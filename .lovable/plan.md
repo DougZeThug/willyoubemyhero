@@ -1,39 +1,61 @@
-## Where things stand
 
-Phase 1 MVP + core Phase 2 features are built (schema, PIN auth, participants, running order + randomize, timer with IndexedDB recovery, splits/penalties, leaderboard, draft board, admin console). The "Cool HUD" visual redesign is partially applied:
+# Phase 3 — Spectator, Media, Analytics
 
-Done
-- Cyan/teal palette + HUD utilities in `src/styles.css`
-- New `src/components/hud-timer.tsx` circular timer
-- `SiteNav` centered wordmark + neon bottom nav
-- `src/routes/index.tsx` rebuilt around the HUD hero
-- `__root.tsx` fonts/metadata
+Builds on the existing HUD/dark broadcast app. Three tracks, one integrated pass.
 
-Not yet done (from the same redesign plan)
-- Cohesion pass on `leaderboard.tsx`, `order.tsx`, `draft.tsx`, `admin.tsx` — headers still use plain `font-display` titles with no HUD framing, no shared section styling, no circuit background.
+## Track A — Spectator mode + QR sharing
 
-## Proposed next step: finish the redesign cohesion pass
+- New public route `src/routes/live.tsx` — read-only broadcast view (no admin controls). Reuses `useEventBundle` + realtime for live timer, current runner, station, and top-5 leaderboard sidebar.
+- New route `src/routes/tv.tsx` — big-screen layout (16:9), oversized HUD timer, standings ticker, "on deck" card, station name banner. Auto-hides cursor, no bottom nav, hides on small viewports with a "open on TV" hint.
+- Admin screen: add a QR code panel (using existing `qrcode` dep) that encodes the `/live` URL. Copy-link and "open TV view" buttons.
+- Nav: add a subtle "Live" link for spectators; keep admin gated by PIN as today.
+- Public SSR-safe: reads go through the existing publishable-key server fns / `events_public` view; no PIN required.
 
-Purely visual — no logic, data, or timing changes.
+## Track B — Rich media + result cards
 
-1. **Shared page header treatment.** Introduce a small `PageHeader` pattern (inline per route, no new component file needed) with:
-   - Eyebrow label ("LIVE", "STANDINGS", "ORDER", "DRAFT", "CONSOLE") in cyan tracking-widest
-   - Big condensed title
-   - Optional right-aligned status chip (e.g. finished count on leaderboard)
-   - Thin cyan hairline divider underneath
+- Participant photo uploads
+  - Admin roster editor: upload avatar → private `participant-photos` bucket (already exists). Store object path on `event_participants.photo_path`.
+  - New server fn `getSignedPhotoUrl` returns short-lived signed URLs; `ParticipantAvatar` prefers the signed URL and falls back to initials.
+- Finish celebrations
+  - When a run finishes, emit a full-screen overlay on `/admin` and `/live`: confetti (canvas), athlete name, final time, delta vs. leader. Auto-dismiss after 4s or on tap.
+  - Motion via existing `motion` dep; respects `prefers-reduced-motion`.
+- Exportable PNG result cards
+  - New util `src/lib/result-card.tsx` renders a 1080×1350 card (name, photo, time, splits, event, date) into an offscreen node.
+  - Export via `html-to-image` (add dep) → download PNG + Web Share API when available.
+  - Buttons: per-run row on leaderboard ("Share card") and a final "Draft board" card on `/draft` once complete.
 
-2. **Route-specific polish**
-   - `leaderboard.tsx`: rank medallions use `hud-bezel` for top 3; leader row gets a subtle cyan glow border; time column uses `timer-digits` for consistency with HUD.
-   - `order.tsx`: current/up-next/on-deck get a cyan left-border accent; running-order number chips restyled as small bezel tiles.
-   - `draft.tsx`: available position tiles get the `neon-btn` outline treatment; selected picks use filled cyan.
-   - `admin.tsx`: Timing Console card wrapped in `hud-bezel`; station split buttons restyled to match neon HUD language; PIN gate card gets the same header treatment.
+## Track C — Advanced analytics
 
-3. **Background.** Apply a lighter `circuit-bg` wash to the outer page container on Leaderboard/Order/Draft (already on Live) so the app reads as one broadcast surface. Admin stays plain for readability.
+- Per-station split breakdowns
+  - New route `src/routes/analytics.tsx` with tabs: Splits, Bests, Head-to-Head, History.
+  - Splits tab: per-station table (best, median, worst, your rank), bar chart via `recharts` (add dep).
+- Personal bests
+  - Server fn aggregates each participant's best station splits and best total across all past events. Displayed on participant detail drawer + Bests tab.
+- Head-to-head
+  - Pick two participants → side-by-side splits, deltas per station, total gap, mini timeline.
+- Historical event archive
+  - New table `public.event_archive_snapshots` (event_id, snapshot jsonb, created_at) written on event completion via an admin "Archive event" action.
+  - History tab lists past events with final standings and links to a read-only recap page `src/routes/recap.$eventSlug.tsx`.
 
-4. **Verify.** Screenshot each route at 360×629 via Playwright after edits to confirm nothing regressed.
+## Data / backend changes
 
-### Out of scope for this step
-- Timer/admin logic, Supabase, auth, routing.
-- Phase 3+ features (TV mode, intro screens, awards, rivalries, records, result cards, sound, exports). Those come next once the visual system is consistent.
+Single migration:
+- `alter table event_participants add column photo_path text;`
+- `create table public.event_archive_snapshots (...)` + GRANTs + RLS (public SELECT of snapshot json; service_role all).
+- Extend `events_public` view / public server fns to expose snapshot summaries for recap pages.
+- Storage: keep `participant-photos` private; add owner/service policies already in place; new admin fn issues signed URLs.
 
-Want me to proceed with this cohesion pass, or jump straight into a Phase 3 feature (TV/spectator mode, shareable result cards, or records/awards) instead?
+## Technical notes
+
+- Deps to add: `recharts`, `html-to-image`, `canvas-confetti` (+ types).
+- All new public routes get proper `head()` metadata (title, description, og:title/description, og:type=website, twitter:card=summary_large_image). No og:image unless a stable absolute hero URL exists.
+- Reuse existing tokens: `hud-bezel`, `neon-btn`, `circuit-bg`, cyan/teal palette. No new colors.
+- Timer visuals on `/live` and `/tv` reuse `HudTimer` at larger sizes; realtime channels are shared, not duplicated.
+- Result-card export runs client-only (`<ClientOnly>` wrapper) to avoid SSR of `html-to-image`.
+- Confetti and `html-to-image` are dynamically imported to keep initial bundle small.
+
+## Out of scope
+
+- Multi-event tenancy / user accounts (still PIN per event).
+- Video capture / streaming.
+- Push notifications.

@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Radio, Trophy, ListOrdered, ClipboardList, Settings } from "lucide-react";
+import { Radio, Trophy, ListOrdered, ClipboardList, Settings, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -7,6 +7,7 @@ const links = [
   { to: "/leaderboard", label: "Board", icon: Trophy },
   { to: "/order", label: "Order", icon: ListOrdered },
   { to: "/draft", label: "Draft", icon: ClipboardList },
+  { to: "/analytics", label: "Stats", icon: BarChart3 },
   { to: "/admin", label: "Admin", icon: Settings },
 ] as const;
 
@@ -51,7 +52,7 @@ export function SiteNav() {
 
       {/* Mobile bottom nav — thin icons, cyan underline glow when active */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/15 bg-background/95 backdrop-blur md:hidden">
-        <ul className="mx-auto grid max-w-md grid-cols-5">
+        <ul className="mx-auto grid max-w-md grid-cols-6">
           {links.map((l) => {
             const Icon = l.icon;
             const active = l.to === "/" ? path === "/" : path.startsWith(l.to);

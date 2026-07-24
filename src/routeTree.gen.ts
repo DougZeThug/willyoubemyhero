@@ -9,15 +9,29 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TvRouteImport } from './routes/tv'
 import { Route as OrderRouteImport } from './routes/order'
+import { Route as LiveRouteImport } from './routes/live'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as DraftRouteImport } from './routes/draft'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RecapSlugRouteImport } from './routes/recap.$slug'
 
+const TvRoute = TvRouteImport.update({
+  id: '/tv',
+  path: '/tv',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrderRoute = OrderRouteImport.update({
   id: '/order',
   path: '/order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeaderboardRoute = LeaderboardRouteImport.update({
@@ -30,6 +44,11 @@ const DraftRoute = DraftRouteImport.update({
   path: '/draft',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -40,52 +59,115 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RecapSlugRoute = RecapSlugRouteImport.update({
+  id: '/recap/$slug',
+  path: '/recap/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/tv': typeof TvRoute
+  '/recap/$slug': typeof RecapSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/tv': typeof TvRoute
+  '/recap/$slug': typeof RecapSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/tv': typeof TvRoute
+  '/recap/$slug': typeof RecapSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/draft' | '/leaderboard' | '/order'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/analytics'
+    | '/draft'
+    | '/leaderboard'
+    | '/live'
+    | '/order'
+    | '/tv'
+    | '/recap/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/draft' | '/leaderboard' | '/order'
-  id: '__root__' | '/' | '/admin' | '/draft' | '/leaderboard' | '/order'
+  to:
+    | '/'
+    | '/admin'
+    | '/analytics'
+    | '/draft'
+    | '/leaderboard'
+    | '/live'
+    | '/order'
+    | '/tv'
+    | '/recap/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/analytics'
+    | '/draft'
+    | '/leaderboard'
+    | '/live'
+    | '/order'
+    | '/tv'
+    | '/recap/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AnalyticsRoute: typeof AnalyticsRoute
   DraftRoute: typeof DraftRoute
   LeaderboardRoute: typeof LeaderboardRoute
+  LiveRoute: typeof LiveRoute
   OrderRoute: typeof OrderRoute
+  TvRoute: typeof TvRoute
+  RecapSlugRoute: typeof RecapSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tv': {
+      id: '/tv'
+      path: '/tv'
+      fullPath: '/tv'
+      preLoaderRoute: typeof TvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/order': {
       id: '/order'
       path: '/order'
       fullPath: '/order'
       preLoaderRoute: typeof OrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leaderboard': {
@@ -102,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DraftRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin': {
       id: '/admin'
       path: '/admin'
@@ -116,15 +205,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/recap/$slug': {
+      id: '/recap/$slug'
+      path: '/recap/$slug'
+      fullPath: '/recap/$slug'
+      preLoaderRoute: typeof RecapSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AnalyticsRoute: AnalyticsRoute,
   DraftRoute: DraftRoute,
   LeaderboardRoute: LeaderboardRoute,
+  LiveRoute: LiveRoute,
   OrderRoute: OrderRoute,
+  TvRoute: TvRoute,
+  RecapSlugRoute: RecapSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

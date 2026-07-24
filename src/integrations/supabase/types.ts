@@ -169,6 +169,51 @@ export type Database = {
           },
         ]
       }
+      event_archive_snapshots: {
+        Row: {
+          created_at: string
+          event_id: string
+          event_name: string
+          event_year: number | null
+          id: string
+          slug: string
+          snapshot: Json
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          event_name: string
+          event_year?: number | null
+          id?: string
+          slug: string
+          snapshot: Json
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          event_name?: string
+          event_year?: number | null
+          id?: string
+          slug?: string
+          snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_archive_snapshots_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_archive_snapshots_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_participants: {
         Row: {
           bib_number: number | null
@@ -178,6 +223,7 @@ export type Database = {
           id: string
           participant_id: string
           participation_status: string
+          photo_path: string | null
           running_order: number
           selected_draft_position: number | null
           updated_at: string
@@ -190,6 +236,7 @@ export type Database = {
           id?: string
           participant_id: string
           participation_status?: string
+          photo_path?: string | null
           running_order?: number
           selected_draft_position?: number | null
           updated_at?: string
@@ -202,6 +249,7 @@ export type Database = {
           id?: string
           participant_id?: string
           participation_status?: string
+          photo_path?: string | null
           running_order?: number
           selected_draft_position?: number | null
           updated_at?: string
