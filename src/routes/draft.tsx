@@ -90,11 +90,15 @@ function DraftPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <ClipboardList className="h-6 w-6 text-primary" />
-          <h1 className="font-display text-3xl font-black uppercase">Draft Board</h1>
+    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+      <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-4">
+        <div>
+          <div className="flex items-center gap-2 text-primary">
+            <ClipboardList className="h-5 w-5" />
+            <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">Draft</span>
+          </div>
+          <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">Draft Board</h1>
         </div>
         {isAdmin && (
           <Button onClick={undo} disabled={busy} size="sm" variant="secondary">
@@ -105,7 +109,7 @@ function DraftPage() {
       </div>
 
       {currentPicker ? (
-        <Card className="border-primary/40 bg-primary/5">
+        <Card className="hud-bezel border-primary/40 hud-glow">
           <CardContent className="flex items-center gap-4 p-5">
             <ParticipantAvatar
               name={currentPicker.ep!.participant?.name ?? "?"}
@@ -127,7 +131,7 @@ function DraftPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
+        <Card className="hud-bezel border-white/10">
           <CardContent className="p-6 text-center text-sm text-muted-foreground">
             {rankings.length === 0
               ? "No combine results yet. Draft board opens once athletes finish."
@@ -152,13 +156,16 @@ function DraftPage() {
                 className={
                   "aspect-square rounded-lg border p-2 text-left transition " +
                   (isTaken
-                    ? "border-primary/30 bg-primary/10"
+                    ? "border-primary/60 bg-primary/15 hud-glow"
                     : isAdmin && currentPicker
-                      ? "border-white/10 bg-white/5 hover:border-primary hover:bg-primary/10"
+                      ? "border-primary/40 bg-white/5 hover:border-primary hover:bg-primary/10 hover:hud-glow"
                       : "border-white/5 bg-white/5 opacity-70")
                 }
               >
-                <div className="font-display text-3xl font-black tabular leading-none text-foreground">
+                <div className={cn(
+                  "font-display text-3xl font-black tabular leading-none",
+                  isTaken ? "text-primary" : "text-foreground",
+                )}>
                   {pos}
                 </div>
                 <div className="mt-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -168,6 +175,7 @@ function DraftPage() {
             );
           })}
         </div>
+      </div>
       </div>
     </div>
   );
