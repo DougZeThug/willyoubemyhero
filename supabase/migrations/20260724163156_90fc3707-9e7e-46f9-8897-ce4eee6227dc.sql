@@ -1,0 +1,1 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto; UPDATE public.event_secrets SET pin_hash = encode(digest(pin_salt || '::1234', 'sha256'), 'hex');

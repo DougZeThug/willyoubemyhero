@@ -104,7 +104,11 @@
 }
 
 @layer base {
-  html { color-scheme: dark; }
+  html, body {
+    color-scheme: dark;
+    overflow-x: hidden;
+    max-width: 100%;
+  }
   * {
     border-color: var(--color-border);
   }
