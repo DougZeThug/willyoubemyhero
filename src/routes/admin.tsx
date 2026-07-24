@@ -58,7 +58,7 @@ function AdminPage() {
 
   const isAdmin = !!event?.id && status.data?.eventId === event.id;
 
-  if (status.isLoading || !event) {
+  if (status.isLoading || !event || !event.id) {
     return (
       <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Loading…</div>
     );
