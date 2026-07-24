@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as OrderRouteImport } from './routes/order'
+import { Route as LiveRouteImport } from './routes/live'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -18,6 +19,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const OrderRoute = OrderRouteImport.update({
   id: '/order',
   path: '/order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeaderboardRoute = LeaderboardRouteImport.update({
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/order': typeof OrderRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/order': typeof OrderRoute
 }
 export interface FileRoutesById {
@@ -61,14 +69,22 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/live': typeof LiveRoute
   '/order': typeof OrderRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/draft' | '/leaderboard' | '/order'
+  fullPaths: '/' | '/admin' | '/draft' | '/leaderboard' | '/live' | '/order'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/draft' | '/leaderboard' | '/order'
-  id: '__root__' | '/' | '/admin' | '/draft' | '/leaderboard' | '/order'
+  to: '/' | '/admin' | '/draft' | '/leaderboard' | '/live' | '/order'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/draft'
+    | '/leaderboard'
+    | '/live'
+    | '/order'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +92,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   DraftRoute: typeof DraftRoute
   LeaderboardRoute: typeof LeaderboardRoute
+  LiveRoute: typeof LiveRoute
   OrderRoute: typeof OrderRoute
 }
 
@@ -86,6 +103,13 @@ declare module '@tanstack/react-router' {
       path: '/order'
       fullPath: '/order'
       preLoaderRoute: typeof OrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leaderboard': {
@@ -124,6 +148,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   DraftRoute: DraftRoute,
   LeaderboardRoute: LeaderboardRoute,
+  LiveRoute: LiveRoute,
   OrderRoute: OrderRoute,
 }
 export const routeTree = rootRouteImport
