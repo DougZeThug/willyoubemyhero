@@ -83,11 +83,10 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function attempt(value: string) {
     setBusy(true);
     try {
-      const res = await verifyFn({ data: { eventId, pin } });
+      const res = await verifyFn({ data: { eventId, pin: value } });
       if (!res.ok) {
         toast.error("Incorrect PIN");
         setPin("");
@@ -100,6 +99,12 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pin || busy) return;
+    await attempt(pin);
   }
 
   return (
@@ -125,8 +130,13 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
               inputMode="numeric"
               autoComplete="off"
               autoFocus
+              maxLength={4}
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value.replace(/\D/g, "").slice(0, 4);
+                setPin(next);
+                if (next.length === 4 && !busy) void attempt(next);
+              }}
               className="text-center font-display text-2xl tracking-[0.4em]"
             />
             <Button type="submit" disabled={busy || !pin} className="w-full">
