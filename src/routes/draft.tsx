@@ -15,9 +15,9 @@ import { ClipboardList, Undo2 } from "lucide-react";
 export const Route = createFileRoute("/draft")({
   head: () => ({
     meta: [
-      { title: "Draft Order — WWBH Draft Combine" },
+      { title: "Draft Order — Will YOU Be My Hero? Draft Combine" },
       { name: "description", content: "Live draft pick selection based on combine results." },
-      { property: "og:title", content: "WWBH Draft Combine — Draft" },
+      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Draft" },
       { property: "og:description", content: "Combine winners select their fantasy draft positions live." },
     ],
   }),

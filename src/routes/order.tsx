@@ -16,9 +16,9 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/order")({
   head: () => ({
     meta: [
-      { title: "Running Order — WWBH Draft Combine" },
+      { title: "Running Order — Will YOU Be My Hero? Draft Combine" },
       { name: "description", content: "Randomized athlete order for the combine." },
-      { property: "og:title", content: "WWBH Draft Combine — Order" },
+      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Order" },
       { property: "og:description", content: "Who's up when." },
     ],
   }),

@@ -79,15 +79,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "We Will Be Heroes Draft Combine" },
+      { title: "Will YOU Be My Hero? Draft Combine" },
       {
         name: "description",
         content:
-          "Live timing, leaderboard, and draft-pick selection for the We Will Be Heroes fantasy football combine.",
+          "Live timing, leaderboard, and draft-pick selection for the Will YOU Be My Hero? fantasy football combine.",
       },
-      { name: "author", content: "We Will Be Heroes" },
+      { name: "author", content: "Will YOU Be My Hero?" },
       { name: "theme-color", content: "#0a0f14" },
-      { property: "og:title", content: "We Will Be Heroes Draft Combine" },
+      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine" },
       {
         property: "og:description",
         content:

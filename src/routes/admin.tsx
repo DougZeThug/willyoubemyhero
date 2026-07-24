@@ -39,7 +39,7 @@ import {
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Admin — WWBH Draft Combine" },
+      { title: "Admin — Will YOU Be My Hero? Draft Combine" },
       { name: "description", content: "Timing console and event controls for combine admins." },
       { name: "robots", content: "noindex" },
     ],
