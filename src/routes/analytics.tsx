@@ -41,7 +41,7 @@ function AnalyticsPage() {
       const st = bundle.stations.find((x) => x.id === s.station_id);
       if (!st) continue;
       const arr = byStation.get(st.name) ?? [];
-      arr.push(s.duration_ms ?? 0);
+      arr.push(s.segment_time_ms ?? 0);
       byStation.set(st.name, arr);
     }
     return bundle.stations.map((st) => {
