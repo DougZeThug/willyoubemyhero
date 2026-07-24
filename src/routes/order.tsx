@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListOrdered, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getAdminStatus } from "@/lib/admin.functions";
+import { useAdminSession } from "@/lib/admin-token";
 import { recordRandomization, setRunningOrder } from "@/lib/admin-write.functions";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { toast } from "sonner";
@@ -28,17 +27,12 @@ export const Route = createFileRoute("/order")({
 
 function OrderPage() {
   const { event, bundle } = useEventBundle();
-  const adminStatusFn = useServerFn(getAdminStatus);
   const setOrderFn = useServerFn(setRunningOrder);
   const recordFn = useServerFn(recordRandomization);
   const [busy, setBusy] = useState(false);
 
-  const admin = useQuery({
-    queryKey: ["admin-status"],
-    queryFn: () => adminStatusFn(),
-    staleTime: 30_000,
-  });
-  const isAdmin = !!event?.id && admin.data?.eventId === event.id;
+  const admin = useAdminSession();
+  const isAdmin = !!event?.id && admin?.eventId === event.id;
 
   const rows = useMemo(
     () => [...(bundle?.participants ?? [])].sort((a, b) => a.running_order - b.running_order),

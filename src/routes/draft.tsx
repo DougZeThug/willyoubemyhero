@@ -1,10 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { getAdminStatus } from "@/lib/admin.functions";
+import { useAdminSession } from "@/lib/admin-token";
 import { recordDraftSelection, undoLastDraftSelection } from "@/lib/admin-write.functions";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,17 +26,12 @@ export const Route = createFileRoute("/draft")({
 
 function DraftPage() {
   const { event, bundle } = useEventBundle();
-  const adminStatusFn = useServerFn(getAdminStatus);
   const recordFn = useServerFn(recordDraftSelection);
   const undoFn = useServerFn(undoLastDraftSelection);
   const [busy, setBusy] = useState(false);
 
-  const admin = useQuery({
-    queryKey: ["admin-status"],
-    queryFn: () => adminStatusFn(),
-    staleTime: 30_000,
-  });
-  const isAdmin = !!event?.id && admin.data?.eventId === event.id;
+  const admin = useAdminSession();
+  const isAdmin = !!event?.id && admin?.eventId === event.id;
 
   const { rankings, taken, currentPicker } = useMemo(() => {
     const parts = bundle?.participants ?? [];
