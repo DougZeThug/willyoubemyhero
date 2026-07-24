@@ -468,7 +468,7 @@ function TimingConsole() {
           </CardContent>
         </Card>
       )}
-      <EventOpsPanel eventId={event.id} eventName={event?.name ?? "Combine"} />
+      {event?.id && <EventOpsPanel eventId={event.id} eventName={event.name ?? "Combine"} />}
     </div>
   );
 }
