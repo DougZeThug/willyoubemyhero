@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Trophy, Radio, User2 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
+import { useFinishWatcher } from "@/hooks/use-finish-watcher";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { HudTimer } from "@/components/hud-timer";
+import { FinishCelebration } from "@/components/finish-celebration";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -21,6 +24,9 @@ export const Route = createFileRoute("/")({
 
 function LiveDashboard() {
   const { event, bundle, loading } = useEventBundle();
+  const photos = useEventPhotoUrls(event?.id ?? null);
+  const [celebration, setCelebration] = useState<{ name: string; timeMs: number; deltaMs: number } | null>(null);
+  useFinishWatcher(bundle, (f) => setCelebration(f));
 
   const { current, next, leaderboard, done, total } = useMemo(() => {
     const parts = bundle?.participants ?? [];
@@ -81,7 +87,7 @@ function LiveDashboard() {
             {current ? (
               <ParticipantAvatar
                 name={current.participant?.name ?? "?"}
-                photoUrl={current.participant?.profile_image_url ?? null}
+                photoUrl={photos.data?.[current.id] ?? current.participant?.profile_image_url ?? null}
                 size={200}
                 className="opacity-70"
               />
@@ -134,7 +140,7 @@ function LiveDashboard() {
                 <div className="flex items-center gap-3">
                   <ParticipantAvatar
                     name={next.participant?.name ?? "?"}
-                    photoUrl={next.participant?.profile_image_url ?? null}
+                    photoUrl={photos.data?.[next.id] ?? next.participant?.profile_image_url ?? null}
                     size={44}
                   />
                   <div className="min-w-0 flex-1">
@@ -193,6 +199,12 @@ function LiveDashboard() {
           </Card>
         </div>
       </div>
+      <FinishCelebration
+        name={celebration?.name ?? null}
+        timeMs={celebration?.timeMs ?? null}
+        deltaMs={celebration?.deltaMs ?? null}
+        onDone={() => setCelebration(null)}
+      />
     </div>
   );
 }
