@@ -1,17 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { useSession } from "@tanstack/react-start/server";
 import { z } from "zod";
-import {
-  getSessionConfig,
-  hashPin,
-  timingSafeEq,
-  type AdminSession,
-} from "./session.server";
-
-export const getAdminStatus = createServerFn({ method: "GET" }).handler(async () => {
-  const session = await useSession<AdminSession>(getSessionConfig());
-  return { eventId: session.data.admin?.eventId ?? null };
-});
+import { hashPin, signAdminToken, timingSafeEq } from "./session.server";
 
 export const verifyEventPin = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
@@ -24,18 +13,13 @@ export const verifyEventPin = createServerFn({ method: "POST" })
       .select("event_id, pin_salt, pin_hash")
       .eq("event_id", data.eventId)
       .maybeSingle();
-    if (error || !secret) return { ok: false as const, reason: "event_not_found" };
+    if (error || !secret) {
+      return { ok: false as const, reason: "event_not_found" as const };
+    }
     const candidate = hashPin(secret.pin_salt, data.pin);
     if (!timingSafeEq(candidate, secret.pin_hash)) {
-      return { ok: false as const, reason: "bad_pin" };
+      return { ok: false as const, reason: "bad_pin" as const };
     }
-    const session = await useSession<AdminSession>(getSessionConfig());
-    await session.update({ admin: { eventId: secret.event_id, unlockedAt: Date.now() } });
-    return { ok: true as const };
+    const { token, expiresAt } = signAdminToken(secret.event_id);
+    return { ok: true as const, token, expiresAt };
   });
-
-export const adminSignOut = createServerFn({ method: "POST" }).handler(async () => {
-  const session = await useSession<AdminSession>(getSessionConfig());
-  await session.clear();
-  return { ok: true as const };
-});
