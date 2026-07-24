@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
 import { useAdminSession } from "@/lib/admin-token";
 import { recordDraftSelection, undoLastDraftSelection } from "@/lib/admin-write.functions";
 import { ParticipantAvatar } from "@/components/participant-avatar";
@@ -26,6 +27,7 @@ export const Route = createFileRoute("/draft")({
 
 function DraftPage() {
   const { event, bundle } = useEventBundle();
+  const photos = useEventPhotoUrls(event?.id ?? null);
   const recordFn = useServerFn(recordDraftSelection);
   const undoFn = useServerFn(undoLastDraftSelection);
   const [busy, setBusy] = useState(false);
@@ -108,7 +110,7 @@ function DraftPage() {
           <CardContent className="flex items-center gap-4 p-5">
             <ParticipantAvatar
               name={currentPicker.ep!.participant?.name ?? "?"}
-              photoUrl={currentPicker.ep!.participant?.profile_image_url ?? null}
+              photoUrl={photos.data?.[currentPicker.ep!.id] ?? currentPicker.ep!.participant?.profile_image_url ?? null}
               size={72}
             />
             <div className="flex-1">

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ export const Route = createFileRoute("/order")({
 
 function OrderPage() {
   const { event, bundle } = useEventBundle();
+  const photos = useEventPhotoUrls(event?.id ?? null);
   const setOrderFn = useServerFn(setRunningOrder);
   const recordFn = useServerFn(recordRandomization);
   const [busy, setBusy] = useState(false);
@@ -100,7 +102,7 @@ function OrderPage() {
                 </span>
                 <ParticipantAvatar
                   name={r.participant?.name ?? "?"}
-                  photoUrl={r.participant?.profile_image_url ?? null}
+                  photoUrl={photos.data?.[r.id] ?? r.participant?.profile_image_url ?? null}
                   size={40}
                 />
                 <div className="min-w-0 flex-1">
