@@ -75,7 +75,7 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(
             style={{
               width: 220,
               height: 220,
-              borderRadius: 999,
+              borderRadius: 24,
               overflow: "hidden",
               background: "linear-gradient(135deg,#0e7490,#155e75)",
               display: "grid",

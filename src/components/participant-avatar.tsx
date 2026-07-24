@@ -24,7 +24,7 @@ export function ParticipantAvatar({
   return (
     <div
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-full border border-white/10 grid place-items-center font-display font-bold uppercase text-white/90",
+        "relative shrink-0 overflow-hidden rounded-md border border-white/10 grid place-items-center font-display font-bold uppercase text-white/90",
         className,
       )}
       style={style}
