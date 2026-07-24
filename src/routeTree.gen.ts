@@ -14,6 +14,7 @@ import { Route as OrderRouteImport } from './routes/order'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as DraftRouteImport } from './routes/draft'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -42,6 +43,11 @@ const DraftRoute = DraftRouteImport.update({
   path: '/draft',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -56,6 +62,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
@@ -86,17 +95,27 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/analytics'
     | '/draft'
     | '/leaderboard'
     | '/live'
     | '/order'
     | '/tv'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/draft' | '/leaderboard' | '/live' | '/order' | '/tv'
+  to:
+    | '/'
+    | '/admin'
+    | '/analytics'
+    | '/draft'
+    | '/leaderboard'
+    | '/live'
+    | '/order'
+    | '/tv'
   id:
     | '__root__'
     | '/'
     | '/admin'
+    | '/analytics'
     | '/draft'
     | '/leaderboard'
     | '/live'
@@ -107,6 +126,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AnalyticsRoute: typeof AnalyticsRoute
   DraftRoute: typeof DraftRoute
   LeaderboardRoute: typeof LeaderboardRoute
   LiveRoute: typeof LiveRoute
@@ -151,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DraftRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin': {
       id: '/admin'
       path: '/admin'
@@ -171,6 +198,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AnalyticsRoute: AnalyticsRoute,
   DraftRoute: DraftRoute,
   LeaderboardRoute: LeaderboardRoute,
   LiveRoute: LiveRoute,
