@@ -95,11 +95,14 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
 
   return (
     <div className="mx-auto grid min-h-[60vh] max-w-md place-items-center px-4 py-10">
-      <Card className="w-full">
+      <Card className="hud-bezel w-full border-white/10">
         <CardContent className="p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <LockKeyhole className="h-5 w-5 text-primary" />
-            <h1 className="font-display text-2xl font-black uppercase">Admin Access</h1>
+          <div className="mb-4">
+            <div className="flex items-center gap-2 text-primary">
+              <LockKeyhole className="h-4 w-4" />
+              <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">Console</span>
+            </div>
+            <h1 className="mt-1 font-display text-2xl font-black uppercase leading-none">Admin Access</h1>
           </div>
           <p className="mb-4 text-sm text-muted-foreground">
             Enter the event PIN for <span className="text-foreground">{eventName}</span> to unlock
@@ -315,11 +318,14 @@ function TimingConsole() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <TimerIcon className="h-5 w-5 text-primary" />
-          <h1 className="font-display text-2xl font-black uppercase">Timing Console</h1>
-          <Badge variant="secondary" className="ml-1 uppercase">Admin</Badge>
+      <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-3">
+        <div>
+          <div className="flex items-center gap-2 text-primary">
+            <TimerIcon className="h-4 w-4" />
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">Console</span>
+            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[9px] uppercase">Admin</Badge>
+          </div>
+          <h1 className="mt-1 font-display text-2xl font-black uppercase leading-none">Timing Console</h1>
         </div>
         <Button variant="ghost" size="sm" onClick={signOut}>
           <LogOut className="mr-1.5 h-4 w-4" />
@@ -335,7 +341,7 @@ function TimingConsole() {
           onStart={startRun}
         />
       ) : (
-        <Card className={paused ? "border-warn/60" : "border-primary/50"}>
+        <Card className={"hud-bezel " + (paused ? "border-warn/60" : "border-primary/50 hud-glow")}>
           <CardContent className="p-5">
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-3">
