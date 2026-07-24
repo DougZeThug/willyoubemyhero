@@ -1,12 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Radio, Trophy, Users, Timer as TimerIcon } from "lucide-react";
+import { Trophy, Radio, User2 } from "lucide-react";
 import { useMemo } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { ParticipantAvatar } from "@/components/participant-avatar";
+import { HudTimer } from "@/components/hud-timer";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -46,173 +45,173 @@ function LiveDashboard() {
     };
   }, [bundle]);
 
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const currentTimer = current ? 0 : 0; // Live-side spectators see 00:00 until admin starts.
+
   return (
-    <div className="field-lines min-h-[calc(100vh-3.25rem)]">
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
-              </span>
-              <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary">
-                Live Combine
-              </span>
+    <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
+      <div className="mx-auto max-w-6xl space-y-6 px-4 pb-6 pt-4 sm:pt-6">
+        {/* Progress + heartbeat */}
+        <div>
+          <div className="relative flex items-center gap-2 rounded-full border border-primary/40 bg-[oklch(0.16_0.02_240)] p-1 shadow-[inset_0_0_0_1px_oklch(1_0_0_/_0.04),0_0_20px_oklch(0.82_0.14_210_/_0.15)]">
+            <div className="relative h-4 flex-1 overflow-hidden rounded-full bg-[oklch(0.1_0.015_240)]">
+              <div
+                className="progress-hatched h-full rounded-full transition-[width] duration-500 shadow-[0_0_12px_var(--color-primary)]"
+                style={{ width: `${pct}%` }}
+              />
             </div>
-            <h1 className="font-display text-3xl font-black uppercase tracking-tight text-foreground sm:text-4xl">
-              {event?.name ?? "Loading combine…"}
-            </h1>
+            <div className="flex shrink-0 items-center gap-1.5 pr-3">
+              <Heartbeat />
+              <span className="timer-digits text-primary text-sm">{pct}%</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="gap-1.5">
-              <Users className="h-3.5 w-3.5" />
-              {done}/{total} done
-            </Badge>
-            {event?.status && (
-              <Badge className="bg-primary/15 text-primary uppercase tracking-widest">
-                {event.status.replace(/_/g, " ")}
-              </Badge>
-            )}
+          <div className="mt-2 text-center text-[11px] font-bold uppercase tracking-[0.32em] text-muted-foreground">
+            {done}/{total} athletes completed
           </div>
         </div>
 
-        {/* Current runner / call to admin */}
-        <Card className="overflow-hidden border-primary/40 bg-gradient-to-b from-primary/10 to-transparent">
-          <CardContent className="p-6">
+        {/* Hero HUD */}
+        <div className="flex flex-col items-center">
+          <HudTimer
+            runningSinceMs={currentTimer}
+            paused={!current}
+            status={current ? "On the Clock" : loading ? "Loading" : "On Deck"}
+            size={320}
+          >
             {current ? (
-              <div className="grid gap-6 md:grid-cols-[auto_1fr_auto] md:items-center">
-                <ParticipantAvatar
-                  name={current.participant?.name ?? "?"}
-                  photoUrl={current.participant?.profile_image_url ?? null}
-                  size={96}
-                />
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-[0.3em] text-primary">
-                    On the clock
-                  </div>
-                  <div className="font-display text-4xl font-black uppercase tracking-tight text-foreground sm:text-5xl">
-                    {current.participant?.name}
-                  </div>
-                  {current.participant?.fantasy_team_name && (
-                    <div className="text-sm text-muted-foreground">
-                      {current.participant.fantasy_team_name}
-                    </div>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                    Follow along
-                  </div>
-                  <Link to="/admin" className="text-primary text-sm underline">
-                    Timing console →
-                  </Link>
-                </div>
-              </div>
+              <ParticipantAvatar
+                name={current.participant?.name ?? "?"}
+                photoUrl={current.participant?.profile_image_url ?? null}
+                size={200}
+                className="opacity-70"
+              />
             ) : (
-              <div className="flex flex-col items-center gap-3 py-8 text-center">
-                <TimerIcon className="h-10 w-10 text-primary" />
-                <div className="font-display text-2xl font-black uppercase text-foreground">
-                  {loading ? "Loading…" : "No runner on the clock"}
-                </div>
-                <p className="max-w-md text-sm text-muted-foreground">
-                  {done === total && total > 0
-                    ? "All athletes are through. Head to the draft board to see the picks."
-                    : "Waiting for the next athlete to be sent."}
-                </p>
-                <div className="flex gap-2">
-                  <Button asChild size="sm" variant="secondary">
-                    <Link to="/order">Running Order</Link>
-                  </Button>
-                  <Button asChild size="sm">
-                    <Link to="/leaderboard">Leaderboard</Link>
-                  </Button>
-                </div>
-              </div>
+              <User2 className="h-40 w-40 text-primary/60" strokeWidth={1.25} />
             )}
-          </CardContent>
-        </Card>
+          </HudTimer>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Up next */}
-          <Card>
-            <CardContent className="p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-display text-lg font-bold uppercase tracking-wider">Up Next</h2>
-                <Radio className="h-4 w-4 text-muted-foreground" />
+          {current ? (
+            <div className="mt-4 text-center">
+              <div className="font-display text-2xl font-black uppercase tracking-wide text-foreground">
+                {current.participant?.name}
+              </div>
+              {current.participant?.fantasy_team_name && (
+                <div className="text-xs text-muted-foreground">
+                  {current.participant.fantasy_team_name}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4 max-w-xs text-center text-xs text-muted-foreground">
+              {done === total && total > 0
+                ? "All athletes are through — head to the draft board."
+                : "Waiting for the next athlete to be sent from the timing console."}
+            </div>
+          )}
+        </div>
+
+        {/* Primary CTAs */}
+        <div className="mx-auto flex max-w-sm flex-col gap-3">
+          <Link to="/order" className="neon-btn">
+            View Running Order
+          </Link>
+          <Link to="/leaderboard" className="neon-btn">
+            Leaderboard
+          </Link>
+        </div>
+
+        {/* Telemetry strip */}
+        <div className="grid gap-3 pt-2 md:grid-cols-2">
+          <Card className="border-primary/15 bg-card/70 backdrop-blur">
+            <CardContent className="p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="font-display text-xs font-black uppercase tracking-[0.32em] text-primary/80">
+                  Up Next
+                </h2>
+                <Radio className="h-3.5 w-3.5 text-primary/60" strokeWidth={1.75} />
               </div>
               {next ? (
                 <div className="flex items-center gap-3">
                   <ParticipantAvatar
                     name={next.participant?.name ?? "?"}
                     photoUrl={next.participant?.profile_image_url ?? null}
-                    size={56}
+                    size={44}
                   />
-                  <div>
-                    <div className="font-display text-2xl font-bold uppercase leading-none">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-display text-lg font-bold uppercase leading-tight">
                       {next.participant?.name}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
                       Order #{next.running_order}
-                      {next.participant?.trash_talk_quote && (
-                        <> — “{next.participant.trash_talk_quote}”</>
-                      )}
                     </div>
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No one queued.</p>
+                <p className="text-xs text-muted-foreground">No one queued.</p>
               )}
             </CardContent>
           </Card>
 
-          {/* Leaderboard top 5 */}
-          <Card>
-            <CardContent className="p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-display text-lg font-bold uppercase tracking-wider">
+          <Card className="border-primary/15 bg-card/70 backdrop-blur">
+            <CardContent className="p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="font-display text-xs font-black uppercase tracking-[0.32em] text-primary/80">
                   Top 5
                 </h2>
-                <Trophy className="h-4 w-4 text-primary" />
+                <Trophy className="h-3.5 w-3.5 text-primary/60" strokeWidth={1.75} />
               </div>
               {leaderboard.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No official times yet.</p>
+                <p className="text-xs text-muted-foreground">No official times yet.</p>
               ) : (
-                <ol className="space-y-2">
+                <ol className="space-y-1.5">
                   {leaderboard.map((row, i) => (
                     <li
                       key={row.run.id}
-                      className="flex items-center gap-3 rounded-md bg-white/5 px-3 py-2"
+                      className="flex items-center gap-2 rounded-md border border-primary/5 bg-[oklch(0.16_0.02_240)] px-2 py-1.5"
                     >
                       <span
                         className={
-                          "grid h-7 w-7 place-items-center rounded-full text-xs font-black " +
+                          "grid h-6 w-6 place-items-center rounded-full text-[10px] font-black tabular " +
                           (i === 0
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-white/10 text-foreground")
+                            ? "bg-primary text-primary-foreground shadow-[0_0_10px_var(--color-primary)]"
+                            : "bg-primary/10 text-primary")
                         }
                       >
                         {i + 1}
                       </span>
-                      <span className="flex-1 truncate font-semibold uppercase tracking-wide">
+                      <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
                         {row.participant?.name ?? "—"}
                       </span>
-                      <span className="timer-digits tabular text-primary text-lg">
+                      <span className="timer-digits tabular text-primary text-base">
                         {formatTime(row.run.official_time_ms)}
                       </span>
                     </li>
                   ))}
                 </ol>
               )}
-              <div className="mt-3 text-right">
-                <Link to="/leaderboard" className="text-xs text-primary hover:underline">
-                  Full board →
-                </Link>
-              </div>
             </CardContent>
           </Card>
         </div>
       </div>
     </div>
+  );
+}
+
+function Heartbeat() {
+  return (
+    <svg
+      width="26"
+      height="14"
+      viewBox="0 0 26 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-primary"
+      aria-hidden
+    >
+      <path d="M0 7 H5 L7 3 L10 11 L13 5 L16 9 L18 7 H26" />
+    </svg>
   );
 }
