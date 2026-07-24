@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TvRouteImport } from './routes/tv'
 import { Route as OrderRouteImport } from './routes/order'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
@@ -16,6 +17,11 @@ import { Route as DraftRouteImport } from './routes/draft'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TvRoute = TvRouteImport.update({
+  id: '/tv',
+  path: '/tv',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrderRoute = OrderRouteImport.update({
   id: '/order',
   path: '/order',
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/tv': typeof TvRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/tv': typeof TvRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,12 +79,20 @@ export interface FileRoutesById {
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/tv': typeof TvRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/draft' | '/leaderboard' | '/live' | '/order'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/draft'
+    | '/leaderboard'
+    | '/live'
+    | '/order'
+    | '/tv'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/draft' | '/leaderboard' | '/live' | '/order'
+  to: '/' | '/admin' | '/draft' | '/leaderboard' | '/live' | '/order' | '/tv'
   id:
     | '__root__'
     | '/'
@@ -85,6 +101,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/live'
     | '/order'
+    | '/tv'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -94,10 +111,18 @@ export interface RootRouteChildren {
   LeaderboardRoute: typeof LeaderboardRoute
   LiveRoute: typeof LiveRoute
   OrderRoute: typeof OrderRoute
+  TvRoute: typeof TvRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tv': {
+      id: '/tv'
+      path: '/tv'
+      fullPath: '/tv'
+      preLoaderRoute: typeof TvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/order': {
       id: '/order'
       path: '/order'
@@ -150,6 +175,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaderboardRoute: LeaderboardRoute,
   LiveRoute: LiveRoute,
   OrderRoute: OrderRoute,
+  TvRoute: TvRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
