@@ -23,7 +23,7 @@ export function SiteNav() {
             </span>
             <div className="leading-tight">
               <div className="font-display text-lg font-black uppercase tracking-[0.08em] text-foreground">
-                We Will Be Heroes
+                Will YOU Be My Hero?
               </div>
               <div className="-mt-0.5 text-[10px] font-semibold uppercase tracking-[0.28em] text-primary">
                 Draft Combine
