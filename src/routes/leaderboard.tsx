@@ -1,12 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import { Trophy } from "lucide-react";
+import { Trophy, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ResultCard } from "@/components/result-card";
+import { exportCardPng } from "@/lib/share-card";
 
 export const Route = createFileRoute("/leaderboard")({
   head: () => ({
@@ -21,7 +25,10 @@ export const Route = createFileRoute("/leaderboard")({
 });
 
 function LeaderboardPage() {
-  const { bundle } = useEventBundle();
+  const { event, bundle } = useEventBundle();
+  const photos = useEventPhotoUrls(event?.id ?? null);
+  const [sharingRunId, setSharingRunId] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => {
     const parts = bundle?.participants ?? [];
     const runs = bundle?.runs ?? [];
@@ -33,6 +40,40 @@ function LeaderboardPage() {
       })
       .sort((a, b) => (a.run.official_time_ms ?? Infinity) - (b.run.official_time_ms ?? Infinity));
   }, [bundle]);
+
+  const shareRow = rows.find((r) => r.run.id === sharingRunId);
+  const shareData = shareRow
+    ? {
+        eventName: event?.name ?? "Draft Combine",
+        eventYear: event?.year ?? null,
+        participantName: shareRow.ep?.participant?.name ?? "Athlete",
+        fantasyTeam: shareRow.ep?.participant?.fantasy_team_name ?? null,
+        photoUrl: photos.data?.[shareRow.ep?.id ?? ""] ?? shareRow.ep?.participant?.profile_image_url ?? null,
+        totalMs: shareRow.run.official_time_ms ?? 0,
+        penaltyMs: shareRow.run.penalty_ms ?? 0,
+        rank: rows.findIndex((r) => r.run.id === sharingRunId) + 1,
+        splits: (bundle?.splits ?? [])
+          .filter((s) => s.run_id === shareRow.run.id)
+          .map((s) => ({
+            label: bundle?.stations.find((st) => st.id === s.station_id)?.name ?? "Split",
+            ms: s.segment_time_ms ?? 0,
+          })),
+      }
+    : null;
+
+  async function handleShare(runId: string) {
+    setSharingRunId(runId);
+    // wait a tick for offscreen render
+    await new Promise((r) => setTimeout(r, 100));
+    try {
+      if (cardRef.current) {
+        const filename = `combine-${runId.slice(0, 8)}.png`;
+        await exportCardPng(cardRef.current, filename);
+      }
+    } finally {
+      setSharingRunId(null);
+    }
+  }
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
@@ -79,7 +120,7 @@ function LeaderboardPage() {
                   </span>
                   <ParticipantAvatar
                     name={row.ep?.participant?.name ?? "?"}
-                    photoUrl={row.ep?.participant?.profile_image_url ?? null}
+                    photoUrl={photos.data?.[row.ep?.id ?? ""] ?? row.ep?.participant?.profile_image_url ?? null}
                     size={40}
                   />
                   <div className="min-w-0 flex-1">
@@ -104,6 +145,16 @@ function LeaderboardPage() {
                   <div className="timer-digits tabular text-2xl text-primary">
                     {formatTime(row.run.official_time_ms)}
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-primary/70 hover:text-primary"
+                    aria-label="Share result card"
+                    onClick={() => handleShare(row.run.id)}
+                    disabled={sharingRunId === row.run.id}
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -111,6 +162,12 @@ function LeaderboardPage() {
         </CardContent>
       </Card>
       </div>
+      {/* Offscreen card for PNG export */}
+      {shareData && (
+        <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
+          <ResultCard ref={cardRef} data={shareData} />
+        </div>
+      )}
     </div>
   );
 }
