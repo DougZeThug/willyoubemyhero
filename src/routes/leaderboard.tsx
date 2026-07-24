@@ -10,9 +10,9 @@ import { Trophy } from "lucide-react";
 export const Route = createFileRoute("/leaderboard")({
   head: () => ({
     meta: [
-      { title: "Leaderboard — WWBH Draft Combine" },
-      { name: "description", content: "Ranked results from the We Will Be Heroes fantasy draft combine." },
-      { property: "og:title", content: "WWBH Draft Combine — Leaderboard" },
+      { title: "Leaderboard — Will YOU Be My Hero? Draft Combine" },
+      { name: "description", content: "Ranked results from the Will YOU Be My Hero? fantasy draft combine." },
+      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Leaderboard" },
       { property: "og:description", content: "Official combine times, penalties, and splits." },
     ],
   }),

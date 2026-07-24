@@ -11,9 +11,9 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Live — WWBH Draft Combine" },
-      { name: "description", content: "Watch the We Will Be Heroes Draft Combine live — current runner, timer, and rolling leaderboard." },
-      { property: "og:title", content: "WWBH Draft Combine — Live" },
+      { title: "Live — Will YOU Be My Hero? Draft Combine" },
+      { name: "description", content: "Watch the Will YOU Be My Hero? Draft Combine live — current runner, timer, and rolling leaderboard." },
+      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Live" },
       { property: "og:description", content: "Live timing dashboard for the fantasy football draft combine." },
     ],
   }),
