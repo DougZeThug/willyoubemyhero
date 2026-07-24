@@ -19,18 +19,18 @@ export const verifyEventPin = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: event, error } = await supabaseAdmin
-      .from("events")
-      .select("id, pin_salt, pin_hash")
-      .eq("id", data.eventId)
+    const { data: secret, error } = await supabaseAdmin
+      .from("event_secrets")
+      .select("event_id, pin_salt, pin_hash")
+      .eq("event_id", data.eventId)
       .maybeSingle();
-    if (error || !event) return { ok: false as const, reason: "event_not_found" };
-    const candidate = hashPin(event.pin_salt, data.pin);
-    if (!timingSafeEq(candidate, event.pin_hash)) {
+    if (error || !secret) return { ok: false as const, reason: "event_not_found" };
+    const candidate = hashPin(secret.pin_salt, data.pin);
+    if (!timingSafeEq(candidate, secret.pin_hash)) {
       return { ok: false as const, reason: "bad_pin" };
     }
     const session = await useSession<AdminSession>(getSessionConfig());
-    await session.update({ admin: { eventId: event.id, unlockedAt: Date.now() } });
+    await session.update({ admin: { eventId: secret.event_id, unlockedAt: Date.now() } });
     return { ok: true as const };
   });
 
