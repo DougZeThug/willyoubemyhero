@@ -144,7 +144,7 @@ export const archiveEvent = createServerFn({ method: "POST" })
       slug,
       event_name: event.data.name,
       event_year: event.data.year ?? null,
-      snapshot: snapshot as unknown as Record<string, unknown>,
+      snapshot: snapshot as never,
     });
     if (error) throw error;
     return { ok: true, slug };
