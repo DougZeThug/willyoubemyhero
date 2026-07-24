@@ -64,7 +64,7 @@ function AdminPage() {
     );
   }
 
-  return isAdmin ? <TimingConsole /> : <PinGate eventId={event.id} eventName={event.name} />;
+  return isAdmin ? <TimingConsole /> : <PinGate eventId={event.id} eventName={event.name ?? "Combine"} />;
 }
 
 // ---------------- PIN GATE ----------------
