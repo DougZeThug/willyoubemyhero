@@ -86,7 +86,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Live timing, leaderboard, and draft-pick selection for the Will YOU Be My Hero? fantasy football combine.",
       },
       { name: "author", content: "Will YOU Be My Hero?" },
-      { name: "theme-color", content: "#0a0f14" },
+      { name: "theme-color", content: "#0a1420" },
       { property: "og:title", content: "Will YOU Be My Hero? Draft Combine" },
       {
         property: "og:description",
