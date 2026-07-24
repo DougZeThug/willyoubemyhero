@@ -44,8 +44,9 @@ export function useEventBundle() {
     const invalidate = () => {
       qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
     };
+    const channelName = `event:${eventId}:${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel(`event:${eventId}`)
+      .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "runs", filter: `event_id=eq.${eventId}` }, invalidate)
       .on("postgres_changes", { event: "*", schema: "public", table: "event_participants", filter: `event_id=eq.${eventId}` }, invalidate)
       .on("postgres_changes", { event: "*", schema: "public", table: "draft_selections", filter: `event_id=eq.${eventId}` }, invalidate)
