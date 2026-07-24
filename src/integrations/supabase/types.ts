@@ -230,6 +230,45 @@ export type Database = {
           },
         ]
       }
+      event_secrets: {
+        Row: {
+          created_at: string
+          event_id: string
+          pin_hash: string
+          pin_salt: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          pin_hash: string
+          pin_salt: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          pin_hash?: string
+          pin_salt?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_secrets_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_secrets_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           active: boolean
@@ -240,8 +279,6 @@ export type Database = {
           id: string
           location: string | null
           name: string
-          pin_hash: string
-          pin_salt: string
           results_locked: boolean
           running_order_locked: boolean
           splits_enabled: boolean
@@ -259,8 +296,6 @@ export type Database = {
           id?: string
           location?: string | null
           name: string
-          pin_hash: string
-          pin_salt: string
           results_locked?: boolean
           running_order_locked?: boolean
           splits_enabled?: boolean
@@ -278,8 +313,6 @@ export type Database = {
           id?: string
           location?: string | null
           name?: string
-          pin_hash?: string
-          pin_salt?: string
           results_locked?: boolean
           running_order_locked?: boolean
           splits_enabled?: boolean
