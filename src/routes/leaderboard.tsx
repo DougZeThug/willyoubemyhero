@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Trophy } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/leaderboard")({
   head: () => ({
@@ -34,12 +35,21 @@ function LeaderboardPage() {
   }, [bundle]);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6">
-      <div className="mb-5 flex items-center gap-3">
-        <Trophy className="h-6 w-6 text-primary" />
-        <h1 className="font-display text-3xl font-black uppercase">Leaderboard</h1>
-      </div>
-      <Card>
+    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="mx-auto max-w-4xl px-4 py-6">
+        <PageHeader
+          eyebrow="Standings"
+          title="Leaderboard"
+          icon={<Trophy className="h-5 w-5" />}
+          right={
+            rows.length > 0 ? (
+              <span className="timer-digits tabular text-primary text-lg">
+                {rows.length} <span className="text-muted-foreground text-xs font-bold uppercase tracking-widest">finished</span>
+              </span>
+            ) : null
+          }
+        />
+      <Card className="hud-bezel border-white/10">
         <CardContent className="p-0">
           {rows.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">
@@ -48,14 +58,20 @@ function LeaderboardPage() {
           ) : (
             <ul className="divide-y divide-white/5">
               {rows.map((row, i) => (
-                <li key={row.run.id} className="flex items-center gap-3 px-4 py-3">
+                <li
+                  key={row.run.id}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 transition",
+                    i === 0 && "bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--color-primary)]",
+                  )}
+                >
                   <span
                     className={
-                      "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black " +
+                      "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black tabular " +
                       (i === 0
-                        ? "bg-primary text-primary-foreground"
+                        ? "hud-bezel text-primary ring-1 ring-primary/60"
                         : i < 3
-                          ? "bg-primary/25 text-primary"
+                          ? "hud-bezel text-primary/90"
                           : "bg-white/10 text-foreground")
                     }
                   >
@@ -81,7 +97,7 @@ function LeaderboardPage() {
                     </div>
                   </div>
                   {row.ep?.selected_draft_position != null && (
-                    <Badge variant="outline" className="hidden sm:inline-flex">
+                    <Badge variant="outline" className="hidden border-primary/40 text-primary sm:inline-flex">
                       Pick #{row.ep.selected_draft_position}
                     </Badge>
                   )}
@@ -94,6 +110,38 @@ function LeaderboardPage() {
           )}
         </CardContent>
       </Card>
+      </div>
+    </div>
+  );
+}
+
+function PageHeader({
+  eyebrow,
+  title,
+  icon,
+  right,
+}: {
+  eyebrow: string;
+  title: string;
+  icon?: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-5 border-b border-primary/20 pb-4">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-primary">
+            {icon}
+            <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+              {eyebrow}
+            </span>
+          </div>
+          <h1 className="font-display text-3xl font-black uppercase leading-none mt-1">
+            {title}
+          </h1>
+        </div>
+        {right}
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListOrdered, Shuffle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { getAdminStatus } from "@/lib/admin.functions";
 import { recordRandomization, setRunningOrder } from "@/lib/admin-write.functions";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
@@ -71,26 +72,36 @@ function OrderPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <div className="mb-5 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <ListOrdered className="h-6 w-6 text-primary" />
-          <h1 className="font-display text-3xl font-black uppercase">Running Order</h1>
+    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        <div className="mb-5 flex items-end justify-between gap-2 border-b border-primary/20 pb-4">
+          <div>
+            <div className="flex items-center gap-2 text-primary">
+              <ListOrdered className="h-5 w-5" />
+              <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">Order</span>
+            </div>
+            <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">Running Order</h1>
+          </div>
+          {isAdmin && !event?.running_order_locked && (
+            <Button onClick={reshuffle} disabled={busy} size="sm">
+              <Shuffle className="mr-1.5 h-4 w-4" />
+              {busy ? "Shuffling…" : "Re-randomize"}
+            </Button>
+          )}
         </div>
-        {isAdmin && !event?.running_order_locked && (
-          <Button onClick={reshuffle} disabled={busy} size="sm">
-            <Shuffle className="mr-1.5 h-4 w-4" />
-            {busy ? "Shuffling…" : "Re-randomize"}
-          </Button>
-        )}
-      </div>
 
-      <Card>
+      <Card className="hud-bezel border-white/10">
         <CardContent className="p-0">
           <ol className="divide-y divide-white/5">
-            {rows.map((r) => (
-              <li key={r.id} className="flex items-center gap-3 px-4 py-3">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/5 font-display text-lg font-black tabular">
+            {rows.map((r) => {
+              const status = r.participation_status ?? "queued";
+              const accent =
+                status === "running"
+                  ? "shadow-[inset_3px_0_0_0_var(--color-primary)] bg-primary/[0.06]"
+                  : "";
+              return (
+              <li key={r.id} className={cn("flex items-center gap-3 px-4 py-3 transition", accent)}>
+                <span className="hud-bezel grid h-8 w-8 shrink-0 place-items-center rounded-md font-display text-lg font-black tabular text-primary">
                   {r.running_order}
                 </span>
                 <ParticipantAvatar
@@ -108,12 +119,14 @@ function OrderPage() {
                     </div>
                   )}
                 </div>
-                <StatusBadge status={r.participation_status ?? "queued"} />
+                <StatusBadge status={status} />
               </li>
-            ))}
+              );
+            })}
           </ol>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
