@@ -8,6 +8,11 @@ import {
   saveCompletedRun,
   setParticipantStatus,
 } from "@/lib/admin-write.functions";
+import {
+  archiveEvent,
+  uploadParticipantPhoto,
+} from "@/lib/media.functions";
+import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +39,10 @@ import {
   Redo2,
   Timer as TimerIcon,
   X,
+  QrCode,
+  Camera,
+  Archive,
+  ExternalLink,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -459,6 +468,7 @@ function TimingConsole() {
           </CardContent>
         </Card>
       )}
+      <EventOpsPanel eventId={event.id} eventName={event?.name ?? "Combine"} />
     </div>
   );
 }
