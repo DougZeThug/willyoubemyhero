@@ -545,3 +545,142 @@ function StartCard({
     </Card>
   );
 }
+// ---------------- EVENT OPS: QR / PHOTOS / ARCHIVE ----------------
+function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: string }) {
+  const { bundle } = useEventBundle();
+  const photos = useEventPhotoUrls(eventId);
+  const qc = useQueryClient();
+  const uploadFn = useServerFn(uploadParticipantPhoto);
+  const archiveFn = useServerFn(archiveEvent);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
+
+  const liveUrl = typeof window !== "undefined" ? `${window.location.origin}/live` : "/live";
+  const tvUrl = typeof window !== "undefined" ? `${window.location.origin}/tv` : "/tv";
+
+  useEffect(() => {
+    let cancelled = false;
+    import("qrcode").then(({ default: QR }) => {
+      QR.toDataURL(liveUrl, { margin: 1, width: 240, color: { dark: "#38bdf8", light: "#0b1220" } }).then((d) => {
+        if (!cancelled) setQrDataUrl(d);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [liveUrl]);
+
+  async function onPickPhoto(epId: string, file: File) {
+    setUploadingId(epId);
+    try {
+      const dataUrl: string = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result as string);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      await uploadFn({ data: { eventId, eventParticipantId: epId, dataUrl } });
+      await qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
+      toast.success("Photo uploaded");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function onArchive() {
+    if (!confirm(`Archive "${eventName}" as a permanent recap?`)) return;
+    setArchiving(true);
+    try {
+      const res = await archiveFn({ data: { eventId } });
+      toast.success(`Archived: /recap/${res.slug}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Archive failed");
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Card className="hud-bezel border-primary/20">
+        <CardContent className="p-5">
+          <div className="mb-2 flex items-center gap-2 text-primary">
+            <QrCode className="h-4 w-4" />
+            <h2 className="font-display text-sm font-black uppercase tracking-[0.3em]">
+              Spectator Access
+            </h2>
+          </div>
+          {qrDataUrl && (
+            <img
+              src={qrDataUrl}
+              alt="QR code to live spectator view"
+              className="mx-auto rounded-lg border border-primary/30"
+              width={240}
+              height={240}
+            />
+          )}
+          <div className="mt-3 space-y-1 text-center text-xs">
+            <a href={liveUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+              <ExternalLink className="h-3 w-3" /> {liveUrl}
+            </a>
+            <div>
+              <a href={tvUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary/80 hover:underline">
+                <ExternalLink className="h-3 w-3" /> TV big-screen: /tv
+              </a>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="hud-bezel border-primary/20">
+        <CardContent className="p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-primary">
+              <Camera className="h-4 w-4" />
+              <h2 className="font-display text-sm font-black uppercase tracking-[0.3em]">
+                Participant Photos
+              </h2>
+            </div>
+            <Button size="sm" variant="secondary" onClick={onArchive} disabled={archiving}>
+              <Archive className="mr-1.5 h-3.5 w-3.5" />
+              {archiving ? "Archiving…" : "Archive Event"}
+            </Button>
+          </div>
+          <div className="max-h-72 space-y-1 overflow-auto pr-1">
+            {(bundle?.participants ?? []).map((p) => (
+              <label
+                key={p.id}
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5 hover:border-primary/30"
+              >
+                <ParticipantAvatar
+                  name={p.participant?.name ?? "?"}
+                  photoUrl={photos.data?.[p.id] ?? p.participant?.profile_image_url ?? null}
+                  size={36}
+                />
+                <span className="flex-1 truncate text-sm font-semibold uppercase">
+                  {p.participant?.name}
+                </span>
+                <span className="text-[10px] uppercase tracking-widest text-primary/70">
+                  {uploadingId === p.id ? "Uploading…" : photos.data?.[p.id] ? "Replace" : "Upload"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onPickPhoto(p.id, f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
