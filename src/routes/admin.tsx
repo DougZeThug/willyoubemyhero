@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { adminSignOut, getAdminStatus, verifyEventPin } from "@/lib/admin.functions";
+import { verifyEventPin } from "@/lib/admin.functions";
+import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
 import {
   saveCompletedRun,
   setParticipantStatus,
@@ -58,16 +59,10 @@ export const Route = createFileRoute("/admin")({
 
 function AdminPage() {
   const { event } = useEventBundle();
-  const adminStatusFn = useServerFn(getAdminStatus);
-  const status = useQuery({
-    queryKey: ["admin-status"],
-    queryFn: () => adminStatusFn(),
-    staleTime: 30_000,
-  });
+  const admin = useAdminSession();
+  const isAdmin = !!event?.id && admin?.eventId === event.id;
 
-  const isAdmin = !!event?.id && status.data?.eventId === event.id;
-
-  if (status.isLoading || !event || !event.id) {
+  if (!event || !event.id) {
     return (
       <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Loading…</div>
     );
@@ -79,7 +74,6 @@ function AdminPage() {
 // ---------------- PIN GATE ----------------
 function PinGate({ eventId, eventName }: { eventId: string; eventName: string }) {
   const verifyFn = useServerFn(verifyEventPin);
-  const qc = useQueryClient();
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -92,8 +86,8 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
         setPin("");
         return;
       }
+      setAdminToken(res.token);
       toast.success("Admin unlocked");
-      await qc.invalidateQueries({ queryKey: ["admin-status"] });
     } catch {
       toast.error("Could not verify PIN");
     } finally {
@@ -153,7 +147,6 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
 function TimingConsole() {
   const { event, bundle } = useEventBundle();
   const qc = useQueryClient();
-  const signOutFn = useServerFn(adminSignOut);
   const saveRunFn = useServerFn(saveCompletedRun);
   const setStatusFn = useServerFn(setParticipantStatus);
 
@@ -191,8 +184,8 @@ function TimingConsole() {
   const usedStationIds = new Set(run?.splits.map((s) => s.stationId) ?? []);
 
   async function signOut() {
-    await signOutFn();
-    await qc.invalidateQueries({ queryKey: ["admin-status"] });
+    clearAdminToken();
+    await qc.invalidateQueries();
   }
 
   async function startRun() {
