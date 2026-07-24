@@ -17,6 +17,7 @@ import { Route as DraftRouteImport } from './routes/draft'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RecapSlugRouteImport } from './routes/recap.$slug'
 
 const TvRoute = TvRouteImport.update({
   id: '/tv',
@@ -58,6 +59,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RecapSlugRoute = RecapSlugRouteImport.update({
+  id: '/recap/$slug',
+  path: '/recap/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
   '/tv': typeof TvRoute
+  '/recap/$slug': typeof RecapSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByTo {
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
   '/tv': typeof TvRoute
+  '/recap/$slug': typeof RecapSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
   '/tv': typeof TvRoute
+  '/recap/$slug': typeof RecapSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,6 +110,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/order'
     | '/tv'
+    | '/recap/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/order'
     | '/tv'
+    | '/recap/$slug'
   id:
     | '__root__'
     | '/'
@@ -121,6 +132,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/order'
     | '/tv'
+    | '/recap/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -132,6 +144,7 @@ export interface RootRouteChildren {
   LiveRoute: typeof LiveRoute
   OrderRoute: typeof OrderRoute
   TvRoute: typeof TvRoute
+  RecapSlugRoute: typeof RecapSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -192,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/recap/$slug': {
+      id: '/recap/$slug'
+      path: '/recap/$slug'
+      fullPath: '/recap/$slug'
+      preLoaderRoute: typeof RecapSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -204,6 +224,7 @@ const rootRouteChildren: RootRouteChildren = {
   LiveRoute: LiveRoute,
   OrderRoute: OrderRoute,
   TvRoute: TvRoute,
+  RecapSlugRoute: RecapSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
