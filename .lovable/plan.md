@@ -1,19 +1,41 @@
-## Two fixes
+## Problem
 
-### 1. Make participant photos square everywhere
+Entering PIN `1234` calls `verifyEventPin`, which the server confirms as `ok:true`. But the next `getAdminStatus` call still returns `eventId: null` — the `wwbh-admin` session cookie set by `useSession` never comes back on the follow-up request. Result: `PinGate` keeps rendering (4 dots stuck on screen); on production Firefox the retry loop lands on the root `errorComponent` ("This page didn't load"). This is reproducible in the current network log.
 
-Change all avatar/photo displays from circles to squares (rounded corners kept for polish; use `rounded-md`, `aspect-square`).
+The cookie fails for two reasons combined:
+- Lovable preview runs the app inside a cross-site iframe; Firefox's tracking protection drops the session cookie.
+- The Set-Cookie from `useSession().update()` inside a `createServerFn` handler isn't reliably attached to the response body used by TanStack's serverFn transport.
 
-- `src/components/participant-avatar.tsx`: swap `rounded-full` → `rounded-md`.
-- `src/components/result-card.tsx`: change the 220×220 photo tile from `borderRadius: 999` → `borderRadius: 24` so exported PNGs match.
-- `src/routes/tv.tsx`, `src/routes/live.tsx`, `src/routes/leaderboard.tsx`, `src/routes/index.tsx`, `src/routes/recap.$slug.tsx`, `src/routes/analytics.tsx`: the rank badges (`h-6 w-6`, `h-9 w-9`, etc.) stay round — they're numbered chips, not photos. Only the actual avatar component (already handled centrally) needs the change.
+## Fix
 
-### 2. Surface the photo uploader on Admin
+Stop relying on a server-side cookie session for admin unlock. Instead:
 
-The uploader already exists (`EventOpsPanel` in `src/routes/admin.tsx`) but only appears **below** the timing console once a PIN is entered, and there's no visible hint. Two changes:
+1. **`verifyEventPin`** returns a short-lived signed token (HMAC of `eventId + expiresAt` using `SESSION_SECRET`) when the PIN matches — no `useSession`, no Set-Cookie.
+2. **Client** stores that token in `localStorage` (per-device admin unlock, matching the intent of "event PIN on this device").
+3. **`getAdminStatus`** is replaced by a pure client check: parse the stored token, verify expiry, expose `eventId` if still valid. No server round-trip needed for the gate.
+4. **Protected server fns** (`saveCompletedRun`, `setParticipantStatus`, `uploadParticipantPhoto`, `archiveEvent`) take the token as an argument and verify HMAC + expiry + eventId server-side via a shared `requireAdminToken(token, eventId)` helper. Replaces the current `useSession`-based `requireAdmin`.
+5. **Sign-out** just clears the localStorage key and invalidates the admin-status query.
 
-- **Move `EventOpsPanel` to the top of the admin console**, above the run controls, so the "Participant Photos" card is the first thing seen after unlocking.
-- **Add a short section header** ("Event Setup") with a subtitle telling admins they can tap any participant row to upload/replace a square photo, and note that the same panel holds the spectator QR + Archive controls.
-- The row's tap target already opens the file picker (`<label>` wraps a hidden `<input type="file">`); no logic change needed.
+## Files touched
 
-No backend or schema changes. All work is in three files: `participant-avatar.tsx`, `result-card.tsx`, and `admin.tsx`.
+- `src/lib/session.server.ts` — add `signAdminToken`, `verifyAdminToken` (HMAC-SHA256 with `SESSION_SECRET`); keep `hashPin` / `timingSafeEq`; drop `getSessionConfig`.
+- `src/lib/admin.functions.ts` — `verifyEventPin` returns `{ ok, token, expiresAt }`; remove `getAdminStatus` server fn and `adminSignOut` server fn.
+- `src/lib/admin-token.ts` (new, client) — `getAdminToken`, `setAdminToken`, `clearAdminToken`, `readAdminSession()` returning `{ eventId, expiresAt } | null`.
+- `src/lib/admin-write.functions.ts` — add `token: string` to every input validator; call new `requireAdminToken` server helper; keep behaviour otherwise.
+- `src/lib/media.functions.ts` — same token change on `uploadParticipantPhoto` and `archiveEvent`.
+- `src/routes/admin.tsx`:
+  - Replace `useQuery(['admin-status'], getAdminStatus)` with a small `useAdminSession()` hook that reads localStorage and re-checks on `storage` events.
+  - `attempt()` stores the returned token, then updates local state — no query invalidation round-trip.
+  - Pass the token into every mutation call.
+  - `signOut()` clears localStorage and local state.
+
+## Verification
+
+- Load `/admin`, type `1234` → `TimingConsole` renders immediately, no server round-trip stalls, works in the Lovable preview iframe and on production willyoubemyhero.com.
+- Reload the page while unlocked → still unlocked until token expiry (12h).
+- Tamper with the localStorage token → server rejects any protected write.
+- Sign out → gate returns.
+
+## Notes
+
+- Security posture is unchanged: the PIN was already a per-device unlock, and every mutation still verifies an HMAC-signed token server-side using the server-only `SESSION_SECRET`. No new secrets, no schema changes, no migration.
