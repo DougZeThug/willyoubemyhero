@@ -352,6 +352,21 @@ function TimingConsole() {
         </Button>
       </div>
 
+      {event?.id && (
+        <div>
+          <div className="mb-2">
+            <div className="flex items-center gap-2 text-primary">
+              <Camera className="h-4 w-4" />
+              <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">Event Setup</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Tap any participant below to upload or replace their square photo. This panel also holds the spectator QR code and the Archive Event button.
+            </p>
+          </div>
+          <EventOpsPanel eventId={event.id} eventName={event.name ?? "Combine"} />
+        </div>
+      )}
+
       {!run ? (
         <StartCard
           participants={participants}
@@ -478,7 +493,6 @@ function TimingConsole() {
           </CardContent>
         </Card>
       )}
-      {event?.id && <EventOpsPanel eventId={event.id} eventName={event.name ?? "Combine"} />}
     </div>
   );
 }

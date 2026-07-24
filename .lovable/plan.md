@@ -1,61 +1,19 @@
+## Two fixes
 
-# Phase 3 — Spectator, Media, Analytics
+### 1. Make participant photos square everywhere
 
-Builds on the existing HUD/dark broadcast app. Three tracks, one integrated pass.
+Change all avatar/photo displays from circles to squares (rounded corners kept for polish; use `rounded-md`, `aspect-square`).
 
-## Track A — Spectator mode + QR sharing
+- `src/components/participant-avatar.tsx`: swap `rounded-full` → `rounded-md`.
+- `src/components/result-card.tsx`: change the 220×220 photo tile from `borderRadius: 999` → `borderRadius: 24` so exported PNGs match.
+- `src/routes/tv.tsx`, `src/routes/live.tsx`, `src/routes/leaderboard.tsx`, `src/routes/index.tsx`, `src/routes/recap.$slug.tsx`, `src/routes/analytics.tsx`: the rank badges (`h-6 w-6`, `h-9 w-9`, etc.) stay round — they're numbered chips, not photos. Only the actual avatar component (already handled centrally) needs the change.
 
-- New public route `src/routes/live.tsx` — read-only broadcast view (no admin controls). Reuses `useEventBundle` + realtime for live timer, current runner, station, and top-5 leaderboard sidebar.
-- New route `src/routes/tv.tsx` — big-screen layout (16:9), oversized HUD timer, standings ticker, "on deck" card, station name banner. Auto-hides cursor, no bottom nav, hides on small viewports with a "open on TV" hint.
-- Admin screen: add a QR code panel (using existing `qrcode` dep) that encodes the `/live` URL. Copy-link and "open TV view" buttons.
-- Nav: add a subtle "Live" link for spectators; keep admin gated by PIN as today.
-- Public SSR-safe: reads go through the existing publishable-key server fns / `events_public` view; no PIN required.
+### 2. Surface the photo uploader on Admin
 
-## Track B — Rich media + result cards
+The uploader already exists (`EventOpsPanel` in `src/routes/admin.tsx`) but only appears **below** the timing console once a PIN is entered, and there's no visible hint. Two changes:
 
-- Participant photo uploads
-  - Admin roster editor: upload avatar → private `participant-photos` bucket (already exists). Store object path on `event_participants.photo_path`.
-  - New server fn `getSignedPhotoUrl` returns short-lived signed URLs; `ParticipantAvatar` prefers the signed URL and falls back to initials.
-- Finish celebrations
-  - When a run finishes, emit a full-screen overlay on `/admin` and `/live`: confetti (canvas), athlete name, final time, delta vs. leader. Auto-dismiss after 4s or on tap.
-  - Motion via existing `motion` dep; respects `prefers-reduced-motion`.
-- Exportable PNG result cards
-  - New util `src/lib/result-card.tsx` renders a 1080×1350 card (name, photo, time, splits, event, date) into an offscreen node.
-  - Export via `html-to-image` (add dep) → download PNG + Web Share API when available.
-  - Buttons: per-run row on leaderboard ("Share card") and a final "Draft board" card on `/draft` once complete.
+- **Move `EventOpsPanel` to the top of the admin console**, above the run controls, so the "Participant Photos" card is the first thing seen after unlocking.
+- **Add a short section header** ("Event Setup") with a subtitle telling admins they can tap any participant row to upload/replace a square photo, and note that the same panel holds the spectator QR + Archive controls.
+- The row's tap target already opens the file picker (`<label>` wraps a hidden `<input type="file">`); no logic change needed.
 
-## Track C — Advanced analytics
-
-- Per-station split breakdowns
-  - New route `src/routes/analytics.tsx` with tabs: Splits, Bests, Head-to-Head, History.
-  - Splits tab: per-station table (best, median, worst, your rank), bar chart via `recharts` (add dep).
-- Personal bests
-  - Server fn aggregates each participant's best station splits and best total across all past events. Displayed on participant detail drawer + Bests tab.
-- Head-to-head
-  - Pick two participants → side-by-side splits, deltas per station, total gap, mini timeline.
-- Historical event archive
-  - New table `public.event_archive_snapshots` (event_id, snapshot jsonb, created_at) written on event completion via an admin "Archive event" action.
-  - History tab lists past events with final standings and links to a read-only recap page `src/routes/recap.$eventSlug.tsx`.
-
-## Data / backend changes
-
-Single migration:
-- `alter table event_participants add column photo_path text;`
-- `create table public.event_archive_snapshots (...)` + GRANTs + RLS (public SELECT of snapshot json; service_role all).
-- Extend `events_public` view / public server fns to expose snapshot summaries for recap pages.
-- Storage: keep `participant-photos` private; add owner/service policies already in place; new admin fn issues signed URLs.
-
-## Technical notes
-
-- Deps to add: `recharts`, `html-to-image`, `canvas-confetti` (+ types).
-- All new public routes get proper `head()` metadata (title, description, og:title/description, og:type=website, twitter:card=summary_large_image). No og:image unless a stable absolute hero URL exists.
-- Reuse existing tokens: `hud-bezel`, `neon-btn`, `circuit-bg`, cyan/teal palette. No new colors.
-- Timer visuals on `/live` and `/tv` reuse `HudTimer` at larger sizes; realtime channels are shared, not duplicated.
-- Result-card export runs client-only (`<ClientOnly>` wrapper) to avoid SSR of `html-to-image`.
-- Confetti and `html-to-image` are dynamically imported to keep initial bundle small.
-
-## Out of scope
-
-- Multi-event tenancy / user accounts (still PIN per event).
-- Video capture / streaming.
-- Push notifications.
+No backend or schema changes. All work is in three files: `participant-avatar.tsx`, `result-card.tsx`, and `admin.tsx`.
