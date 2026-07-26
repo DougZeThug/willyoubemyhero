@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TvRouteImport } from './routes/tv'
+import { Route as PlayersRouteImport } from './routes/players'
 import { Route as OrderRouteImport } from './routes/order'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
@@ -22,6 +23,11 @@ import { Route as RecapSlugRouteImport } from './routes/recap.$slug'
 const TvRoute = TvRouteImport.update({
   id: '/tv',
   path: '/tv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlayersRoute = PlayersRouteImport.update({
+  id: '/players',
+  path: '/players',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrderRoute = OrderRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/players': typeof PlayersRoute
   '/tv': typeof TvRoute
   '/recap/$slug': typeof RecapSlugRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/players': typeof PlayersRoute
   '/tv': typeof TvRoute
   '/recap/$slug': typeof RecapSlugRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
   '/order': typeof OrderRoute
+  '/players': typeof PlayersRoute
   '/tv': typeof TvRoute
   '/recap/$slug': typeof RecapSlugRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/live'
     | '/order'
+    | '/players'
     | '/tv'
     | '/recap/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/live'
     | '/order'
+    | '/players'
     | '/tv'
     | '/recap/$slug'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/live'
     | '/order'
+    | '/players'
     | '/tv'
     | '/recap/$slug'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   LeaderboardRoute: typeof LeaderboardRoute
   LiveRoute: typeof LiveRoute
   OrderRoute: typeof OrderRoute
+  PlayersRoute: typeof PlayersRoute
   TvRoute: typeof TvRoute
   RecapSlugRoute: typeof RecapSlugRoute
 }
@@ -154,6 +167,13 @@ declare module '@tanstack/react-router' {
       path: '/tv'
       fullPath: '/tv'
       preLoaderRoute: typeof TvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/players': {
+      id: '/players'
+      path: '/players'
+      fullPath: '/players'
+      preLoaderRoute: typeof PlayersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/order': {
@@ -223,6 +243,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaderboardRoute: LeaderboardRoute,
   LiveRoute: LiveRoute,
   OrderRoute: OrderRoute,
+  PlayersRoute: PlayersRoute,
   TvRoute: TvRoute,
   RecapSlugRoute: RecapSlugRoute,
 }

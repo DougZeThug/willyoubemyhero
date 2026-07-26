@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -117,9 +117,13 @@ function DraftPage() {
               <div className="text-xs font-bold uppercase tracking-[0.3em] text-primary">
                 On the clock
               </div>
-              <div className="font-display text-3xl font-black uppercase">
+              <Link
+                to="/players/$id"
+                params={{ id: currentPicker.ep!.id }}
+                className="font-display text-3xl font-black uppercase hover:text-primary"
+              >
                 {currentPicker.ep!.participant?.name}
-              </div>
+              </Link>
               <div className="text-xs text-muted-foreground">
                 Combine time {formatTime(currentPicker.run.official_time_ms)}
                 {isAdmin ? " · Tap a position below to lock the pick" : ""}

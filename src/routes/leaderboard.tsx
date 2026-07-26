@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
@@ -124,9 +124,17 @@ function LeaderboardPage() {
                     size={40}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-display text-lg font-bold uppercase leading-tight">
-                      {row.ep?.participant?.name ?? "—"}
-                    </div>
+                    {row.ep ? (
+                      <Link
+                        to="/players/$id"
+                        params={{ id: row.ep.id }}
+                        className="block truncate font-display text-lg font-bold uppercase leading-tight hover:text-primary"
+                      >
+                        {row.ep.participant?.name ?? "—"}
+                      </Link>
+                    ) : (
+                      <div className="truncate font-display text-lg font-bold uppercase leading-tight">—</div>
+                    )}
                     <div className="truncate text-xs text-muted-foreground">
                       {row.ep?.participant?.fantasy_team_name ?? row.ep?.participant?.nickname ?? "—"}
                       {row.run.penalty_ms > 0 && (

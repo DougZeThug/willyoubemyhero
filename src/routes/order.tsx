@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useEventBundle } from "@/hooks/use-event-bundle";
@@ -106,9 +106,13 @@ function OrderPage() {
                   size={40}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-display text-lg font-bold uppercase leading-tight">
+                  <Link
+                    to="/players/$id"
+                    params={{ id: r.id }}
+                    className="block truncate font-display text-lg font-bold uppercase leading-tight hover:text-primary"
+                  >
                     {r.participant?.name ?? "—"}
-                  </div>
+                  </Link>
                   {r.participant?.fantasy_team_name && (
                     <div className="truncate text-xs text-muted-foreground">
                       {r.participant.fantasy_team_name}
