@@ -570,11 +570,15 @@ function StartCard({
 function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: string }) {
   const { bundle } = useEventBundle();
   const photos = useEventPhotoUrls(eventId);
+  const cards = useEventCardUrls(eventId);
   const qc = useQueryClient();
   const uploadFn = useServerFn(uploadParticipantPhoto);
+  const uploadCardFn = useServerFn(uploadParticipantCard);
+  const deleteCardFn = useServerFn(deleteParticipantCard);
   const archiveFn = useServerFn(archiveEvent);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadingCardId, setUploadingCardId] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
 
   const liveUrl = typeof window !== "undefined" ? `${window.location.origin}/live` : "/live";
@@ -608,6 +612,36 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploadingId(null);
+    }
+  }
+
+  async function onPickCard(epId: string, file: File) {
+    setUploadingCardId(epId);
+    try {
+      const dataUrl: string = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result as string);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      await uploadCardFn({ data: { eventId, eventParticipantId: epId, dataUrl } });
+      await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      toast.success("Card uploaded");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploadingCardId(null);
+    }
+  }
+
+  async function onRemoveCard(epId: string) {
+    if (!confirm("Remove this player's card image?")) return;
+    try {
+      await deleteCardFn({ data: { eventId, eventParticipantId: epId } });
+      await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      toast.success("Card removed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Remove failed");
     }
   }
 
@@ -672,9 +706,9 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
           </div>
           <div className="max-h-72 space-y-1 overflow-auto pr-1">
             {(bundle?.participants ?? []).map((p) => (
-              <label
+              <div
                 key={p.id}
-                className="flex cursor-pointer items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5 hover:border-primary/30"
+                className="flex items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5"
               >
                 <ParticipantAvatar
                   name={p.participant?.name ?? "?"}
@@ -684,20 +718,44 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                 <span className="flex-1 truncate text-sm font-semibold uppercase">
                   {p.participant?.name}
                 </span>
-                <span className="text-[10px] uppercase tracking-widest text-primary/70">
-                  {uploadingId === p.id ? "Uploading…" : photos.data?.[p.id] ? "Replace" : "Upload"}
-                </span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onPickPhoto(p.id, f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+                <label className="cursor-pointer rounded border border-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:border-primary/60 hover:text-primary">
+                  <Camera className="mr-1 inline h-3 w-3" />
+                  {uploadingId === p.id ? "…" : photos.data?.[p.id] ? "Photo" : "Photo"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onPickPhoto(p.id, f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <label className="cursor-pointer rounded border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20">
+                  <IdCard className="mr-1 inline h-3 w-3" />
+                  {uploadingCardId === p.id ? "…" : cards.data?.[p.id] ? "Card ✓" : "Card"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onPickCard(p.id, f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {cards.data?.[p.id] && (
+                  <button
+                    onClick={() => onRemoveCard(p.id)}
+                    className="rounded p-1 text-muted-foreground hover:text-destructive"
+                    aria-label="Remove card"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </CardContent>
