@@ -12,8 +12,10 @@ import {
 import {
   archiveEvent,
   uploadParticipantPhoto,
+  uploadParticipantCard,
+  deleteParticipantCard,
 } from "@/lib/media.functions";
-import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
+import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,8 @@ import {
   Camera,
   Archive,
   ExternalLink,
+  IdCard,
+  Trash2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
