@@ -56,6 +56,86 @@ export const getEventPhotoUrls = createServerFn({ method: "GET" })
     return out;
   });
 
+// Return signed URLs for uploaded full player-card images (card_path).
+export const getEventCardUrls = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const sb = publicClient();
+    const { data: eps } = await sb
+      .from("event_participants")
+      .select("id, card_path")
+      .eq("event_id", data.eventId);
+    const rows = (eps ?? []).filter((r) => !!r.card_path);
+    if (rows.length === 0) return {} as Record<string, string>;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const out: Record<string, string> = {};
+    await Promise.all(
+      rows.map(async (r) => {
+        const { data: signed } = await supabaseAdmin.storage
+          .from("participant-photos")
+          .createSignedUrl(r.card_path as string, 60 * 60);
+        if (signed?.signedUrl) out[r.id] = signed.signedUrl;
+      }),
+    );
+    return out;
+  });
+
+export const uploadParticipantCard = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: z.string().uuid(),
+        eventParticipantId: z.string().uuid(),
+        dataUrl: z.string().min(32).max(12_000_000),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const m = data.dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/);
+    if (!m) throw new Error("Unsupported image format");
+    const contentType = m[1];
+    const ext = m[2] === "jpg" ? "jpeg" : m[2];
+    const bytes = Uint8Array.from(atob(m[3]), (c) => c.charCodeAt(0));
+    const path = `cards/${data.eventId}/${data.eventParticipantId}-${Date.now()}.${ext}`;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error: upErr } = await supabaseAdmin.storage
+      .from("participant-photos")
+      .upload(path, bytes, { contentType, upsert: true });
+    if (upErr) throw upErr;
+    const { error: dbErr } = await supabaseAdmin
+      .from("event_participants")
+      .update({ card_path: path })
+      .eq("id", data.eventParticipantId);
+    if (dbErr) throw dbErr;
+    const { data: signed } = await supabaseAdmin.storage
+      .from("participant-photos")
+      .createSignedUrl(path, 60 * 60);
+    return { ok: true, url: signed?.signedUrl ?? null, path };
+  });
+
+export const deleteParticipantCard = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ eventId: z.string().uuid(), eventParticipantId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
+      .from("event_participants")
+      .select("card_path")
+      .eq("id", data.eventParticipantId)
+      .maybeSingle();
+    if (row?.card_path) {
+      await supabaseAdmin.storage.from("participant-photos").remove([row.card_path]);
+    }
+    await supabaseAdmin
+      .from("event_participants")
+      .update({ card_path: null })
+      .eq("id", data.eventParticipantId);
+    return { ok: true };
+  });
+
 export const uploadParticipantPhoto = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
