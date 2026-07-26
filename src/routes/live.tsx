@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { User2, Trophy, Radio } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
@@ -80,9 +80,13 @@ function LivePage() {
           </HudTimer>
           {current ? (
             <div className="mt-4 text-center">
-              <div className="font-display text-3xl font-black uppercase tracking-wide">
+              <Link
+                to="/players/$id"
+                params={{ id: current.id }}
+                className="font-display text-3xl font-black uppercase tracking-wide hover:text-primary"
+              >
                 {current.participant?.name}
-              </div>
+              </Link>
               {current.participant?.fantasy_team_name && (
                 <div className="text-xs text-muted-foreground">
                   {current.participant.fantasy_team_name}
@@ -131,9 +135,17 @@ function LivePage() {
                       photoUrl={photos.data?.[row.ep?.id ?? ""] ?? row.ep?.participant?.profile_image_url ?? null}
                       size={32}
                     />
-                    <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
-                      {row.ep?.participant?.name ?? "—"}
-                    </span>
+                    {row.ep ? (
+                      <Link
+                        to="/players/$id"
+                        params={{ id: row.ep.id }}
+                        className="flex-1 truncate text-sm font-semibold uppercase tracking-wide hover:text-primary"
+                      >
+                        {row.ep.participant?.name ?? "—"}
+                      </Link>
+                    ) : (
+                      <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">—</span>
+                    )}
                     <span className="timer-digits tabular text-primary text-lg">
                       {formatTime(row.run.official_time_ms)}
                     </span>

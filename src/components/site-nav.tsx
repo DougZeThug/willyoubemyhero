@@ -1,13 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Radio, Trophy, ListOrdered, ClipboardList, Settings, BarChart3 } from "lucide-react";
+import { Radio, Trophy, ListOrdered, ClipboardList, Settings, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
   { to: "/", label: "Live", icon: Radio },
   { to: "/leaderboard", label: "Board", icon: Trophy },
   { to: "/order", label: "Order", icon: ListOrdered },
+  { to: "/players", label: "Players", icon: Users },
   { to: "/draft", label: "Draft", icon: ClipboardList },
-  { to: "/analytics", label: "Stats", icon: BarChart3 },
   { to: "/admin", label: "Admin", icon: Settings },
 ] as const;
 

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
@@ -81,9 +81,17 @@ function TvPage() {
               size={56}
             />
             <div className="min-w-0 flex-1">
-              <div className="truncate font-display text-2xl font-black uppercase leading-tight">
-                {row.ep?.participant?.name}
-              </div>
+              {row.ep ? (
+                <Link
+                  to="/players/$id"
+                  params={{ id: row.ep.id }}
+                  className="block truncate font-display text-2xl font-black uppercase leading-tight hover:text-primary"
+                >
+                  {row.ep.participant?.name}
+                </Link>
+              ) : (
+                <div className="truncate font-display text-2xl font-black uppercase leading-tight">—</div>
+              )}
               {row.ep?.participant?.fantasy_team_name && (
                 <div className="truncate text-xs uppercase tracking-widest text-muted-foreground">
                   {row.ep.participant.fantasy_team_name}

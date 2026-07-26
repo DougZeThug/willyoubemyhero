@@ -217,6 +217,7 @@ export type Database = {
       event_participants: {
         Row: {
           bib_number: number | null
+          card_path: string | null
           created_at: string
           draft_choice_priority: number | null
           event_id: string
@@ -230,6 +231,7 @@ export type Database = {
         }
         Insert: {
           bib_number?: number | null
+          card_path?: string | null
           created_at?: string
           draft_choice_priority?: number | null
           event_id: string
@@ -243,6 +245,7 @@ export type Database = {
         }
         Update: {
           bib_number?: number | null
+          card_path?: string | null
           created_at?: string
           draft_choice_priority?: number | null
           event_id?: string
