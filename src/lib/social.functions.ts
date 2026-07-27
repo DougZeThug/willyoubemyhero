@@ -227,56 +227,16 @@ export const closeAwardVoting = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();
-    const { data: rows } = await sb
-      .from("award_votes")
-      .select("category, target_participant_id")
-      .eq("event_id", data.eventId);
-
-    const tally: Record<string, Record<string, number>> = {};
-    for (const r of rows ?? []) {
-      tally[r.category] ??= {};
-      tally[r.category][r.target_participant_id] =
-        (tally[r.category][r.target_participant_id] ?? 0) + 1;
-    }
-
-    // Republish from scratch so re-closing after a correction is idempotent.
-    await sb.from("awards").delete().eq("event_id", data.eventId);
-
-    const inserts: {
-      event_id: string;
-      participant_id: string;
-      award_name: string;
-      award_type: string;
-      description: string;
-    }[] = [];
-    for (const category of AWARD_CATEGORIES) {
-      const counts = tally[category.id];
-      if (!counts) continue;
-      const top = Math.max(...Object.values(counts));
-      if (top <= 0) continue;
-      const winners = Object.entries(counts)
-        .filter(([, n]) => n === top)
-        .map(([participantId]) => participantId);
-      for (const participantId of winners) {
-        inserts.push({
-          event_id: data.eventId,
-          participant_id: participantId,
-          award_name: category.label,
-          award_type: category.id,
-          description:
-            winners.length > 1
-              ? `Tied with ${winners.length - 1} other${winners.length > 2 ? "s" : ""} — ${top} vote${top === 1 ? "" : "s"}`
-              : `${top} vote${top === 1 ? "" : "s"}`,
-        });
-      }
-    }
-    if (inserts.length) {
-      const { error } = await sb.from("awards").insert(inserts);
-      if (error) throw error;
-    }
-
-    await sb.from("events").update({ awards_locked: true }).eq("id", data.eventId);
-    return { ok: true, published: inserts.length };
+    // Tally + publish + lock happen inside close_award_voting, which takes a
+    // row lock on the event so an in-flight cast_award_vote either finishes
+    // first (and is counted) or waits until we're done (and then sees
+    // awards_locked). No vote is silently dropped.
+    const { data: published, error } = await sb.rpc("close_award_voting", {
+      _event_id: data.eventId,
+      _categories: AWARD_CATEGORIES.map((c) => ({ id: c.id, label: c.label })),
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true, published: published ?? 0 };
   });
 
 /** Reopen voting and unpublish, for when someone was left out. */
@@ -285,7 +245,7 @@ export const reopenAwardVoting = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();
-    await sb.from("awards").delete().eq("event_id", data.eventId);
-    await sb.from("events").update({ awards_locked: false }).eq("id", data.eventId);
+    const { error } = await sb.rpc("reopen_award_voting", { _event_id: data.eventId });
+    if (error) throw new Error(error.message);
     return { ok: true };
   });
