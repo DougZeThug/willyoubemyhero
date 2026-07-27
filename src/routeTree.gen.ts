@@ -22,9 +22,6 @@ import { Route as TvRouteImport } from './routes/tv'
 import { Route as PlayersIndexRouteImport } from './routes/players.index'
 import { Route as PlayersIdRouteImport } from './routes/players.$id'
 import { Route as PlayersPackRouteImport } from './routes/players.pack'
-import { Route as PlayersRouteImport } from './routes/players'
-import { Route as TvRouteImport } from './routes/tv'
-import { Route as PlayersIdRouteImport } from './routes/players.$id'
 import { Route as RecapSlugRouteImport } from './routes/recap.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -45,9 +42,6 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
 const AwardsRoute = AwardsRouteImport.update({
   id: '/awards',
   path: '/awards',
-const DraftRoute = DraftRouteImport.update({
-  id: '/draft',
-  path: '/draft',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClaimRoute = ClaimRouteImport.update({
@@ -93,30 +87,7 @@ const PlayersIdRoute = PlayersIdRouteImport.update({
 const PlayersPackRoute = PlayersPackRouteImport.update({
   id: '/players/pack',
   path: '/players/pack',
-const LiveRoute = LiveRouteImport.update({
-  id: '/live',
-  path: '/live',
   getParentRoute: () => rootRouteImport,
-} as any)
-const OrderRoute = OrderRouteImport.update({
-  id: '/order',
-  path: '/order',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlayersRoute = PlayersRouteImport.update({
-  id: '/players',
-  path: '/players',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TvRoute = TvRouteImport.update({
-  id: '/tv',
-  path: '/tv',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlayersIdRoute = PlayersIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => PlayersRoute,
 } as any)
 const RecapSlugRoute = RecapSlugRouteImport.update({
   id: '/recap/$slug',
@@ -269,11 +240,6 @@ declare module '@tanstack/react-router' {
       path: '/awards'
       fullPath: '/awards'
       preLoaderRoute: typeof AwardsRouteImport
-    '/draft': {
-      id: '/draft'
-      path: '/draft'
-      fullPath: '/draft'
-      preLoaderRoute: typeof DraftRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim': {
@@ -309,25 +275,6 @@ declare module '@tanstack/react-router' {
       path: '/order'
       fullPath: '/order'
       preLoaderRoute: typeof OrderRouteImport
-    '/live': {
-      id: '/live'
-      path: '/live'
-      fullPath: '/live'
-      preLoaderRoute: typeof LiveRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/order': {
-      id: '/order'
-      path: '/order'
-      fullPath: '/order'
-      preLoaderRoute: typeof OrderRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/players': {
-      id: '/players'
-      path: '/players'
-      fullPath: '/players'
-      preLoaderRoute: typeof PlayersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tv': {
@@ -365,13 +312,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RecapSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/recap/$slug': {
-      id: '/recap/$slug'
-      path: '/recap/$slug'
-      fullPath: '/recap/$slug'
-      preLoaderRoute: typeof RecapSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -394,13 +334,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
