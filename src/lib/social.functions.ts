@@ -171,34 +171,17 @@ export const castAwardVote = createServerFn({ method: "POST" })
     if (!isAwardCategory(data.category)) throw new Error("Unknown award category");
     const sb = await admin();
 
-    const { data: event } = await sb
-      .from("events")
-      .select("awards_locked")
-      .eq("id", data.eventId)
-      .maybeSingle();
-    if (event?.awards_locked) throw new Error("Voting is closed");
-
-    // The target must actually be in this event's roster — participants is
-    // globally readable, so without this check a crafted vote could nominate
-    // (and later publish) someone who never played.
-    const { data: target } = await sb
-      .from("event_participants")
-      .select("participant_id")
-      .eq("event_id", data.eventId)
-      .eq("participant_id", data.targetParticipantId)
-      .maybeSingle();
-    if (!target) throw new Error("Nominee is not in this event");
-
-    const { error } = await sb.from("award_votes").upsert(
-      {
-        event_id: data.eventId,
-        category: data.category,
-        voter_participant_id: me,
-        target_participant_id: data.targetParticipantId,
-      },
-      { onConflict: "event_id,category,voter_participant_id" },
-    );
-    if (error) throw error;
+    // The RPC locks the event row, re-checks awards_locked, verifies the
+    // nominee is on the roster, and upserts the vote in one transaction —
+    // so a vote can't slip in between close_award_voting's lock check and
+    // its final tally.
+    const { error } = await sb.rpc("cast_award_vote", {
+      _event_id: data.eventId,
+      _category: data.category,
+      _voter_participant_id: me,
+      _target_participant_id: data.targetParticipantId,
+    });
+    if (error) throw new Error(error.message);
     return { ok: true };
   });
 
