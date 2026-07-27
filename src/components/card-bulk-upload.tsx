@@ -8,8 +8,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** Server cap is 12 MB per card (see media.functions.ts); warn before the round trip. */
-const MAX_BYTES = 12_000_000;
+/**
+ * Server cap is 12,000,000 chars of base64 per card (see media.functions.ts).
+ * Base64 expands raw bytes by ~4/3, so cap raw file size at ~8.9 MB to stay
+ * under the encoded limit (with headroom for the data URL prefix). Bulk
+ * requests validate the whole batch atomically, so one oversize file would
+ * reject the entire round trip instead of failing per-item.
+ */
+const MAX_BYTES = 8_800_000;
 const ACCEPT = ["image/png", "image/jpeg", "image/webp"];
 
 type Candidate = {
