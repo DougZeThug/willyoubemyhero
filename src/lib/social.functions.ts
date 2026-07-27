@@ -109,18 +109,25 @@ export const postComment = createServerFn({ method: "POST" })
 /** You can delete your own trash talk; the commissioner can delete anyone's. */
 export const deleteComment = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
-    z.object({ commentId: z.string().uuid(), eventId: z.string().uuid() }).parse(d),
+    z.object({ commentId: z.string().uuid() }).parse(d),
   )
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: row } = await sb
       .from("card_comments")
-      .select("id, participant_id")
+      .select("id, participant_id, event_participant:event_participants!inner(event_id)")
       .eq("id", data.commentId)
-      .maybeSingle();
+      .maybeSingle<{
+        id: string;
+        participant_id: string;
+        event_participant: { event_id: string } | null;
+      }>();
     if (!row) return { ok: true };
 
-    if (!isAdminFor(data.eventId)) {
+    // Authorize against the comment's actual event, not a caller-supplied one —
+    // otherwise an admin for event A could delete comments belonging to event B.
+    const eventId = row.event_participant?.event_id ?? null;
+    if (!eventId || !isAdminFor(eventId)) {
       const me = await requireMember();
       if (row.participant_id !== me) throw new Error("Not your comment");
     }
