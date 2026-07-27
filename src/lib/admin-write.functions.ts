@@ -1,15 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { verifyAdminToken } from "./session.server";
-
-async function requireAdmin(eventId: string) {
-  const token = getRequestHeader("x-admin-token") ?? null;
-  const claims = verifyAdminToken(token);
-  if (!claims || claims.eventId !== eventId) {
-    throw new Error("Admin PIN required");
-  }
-}
+import { requireAdmin } from "./require-auth.server";
 
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })
@@ -194,9 +185,7 @@ export const upsertStation = createServerFn({ method: "POST" })
       const { error } = await supabaseAdmin.from("stations").update(rest).eq("id", id);
       if (error) throw error;
     } else {
-      const { error } = await supabaseAdmin
-        .from("stations")
-        .insert({ ...rest, event_id: eventId });
+      const { error } = await supabaseAdmin.from("stations").insert({ ...rest, event_id: eventId });
       if (error) throw error;
     }
     return { ok: true };

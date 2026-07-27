@@ -6,7 +6,10 @@ export const Route = createFileRoute("/recap/$slug")({
   head: ({ params }) => ({
     meta: [
       { title: `Recap · ${params.slug} — Draft Combine` },
-      { name: "description", content: "Archived draft combine recap: final leaderboard and draft order." },
+      {
+        name: "description",
+        content: "Archived draft combine recap: final leaderboard and draft order.",
+      },
       { property: "og:title", content: `Draft Combine Recap · ${params.slug}` },
       { property: "og:description", content: "Final combine results and draft order." },
     ],
@@ -16,11 +19,15 @@ export const Route = createFileRoute("/recap/$slug")({
     if (!recap) throw notFound();
     return recap;
   },
-  errorComponent: () => <div className="p-8 text-center text-muted-foreground">Recap failed to load.</div>,
+  errorComponent: () => (
+    <div className="p-8 text-center text-muted-foreground">Recap failed to load.</div>
+  ),
   notFoundComponent: () => (
     <div className="p-8 text-center">
       <p className="text-muted-foreground">No recap found.</p>
-      <Link to="/analytics" className="mt-4 inline-block text-primary underline">Back to archive</Link>
+      <Link to="/analytics" className="mt-4 inline-block text-primary underline">
+        Back to archive
+      </Link>
     </div>
   ),
   component: RecapPage,
@@ -28,13 +35,24 @@ export const Route = createFileRoute("/recap/$slug")({
 
 type Snapshot = {
   event: { name: string; year: number | null };
-  participants: Array<{ id: string; participant_id: string; participant?: { name: string; fantasy_team_name?: string | null } | null }>;
-  runs: Array<{ id: string; participant_id: string; is_official: boolean; official_time_ms: number | null }>;
+  participants: Array<{
+    id: string;
+    participant_id: string;
+    participant?: { name: string; fantasy_team_name?: string | null } | null;
+  }>;
+  runs: Array<{
+    id: string;
+    participant_id: string;
+    is_official: boolean;
+    official_time_ms: number | null;
+  }>;
   drafts: Array<{ selection_order: number; participant_id: string; draft_position: number }>;
 };
 
 function RecapPage() {
-  const recap = Route.useLoaderData();
+  // The loader throws notFound() when there is no row, so this is always present.
+  // Typed off the server function because useLoaderData doesn't infer it here.
+  const recap = Route.useLoaderData() as NonNullable<Awaited<ReturnType<typeof getArchivedRecap>>>;
   const snap = recap.snapshot as Snapshot;
   const results = snap.runs
     .filter((r) => r.is_official)
@@ -63,14 +81,19 @@ function RecapPage() {
           </h2>
           <ol className="space-y-1.5">
             {results.map((r, i) => (
-              <li key={r.run.id} className="flex items-center gap-3 rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2">
+              <li
+                key={r.run.id}
+                className="flex items-center gap-3 rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2"
+              >
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-primary/15 text-[11px] font-black text-primary">
                   {i + 1}
                 </span>
                 <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
                   {r.ep?.participant?.name ?? "?"}
                 </span>
-                <span className="timer-digits text-primary">{formatTime(r.run.official_time_ms)}</span>
+                <span className="timer-digits text-primary">
+                  {formatTime(r.run.official_time_ms)}
+                </span>
               </li>
             ))}
           </ol>
@@ -85,7 +108,10 @@ function RecapPage() {
               {drafts.map((d) => {
                 const ep = snap.participants.find((p) => p.participant_id === d.participant_id);
                 return (
-                  <li key={d.selection_order} className="flex items-center gap-3 rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2">
+                  <li
+                    key={d.selection_order}
+                    className="flex items-center gap-3 rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2"
+                  >
                     <span className="grid h-7 w-7 place-items-center rounded-full bg-primary text-primary-foreground text-[11px] font-black">
                       {d.draft_position}
                     </span>
