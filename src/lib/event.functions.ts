@@ -11,10 +11,7 @@ function publicClient() {
     global: {
       fetch: (input, init) => {
         const headers = new Headers(init?.headers);
-        if (
-          key.startsWith("sb_") &&
-          headers.get("Authorization") === `Bearer ${key}`
-        ) {
+        if (key.startsWith("sb_") && headers.get("Authorization") === `Bearer ${key}`) {
           headers.delete("Authorization");
         }
         headers.set("apikey", key);
@@ -40,32 +37,31 @@ export const getEventBundle = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => z.object({ eventId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const sb = publicClient();
-    const [event, participants, stations, runs, splits, penalties, drafts] =
-      await Promise.all([
-        sb.from("events_public").select("*").eq("id", data.eventId).maybeSingle(),
-        sb
-          .from("event_participants")
-          .select("*, participant:participants(*)")
-          .eq("event_id", data.eventId)
-          .order("running_order", { ascending: true }),
-        sb
-          .from("stations")
-          .select("*")
-          .eq("event_id", data.eventId)
-          .order("station_order", { ascending: true }),
-        sb
-          .from("runs")
-          .select("*")
-          .eq("event_id", data.eventId)
-          .order("created_at", { ascending: true }),
-        sb.from("splits").select("*"),
-        sb.from("penalties").select("*"),
-        sb
-          .from("draft_selections")
-          .select("*")
-          .eq("event_id", data.eventId)
-          .order("selection_order", { ascending: true }),
-      ]);
+    const [event, participants, stations, runs, splits, penalties, drafts] = await Promise.all([
+      sb.from("events_public").select("*").eq("id", data.eventId).maybeSingle(),
+      sb
+        .from("event_participants")
+        .select("*, participant:participants(*)")
+        .eq("event_id", data.eventId)
+        .order("running_order", { ascending: true }),
+      sb
+        .from("stations")
+        .select("*")
+        .eq("event_id", data.eventId)
+        .order("station_order", { ascending: true }),
+      sb
+        .from("runs")
+        .select("*")
+        .eq("event_id", data.eventId)
+        .order("created_at", { ascending: true }),
+      sb.from("splits").select("*, run:runs!inner(event_id)").eq("run.event_id", data.eventId),
+      sb.from("penalties").select("*, run:runs!inner(event_id)").eq("run.event_id", data.eventId),
+      sb
+        .from("draft_selections")
+        .select("*")
+        .eq("event_id", data.eventId)
+        .order("selection_order", { ascending: true }),
+    ]);
     return {
       event: event.data,
       participants: participants.data ?? [],
@@ -87,7 +83,9 @@ export const getAllTimeRecords = createServerFn({ method: "GET" }).handler(async
   const sb = publicClient();
   const { data: runs } = await sb
     .from("runs")
-    .select("*, participant:participants(name, nickname, fantasy_team_name), event:events!inner(name, year)")
+    .select(
+      "*, participant:participants(name, nickname, fantasy_team_name), event:events!inner(name, year)",
+    )
     .eq("is_official", true)
     .order("official_time_ms", { ascending: true })
     .limit(20);

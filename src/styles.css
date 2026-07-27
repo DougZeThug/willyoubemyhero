@@ -196,3 +196,104 @@
     oklch(0.72 0.14 200) 6px 12px
   );
 }
+
+/*
+ * ---------------------------------------------------------------------------
+ * Trading cards
+ *
+ * The foil is not masked to the artwork — it can't be, the card art is an opaque
+ * raster with no alpha. Instead `color-dodge` does the masking for free: it is
+ * mathematically incapable of brightening pure black, so dark regions of the art
+ * stay dark while already-bright regions (helmets, numerals, logos) bloom into
+ * rainbow. The artwork's own luminance decides where the foil catches light.
+ *
+ * Every layer reads pointer position from custom properties set imperatively by
+ * holo-card.tsx, so tracking the pointer never re-renders React.
+ * ---------------------------------------------------------------------------
+ */
+
+@utility holo-scene {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+@utility holo-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* Contain the blend modes so foil never bleeds onto the page background. */
+  isolation: isolate;
+  border-radius: inherit;
+}
+
+/* Rainbow refractor bands. The workhorse layer. */
+@utility holo-foil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  mix-blend-mode: color-dodge;
+  opacity: var(--holo-strength, 0.38);
+  background-image: repeating-linear-gradient(
+    115deg,
+    transparent 0%,
+    var(--holo-a, oklch(0.82 0.14 210)) 12%,
+    var(--holo-b, oklch(0.75 0.13 195)) 20%,
+    transparent 32%
+  );
+  background-size: 220% 220%;
+  background-position: var(--holo-pos, 50%) 50%;
+}
+
+/* Wet specular hotspot that follows the finger. */
+@utility holo-glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  mix-blend-mode: overlay;
+  background: radial-gradient(
+    circle at var(--holo-gx, 50%) var(--holo-gy, 50%),
+    oklch(1 0 0 / 55%) 0%,
+    transparent 45%
+  );
+}
+
+/* Fine glint field, parallaxed faster than the foil so sparkles crawl. */
+@utility holo-sparkle {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  mix-blend-mode: screen;
+  filter: contrast(3);
+  opacity: var(--holo-sparkle, 0.35);
+  background-image: repeating-radial-gradient(
+    circle at 50% 50%,
+    oklch(1 0 0 / 70%) 0 1px,
+    transparent 1px 7px
+  );
+  background-size: 90px 90px;
+  background-position: var(--holo-sparkle-x, 50%) var(--holo-sparkle-y, 50%);
+}
+
+/* Sealed wax pack wrapper — pure CSS, no image assets. */
+@utility wax-foil {
+  background-color: oklch(0.18 0.03 240);
+  background-image:
+    repeating-conic-gradient(
+      from 0deg at 30% 20%,
+      oklch(1 0 0 / 10%) 0deg 6deg,
+      transparent 6deg 14deg
+    ),
+    linear-gradient(
+      135deg,
+      oklch(0.32 0.09 235) 0%,
+      oklch(0.18 0.04 240) 40%,
+      oklch(0.38 0.11 200) 70%,
+      oklch(0.16 0.03 240) 100%
+    );
+  background-blend-mode: overlay, normal;
+}

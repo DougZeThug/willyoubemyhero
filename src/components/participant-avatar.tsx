@@ -30,7 +30,6 @@ export function ParticipantAvatar({
       style={style}
     >
       {photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img src={photoUrl} alt="" className="h-full w-full object-cover" />
       ) : (
         initialsOf(name) || "?"

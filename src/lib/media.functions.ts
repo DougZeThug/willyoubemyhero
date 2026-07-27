@@ -56,25 +56,80 @@ export const getEventPhotoUrls = createServerFn({ method: "GET" })
     return out;
   });
 
-// Return signed URLs for uploaded full player-card images (card_path).
+// ------- Player trading cards -------
+
+export type CardSide = "front" | "back";
+export type CardUrls = { front: string | null; back: string | null };
+
+const cardSide = z.enum(["front", "back"]);
+
+// Which column each side writes to. `card_path` stays the front so existing rows
+// keep working. Built as a literal per side rather than a computed key, because
+// supabase-js rejects an index-signature object in .update().
+function cardPatch(side: CardSide, value: string | null) {
+  return side === "front" ? { card_path: value } : { card_back_path: value };
+}
+
+// Decode a base64 data URL into bytes, rejecting anything that isn't an image we accept.
+function decodeImageDataUrl(dataUrl: string) {
+  const m = dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/);
+  if (!m) throw new Error("Unsupported image format");
+  return {
+    contentType: m[1],
+    ext: m[2] === "jpg" ? "jpeg" : m[2],
+    bytes: Uint8Array.from(atob(m[3]), (c) => c.charCodeAt(0)),
+  };
+}
+
+// Upload one card face and point the matching column at it. Assumes admin is already verified.
+async function storeCard(
+  eventId: string,
+  eventParticipantId: string,
+  side: CardSide,
+  dataUrl: string,
+) {
+  const { contentType, ext, bytes } = decodeImageDataUrl(dataUrl);
+  const path = `cards/${eventId}/${eventParticipantId}-${side}-${Date.now()}.${ext}`;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { error: upErr } = await supabaseAdmin.storage
+    .from("participant-photos")
+    .upload(path, bytes, { contentType, upsert: true });
+  if (upErr) throw upErr;
+  const { error: dbErr } = await supabaseAdmin
+    .from("event_participants")
+    .update(cardPatch(side, path))
+    .eq("id", eventParticipantId);
+  if (dbErr) throw dbErr;
+  const { data: signed } = await supabaseAdmin.storage
+    .from("participant-photos")
+    .createSignedUrl(path, 60 * 60);
+  return { url: signed?.signedUrl ?? null, path };
+}
+
+// Signed URLs for both faces of every uploaded player card, keyed by event_participant id.
 export const getEventCardUrls = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = publicClient();
     const { data: eps } = await sb
       .from("event_participants")
-      .select("id, card_path")
+      .select("id, card_path, card_back_path")
       .eq("event_id", data.eventId);
-    const rows = (eps ?? []).filter((r) => !!r.card_path);
-    if (rows.length === 0) return {} as Record<string, string>;
+    const rows = (eps ?? []).filter((r) => r.card_path || r.card_back_path);
+    if (rows.length === 0) return {} as Record<string, CardUrls>;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const out: Record<string, string> = {};
+    const sign = async (path: string | null) => {
+      if (!path) return null;
+      const { data: signed } = await supabaseAdmin.storage
+        .from("participant-photos")
+        .createSignedUrl(path, 60 * 60);
+      return signed?.signedUrl ?? null;
+    };
+    const out: Record<string, CardUrls> = {};
     await Promise.all(
       rows.map(async (r) => {
-        const { data: signed } = await supabaseAdmin.storage
-          .from("participant-photos")
-          .createSignedUrl(r.card_path as string, 60 * 60);
-        if (signed?.signedUrl) out[r.id] = signed.signedUrl;
+        const [front, back] = await Promise.all([sign(r.card_path), sign(r.card_back_path)]);
+        out[r.id] = { front, back };
       }),
     );
     return out;
@@ -86,52 +141,88 @@ export const uploadParticipantCard = createServerFn({ method: "POST" })
       .object({
         eventId: z.string().uuid(),
         eventParticipantId: z.string().uuid(),
+        side: cardSide.default("front"),
         dataUrl: z.string().min(32).max(12_000_000),
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const m = data.dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/);
-    if (!m) throw new Error("Unsupported image format");
-    const contentType = m[1];
-    const ext = m[2] === "jpg" ? "jpeg" : m[2];
-    const bytes = Uint8Array.from(atob(m[3]), (c) => c.charCodeAt(0));
-    const path = `cards/${data.eventId}/${data.eventParticipantId}-${Date.now()}.${ext}`;
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error: upErr } = await supabaseAdmin.storage
-      .from("participant-photos")
-      .upload(path, bytes, { contentType, upsert: true });
-    if (upErr) throw upErr;
-    const { error: dbErr } = await supabaseAdmin
-      .from("event_participants")
-      .update({ card_path: path })
-      .eq("id", data.eventParticipantId);
-    if (dbErr) throw dbErr;
-    const { data: signed } = await supabaseAdmin.storage
-      .from("participant-photos")
-      .createSignedUrl(path, 60 * 60);
-    return { ok: true, url: signed?.signedUrl ?? null, path };
+    const res = await storeCard(data.eventId, data.eventParticipantId, data.side, data.dataUrl);
+    return { ok: true, ...res };
+  });
+
+// Upload many card faces behind a single admin check. Each item reports its own outcome so
+// one bad file in a batch of 26 doesn't discard the rest.
+export const uploadParticipantCardsBulk = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: z.string().uuid(),
+        items: z
+          .array(
+            z.object({
+              eventParticipantId: z.string().uuid(),
+              side: cardSide,
+              dataUrl: z.string().min(32).max(12_000_000),
+            }),
+          )
+          .min(1)
+          .max(40),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const results: {
+      eventParticipantId: string;
+      side: CardSide;
+      ok: boolean;
+      error?: string;
+    }[] = [];
+    for (const item of data.items) {
+      try {
+        await storeCard(data.eventId, item.eventParticipantId, item.side, item.dataUrl);
+        results.push({ eventParticipantId: item.eventParticipantId, side: item.side, ok: true });
+      } catch (e) {
+        results.push({
+          eventParticipantId: item.eventParticipantId,
+          side: item.side,
+          ok: false,
+          error: e instanceof Error ? e.message : "Upload failed",
+        });
+      }
+    }
+    return { ok: results.every((r) => r.ok), results };
   });
 
 export const deleteParticipantCard = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
-    z.object({ eventId: z.string().uuid(), eventParticipantId: z.string().uuid() }).parse(d),
+    z
+      .object({
+        eventId: z.string().uuid(),
+        eventParticipantId: z.string().uuid(),
+        side: cardSide.default("front"),
+      })
+      .parse(d),
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
+    const side: CardSide = data.side;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row } = await supabaseAdmin
       .from("event_participants")
-      .select("card_path")
+      .select("card_path, card_back_path")
       .eq("id", data.eventParticipantId)
       .maybeSingle();
-    if (row?.card_path) {
-      await supabaseAdmin.storage.from("participant-photos").remove([row.card_path]);
+    // Read the column explicitly rather than dynamically indexing the row.
+    const existing = (side === "front" ? row?.card_path : row?.card_back_path) ?? null;
+    if (existing) {
+      await supabaseAdmin.storage.from("participant-photos").remove([existing]);
     }
     await supabaseAdmin
       .from("event_participants")
-      .update({ card_path: null })
+      .update(cardPatch(side, null))
       .eq("id", data.eventParticipantId);
     return { ok: true };
   });

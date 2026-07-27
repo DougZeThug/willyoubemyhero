@@ -5,16 +5,15 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { verifyEventPin } from "@/lib/admin.functions";
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
-import {
-  saveCompletedRun,
-  setParticipantStatus,
-} from "@/lib/admin-write.functions";
+import { saveCompletedRun, setParticipantStatus } from "@/lib/admin-write.functions";
 import {
   archiveEvent,
   uploadParticipantPhoto,
   uploadParticipantCard,
   deleteParticipantCard,
+  type CardSide,
 } from "@/lib/media.functions";
+import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { Card, CardContent } from "@/components/ui/card";
@@ -67,12 +66,14 @@ function AdminPage() {
   const isAdmin = !!event?.id && admin?.eventId === event.id;
 
   if (!event || !event.id) {
-    return (
-      <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Loading…</div>
-    );
+    return <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Loading…</div>;
   }
 
-  return isAdmin ? <TimingConsole /> : <PinGate eventId={event.id} eventName={event.name ?? "Combine"} />;
+  return isAdmin ? (
+    <TimingConsole />
+  ) : (
+    <PinGate eventId={event.id} eventName={event.name ?? "Combine"} />
+  );
 }
 
 // ---------------- PIN GATE ----------------
@@ -112,9 +113,13 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
           <div className="mb-4">
             <div className="flex items-center gap-2 text-primary">
               <LockKeyhole className="h-4 w-4" />
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">Console</span>
+              <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">
+                Console
+              </span>
             </div>
-            <h1 className="mt-1 font-display text-2xl font-black uppercase leading-none">Admin Access</h1>
+            <h1 className="mt-1 font-display text-2xl font-black uppercase leading-none">
+              Admin Access
+            </h1>
           </div>
           <p className="mb-4 text-sm text-muted-foreground">
             Enter the event PIN for <span className="text-foreground">{eventName}</span> to unlock
@@ -173,13 +178,14 @@ function TimingConsole() {
     [bundle],
   );
   const stations = useMemo(
-    () => (bundle?.stations ?? []).filter((s) => s.active).sort((a, b) => a.station_order - b.station_order),
+    () =>
+      (bundle?.stations ?? [])
+        .filter((s) => s.active)
+        .sort((a, b) => a.station_order - b.station_order),
     [bundle],
   );
 
-  const currentEp = run
-    ? participants.find((p) => p.participant_id === run.participantId)
-    : null;
+  const currentEp = run ? participants.find((p) => p.participant_id === run.participantId) : null;
 
   const paused = run?.status === "paused";
   const finished = run?.status === "finished";
@@ -214,7 +220,8 @@ function TimingConsole() {
       await setStatusFn({
         data: {
           eventId: event.id,
-          eventParticipantId: participants.find((p) => p.participant_id === selectedParticipantId)!.id,
+          eventParticipantId: participants.find((p) => p.participant_id === selectedParticipantId)!
+            .id,
           status: "running",
         },
       });
@@ -226,7 +233,11 @@ function TimingConsole() {
   function togglePause() {
     if (!run) return;
     if (run.status === "running") {
-      setRun({ ...run, status: "paused", pauses: [...run.pauses, { pausedAt: performance.now(), resumedAt: null }] });
+      setRun({
+        ...run,
+        status: "paused",
+        pauses: [...run.pauses, { pausedAt: performance.now(), resumedAt: null }],
+      });
     } else if (run.status === "paused") {
       const pauses = run.pauses.slice();
       const last = pauses[pauses.length - 1];
@@ -275,7 +286,10 @@ function TimingConsole() {
     if (!run || !event?.id) return;
     const finishedAtPerf = performance.now();
     const finishedAtIso = new Date().toISOString();
-    const raw_time_ms = computeElapsedMs({ ...run, status: "finished", finishedAtPerf }, finishedAtPerf);
+    const raw_time_ms = computeElapsedMs(
+      { ...run, status: "finished", finishedAtPerf },
+      finishedAtPerf,
+    );
     const paused_duration_ms = run.pauses.reduce(
       (s, p) => s + ((p.resumedAt ?? finishedAtPerf) - p.pausedAt),
       0,
@@ -338,10 +352,16 @@ function TimingConsole() {
         <div>
           <div className="flex items-center gap-2 text-primary">
             <TimerIcon className="h-4 w-4" />
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">Console</span>
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[9px] uppercase">Admin</Badge>
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">
+              Console
+            </span>
+            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[9px] uppercase">
+              Admin
+            </Badge>
           </div>
-          <h1 className="mt-1 font-display text-2xl font-black uppercase leading-none">Timing Console</h1>
+          <h1 className="mt-1 font-display text-2xl font-black uppercase leading-none">
+            Timing Console
+          </h1>
         </div>
         <Button variant="ghost" size="sm" onClick={signOut}>
           <LogOut className="mr-1.5 h-4 w-4" />
@@ -354,10 +374,13 @@ function TimingConsole() {
           <div className="mb-2">
             <div className="flex items-center gap-2 text-primary">
               <Camera className="h-4 w-4" />
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">Event Setup</span>
+              <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">
+                Event Setup
+              </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Tap any participant below to upload or replace their square photo. This panel also holds the spectator QR code and the Archive Event button.
+              Tap any participant below to upload or replace their square photo. This panel also
+              holds the spectator QR code and the Archive Event button.
             </p>
           </div>
           <EventOpsPanel eventId={event.id} eventName={event.name ?? "Combine"} />
@@ -425,7 +448,12 @@ function TimingConsole() {
                 <h3 className="font-display text-sm font-bold uppercase tracking-widest text-muted-foreground">
                   Stations & Splits
                 </h3>
-                <Button size="sm" variant="ghost" onClick={undoLastSplit} disabled={run.splits.length === 0}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={undoLastSplit}
+                  disabled={run.splits.length === 0}
+                >
                   <Redo2 className="mr-1 h-3.5 w-3.5" /> Undo split
                 </Button>
               </div>
@@ -459,11 +487,14 @@ function TimingConsole() {
                       </button>
                       {st.penalty_amount_ms > 0 && (
                         <button
-                          onClick={() => addPenalty(st.id, st.penalty_amount_ms, `${st.name} penalty`)}
+                          onClick={() =>
+                            addPenalty(st.id, st.penalty_amount_ms, `${st.name} penalty`)
+                          }
                           disabled={finished}
                           className="rounded-md border border-warn/30 bg-warn/10 py-1 text-[10px] font-bold uppercase tracking-widest text-warn hover:bg-warn/20 disabled:opacity-50"
                         >
-                          <Plus className="mr-1 inline h-3 w-3" />+{formatTime(st.penalty_amount_ms)} pen
+                          <Plus className="mr-1 inline h-3 w-3" />+
+                          {formatTime(st.penalty_amount_ms)} pen
                         </button>
                       )}
                     </div>
@@ -479,7 +510,10 @@ function TimingConsole() {
                 </h3>
                 <ul className="space-y-1 text-sm">
                   {run.penalties.map((p) => (
-                    <li key={p.clientKey} className="flex justify-between rounded bg-warn/10 px-2 py-1">
+                    <li
+                      key={p.clientKey}
+                      className="flex justify-between rounded bg-warn/10 px-2 py-1"
+                    >
                       <span>{p.reason ?? "Penalty"}</span>
                       <span className="text-warn tabular">+{formatTime(p.penalty_ms)}</span>
                     </li>
@@ -541,9 +575,7 @@ function StartCard({
                 <span className="flex-1 truncate font-semibold uppercase">
                   {p.participant?.name}
                 </span>
-                {sel && (
-                  <Badge className="bg-primary text-primary-foreground">Next</Badge>
-                )}
+                {sel && <Badge className="bg-primary text-primary-foreground">Next</Badge>}
               </button>
             );
           })}
@@ -587,7 +619,11 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   useEffect(() => {
     let cancelled = false;
     import("qrcode").then(({ default: QR }) => {
-      QR.toDataURL(liveUrl, { margin: 1, width: 240, color: { dark: "#38bdf8", light: "#0b1220" } }).then((d) => {
+      QR.toDataURL(liveUrl, {
+        margin: 1,
+        width: 240,
+        color: { dark: "#38bdf8", light: "#0b1220" },
+      }).then((d) => {
         if (!cancelled) setQrDataUrl(d);
       });
     });
@@ -615,8 +651,8 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
     }
   }
 
-  async function onPickCard(epId: string, file: File) {
-    setUploadingCardId(epId);
+  async function onPickCard(epId: string, side: CardSide, file: File) {
+    setUploadingCardId(`${epId}:${side}`);
     try {
       const dataUrl: string = await new Promise((res, rej) => {
         const r = new FileReader();
@@ -624,9 +660,9 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
         r.onerror = rej;
         r.readAsDataURL(file);
       });
-      await uploadCardFn({ data: { eventId, eventParticipantId: epId, dataUrl } });
+      await uploadCardFn({ data: { eventId, eventParticipantId: epId, side, dataUrl } });
       await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
-      toast.success("Card uploaded");
+      toast.success(`Card ${side} uploaded`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -634,10 +670,10 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
     }
   }
 
-  async function onRemoveCard(epId: string) {
-    if (!confirm("Remove this player's card image?")) return;
+  async function onRemoveCard(epId: string, side: CardSide) {
+    if (!confirm(`Remove this player's ${side} card image?`)) return;
     try {
-      await deleteCardFn({ data: { eventId, eventParticipantId: epId } });
+      await deleteCardFn({ data: { eventId, eventParticipantId: epId, side } });
       await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       toast.success("Card removed");
     } catch (e) {
@@ -658,8 +694,18 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
     }
   }
 
+  const bulkTargets = (bundle?.participants ?? []).map((p) => ({
+    id: p.id,
+    name: p.participant?.name ?? "Unknown",
+    nickname: p.participant?.nickname ?? null,
+  }));
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
+      <div className="md:col-span-2">
+        <CardBulkUpload eventId={eventId} targets={bulkTargets} />
+      </div>
+
       <Card className="hud-bezel border-primary/20">
         <CardContent className="p-5">
           <div className="mb-2 flex items-center gap-2 text-primary">
@@ -678,11 +724,21 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
             />
           )}
           <div className="mt-3 space-y-1 text-center text-xs">
-            <a href={liveUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+            <a
+              href={liveUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
               <ExternalLink className="h-3 w-3" /> {liveUrl}
             </a>
             <div>
-              <a href={tvUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary/80 hover:underline">
+              <a
+                href={tvUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary/80 hover:underline"
+              >
                 <ExternalLink className="h-3 w-3" /> TV big-screen: /tv
               </a>
             </div>
@@ -732,29 +788,37 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                     }}
                   />
                 </label>
-                <label className="cursor-pointer rounded border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20">
-                  <IdCard className="mr-1 inline h-3 w-3" />
-                  {uploadingCardId === p.id ? "…" : cards.data?.[p.id] ? "Card ✓" : "Card"}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) onPickCard(p.id, f);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                {cards.data?.[p.id] && (
-                  <button
-                    onClick={() => onRemoveCard(p.id)}
-                    className="rounded p-1 text-muted-foreground hover:text-destructive"
-                    aria-label="Remove card"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                {(["front", "back"] as const).map((side) => {
+                  const has = !!cards.data?.[p.id]?.[side];
+                  const busy = uploadingCardId === `${p.id}:${side}`;
+                  return (
+                    <span key={side} className="flex items-center">
+                      <label className="cursor-pointer rounded border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20">
+                        <IdCard className="mr-1 inline h-3 w-3" />
+                        {busy ? "…" : has ? `${side} ✓` : side}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) onPickCard(p.id, side, f);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                      {has && (
+                        <button
+                          onClick={() => onRemoveCard(p.id, side)}
+                          className="rounded p-1 text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove ${side} card`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             ))}
           </div>
