@@ -921,6 +921,7 @@ export type Database = {
       events_public: {
         Row: {
           active: boolean | null
+          awards_locked: boolean | null
           created_at: string | null
           draft_locked: boolean | null
           draft_size: number | null
@@ -938,6 +939,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean | null
+          awards_locked?: boolean | null
           created_at?: string | null
           draft_locked?: boolean | null
           draft_size?: number | null
@@ -955,6 +957,7 @@ export type Database = {
         }
         Update: {
           active?: boolean | null
+          awards_locked?: boolean | null
           created_at?: string | null
           draft_locked?: boolean | null
           draft_size?: number | null
