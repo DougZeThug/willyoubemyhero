@@ -977,7 +977,20 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      cast_award_vote: {
+        Args: {
+          _category: string
+          _event_id: string
+          _target_participant_id: string
+          _voter_participant_id: string
+        }
+        Returns: undefined
+      }
+      close_award_voting: {
+        Args: { _categories: Json; _event_id: string }
+        Returns: number
+      }
+      reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
