@@ -14,6 +14,7 @@ import {
   type CardSide,
 } from "@/lib/media.functions";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
+import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { Card, CardContent } from "@/components/ui/card";
@@ -600,7 +601,8 @@ function StartCard({
 }
 // ---------------- EVENT OPS: QR / PHOTOS / ARCHIVE ----------------
 function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: string }) {
-  const { bundle } = useEventBundle();
+  const { event, bundle } = useEventBundle();
+  const awardsLocked = event?.awards_locked;
   const photos = useEventPhotoUrls(eventId);
   const cards = useEventCardUrls(eventId);
   const qc = useQueryClient();
@@ -705,6 +707,9 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       <div className="md:col-span-2">
         <CardBulkUpload eventId={eventId} targets={bulkTargets} />
       </div>
+
+      <MemberCodesPanel eventId={eventId} />
+      <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
 
       <Card className="hud-bezel border-primary/20">
         <CardContent className="p-5">

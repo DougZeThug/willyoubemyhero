@@ -1,17 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { verifyAdminToken } from "./session.server";
+import { requireAdmin } from "./require-auth.server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-
-async function requireAdmin(eventId: string) {
-  const token = getRequestHeader("x-admin-token") ?? null;
-  const claims = verifyAdminToken(token);
-  if (!claims || claims.eventId !== eventId) {
-    throw new Error("Admin PIN required");
-  }
-}
 
 function publicClient() {
   const url = process.env.SUPABASE_URL!;

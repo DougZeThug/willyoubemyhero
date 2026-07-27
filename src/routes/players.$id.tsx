@@ -18,6 +18,9 @@ import { HoloCard } from "@/components/holo-card";
 import { requestGyroPermission } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
 import { CardBackPanel } from "@/components/card-back-panel";
+import { CardSocial } from "@/components/card-social";
+import { useEventSocial, useEventAwards } from "@/hooks/use-event-social";
+import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { exportCardPng } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
@@ -50,6 +53,8 @@ function PlayerCardPage() {
   const { event, bundle, loading } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
+  const social = useEventSocial(event?.id ?? null);
+  const awards = useEventAwards(event?.id ?? null);
 
   const [flipped, setFlipped] = useState(false);
   const [gyro, setGyro] = useState(false);
@@ -131,6 +136,20 @@ function PlayerCardPage() {
   }
   const bestMs = bestRun?.official_time_ms ?? null;
   const rank = bestMs != null ? [...allBest.values()].filter((ms) => ms < bestMs).length + 1 : null;
+
+  // Reactions and comments store participant_id; the roster is the only place
+  // that maps those back to names.
+  const nameOf = (participantId: string) =>
+    bundle?.participants.find((p) => p.participant_id === participantId)?.participant?.name ??
+    "Someone";
+
+  const cardReactions = (social.data?.reactions ?? []).filter(
+    (r) => r.event_participant_id === ep.id,
+  );
+  const cardComments = (social.data?.comments ?? []).filter(
+    (c) => c.event_participant_id === ep.id,
+  );
+  const myAwards = ep.participant_id ? (awards.byParticipant.get(ep.participant_id) ?? []) : [];
 
   const shareData: ShareCardData = {
     eventName: event?.name ?? "Draft Combine",
@@ -231,6 +250,23 @@ function PlayerCardPage() {
               {ep.participant.fantasy_team_name}
             </div>
           )}
+          {myAwards.length > 0 && (
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {myAwards.map((a) => {
+                const cat = a.award_type ? awardCategory(a.award_type) : undefined;
+                return (
+                  <Link
+                    key={`${a.award_type}-${a.award_name}`}
+                    to="/awards"
+                    className="inline-flex items-center gap-1 rounded-full border border-warn/50 bg-warn/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-warn hover:bg-warn/20"
+                  >
+                    <span aria-hidden>{cat?.icon ?? "🏅"}</span>
+                    {a.award_name}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -275,6 +311,16 @@ function PlayerCardPage() {
           <Stat label="Time" value={bestRun ? formatTime(bestRun.official_time_ms) : "—"} mono />
           <Stat label="Rank" value={rank != null ? `#${rank}` : "—"} />
         </div>
+
+        {event?.id && (
+          <CardSocial
+            eventId={event.id}
+            eventParticipantId={ep.id}
+            reactions={cardReactions}
+            comments={cardComments}
+            nameOf={nameOf}
+          />
+        )}
 
         {qrUrl && (
           <div className="mt-8 flex flex-col items-center gap-2">

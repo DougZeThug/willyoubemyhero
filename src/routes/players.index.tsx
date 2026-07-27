@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Users, Shuffle, PackageOpen, Layers } from "lucide-react";
+import { Users, Shuffle, PackageOpen, Layers, Award, UserRoundCheck } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { loadCollection } from "@/lib/card-collection";
+import { useMemberSession } from "@/lib/member-token";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ function PlayersPage() {
   const [sort, setSort] = useState<SortKey>("name");
   const [shuffleSeed, setShuffleSeed] = useState(0);
   const [collected, setCollected] = useState<Record<string, unknown>>({});
+  const member = useMemberSession();
 
   useEffect(() => {
     loadCollection().then(setCollected);
@@ -94,15 +96,33 @@ function PlayersPage() {
                 {withCards} of {rows.length} cards printed
                 {collectedCount > 0 && ` · ${collectedCount} collected`}
               </p>
+              {!member && (
+                <Link
+                  to="/claim"
+                  className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-primary hover:underline"
+                >
+                  <UserRoundCheck className="h-3.5 w-3.5" />
+                  Claim your player
+                </Link>
+              )}
             </div>
-            <Link
-              to="/players/pack"
-              className="neon-btn !px-4 !py-2 !text-xs"
-              aria-label="Open today's pack"
-            >
-              <PackageOpen className="h-4 w-4" />
-              Open Pack
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/awards"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+              >
+                <Award className="h-3.5 w-3.5" />
+                Awards
+              </Link>
+              <Link
+                to="/players/pack"
+                className="neon-btn !px-4 !py-2 !text-xs"
+                aria-label="Open today's pack"
+              >
+                <PackageOpen className="h-4 w-4" />
+                Open Pack
+              </Link>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-1.5">

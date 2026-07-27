@@ -111,6 +111,117 @@ export type Database = {
           },
         ];
       };
+      award_votes: {
+        Row: {
+          category: string;
+          created_at: string;
+          event_id: string;
+          id: string;
+          target_participant_id: string;
+          updated_at: string;
+          voter_participant_id: string;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          event_id: string;
+          id?: string;
+          target_participant_id: string;
+          updated_at?: string;
+          voter_participant_id: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          event_id?: string;
+          id?: string;
+          target_participant_id?: string;
+          updated_at?: string;
+          voter_participant_id?: string;
+        };
+        Relationships: [];
+      };
+      card_comments: {
+        Row: {
+          body: string;
+          created_at: string;
+          event_participant_id: string;
+          id: string;
+          participant_id: string;
+        };
+        Insert: {
+          body: string;
+          created_at?: string;
+          event_participant_id: string;
+          id?: string;
+          participant_id: string;
+        };
+        Update: {
+          body?: string;
+          created_at?: string;
+          event_participant_id?: string;
+          id?: string;
+          participant_id?: string;
+        };
+        Relationships: [];
+      };
+      card_reactions: {
+        Row: {
+          created_at: string;
+          emoji: string;
+          event_participant_id: string;
+          id: string;
+          participant_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          emoji: string;
+          event_participant_id: string;
+          id?: string;
+          participant_id: string;
+        };
+        Update: {
+          created_at?: string;
+          emoji?: string;
+          event_participant_id?: string;
+          id?: string;
+          participant_id?: string;
+        };
+        Relationships: [];
+      };
+      member_codes: {
+        Row: {
+          claim_count: number;
+          claimed_at: string | null;
+          code_hash: string;
+          code_salt: string;
+          created_at: string;
+          last_claimed_at: string | null;
+          participant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          claim_count?: number;
+          claimed_at?: string | null;
+          code_hash: string;
+          code_salt: string;
+          created_at?: string;
+          last_claimed_at?: string | null;
+          participant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          claim_count?: number;
+          claimed_at?: string | null;
+          code_hash?: string;
+          code_salt?: string;
+          created_at?: string;
+          last_claimed_at?: string | null;
+          participant_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       draft_selections: {
         Row: {
           created_by: string | null;
@@ -330,6 +441,7 @@ export type Database = {
           id: string;
           location: string | null;
           name: string;
+          awards_locked: boolean;
           results_locked: boolean;
           running_order_locked: boolean;
           splits_enabled: boolean;
@@ -347,6 +459,7 @@ export type Database = {
           id?: string;
           location?: string | null;
           name: string;
+          awards_locked?: boolean;
           results_locked?: boolean;
           running_order_locked?: boolean;
           splits_enabled?: boolean;
@@ -364,6 +477,7 @@ export type Database = {
           id?: string;
           location?: string | null;
           name?: string;
+          awards_locked?: boolean;
           results_locked?: boolean;
           running_order_locked?: boolean;
           splits_enabled?: boolean;
@@ -744,6 +858,7 @@ export type Database = {
           id: string | null;
           location: string | null;
           name: string | null;
+          awards_locked: boolean | null;
           results_locked: boolean | null;
           running_order_locked: boolean | null;
           splits_enabled: boolean | null;
@@ -761,6 +876,7 @@ export type Database = {
           id?: string | null;
           location?: string | null;
           name?: string | null;
+          awards_locked?: boolean | null;
           results_locked?: boolean | null;
           running_order_locked?: boolean | null;
           splits_enabled?: boolean | null;
@@ -778,6 +894,7 @@ export type Database = {
           id?: string | null;
           location?: string | null;
           name?: string | null;
+          awards_locked?: boolean | null;
           results_locked?: boolean | null;
           running_order_locked?: boolean | null;
           splits_enabled?: boolean | null;
