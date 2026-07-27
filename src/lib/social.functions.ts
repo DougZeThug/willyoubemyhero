@@ -178,6 +178,17 @@ export const castAwardVote = createServerFn({ method: "POST" })
       .maybeSingle();
     if (event?.awards_locked) throw new Error("Voting is closed");
 
+    // The target must actually be in this event's roster — participants is
+    // globally readable, so without this check a crafted vote could nominate
+    // (and later publish) someone who never played.
+    const { data: target } = await sb
+      .from("event_participants")
+      .select("participant_id")
+      .eq("event_id", data.eventId)
+      .eq("participant_id", data.targetParticipantId)
+      .maybeSingle();
+    if (!target) throw new Error("Nominee is not in this event");
+
     const { error } = await sb.from("award_votes").upsert(
       {
         event_id: data.eventId,
