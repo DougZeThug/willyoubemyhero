@@ -47,9 +47,31 @@ export function useEventBundle() {
     const channelName = `event:${eventId}:${Math.random().toString(36).slice(2)}`;
     const channel = supabase
       .channel(channelName)
-      .on("postgres_changes", { event: "*", schema: "public", table: "runs", filter: `event_id=eq.${eventId}` }, invalidate)
-      .on("postgres_changes", { event: "*", schema: "public", table: "event_participants", filter: `event_id=eq.${eventId}` }, invalidate)
-      .on("postgres_changes", { event: "*", schema: "public", table: "draft_selections", filter: `event_id=eq.${eventId}` }, invalidate)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "runs", filter: `event_id=eq.${eventId}` },
+        invalidate,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "event_participants",
+          filter: `event_id=eq.${eventId}`,
+        },
+        invalidate,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "draft_selections",
+          filter: `event_id=eq.${eventId}`,
+        },
+        invalidate,
+      )
       .on("postgres_changes", { event: "*", schema: "public", table: "splits" }, invalidate)
       .on("postgres_changes", { event: "*", schema: "public", table: "penalties" }, invalidate)
       .subscribe();

@@ -105,9 +105,6 @@ export function computeElapsedMs(run: ActiveRun, nowPerf: number): number {
   if (run.status === "finished" && run.finishedAtPerf != null) {
     nowPerf = run.finishedAtPerf;
   }
-  const totalPaused = run.pauses.reduce(
-    (s, p) => s + ((p.resumedAt ?? nowPerf) - p.pausedAt),
-    0,
-  );
+  const totalPaused = run.pauses.reduce((s, p) => s + ((p.resumedAt ?? nowPerf) - p.pausedAt), 0);
   return Math.max(0, Math.floor(nowPerf - run.startedAtPerf - totalPaused));
 }

@@ -68,17 +68,17 @@
   --card-foreground: oklch(0.98 0.005 240);
   --popover: oklch(0.19 0.02 240);
   --popover-foreground: oklch(0.98 0.005 240);
-  --primary: oklch(0.82 0.14 210);           /* electric cyan */
+  --primary: oklch(0.82 0.14 210); /* electric cyan */
   --primary-foreground: oklch(0.14 0.03 230);
   --secondary: oklch(0.26 0.025 235);
   --secondary-foreground: oklch(0.98 0.005 240);
   --muted: oklch(0.24 0.02 235);
   --muted-foreground: oklch(0.74 0.03 220);
-  --accent: oklch(0.75 0.13 195);            /* teal */
+  --accent: oklch(0.75 0.13 195); /* teal */
   --accent-foreground: oklch(0.14 0.03 230);
   --destructive: oklch(0.65 0.24 25);
   --destructive-foreground: oklch(0.98 0.005 240);
-  --warn: oklch(0.82 0.19 85);               /* penalty amber */
+  --warn: oklch(0.82 0.19 85); /* penalty amber */
   --warn-foreground: oklch(0.15 0.02 85);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
@@ -99,12 +99,22 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.82 0.14 210);
   --glow-primary: 0 0 24px oklch(0.82 0.14 210 / 45%), 0 0 60px oklch(0.82 0.14 210 / 25%);
-  --gradient-bezel: radial-gradient(circle at 30% 20%, oklch(0.32 0.02 235) 0%, oklch(0.12 0.02 240) 55%, oklch(0.08 0.015 240) 100%);
-  --gradient-hud: radial-gradient(circle at 50% 50%, oklch(0.82 0.14 210 / 22%) 0%, transparent 60%);
+  --gradient-bezel: radial-gradient(
+    circle at 30% 20%,
+    oklch(0.32 0.02 235) 0%,
+    oklch(0.12 0.02 240) 55%,
+    oklch(0.08 0.015 240) 100%
+  );
+  --gradient-hud: radial-gradient(
+    circle at 50% 50%,
+    oklch(0.82 0.14 210 / 22%) 0%,
+    transparent 60%
+  );
 }
 
 @layer base {
-  html, body {
+  html,
+  body {
     color-scheme: dark;
     overflow-x: hidden;
     max-width: 100%;
@@ -119,7 +129,9 @@
     font-feature-settings: "ss01", "tnum";
   }
 
-  .tabular { font-variant-numeric: tabular-nums; }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 
   .field-lines {
     background-image:
@@ -144,7 +156,10 @@
     linear-gradient(180deg, oklch(0.18 0.03 235) 0%, var(--color-background) 70%),
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240' fill='none' stroke='%2338bdf8' stroke-opacity='0.10' stroke-width='1'><path d='M0 40 H80 V0 M160 240 V200 H240 M0 200 H60 V240 M240 40 H180 V0 M120 0 V60 H80 M120 240 V180 H160'/><circle cx='80' cy='40' r='2.5' fill='%2338bdf8' fill-opacity='0.35' stroke='none'/><circle cx='160' cy='200' r='2.5' fill='%2338bdf8' fill-opacity='0.35' stroke='none'/><circle cx='60' cy='200' r='2.5' fill='%2338bdf8' fill-opacity='0.35' stroke='none'/><circle cx='180' cy='40' r='2.5' fill='%2338bdf8' fill-opacity='0.35' stroke='none'/><circle cx='120' cy='60' r='2.5' fill='%2338bdf8' fill-opacity='0.35' stroke='none'/><circle cx='120' cy='180' r='2.5' fill='%2338bdf8' fill-opacity='0.35' stroke='none'/></svg>");
   background-repeat: no-repeat, no-repeat, repeat;
-  background-size: auto, auto, 240px 240px;
+  background-size:
+    auto,
+    auto,
+    240px 240px;
 }
 
 @utility neon-btn {
@@ -166,7 +181,10 @@
     inset 0 0 0 1px oklch(1 0 0 / 4%),
     0 0 0 1px oklch(0.82 0.14 210 / 15%),
     var(--glow-primary);
-  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
   &:hover {
     background: linear-gradient(180deg, oklch(0.26 0.04 235) 0%, oklch(0.18 0.03 240) 100%);
     box-shadow:
@@ -174,7 +192,9 @@
       0 0 0 1px oklch(0.82 0.14 210 / 30%),
       0 0 30px oklch(0.82 0.14 210 / 55%);
   }
-  &:active { transform: translateY(1px); }
+  &:active {
+    transform: translateY(1px);
+  }
 }
 
 @utility hud-bezel {

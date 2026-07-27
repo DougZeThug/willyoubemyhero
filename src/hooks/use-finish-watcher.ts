@@ -1,8 +1,17 @@
 import { useEffect, useRef } from "react";
 
 type Bundle = {
-  participants: Array<{ id: string; participant_id: string; participant?: { name: string } | null }>;
-  runs: Array<{ id: string; participant_id: string; is_official: boolean; official_time_ms: number | null }>;
+  participants: Array<{
+    id: string;
+    participant_id: string;
+    participant?: { name: string } | null;
+  }>;
+  runs: Array<{
+    id: string;
+    participant_id: string;
+    is_official: boolean;
+    official_time_ms: number | null;
+  }>;
 };
 
 export type FinishPayload = { name: string; timeMs: number; deltaMs: number };

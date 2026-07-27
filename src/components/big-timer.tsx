@@ -31,9 +31,7 @@ export function BigTimer({
     return () => cancelAnimationFrame(raf);
   }, [paused]);
 
-  const ms = paused
-    ? runningSinceMs
-    : Math.max(0, runningSinceMs + (now - anchor.current.perf));
+  const ms = paused ? runningSinceMs : Math.max(0, runningSinceMs + (now - anchor.current.perf));
 
   return (
     <div

@@ -74,9 +74,13 @@ function OrderPage() {
           <div>
             <div className="flex items-center gap-2 text-primary">
               <ListOrdered className="h-5 w-5" />
-              <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">Order</span>
+              <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+                Order
+              </span>
             </div>
-            <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">Running Order</h1>
+            <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">
+              Running Order
+            </h1>
           </div>
           {isAdmin && !event?.running_order_locked && (
             <Button onClick={reshuffle} disabled={busy} size="sm">
@@ -86,46 +90,49 @@ function OrderPage() {
           )}
         </div>
 
-      <Card className="hud-bezel border-white/10">
-        <CardContent className="p-0">
-          <ol className="divide-y divide-white/5">
-            {rows.map((r) => {
-              const status = r.participation_status ?? "queued";
-              const accent =
-                status === "running"
-                  ? "shadow-[inset_3px_0_0_0_var(--color-primary)] bg-primary/[0.06]"
-                  : "";
-              return (
-              <li key={r.id} className={cn("flex items-center gap-3 px-4 py-3 transition", accent)}>
-                <span className="hud-bezel grid h-8 w-8 shrink-0 place-items-center rounded-md font-display text-lg font-black tabular text-primary">
-                  {r.running_order}
-                </span>
-                <ParticipantAvatar
-                  name={r.participant?.name ?? "?"}
-                  photoUrl={photos.data?.[r.id] ?? r.participant?.profile_image_url ?? null}
-                  size={40}
-                />
-                <div className="min-w-0 flex-1">
-                  <Link
-                    to="/players/$id"
-                    params={{ id: r.id }}
-                    className="block truncate font-display text-lg font-bold uppercase leading-tight hover:text-primary"
+        <Card className="hud-bezel border-white/10">
+          <CardContent className="p-0">
+            <ol className="divide-y divide-white/5">
+              {rows.map((r) => {
+                const status = r.participation_status ?? "queued";
+                const accent =
+                  status === "running"
+                    ? "shadow-[inset_3px_0_0_0_var(--color-primary)] bg-primary/[0.06]"
+                    : "";
+                return (
+                  <li
+                    key={r.id}
+                    className={cn("flex items-center gap-3 px-4 py-3 transition", accent)}
                   >
-                    {r.participant?.name ?? "—"}
-                  </Link>
-                  {r.participant?.fantasy_team_name && (
-                    <div className="truncate text-xs text-muted-foreground">
-                      {r.participant.fantasy_team_name}
+                    <span className="hud-bezel grid h-8 w-8 shrink-0 place-items-center rounded-md font-display text-lg font-black tabular text-primary">
+                      {r.running_order}
+                    </span>
+                    <ParticipantAvatar
+                      name={r.participant?.name ?? "?"}
+                      photoUrl={photos.data?.[r.id] ?? r.participant?.profile_image_url ?? null}
+                      size={40}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to="/players/$id"
+                        params={{ id: r.id }}
+                        className="block truncate font-display text-lg font-bold uppercase leading-tight hover:text-primary"
+                      >
+                        {r.participant?.name ?? "—"}
+                      </Link>
+                      {r.participant?.fantasy_team_name && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {r.participant.fantasy_team_name}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <StatusBadge status={status} />
-              </li>
-              );
-            })}
-          </ol>
-        </CardContent>
-      </Card>
+                    <StatusBadge status={status} />
+                  </li>
+                );
+              })}
+            </ol>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

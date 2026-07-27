@@ -60,7 +60,11 @@ export function newSeed(): string {
 
 export function newClientKey(): string {
   const bytes = new Uint8Array(16);
-  (globalThis.crypto ?? { getRandomValues: (a: Uint8Array) => a.map(() => (Math.random() * 256) | 0) }).getRandomValues(bytes);
+  (
+    globalThis.crypto ?? {
+      getRandomValues: (a: Uint8Array) => a.map(() => (Math.random() * 256) | 0),
+    }
+  ).getRandomValues(bytes);
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");

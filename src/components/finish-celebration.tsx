@@ -84,9 +84,7 @@ export function FinishCelebration({
                 {deltaMs === 0 ? (
                   <span className="text-primary">New leader</span>
                 ) : (
-                  <span className="text-muted-foreground">
-                    +{formatTime(deltaMs)} off lead
-                  </span>
+                  <span className="text-muted-foreground">+{formatTime(deltaMs)} off lead</span>
                 )}
               </div>
             )}
