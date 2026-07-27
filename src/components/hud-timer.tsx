@@ -49,9 +49,7 @@ export function HudTimer({
     return () => cancelAnimationFrame(raf);
   }, [paused]);
 
-  const ms = paused
-    ? runningSinceMs
-    : Math.max(0, runningSinceMs + (now - anchor.current.perf));
+  const ms = paused ? runningSinceMs : Math.max(0, runningSinceMs + (now - anchor.current.perf));
 
   const strokeW = 8;
   const r = size / 2 - strokeW * 2 - 6;
@@ -61,9 +59,10 @@ export function HudTimer({
 
   const seconds = Math.floor(ms / 1000);
   const cs = Math.floor((ms % 1000) / 10);
-  const digits = seconds < 60
-    ? `${String(seconds).padStart(2, "0")}:${String(cs).padStart(2, "0")}`
-    : formatTime(ms);
+  const digits =
+    seconds < 60
+      ? `${String(seconds).padStart(2, "0")}:${String(cs).padStart(2, "0")}`
+      : formatTime(ms);
 
   return (
     <div
@@ -97,10 +96,7 @@ export function HudTimer({
       )}
 
       {/* Ring + ticks */}
-      <svg
-        className="absolute inset-0 h-full w-full -rotate-90"
-        viewBox={`0 0 ${size} ${size}`}
-      >
+      <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox={`0 0 ${size} ${size}`}>
         {/* base track */}
         <circle
           cx={c}

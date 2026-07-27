@@ -77,7 +77,9 @@ function TvPage() {
             </span>
             <ParticipantAvatar
               name={row.ep?.participant?.name ?? "?"}
-              photoUrl={photos.data?.[row.ep?.id ?? ""] ?? row.ep?.participant?.profile_image_url ?? null}
+              photoUrl={
+                photos.data?.[row.ep?.id ?? ""] ?? row.ep?.participant?.profile_image_url ?? null
+              }
               size={56}
             />
             <div className="min-w-0 flex-1">
@@ -90,7 +92,9 @@ function TvPage() {
                   {row.ep.participant?.name}
                 </Link>
               ) : (
-                <div className="truncate font-display text-2xl font-black uppercase leading-tight">—</div>
+                <div className="truncate font-display text-2xl font-black uppercase leading-tight">
+                  —
+                </div>
               )}
               {row.ep?.participant?.fantasy_team_name && (
                 <div className="truncate text-xs uppercase tracking-widest text-muted-foreground">
@@ -98,7 +102,10 @@ function TvPage() {
                 </div>
               )}
             </div>
-            <div className="timer-digits text-4xl text-primary" style={{ textShadow: "0 0 12px var(--color-primary)" }}>
+            <div
+              className="timer-digits text-4xl text-primary"
+              style={{ textShadow: "0 0 12px var(--color-primary)" }}
+            >
               {formatTime(row.run.official_time_ms)}
             </div>
           </div>

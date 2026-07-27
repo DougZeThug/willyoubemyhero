@@ -14,9 +14,16 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Live — Will YOU Be My Hero? Draft Combine" },
-      { name: "description", content: "Watch the Will YOU Be My Hero? Draft Combine live — current runner, timer, and rolling leaderboard." },
+      {
+        name: "description",
+        content:
+          "Watch the Will YOU Be My Hero? Draft Combine live — current runner, timer, and rolling leaderboard.",
+      },
       { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Live" },
-      { property: "og:description", content: "Live timing dashboard for the fantasy football draft combine." },
+      {
+        property: "og:description",
+        content: "Live timing dashboard for the fantasy football draft combine.",
+      },
     ],
   }),
   component: LiveDashboard,
@@ -25,7 +32,11 @@ export const Route = createFileRoute("/")({
 function LiveDashboard() {
   const { event, bundle, loading } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
-  const [celebration, setCelebration] = useState<{ name: string; timeMs: number; deltaMs: number } | null>(null);
+  const [celebration, setCelebration] = useState<{
+    name: string;
+    timeMs: number;
+    deltaMs: number;
+  } | null>(null);
   useFinishWatcher(bundle, (f) => setCelebration(f));
 
   const { current, next, leaderboard, done, total } = useMemo(() => {
@@ -33,7 +44,10 @@ function LiveDashboard() {
     const runs = bundle?.runs ?? [];
     const runningIdx = parts.findIndex((p) => p.participation_status === "running");
     const upNextIdx = parts.findIndex(
-      (p, i) => i > (runningIdx < 0 ? -1 : runningIdx) && p.participation_status !== "finished" && p.participation_status !== "scratched",
+      (p, i) =>
+        i > (runningIdx < 0 ? -1 : runningIdx) &&
+        p.participation_status !== "finished" &&
+        p.participation_status !== "scratched",
     );
     const finished = runs
       .filter((r) => r.is_official)
@@ -87,7 +101,9 @@ function LiveDashboard() {
             {current ? (
               <ParticipantAvatar
                 name={current.participant?.name ?? "?"}
-                photoUrl={photos.data?.[current.id] ?? current.participant?.profile_image_url ?? null}
+                photoUrl={
+                  photos.data?.[current.id] ?? current.participant?.profile_image_url ?? null
+                }
                 size={200}
                 className="opacity-70"
               />

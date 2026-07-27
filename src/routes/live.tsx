@@ -14,7 +14,11 @@ export const Route = createFileRoute("/live")({
   head: () => ({
     meta: [
       { title: "Live Spectator — Will YOU Be My Hero? Draft Combine" },
-      { name: "description", content: "Spectator broadcast view of the draft combine — timer, current athlete, and leaderboard." },
+      {
+        name: "description",
+        content:
+          "Spectator broadcast view of the draft combine — timer, current athlete, and leaderboard.",
+      },
       { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Live" },
       { property: "og:description", content: "Read-only broadcast feed of the timed combine." },
       { property: "og:type", content: "website" },
@@ -27,7 +31,11 @@ export const Route = createFileRoute("/live")({
 function LivePage() {
   const { event, bundle, loading } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
-  const [celebration, setCelebration] = useState<{ name: string; timeMs: number; deltaMs: number } | null>(null);
+  const [celebration, setCelebration] = useState<{
+    name: string;
+    timeMs: number;
+    deltaMs: number;
+  } | null>(null);
 
   const { current, leaderboard, done, total } = useMemo(() => {
     const parts = bundle?.participants ?? [];
@@ -70,7 +78,9 @@ function LivePage() {
             {current ? (
               <ParticipantAvatar
                 name={current.participant?.name ?? "?"}
-                photoUrl={photos.data?.[current.id] ?? current.participant?.profile_image_url ?? null}
+                photoUrl={
+                  photos.data?.[current.id] ?? current.participant?.profile_image_url ?? null
+                }
                 size={220}
                 className="opacity-80"
               />
@@ -94,9 +104,7 @@ function LivePage() {
               )}
             </div>
           ) : (
-            <div className="mt-4 text-xs text-muted-foreground">
-              Waiting for the next athlete.
-            </div>
+            <div className="mt-4 text-xs text-muted-foreground">Waiting for the next athlete.</div>
           )}
         </div>
 
@@ -132,7 +140,11 @@ function LivePage() {
                     </span>
                     <ParticipantAvatar
                       name={row.ep?.participant?.name ?? "?"}
-                      photoUrl={photos.data?.[row.ep?.id ?? ""] ?? row.ep?.participant?.profile_image_url ?? null}
+                      photoUrl={
+                        photos.data?.[row.ep?.id ?? ""] ??
+                        row.ep?.participant?.profile_image_url ??
+                        null
+                      }
                       size={32}
                     />
                     {row.ep ? (
@@ -144,7 +156,9 @@ function LivePage() {
                         {row.ep.participant?.name ?? "—"}
                       </Link>
                     ) : (
-                      <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">—</span>
+                      <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
+                        —
+                      </span>
                     )}
                     <span className="timer-digits tabular text-primary text-lg">
                       {formatTime(row.run.official_time_ms)}

@@ -66,7 +66,10 @@ export function SiteNav() {
                   )}
                 >
                   <Icon
-                    className={cn("h-5 w-5", active && "drop-shadow-[0_0_6px_var(--color-primary)]")}
+                    className={cn(
+                      "h-5 w-5",
+                      active && "drop-shadow-[0_0_6px_var(--color-primary)]",
+                    )}
                     strokeWidth={1.75}
                   />
                   {l.label}

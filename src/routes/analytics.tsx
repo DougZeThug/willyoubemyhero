@@ -3,15 +3,7 @@ import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { listArchives } from "@/lib/media.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +13,10 @@ export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
       { title: "Analytics — Draft Combine" },
-      { name: "description", content: "Split analysis, personal bests, and historical event archive." },
+      {
+        name: "description",
+        content: "Split analysis, personal bests, and historical event archive.",
+      },
       { property: "og:title", content: "Draft Combine — Analytics" },
       { property: "og:description", content: "Combine splits, personal bests, and archive." },
     ],
@@ -48,7 +43,11 @@ function AnalyticsPage() {
       const arr = byStation.get(st.name) ?? [];
       const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
       const best = arr.length ? Math.min(...arr) : 0;
-      return { name: st.name, avgSec: +(avg / 1000).toFixed(2), bestSec: +(best / 1000).toFixed(2) };
+      return {
+        name: st.name,
+        avgSec: +(avg / 1000).toFixed(2),
+        bestSec: +(best / 1000).toFixed(2),
+      };
     });
   }, [bundle]);
 
@@ -56,7 +55,9 @@ function AnalyticsPage() {
     if (!bundle) return [];
     return bundle.participants
       .map((ep) => {
-        const runs = bundle.runs.filter((r) => r.participant_id === ep.participant_id && r.is_official);
+        const runs = bundle.runs.filter(
+          (r) => r.participant_id === ep.participant_id && r.is_official,
+        );
         if (!runs.length) return null;
         const best = Math.min(...runs.map((r) => r.official_time_ms ?? Infinity));
         return { name: ep.participant?.name ?? "?", bestMs: best };
@@ -90,12 +91,19 @@ function AnalyticsPage() {
             ) : (
               <div className="h-56 w-full">
                 <ResponsiveContainer>
-                  <BarChart data={stationAverages} margin={{ top: 8, right: 8, bottom: 8, left: -8 }}>
+                  <BarChart
+                    data={stationAverages}
+                    margin={{ top: 8, right: 8, bottom: 8, left: -8 }}
+                  >
                     <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
                     <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
                     <YAxis stroke="#94a3b8" fontSize={11} unit="s" />
                     <Tooltip
-                      contentStyle={{ background: "#0f172a", border: "1px solid #38bdf8", borderRadius: 8 }}
+                      contentStyle={{
+                        background: "#0f172a",
+                        border: "1px solid #38bdf8",
+                        borderRadius: 8,
+                      }}
                       labelStyle={{ color: "#67e8f9" }}
                       formatter={(v: number) => `${v}s`}
                     />
@@ -120,11 +128,16 @@ function AnalyticsPage() {
             ) : (
               <ol className="space-y-1.5">
                 {bests.map((b, i) => (
-                  <li key={b.name} className="flex items-center gap-3 rounded-md bg-[oklch(0.16_0.02_240)] px-3 py-2">
+                  <li
+                    key={b.name}
+                    className="flex items-center gap-3 rounded-md bg-[oklch(0.16_0.02_240)] px-3 py-2"
+                  >
                     <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 text-[10px] font-black text-primary">
                       {i + 1}
                     </span>
-                    <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">{b.name}</span>
+                    <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
+                      {b.name}
+                    </span>
                     <span className="timer-digits text-primary">{formatTime(b.bestMs)}</span>
                   </li>
                 ))}
