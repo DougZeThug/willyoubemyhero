@@ -1,1040 +1,925 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5";
-  };
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
       audit_logs: {
         Row: {
-          action: string;
-          entity_id: string | null;
-          entity_type: string | null;
-          event_id: string | null;
-          id: string;
-          new_value: Json | null;
-          performed_at: string;
-          performed_by: string | null;
-          previous_value: Json | null;
-        };
+          action: string
+          entity_id: string | null
+          entity_type: string | null
+          event_id: string | null
+          id: string
+          new_value: Json | null
+          performed_at: string
+          performed_by: string | null
+          previous_value: Json | null
+        }
         Insert: {
-          action: string;
-          entity_id?: string | null;
-          entity_type?: string | null;
-          event_id?: string | null;
-          id?: string;
-          new_value?: Json | null;
-          performed_at?: string;
-          performed_by?: string | null;
-          previous_value?: Json | null;
-        };
+          action: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_id?: string | null
+          id?: string
+          new_value?: Json | null
+          performed_at?: string
+          performed_by?: string | null
+          previous_value?: Json | null
+        }
         Update: {
-          action?: string;
-          entity_id?: string | null;
-          entity_type?: string | null;
-          event_id?: string | null;
-          id?: string;
-          new_value?: Json | null;
-          performed_at?: string;
-          performed_by?: string | null;
-          previous_value?: Json | null;
-        };
+          action?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          event_id?: string | null
+          id?: string
+          new_value?: Json | null
+          performed_at?: string
+          performed_by?: string | null
+          previous_value?: Json | null
+        }
         Relationships: [
           {
-            foreignKeyName: "audit_logs_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "audit_logs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "audit_logs_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "audit_logs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       awards: {
         Row: {
-          award_name: string;
-          award_type: string | null;
-          created_at: string;
-          description: string | null;
-          event_id: string;
-          id: string;
-          participant_id: string | null;
-        };
+          award_name: string
+          award_type: string | null
+          created_at: string
+          description: string | null
+          event_id: string
+          id: string
+          participant_id: string | null
+        }
         Insert: {
-          award_name: string;
-          award_type?: string | null;
-          created_at?: string;
-          description?: string | null;
-          event_id: string;
-          id?: string;
-          participant_id?: string | null;
-        };
+          award_name: string
+          award_type?: string | null
+          created_at?: string
+          description?: string | null
+          event_id: string
+          id?: string
+          participant_id?: string | null
+        }
         Update: {
-          award_name?: string;
-          award_type?: string | null;
-          created_at?: string;
-          description?: string | null;
-          event_id?: string;
-          id?: string;
-          participant_id?: string | null;
-        };
+          award_name?: string
+          award_type?: string | null
+          created_at?: string
+          description?: string | null
+          event_id?: string
+          id?: string
+          participant_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "awards_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "awards_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "awards_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "awards_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "awards_participant_id_fkey";
-            columns: ["participant_id"];
-            isOneToOne: false;
-            referencedRelation: "participants";
-            referencedColumns: ["id"];
+            foreignKeyName: "awards_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      award_votes: {
-        Row: {
-          category: string;
-          created_at: string;
-          event_id: string;
-          id: string;
-          target_participant_id: string;
-          updated_at: string;
-          voter_participant_id: string;
-        };
-        Insert: {
-          category: string;
-          created_at?: string;
-          event_id: string;
-          id?: string;
-          target_participant_id: string;
-          updated_at?: string;
-          voter_participant_id: string;
-        };
-        Update: {
-          category?: string;
-          created_at?: string;
-          event_id?: string;
-          id?: string;
-          target_participant_id?: string;
-          updated_at?: string;
-          voter_participant_id?: string;
-        };
-        Relationships: [];
-      };
-      card_comments: {
-        Row: {
-          body: string;
-          created_at: string;
-          event_participant_id: string;
-          id: string;
-          participant_id: string;
-        };
-        Insert: {
-          body: string;
-          created_at?: string;
-          event_participant_id: string;
-          id?: string;
-          participant_id: string;
-        };
-        Update: {
-          body?: string;
-          created_at?: string;
-          event_participant_id?: string;
-          id?: string;
-          participant_id?: string;
-        };
-        Relationships: [];
-      };
-      card_reactions: {
-        Row: {
-          created_at: string;
-          emoji: string;
-          event_participant_id: string;
-          id: string;
-          participant_id: string;
-        };
-        Insert: {
-          created_at?: string;
-          emoji: string;
-          event_participant_id: string;
-          id?: string;
-          participant_id: string;
-        };
-        Update: {
-          created_at?: string;
-          emoji?: string;
-          event_participant_id?: string;
-          id?: string;
-          participant_id?: string;
-        };
-        Relationships: [];
-      };
-      member_codes: {
-        Row: {
-          claim_count: number;
-          claimed_at: string | null;
-          code_hash: string;
-          code_salt: string;
-          created_at: string;
-          last_claimed_at: string | null;
-          participant_id: string;
-          updated_at: string;
-        };
-        Insert: {
-          claim_count?: number;
-          claimed_at?: string | null;
-          code_hash: string;
-          code_salt: string;
-          created_at?: string;
-          last_claimed_at?: string | null;
-          participant_id: string;
-          updated_at?: string;
-        };
-        Update: {
-          claim_count?: number;
-          claimed_at?: string | null;
-          code_hash?: string;
-          code_salt?: string;
-          created_at?: string;
-          last_claimed_at?: string | null;
-          participant_id?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+        ]
+      }
       draft_selections: {
         Row: {
-          created_by: string | null;
-          draft_position: number;
-          event_id: string;
-          id: string;
-          participant_id: string;
-          selected_at: string;
-          selection_order: number;
-        };
+          created_by: string | null
+          draft_position: number
+          event_id: string
+          id: string
+          participant_id: string
+          selected_at: string
+          selection_order: number
+        }
         Insert: {
-          created_by?: string | null;
-          draft_position: number;
-          event_id: string;
-          id?: string;
-          participant_id: string;
-          selected_at?: string;
-          selection_order: number;
-        };
+          created_by?: string | null
+          draft_position: number
+          event_id: string
+          id?: string
+          participant_id: string
+          selected_at?: string
+          selection_order: number
+        }
         Update: {
-          created_by?: string | null;
-          draft_position?: number;
-          event_id?: string;
-          id?: string;
-          participant_id?: string;
-          selected_at?: string;
-          selection_order?: number;
-        };
+          created_by?: string | null
+          draft_position?: number
+          event_id?: string
+          id?: string
+          participant_id?: string
+          selected_at?: string
+          selection_order?: number
+        }
         Relationships: [
           {
-            foreignKeyName: "draft_selections_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "draft_selections_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "draft_selections_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "draft_selections_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "draft_selections_participant_id_fkey";
-            columns: ["participant_id"];
-            isOneToOne: false;
-            referencedRelation: "participants";
-            referencedColumns: ["id"];
+            foreignKeyName: "draft_selections_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       event_archive_snapshots: {
         Row: {
-          created_at: string;
-          event_id: string;
-          event_name: string;
-          event_year: number | null;
-          id: string;
-          slug: string;
-          snapshot: Json;
-        };
+          created_at: string
+          event_id: string
+          event_name: string
+          event_year: number | null
+          id: string
+          slug: string
+          snapshot: Json
+        }
         Insert: {
-          created_at?: string;
-          event_id: string;
-          event_name: string;
-          event_year?: number | null;
-          id?: string;
-          slug: string;
-          snapshot: Json;
-        };
+          created_at?: string
+          event_id: string
+          event_name: string
+          event_year?: number | null
+          id?: string
+          slug: string
+          snapshot: Json
+        }
         Update: {
-          created_at?: string;
-          event_id?: string;
-          event_name?: string;
-          event_year?: number | null;
-          id?: string;
-          slug?: string;
-          snapshot?: Json;
-        };
+          created_at?: string
+          event_id?: string
+          event_name?: string
+          event_year?: number | null
+          id?: string
+          slug?: string
+          snapshot?: Json
+        }
         Relationships: [
           {
-            foreignKeyName: "event_archive_snapshots_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "event_archive_snapshots_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_archive_snapshots_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "event_archive_snapshots_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       event_participants: {
         Row: {
-          bib_number: number | null;
-          card_back_path: string | null;
-          card_path: string | null;
-          card_rarity: string | null;
-          created_at: string;
-          draft_choice_priority: number | null;
-          event_id: string;
-          id: string;
-          participant_id: string;
-          participation_status: string;
-          photo_path: string | null;
-          running_order: number;
-          selected_draft_position: number | null;
-          updated_at: string;
-        };
+          bib_number: number | null
+          card_path: string | null
+          created_at: string
+          draft_choice_priority: number | null
+          event_id: string
+          id: string
+          participant_id: string
+          participation_status: string
+          photo_path: string | null
+          running_order: number
+          selected_draft_position: number | null
+          updated_at: string
+        }
         Insert: {
-          bib_number?: number | null;
-          card_back_path?: string | null;
-          card_path?: string | null;
-          card_rarity?: string | null;
-          created_at?: string;
-          draft_choice_priority?: number | null;
-          event_id: string;
-          id?: string;
-          participant_id: string;
-          participation_status?: string;
-          photo_path?: string | null;
-          running_order?: number;
-          selected_draft_position?: number | null;
-          updated_at?: string;
-        };
+          bib_number?: number | null
+          card_path?: string | null
+          created_at?: string
+          draft_choice_priority?: number | null
+          event_id: string
+          id?: string
+          participant_id: string
+          participation_status?: string
+          photo_path?: string | null
+          running_order?: number
+          selected_draft_position?: number | null
+          updated_at?: string
+        }
         Update: {
-          bib_number?: number | null;
-          card_back_path?: string | null;
-          card_path?: string | null;
-          card_rarity?: string | null;
-          created_at?: string;
-          draft_choice_priority?: number | null;
-          event_id?: string;
-          id?: string;
-          participant_id?: string;
-          participation_status?: string;
-          photo_path?: string | null;
-          running_order?: number;
-          selected_draft_position?: number | null;
-          updated_at?: string;
-        };
+          bib_number?: number | null
+          card_path?: string | null
+          created_at?: string
+          draft_choice_priority?: number | null
+          event_id?: string
+          id?: string
+          participant_id?: string
+          participation_status?: string
+          photo_path?: string | null
+          running_order?: number
+          selected_draft_position?: number | null
+          updated_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "event_participants_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "event_participants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_participants_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "event_participants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_participants_participant_id_fkey";
-            columns: ["participant_id"];
-            isOneToOne: false;
-            referencedRelation: "participants";
-            referencedColumns: ["id"];
+            foreignKeyName: "event_participants_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       event_secrets: {
         Row: {
-          created_at: string;
-          event_id: string;
-          pin_hash: string;
-          pin_salt: string;
-          updated_at: string;
-        };
+          created_at: string
+          event_id: string
+          pin_hash: string
+          pin_salt: string
+          updated_at: string
+        }
         Insert: {
-          created_at?: string;
-          event_id: string;
-          pin_hash: string;
-          pin_salt: string;
-          updated_at?: string;
-        };
+          created_at?: string
+          event_id: string
+          pin_hash: string
+          pin_salt: string
+          updated_at?: string
+        }
         Update: {
-          created_at?: string;
-          event_id?: string;
-          pin_hash?: string;
-          pin_salt?: string;
-          updated_at?: string;
-        };
+          created_at?: string
+          event_id?: string
+          pin_hash?: string
+          pin_salt?: string
+          updated_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "event_secrets_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: true;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "event_secrets_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_secrets_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: true;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "event_secrets_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       events: {
         Row: {
-          active: boolean;
-          created_at: string;
-          draft_locked: boolean;
-          draft_size: number;
-          event_date: string | null;
-          id: string;
-          location: string | null;
-          name: string;
-          awards_locked: boolean;
-          results_locked: boolean;
-          running_order_locked: boolean;
-          splits_enabled: boolean;
-          status: string;
-          timing_mode: string;
-          updated_at: string;
-          year: number;
-        };
+          active: boolean
+          created_at: string
+          draft_locked: boolean
+          draft_size: number
+          event_date: string | null
+          id: string
+          location: string | null
+          name: string
+          results_locked: boolean
+          running_order_locked: boolean
+          splits_enabled: boolean
+          status: string
+          timing_mode: string
+          updated_at: string
+          year: number
+        }
         Insert: {
-          active?: boolean;
-          created_at?: string;
-          draft_locked?: boolean;
-          draft_size?: number;
-          event_date?: string | null;
-          id?: string;
-          location?: string | null;
-          name: string;
-          awards_locked?: boolean;
-          results_locked?: boolean;
-          running_order_locked?: boolean;
-          splits_enabled?: boolean;
-          status?: string;
-          timing_mode?: string;
-          updated_at?: string;
-          year: number;
-        };
+          active?: boolean
+          created_at?: string
+          draft_locked?: boolean
+          draft_size?: number
+          event_date?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          results_locked?: boolean
+          running_order_locked?: boolean
+          splits_enabled?: boolean
+          status?: string
+          timing_mode?: string
+          updated_at?: string
+          year: number
+        }
         Update: {
-          active?: boolean;
-          created_at?: string;
-          draft_locked?: boolean;
-          draft_size?: number;
-          event_date?: string | null;
-          id?: string;
-          location?: string | null;
-          name?: string;
-          awards_locked?: boolean;
-          results_locked?: boolean;
-          running_order_locked?: boolean;
-          splits_enabled?: boolean;
-          status?: string;
-          timing_mode?: string;
-          updated_at?: string;
-          year?: number;
-        };
-        Relationships: [];
-      };
+          active?: boolean
+          created_at?: string
+          draft_locked?: boolean
+          draft_size?: number
+          event_date?: string | null
+          id?: string
+          location?: string | null
+          name?: string
+          results_locked?: boolean
+          running_order_locked?: boolean
+          splits_enabled?: boolean
+          status?: string
+          timing_mode?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
+      }
       participants: {
         Row: {
-          active: boolean;
-          bio: string | null;
-          created_at: string;
-          fantasy_team_name: string | null;
-          id: string;
-          name: string;
-          nickname: string | null;
-          profile_image_url: string | null;
-          team_logo_url: string | null;
-          trash_talk_quote: string | null;
-          updated_at: string;
-        };
+          active: boolean
+          bio: string | null
+          created_at: string
+          fantasy_team_name: string | null
+          id: string
+          name: string
+          nickname: string | null
+          profile_image_url: string | null
+          team_logo_url: string | null
+          trash_talk_quote: string | null
+          updated_at: string
+        }
         Insert: {
-          active?: boolean;
-          bio?: string | null;
-          created_at?: string;
-          fantasy_team_name?: string | null;
-          id?: string;
-          name: string;
-          nickname?: string | null;
-          profile_image_url?: string | null;
-          team_logo_url?: string | null;
-          trash_talk_quote?: string | null;
-          updated_at?: string;
-        };
+          active?: boolean
+          bio?: string | null
+          created_at?: string
+          fantasy_team_name?: string | null
+          id?: string
+          name: string
+          nickname?: string | null
+          profile_image_url?: string | null
+          team_logo_url?: string | null
+          trash_talk_quote?: string | null
+          updated_at?: string
+        }
         Update: {
-          active?: boolean;
-          bio?: string | null;
-          created_at?: string;
-          fantasy_team_name?: string | null;
-          id?: string;
-          name?: string;
-          nickname?: string | null;
-          profile_image_url?: string | null;
-          team_logo_url?: string | null;
-          trash_talk_quote?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+          active?: boolean
+          bio?: string | null
+          created_at?: string
+          fantasy_team_name?: string | null
+          id?: string
+          name?: string
+          nickname?: string | null
+          profile_image_url?: string | null
+          team_logo_url?: string | null
+          trash_talk_quote?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       penalties: {
         Row: {
-          client_key: string | null;
-          created_at: string;
-          created_by: string | null;
-          id: string;
-          notes: string | null;
-          penalty_ms: number;
-          reason: string | null;
-          run_id: string;
-          station_id: string | null;
-        };
+          client_key: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          penalty_ms: number
+          reason: string | null
+          run_id: string
+          station_id: string | null
+        }
         Insert: {
-          client_key?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          id?: string;
-          notes?: string | null;
-          penalty_ms: number;
-          reason?: string | null;
-          run_id: string;
-          station_id?: string | null;
-        };
+          client_key?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          penalty_ms: number
+          reason?: string | null
+          run_id: string
+          station_id?: string | null
+        }
         Update: {
-          client_key?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          id?: string;
-          notes?: string | null;
-          penalty_ms?: number;
-          reason?: string | null;
-          run_id?: string;
-          station_id?: string | null;
-        };
+          client_key?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          penalty_ms?: number
+          reason?: string | null
+          run_id?: string
+          station_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "penalties_run_id_fkey";
-            columns: ["run_id"];
-            isOneToOne: false;
-            referencedRelation: "runs";
-            referencedColumns: ["id"];
+            foreignKeyName: "penalties_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "penalties_station_id_fkey";
-            columns: ["station_id"];
-            isOneToOne: false;
-            referencedRelation: "stations";
-            referencedColumns: ["id"];
+            foreignKeyName: "penalties_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       running_order_randomizations: {
         Row: {
-          event_id: string;
-          id: string;
-          previous_order: Json | null;
-          randomization_seed: string | null;
-          randomized_at: string;
-          randomized_by: string | null;
-          randomized_scope: string | null;
-          resulting_order: Json | null;
-        };
+          event_id: string
+          id: string
+          previous_order: Json | null
+          randomization_seed: string | null
+          randomized_at: string
+          randomized_by: string | null
+          randomized_scope: string | null
+          resulting_order: Json | null
+        }
         Insert: {
-          event_id: string;
-          id?: string;
-          previous_order?: Json | null;
-          randomization_seed?: string | null;
-          randomized_at?: string;
-          randomized_by?: string | null;
-          randomized_scope?: string | null;
-          resulting_order?: Json | null;
-        };
+          event_id: string
+          id?: string
+          previous_order?: Json | null
+          randomization_seed?: string | null
+          randomized_at?: string
+          randomized_by?: string | null
+          randomized_scope?: string | null
+          resulting_order?: Json | null
+        }
         Update: {
-          event_id?: string;
-          id?: string;
-          previous_order?: Json | null;
-          randomization_seed?: string | null;
-          randomized_at?: string;
-          randomized_by?: string | null;
-          randomized_scope?: string | null;
-          resulting_order?: Json | null;
-        };
+          event_id?: string
+          id?: string
+          previous_order?: Json | null
+          randomization_seed?: string | null
+          randomized_at?: string
+          randomized_by?: string | null
+          randomized_scope?: string | null
+          resulting_order?: Json | null
+        }
         Relationships: [
           {
-            foreignKeyName: "running_order_randomizations_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "running_order_randomizations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "running_order_randomizations_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "running_order_randomizations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       runs: {
         Row: {
-          attempt_number: number;
-          client_key: string | null;
-          created_at: string;
-          event_id: string;
-          finished_at: string | null;
-          id: string;
-          is_official: boolean;
-          notes: string | null;
-          official_time_ms: number | null;
-          participant_id: string;
-          paused_duration_ms: number;
-          penalty_ms: number;
-          raw_time_ms: number | null;
-          started_at: string | null;
-          status: string;
-          updated_at: string;
-        };
+          attempt_number: number
+          client_key: string | null
+          created_at: string
+          event_id: string
+          finished_at: string | null
+          id: string
+          is_official: boolean
+          notes: string | null
+          official_time_ms: number | null
+          participant_id: string
+          paused_duration_ms: number
+          penalty_ms: number
+          raw_time_ms: number | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
         Insert: {
-          attempt_number?: number;
-          client_key?: string | null;
-          created_at?: string;
-          event_id: string;
-          finished_at?: string | null;
-          id?: string;
-          is_official?: boolean;
-          notes?: string | null;
-          official_time_ms?: number | null;
-          participant_id: string;
-          paused_duration_ms?: number;
-          penalty_ms?: number;
-          raw_time_ms?: number | null;
-          started_at?: string | null;
-          status?: string;
-          updated_at?: string;
-        };
+          attempt_number?: number
+          client_key?: string | null
+          created_at?: string
+          event_id: string
+          finished_at?: string | null
+          id?: string
+          is_official?: boolean
+          notes?: string | null
+          official_time_ms?: number | null
+          participant_id: string
+          paused_duration_ms?: number
+          penalty_ms?: number
+          raw_time_ms?: number | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
         Update: {
-          attempt_number?: number;
-          client_key?: string | null;
-          created_at?: string;
-          event_id?: string;
-          finished_at?: string | null;
-          id?: string;
-          is_official?: boolean;
-          notes?: string | null;
-          official_time_ms?: number | null;
-          participant_id?: string;
-          paused_duration_ms?: number;
-          penalty_ms?: number;
-          raw_time_ms?: number | null;
-          started_at?: string | null;
-          status?: string;
-          updated_at?: string;
-        };
+          attempt_number?: number
+          client_key?: string | null
+          created_at?: string
+          event_id?: string
+          finished_at?: string | null
+          id?: string
+          is_official?: boolean
+          notes?: string | null
+          official_time_ms?: number | null
+          participant_id?: string
+          paused_duration_ms?: number
+          penalty_ms?: number
+          raw_time_ms?: number | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "runs_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "runs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "runs_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "runs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "runs_participant_id_fkey";
-            columns: ["participant_id"];
-            isOneToOne: false;
-            referencedRelation: "participants";
-            referencedColumns: ["id"];
+            foreignKeyName: "runs_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       splits: {
         Row: {
-          client_key: string | null;
-          corrected: boolean;
-          correction_reason: string | null;
-          created_at: string;
-          cumulative_time_ms: number;
-          entry_method: string;
-          id: string;
-          recorded_at: string;
-          recorded_by: string | null;
-          run_id: string;
-          segment_time_ms: number | null;
-          station_id: string;
-          updated_at: string;
-        };
+          client_key: string | null
+          corrected: boolean
+          correction_reason: string | null
+          created_at: string
+          cumulative_time_ms: number
+          entry_method: string
+          id: string
+          recorded_at: string
+          recorded_by: string | null
+          run_id: string
+          segment_time_ms: number | null
+          station_id: string
+          updated_at: string
+        }
         Insert: {
-          client_key?: string | null;
-          corrected?: boolean;
-          correction_reason?: string | null;
-          created_at?: string;
-          cumulative_time_ms: number;
-          entry_method?: string;
-          id?: string;
-          recorded_at?: string;
-          recorded_by?: string | null;
-          run_id: string;
-          segment_time_ms?: number | null;
-          station_id: string;
-          updated_at?: string;
-        };
+          client_key?: string | null
+          corrected?: boolean
+          correction_reason?: string | null
+          created_at?: string
+          cumulative_time_ms: number
+          entry_method?: string
+          id?: string
+          recorded_at?: string
+          recorded_by?: string | null
+          run_id: string
+          segment_time_ms?: number | null
+          station_id: string
+          updated_at?: string
+        }
         Update: {
-          client_key?: string | null;
-          corrected?: boolean;
-          correction_reason?: string | null;
-          created_at?: string;
-          cumulative_time_ms?: number;
-          entry_method?: string;
-          id?: string;
-          recorded_at?: string;
-          recorded_by?: string | null;
-          run_id?: string;
-          segment_time_ms?: number | null;
-          station_id?: string;
-          updated_at?: string;
-        };
+          client_key?: string | null
+          corrected?: boolean
+          correction_reason?: string | null
+          created_at?: string
+          cumulative_time_ms?: number
+          entry_method?: string
+          id?: string
+          recorded_at?: string
+          recorded_by?: string | null
+          run_id?: string
+          segment_time_ms?: number | null
+          station_id?: string
+          updated_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "splits_run_id_fkey";
-            columns: ["run_id"];
-            isOneToOne: false;
-            referencedRelation: "runs";
-            referencedColumns: ["id"];
+            foreignKeyName: "splits_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "splits_station_id_fkey";
-            columns: ["station_id"];
-            isOneToOne: false;
-            referencedRelation: "stations";
-            referencedColumns: ["id"];
+            foreignKeyName: "splits_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       stations: {
         Row: {
-          active: boolean;
-          attempts_allowed: number;
-          created_at: string;
-          description: string | null;
-          event_id: string;
-          icon: string | null;
-          id: string;
-          name: string;
-          penalty_amount_ms: number;
-          penalty_rule: string | null;
-          short_name: string | null;
-          split_enabled: boolean;
-          station_order: number;
-          station_type: string;
-          success_required: boolean;
-          tiebreaker_station: boolean;
-          updated_at: string;
-        };
+          active: boolean
+          attempts_allowed: number
+          created_at: string
+          description: string | null
+          event_id: string
+          icon: string | null
+          id: string
+          name: string
+          penalty_amount_ms: number
+          penalty_rule: string | null
+          short_name: string | null
+          split_enabled: boolean
+          station_order: number
+          station_type: string
+          success_required: boolean
+          tiebreaker_station: boolean
+          updated_at: string
+        }
         Insert: {
-          active?: boolean;
-          attempts_allowed?: number;
-          created_at?: string;
-          description?: string | null;
-          event_id: string;
-          icon?: string | null;
-          id?: string;
-          name: string;
-          penalty_amount_ms?: number;
-          penalty_rule?: string | null;
-          short_name?: string | null;
-          split_enabled?: boolean;
-          station_order?: number;
-          station_type?: string;
-          success_required?: boolean;
-          tiebreaker_station?: boolean;
-          updated_at?: string;
-        };
+          active?: boolean
+          attempts_allowed?: number
+          created_at?: string
+          description?: string | null
+          event_id: string
+          icon?: string | null
+          id?: string
+          name: string
+          penalty_amount_ms?: number
+          penalty_rule?: string | null
+          short_name?: string | null
+          split_enabled?: boolean
+          station_order?: number
+          station_type?: string
+          success_required?: boolean
+          tiebreaker_station?: boolean
+          updated_at?: string
+        }
         Update: {
-          active?: boolean;
-          attempts_allowed?: number;
-          created_at?: string;
-          description?: string | null;
-          event_id?: string;
-          icon?: string | null;
-          id?: string;
-          name?: string;
-          penalty_amount_ms?: number;
-          penalty_rule?: string | null;
-          short_name?: string | null;
-          split_enabled?: boolean;
-          station_order?: number;
-          station_type?: string;
-          success_required?: boolean;
-          tiebreaker_station?: boolean;
-          updated_at?: string;
-        };
+          active?: boolean
+          attempts_allowed?: number
+          created_at?: string
+          description?: string | null
+          event_id?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          penalty_amount_ms?: number
+          penalty_rule?: string | null
+          short_name?: string | null
+          split_enabled?: boolean
+          station_order?: number
+          station_type?: string
+          success_required?: boolean
+          tiebreaker_station?: boolean
+          updated_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "stations_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
+            foreignKeyName: "stations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "stations_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: false;
-            referencedRelation: "events_public";
-            referencedColumns: ["id"];
+            foreignKeyName: "stations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-    };
+        ]
+      }
+    }
     Views: {
       events_public: {
         Row: {
-          active: boolean | null;
-          created_at: string | null;
-          draft_locked: boolean | null;
-          draft_size: number | null;
-          event_date: string | null;
-          id: string | null;
-          location: string | null;
-          name: string | null;
-          awards_locked: boolean | null;
-          results_locked: boolean | null;
-          running_order_locked: boolean | null;
-          splits_enabled: boolean | null;
-          status: string | null;
-          timing_mode: string | null;
-          updated_at: string | null;
-          year: number | null;
-        };
+          active: boolean | null
+          created_at: string | null
+          draft_locked: boolean | null
+          draft_size: number | null
+          event_date: string | null
+          id: string | null
+          location: string | null
+          name: string | null
+          results_locked: boolean | null
+          running_order_locked: boolean | null
+          splits_enabled: boolean | null
+          status: string | null
+          timing_mode: string | null
+          updated_at: string | null
+          year: number | null
+        }
         Insert: {
-          active?: boolean | null;
-          created_at?: string | null;
-          draft_locked?: boolean | null;
-          draft_size?: number | null;
-          event_date?: string | null;
-          id?: string | null;
-          location?: string | null;
-          name?: string | null;
-          awards_locked?: boolean | null;
-          results_locked?: boolean | null;
-          running_order_locked?: boolean | null;
-          splits_enabled?: boolean | null;
-          status?: string | null;
-          timing_mode?: string | null;
-          updated_at?: string | null;
-          year?: number | null;
-        };
+          active?: boolean | null
+          created_at?: string | null
+          draft_locked?: boolean | null
+          draft_size?: number | null
+          event_date?: string | null
+          id?: string | null
+          location?: string | null
+          name?: string | null
+          results_locked?: boolean | null
+          running_order_locked?: boolean | null
+          splits_enabled?: boolean | null
+          status?: string | null
+          timing_mode?: string | null
+          updated_at?: string | null
+          year?: number | null
+        }
         Update: {
-          active?: boolean | null;
-          created_at?: string | null;
-          draft_locked?: boolean | null;
-          draft_size?: number | null;
-          event_date?: string | null;
-          id?: string | null;
-          location?: string | null;
-          name?: string | null;
-          awards_locked?: boolean | null;
-          results_locked?: boolean | null;
-          running_order_locked?: boolean | null;
-          splits_enabled?: boolean | null;
-          status?: string | null;
-          timing_mode?: string | null;
-          updated_at?: string | null;
-          year?: number | null;
-        };
-        Relationships: [];
-      };
-    };
+          active?: boolean | null
+          created_at?: string | null
+          draft_locked?: boolean | null
+          draft_size?: number | null
+          event_date?: string | null
+          id?: string | null
+          location?: string | null
+          name?: string | null
+          results_locked?: boolean | null
+          running_order_locked?: boolean | null
+          splits_enabled?: boolean | null
+          status?: string | null
+          timing_mode?: string | null
+          updated_at?: string | null
+          year?: number | null
+        }
+        Relationships: []
+      }
+    }
     Functions: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     Enums: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
-};
+      [_ in never]: never
+    }
+  }
+}
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">];
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R;
+      Row: infer R
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R;
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
       }
       ? R
       : never
-    : never;
+    : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I;
+      Insert: infer I
     }
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I;
+        Insert: infer I
       }
       ? I
       : never
-    : never;
+    : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U;
+      Update: infer U
     }
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U;
+        Update: infer U
       }
       ? U
       : never
-    : never;
+    : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never;
+    : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never;
+    : never
 
 export const Constants = {
   public: {
     Enums: {},
   },
-} as const;
+} as const
