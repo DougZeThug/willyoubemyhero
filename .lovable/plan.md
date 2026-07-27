@@ -1,33 +1,19 @@
-## Player Cards
+## Goal
 
-### Storage & data
-- Reuse the existing private `participant-photos` bucket with a `cards/` prefix (or add `card_path` column to `event_participants`).
-- Migration: `ALTER TABLE event_participants ADD COLUMN card_path text;`
+Fix the 79 stale-type errors at the root by regenerating `src/integrations/supabase/types.ts` from the current DB schema, then re-enable the Typecheck step in CI so future drift fails the build.
 
-### Server functions (src/lib/media.functions.ts)
-- `uploadParticipantCard({ eventParticipantId, contentType, bytesBase64 })` — admin-only, stores to `cards/{eventId}/{ep.id}.{ext}`, updates `card_path`.
-- `deleteParticipantCard({ eventParticipantId })` — admin-only.
-- Extend `useEventPhotoUrls` (or add sibling `useEventCardUrls`) to sign `card_path` URLs.
+## Steps
 
-### Routes
-- `src/routes/players.tsx` — grid of all participants (square photo + name), each links to `/players/$id`.
-- `src/routes/players.$id.tsx` — full-bleed card: if `card_path` signed URL exists, show the image at natural aspect (max-w screen, centered, dark bg); otherwise fallback panel showing photo, name, team, running order, official time. Head meta uses player name; og:image = card URL when present.
+1. **Regenerate `src/integrations/supabase/types.ts`** from the live schema so it includes:
+   - `events.awards_locked`
+   - `event_participants.card_back_path`
+   - Tables `award_votes`, `card_reactions`, `card_comments`, `member_codes`, `event_secrets`
+   - RPC signatures for `cast_award_vote`, `close_award_voting`, `reopen_award_voting`
+2. **Run `bun run typecheck`** locally to confirm all 79 errors clear. If any residual errors remain (real code bugs, not codegen drift), fix them in the same pass.
+3. **Re-enable the Typecheck step** in `.github/workflows/ci.yml`: uncomment the step and delete the explanatory comment block above it so CI gates type errors going forward.
 
-### Admin
-- In `admin.tsx` participant row: add "Upload Card" button next to existing photo upload, plus remove-card action when present. Same file-picker pattern as photos.
+## Notes
 
-### Name links (all instances)
-Wrap participant names in `<Link to="/players/$id" params={{ id: ep.id }}>` in:
-- `src/routes/order.tsx`
-- `src/routes/leaderboard.tsx`
-- `src/routes/live.tsx`
-- `src/routes/tv.tsx`
-- `src/routes/draft.tsx`
-- `src/components/result-card.tsx` (skip — export image)
-
-### Nav
-- Add "Players" entry to `src/components/site-nav.tsx` (desktop + mobile bottom nav).
-
-### Notes
-- Card images displayed at their natural (portrait) aspect — no cropping. Grid thumbnails stay square (uses existing profile photo, not card).
-- No changes to timing / draft logic.
+- `types.ts` is auto-generated and normally untouched by hand; regeneration is the correct fix, not editing it.
+- No app behavior changes — types-only.
+- No DB migration needed; schema is already correct, only the generated file is stale.
