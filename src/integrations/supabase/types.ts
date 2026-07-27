@@ -65,6 +65,65 @@ export type Database = {
           },
         ]
       }
+      award_votes: {
+        Row: {
+          category: string
+          created_at: string
+          event_id: string
+          id: string
+          target_participant_id: string
+          updated_at: string
+          voter_participant_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          event_id: string
+          id?: string
+          target_participant_id: string
+          updated_at?: string
+          voter_participant_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          target_participant_id?: string
+          updated_at?: string
+          voter_participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "award_votes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_votes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_votes_target_participant_id_fkey"
+            columns: ["target_participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_votes_voter_participant_id_fkey"
+            columns: ["voter_participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       awards: {
         Row: {
           award_name: string
@@ -110,6 +169,84 @@ export type Database = {
           },
           {
             foreignKeyName: "awards_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_comments: {
+        Row: {
+          body: string
+          created_at: string
+          event_participant_id: string
+          id: string
+          participant_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          event_participant_id: string
+          id?: string
+          participant_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          event_participant_id?: string
+          id?: string
+          participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_comments_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_comments_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          event_participant_id: string
+          id: string
+          participant_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          event_participant_id: string
+          id?: string
+          participant_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          event_participant_id?: string
+          id?: string
+          participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_reactions_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_reactions_participant_id_fkey"
             columns: ["participant_id"]
             isOneToOne: false
             referencedRelation: "participants"
@@ -217,6 +354,7 @@ export type Database = {
       event_participants: {
         Row: {
           bib_number: number | null
+          card_back_path: string | null
           card_path: string | null
           created_at: string
           draft_choice_priority: number | null
@@ -231,6 +369,7 @@ export type Database = {
         }
         Insert: {
           bib_number?: number | null
+          card_back_path?: string | null
           card_path?: string | null
           created_at?: string
           draft_choice_priority?: number | null
@@ -245,6 +384,7 @@ export type Database = {
         }
         Update: {
           bib_number?: number | null
+          card_back_path?: string | null
           card_path?: string | null
           created_at?: string
           draft_choice_priority?: number | null
@@ -323,6 +463,7 @@ export type Database = {
       events: {
         Row: {
           active: boolean
+          awards_locked: boolean
           created_at: string
           draft_locked: boolean
           draft_size: number
@@ -340,6 +481,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          awards_locked?: boolean
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
@@ -357,6 +499,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          awards_locked?: boolean
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
@@ -373,6 +516,47 @@ export type Database = {
           year?: number
         }
         Relationships: []
+      }
+      member_codes: {
+        Row: {
+          claim_count: number
+          claimed_at: string | null
+          code_hash: string
+          code_salt: string
+          created_at: string
+          last_claimed_at: string | null
+          participant_id: string
+          updated_at: string
+        }
+        Insert: {
+          claim_count?: number
+          claimed_at?: string | null
+          code_hash: string
+          code_salt: string
+          created_at?: string
+          last_claimed_at?: string | null
+          participant_id: string
+          updated_at?: string
+        }
+        Update: {
+          claim_count?: number
+          claimed_at?: string | null
+          code_hash?: string
+          code_salt?: string
+          created_at?: string
+          last_claimed_at?: string | null
+          participant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_codes_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: true
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       participants: {
         Row: {
