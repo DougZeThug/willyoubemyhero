@@ -51,18 +51,8 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      # There is deliberately no typecheck step yet. `bun run typecheck` exists
-      # in package.json and works locally, but currently reports 79 errors —
-      # all of them because src/integrations/supabase/types.ts was never
-      # regenerated after the 20260727130000_member_identity_and_social
-      # migration, so awards_locked / award_votes / target_participant_id /
-      # event_participant_id are missing from the generated DB types. Regenerate
-      # types.ts (`supabase gen types`), then add back:
-      #
-      #   - name: Typecheck
-      #     run: bun run typecheck
-      #
-      # Note esbuild strips types without checking them, so until that step
-      # exists this workflow does not gate type errors.
+      - name: Typecheck
+        run: bun run typecheck
+
       - name: Build
         run: bun run build
