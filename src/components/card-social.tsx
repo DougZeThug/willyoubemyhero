@@ -97,7 +97,7 @@ export function CardSocial({
 
   async function onDelete(commentId: string) {
     try {
-      await deleteFn({ data: { commentId, eventId } });
+      await deleteFn({ data: { commentId } });
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not delete");
