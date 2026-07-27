@@ -192,10 +192,24 @@ export const archiveEvent = createServerFn({ method: "POST" })
         .select("*, participant:participants(*)")
         .eq("event_id", data.eventId),
       supabaseAdmin.from("stations").select("*").eq("event_id", data.eventId),
-      supabaseAdmin.from("runs").select("*").eq("event_id", data.eventId),
-      supabaseAdmin.from("splits").select("*"),
-      supabaseAdmin.from("penalties").select("*"),
-      supabaseAdmin.from("draft_selections").select("*").eq("event_id", data.eventId),
+      supabaseAdmin
+        .from("runs")
+        .select(
+          "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, notes, is_official, created_at, updated_at",
+        )
+        .eq("event_id", data.eventId),
+      supabaseAdmin
+        .from("splits")
+        .select(
+          "id, run_id, station_id, recorded_at, cumulative_time_ms, segment_time_ms, entry_method, corrected, correction_reason, created_at, updated_at",
+        ),
+      supabaseAdmin
+        .from("penalties")
+        .select("id, run_id, station_id, penalty_ms, reason, notes, created_at"),
+      supabaseAdmin
+        .from("draft_selections")
+        .select("id, event_id, participant_id, selection_order, draft_position, selected_at")
+        .eq("event_id", data.eventId),
     ]);
     if (!event.data) throw new Error("Event not found");
     const runIds = new Set((runs.data ?? []).map((r) => r.id));
