@@ -65,7 +65,9 @@ describe("signed url cache", () => {
     // every refetch: the browser had never seen the URL before.
     const signer = signingCounter();
     withDb({
-      "event_participants.select": { data: [{ id: CARD_ID, photo_path: "photos/a.jpg" }] },
+      "event_participants.select": {
+        data: [{ id: CARD_ID, photo_path: "photos/a.jpg", photo_path_thumb: "photos/a.jpg", photo_path_medium: "photos/a.jpg" }],
+      },
       "storage.createSignedUrl": signer.response,
     });
     const mod = await freshModule();
