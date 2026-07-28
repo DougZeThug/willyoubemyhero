@@ -32,14 +32,7 @@ beforeEach(() => {
 function setup(props: Partial<React.ComponentProps<typeof PackWrapper>> = {}) {
   const onTear = vi.fn();
   render(
-    <PackWrapper
-      backUrl={null}
-      cardCount={3}
-      year={2026}
-      seed="seed"
-      onTear={onTear}
-      {...props}
-    />,
+    <PackWrapper backUrl={null} cardCount={3} year={2026} seed="seed" onTear={onTear} {...props} />,
   );
   return { onTear, pack: screen.getByRole("button", { name: /swipe up to open the pack/i }) };
 }

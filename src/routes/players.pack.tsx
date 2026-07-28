@@ -401,6 +401,13 @@ function PackPage() {
 
       if (s.index === SECRET_STAGE_INDEX) {
         setStage({ ...s, phase: "held" });
+        // Marked seen *here*, on the flip, rather than when it lands. The three
+        // roster cards can afford "landed on the board" semantics — flipping one
+        // again after a badly timed reload costs nothing. The once-a-day card
+        // cannot: it is spent server-side the moment it is pulled, so a reload
+        // during the hold that put it back face-down would be the app asking
+        // someone to open the same drop twice.
+        setSecretRevealed(true);
         playSecretReveal(secretDuplicate);
         // A duplicate gets the shimmer, never a second burst — a wink, not a parade.
         if (!secretDuplicate) void celebrateSecret(secretRarity);
@@ -429,8 +436,8 @@ function PackPage() {
     if (!s || s.phase !== "landing") return;
     clearTimers();
 
+    // Already marked seen on the flip — this only closes the stage.
     if (s.index === SECRET_STAGE_INDEX) {
-      setSecretRevealed(true);
       setStage(null);
       return;
     }

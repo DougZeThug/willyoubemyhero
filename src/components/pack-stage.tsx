@@ -147,6 +147,21 @@ export function PackStage({
   const from = landing ? targetRect : originRect;
   const delta = flying && stageRect && from ? rectDelta(from, stageRect) : null;
 
+  /**
+   * Where the card is going.
+   *
+   * The fallback shrink is not decoration. Without it, a landing with no usable
+   * target animated to the values the card already held — motion sees nothing to
+   * animate, never fires onAnimationComplete, and the ceremony wedges with a card
+   * on screen and no way past it but a reload, on the one screen where a reload
+   * costs somebody their pack. Always give it something to move to.
+   */
+  const target = landing
+    ? delta
+      ? { ...delta, opacity: 0 }
+      : { scale: 0.85, opacity: 0 }
+    : { x: 0, y: 0, scale: 1, opacity: 1 };
+
   return (
     <div
       ref={overlayRef}
@@ -179,7 +194,7 @@ export function PackStage({
         // imperatively on both of its own inner layers and would overwrite
         // anything set here on the next pointer frame.
         initial={delta && !landing ? { ...delta, opacity: 0.6 } : { opacity: 0 }}
-        animate={landing && delta ? { ...delta, opacity: 0 } : { x: 0, y: 0, scale: 1, opacity: 1 }}
+        animate={target}
         transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 26 }}
         onAnimationComplete={() => (landing ? onLanded() : onEntered())}
         style={glow ? ({ "--stage-glow": card.rarity.accent } as React.CSSProperties) : undefined}
