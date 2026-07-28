@@ -18,7 +18,7 @@ import {
   deleteParticipantCard,
   type CardSide,
 } from "@/lib/media.functions";
-import { encodeUploadImage } from "@/lib/image-encode";
+import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { UniversalCardBack } from "@/components/universal-card-back";
 import { SecretCardsPanel } from "@/components/secret-cards-panel";
