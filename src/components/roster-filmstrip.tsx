@@ -2,12 +2,13 @@ import { useEffect, useRef } from "react";
 import { HoloCard } from "@/components/holo-card";
 import { initialsOf } from "@/lib/format";
 import type { Rarity } from "@/lib/card-rarity";
+import type { ImageUrlSet } from "@/lib/media.functions";
 import { cn } from "@/lib/utils";
 
 export type FilmstripEntry = {
   id: string;
   name: string;
-  frontUrl: string | null;
+  frontUrl: ImageUrlSet | string | null;
   rarity: Rarity;
 };
 
