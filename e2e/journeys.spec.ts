@@ -234,6 +234,43 @@ test.describe("opening a pack", () => {
     expect(await readPackState(page)).toBeNull();
   });
 
+  test("brings the cards up one at a time and lands them on the board", async ({ page }) => {
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+
+    const stage = page.getByRole("dialog");
+    await expect(stage).toBeVisible();
+    // One card is held up at a time. Two on screen at once would mean the
+    // machine advanced without the first one landing.
+    await expect(stage).toHaveCount(1);
+
+    // Nothing is named or graded before it has been turned over — the whole
+    // reason the stage exists rather than flipping cards in the grid.
+    await expect(stage).toContainText(/tap to flip/i);
+    await expect(stage).not.toContainText(/gold|1 of 1|station king|penalty box|dnf/i);
+
+    await stage.press("Enter");
+    await expect(stage).toContainText(/gold|1 of 1|station king|penalty box|dnf|base/i);
+
+    // It goes down to the board on its own. `revealed` only counts cards that
+    // have landed, so this is the flight completing rather than the flip.
+    await expect
+      .poll(async () => (await readPackState(page))?.revealed.length ?? 0, { timeout: 20_000 })
+      .toBeGreaterThan(0);
+
+    // Let the rest run itself out, then every card in the row is on the board
+    // under its own name.
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(stage).toBeHidden({ timeout: 20_000 });
+
+    const state = (await readPackState(page))!;
+    expect(state.revealed).toHaveLength(PACK_SIZE);
+    for (const id of state.ids) {
+      const name = PLAYERS.find((p) => p.ep === id)!.name;
+      await expect(page.getByRole("link", { name })).toBeVisible();
+    }
+  });
+
   test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {
     await page.goto("/players/pack");
     await expect(sealedPack(page)).toBeVisible();
