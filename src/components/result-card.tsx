@@ -20,6 +20,7 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
   ref,
 ) {
   const photoUrl = urlFromSet(data.photoUrl);
+  return (
     <div
       ref={ref}
       style={{
