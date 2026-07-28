@@ -296,7 +296,12 @@ export function HoloCard({
                 src={backUrl}
                 alt={`${name} card back`}
                 crossOrigin="anonymous"
-                className="h-full w-full object-contain"
+                // object-cover, not contain: the card's aspect is measured from
+                // the front art, and one universal back shared across an event
+                // won't always match it exactly. Contain would letterbox the
+                // back against the card body; cover keeps it full-bleed.
+                className="h-full w-full object-cover"
+                style={{ filter: "saturate(1.06) contrast(1.04)" }}
                 draggable={false}
               />
             ) : (
