@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
+import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { formatTime } from "@/lib/format";
 
@@ -21,6 +21,7 @@ export const Route = createFileRoute("/tv")({
 function TvPage() {
   const { event, bundle } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
+  const cards = useEventCardUrls(event?.id ?? null);
 
   const rows = useMemo(() => {
     const parts = bundle?.participants ?? [];
@@ -77,6 +78,7 @@ function TvPage() {
             </span>
             <ParticipantAvatar
               name={row.ep?.participant?.name ?? "?"}
+              cardUrl={row.ep ? (cards.data?.[row.ep.id]?.front ?? null) : null}
               photoUrl={
                 photos.data?.[row.ep?.id ?? ""] ?? row.ep?.participant?.profile_image_url ?? null
               }
