@@ -91,17 +91,20 @@ beforeEach(() => {
 });
 
 describe("when signed out", () => {
-  it("disables every reaction button", async () => {
+  it("offers reactions and a guest name prompt on tap", async () => {
     await renderSocial();
-    for (const button of screen.getAllByRole("button", { name: /claim your player to react/i })) {
-      expect(button).toBeDisabled();
-    }
+    const fire = screen.getByRole("button", { name: "React with 🔥" });
+    expect(fire).toBeEnabled();
+    await userEvent.click(fire);
+    expect(await screen.findByText(/What should we call you/i)).toBeInTheDocument();
   });
 
-  it("prompts for a claim instead of showing the comment box", async () => {
+  it("shows the comment box and prompts for a guest name on submit", async () => {
     await renderSocial();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /claim your player/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox"), "hello");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+    expect(await screen.findByText(/What should we call you/i)).toBeInTheDocument();
   });
 
   it("still shows everyone else's reactions and trash talk", async () => {
