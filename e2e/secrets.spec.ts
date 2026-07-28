@@ -41,8 +41,7 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
   });
 }
 
-const sealedPack = (page: Page) =>
-  page.getByRole("button", { name: /drag down to open the pack/i });
+const sealedPack = (page: Page) => page.getByRole("button", { name: /swipe up to open the pack/i });
 
 test.describe("the daily secret", () => {
   test("a claimed member gets a fourth card, and it never enters the pack row", async ({

@@ -631,6 +631,44 @@
   }
 }
 
+/* The beat before a card lands, held up full-screen on the pack stage.
+ *
+ * animate-pulse fades the whole element, which at this size reads as the artwork
+ * flickering rather than as the bezel breathing — so this animates the glow alone
+ * and leaves the art at full opacity throughout. Driven by --stage-glow, set
+ * inline from the tier's `accent`: never `border`, because base and dnf put a
+ * near-transparent white there precisely so their bezel vanishes.
+ *
+ * A plain rule rather than an @utility, for the same reason .holo-idle is — it is
+ * toggled from JS and the class scanner would drop it. */
+.pack-stage-glow {
+  animation: pack-stage-breathe 900ms ease-in-out infinite;
+}
+
+@keyframes pack-stage-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px var(--stage-glow, oklch(0.82 0.14 210)),
+      0 0 30px var(--stage-glow, oklch(0.82 0.14 210));
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px var(--stage-glow, oklch(0.82 0.14 210)),
+      0 0 90px var(--stage-glow, oklch(0.82 0.14 210));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still visibly a card being held up, just not breathing. */
+  .pack-stage-glow {
+    animation: none;
+    box-shadow:
+      0 0 0 4px var(--stage-glow, oklch(0.82 0.14 210)),
+      0 0 40px var(--stage-glow, oklch(0.82 0.14 210));
+  }
+}
+
 /* Wet specular hotspot that follows the finger. */
 @utility holo-glare {
   position: absolute;

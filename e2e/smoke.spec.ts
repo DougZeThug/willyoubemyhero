@@ -8,6 +8,10 @@ const ROUTES = [
   { path: "/players", title: /Vault|Players/i },
   { path: "/awards", title: /Awards/i },
   { path: "/claim", title: /Claim/i },
+  // The most animation-heavy screen in the app, and the one with the most going
+  // on at mount — signed URLs, IndexedDB, a gesture and a ceremony. It had no
+  // console-error guard at all until the ceremony landed.
+  { path: "/players/pack", title: /Pack/i },
 ];
 
 test.describe("smoke", () => {

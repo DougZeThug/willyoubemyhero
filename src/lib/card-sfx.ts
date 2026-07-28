@@ -6,6 +6,7 @@
 // or if Web Audio is unavailable.
 
 import { useCallback, useEffect, useState } from "react";
+import { SECRET_CHIME, SECRET_DUPE_CHIME } from "./secret-cards";
 
 const MUTE_KEY = "wwbh:sfx-muted";
 
@@ -188,6 +189,26 @@ export function playSecretRiser(durationSec = 0.9) {
   osc.connect(amp).connect(ac.destination);
   osc.start(start);
   osc.stop(start + durationSec + 0.05);
+}
+
+/**
+ * The secret landing: its own chime, and the one haptic in the app that is more
+ * than a tick.
+ *
+ * Here rather than at the call site because the vibration used to be an inline
+ * navigator.vibrate in players.pack.tsx, and was the only sound-or-feel in the
+ * whole app that fired regardless of prefers-reduced-motion. Behind the gate now,
+ * with everything else.
+ *
+ * The chime name is passed in explicitly and never derived from a rarity:
+ * SECRET_RARITY carries tier "base" purely to satisfy the type, and nothing may
+ * branch on that.
+ */
+export function playSecretReveal(duplicate: boolean) {
+  playReveal(duplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
+  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
+    navigator.vibrate?.([10, 60, 10, 60, 26]);
+  }
 }
 
 /** Rarity reveal chime — three or four detuned sines with an exponential tail. */

@@ -44,3 +44,35 @@ export function dealPack<T extends { id: string }>(
   if (missing && picks.length === size) picks[size - 1] = missing;
   return picks;
 }
+
+/** How many segments the rip is cut into. Enough to read as torn foil, few enough
+ *  that the polygon string stays cheap to rebuild on every pointer frame. */
+const TEAR_STEPS = 14;
+/** Peak-to-peak wobble of the tear edge, in percent of the pack's height. */
+const TEAR_JITTER = 9;
+
+/**
+ * A ragged tear edge, deterministic for a given seed so the same pack always
+ * tears the same way.
+ *
+ * `progress` is 0 at the bottom of the pack and 1 at the top, because the thumb
+ * pushes up and the edge follows it. The torn-away strip is everything below the
+ * edge; `keep` is everything above.
+ *
+ * Callers must pass a **fresh** generator per side — `seededRng(seed)` twice,
+ * never one generator reused across both calls. Reusing it walks the sequence on,
+ * the two halves get different jitter, and the pieces visibly fail to line up
+ * along the rip they are supposed to share.
+ */
+export function tearPolygon(rng: () => number, progress: number, side: "keep" | "strip"): string {
+  const y = (1 - progress) * 100;
+  const points: string[] = [];
+  for (let i = 0; i <= TEAR_STEPS; i++) {
+    const x = (i / TEAR_STEPS) * 100;
+    const jitter = (rng() - 0.5) * TEAR_JITTER;
+    points.push(`${x.toFixed(1)}% ${Math.min(100, Math.max(0, y + jitter)).toFixed(1)}%`);
+  }
+  return side === "strip"
+    ? `polygon(${points.join(", ")}, 100% 100%, 0% 100%)`
+    : `polygon(0% 0%, 100% 0%, ${[...points].reverse().join(", ")})`;
+}

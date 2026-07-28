@@ -2,7 +2,8 @@
 // same day get different cards — which is the whole point of the change, and was
 // not true before: the seed carried no identity at all.
 import { describe, expect, it } from "vitest";
-import { dealPack, packSeed } from "./pack";
+import { dealPack, packSeed, tearPolygon } from "./pack";
+import { seededRng } from "./format";
 
 const EVENT = "00000000-0000-4000-8000-0000000000ff";
 const DAY = "2026-07-28";
@@ -77,5 +78,64 @@ describe("dealPack", () => {
 
   it("deals what it can when the roster is smaller than the pack", () => {
     expect(dealPack(roster.slice(0, 2), packSeed(EVENT, DAY, "m:alice"), {}, 3)).toHaveLength(2);
+  });
+});
+
+describe("tearPolygon", () => {
+  /** The 15 ragged points, left to right, with the square corners dropped.
+   *
+   *  Both polygons close over a straight edge of the pack — the bottom two
+   *  corners for the strip, the top two for the keep — and those are not part of
+   *  the rip. Reading them as if they were is how a first pass at this had the
+   *  tear "reaching y=100" at every progress. */
+  function edgeYs(polygon: string, side: "keep" | "strip"): number[] {
+    const inner = polygon.slice(polygon.indexOf("(") + 1, polygon.lastIndexOf(")"));
+    const pts = inner.split(", ").map((p) => p.split(" ").map((n) => parseFloat(n))[1]);
+    // strip: [...edge, bottom-right, bottom-left]. keep: [top-left, top-right, ...edge reversed].
+    return side === "strip" ? pts.slice(0, -2) : pts.slice(2).reverse();
+  }
+
+  const strip = (p: number) => tearPolygon(seededRng("seed"), p, "strip");
+  const keep = (p: number) => tearPolygon(seededRng("seed"), p, "keep");
+  const stripYs = (p: number) => edgeYs(strip(p), "strip");
+
+  it("tears the same way every time for a given seed", () => {
+    expect(strip(0.4)).toBe(tearPolygon(seededRng("seed"), 0.4, "strip"));
+    expect(strip(0.4)).not.toBe(tearPolygon(seededRng("other"), 0.4, "strip"));
+  });
+
+  it("rises as the swipe goes up, which is the whole direction of the gesture", () => {
+    // The single most breakable thing in this file: the edge used to be anchored
+    // at the top and grow downward. A y that increases with progress means the
+    // tear is running the wrong way and the pack opens from the wrong end.
+    const mean = (ys: number[]) => ys.reduce((a, b) => a + b, 0) / ys.length;
+    expect(mean(stripYs(0.8))).toBeLessThan(mean(stripYs(0.2)));
+  });
+
+  it("gives both halves the same edge, so the rip lines up", () => {
+    // Each side must be handed its own generator off the same seed. One
+    // generator shared across both calls walks the sequence on, the two halves
+    // get different jitter, and the pieces come apart along the seam they are
+    // supposed to share.
+    expect(edgeYs(keep(0.5), "keep")).toEqual(edgeYs(strip(0.5), "strip"));
+  });
+
+  it("never leaves the pack, however wild the jitter", () => {
+    for (const p of [0, 0.01, 0.5, 0.99, 1]) {
+      for (const y of stripYs(p)) {
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(y).toBeLessThanOrEqual(100);
+      }
+    }
+  });
+
+  it("is well formed at both ends of the gesture", () => {
+    // At progress 0 the rip sits along the very bottom edge; at 1 it has reached
+    // the top. Both ends have to be closed polygons or the first and last frames
+    // of the swipe flash an empty clip.
+    expect(strip(0)).toContain("100% 100%");
+    expect(keep(1)).toContain("0% 0%");
+    expect(stripYs(0).every((y) => y > 90)).toBe(true);
+    expect(stripYs(1).every((y) => y < 10)).toBe(true);
   });
 });

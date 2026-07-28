@@ -191,25 +191,47 @@ test.describe("opening a pack", () => {
   }
 
   const sealedPack = (page: import("@playwright/test").Page) =>
-    page.getByRole("button", { name: /drag down to open the pack/i });
+    page.getByRole("button", { name: /swipe up to open the pack/i });
 
-  test("a drag past the threshold tears the pack open", async ({ page }) => {
+  test("a swipe past the threshold tears the pack open", async ({ page }) => {
     await page.goto("/players/pack");
 
     const pack = sealedPack(page);
     await expect(pack).toBeVisible();
 
-    // The handler tears at 55% of the element's own height, measured from its
-    // top edge — so the drag has to start high on the pack and finish low.
+    // The handler measures *upward travel* from wherever the thumb landed, and
+    // tears past 55% of the pack's height. So the swipe starts low and finishes
+    // high, and it does not matter where on the pack it began.
     const box = (await pack.boundingBox())!;
     expect(box).toBeTruthy();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.1);
+    const cx = box.x + box.width / 2;
+    await page.mouse.move(cx, box.y + box.height * 0.9);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.95, { steps: 12 });
+    await page.mouse.move(cx, box.y + box.height * 0.15, { steps: 12 });
     await page.mouse.up();
 
     // The sealed wrapper is gone once it has been torn.
     await expect(pack).toBeHidden();
+  });
+
+  test("a swipe the wrong way leaves the pack sealed", async ({ page }) => {
+    await page.goto("/players/pack");
+
+    const pack = sealedPack(page);
+    await expect(pack).toBeVisible();
+
+    // Downward travel is not a tear at any distance. Worth its own test: the
+    // gesture reversed direction, and "it opens on any drag" would pass the
+    // test above while quietly making the swipe meaningless.
+    const box = (await pack.boundingBox())!;
+    const cx = box.x + box.width / 2;
+    await page.mouse.move(cx, box.y + box.height * 0.15);
+    await page.mouse.down();
+    await page.mouse.move(cx, box.y + box.height * 0.9, { steps: 12 });
+    await page.mouse.up();
+
+    await expect(pack).toBeVisible();
+    expect(await readPackState(page)).toBeNull();
   });
 
   test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {

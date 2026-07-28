@@ -2,33 +2,28 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Lock, PackageOpen, Sparkles } from "lucide-react";
+import { ArrowLeft, PackageOpen } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { mySecretsKey, secretStatusKey, useSecretStatus } from "@/hooks/use-daily-secret";
-import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
+import { PackWrapper } from "@/components/pack-wrapper";
+import { PackBoard, type BoardCard } from "@/components/pack-board";
+import { PackSecretSlot, type SecretSlot } from "@/components/pack-secret-slot";
+import { PackStage, type StagePhase, type StageCard } from "@/components/pack-stage";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { collectCard, loadCollection, loadPackState, savePackState } from "@/lib/card-collection";
-import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
+import { playReveal, playSecretRiser, playSecretReveal, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
 import { pullSecretCard } from "@/lib/secret-cards.functions";
-import {
-  secretFoil,
-  SECRET_CHIME,
-  SECRET_DUPE_CHIME,
-  type SecretCardView,
-} from "@/lib/secret-cards";
+import { secretFoil, type SecretCardView } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { usePackIdentity } from "@/lib/device-id";
 import { dealPack, packSeed } from "@/lib/pack";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
-import { seededRng } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/pack")({
   head: () => ({
@@ -47,15 +42,39 @@ export const Route = createFileRoute("/players/pack")({
 });
 
 const PACK_SIZE = 3;
-/** Drag distance, as a fraction of the pack width, that completes the tear. */
-const TEAR_THRESHOLD = 0.55;
 
-/** Hold on the glowing edge before the hit lands. */
+/**
+ * The fourth slot's index on the stage.
+ *
+ * A sentinel rather than `pack.length`, because `pack` is empty for a beat while
+ * the bundle loads and a length-derived sentinel would quietly point at card 0.
+ */
+const SECRET_STAGE_INDEX = -1;
+
+/** Hold on the glowing edge before the hit comes up. The pause is the whole trick. */
 const PEEK_MS = 900;
 /** The once-a-day card holds longer. It is the only card here nobody has seen. */
 const SECRET_PEEK_MS = 1600;
 /** Where in that hold the riser starts, so it lands on the chime's bottom note. */
 const SECRET_RISER_AT_MS = 700;
+/** How long a flipped card stays up before it flies down to the board. */
+const HOLD_MS = 1400;
+/** A card worth confetti stays up long enough for the confetti to finish. */
+const CELEBRATION_HOLD_MS = 2200;
+/**
+ * Every hold, once "Reveal all" is pressed. "Reveal all" means stop performing at
+ * me, so the ceremony collapses to a flick-through rather than replaying itself
+ * at full length — and the whole run has to fit inside the e2e suite's patience.
+ */
+const AUTO_HOLD_MS = 420;
+/**
+ * Backstop on a flight that never reports finishing.
+ *
+ * onAnimationComplete is the normal path, but a card that never advances leaves
+ * the ceremony wedged with no way out but a reload, on the one screen where that
+ * costs a person their pack for the day. Cheap insurance.
+ */
+const FLIGHT_TIMEOUT_MS = 1200;
 /**
  * Short on purpose: staring at a pulsing card while your friends look at theirs
  * is worse than a retry tap. Giving up does not cancel the request — a row may
@@ -75,209 +94,15 @@ function todayKey(): string {
 }
 
 /**
- * How the fourth slot is doing.
+ * Which card is up, and where it is in its own little life.
  *
- * Derived rather than kept as four booleans, two of which could be true at once.
- * The order matters: a pull that succeeds after a failure lands straight on
- * "sealed" rather than staying stuck on the error.
+ * Not persisted, and that is the design rather than an omission. A ceremony is a
+ * live performance: resuming "card two was mid-flip when the tab died" would
+ * replay half an animation with no gesture behind it. What survives a reload is
+ * what *landed*, which is exactly what PackState already stores — so this needs
+ * no new field, and the e2e suite can keep opening the database at version 2.
  */
-type SecretSlot = "hidden" | "gated" | "pending" | "failed" | "sealed" | "open";
-
-/**
- * A ragged tear edge, deterministic for a given seed so the same pack always
- * tears the same way.
- */
-function tearPolygon(rng: () => number, progress: number): string {
-  const steps = 14;
-  const points: string[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const x = (i / steps) * 100;
-    const jitter = (rng() - 0.5) * 9;
-    points.push(`${x.toFixed(1)}% ${Math.max(0, progress * 100 + jitter).toFixed(1)}%`);
-  }
-  return `polygon(0% 0%, 100% 0%, ${[...points].reverse().join(", ")})`;
-}
-
-/** Generic card back shown while a pulled card is still face-down. */
-function SealedBack() {
-  return (
-    <div className="wax-foil flex h-full w-full flex-col items-center justify-center gap-1 p-3 text-center">
-      <Sparkles className="h-5 w-5 text-primary/80" />
-      <div className="font-display text-[8px] font-black uppercase tracking-[0.3em] text-primary/80">
-        Will YOU Be My Hero?
-      </div>
-      <div className="font-display text-sm font-black uppercase leading-none text-foreground/90">
-        Draft Combine
-      </div>
-    </div>
-  );
-}
-
-/**
- * The fourth slot.
- *
- * Appended below the three, never a replaced slot: `nextPack` swaps its *last*
- * entry for a card the user has not collected, and that swap is the only
- * mechanism by which the thirteen-card set ever completes. It also keeps
- * PackState.ids at exactly three roster ids, which is what the e2e suite asserts.
- */
-function SecretSlotView({
-  slot,
-  card,
-  rarity,
-  duplicate,
-  peeking,
-  pulledCount,
-  onReveal,
-  onRetry,
-}: {
-  slot: SecretSlot;
-  card: SecretCardView | null;
-  rarity: Rarity;
-  duplicate: boolean;
-  peeking: boolean;
-  pulledCount: number;
-  onReveal: () => void;
-  onRetry: () => void;
-}) {
-  if (slot === "hidden") return null;
-
-  return (
-    // Wider than a board card, which is now ~173px on a phone. The fourth slot
-    // has to stay visibly the biggest thing here or it stops reading as the
-    // thing nobody else on the roster has.
-    <div className="mx-auto flex w-full max-w-[240px] flex-col items-center gap-2 pt-2">
-      <div className="text-center">
-        <h2
-          className="font-display text-sm font-black uppercase tracking-[0.2em]"
-          style={{ color: rarity.accent }}
-        >
-          One More Card
-        </h2>
-        {slot === "gated" && (
-          <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-            Claim your player to open it. Ask whoever&apos;s running the combine for your code.
-          </p>
-        )}
-        {(slot === "sealed" || slot === "pending") && !peeking && (
-          <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-            {slot === "pending"
-              ? "Checking the wrapper…"
-              : "Not on the roster. One a day, and it's yours for good."}
-          </p>
-        )}
-        {peeking && (
-          <p
-            className="mt-1 text-[10px] font-bold uppercase tracking-[0.3em]"
-            style={{ color: rarity.accent }}
-          >
-            Something else…
-          </p>
-        )}
-      </div>
-
-      {slot === "gated" ? (
-        // Card-shaped, not a bordered link box — that reads as a cookie banner
-        // and gets ignored.
-        <Link
-          to="/claim"
-          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center"
-        >
-          <Lock className="h-6 w-6 text-muted-foreground" />
-          <span className="font-display text-[10px] font-black uppercase tracking-[0.25em] text-primary">
-            Claim your player
-          </span>
-        </Link>
-      ) : slot === "failed" ? (
-        <button
-          onClick={onRetry}
-          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
-        >
-          <span className="font-display text-xs font-black uppercase tracking-[0.2em]">
-            No signal
-          </span>
-          {/* Never a toast: a toast announces a fourth card to whoever is
-              glancing at the phone over your shoulder. */}
-          <span className="text-[10px] leading-snug text-muted-foreground">
-            Tap to try again — you haven&apos;t used today&apos;s.
-          </span>
-        </button>
-      ) : slot === "pending" ? (
-        <div className="wax-foil flex aspect-[5/7] w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
-      ) : slot === "sealed" && card ? (
-        <div
-          // w-full is load-bearing: the column above centres its items, which
-          // makes a flex child shrink to its content, and HoloCard sizes itself
-          // from its width via aspect-ratio — so without this the card collapses
-          // to nothing and the slot renders as a sliver.
-          className={cn("relative w-full rounded-xl transition-shadow", peeking && "animate-pulse")}
-          style={
-            peeking
-              ? {
-                  // Deliberately thinner than the hit's 6px inset, so it reads as
-                  // a different thing rather than as a bigger one.
-                  boxShadow: `inset 0 0 0 8px ${rarity.border}, 0 0 70px ${rarity.border}`,
-                }
-              : { boxShadow: `inset 0 0 0 3px ${rarity.border}, 0 0 20px ${rarity.border}` }
-          }
-        >
-          <motion.div
-            animate={peeking ? { scale: 1.06 } : { scale: 1 }}
-            transition={{ duration: 0.9 }}
-          >
-            <HoloCard
-              frontUrl={null}
-              backUrl={null}
-              name="Secret"
-              rarity={rarity}
-              cacheKey={`secret-sealed-${card.id}`}
-              faceDown
-              flipped={false}
-              interactive={false}
-              backContent={<SealedBack />}
-              onClick={onReveal}
-            />
-          </motion.div>
-        </div>
-      ) : card ? (
-        <>
-          <div className={cn("relative w-full rounded-xl", duplicate && "secret-dupe-shimmer")}>
-            <HoloCard
-              frontUrl={card.artUrl}
-              backUrl={card.backUrl}
-              name={card.name}
-              rarity={rarity}
-              cacheKey={card.id}
-              tilt="hero"
-              backContent={<SecretBackPanel card={card} rarity={rarity} />}
-            />
-          </div>
-          <div className="text-center">
-            <div className="truncate font-display text-xs font-black uppercase tracking-wide">
-              {card.name}
-            </div>
-            {duplicate ? (
-              <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-                Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing off.
-              </div>
-            ) : (
-              <div
-                className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                style={{ color: rarity.border }}
-              >
-                {/* Taught once, on the first secret anyone ever pulls. Without it
-                    the empty vault shelf afterwards reads as a bug. */}
-                {pulledCount <= 1
-                  ? "Secret · Not on the roster. Nobody knows how many there are."
-                  : "Secret · Yours for good, even on a new phone."}
-              </div>
-            )}
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
+type Stage = { index: number; phase: StagePhase } | null;
 
 function PackPage() {
   const { event, bundle } = useEventBundle();
@@ -299,10 +124,21 @@ function PackPage() {
   // sealed pack never flashes on a day that has already been opened.
   const [dealtIds, setDealtIds] = useState<string[] | null>(null);
   const [stateLoaded, setStateLoaded] = useState(false);
-  const [progress, setProgress] = useState(0);
+  // "Landed on the board face-up". A card up on the stage is simply not in here
+  // yet, which is what makes a mid-ceremony reload resume honestly.
   const [revealed, setRevealed] = useState<number[]>([]);
-  const [peeking, setPeeking] = useState(false);
-  const dragRef = useRef<HTMLDivElement>(null);
+
+  // ---- the ceremony ----
+  const [stage, setStage] = useState<Stage>(null);
+  const [stageFlipped, setStageFlipped] = useState(false);
+  /** Set by "Reveal all": every hold collapses to AUTO_HOLD_MS from then on. */
+  const [auto, setAuto] = useState(false);
+  /** Board slots, for the flight. Never state — nothing should re-render on it. */
+  const slotsRef = useRef(new Map<number, HTMLElement>());
+  /** The wrapper's rect, captured the instant before it was torn away. */
+  const wrapperRectRef = useRef<DOMRect | null>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---- the fourth slot ----
   const me = useMemberSession();
@@ -314,7 +150,6 @@ function PackPage() {
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
   const [secretRevealed, setSecretRevealed] = useState(false);
-  const [secretPeeking, setSecretPeeking] = useState(false);
   const [secretPulling, setSecretPulling] = useState(false);
   const [secretFailed, setSecretFailed] = useState(false);
   const [secretUnavailable, setSecretUnavailable] = useState(false);
@@ -417,51 +252,241 @@ function PackPage() {
   }, [bundle, dealtIds, nextPack]);
 
   const torn = dealtIds != null;
+  const secretRarity = secretFoil(secret?.foil);
 
-  const tearOpen = useCallback(() => {
-    if (dealtIds || nextPack.length === 0) return;
-    const ids = nextPack.map((p) => p.id);
-    setDealtIds(ids);
-    playTear();
-  }, [dealtIds, nextPack]);
+  const secretSlot: SecretSlot = !torn
+    ? "hidden"
+    : !me
+      ? "gated"
+      : secret
+        ? secretRevealed
+          ? "open"
+          : "sealed"
+        : secretUnavailable
+          ? "hidden"
+          : secretFailed
+            ? "failed"
+            : secretPulling
+              ? "pending"
+              : "hidden";
 
-  function onDrag(clientY: number) {
-    const el = dragRef.current;
-    if (!el || torn) return;
-    const r = el.getBoundingClientRect();
-    const p = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
-    setProgress(p);
-    if (p >= TEAR_THRESHOLD) tearOpen();
-  }
+  // The whole ceremony counts as "under somebody's thumb", not just the moment
+  // inside an await — a card up on the stage must not be re-sealed at midnight.
+  useEffect(() => {
+    revealingRef.current = stage != null;
+  }, [stage]);
 
-  async function revealAt(i: number) {
-    if (revealed.includes(i)) return;
-    const ep = pack[i];
-    if (!ep) return;
-    const rarity = rarities.get(ep.id) ?? rarityStyle("base");
-    const isHit = i === pack.length - 1;
+  const clearTimers = useCallback(() => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    if (flightTimerRef.current) clearTimeout(flightTimerRef.current);
+    holdTimerRef.current = null;
+    flightTimerRef.current = null;
+  }, []);
 
-    revealingRef.current = true;
-    try {
-      // Hold on the glowing edge before the hit lands. The pause is the whole trick.
-      if (isHit) {
-        setPeeking(true);
-        await new Promise((r) => setTimeout(r, PEEK_MS));
-        setPeeking(false);
+  useEffect(() => clearTimers, [clearTimers]);
+
+  /**
+   * What comes up next, or null when the board is finished.
+   *
+   * The secret goes last on purpose: its hold is nearly twice a hit's, and
+   * landing underneath one means neither of them reads.
+   */
+  const nextStage = useCallback(
+    (landed: number[]): Stage => {
+      const i = pack.findIndex((_, n) => !landed.includes(n));
+      if (i >= 0) return { index: i, phase: "entering" };
+      // Only when it is pulled and unrevealed. A pending pull is not worth
+      // holding an empty stage open for — see the timeout's comment.
+      if (secret && !secretRevealed) return { index: SECRET_STAGE_INDEX, phase: "entering" };
+      return null;
+    },
+    [pack, secret, secretRevealed],
+  );
+
+  const openStage = useCallback(
+    (index: number) => {
+      clearTimers();
+      setStageFlipped(false);
+      setStage({ index, phase: "entering" });
+    },
+    [clearTimers],
+  );
+
+  /**
+   * A swipe that finished before the roster did.
+   *
+   * The gesture used to be swallowed whole: the pack sat there, apparently
+   * ignoring a completed tear, and the only recovery was to swipe again. On a
+   * phone in a garden that reads as broken rather than as slow. Latching the
+   * intent means the pack opens the instant it *can*, which is what the person
+   * asked for either way.
+   */
+  const pendingTearRef = useRef(false);
+
+  const tearOpen = useCallback(
+    (rect: DOMRect | null) => {
+      if (dealtIds) return;
+      wrapperRectRef.current = rect;
+      if (nextPack.length === 0) {
+        pendingTearRef.current = true;
+        return;
+      }
+      setDealtIds(nextPack.map((p) => p.id));
+      playTear();
+      // Straight onto the stage: the tear and the first card are one gesture's
+      // worth of payoff, not two.
+      setStageFlipped(false);
+      setStage({ index: 0, phase: "entering" });
+    },
+    [dealtIds, nextPack],
+  );
+
+  useEffect(() => {
+    if (!pendingTearRef.current || dealtIds || nextPack.length === 0) return;
+    pendingTearRef.current = false;
+    tearOpen(wrapperRectRef.current);
+  }, [dealtIds, nextPack, tearOpen]);
+
+  const isSecretStage = stage?.index === SECRET_STAGE_INDEX;
+
+  /** The anticipation hold, once a card has finished flying in. */
+  const holdBeforeFlip = useCallback(
+    (index: number) => {
+      if (auto) return 0;
+      if (index === SECRET_STAGE_INDEX) {
+        // A duplicate you have seen three times does not need the full
+        // production. The card still comes up; it just stops pausing first.
+        const ceremony = !secretDuplicate || (status.data?.pulled ?? 0) <= DUPE_CEREMONY_LIMIT;
+        return ceremony ? SECRET_PEEK_MS : 0;
+      }
+      // The last of the three is the hit. Everything before it comes straight up.
+      return index === pack.length - 1 ? PEEK_MS : 0;
+    },
+    [auto, pack.length, secretDuplicate, status.data?.pulled],
+  );
+
+  /** Called when a card has finished flying onto the stage. */
+  const handleEntered = useCallback(() => {
+    setStage((prev) => {
+      if (!prev || prev.phase !== "entering") return prev;
+      const hold = holdBeforeFlip(prev.index);
+      if (hold === 0) return { ...prev, phase: "facedown" };
+      if (prev.index === SECRET_STAGE_INDEX) {
+        // Timed to land on the chime's bottom note rather than run under it.
+        holdTimerRef.current = setTimeout(() => playSecretRiser(0.9), SECRET_RISER_AT_MS);
+      }
+      // Deliberately not cancelling holdTimerRef above: the riser is fire and
+      // forget, and this reassignment is the next thing scheduled either way.
+      const t = setTimeout(
+        () => setStage((s) => (s?.phase === "entering" ? { ...s, phase: "facedown" } : s)),
+        hold,
+      );
+      // Kept on the flight slot so the riser's timer above keeps its own handle.
+      flightTimerRef.current = t;
+      return prev;
+    });
+  }, [holdBeforeFlip]);
+
+  /** The card turned over. This is the reveal: chime, collection, confetti. */
+  const handleFlip = useCallback(
+    (next: boolean) => {
+      setStageFlipped(next);
+      const s = stage;
+      if (!s || s.phase !== "facedown" || !next) {
+        // A second tap on a card already face-up just turns it back to its stats,
+        // and cancels the auto fly-down so it can actually be read.
+        if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+        return;
       }
 
-      setRevealed((prev) => [...prev, i]);
+      if (s.index === SECRET_STAGE_INDEX) {
+        setStage({ ...s, phase: "held" });
+        playSecretReveal(secretDuplicate);
+        // A duplicate gets the shimmer, never a second burst — a wink, not a parade.
+        if (!secretDuplicate) void celebrateSecret(secretRarity);
+        return;
+      }
+
+      const ep = pack[s.index];
+      if (!ep) return;
+      const rarity = rarities.get(ep.id) ?? rarityStyle("base");
+      setStage({ ...s, phase: "held" });
       playReveal(rarity.tier);
       void collectCard(ep.id, rarity.tier);
       setCollected((prev) => ({ ...prev, [ep.id]: true }));
+      if (rarity.tier === "champion" || rarity.tier === "podium") void celebrate(rarity);
+    },
+    [stage, pack, rarities, secretDuplicate, secretRarity],
+  );
 
-      if (rarity.tier === "champion" || rarity.tier === "podium") {
-        await celebrate(rarity);
-      }
-    } finally {
-      revealingRef.current = false;
+  const sendToBoard = useCallback(() => {
+    setStage((prev) => (prev?.phase === "held" ? { ...prev, phase: "landing" } : prev));
+  }, []);
+
+  /** The card reached its slot. Commit it and bring up the next one. */
+  const handleLanded = useCallback(() => {
+    const s = stage;
+    if (!s || s.phase !== "landing") return;
+    clearTimers();
+
+    if (s.index === SECRET_STAGE_INDEX) {
+      setSecretRevealed(true);
+      setStage(null);
+      return;
     }
-  }
+    // Both in one handler so React batches them: the flying card unmounts and its
+    // slot fills in a single commit, with no frame where the card is nowhere.
+    const landed = [...revealed, s.index];
+    setRevealed(landed);
+    const next = nextStage(landed);
+    setStageFlipped(false);
+    setStage(next);
+  }, [stage, revealed, nextStage, clearTimers]);
+
+  // Once face-up, a card flies down on its own — "then they animate down to the
+  // board" is the whole shape of this screen. Cancelled if the card is turned
+  // over to read its stats, and collapsed to a flick under "Reveal all".
+  useEffect(() => {
+    if (stage?.phase !== "held" || !stageFlipped) return;
+    const ep = stage.index === SECRET_STAGE_INDEX ? null : pack[stage.index];
+    const tier = ep ? (rarities.get(ep.id)?.tier ?? "base") : null;
+    const celebrating =
+      stage.index === SECRET_STAGE_INDEX
+        ? !secretDuplicate
+        : tier === "champion" || tier === "podium";
+    const wait = auto ? AUTO_HOLD_MS : celebrating ? CELEBRATION_HOLD_MS : HOLD_MS;
+    holdTimerRef.current = setTimeout(sendToBoard, wait);
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    };
+  }, [stage, stageFlipped, auto, pack, rarities, secretDuplicate, sendToBoard]);
+
+  // "Reveal all" turns the flip itself into a step the ceremony takes for you.
+  useEffect(() => {
+    if (!auto || stage?.phase !== "facedown") return;
+    const t = setTimeout(() => handleFlip(true), AUTO_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [auto, stage, handleFlip]);
+
+  // Backstop for a flight that never reports finishing. A wedged stage is
+  // unrecoverable without a reload, and a reload here costs a person their pack.
+  useEffect(() => {
+    if (stage?.phase !== "entering" && stage?.phase !== "landing") return;
+    const phase = stage.phase;
+    const t = setTimeout(
+      () => (phase === "landing" ? handleLanded() : handleEntered()),
+      FLIGHT_TIMEOUT_MS,
+    );
+    return () => clearTimeout(t);
+  }, [stage, handleEntered, handleLanded]);
+
+  // The secret is the finale, so it comes up once the three have landed — even
+  // if it only arrived from the server after the stage had already closed.
+  useEffect(() => {
+    if (!torn || stage || !secret || secretRevealed) return;
+    if (pack.length === 0 || revealed.length < pack.length) return;
+    openStage(SECRET_STAGE_INDEX);
+  }, [torn, stage, secret, secretRevealed, pack.length, revealed.length, openStage]);
 
   /**
    * The one-a-day card.
@@ -588,34 +613,6 @@ function PackPage() {
     serverDayRef.current = day;
   }, [status.data?.day]);
 
-  const secretRarity = secretFoil(secret?.foil);
-
-  async function revealSecret() {
-    if (!secret || secretRevealed) return;
-    revealingRef.current = true;
-    try {
-      // A duplicate you have seen three times does not need the full production.
-      const ceremony = !secretDuplicate || (status.data?.pulled ?? 0) <= DUPE_CEREMONY_LIMIT;
-      if (ceremony) {
-        setSecretPeeking(true);
-        await new Promise((r) => setTimeout(r, SECRET_RISER_AT_MS));
-        playSecretRiser(0.9);
-        await new Promise((r) => setTimeout(r, SECRET_PEEK_MS - SECRET_RISER_AT_MS));
-        setSecretPeeking(false);
-      }
-
-      setSecretRevealed(true);
-      // Not a tier: SECRET_RARITY carries tier "base" so it satisfies the type,
-      // and nothing may branch on that. The chime is named explicitly.
-      playReveal(secretDuplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
-      navigator.vibrate?.([10, 60, 10, 60, 26]);
-      // A duplicate gets the shimmer, never a second burst — a wink, not a parade.
-      if (!secretDuplicate) await celebrateSecret(secretRarity);
-    } finally {
-      revealingRef.current = false;
-    }
-  }
-
   // Written on every step rather than only on tear, so a phone that loses the tab
   // mid-reveal comes back to the cards it had already flipped.
   useEffect(() => {
@@ -629,29 +626,140 @@ function PackPage() {
     });
   }, [dealtIds, dayKey, revealed, secretRevealed, stateLoaded, identity]);
 
-  const secretSlot: SecretSlot = !torn
-    ? "hidden"
-    : !me
-      ? "gated"
-      : secret
-        ? secretRevealed
-          ? "open"
-          : "sealed"
-        : secretUnavailable
-          ? "hidden"
-          : secretFailed
-            ? "failed"
-            : secretPulling
-              ? "pending"
-              : "hidden";
+  const registerSlot = useCallback((index: number, el: HTMLElement | null) => {
+    if (el) slotsRef.current.set(index, el);
+    else slotsRef.current.delete(index);
+  }, []);
+
+  const boardCards: BoardCard[] = pack.map((ep) => {
+    const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
+    return {
+      id: ep.id,
+      name: ep.participant?.name ?? "—",
+      rarity,
+      frontUrl: cards.data?.[ep.id]?.front ?? null,
+      backUrl: cards.data?.[ep.id]?.back ?? null,
+      backContent: <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />,
+      packedBy: packedByLabel(pullCounts.data?.[ep.id]) || null,
+    };
+  });
 
   const allPlayerCardsRevealed = pack.length > 0 && revealed.length === pack.length;
   // A slot still working counts as outstanding, or "Pack Complete" flashes for a
   // beat before the fourth card turns up. For a guest, or a pull that failed,
   // this reduces to exactly the old expression.
-  const allRevealed = allPlayerCardsRevealed && secretSlot !== "pending" && secretSlot !== "sealed";
+  const allRevealed =
+    allPlayerCardsRevealed && stage == null && secretSlot !== "pending" && secretSlot !== "sealed";
   const collectedCount = (bundle?.participants ?? []).filter((p) => collected[p.id]).length;
   const total = bundle?.participants.length ?? 0;
+  // Everyone who gets a fourth card sees four pips; nobody else is told there is
+  // one to miss.
+  const stageTotal = pack.length + (secret ? 1 : 0);
+
+  const stageCard: StageCard | null = (() => {
+    if (!stage) return null;
+    const faceUp = stageFlipped;
+
+    if (stage.index === SECRET_STAGE_INDEX) {
+      if (!secret) return null;
+      return {
+        cacheKey: secret.id,
+        name: faceUp ? secret.name : "Secret card",
+        // The secret's tier is loud — a rosette foil and a spinning rainbow
+        // bezel — so it stays base until it is face-up, same as the others.
+        rarity: faceUp ? secretRarity : rarityStyle("base"),
+        frontUrl: faceUp ? secret.artUrl : null,
+        backUrl: faceUp ? secret.backUrl : (packBack.data?.url ?? null),
+        backContent: faceUp ? (
+          <SecretBackPanel card={secret} rarity={secretRarity} />
+        ) : (
+          <SealedFace />
+        ),
+        caption: faceUp ? (
+          <SecretCaption
+            name={secret.name}
+            duplicate={secretDuplicate}
+            rarity={secretRarity}
+            pulledCount={status.data?.pulled ?? 0}
+          />
+        ) : (
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+            Something else…
+          </p>
+        ),
+      };
+    }
+
+    const ep = pack[stage.index];
+    if (!ep) return null;
+    const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
+    const name = ep.participant?.name ?? "—";
+    return {
+      cacheKey: ep.id,
+      // The real name only once it is face-up. A face-down card announcing whose
+      // it is would be the spoiler this whole screen exists to withhold.
+      name: faceUp ? name : `Card ${stage.index + 1}`,
+      // And the real tier only once it is face-up, for the same reason: HoloCard
+      // paints the tier onto the border and the outer glow, so a gold card would
+      // announce itself through the back of it.
+      rarity: faceUp ? rarity : rarityStyle("base"),
+      frontUrl: cards.data?.[ep.id]?.front ?? null,
+      // The event's universal back while face-down, this player's own once it has
+      // been turned over. In a real deck every back is identical, and that is
+      // exactly what makes a face-down card mean anything.
+      backUrl: faceUp ? (cards.data?.[ep.id]?.back ?? null) : (packBack.data?.url ?? null),
+      backContent: faceUp ? (
+        <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />
+      ) : (
+        <SealedFace />
+      ),
+      caption: faceUp ? (
+        <>
+          <div className="font-display text-xl font-black uppercase leading-tight tracking-wide">
+            {name}
+          </div>
+          <div
+            className="text-[11px] font-bold uppercase tracking-[0.25em]"
+            style={{ color: rarity.accent }}
+          >
+            {rarity.label}
+          </div>
+          {packedByLabel(pullCounts.data?.[ep.id]) && (
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+              {packedByLabel(pullCounts.data?.[ep.id])}
+            </div>
+          )}
+        </>
+      ) : null,
+    };
+  })();
+
+  const stagePosition = stage
+    ? stage.index === SECRET_STAGE_INDEX
+      ? stageTotal
+      : stage.index + 1
+    : 0;
+  const stageOrigin =
+    stage && stage.index === 0 && revealed.length === 0
+      ? wrapperRectRef.current
+      : (slotsRef.current.get(stage?.index ?? -99)?.getBoundingClientRect() ?? null);
+  const stageTarget = stage
+    ? (slotsRef.current.get(stage.index)?.getBoundingClientRect() ?? null)
+    : null;
+
+  const startAuto = useCallback(() => {
+    setAuto(true);
+    // Nothing on the board yet means nothing has been sent up either — this is
+    // the resumed-after-reload path, where the stage is closed and the next
+    // face-down card has to be put on it before anything can advance.
+    if (!stage) {
+      const next = nextStage(revealed);
+      if (next) {
+        setStageFlipped(false);
+        setStage(next);
+      }
+    }
+  }, [stage, nextStage, revealed]);
 
   // The sealed pack must not flash on a day already opened, so nothing renders
   // until the stored state has been read.
@@ -661,7 +769,13 @@ function PackPage() {
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
-      <div className="mx-auto max-w-4xl px-4 py-6">
+      <div
+        className="mx-auto max-w-4xl px-4 py-6"
+        // Rather than a focus trap: the stage has two focusables and a trap would
+        // be over-engineering. This also stops a stray tap reaching the board
+        // through the scrim.
+        inert={stage != null}
+      >
         <div className="mb-5 flex items-center justify-between border-b border-primary/20 pb-4">
           <Link
             to="/players"
@@ -680,89 +794,26 @@ function PackPage() {
         </div>
 
         {!torn ? (
-          <div className="flex flex-col items-center gap-5 py-6">
+          // Tight on purpose. The swipe starts low on the pack, so the whole pack
+          // has to sit above the fixed nav — copy that pushes its bottom half off
+          // screen does not just look cramped, it puts the gesture out of reach.
+          <div className="flex flex-col items-center gap-4 py-2">
             <div className="text-center">
               <h1 className="font-display text-3xl font-black uppercase leading-none">
                 Today&apos;s Pack
               </h1>
               <p className="mt-2 max-w-sm text-xs text-muted-foreground">
-                One pack a day, dealt to you and nobody else. Refreshing won&apos;t reroll it — drag
-                down to rip it open.
+                One pack a day, dealt to you and nobody else. Swipe up to rip it open.
               </p>
             </div>
 
-            <div
-              ref={dragRef}
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                onDrag(e.clientY);
-              }}
-              onPointerMove={(e) => {
-                if (e.buttons > 0) onDrag(e.clientY);
-              }}
-              onPointerUp={() => {
-                if (!torn) setProgress(0);
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label="Drag down to open the pack"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  tearOpen();
-                }
-              }}
-              className="wax-foil hud-glow relative aspect-[3/4] w-full max-w-xs cursor-grab touch-none overflow-hidden rounded-2xl border border-primary/40 active:cursor-grabbing"
-            >
-              {/* The wax foil underneath is the designed fallback, not a spinner:
-                  a slow network gets a beautiful pack rather than a grey box, and
-                  an event with no uploaded back gets the same thing permanently.
-                  The art fades in on top of it, which reads as intentional rather
-                  than as a pop. aspect-[3/4] is fixed by class either way, so
-                  nothing shifts when it lands. */}
-              {packBack.data?.url && (
-                <img
-                  src={packBack.data.url}
-                  alt=""
-                  aria-hidden
-                  crossOrigin="anonymous"
-                  draggable={false}
-                  onLoad={(e) => e.currentTarget.style.setProperty("opacity", "1")}
-                  className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300"
-                />
-              )}
-              <div
-                className={cn(
-                  "relative flex h-full flex-col items-center justify-center gap-2 p-6 text-center",
-                  // The lettering is the pack's identity only while there is no
-                  // art. Over a real back it is a caption nobody asked for.
-                  packBack.data?.url && "hidden",
-                )}
-              >
-                <Sparkles className="h-8 w-8 text-primary" />
-                <div className="font-display text-xs font-black uppercase tracking-[0.35em] text-primary/90">
-                  Will YOU Be My Hero?
-                </div>
-                <div className="font-display text-3xl font-black uppercase leading-none">
-                  Draft Combine
-                </div>
-                <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-                  {PACK_SIZE} cards · {event?.year ?? ""}
-                </div>
-              </div>
-              {/* Torn-away portion, revealed as the drag progresses. */}
-              {progress > 0 && (
-                <div
-                  aria-hidden
-                  className="absolute inset-0 bg-background/85"
-                  style={{ clipPath: tearPolygon(seededRng(seed ?? ""), progress) }}
-                />
-              )}
-            </div>
-
-            <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-              Drag down · or press Enter
-            </div>
+            <PackWrapper
+              backUrl={packBack.data?.url ?? null}
+              cardCount={PACK_SIZE}
+              year={event?.year ?? null}
+              seed={seed ?? ""}
+              onTear={tearOpen}
+            />
           </div>
         ) : (
           <div className="space-y-5">
@@ -770,143 +821,27 @@ function PackPage() {
               <h1 className="font-display text-2xl font-black uppercase leading-none">
                 {allRevealed ? "Pack Complete" : "Tap to Reveal"}
               </h1>
-              {peeking && (
-                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.3em] text-primary">
-                  Last card…
-                </p>
-              )}
             </div>
 
-            {/* Two up on a phone, with the third centred underneath.
-                This was three across at every width, so the whole pack stayed in
-                view at once — but a third of a 390px screen minus gaps comes out
-                around 114px, smaller than the vault's own grid thumbnails and far
-                too small to be the payoff of a ceremony. Seeing all three without
-                scrolling turned out to be worth less than being able to see any
-                of them.
-                Four columns spanning two each, rather than grid-cols-2: it makes
-                the odd card `col-start-2`, where it lands exactly centred at
-                exactly the width of the two above, with no calc() and no
-                half-gap drift. */}
-            <div className="mx-auto grid max-w-2xl grid-cols-4 items-start gap-3 sm:grid-cols-3 sm:gap-4">
-              {pack.map((ep, i) => {
-                const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
-                const isRevealed = revealed.includes(i);
-                const isHit = i === pack.length - 1;
-                const name = ep.participant?.name ?? "—";
-                return (
-                  <motion.div
-                    key={ep.id}
-                    initial={{ opacity: 0, y: 24 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.07, type: "spring", stiffness: 220, damping: 20 }}
-                    className={cn(
-                      "col-span-2 flex flex-col gap-2",
-                      // Only while the grid is two-up. At sm: it is an ordinary
-                      // third column and must let go, or it stays offset.
-                      i === 2 && "col-start-2",
-                      "sm:col-span-1 sm:col-start-auto",
-                    )}
-                  >
-                    {/* The card owns its own button semantics — wrapping it in
-                        another button would nest interactive elements. */}
-                    <div
-                      className={cn(
-                        "rounded-xl transition-shadow",
-                        peeking && isHit && "animate-pulse",
-                      )}
-                      style={
-                        peeking && isHit
-                          ? {
-                              boxShadow: `inset 0 0 0 6px ${rarity.border}, 0 0 40px ${rarity.border}`,
-                            }
-                          : undefined
-                      }
-                    >
-                      {isRevealed ? (
-                        // Uncontrolled once revealed, so it flips freely front to back.
-                        <HoloCard
-                          frontUrl={cards.data?.[ep.id]?.front ?? null}
-                          backUrl={cards.data?.[ep.id]?.back ?? null}
-                          name={name}
-                          rarity={rarity}
-                          cacheKey={ep.id}
-                          backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
-                        />
-                      ) : (
-                        // Real back art, not the wax-foil stand-in: a pack of
-                        // cards face-down should look like the deck it came from.
-                        //
-                        // This makes canFlip true (holo-card.tsx:184), which would
-                        // normally arm flick-to-flip. It doesn't here — both the
-                        // flick and the click are gated on `!onClick`, and this
-                        // card has one. A face-down card still cannot turn itself
-                        // over; only a deliberate reveal does that.
-                        <HoloCard
-                          frontUrl={cards.data?.[ep.id]?.front ?? null}
-                          backUrl={cards.data?.[ep.id]?.back ?? null}
-                          name={`Card ${i + 1}`}
-                          rarity={rarityStyle("base")}
-                          cacheKey={ep.id}
-                          faceDown
-                          flipped={false}
-                          interactive={false}
-                          backContent={<SealedBack />}
-                          onClick={() => void revealAt(i)}
-                        />
-                      )}
-                    </div>
-                    <AnimatePresence>
-                      {isRevealed && (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="text-center"
-                        >
-                          {/* Wrapped rather than truncated: a name cut off mid-word
-                              is a poor look on the screen that is meant to be the
-                              payoff, and at two-up there is room for two lines.
-                              The grid's items-start absorbs the uneven rows. */}
-                          <Link
-                            to="/players/$id"
-                            params={{ id: ep.id }}
-                            className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary sm:text-base"
-                          >
-                            {name}
-                          </Link>
-                          {/* accent, not border: base and dnf set border to a
-                              near-transparent white so their bezel vanishes,
-                              which left this label all but unreadable. Same
-                              reason CardBackPanel does it. */}
-                          <div
-                            className="text-[10px] font-bold uppercase tracking-[0.25em] sm:text-xs"
-                            style={{ color: rarity.accent }}
-                          >
-                            {rarity.label}
-                          </div>
-                          {/* Muted and on its own line: the tier above is what
-                              this card is, this is how many people have one. */}
-                          {packedByLabel(pullCounts.data?.[ep.id]) && (
-                            <div className="text-[9px] font-bold uppercase leading-tight tracking-[0.2em] text-muted-foreground sm:text-[10px]">
-                              {packedByLabel(pullCounts.data?.[ep.id])}
-                            </div>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                );
-              })}
-            </div>
+            <PackBoard
+              cards={boardCards}
+              revealed={revealed}
+              sealedBackUrl={packBack.data?.url ?? null}
+              hiddenIndex={stage && !isSecretStage ? stage.index : null}
+              registerSlot={registerSlot}
+              onOpen={openStage}
+            />
 
-            <SecretSlotView
+            <PackSecretSlot
               slot={secretSlot}
               card={secret}
               rarity={secretRarity}
               duplicate={secretDuplicate}
-              peeking={secretPeeking}
+              peeking={false}
               pulledCount={status.data?.pulled ?? 0}
-              onReveal={() => void revealSecret()}
+              hidden={isSecretStage}
+              registerSlot={(el) => registerSlot(SECRET_STAGE_INDEX, el)}
+              onReveal={() => openStage(SECRET_STAGE_INDEX)}
               onRetry={() => {
                 pullFiredRef.current = false;
                 setSecretFailed(false);
@@ -917,18 +852,12 @@ function PackPage() {
             />
 
             <div className="flex flex-wrap justify-center gap-2 pt-2">
-              {!allRevealed && (
+              {/* Exactly one "Reveal all" exists at a time — the stage carries its
+                  own while the ceremony is running. Two would be ambiguous to a
+                  person and fatal to Playwright's strict mode. */}
+              {stage == null && !allRevealed && (
                 <button
-                  onClick={async () => {
-                    // Sequential so the chimes stagger instead of stacking into noise.
-                    for (let i = 0; i < pack.length; i++) {
-                      await revealAt(i);
-                      await new Promise((r) => setTimeout(r, 260));
-                    }
-                    // The secret goes last, or its hold lands underneath the hit's
-                    // and neither of them reads.
-                    await revealSecret();
-                  }}
+                  onClick={startAuto}
                   className="rounded-full border border-white/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground hover:border-primary/50 hover:text-primary"
                 >
                   Reveal all
@@ -944,7 +873,7 @@ function PackPage() {
 
             {allRevealed && (
               <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-                {secretSlot === "open"
+                {secretRevealed
                   ? "That's today's pack, secret and all — come back tomorrow"
                   : "That's today's pack — come back tomorrow"}
               </p>
@@ -952,6 +881,84 @@ function PackPage() {
           </div>
         )}
       </div>
+
+      {/* Deliberately a sibling of the page container rather than inside it:
+          `fixed` means "the viewport" only while no ancestor takes a transform,
+          filter or perspective. HoloCard sets perspective on every .holo-scene
+          and the board's cards carry transforms, so a stage nested in there would
+          silently start positioning itself against a card. */}
+      {stage && stageCard && (
+        <PackStage
+          card={stageCard}
+          phase={stage.phase}
+          flipped={stageFlipped}
+          glow={stage.phase === "entering" && holdBeforeFlip(stage.index) > 0}
+          originRect={stageOrigin}
+          targetRect={stageTarget}
+          position={stagePosition}
+          total={stageTotal}
+          onFlip={handleFlip}
+          onEntered={handleEntered}
+          onAdvance={sendToBoard}
+          onLanded={handleLanded}
+          onRevealAll={auto ? null : startAuto}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * The wax-foil back, for an event that never uploaded one.
+ *
+ * Stage-sized rather than reusing SealedBack, which is drawn for a ~170px board
+ * slot and reads as a postage stamp blown up at 85vw.
+ */
+function SealedFace() {
+  return (
+    <div className="wax-foil flex h-full w-full flex-col items-center justify-center gap-2 p-6 text-center">
+      <div className="font-display text-[10px] font-black uppercase tracking-[0.35em] text-primary/80">
+        Will YOU Be My Hero?
+      </div>
+      <div className="font-display text-2xl font-black uppercase leading-none text-foreground/90">
+        Draft Combine
+      </div>
+    </div>
+  );
+}
+
+function SecretCaption({
+  name,
+  duplicate,
+  rarity,
+  pulledCount,
+}: {
+  name: string;
+  duplicate: boolean;
+  rarity: Rarity;
+  pulledCount: number;
+}) {
+  return (
+    <>
+      <div className="font-display text-xl font-black uppercase leading-tight tracking-wide">
+        {name}
+      </div>
+      {duplicate ? (
+        <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+          Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing off.
+        </div>
+      ) : (
+        <div
+          className="text-[9px] font-bold uppercase tracking-[0.25em]"
+          style={{ color: rarity.accent }}
+        >
+          {/* Taught once, on the first secret anyone ever pulls. Without it the
+              empty vault shelf afterwards reads as a bug. */}
+          {pulledCount <= 1
+            ? "Secret · Not on the roster. Nobody knows how many there are."
+            : "Secret · Yours for good, even on a new phone."}
+        </div>
+      )}
+    </>
   );
 }
