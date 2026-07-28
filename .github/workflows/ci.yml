@@ -41,6 +41,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      # bun.lock must only ever record registry-relative resolutions (the empty
+      # "" field), never an absolute tarball host. Resolving in a sandbox that
+      # fronts npm with a private pull-through mirror bakes that mirror's host
+      # into every package it resolved, and the lockfile stops being portable:
+      # anywhere the mirror is unreachable, bun retries those fetches forever
+      # and `bun install` never exits. Catch it here rather than let it strand
+      # a checkout for minutes with no output. Runs before install so it fails
+      # in seconds.
+      - name: Check lockfile is registry-portable
+        run: |
+          if grep -nE '", "https://' bun.lock; then
+            echo "::error file=bun.lock::bun.lock pins packages to absolute tarball URLs. Re-resolve against the public registry so the resolution field is \"\"."
+            exit 1
+          fi
+          echo "bun.lock records no absolute tarball hosts."
+
       # bunfig.toml's minimumReleaseAge is a resolution-time guard; a frozen
       # install re-resolves nothing, so it cannot affect this step. The build
       # needs no secrets — every process.env read in src/ is inside a function
