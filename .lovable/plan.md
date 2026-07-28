@@ -1,38 +1,61 @@
 ## Goal
 
-Apply two database migrations that add the secret-cards catalogue/ledger and the player-card pull counter, exactly as specified in the pasted prompt. No app code changes.
+Let a guest (nobody claimed on this phone) do everything a claimed member can do in the vault — open a full 4‑card pack, react, comment — with all guest state kept on the device.
 
-## What to apply
+Also investigate the "didn't load for her" report.
 
-Run as two separate migrations, in order:
+## What changes
 
-1. **`20260728143000_secret_holo_cards.sql`** — creates `public.secret_cards` and `public.secret_card_pulls` (RLS on, zero policies, no grants to anon/authenticated), the `events_one_active` partial unique index, and the `SECURITY DEFINER` functions `pull_secret_card(uuid, uuid)` and `secret_pull_status(uuid)` with `SET timezone = 'America/New_York'` and `REVOKE ... FROM PUBLIC` / `GRANT EXECUTE ... TO service_role`.
+### 1. Secret 4th card for guests
 
-2. **`20260728160000_player_card_pulls.sql`** — creates `public.card_pulls` (composite PK `(participant_id, event_participant_id)`, RLS on, zero policies, no grants to anon/authenticated) plus `card_pulls_card_idx`, and the `SECURITY DEFINER` function `record_card_pulls(uuid, uuid[])` with `REVOKE ... FROM PUBLIC` / `GRANT EXECUTE ... TO service_role`.
+Today: pack shows a "Claim your player" tile in slot 4 when there's no member.
 
-Both migrations use `IF NOT EXISTS` / `CREATE OR REPLACE` throughout so re-runs are safe.
+Change: guests get a real secret card in slot 4, tracked per device.
 
-## Hard rules (from the prompt)
+- New server fn `pullSecretCardForGuest({ deviceId, eventId })` — signs no token, picks one active secret card at random from `secret_cards` server‑side and returns `{ cardId, art/back signed URLs, flavour, foil }`. No writes; no participant row required.
+- Guest daily‑limit + duplicate avoidance stays on the device (extend `PackState` with `guestSecretCardId` + already‑seen set in IndexedDB). Members keep the existing DB‑backed path unchanged.
+- `players.pack.tsx` swaps the `!me → "gated"` branch for a `"sealed"` slot backed by the guest pull. Reveal + confetti reuse the existing sealed→open flow.
 
-- Do NOT add any RLS policy to `secret_cards`, `secret_card_pulls`, or `card_pulls`. RLS-on-with-zero-policies is the intended state.
-- Do NOT grant anything on these tables to `anon`, `authenticated`, or `PUBLIC`.
-- Do NOT add them to the `supabase_realtime` publication.
-- Do NOT change `SECURITY DEFINER` → `SECURITY INVOKER`, and do NOT drop the `REVOKE ... FROM PUBLIC` lines on the two RPCs.
-- Do NOT change the `SET timezone = 'America/New_York'` on either RPC.
-- Do NOT edit any application code (TS side arrives via git; `secret-cards-db.server.ts` stays until types are regenerated).
+### 2. Reactions and comments for guests
 
-## Verification
+Today: `card-social.tsx` disables the row and shows `<ClaimPrompt>` when `!me`; server fns require a member token.
 
-After each migration is approved and applied, run the four verification queries from section 3 of the prompt via `supabase--read_query`:
+Change on the client:
 
-1. Three tables present, `rls_enabled = t`, `policy_count = 0`.
-2. Zero rows of grants to anon/authenticated/PUBLIC on those tables.
-3. Zero project functions executable by anon/authenticated.
-4. Zero of the three tables in the `supabase_realtime` publication.
+- Guest identity = `d:<deviceId>` (already exists via `usePackIdentity`). Persist a chosen display name in localStorage (`wwbh:guest-name`) — first comment prompts for one; reactions don't need a name.
+- Drop the disabled state and the claim prompt when a guest identity is available.
 
-If any check fails, do not proceed — re-apply the DDL exactly as written.
+Change on the server (`src/lib/social.functions.ts`):
+
+- Split each mutation into two variants: authenticated (member token, unchanged) and guest. Guest variants accept `{ deviceId, displayName? }`, validate shape, and write with `participant_id = NULL` plus a new nullable `guest_device_id` / `guest_name` on `card_comments` and `guest_device_id` on `card_reactions`.
+- Rate‑limit guest writes per device (simple in‑memory + row count guard) so nobody spams the wall.
+- Reads already public — no change.
+
+Migration:
+
+- Add nullable `guest_device_id text`, `guest_name text` on `card_comments`; nullable `guest_device_id text` on `card_reactions`.
+- Relax the NOT NULL on `participant_id` for both tables and add a `CHECK (participant_id IS NOT NULL OR guest_device_id IS NOT NULL)`.
+- Uniqueness for reactions extended to `(event_participant_id, coalesce(participant_id::text, guest_device_id), emoji)`.
+
+### 3. "Didn't load for her" investigation
+
+The console shows a hydration mismatch attributed to Progressier stripping body classes, plus a service‑worker 404 on `/progressier.js`. Both are noise on a working session, but the SW registration failure can leave a stale cached shell on repeat visits. Plan:
+
+- Confirm `public/progressier.js` is actually served (404 in the log suggests it isn't in the build output for that host) and fix the path, or remove the registration on non‑published hosts.
+- Move the Progressier `<script>` behind `<ClientOnly>` so the body‑class it injects doesn't cause a hydration mismatch that blanks the tree on slower phones.
+
+### 4. Tests
+
+- Extend `card-collection` tests for the new `guestSecretCardId` field round‑trip.
+- Add server‑fn tests covering guest comment + reaction paths (happy path, missing device id, rate‑limit).
+- E2E: a fixture with no member token opens `/players/pack`, tears it, sees 4 cards including a secret slot, and posts a reaction on a player page.
 
 ## Out of scope
 
-- No TypeScript changes, no regenerated `types.ts`, no deletion of `secret-cards-db.server.ts` in this pass.
-- Storage bucket privacy (`participant-photos`) is dashboard state; not touched by migrations.
+Awards voting stays member‑only (one vote per person is meaningless without an identity we control).
+
+## Technical notes
+
+- `pull_secret_card` RPC is unchanged; the guest path deliberately does not write to `secret_card_pulls` (that ledger is per‑member, per‑day and would corrupt the "one a day for real players" invariant).
+- Server fns for guest writes live in the same `social.functions.ts` file; the token/no‑token split is done inside the handler, not via middleware, so a member with a stale token still writes as a member.
+- All new columns are nullable and additive; existing rows and the `has_role`‑style guards don't move.
