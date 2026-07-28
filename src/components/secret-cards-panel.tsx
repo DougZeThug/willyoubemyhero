@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { EyeOff, Gift, Pencil, Trash2 } from "lucide-react";
+import { EyeOff, Gift, Loader2, Pencil, Trash2 } from "lucide-react";
 import {
   createSecretCards,
   deleteSecretCard,
@@ -85,6 +85,10 @@ export function SecretCardsPanel() {
   const [editing, setEditing] = useState<string | null>(null);
   // Per-card grant target: the participant id currently chosen in that row's picker.
   const [grantTarget, setGrantTarget] = useState<Record<string, string>>({});
+  // Per-row pending flags so each row shows its own spinner and neighbour rows
+  // stay interactive while one card is saving.
+  const [grantingId, setGrantingId] = useState<string | null>(null);
+  const [savingWeightId, setSavingWeightId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editFlavour, setEditFlavour] = useState("");
 
@@ -159,14 +163,22 @@ export function SecretCardsPanel() {
 
   async function saveEdit(id: string) {
     setBusy(true);
-    try {
-      await updateFn({
-        data: { id, name: editName.trim(), flavour: editFlavour.trim() || null },
-      });
+    const p = updateFn({
+      data: { id, name: editName.trim(), flavour: editFlavour.trim() || null },
+    }).then(async (r) => {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(p, {
+      loading: "Saving card…",
+      success: "Card updated",
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
+    try {
+      await p;
       setEditing(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Save failed");
+    } catch {
+      // toast.promise already surfaced the error
     } finally {
       setBusy(false);
     }
@@ -194,14 +206,25 @@ export function SecretCardsPanel() {
       toast.error("Weight must be a whole number between 0 and 10,000");
       return;
     }
-    setBusy(true);
-    try {
-      await updateFn({ data: { id, weight: parsed } });
+    setSavingWeightId(id);
+    const p = updateFn({ data: { id, weight: parsed } }).then(async (r) => {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Save failed");
+      return r;
+    });
+    toast.promise(p, {
+      loading: "Saving weight…",
+      success:
+        parsed === 0
+          ? "Weight saved — card excluded from packs"
+          : `Weight saved (${parsed})`,
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
+    try {
+      await p;
+    } catch {
+      // toast.promise already surfaced the error
     } finally {
-      setBusy(false);
+      setSavingWeightId(null);
     }
   }
 
@@ -212,20 +235,26 @@ export function SecretCardsPanel() {
       return;
     }
     const who = roster.find((p) => p.id === participantId)?.name ?? "participant";
-    setBusy(true);
-    try {
-      const res = await grantFn({ data: { participantId, cardId: card.id } });
+    setGrantingId(card.id);
+    const p = grantFn({ data: { participantId, cardId: card.id } }).then(async (r) => {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-      setGrantTarget((prev) => ({ ...prev, [card.id]: "" }));
-      toast.success(
-        res.duplicate
+      return r;
+    });
+    toast.promise(p, {
+      loading: `Granting "${card.name}" to ${who}…`,
+      success: (r) =>
+        r.duplicate
           ? `${who} already had "${card.name}" — logged as a duplicate`
           : `Granted "${card.name}" to ${who}`,
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Grant failed");
+      error: (e) => (e instanceof Error ? e.message : "Grant failed"),
+    });
+    try {
+      await p;
+      setGrantTarget((prev) => ({ ...prev, [card.id]: "" }));
+    } catch {
+      // toast.promise already surfaced the error
     } finally {
-      setBusy(false);
+      setGrantingId(null);
     }
   }
 
@@ -441,12 +470,15 @@ export function SecretCardsPanel() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                       }}
-                      disabled={busy}
+                      disabled={savingWeightId === card.id}
                       className="h-6 w-16 rounded border border-white/15 bg-background px-1.5 text-xs tabular-nums"
                       aria-label={`Pull weight for ${card.name}`}
                     />
                   </label>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    {savingWeightId === card.id && (
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    )}
                     {card.weight === 0
                       ? "Excluded from packs"
                       : "Higher = shows up more often (100 = baseline)"}
@@ -475,11 +507,20 @@ export function SecretCardsPanel() {
                       size="sm"
                       variant="secondary"
                       onClick={() => void grant(card)}
-                      disabled={busy || !grantTarget[card.id]}
+                      disabled={grantingId === card.id || !grantTarget[card.id]}
                       className="h-7 px-2 text-[10px]"
                     >
-                      <Gift className="mr-1 h-3 w-3" />
-                      Grant
+                      {grantingId === card.id ? (
+                        <>
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden />
+                          Granting…
+                        </>
+                      ) : (
+                        <>
+                          <Gift className="mr-1 h-3 w-3" />
+                          Grant
+                        </>
+                      )}
                     </Button>
                   </div>
                 )}
