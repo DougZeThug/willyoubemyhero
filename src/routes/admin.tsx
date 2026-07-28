@@ -631,13 +631,10 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   const uploadCardFn = useServerFn(uploadParticipantCard);
   const deleteCardFn = useServerFn(deleteParticipantCard);
   const archiveFn = useServerFn(archiveEvent);
-  const checkVariantsFn = useServerFn(getImagePathsNeedingVariants);
-  const writeVariantsFn = useServerFn(writeImageVariants);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadingCardId, setUploadingCardId] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
-  const [backfilling, setBackfilling] = useState(false);
 
   const liveUrl = typeof window !== "undefined" ? `${window.location.origin}/live` : "/live";
   const tvUrl = typeof window !== "undefined" ? `${window.location.origin}/tv` : "/tv";
