@@ -58,7 +58,7 @@ import { cn } from "@/lib/utils";
 const revealed = new Set<string>();
 
 export const Route = createFileRoute("/players/$id")({
-  head: ({ loaderData }) => ({
+  head: ({ loaderData }: { loaderData: { frontUrl: string | null } }) => ({
     meta: [
       { title: "Player Card — Will YOU Be My Hero? Draft Combine" },
       { name: "description", content: "Full player trading card for the draft combine." },
