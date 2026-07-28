@@ -55,7 +55,7 @@ export function SiteNav() {
         <ul className="mx-auto grid max-w-md grid-cols-6">
           {links.map((l) => {
             const Icon = l.icon;
-            const active = l.to === "/" ? path === "/" : path.startsWith(l.to);
+            const active = path.startsWith(l.to);
             return (
               <li key={l.to}>
                 <Link
