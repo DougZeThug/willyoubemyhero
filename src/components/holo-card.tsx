@@ -429,9 +429,16 @@ function HoloCardImpl({
     touchAction: dragTilt && interactive && !reduced ? t.touchAct : undefined,
   } as React.CSSProperties;
 
+  // A resting card only crawls if the tier earned it, and only at hero size —
+  // the vault grid is the one place many cards mount at once, and a permanently
+  // animating layer on each is the same cost `engaged` exists to avoid. It also
+  // yields the moment the pointer's own band takes over.
+  const idle = rarity.idle && tilt === "hero" && !reduced && !engaged;
+
   const Overlays = (
     <>
-      <div className="holo-foil" aria-hidden />
+      <div className={cn("holo-foil", `holo-pattern-${rarity.pattern}`)} aria-hidden />
+      {idle && <div className="holo-idle" aria-hidden />}
       {engaged && <div className="holo-glare" aria-hidden />}
       {engaged && rarity.sparkle > 0 && <div className="holo-sparkle" aria-hidden />}
     </>

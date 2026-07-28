@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { formatTime } from "@/lib/format";
-import type { Rarity } from "@/lib/card-rarity";
+import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
 
 /**
  * Generated card back, used when a player has no uploaded back artwork.
@@ -47,15 +47,6 @@ type LadderRow = {
   ms: number | null;
   /** Signed difference from the field median. Negative is faster. */
   deltaMs: number | null;
-};
-
-const TIER_REASON: Record<string, string> = {
-  champion: "Fastest official time",
-  podium: "Top three finish",
-  stationKing: "Fastest at a station",
-  penaltyBox: "Most penalty time",
-  dnf: "Did not finish",
-  base: "Combine athlete",
 };
 
 export function CardBackPanel({
@@ -117,7 +108,9 @@ export function CardBackPanel({
       >
         <span
           className="font-display text-[10px] font-black uppercase tracking-[0.25em]"
-          style={{ color: rarity.border }}
+          // accent, not border: `base` and `dnf` set border to a near-transparent
+          // white so their bezel vanishes, which rendered this label invisible.
+          style={{ color: rarity.accent }}
         >
           {rarity.label}
         </span>

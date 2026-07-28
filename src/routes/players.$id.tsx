@@ -21,7 +21,7 @@ import { CardBackPanel } from "@/components/card-back-panel";
 import { CardSocial } from "@/components/card-social";
 import { useEventSocial, useEventAwards } from "@/hooks/use-event-social";
 import { awardCategory } from "@/lib/awards";
-import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import { rarityMap, rarityStyle, TIER_REASON, type Rarity } from "@/lib/card-rarity";
 import { exportCardPng } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -198,21 +198,31 @@ function PlayerCardPage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
-      <div className="mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-4 flex items-center justify-between">
+    // Every tier-coloured thing below reads `--tier` off this node rather than
+    // taking a prop, so one variable retints the whole page.
+    <div
+      className="circuit-bg relative min-h-[calc(100dvh-8rem)]"
+      style={{ "--tier": rarity.accent } as React.CSSProperties}
+    >
+      {/* Tier wash over circuit-bg's own hard-coded cyan bloom. Sits behind the
+          content, so a champion's page glows gold and a DNF's barely glows. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[70vh]"
+        style={{
+          background:
+            "radial-gradient(ellipse 65% 55% at 50% 20%, color-mix(in oklab, var(--tier) 24%, transparent) 0%, transparent 70%)",
+        }}
+      />
+      <div className="relative mx-auto max-w-3xl px-4 py-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
           <Link
             to="/players"
-            className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline"
+            className="inline-flex items-center gap-1 pt-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Vault
           </Link>
-          <div className="flex items-center gap-2 text-primary">
-            <IdCard className="h-4 w-4" />
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">
-              {rarity.label}
-            </span>
-          </div>
+          <TierRibbon rarity={rarity} />
         </div>
 
         <div className="flex items-center gap-3">
@@ -297,7 +307,7 @@ function PlayerCardPage() {
         {ep.participant?.trash_talk_quote && (
           <blockquote
             className="mx-auto mt-6 max-w-md border-l-2 pl-4 text-sm italic text-muted-foreground"
-            style={{ borderColor: rarity.border }}
+            style={{ borderColor: "var(--tier)" }}
           >
             “{ep.participant.trash_talk_quote}”
           </blockquote>
@@ -370,6 +380,37 @@ function NavButton({
   );
 }
 
+/**
+ * Tier badge in the page header. The label alone never said what it meant —
+ * "Station King" is only a flex if you know it's the fastest split at a station,
+ * so the reason rides along underneath.
+ */
+function TierRibbon({ rarity }: { rarity: Rarity }) {
+  return (
+    <div
+      className="flex min-w-0 items-center gap-2 rounded-full border py-1.5 pl-3 pr-3.5"
+      style={{
+        borderColor: "color-mix(in oklab, var(--tier) 45%, transparent)",
+        background: "color-mix(in oklab, var(--tier) 10%, transparent)",
+        boxShadow: "0 0 24px -8px var(--tier)",
+      }}
+    >
+      <IdCard className="h-4 w-4 shrink-0" style={{ color: "var(--tier)" }} />
+      <div className="min-w-0 leading-tight">
+        <div
+          className="font-display truncate text-[11px] font-black uppercase tracking-[0.25em]"
+          style={{ color: "var(--tier)" }}
+        >
+          {rarity.label}
+        </div>
+        <div className="truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+          {TIER_REASON[rarity.tier] ?? ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ActionButton({
   onClick,
   children,
@@ -388,10 +429,8 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] transition-colors disabled:opacity-50",
-        active
-          ? "border-primary bg-primary/15 text-primary"
-          : "border-white/10 text-muted-foreground hover:border-primary/50 hover:text-primary",
+        "tier-chip inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] transition-colors disabled:opacity-50",
+        active && "is-active",
       )}
     >
       {icon}
@@ -402,14 +441,16 @@ function ActionButton({
 
 function Stat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="hud-bezel rounded-md border border-white/10 px-4 py-2 text-center">
+    <div
+      className="hud-bezel rounded-md border px-4 py-2 text-center"
+      style={{ borderColor: "color-mix(in oklab, var(--tier) 30%, oklch(1 0 0 / 10%))" }}
+    >
       <div className="text-[9px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
         {label}
       </div>
       <div
-        className={
-          "font-display text-xl font-black text-primary " + (mono ? "timer-digits tabular" : "")
-        }
+        className={"font-display text-xl font-black " + (mono ? "timer-digits tabular" : "")}
+        style={{ color: "var(--tier)" }}
       >
         {value}
       </div>

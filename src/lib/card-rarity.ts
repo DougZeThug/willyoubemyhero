@@ -7,6 +7,14 @@
 
 export type RarityTier = "champion" | "podium" | "stationKing" | "penaltyBox" | "dnf" | "base";
 
+/**
+ * Which foil texture a tier wears. The colours alone were never enough to tell
+ * two tiers apart at a glance — a champion and a base card both swept one
+ * rainbow band, just in different hues. Each pattern is a `.holo-pattern-*` rule
+ * in styles.css that overrides the band geometry.
+ */
+export type FoilPattern = "refractor" | "prismatic" | "scanline" | "hazard" | "matte";
+
 export type Rarity = {
   tier: RarityTier;
   label: string;
@@ -22,6 +30,22 @@ export type Rarity = {
   sparkle: number;
   /** Border colour for the card bezel and grid tiles. */
   border: string;
+  /**
+   * Opaque tier colour for page chrome — stat tiles, buttons, ambient glow.
+   *
+   * Deliberately not `border`: two tiers use a translucent white there (`base`
+   * at 12%, `dnf` at 8%) precisely so their bezel disappears into the card, and
+   * text or a glow in that colour would be invisible.
+   */
+  accent: string;
+  /** Foil texture. See FoilPattern. */
+  pattern: FoilPattern;
+  /**
+   * Whether the card keeps a slow sheen crawling across it at rest. Only the
+   * tiers worth showing off get it, and only on a hero-sized card — see the
+   * gating in holo-card.tsx.
+   */
+  idle: boolean;
   /** Ranked best-to-worst, for sorting the vault. */
   rank: number;
 };
@@ -38,6 +62,9 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     strength: 1,
     sparkle: 1,
     border: "oklch(0.88 0.17 90)",
+    accent: "oklch(0.88 0.17 90)",
+    pattern: "prismatic",
+    idle: true,
     rank: 0,
   },
   podium: {
@@ -47,6 +74,9 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     strength: 0.92,
     sparkle: 0.7,
     border: "oklch(0.85 0.14 95)",
+    accent: "oklch(0.85 0.14 95)",
+    pattern: "refractor",
+    idle: true,
     rank: 1,
   },
   stationKing: {
@@ -56,6 +86,9 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     strength: 0.86,
     sparkle: 0.6,
     border: "oklch(0.8 0.16 300)",
+    accent: "oklch(0.8 0.16 300)",
+    pattern: "scanline",
+    idle: false,
     rank: 2,
   },
   base: {
@@ -65,6 +98,10 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     strength: 0.8,
     sparkle: 0.35,
     border: "oklch(1 0 0 / 12%)",
+    // The house cyan — a base card is the app's default look, not a downgrade.
+    accent: "oklch(0.82 0.14 210)",
+    pattern: "refractor",
+    idle: false,
     rank: 3,
   },
   penaltyBox: {
@@ -74,6 +111,9 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     strength: 0.66,
     sparkle: 0.22,
     border: "oklch(0.82 0.19 85)",
+    accent: "oklch(0.82 0.19 85)",
+    pattern: "hazard",
+    idle: false,
     rank: 4,
   },
   dnf: {
@@ -83,8 +123,28 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     strength: 0.22,
     sparkle: 0,
     border: "oklch(1 0 0 / 8%)",
+    // Desaturated slate. The tier is supposed to look like the lights went out.
+    accent: "oklch(0.62 0.02 240)",
+    pattern: "matte",
+    idle: false,
     rank: 5,
   },
+};
+
+/**
+ * What a player did to land on a tier.
+ *
+ * The label alone never carried it — "Station King" only reads as a flex if you
+ * already know it means the fastest split at a station. Shown under the tier
+ * badge on the player page and on the generated card back.
+ */
+export const TIER_REASON: Record<RarityTier, string> = {
+  champion: "Fastest official time",
+  podium: "Top three finish",
+  stationKing: "Fastest at a station",
+  penaltyBox: "Most penalty time",
+  dnf: "Did not finish",
+  base: "Combine athlete",
 };
 
 export function rarityStyle(tier: RarityTier): Rarity {
