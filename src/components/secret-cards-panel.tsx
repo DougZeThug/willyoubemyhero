@@ -99,6 +99,7 @@ export function SecretCardsPanel() {
   });
 
   const cards = (list.data?.cards ?? []) as SecretCardAdminRow[];
+  const roster: Roster = list.data?.participants ?? [];
 
   function addFiles(files: File[]) {
     const next: Draft[] = [];
@@ -179,6 +180,50 @@ export function SecretCardsPanel() {
       toast.success("Art replaced");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Weight edits save on blur / enter. Debouncing on every keystroke would hide
+  // the "did it save?" moment; a full save button per row is more taps than the
+  // change deserves. Leave clears back to 100 (baseline uniform).
+  async function saveWeight(id: string, raw: string) {
+    const parsed = raw.trim() === "" ? 100 : Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 10_000) {
+      toast.error("Weight must be a whole number between 0 and 10,000");
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateFn({ data: { id, weight: parsed } });
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function grant(card: SecretCardAdminRow) {
+    const participantId = grantTarget[card.id];
+    if (!participantId) {
+      toast.error("Pick a participant first");
+      return;
+    }
+    const who = roster.find((p) => p.id === participantId)?.name ?? "participant";
+    setBusy(true);
+    try {
+      const res = await grantFn({ data: { participantId, cardId: card.id } });
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      setGrantTarget((prev) => ({ ...prev, [card.id]: "" }));
+      toast.success(
+        res.duplicate
+          ? `${who} already had "${card.name}" — logged as a duplicate`
+          : `Granted "${card.name}" to ${who}`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Grant failed");
     } finally {
       setBusy(false);
     }
