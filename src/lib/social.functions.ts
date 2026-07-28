@@ -62,7 +62,9 @@ export const getEventSocial = createServerFn({ method: "GET" })
     const [{ data: reactions }, { data: comments }] = await Promise.all([
       sb
         .from("card_reactions")
-        .select("id, event_participant_id, participant_id, guest_key, guest_name, emoji, created_at")
+        .select(
+          "id, event_participant_id, participant_id, guest_key, guest_name, emoji, created_at",
+        )
         .in("event_participant_id", ids),
       sb
         .from("card_comments")
@@ -180,8 +182,7 @@ export const deleteComment = createServerFn({ method: "POST" })
     if (!eventId || !isAdminFor(eventId)) {
       const me = optionalMember();
       const isOwnMember = !!me && row.participant_id === me;
-      const isOwnGuest =
-        !me && !!data.guest && !!row.guest_key && row.guest_key === data.guest.key;
+      const isOwnGuest = !me && !!data.guest && !!row.guest_key && row.guest_key === data.guest.key;
       if (!isOwnMember && !isOwnGuest) throw new Error("Not your comment");
     }
     await sb.from("card_comments").delete().eq("id", data.commentId);

@@ -82,9 +82,7 @@ export function CardSocial({
   const [bursting, setBursting] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<Record<string, number>>({});
 
-  type Actor =
-    | { kind: "member" }
-    | { kind: "guest"; guest: { key: string; name: string } };
+  type Actor = { kind: "member" } | { kind: "guest"; guest: { key: string; name: string } };
 
   /**
    * Resolve who this device is acting as, or open the inline name prompt.
