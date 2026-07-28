@@ -580,9 +580,11 @@ function HoloCardImpl({
           {/* Front. `invisible` rather than backface-visibility alone — see the
               note on .holo-face; WebKit shows the away side through the card. */}
           <div className={cn("holo-face", canFlip && showBack && "invisible")}>
-            {frontUrl ? (
+            {frontSrc ? (
               <img
-                src={frontUrl}
+                src={frontSrc}
+                srcSet={frontSrcSet}
+                sizes="(max-width: 640px) 90vw, 420px"
                 alt={`${name} card front`}
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
