@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Upload, X, CheckCircle2, AlertTriangle } from "lucide-react";
 import { uploadParticipantCardsBulk, type CardSide } from "@/lib/media.functions";
-import { Card, CardContent } from "@/components/ui/card";
+import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -194,114 +194,114 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
   }
 
   return (
-    <Card className="hud-bezel border-primary/20">
-      <CardContent className="p-5">
-        <div className="mb-3 flex items-center gap-2 text-primary">
-          <Upload className="h-4 w-4" />
-          <h2 className="font-display text-sm font-black uppercase tracking-[0.3em]">
-            Bulk Card Upload
-          </h2>
-        </div>
-
-        <div
-          onDragOver={(e) => {
+    <AdminSection
+      icon={<Upload className="h-4 w-4 shrink-0" />}
+      title="Bulk Card Upload"
+      meta={items.length > 0 ? `${items.length} staged` : undefined}
+    >
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          addFiles(e.dataTransfer.files);
+        }}
+        onClick={() => inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            setDragging(true);
+            inputRef.current?.click();
+          }
+        }}
+        className={cn(
+          "cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors",
+          dragging
+            ? "border-primary bg-primary/10"
+            : "border-white/15 hover:border-primary/50 hover:bg-white/[0.02]",
+        )}
+      >
+        <p className="font-display text-sm font-bold uppercase tracking-widest text-foreground">
+          <span className="max-sm:hidden">Drop card images here</span>
+          <span className="sm:hidden">Tap to choose card images</span>
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Names are matched automatically. Add <code>-front</code> or <code>-back</code> to a
+          filename to set the side.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) addFiles(e.target.files);
+            e.target.value = "";
           }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            addFiles(e.dataTransfer.files);
-          }}
-          onClick={() => inputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              inputRef.current?.click();
-            }
-          }}
-          className={cn(
-            "cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors",
-            dragging
-              ? "border-primary bg-primary/10"
-              : "border-white/15 hover:border-primary/50 hover:bg-white/[0.02]",
-          )}
-        >
-          <p className="font-display text-sm font-bold uppercase tracking-widest text-foreground">
-            Drop card images here
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Names are matched automatically. Add <code>-front</code> or <code>-back</code> to a
-            filename to set the side.
-          </p>
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) addFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-        </div>
+        />
+      </div>
 
-        {items.length > 0 && (
-          <>
-            <div className="mt-4 max-h-80 space-y-1.5 overflow-auto pr-1">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md border px-2 py-1.5",
-                    item.oversize
-                      ? "border-destructive/40 bg-destructive/5"
-                      : item.eventParticipantId
-                        ? "border-white/5 bg-white/[0.02]"
-                        : "border-warn/40 bg-warn/5",
-                  )}
-                >
-                  <img
-                    src={item.previewUrl}
-                    alt=""
-                    className="h-11 w-8 shrink-0 rounded border border-white/10 object-cover"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[11px] text-muted-foreground">
-                      {item.file.name}
+      {items.length > 0 && (
+        <>
+          <div className="mt-4 max-h-[60vh] space-y-1.5 overflow-auto pr-1 sm:max-h-80">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className={cn(
+                  "flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5",
+                  item.oversize
+                    ? "border-destructive/40 bg-destructive/5"
+                    : item.eventParticipantId
+                      ? "border-white/5 bg-white/[0.02]"
+                      : "border-warn/40 bg-warn/5",
+                )}
+              >
+                <img
+                  src={item.previewUrl}
+                  alt=""
+                  className="h-11 w-8 shrink-0 rounded border border-white/10 object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[11px] text-muted-foreground">{item.file.name}</div>
+                  {item.oversize ? (
+                    <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-destructive">
+                      <AlertTriangle className="h-3 w-3 shrink-0" /> Over 12 MB
                     </div>
-                    {item.oversize ? (
-                      <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-destructive">
-                        <AlertTriangle className="h-3 w-3" /> Over 12 MB
-                      </div>
-                    ) : (
-                      <select
-                        value={item.eventParticipantId ?? ""}
-                        onChange={(e) =>
-                          setItems((prev) =>
-                            prev.map((p) =>
-                              p.id === item.id
-                                ? { ...p, eventParticipantId: e.target.value || null }
-                                : p,
-                            ),
-                          )
-                        }
-                        className="w-full rounded border border-white/10 bg-transparent px-1 py-0.5 text-xs font-semibold uppercase text-foreground"
-                      >
-                        <option value="">— unmatched —</option>
-                        {targets.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
+                  ) : (
+                    // text-base below sm: anything under 16px makes iOS Safari
+                    // zoom the viewport on focus and never zoom back out.
+                    <select
+                      value={item.eventParticipantId ?? ""}
+                      aria-label={`Player for ${item.file.name}`}
+                      onChange={(e) =>
+                        setItems((prev) =>
+                          prev.map((p) =>
+                            p.id === item.id
+                              ? { ...p, eventParticipantId: e.target.value || null }
+                              : p,
+                          ),
+                        )
+                      }
+                      className="min-h-11 w-full rounded border border-white/10 bg-transparent px-1 py-0.5 text-base font-semibold uppercase text-foreground sm:min-h-0 sm:text-xs"
+                    >
+                      <option value="">— unmatched —</option>
+                      {targets.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
 
+                {/* Side toggle and remove wrap to their own line on phones. */}
+                <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                   <div className="flex shrink-0 overflow-hidden rounded border border-white/10">
                     {(["front", "back"] as const).map((side) => (
                       <button
@@ -312,7 +312,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                           )
                         }
                         className={cn(
-                          "px-2 py-1 text-[9px] font-bold uppercase tracking-widest transition-colors",
+                          "min-h-9 px-3 py-1 text-[9px] font-bold uppercase tracking-widest transition-colors sm:min-h-0 sm:px-2",
                           item.side === side
                             ? "bg-primary/20 text-primary"
                             : "text-muted-foreground hover:text-foreground",
@@ -328,32 +328,43 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                   )}
                   <button
                     onClick={() => removeItem(item.id)}
-                    className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
+                    className="shrink-0 rounded p-2.5 text-muted-foreground hover:text-destructive sm:p-1"
                     aria-label={`Remove ${item.file.name}`}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
 
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <div className="text-[11px] text-muted-foreground">
-                {ready.length} ready
-                {unmatched > 0 && <span className="text-warn"> · {unmatched} need attention</span>}
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" onClick={clearAll} disabled={busy}>
-                  Clear
-                </Button>
-                <Button size="sm" onClick={onUpload} disabled={busy || ready.length === 0}>
-                  {busy ? "Uploading…" : `Upload ${ready.length}`}
-                </Button>
-              </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] text-muted-foreground">
+              {ready.length} ready
+              {unmatched > 0 && <span className="text-warn"> · {unmatched} need attention</span>}
             </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+            <div className="flex flex-1 gap-2 sm:flex-none">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={clearAll}
+                disabled={busy}
+                className="min-h-11 flex-1 sm:min-h-0 sm:flex-none"
+              >
+                Clear
+              </Button>
+              <Button
+                size="sm"
+                onClick={onUpload}
+                disabled={busy || ready.length === 0}
+                className="min-h-11 flex-1 sm:min-h-0 sm:flex-none"
+              >
+                {busy ? "Uploading…" : `Upload ${ready.length}`}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </AdminSection>
   );
 }

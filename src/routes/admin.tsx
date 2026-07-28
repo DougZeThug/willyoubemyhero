@@ -15,6 +15,7 @@ import {
 } from "@/lib/media.functions";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
+import { AdminSection } from "@/components/admin-section";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { Card, CardContent } from "@/components/ui/card";
@@ -110,7 +111,7 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
   return (
     <div className="mx-auto grid min-h-[60vh] max-w-md place-items-center px-4 py-10">
       <Card className="hud-bezel w-full border-white/10">
-        <CardContent className="p-6">
+        <CardContent className="p-5 sm:p-6">
           <div className="mb-4">
             <div className="flex items-center gap-2 text-primary">
               <LockKeyhole className="h-4 w-4" />
@@ -397,7 +398,7 @@ function TimingConsole() {
         />
       ) : (
         <Card className={"hud-bezel " + (paused ? "border-warn/60" : "border-primary/50 hud-glow")}>
-          <CardContent className="p-5">
+          <CardContent className="p-4 sm:p-5">
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-3">
                 <ParticipantAvatar
@@ -423,7 +424,7 @@ function TimingConsole() {
                   size="lg"
                   variant={paused ? "default" : "secondary"}
                   onClick={togglePause}
-                  className="min-w-28"
+                  className="h-12 flex-1 sm:h-10 sm:min-w-28 sm:flex-none"
                 >
                   {paused ? (
                     <>
@@ -435,10 +436,19 @@ function TimingConsole() {
                     </>
                   )}
                 </Button>
-                <Button size="lg" onClick={finishRun} className="min-w-28">
+                <Button
+                  size="lg"
+                  onClick={finishRun}
+                  className="h-12 flex-1 sm:h-10 sm:min-w-28 sm:flex-none"
+                >
                   <Flag className="mr-1.5 h-4 w-4" /> Finish
                 </Button>
-                <Button size="lg" variant="ghost" onClick={cancelRun}>
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  onClick={cancelRun}
+                  className="h-12 w-full sm:h-10 sm:w-auto"
+                >
                   <X className="mr-1.5 h-4 w-4" /> Cancel
                 </Button>
               </div>
@@ -492,7 +502,7 @@ function TimingConsole() {
                             addPenalty(st.id, st.penalty_amount_ms, `${st.name} penalty`)
                           }
                           disabled={finished}
-                          className="rounded-md border border-warn/30 bg-warn/10 py-1 text-[10px] font-bold uppercase tracking-widest text-warn hover:bg-warn/20 disabled:opacity-50"
+                          className="min-h-9 rounded-md border border-warn/30 bg-warn/10 py-1 text-[10px] font-bold uppercase tracking-widest text-warn hover:bg-warn/20 disabled:opacity-50 sm:min-h-0"
                         >
                           <Plus className="mr-1 inline h-3 w-3" />+
                           {formatTime(st.penalty_amount_ms)} pen
@@ -551,9 +561,9 @@ function StartCard({
 
   return (
     <Card>
-      <CardContent className="p-5">
+      <CardContent className="p-4 sm:p-5">
         <h2 className="mb-3 font-display text-xl font-black uppercase">Send next athlete</h2>
-        <div className="max-h-72 overflow-auto rounded border border-white/5 divide-y divide-white/5">
+        <div className="max-h-[55vh] overflow-auto rounded border border-white/5 divide-y divide-white/5 sm:max-h-72">
           {queued.map((p) => {
             const sel = p.participant_id === selectedParticipantId;
             return (
@@ -711,77 +721,79 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       <MemberCodesPanel eventId={eventId} />
       <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
 
-      <Card className="hud-bezel border-primary/20">
-        <CardContent className="p-5">
-          <div className="mb-2 flex items-center gap-2 text-primary">
-            <QrCode className="h-4 w-4" />
-            <h2 className="font-display text-sm font-black uppercase tracking-[0.3em]">
-              Spectator Access
-            </h2>
-          </div>
-          {qrDataUrl && (
-            <img
-              src={qrDataUrl}
-              alt="QR code to live spectator view"
-              className="mx-auto rounded-lg border border-primary/30"
-              width={240}
-              height={240}
-            />
-          )}
-          <div className="mt-3 space-y-1 text-center text-xs">
+      <AdminSection
+        icon={<QrCode className="h-4 w-4 shrink-0" />}
+        title="Spectator Access"
+        defaultOpen
+      >
+        {qrDataUrl && (
+          <img
+            src={qrDataUrl}
+            alt="QR code to live spectator view"
+            className="mx-auto h-auto w-full max-w-[240px] rounded-lg border border-primary/30"
+            width={240}
+            height={240}
+          />
+        )}
+        <div className="mt-3 space-y-1 text-center text-xs">
+          <a
+            href={liveUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 break-all text-primary hover:underline"
+          >
+            <ExternalLink className="h-3 w-3 shrink-0" /> {liveUrl}
+          </a>
+          <div>
             <a
-              href={liveUrl}
+              href={tvUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
+              className="inline-flex items-center gap-1 break-all text-primary/80 hover:underline"
             >
-              <ExternalLink className="h-3 w-3" /> {liveUrl}
+              <ExternalLink className="h-3 w-3 shrink-0" /> TV big-screen: /tv
             </a>
-            <div>
-              <a
-                href={tvUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-primary/80 hover:underline"
-              >
-                <ExternalLink className="h-3 w-3" /> TV big-screen: /tv
-              </a>
-            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </AdminSection>
 
-      <Card className="hud-bezel border-primary/20">
-        <CardContent className="p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-primary">
-              <Camera className="h-4 w-4" />
-              <h2 className="font-display text-sm font-black uppercase tracking-[0.3em]">
-                Participant Photos
-              </h2>
-            </div>
-            <Button size="sm" variant="secondary" onClick={onArchive} disabled={archiving}>
-              <Archive className="mr-1.5 h-3.5 w-3.5" />
-              {archiving ? "Archiving…" : "Archive Event"}
-            </Button>
-          </div>
-          <div className="max-h-72 space-y-1 overflow-auto pr-1">
-            {(bundle?.participants ?? []).map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5"
-              >
+      <AdminSection icon={<Camera className="h-4 w-4 shrink-0" />} title="Participant Photos">
+        <div className="mb-3">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={onArchive}
+            disabled={archiving}
+            className="min-h-11 w-full sm:min-h-0 sm:w-auto"
+          >
+            <Archive className="mr-1.5 h-3.5 w-3.5" />
+            {archiving ? "Archiving…" : "Archive Event"}
+          </Button>
+        </div>
+        {/* Uncapped on phones — the section already collapses, so a nested
+            scroll box here would just trap touch scrolling. */}
+        <div className="space-y-1 overflow-visible pr-1 sm:max-h-72 sm:overflow-auto">
+          {(bundle?.participants ?? []).map((p) => (
+            <div
+              key={p.id}
+              className="flex flex-wrap items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5"
+            >
+              <div className="flex min-w-0 flex-1 basis-full items-center gap-2 sm:basis-auto">
                 <ParticipantAvatar
                   name={p.participant?.name ?? "?"}
                   photoUrl={photos.data?.[p.id] ?? p.participant?.profile_image_url ?? null}
                   size={36}
                 />
-                <span className="flex-1 truncate text-sm font-semibold uppercase">
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase">
                   {p.participant?.name}
                 </span>
-                <label className="cursor-pointer rounded border border-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:border-primary/60 hover:text-primary">
-                  <Camera className="mr-1 inline h-3 w-3" />
-                  {uploadingId === p.id ? "…" : photos.data?.[p.id] ? "Photo" : "Photo"}
+              </div>
+
+              {/* Upload controls take a full second line on phones. */}
+              <div className="flex w-full items-center gap-1.5 sm:w-auto">
+                <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-white/10 px-3 text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:border-primary/60 hover:text-primary sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
+                  <Camera className="mr-1 inline h-3 w-3 shrink-0" />
+                  {uploadingId === p.id ? "…" : "Photo"}
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
@@ -797,9 +809,9 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                   const has = !!cards.data?.[p.id]?.[side];
                   const busy = uploadingCardId === `${p.id}:${side}`;
                   return (
-                    <span key={side} className="flex items-center">
-                      <label className="cursor-pointer rounded border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20">
-                        <IdCard className="mr-1 inline h-3 w-3" />
+                    <span key={side} className="flex flex-1 items-center sm:flex-none">
+                      <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-primary/30 bg-primary/10 px-3 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20 sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
+                        <IdCard className="mr-1 inline h-3 w-3 shrink-0" />
                         {busy ? "…" : has ? `${side} ✓` : side}
                         <input
                           type="file"
@@ -815,7 +827,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                       {has && (
                         <button
                           onClick={() => onRemoveCard(p.id, side)}
-                          className="rounded p-1 text-muted-foreground hover:text-destructive"
+                          className="shrink-0 rounded p-2.5 text-muted-foreground hover:text-destructive sm:p-1"
                           aria-label={`Remove ${side} card`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -825,10 +837,10 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                   );
                 })}
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          ))}
+        </div>
+      </AdminSection>
     </div>
   );
 }
