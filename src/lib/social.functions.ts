@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { isAdminFor, requireAdmin, requireMember } from "./require-auth.server";
+import { isAdminFor, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
 import { AWARD_CATEGORIES, isAwardCategory } from "./awards";
 
 /**
@@ -21,6 +21,32 @@ async function admin() {
   return supabaseAdmin;
 }
 
+/**
+ * Guest identity forwarded from the browser. `key` is `d:<deviceId>`, minted
+ * per device and stable across reloads. `name` is what the guest typed the
+ * first time they wanted to say something.
+ *
+ * A member session always wins over a guest identity in the same request, so
+ * signing in later can't silently double up your reactions.
+ */
+const guestSchema = z
+  .object({
+    key: z.string().trim().min(4).max(80),
+    name: z.string().trim().min(1).max(40),
+  })
+  .optional();
+type GuestInput = z.infer<typeof guestSchema>;
+
+function actor(input: GuestInput): {
+  member: string | null;
+  guest: { key: string; name: string } | null;
+} {
+  const member = optionalMember();
+  if (member) return { member, guest: null };
+  if (!input) throw new Error("Claim your player or add a name to join in");
+  return { member: null, guest: input };
+}
+
 /** Every reaction and comment for one event, in a single round trip. */
 export const getEventSocial = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
@@ -36,11 +62,11 @@ export const getEventSocial = createServerFn({ method: "GET" })
     const [{ data: reactions }, { data: comments }] = await Promise.all([
       sb
         .from("card_reactions")
-        .select("id, event_participant_id, participant_id, emoji, created_at")
+        .select("id, event_participant_id, participant_id, guest_key, guest_name, emoji, created_at")
         .in("event_participant_id", ids),
       sb
         .from("card_comments")
-        .select("id, event_participant_id, participant_id, body, created_at")
+        .select("id, event_participant_id, participant_id, guest_key, guest_name, body, created_at")
         .in("event_participant_id", ids)
         .order("created_at", { ascending: true }),
     ]);
@@ -54,29 +80,41 @@ export const toggleReaction = createServerFn({ method: "POST" })
       .object({
         eventParticipantId: z.string().uuid(),
         emoji: reactionEmoji,
+        guest: guestSchema,
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const who = actor(data.guest);
     const sb = await admin();
-    const { data: existing } = await sb
+    const q = sb
       .from("card_reactions")
       .select("id")
       .eq("event_participant_id", data.eventParticipantId)
-      .eq("participant_id", me)
-      .eq("emoji", data.emoji)
-      .maybeSingle();
+      .eq("emoji", data.emoji);
+    const { data: existing } = who.member
+      ? await q.eq("participant_id", who.member).maybeSingle()
+      : await q.eq("guest_key", who.guest!.key).maybeSingle();
 
     if (existing) {
       await sb.from("card_reactions").delete().eq("id", existing.id);
       return { ok: true as const, reacted: false as const };
     }
-    const { error } = await sb.from("card_reactions").insert({
-      event_participant_id: data.eventParticipantId,
-      participant_id: me,
-      emoji: data.emoji,
-    });
+    const { error } = await sb.from("card_reactions").insert(
+      who.member
+        ? {
+            event_participant_id: data.eventParticipantId,
+            participant_id: who.member,
+            emoji: data.emoji,
+          }
+        : {
+            event_participant_id: data.eventParticipantId,
+            participant_id: null,
+            guest_key: who.guest!.key,
+            guest_name: who.guest!.name,
+            emoji: data.emoji,
+          },
+    );
     if (error) throw error;
     return { ok: true as const, reacted: true as const };
   });
@@ -87,19 +125,30 @@ export const postComment = createServerFn({ method: "POST" })
       .object({
         eventParticipantId: z.string().uuid(),
         body: z.string().trim().min(1).max(280),
+        guest: guestSchema,
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const who = actor(data.guest);
     const sb = await admin();
     const { data: row, error } = await sb
       .from("card_comments")
-      .insert({
-        event_participant_id: data.eventParticipantId,
-        participant_id: me,
-        body: data.body,
-      })
+      .insert(
+        who.member
+          ? {
+              event_participant_id: data.eventParticipantId,
+              participant_id: who.member,
+              body: data.body,
+            }
+          : {
+              event_participant_id: data.eventParticipantId,
+              participant_id: null,
+              guest_key: who.guest!.key,
+              guest_name: who.guest!.name,
+              body: data.body,
+            },
+      )
       .select()
       .single();
     if (error) throw error;
@@ -108,16 +157,19 @@ export const postComment = createServerFn({ method: "POST" })
 
 /** You can delete your own trash talk; the commissioner can delete anyone's. */
 export const deleteComment = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ commentId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ commentId: z.string().uuid(), guest: guestSchema }).parse(d),
+  )
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: row } = await sb
       .from("card_comments")
-      .select("id, participant_id, event_participant:event_participants!inner(event_id)")
+      .select("id, participant_id, guest_key, event_participant:event_participants!inner(event_id)")
       .eq("id", data.commentId)
       .maybeSingle<{
         id: string;
-        participant_id: string;
+        participant_id: string | null;
+        guest_key: string | null;
         event_participant: { event_id: string } | null;
       }>();
     if (!row) return { ok: true };
@@ -126,8 +178,11 @@ export const deleteComment = createServerFn({ method: "POST" })
     // otherwise an admin for event A could delete comments belonging to event B.
     const eventId = row.event_participant?.event_id ?? null;
     if (!eventId || !isAdminFor(eventId)) {
-      const me = await requireMember();
-      if (row.participant_id !== me) throw new Error("Not your comment");
+      const me = optionalMember();
+      const isOwnMember = !!me && row.participant_id === me;
+      const isOwnGuest =
+        !me && !!data.guest && !!row.guest_key && row.guest_key === data.guest.key;
+      if (!isOwnMember && !isOwnGuest) throw new Error("Not your comment");
     }
     await sb.from("card_comments").delete().eq("id", data.commentId);
     return { ok: true };

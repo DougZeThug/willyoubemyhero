@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "motion/react";
@@ -7,6 +6,7 @@ import { toast } from "sonner";
 import { MessageSquare, Send, Trash2 } from "lucide-react";
 import { deleteComment, postComment, toggleReaction } from "@/lib/social.functions";
 import { useMemberSession } from "@/lib/member-token";
+import { deviceId } from "@/lib/device-id";
 import type { CommentRow, ReactionRow } from "@/hooks/use-event-social";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -22,16 +22,24 @@ const BURST = [
   { x: 16, y: -20 },
 ];
 
-/** Prompt shown wherever a visitor needs to be a claimed member to interact. */
-function ClaimPrompt({ verb }: { verb: string }) {
-  return (
-    <p className="text-[11px] text-muted-foreground">
-      <Link to="/claim" className="text-primary underline">
-        Claim your player
-      </Link>{" "}
-      to {verb}.
-    </p>
-  );
+/** Local storage key for the guest display name — one per browser. */
+const GUEST_NAME_KEY = "wwbh:guest-name";
+
+function readGuestName(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(GUEST_NAME_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+function writeGuestName(name: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(GUEST_NAME_KEY, name);
+  } catch {
+    /* private mode, or the quota is full — the name only lives for this session */
+  }
 }
 
 export function CardSocial({
@@ -54,27 +62,75 @@ export function CardSocial({
   const postFn = useServerFn(postComment);
   const deleteFn = useServerFn(deleteComment);
 
+  // Guest identity is minted lazily — never in render, or the server and first
+  // client render disagree on what the button shows.
+  const [guestKey, setGuestKey] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState<string>("");
+  useEffect(() => {
+    setGuestKey(deviceId());
+    setGuestName(readGuestName());
+  }, []);
+
+  // Ask for a name once, only when the guest actually tries to do something.
+  const [namePrompt, setNamePrompt] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [pendingAction, setPendingAction] = useState<null | (() => void)>(null);
+
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
-  // Which emoji is mid-burst. Cleared by the animation's own onComplete.
   const [bursting, setBursting] = useState<string | null>(null);
-  /**
-   * Reactions this device has toggled but whose refetch hasn't landed yet.
-   *
-   * The server round trip is followed by a full `invalidateQueries` refetch, so
-   * without this the count sat still for a beat after every tap and the button
-   * read as broken. Maps emoji to the signed delta this device is responsible
-   * for, and is dropped as soon as the authoritative list agrees.
-   */
   const [optimistic, setOptimistic] = useState<Record<string, number>>({});
+
+  type Actor =
+    | { kind: "member" }
+    | { kind: "guest"; guest: { key: string; name: string } };
+
+  /**
+   * Resolve who this device is acting as, or open the inline name prompt.
+   * Returns null when the caller should abort and wait for a name.
+   */
+  function ensureIdentity(runAfterNamed: () => void): Actor | null {
+    if (me) return { kind: "member" };
+    if (!guestKey) return null;
+    const trimmed = guestName.trim();
+    if (trimmed.length > 0) {
+      return { kind: "guest", guest: { key: guestKey, name: trimmed } };
+    }
+    // Stash so a first-time guest who names themselves picks up where they
+    // left off, rather than losing the tap that surfaced the prompt.
+    setPendingAction(() => runAfterNamed);
+    setNamePrompt(true);
+    return null;
+  }
+
+  function saveGuestName() {
+    const cleaned = nameDraft.trim().slice(0, 40);
+    if (!cleaned) return;
+    setGuestName(cleaned);
+    writeGuestName(cleaned);
+    setNamePrompt(false);
+    setNameDraft("");
+    const next = pendingAction;
+    setPendingAction(null);
+    if (next) next();
+  }
+
+  /** Display label for a reaction/comment row, falling back to guest name. */
+  function labelFor(row: { participant_id: string | null; guest_name?: string | null }): string {
+    if (row.participant_id) return nameOf(row.participant_id);
+    return row.guest_name?.trim() || "Guest";
+  }
 
   const mine = useMemo(() => {
     const set = new Set<string>();
-    if (!me) return set;
-    for (const r of reactions) if (r.participant_id === me.participantId) set.add(r.emoji);
+    if (me) {
+      for (const r of reactions) if (r.participant_id === me.participantId) set.add(r.emoji);
+    } else if (guestKey) {
+      for (const r of reactions) if (r.guest_key === guestKey) set.add(r.emoji);
+    }
     return set;
-  }, [reactions, me]);
+  }, [reactions, me, guestKey]);
 
   const counts = useMemo(() => {
     const map = new Map<string, ReactionRow[]>();
@@ -89,25 +145,27 @@ export function CardSocial({
   const refresh = () => qc.invalidateQueries({ queryKey: ["event-social", eventId] });
 
   async function onReact(emoji: string) {
-    if (!me) return;
+    const who = ensureIdentity(() => void onReact(emoji));
+    if (!who) return;
     const adding = !mine.has(emoji);
     setPending(emoji);
     setOptimistic((prev) => ({ ...prev, [emoji]: (prev[emoji] ?? 0) + (adding ? 1 : -1) }));
-    // motion/react animates regardless of the OS setting unless something opts
-    // out for it, so the burst and its haptic are both gated here.
     if (adding && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       setBursting(emoji);
-      // Same tick the flip haptic uses, so every card interaction feels related.
       navigator.vibrate?.([8]);
     }
     try {
-      await toggleFn({ data: { eventParticipantId, emoji } });
+      await toggleFn({
+        data: {
+          eventParticipantId,
+          emoji,
+          guest: who.kind === "guest" ? who.guest : undefined,
+        },
+      });
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not react");
     } finally {
-      // Whether the write succeeded or failed, the refetched list is now the
-      // truth — a failed toggle rolls back by simply being forgotten here.
       setOptimistic((prev) => {
         const next = { ...prev };
         delete next[emoji];
@@ -117,13 +175,20 @@ export function CardSocial({
     }
   }
 
-  async function onPost(e: React.FormEvent) {
-    e.preventDefault();
+  async function submitPost() {
     const body = draft.trim();
-    if (!body || !me || busy) return;
+    if (!body || busy) return;
+    const who = ensureIdentity(() => void submitPost());
+    if (!who) return;
     setBusy(true);
     try {
-      await postFn({ data: { eventParticipantId, body } });
+      await postFn({
+        data: {
+          eventParticipantId,
+          body,
+          guest: who.kind === "guest" ? who.guest : undefined,
+        },
+      });
       setDraft("");
       await refresh();
     } catch (err) {
@@ -134,8 +199,15 @@ export function CardSocial({
   }
 
   async function onDelete(commentId: string) {
+    const who = ensureIdentity(() => void onDelete(commentId));
+    if (!who) return;
     try {
-      await deleteFn({ data: { commentId } });
+      await deleteFn({
+        data: {
+          commentId,
+          guest: who.kind === "guest" ? who.guest : undefined,
+        },
+      });
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not delete");
@@ -153,19 +225,17 @@ export function CardSocial({
             const list = counts.get(emoji) ?? [];
             const active = mine.has(emoji);
             const count = Math.max(0, list.length + (optimistic[emoji] ?? 0));
-            const names = list.map((r) => nameOf(r.participant_id));
             return (
               <div key={emoji} className="relative">
                 <button
                   onClick={() => onReact(emoji)}
-                  disabled={!me || pending === emoji}
-                  aria-label={me ? `React with ${emoji}` : "Claim your player to react"}
+                  disabled={pending === emoji}
+                  aria-label={`React with ${emoji}`}
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-transform duration-150 active:scale-90 disabled:opacity-50",
                     active
                       ? "border-primary bg-primary/15"
                       : "border-white/10 bg-white/[0.02] hover:border-primary/40",
-                    !me && "cursor-not-allowed",
                   )}
                 >
                   <span aria-hidden>{emoji}</span>
@@ -205,9 +275,7 @@ export function CardSocial({
                   )}
                 </AnimatePresence>
 
-                {/* Who reacted. This was a `title` attribute, which touch devices
-                    never show — and touch is most of this audience. */}
-                {names.length > 0 && (
+                {list.length > 0 && (
                   <Popover>
                     <PopoverTrigger
                       className="absolute -right-1 -top-1 h-4 w-4 rounded-full text-[9px] text-muted-foreground hover:text-primary"
@@ -216,7 +284,9 @@ export function CardSocial({
                       ⓘ
                     </PopoverTrigger>
                     <PopoverContent className="w-auto max-w-[14rem] px-3 py-2">
-                      <p className="text-xs leading-snug text-foreground/90">{names.join(", ")}</p>
+                      <p className="text-xs leading-snug text-foreground/90">
+                        {list.map((r) => labelFor(r)).join(", ")}
+                      </p>
                     </PopoverContent>
                   </Popover>
                 )}
@@ -224,7 +294,6 @@ export function CardSocial({
             );
           })}
         </div>
-        {!me && <div className="mt-2">{<ClaimPrompt verb="react" />}</div>}
       </section>
 
       <section>
@@ -239,7 +308,9 @@ export function CardSocial({
         ) : (
           <ul className="space-y-1.5">
             {comments.map((c) => {
-              const canDelete = me?.participantId === c.participant_id;
+              const canDelete = me
+                ? c.participant_id === me.participantId
+                : !!guestKey && c.guest_key === guestKey;
               return (
                 <li
                   key={c.id}
@@ -247,7 +318,7 @@ export function CardSocial({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-primary/80">
-                      {nameOf(c.participant_id)}
+                      {labelFor(c)}
                     </div>
                     <p className="break-words text-sm text-foreground/90">{c.body}</p>
                   </div>
@@ -266,26 +337,59 @@ export function CardSocial({
           </ul>
         )}
 
-        {me ? (
-          <form onSubmit={onPost} className="mt-3 flex items-center gap-2">
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value.slice(0, 280))}
-              placeholder={`Talk your talk, ${me.name ?? "champ"}…`}
-              className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary/50"
-            />
-            <button
-              type="submit"
-              disabled={busy || !draft.trim()}
-              aria-label="Post"
-              className="shrink-0 rounded-md border border-primary/40 bg-primary/10 p-2 text-primary transition-colors hover:bg-primary/20 disabled:opacity-40"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submitPost();
+          }}
+          className="mt-3 flex items-center gap-2"
+        >
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.slice(0, 280))}
+            placeholder={`Talk your talk, ${me?.name ?? (guestName || "guest")}…`}
+            className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary/50"
+          />
+          <button
+            type="submit"
+            disabled={busy || !draft.trim()}
+            aria-label="Post"
+            className="shrink-0 rounded-md border border-primary/40 bg-primary/10 p-2 text-primary transition-colors hover:bg-primary/20 disabled:opacity-40"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </form>
+
+        {namePrompt && !me && (
+          <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-primary">
+              What should we call you?
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Shown next to your reactions and comments. Stored on this device only.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveGuestName();
+              }}
+              className="mt-2 flex items-center gap-2"
             >
-              <Send className="h-4 w-4" />
-            </button>
-          </form>
-        ) : (
-          <div className="mt-3">
-            <ClaimPrompt verb="join in" />
+              <input
+                autoFocus
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value.slice(0, 40))}
+                placeholder="Your name"
+                className="min-w-0 flex-1 rounded-md border border-white/10 bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
+              />
+              <button
+                type="submit"
+                disabled={!nameDraft.trim()}
+                className="shrink-0 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold uppercase tracking-widest text-primary hover:bg-primary/20 disabled:opacity-40"
+              >
+                Save
+              </button>
+            </form>
           </div>
         )}
       </section>

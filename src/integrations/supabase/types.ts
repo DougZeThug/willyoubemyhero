@@ -181,22 +181,28 @@ export type Database = {
           body: string
           created_at: string
           event_participant_id: string
+          guest_key: string | null
+          guest_name: string | null
           id: string
-          participant_id: string
+          participant_id: string | null
         }
         Insert: {
           body: string
           created_at?: string
           event_participant_id: string
+          guest_key?: string | null
+          guest_name?: string | null
           id?: string
-          participant_id: string
+          participant_id?: string | null
         }
         Update: {
           body?: string
           created_at?: string
           event_participant_id?: string
+          guest_key?: string | null
+          guest_name?: string | null
           id?: string
-          participant_id?: string
+          participant_id?: string | null
         }
         Relationships: [
           {
@@ -259,22 +265,28 @@ export type Database = {
           created_at: string
           emoji: string
           event_participant_id: string
+          guest_key: string | null
+          guest_name: string | null
           id: string
-          participant_id: string
+          participant_id: string | null
         }
         Insert: {
           created_at?: string
           emoji: string
           event_participant_id: string
+          guest_key?: string | null
+          guest_name?: string | null
           id?: string
-          participant_id: string
+          participant_id?: string | null
         }
         Update: {
           created_at?: string
           emoji?: string
           event_participant_id?: string
+          guest_key?: string | null
+          guest_name?: string | null
           id?: string
-          participant_id?: string
+          participant_id?: string | null
         }
         Relationships: [
           {
