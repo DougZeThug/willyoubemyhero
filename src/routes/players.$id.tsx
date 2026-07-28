@@ -58,14 +58,24 @@ import { cn } from "@/lib/utils";
 const revealed = new Set<string>();
 
 export const Route = createFileRoute("/players/$id")({
-  head: () => ({
+  head: ({ loaderData }) => ({
     meta: [
       { title: "Player Card — Will YOU Be My Hero? Draft Combine" },
       { name: "description", content: "Full player trading card for the draft combine." },
       { property: "og:title", content: "Draft Combine — Player Card" },
       { property: "og:description", content: "Tilt it, flip it, send it to the group chat." },
     ],
+    links: loaderData?.frontUrl
+      ? [{ rel: "preload", as: "image", href: loaderData.frontUrl, fetchpriority: "high" }]
+      : [],
   }),
+  loader: async ({ params }) => {
+    const active = await getActiveEvent();
+    if (!active?.id) return { frontUrl: null };
+    const urls = await getEventCardUrls({ data: { eventId: active.id } });
+    const frontUrl = urls[params.id]?.front?.large ?? null;
+    return { frontUrl };
+  },
   // `?vs=` makes a head-to-head a link you can drop in the group chat, rather
   // than something only reachable by tapping through the drawer.
   validateSearch: (search: Record<string, unknown>) => ({
