@@ -22,6 +22,60 @@ function publicClient() {
   });
 }
 
+// ------- Signed URL cache -------
+//
+// `createSignedUrl` mints a brand new token every time it is called, so signing
+// the same object twice produces two different URL strings for identical bytes.
+// That is what made card art re-download constantly: every refetch — and every
+// fresh page load — handed the browser a URL it had never seen, so its HTTP
+// cache was useless and 30 full-size images came down the wire again.
+//
+// Signing once per path and handing back the same string until the token is
+// close to expiring makes the URL stable, which means the browser cache hits and
+// the vault paints from disk. It also keeps React Query's structural sharing
+// intact: an unchanged response no longer re-renders every card on screen.
+const SIGNED_TTL_S = 8 * 60 * 60;
+/** Re-sign well before expiry so a URL handed out now stays valid for hours. */
+const SIGNED_REUSE_MS = 6 * 60 * 60_000;
+/** Bounded so a long-lived server process can't accumulate every event ever. */
+const SIGNED_CACHE_MAX = 600;
+
+const signedCache = new Map<string, { url: string; mintedAt: number }>();
+/** In-flight signings, so two requests for one file can't mint two URLs for it. */
+const signingNow = new Map<string, Promise<string | null>>();
+
+async function mintSignedUrl(path: string): Promise<string | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: signed } = await supabaseAdmin.storage
+    .from("participant-photos")
+    .createSignedUrl(path, SIGNED_TTL_S);
+  if (!signed?.signedUrl) return null;
+  // Map iterates in insertion order, so the first key is the oldest entry.
+  if (signedCache.size >= SIGNED_CACHE_MAX) {
+    const oldest = signedCache.keys().next().value;
+    if (oldest) signedCache.delete(oldest);
+  }
+  signedCache.delete(path);
+  signedCache.set(path, { url: signed.signedUrl, mintedAt: Date.now() });
+  return signed.signedUrl;
+}
+
+async function signPath(path: string | null): Promise<string | null> {
+  if (!path) return null;
+  const hit = signedCache.get(path);
+  if (hit && Date.now() - hit.mintedAt < SIGNED_REUSE_MS) return hit.url;
+  const pending = signingNow.get(path);
+  if (pending) return pending;
+  const p = mintSignedUrl(path).finally(() => signingNow.delete(path));
+  signingNow.set(path, p);
+  return p;
+}
+
+/** Drop a cached URL when its object is deleted, so nothing hands out a 404. */
+function forgetSignedPath(path: string | null | undefined) {
+  if (path) signedCache.delete(path);
+}
+
 // Return signed URLs for all event participants that have a photo_path.
 // Public-readable; the bucket is private, so URLs expire.
 export const getEventPhotoUrls = createServerFn({ method: "GET" })
@@ -34,14 +88,11 @@ export const getEventPhotoUrls = createServerFn({ method: "GET" })
       .eq("event_id", data.eventId);
     const rows = (eps ?? []).filter((r) => !!r.photo_path);
     if (rows.length === 0) return {} as Record<string, string>;
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const out: Record<string, string> = {};
     await Promise.all(
       rows.map(async (r) => {
-        const { data: signed } = await supabaseAdmin.storage
-          .from("participant-photos")
-          .createSignedUrl(r.photo_path as string, 60 * 60);
-        if (signed?.signedUrl) out[r.id] = signed.signedUrl;
+        const url = await signPath(r.photo_path);
+        if (url) out[r.id] = url;
       }),
     );
     return out;
@@ -91,10 +142,7 @@ async function storeCard(
     .update(cardPatch(side, path))
     .eq("id", eventParticipantId);
   if (dbErr) throw dbErr;
-  const { data: signed } = await supabaseAdmin.storage
-    .from("participant-photos")
-    .createSignedUrl(path, 60 * 60);
-  return { url: signed?.signedUrl ?? null, path };
+  return { url: await signPath(path), path };
 }
 
 // Signed URLs for both faces of every uploaded player card, keyed by event_participant id.
@@ -121,19 +169,15 @@ export const getEventCardUrls = createServerFn({ method: "GET" })
     // with no art of their own yet — so they can't be filtered out here.
     const rows = (eps ?? []).filter((r) => r.card_path || r.card_back_path || universalPath);
     if (rows.length === 0) return {} as Record<string, CardUrls>;
-    const sign = async (path: string | null) => {
-      if (!path) return null;
-      const { data: signed } = await supabaseAdmin.storage
-        .from("participant-photos")
-        .createSignedUrl(path, 60 * 60);
-      return signed?.signedUrl ?? null;
-    };
     // Signed once and shared, rather than re-signing the same object per player.
-    const universalUrl = await sign(universalPath);
+    const universalUrl = await signPath(universalPath);
     const out: Record<string, CardUrls> = {};
     await Promise.all(
       rows.map(async (r) => {
-        const [front, ownBack] = await Promise.all([sign(r.card_path), sign(r.card_back_path)]);
+        const [front, ownBack] = await Promise.all([
+          signPath(r.card_path),
+          signPath(r.card_back_path),
+        ]);
         out[r.id] = { front, back: ownBack ?? universalUrl };
       }),
     );
@@ -151,10 +195,7 @@ export const getEventCardBack = createServerFn({ method: "GET" })
       .eq("id", data.eventId)
       .maybeSingle();
     if (!event?.card_back_path) return { url: null as string | null };
-    const { data: signed } = await supabaseAdmin.storage
-      .from("participant-photos")
-      .createSignedUrl(event.card_back_path, 60 * 60);
-    return { url: signed?.signedUrl ?? null };
+    return { url: await signPath(event.card_back_path) };
   });
 
 // Upload one image and make it the back of every card in the event.
@@ -191,11 +232,9 @@ export const uploadEventCardBack = createServerFn({ method: "POST" })
     // Only bin the old file once the new one is safely referenced.
     if (prev?.card_back_path && prev.card_back_path !== path) {
       await supabaseAdmin.storage.from("participant-photos").remove([prev.card_back_path]);
+      forgetSignedPath(prev.card_back_path);
     }
-    const { data: signed } = await supabaseAdmin.storage
-      .from("participant-photos")
-      .createSignedUrl(path, 60 * 60);
-    return { ok: true, url: signed?.signedUrl ?? null, path };
+    return { ok: true, url: await signPath(path), path };
   });
 
 export const deleteEventCardBack = createServerFn({ method: "POST" })
@@ -210,6 +249,7 @@ export const deleteEventCardBack = createServerFn({ method: "POST" })
       .maybeSingle();
     if (event?.card_back_path) {
       await supabaseAdmin.storage.from("participant-photos").remove([event.card_back_path]);
+      forgetSignedPath(event.card_back_path);
     }
     await supabaseAdmin.from("events").update({ card_back_path: null }).eq("id", data.eventId);
     return { ok: true };
@@ -299,6 +339,7 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
     const existing = (side === "front" ? row?.card_path : row?.card_back_path) ?? null;
     if (existing) {
       await supabaseAdmin.storage.from("participant-photos").remove([existing]);
+      forgetSignedPath(existing);
     }
     await supabaseAdmin
       .from("event_participants")
@@ -336,10 +377,7 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
       .update({ photo_path: path })
       .eq("id", data.eventParticipantId);
     if (dbErr) throw dbErr;
-    const { data: signed } = await supabaseAdmin.storage
-      .from("participant-photos")
-      .createSignedUrl(path, 60 * 60);
-    return { ok: true, url: signed?.signedUrl ?? null, path };
+    return { ok: true, url: await signPath(path), path };
   });
 
 // ------- Archive / recap -------

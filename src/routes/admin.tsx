@@ -18,6 +18,7 @@ import {
   deleteParticipantCard,
   type CardSide,
 } from "@/lib/media.functions";
+import { encodeUploadImage } from "@/lib/image-encode";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { UniversalCardBack } from "@/components/universal-card-back";
 import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
@@ -654,12 +655,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   async function onPickPhoto(epId: string, file: File) {
     setUploadingId(epId);
     try {
-      const dataUrl: string = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result as string);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
+      const dataUrl = await encodeUploadImage(file);
       await uploadFn({ data: { eventId, eventParticipantId: epId, dataUrl } });
       await qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
       toast.success("Photo uploaded");
@@ -673,12 +669,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   async function onPickCard(epId: string, side: CardSide, file: File) {
     setUploadingCardId(`${epId}:${side}`);
     try {
-      const dataUrl: string = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result as string);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
+      const dataUrl = await encodeUploadImage(file);
       await uploadCardFn({ data: { eventId, eventParticipantId: epId, side, dataUrl } });
       await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       toast.success(`Card ${side} uploaded`);

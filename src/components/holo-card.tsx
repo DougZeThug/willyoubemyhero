@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { initialsOf } from "@/lib/format";
-import { loadCardMeta, saveCardMeta } from "@/lib/card-collection";
+import { cachedCardMeta, primeCardMeta, saveCardMeta } from "@/lib/card-collection";
 import { playFlip } from "@/lib/card-sfx";
 import type { Rarity } from "@/lib/card-rarity";
 
@@ -9,7 +9,18 @@ import type { Rarity } from "@/lib/card-rarity";
 const DEFAULT_ASPECT = 5 / 7;
 
 /** Maximum tilt in degrees at the edges of the card. */
-const MAX_TILT = 12;
+const MAX_TILT = 16;
+
+/**
+ * How much further a finger drag tilts the card than the same distance of mouse
+ * travel. A mouse sweeps the whole card and reaches the edges on its own; a thumb
+ * plants somewhere near the middle and wiggles maybe a centimetre, which under
+ * plain position mapping is a couple of degrees — the card barely moves. Touch is
+ * therefore tracked as amplified displacement from wherever the finger landed.
+ */
+const TOUCH_GAIN = 2.6;
+
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 export type HoloCardProps = {
   frontUrl: string | null;
@@ -23,6 +34,11 @@ export type HoloCardProps = {
   onFlippedChange?: (next: boolean) => void;
   /** Whether the card responds to pointer tilt. */
   interactive?: boolean;
+  /**
+   * Whether a finger drag tilts the card. Defaults on for full-size cards and off
+   * for grid thumbnails, where claiming the gesture would fight the page scroll.
+   */
+  touchTilt?: boolean;
   /**
    * How loud the foil is. "subtle" halves it for small, mostly-non-interactive
    * cards like the vault grid, where a full-strength overlay swamps the artwork.
@@ -51,7 +67,7 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
-export function HoloCard({
+function HoloCardImpl({
   frontUrl,
   backUrl,
   name,
@@ -60,6 +76,7 @@ export function HoloCard({
   flipped,
   onFlippedChange,
   interactive = true,
+  touchTilt,
   intensity = "full",
   gyro = false,
   faceDown = false,
@@ -71,11 +88,27 @@ export function HoloCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
   const pendingRef = useRef<{ px: number; py: number } | null>(null);
+  const dragRef = useRef<{ id: number; px: number; py: number } | null>(null);
   const reduced = usePrefersReducedMotion();
   const titleId = useId();
 
-  const [aspect, setAspect] = useState<number | null>(null);
+  // A full-size card is meant to be handled; a thumbnail in a scrolling grid is not.
+  const dragTilt = touchTilt ?? intensity === "full";
+  // The grid is the one place many cards mount at once, and it is the one place
+  // the art is small enough that off-screen work is pure waste.
+  const eager = intensity === "full";
+
+  // Reading straight out of the in-memory cache means a revisit lays the grid out
+  // at the right size on the first render, with no async round trip and no reflow.
+  const [aspect, setAspect] = useState<number | null>(
+    () => cachedCardMeta(cacheKey)?.aspect ?? null,
+  );
   const [uncontrolledFlip, setUncontrolledFlip] = useState(false);
+  // The glare and sparkle layers are invisible until the card moves, and each one
+  // is a blend-mode layer the compositor has to carry. Thirty cards' worth of them
+  // at first paint is what makes the vault crawl on a phone, so they are not
+  // mounted until the card is actually being handled.
+  const [engaged, setEngaged] = useState(false);
   const isFlipped = flipped ?? uncontrolledFlip;
   const showBack = faceDown ? !isFlipped : isFlipped;
   // A generated back is just as flippable as uploaded back artwork.
@@ -83,14 +116,18 @@ export function HoloCard({
 
   // Restore the cached aspect ratio before the image loads so the grid never reflows.
   useEffect(() => {
-    if (!cacheKey) return;
+    if (!cacheKey || aspect != null) return;
     let cancelled = false;
-    loadCardMeta(cacheKey).then((meta) => {
+    primeCardMeta().then(() => {
+      const meta = cachedCardMeta(cacheKey);
       if (!cancelled && meta?.aspect) setAspect(meta.aspect);
     });
     return () => {
       cancelled = true;
     };
+    // Only ever runs for a card whose ratio is still unknown; re-running it once
+    // the image has reported its own size would be pointless work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey]);
 
   const onImageLoad = useCallback(
@@ -145,6 +182,7 @@ export function HoloCard({
       cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
+    dragRef.current = null;
     applyTilt(0.5, 0.5, 0);
   }, [applyTilt]);
 
@@ -158,6 +196,7 @@ export function HoloCard({
   // angle — standing at the bar or lying on the couch.
   useEffect(() => {
     if (!gyro || reduced || typeof window === "undefined") return;
+    setEngaged(true);
     let baseline: { beta: number; gamma: number } | null = null;
     const onOrient = (e: DeviceOrientationEvent) => {
       const { beta, gamma } = e;
@@ -166,21 +205,60 @@ export function HoloCard({
         baseline = { beta, gamma };
         return;
       }
-      const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+      // Roughly a 20° roll of the phone sweeps the card corner to corner. Wider
+      // than this and normal handling reads as a dead card.
       schedule(
-        clamp01(0.5 + (gamma - baseline.gamma) / 45),
-        clamp01(0.5 + (beta - baseline.beta) / 40),
+        clamp01(0.5 + (gamma - baseline.gamma) / 26),
+        clamp01(0.5 + (beta - baseline.beta) / 24),
       );
     };
     window.addEventListener("deviceorientation", onOrient);
     return () => window.removeEventListener("deviceorientation", onOrient);
   }, [gyro, reduced, schedule]);
 
+  function localPoint(e: React.PointerEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    return { px: (e.clientX - r.left) / r.width, py: (e.clientY - r.top) / r.height };
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!interactive || reduced || e.pointerType === "mouse" || !dragTilt) return;
+    const p = localPoint(e);
+    if (!p) return;
+    dragRef.current = { id: e.pointerId, px: p.px, py: p.py };
+    // Capture so the tilt keeps tracking once the finger slides past the card's
+    // edge, and so a drag that started here isn't handed off mid-gesture.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    // Mounted now, a frame before anything moves, so the overlays still get to
+    // fade in rather than snapping on with the first tilt.
+    setEngaged(true);
+  }
+
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!interactive || reduced) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    schedule((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+    const drag = dragRef.current;
+    // Hover tilts on a mouse; touch and pen only tilt while a finger is down,
+    // otherwise a stray move event would leave the card cocked over.
+    if (e.pointerType !== "mouse" && (!drag || drag.id !== e.pointerId)) return;
+    const p = localPoint(e);
+    if (!p) return;
+    setEngaged(true);
+    if (drag) {
+      schedule(
+        clamp01(drag.px + (p.px - drag.px) * TOUCH_GAIN),
+        clamp01(drag.py + (p.py - drag.py) * TOUCH_GAIN),
+      );
+      return;
+    }
+    schedule(p.px, p.py);
+  }
+
+  function handlePointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.id === e.pointerId && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    resetTilt();
   }
 
   function toggleFlip() {
@@ -210,13 +288,17 @@ export function HoloCard({
     // near the old flat 0.38, but only while moving and only inside the band.
     "--holo-gain": reduced ? 0 : 0.4 * rarity.strength * scale,
     aspectRatio: aspect ?? DEFAULT_ASPECT,
+    // Vertical drags still scroll the page; anything with sideways intent is the
+    // card's. Without this the browser claims the gesture as a scroll a few pixels
+    // in and cancels the pointer stream, which is why a thumb barely moved the card.
+    touchAction: dragTilt && interactive && !reduced ? "pan-y" : undefined,
   } as React.CSSProperties;
 
   const Overlays = (
     <>
       <div className="holo-foil" aria-hidden />
-      <div className="holo-glare" aria-hidden />
-      {rarity.sparkle > 0 && <div className="holo-sparkle" aria-hidden />}
+      {engaged && <div className="holo-glare" aria-hidden />}
+      {engaged && rarity.sparkle > 0 && <div className="holo-sparkle" aria-hidden />}
     </>
   );
 
@@ -225,8 +307,11 @@ export function HoloCard({
       ref={sceneRef}
       className={cn("holo-scene relative w-full select-none", className)}
       style={styleVars}
+      onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
-      onPointerLeave={resetTilt}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onPointerLeave={handlePointerEnd}
     >
       {/*
         Tilt and flip live on separate layers on purpose. The flip needs a ~500ms
@@ -277,6 +362,12 @@ export function HoloCard({
                 alt={`${name} card front`}
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
+                // A vault grid is thirty cards deep. Fetching and decoding the
+                // ones below the fold up front is what starves the handful that
+                // are actually on screen.
+                loading={eager ? "eager" : "lazy"}
+                decoding="async"
+                fetchPriority={eager ? "high" : "auto"}
                 className="h-full w-full object-cover"
                 // Buys back the small amount of punch the blend layers still
                 // cost, so the art lands closer to the source file.
@@ -289,33 +380,43 @@ export function HoloCard({
             {Overlays}
           </div>
 
-          {/* Back */}
-          <div className="holo-face [transform:rotateY(180deg)]">
-            {backUrl ? (
-              <img
-                src={backUrl}
-                alt={`${name} card back`}
-                crossOrigin="anonymous"
-                // object-cover, not contain: the card's aspect is measured from
-                // the front art, and one universal back shared across an event
-                // won't always match it exactly. Contain would letterbox the
-                // back against the card body; cover keeps it full-bleed.
-                className="h-full w-full object-cover"
-                style={{ filter: "saturate(1.06) contrast(1.04)" }}
-                draggable={false}
-              />
-            ) : (
-              (backContent ?? <CardPlaceholder name={name} label="No back art" />)
-            )}
-            {/* Uploaded art gets the full foil treatment; a generated back only
+          {/* Back — skipped entirely on a card that can't turn over, which is every
+              thumbnail in the vault grid. */}
+          {(canFlip || faceDown) && (
+            <div className="holo-face [transform:rotateY(180deg)]">
+              {backUrl ? (
+                <img
+                  src={backUrl}
+                  alt={`${name} card back`}
+                  crossOrigin="anonymous"
+                  loading="lazy"
+                  decoding="async"
+                  // object-cover, not contain: the card's aspect is measured from
+                  // the front art, and one universal back shared across an event
+                  // won't always match it exactly. Contain would letterbox the
+                  // back against the card body; cover keeps it full-bleed.
+                  className="h-full w-full object-cover"
+                  style={{ filter: "saturate(1.06) contrast(1.04)" }}
+                  draggable={false}
+                />
+              ) : (
+                (backContent ?? <CardPlaceholder name={name} label="No back art" />)
+              )}
+              {/* Uploaded art gets the full foil treatment; a generated back only
                 takes the glare, so the stats stay legible. */}
-            {backUrl ? Overlays : <div className="holo-glare" aria-hidden />}
-          </div>
+              {backUrl ? Overlays : engaged && <div className="holo-glare" aria-hidden />}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+// The vault renders the whole roster at once, and its parent re-renders on every
+// sort, every collection read and every signed-URL refresh. None of that changes
+// a card, so none of it should cost thirty re-renders.
+export const HoloCard = memo(HoloCardImpl);
 
 function CardPlaceholder({ name, label }: { name: string; label: string }) {
   return (

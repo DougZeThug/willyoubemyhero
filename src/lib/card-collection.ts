@@ -81,17 +81,38 @@ export async function clearCollection(): Promise<void> {
   }
 }
 
-export async function loadCardMeta(eventParticipantId: string): Promise<CardMeta | null> {
-  if (!isBrowser()) return null;
-  try {
-    const db = await getDb();
-    return ((await db.get(CARD_META, eventParticipantId)) as CardMeta | undefined) ?? null;
-  } catch {
-    return null;
+// Aspect ratios are read by every card on screen at once — a vault grid is 30+.
+// One `getAll` on first use beats 30 separate IndexedDB round trips, and the
+// synchronous cache lets a revisit size its cards on the very first render
+// instead of laying out at the default ratio and reflowing a frame later.
+const metaCache = new Map<string, CardMeta>();
+let primePromise: Promise<void> | null = null;
+
+/** Pull the whole card-meta store into memory once per page load. */
+export function primeCardMeta(): Promise<void> {
+  if (!primePromise) {
+    primePromise = (async () => {
+      if (!isBrowser()) return;
+      try {
+        const db = await getDb();
+        const [keys, values] = await Promise.all([db.getAllKeys(CARD_META), db.getAll(CARD_META)]);
+        keys.forEach((k, i) => metaCache.set(String(k), values[i] as CardMeta));
+      } catch {
+        /* a device with IndexedDB blocked just measures from the image */
+      }
+    })();
   }
+  return primePromise;
+}
+
+/** Whatever is already in memory. Null until `primeCardMeta` has resolved. */
+export function cachedCardMeta(eventParticipantId: string | undefined): CardMeta | null {
+  if (!eventParticipantId) return null;
+  return metaCache.get(eventParticipantId) ?? null;
 }
 
 export async function saveCardMeta(eventParticipantId: string, meta: CardMeta): Promise<void> {
+  metaCache.set(eventParticipantId, meta);
   if (!isBrowser()) return;
   try {
     const db = await getDb();
