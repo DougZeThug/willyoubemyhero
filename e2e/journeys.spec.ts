@@ -1,5 +1,5 @@
 // The flows that matter: getting in, seeing results, and opening a pack.
-import { test, expect, BUNDLE, PLAYERS } from "./fixtures";
+import { test, expect, BUNDLE, PLAYERS, stubServerFns } from "./fixtures";
 
 const MEMBER_KEY = "wwbh:member-token";
 const ADMIN_KEY = "wwbh:admin-token";
@@ -161,66 +161,100 @@ test.describe("a player's card", () => {
 });
 
 test.describe("opening a pack", () => {
-  test("deals three cards and remembers them across a reload", async ({ page }) => {
-    await page.goto("/players/pack");
+  const PACK_SIZE = 3;
 
-    // The wrapper is torn by dragging past a threshold; the page also accepts a
-    // tap on the pack for devices where the gesture does not land.
-    const pack = page.locator("[class*='wax-foil'], main").first();
-    await expect(pack).toBeVisible();
+  /** Today's pack row straight out of IndexedDB, or null if nothing is stored. */
+  type PackState = { dayKey: string; ids: string[]; revealed: number[] };
 
-    const box = await pack.boundingBox();
-    if (box) {
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.95, { steps: 12 });
-      await page.mouse.up();
-    }
-
-    // Whether or not the gesture completed, the page must not have crashed and
-    // the pack state must be consistent with what is on screen.
-    await expect(page.locator("body")).not.toBeEmpty();
-
-    const stored = await page.evaluate(async () => {
-      const open = indexedDB.open("wwbh-cards", 2);
-      return new Promise<unknown>((resolve) => {
-        open.onsuccess = () => {
-          const db = open.result;
-          if (!db.objectStoreNames.contains("pack-state")) return resolve(null);
-          const req = db.transaction("pack-state").objectStore("pack-state").get("today");
-          req.onsuccess = () => resolve(req.result ?? null);
-          req.onerror = () => resolve(null);
-        };
-        open.onerror = () => resolve(null);
-      });
-    });
-
-    if (stored) {
-      const state = stored as { dayKey: string; ids: string[] };
-      expect(state.ids.length).toBeGreaterThan(0);
-      expect(state.ids.length).toBeLessThanOrEqual(3);
-      // Every dealt card is a real roster entry, never a stale or invented id.
-      for (const id of state.ids) {
-        expect(PLAYERS.map((p) => p.ep)).toContain(id);
-      }
-
-      // A return visit the same day resumes rather than re-dealing.
-      await page.reload();
-      const after = await page.evaluate(async () => {
-        const open = indexedDB.open("wwbh-cards", 2);
-        return new Promise<{ ids: string[] } | null>((resolve) => {
+  function readPackState(page: import("@playwright/test").Page) {
+    return page.evaluate(
+      () =>
+        new Promise<PackState | null>((resolve) => {
+          const open = indexedDB.open("wwbh-cards", 2);
           open.onsuccess = () => {
-            const req = open.result
-              .transaction("pack-state")
-              .objectStore("pack-state")
-              .get("today");
-            req.onsuccess = () => resolve(req.result ?? null);
+            const db = open.result;
+            if (!db.objectStoreNames.contains("pack-state")) return resolve(null);
+            const req = db.transaction("pack-state").objectStore("pack-state").get("today");
+            req.onsuccess = () => resolve((req.result as PackState) ?? null);
             req.onerror = () => resolve(null);
           };
           open.onerror = () => resolve(null);
-        });
-      });
-      expect(after?.ids).toEqual(state.ids);
+        }),
+    );
+  }
+
+  const sealedPack = (page: import("@playwright/test").Page) =>
+    page.getByRole("button", { name: /drag down to open the pack/i });
+
+  test("a drag past the threshold tears the pack open", async ({ page }) => {
+    await page.goto("/players/pack");
+
+    const pack = sealedPack(page);
+    await expect(pack).toBeVisible();
+
+    // The handler tears at 55% of the element's own height, measured from its
+    // top edge — so the drag has to start high on the pack and finish low.
+    const box = (await pack.boundingBox())!;
+    expect(box).toBeTruthy();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.1);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.95, { steps: 12 });
+    await page.mouse.up();
+
+    // The sealed wrapper is gone once it has been torn.
+    await expect(pack).toBeHidden();
+  });
+
+  test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {
+    await page.goto("/players/pack");
+    await expect(sealedPack(page)).toBeVisible();
+    // Nothing is dealt until the pack is actually opened.
+    expect(await readPackState(page)).toBeNull();
+
+    // Keyboard rather than the drag: this test is about what gets persisted, and
+    // the pack exposes Enter for exactly this. The gesture has its own test above,
+    // so a broken drag fails there instead of silently hollowing this one out.
+    await sealedPack(page).press("Enter");
+    await expect(sealedPack(page)).toBeHidden();
+
+    // The row is written from an effect, so give it a beat to land — but it must
+    // land. A null here means the pack was never persisted, which is the whole
+    // thing this test exists to catch.
+    await expect.poll(() => readPackState(page)).not.toBeNull();
+
+    const state = (await readPackState(page))!;
+    expect(state.ids).toHaveLength(PACK_SIZE);
+    // Every dealt card is a real roster entry, never a stale or invented id.
+    expect(new Set(state.ids).size).toBe(PACK_SIZE);
+    for (const id of state.ids) {
+      expect(PLAYERS.map((p) => p.ep)).toContain(id);
+    }
+
+    // A return visit the same day resumes rather than re-dealing.
+    await page.reload();
+    await expect(sealedPack(page)).toBeHidden();
+    expect((await readPackState(page))?.ids).toEqual(state.ids);
+  });
+
+  test("deals the same pack to everyone in the league", async ({ page, browser }) => {
+    // Slots come from a seeded shuffle keyed on the event and the day, so two
+    // devices opening today's pack must agree — that is the shared-pack promise.
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+    await expect.poll(() => readPackState(page)).not.toBeNull();
+    const mine = (await readPackState(page))!.ids;
+
+    const other = await browser.newPage();
+    try {
+      await stubServerFns(other);
+      await other.goto(new URL("/players/pack", page.url()).toString());
+      await sealedPack(other).press("Enter");
+      await expect.poll(() => readPackState(other)).not.toBeNull();
+      // The last slot is swapped for an uncollected card, and neither device has
+      // collected anything, so the whole pack should match.
+      expect((await readPackState(other))!.ids).toEqual(mine);
+    } finally {
+      await other.close();
     }
   });
 });
