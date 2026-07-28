@@ -125,19 +125,30 @@ export const postComment = createServerFn({ method: "POST" })
       .object({
         eventParticipantId: z.string().uuid(),
         body: z.string().trim().min(1).max(280),
+        guest: guestSchema,
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const who = actor(data.guest);
     const sb = await admin();
     const { data: row, error } = await sb
       .from("card_comments")
-      .insert({
-        event_participant_id: data.eventParticipantId,
-        participant_id: me,
-        body: data.body,
-      })
+      .insert(
+        who.member
+          ? {
+              event_participant_id: data.eventParticipantId,
+              participant_id: who.member,
+              body: data.body,
+            }
+          : {
+              event_participant_id: data.eventParticipantId,
+              participant_id: null,
+              guest_key: who.guest!.key,
+              guest_name: who.guest!.name,
+              body: data.body,
+            },
+      )
       .select()
       .single();
     if (error) throw error;
