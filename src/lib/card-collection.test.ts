@@ -109,6 +109,47 @@ describe("pack state", () => {
     });
   });
 
+  it("round-trips whether today's secret has been turned over", async () => {
+    const mod = await freshModule();
+    const state = {
+      dayKey: "2026-07-28",
+      ids: [CARD_A, CARD_B, "card-c"],
+      revealed: [0, 1, 2],
+      secretRevealed: true,
+    };
+    await mod.savePackState(state);
+    expect(await mod.loadPackState()).toEqual(state);
+  });
+
+  it("loads a row written before secret cards existed", async () => {
+    // savePackState is a pure passthrough, so an old row simply has no
+    // secretRevealed key — it must not come back defaulted to anything.
+    const mod = await freshModule();
+    const legacy = { dayKey: "2026-07-28", ids: [CARD_A], revealed: [0] };
+    await mod.savePackState(legacy);
+    const loaded = await mod.loadPackState();
+    expect(loaded).toEqual(legacy);
+    expect(loaded).not.toHaveProperty("secretRevealed");
+  });
+
+  it("only stores the flag, never which secret it was", async () => {
+    // The card itself is a Postgres row keyed on the claimed member, so it
+    // follows you to a new phone. An id here would be a second source of truth.
+    const mod = await freshModule();
+    await mod.savePackState({
+      dayKey: "2026-07-28",
+      ids: [CARD_A],
+      revealed: [0],
+      secretRevealed: true,
+    });
+    expect(Object.keys((await mod.loadPackState())!).sort()).toEqual([
+      "dayKey",
+      "ids",
+      "revealed",
+      "secretRevealed",
+    ]);
+  });
+
   it("stores the dealt ids rather than a seed", async () => {
     // The last slot is swapped for a card the user had not collected at the
     // moment the pack was dealt, so re-deriving from the seed after revealing

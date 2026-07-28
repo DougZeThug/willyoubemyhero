@@ -6,6 +6,11 @@
 
 import { openDB, type IDBPDatabase } from "idb";
 
+// The name, the version and the store names below are read directly by
+// e2e/journeys.spec.ts, which opens this database itself to assert what a pack
+// left behind. Opening it there at a version *below* the one stored raises
+// VersionError, so bumping this without touching that file turns five assertions
+// into a confusing null.
 const DB_NAME = "wwbh-cards";
 const COLLECTED = "collected";
 const CARD_META = "card-meta";
@@ -30,6 +35,26 @@ export type PackState = {
   ids: string[];
   /** Indices already flipped face-up. */
   revealed: number[];
+  /**
+   * Whether today's secret card has been turned over *on this device*.
+   *
+   * Only a flag. Which secret it is lives in a Postgres row keyed on the claimed
+   * member, so it follows you to a new phone — an id here would be a second
+   * source of truth that could disagree with the first. Optional so a row written
+   * before secret cards existed still loads, and so `savePackState` can stay a
+   * pure passthrough of whatever the caller handed it.
+   */
+  secretRevealed?: boolean;
+  /**
+   * Who this pack was dealt to, as `usePackIdentity` returns it.
+   *
+   * Packs are per-person now, and a phone changes hands mid-party in this league.
+   * Without this, whoever picks the handset up next resumes the previous person's
+   * pack. Optional so a row written before per-person packs still loads — a
+   * missing value counts as a match, so nobody mid-reveal on the day this ships
+   * loses their cards.
+   */
+  identity?: string;
 };
 
 export type CollectedCard = {

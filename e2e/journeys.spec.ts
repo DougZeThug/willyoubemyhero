@@ -1,7 +1,14 @@
 // The flows that matter: getting in, seeing results, and opening a pack.
-import { test, expect, BUNDLE, PLAYERS, stubServerFns } from "./fixtures";
+import { test, expect, BUNDLE, EVENT_ID, PLAYERS, stubServerFns } from "./fixtures";
+// The same pure functions the pack route deals from, so these tests can compute
+// the pack they expect rather than guess at one. With a four-player fixture and
+// a three-card pack, "assert two packs differ" collides often enough to be flaky;
+// "assert this pack is the one this identity earns" never does.
+import { dealPack, packSeed } from "../src/lib/pack";
 
 const MEMBER_KEY = "wwbh:member-token";
+/** Matches playwright.config.ts. Pages opened via browser.newPage() get no baseURL. */
+const BASE_URL = `http://127.0.0.1:${process.env.E2E_PORT ?? 5199}`;
 const ADMIN_KEY = "wwbh:admin-token";
 
 test.describe("claiming a player", () => {
@@ -223,6 +230,10 @@ test.describe("opening a pack", () => {
     await expect.poll(() => readPackState(page)).not.toBeNull();
 
     const state = (await readPackState(page))!;
+    // Exactly three, always. The daily secret is appended as a fourth slot on
+    // screen but is never a roster id and never enters this row — its ownership
+    // is a Postgres row keyed on the claimed member. This doubles as the
+    // regression guard for that.
     expect(state.ids).toHaveLength(PACK_SIZE);
     // Every dealt card is a real roster entry, never a stale or invented id.
     expect(new Set(state.ids).size).toBe(PACK_SIZE);
@@ -236,26 +247,103 @@ test.describe("opening a pack", () => {
     expect((await readPackState(page))?.ids).toEqual(state.ids);
   });
 
-  test("deals the same pack to everyone in the league", async ({ page, browser }) => {
-    // Slots come from a seeded shuffle keyed on the event and the day, so two
-    // devices opening today's pack must agree — that is the shared-pack promise.
-    await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
-    await expect.poll(() => readPackState(page)).not.toBeNull();
-    const mine = (await readPackState(page))!.ids;
-
-    const other = await browser.newPage();
+  /** Deal a pack on a fresh page carrying the given localStorage, and read it back. */
+  async function packFor(
+    browser: import("@playwright/test").Browser,
+    storage: Record<string, string>,
+  ) {
+    // A page from browser.newPage() has no baseURL of its own, so the path is
+    // resolved against the config's here rather than against page.url() — which
+    // is "about:blank" until something navigates.
+    const other = await browser.newPage({ baseURL: BASE_URL });
     try {
       await stubServerFns(other);
-      await other.goto(new URL("/players/pack", page.url()).toString());
+      await other.addInitScript((entries: [string, string][]) => {
+        for (const [k, v] of entries) localStorage.setItem(k, v);
+      }, Object.entries(storage));
+      await other.goto("/players/pack");
       await sealedPack(other).press("Enter");
       await expect.poll(() => readPackState(other)).not.toBeNull();
-      // The last slot is swapped for an uncollected card, and neither device has
-      // collected anything, so the whole pack should match.
-      expect((await readPackState(other))!.ids).toEqual(mine);
+      return (await readPackState(other))!.ids;
     } finally {
       await other.close();
     }
+  }
+
+  const memberToken = (pid: string) => `m.${pid}.${Date.now() + 60 * 60_000}.signature`;
+
+  /** The device-local date key, exactly as players.pack.tsx builds it. */
+  function dayKey(): string {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  /** What this identity should be dealt today. Nothing collected on a fresh page. */
+  const expectedPack = (identity: string) =>
+    dealPack(BUNDLE.participants, packSeed(EVENT_ID, dayKey(), identity), {}, PACK_SIZE).map(
+      (p) => p.id,
+    );
+
+  test("deals one person the same three cards on either of their phones", async ({ browser }) => {
+    // Packs are per *person* now, not per device — so a member picking up a
+    // second handset gets the pack they already had rather than a new one. This
+    // is the load-bearing assertion: it proves the member id, and not the device
+    // id, is what seeds a claimed pack.
+    const token = memberToken("p-alice");
+    const first = await packFor(browser, {
+      "wwbh:member-token": token,
+      "wwbh:member-name": "Alice Ace",
+      "wwbh:device-id": "device-one",
+    });
+    const second = await packFor(browser, {
+      "wwbh:member-token": token,
+      "wwbh:member-name": "Alice Ace",
+      "wwbh:device-id": "device-two",
+    });
+    expect(first).toHaveLength(PACK_SIZE);
+    expect(second).toEqual(first);
+    // And it is specifically the pack this member earns — not just any two packs
+    // that happen to agree.
+    expect(first).toEqual(expectedPack("m:p-alice"));
+  });
+
+  test("deals each person the pack their own name earns", async ({ browser }) => {
+    // The whole point of the change: the seed carries who you are. Two members on
+    // the same device, same day, each getting the pack computed for *them* is the
+    // end-to-end proof of that wiring.
+    const alice = await packFor(browser, {
+      "wwbh:member-token": memberToken("p-alice"),
+      "wwbh:member-name": "Alice Ace",
+      "wwbh:device-id": "device-one",
+    });
+    const bob = await packFor(browser, {
+      "wwbh:member-token": memberToken("p-bob"),
+      "wwbh:member-name": "Bob Blitz",
+      "wwbh:device-id": "device-one",
+    });
+    expect(alice).toEqual(expectedPack("m:p-alice"));
+    expect(bob).toEqual(expectedPack("m:p-bob"));
+  });
+
+  test("gives two unclaimed phones two different packs", async ({ browser }) => {
+    // A guest has no person behind them, so the device stands in — and they must
+    // still get three cards, because nothing here is allowed to gate the pack.
+    //
+    // The two device ids are *searched for* rather than pinned: the fixture
+    // roster is four players deep, so an arbitrary pair collides some days and
+    // not others. Picking a pair that genuinely differs today is what makes this
+    // a real assertion every day rather than a lucky one.
+    const ids = Array.from({ length: 40 }, (_, i) => `guest-${i}`);
+    const first = ids[0];
+    const second = ids.slice(1).find((d) => expectedPack(`d:${d}`).join() !== expectedPack(`d:${first}`).join()); // prettier-ignore
+    expect(second, "no two guest device ids produced different packs").toBeTruthy();
+
+    const one = await packFor(browser, { "wwbh:device-id": first });
+    const two = await packFor(browser, { "wwbh:device-id": second! });
+    expect(one).toEqual(expectedPack(`d:${first}`));
+    expect(two).toEqual(expectedPack(`d:${second}`));
+    expect(two).not.toEqual(one);
   });
 });
 

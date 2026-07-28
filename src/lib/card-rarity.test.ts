@@ -333,6 +333,15 @@ describe("rarityMap", () => {
       expect(rarityMap(makeBundle({ participants: [p] })).get(p.id)?.tier).toBe("base");
     });
 
+    it("is ignored when it names the secret look", () => {
+      // Secret cards live outside RARITY on purpose: those six strings are
+      // persisted in card_rarity, and a seventh would be a tier the commissioner
+      // could hand to a player who never earned it. "secret" is not a tier, so it
+      // falls through like any other unknown string.
+      const p = makeParticipant({ card_rarity: "secret" });
+      expect(rarityMap(makeBundle({ participants: [p] })).get(p.id)?.tier).toBe("base");
+    });
+
     it("is ignored when empty or null", () => {
       const empty = makeParticipant({ card_rarity: "" });
       const missing = makeParticipant({ card_rarity: null });

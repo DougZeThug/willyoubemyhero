@@ -86,6 +86,17 @@ export const BUNDLE = {
  */
 export type Responses = Record<string, unknown>;
 
+/**
+ * Two rules govern every key below, because the lookup is a case-insensitive
+ * `includes` over insertion order (see `matches`):
+ *
+ *  1. No key may be a substring of another key.
+ *  2. No new server-function export name may contain an unrelated key.
+ *
+ * Break either and the wrong stub answers. And a *missing* stub is worse than a
+ * loud failure: an unmatched name falls through to `result: null` with a 200, so
+ * the screen renders its empty state and the test passes for the wrong reason.
+ */
 export const DEFAULT_RESPONSES: Responses = {
   getActiveEvent: BUNDLE.event,
   getEventBundle: BUNDLE,
@@ -103,6 +114,33 @@ export const DEFAULT_RESPONSES: Responses = {
     claimed: false,
   })),
   getMyAwardVotes: [],
+  // Secret cards. Off by default: a visitor with no member token gets no drop,
+  // which is what every existing pack test runs as.
+  getSecretStatus: {
+    claimed: false,
+    day: null,
+    pulledToday: false,
+    pulled: 0,
+    available: false,
+    resetsAt: null,
+  },
+  getMySecrets: { cards: [], pulled: 0 },
+  pullSecretCard: { ok: false, reason: "unavailable" },
+  listSecretCards: { cards: [], claimedMembers: 0, exhausted: false },
+  // Empty by default, so packedByLabel renders nothing and no existing spec
+  // has to know this feature exists.
+  getCardPullCounts: {},
+  recordCardPulls: { ok: true, recorded: 0 },
+};
+
+/** A secret card as pullSecretCard returns it, for tests that want the fourth slot. */
+export const SECRET_CARD = {
+  id: "secret-gary",
+  name: "Gary The Grill",
+  flavour: "Lit at 11am. Still going at 11pm.",
+  foil: "rosette",
+  artUrl: null,
+  backUrl: null,
 };
 
 /**

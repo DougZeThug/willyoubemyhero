@@ -20,6 +20,19 @@ export async function closeDb() {
 }
 
 /**
+ * A second connection, for the caller to own and end.
+ *
+ * `db()` caches one client and `asRole` wraps every call in a transaction, so a
+ * test that needs two statements genuinely in flight at once — proving a row lock
+ * serialises them, say — cannot get there through the shared client.
+ */
+export async function newClient(): Promise<Client> {
+  const c = new Client({ connectionString: inject("databaseUrl") });
+  await c.connect();
+  return c;
+}
+
+/**
  * Run a statement as one of the PostgREST roles.
  *
  * `SET LOCAL ROLE` inside a transaction is what makes RLS apply: the connection
@@ -90,11 +103,17 @@ export const IDS = {
  * Truncates first, so each suite starts from the same state.
  */
 export async function seedEvent() {
+  // secret_card_pulls before secret_cards, and secret_cards listed explicitly:
+  // CASCADE from participants reaches the pulls, but nothing FKs into the
+  // catalogue, so with fileParallelism disabled its rows would otherwise
+  // accumulate across suites.
   await sql(`
     TRUNCATE
       public.award_votes, public.awards, public.card_comments, public.card_reactions,
       public.member_codes, public.draft_selections, public.penalties, public.splits,
-      public.runs, public.stations, public.event_participants, public.event_secrets,
+      public.runs, public.stations, public.secret_card_pulls, public.secret_cards,
+      public.card_pulls,
+      public.event_participants, public.event_secrets,
       public.participants, public.events
     RESTART IDENTITY CASCADE
   `);

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 const KEY = "wwbh:member-token";
 const NAME_KEY = "wwbh:member-name";
+/** Breadcrumb that outlives the token. See setMemberToken. */
+export const WAS_MEMBER_KEY = "wwbh:was-member";
 
 export type MemberSession = {
   participantId: string;
@@ -40,6 +42,11 @@ export function setMemberToken(token: string, name: string) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(KEY, token);
   window.localStorage.setItem(NAME_KEY, name);
+  // Deliberately never cleared, including on sign-out. A member's secret cards
+  // live on their name rather than on the phone, so somebody arriving on a new
+  // handset to an empty vault needs to be told where their collection went — and
+  // by then the token that would have proved they had one is gone.
+  window.localStorage.setItem(WAS_MEMBER_KEY, "1");
   window.dispatchEvent(new Event("wwbh:member-token-changed"));
 }
 

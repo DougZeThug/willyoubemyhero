@@ -6,7 +6,17 @@ import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { loadCollection, type CollectedCard } from "@/lib/card-collection";
-import { useMemberSession } from "@/lib/member-token";
+import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
+import { useMySecrets, useSecretStatus } from "@/hooks/use-daily-secret";
+import { useCardPullCounts } from "@/hooks/use-card-pulls";
+import { packedByLabel } from "@/lib/card-pulls";
+import { SecretCardSheet } from "@/components/secret-card-sheet";
+import {
+  secretFoil,
+  secretsPulledLabel,
+  SECRET_RARITY,
+  type OwnedSecret,
+} from "@/lib/secret-cards";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +53,18 @@ function PlayersPage() {
   // left operand when it is falsy, and an `unknown` there is not a ReactNode.
   const [collected, setCollected] = useState<Record<string, CollectedCard>>({});
   const member = useMemberSession();
+  const secrets = useMySecrets(member?.participantId);
+  const secretStatus = useSecretStatus(member?.participantId);
+  const pullCounts = useCardPullCounts(event?.id ?? null);
+  const [openSecret, setOpenSecret] = useState<OwnedSecret | null>(null);
+  // Set on claim and never cleared, so a member on a new phone gets told where
+  // their collection went instead of watching it silently vanish. Read in an
+  // effect rather than during render: SSR has no localStorage, and a mismatched
+  // first paint is exactly the bug use-photo-urls.ts is written around.
+  const [wasMember, setWasMember] = useState(false);
+  useEffect(() => {
+    setWasMember(localStorage.getItem(WAS_MEMBER_KEY) === "1");
+  }, []);
 
   useEffect(() => {
     loadCollection().then(setCollected);
@@ -78,6 +100,8 @@ function PlayersPage() {
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
   const collectedCount = rows.filter((p) => collected[p.id]).length;
+  const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
+  const ownedSecrets = secrets.data?.cards ?? [];
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
@@ -98,6 +122,19 @@ function PlayersPage() {
                 {withCards} of {rows.length} cards printed
                 {collectedCount > 0 && ` · ${collectedCount} collected`}
               </p>
+              {/* Only ever rendered above zero. "0 secrets pulled" would announce
+                  that a set exists at all, which is the one thing withheld — and
+                  `?? 0` keeps a zero from flashing during the loading frame. */}
+              {(secrets.data?.pulled ?? 0) > 0 && (
+                <p className="mt-1 text-xs font-bold" style={{ color: SECRET_RARITY.accent }}>
+                  {secretsPulledLabel(secrets.data!.pulled)}
+                </p>
+              )}
+              {!member && wasMember && (
+                <p className="mt-2 max-w-xs text-[11px] leading-snug text-muted-foreground">
+                  Your secrets are on your name, not on this phone. Claim again to get them back.
+                </p>
+              )}
               {!member && (
                 <Link
                   to="/claim"
@@ -116,13 +153,24 @@ function PlayersPage() {
                 <Award className="h-3.5 w-3.5" />
                 Awards
               </Link>
+              {/* The daily loop's alarm clock. Nothing else brings anyone back on
+                  a random Tuesday. Leaks nothing: a guest, and a member who has
+                  already pulled today, both see the button exactly as it was. */}
               <Link
                 to="/players/pack"
-                className="neon-btn !px-4 !py-2 !text-xs"
-                aria-label="Open today's pack"
+                className={cn("neon-btn relative !px-4 !py-2 !text-xs", secretWaiting && "ring-2")}
+                style={secretWaiting ? { ["--tw-ring-color" as string]: SECRET_RARITY.border } : undefined} // prettier-ignore
+                aria-label={secretWaiting ? "Open today's pack — a secret is waiting" : "Open today's pack"} // prettier-ignore
               >
                 <PackageOpen className="h-4 w-4" />
                 Open Pack
+                {secretWaiting && (
+                  <span
+                    aria-hidden
+                    className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full"
+                    style={{ background: SECRET_RARITY.border }}
+                  />
+                )}
               </Link>
             </div>
           </div>
@@ -159,6 +207,61 @@ function PlayersPage() {
             </button>
           </div>
         </div>
+
+        {/* Its own shelf rather than interleaved into the grid: every SortKey
+            branch reads a field a secret does not have, and editorially a secret
+            is not a roster card. Nothing is rendered at zero — no header, no
+            slots, no silhouettes. An unpulled secret is not "missing", it is
+            unknown. */}
+        {ownedSecrets.length > 0 && (
+          <section className="mb-6">
+            <div
+              className="mb-3 font-display text-[10px] font-bold uppercase tracking-[0.3em]"
+              style={{ color: SECRET_RARITY.accent }}
+            >
+              Secrets
+            </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {ownedSecrets.map((s) => {
+                const rarity = secretFoil(s.foil);
+                return (
+                  <div key={s.id} className="flex flex-col gap-2">
+                    <HoloCard
+                      frontUrl={s.artUrl}
+                      backUrl={null}
+                      name={s.name}
+                      rarity={rarity}
+                      cacheKey={s.id}
+                      intensity="subtle"
+                      interactive={false}
+                      onClick={() => setOpenSecret(s)}
+                    />
+                    <div className="text-center">
+                      <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+                        {s.name}
+                      </div>
+                      <div
+                        className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                        style={{ color: rarity.border }}
+                      >
+                        {/* Same vocabulary as card-slab.tsx, so the two halves of
+                            the collection speak the same language. */}
+                        {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
+                      </div>
+                      {packedByLabel(s.ownerCount) && (
+                        <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                          {packedByLabel(s.ownerCount)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <SecretCardSheet card={openSecret} onOpenChange={(open) => !open && setOpenSecret(null)} />
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {rows.map((p) => {
@@ -198,6 +301,14 @@ function PlayersPage() {
                       {urls?.front ? rarity.label : "No card yet"}
                     </span>
                   </div>
+                  {/* The league's number, not yours. Its own line and muted, so
+                      it never reads as one statement with the tick above it —
+                      that tick is "you have this", this is "they do". */}
+                  {packedByLabel(pullCounts.data?.[p.id]) && (
+                    <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                      {packedByLabel(pullCounts.data?.[p.id])}
+                    </div>
+                  )}
                 </div>
               </Link>
             );

@@ -10,6 +10,9 @@ import { asRole, closeDb, isDenied, IDS, seedEvent, sql, visibleRows } from "./h
 beforeAll(seedEvent);
 afterAll(closeDb);
 
+/** A secret card seeded through the owner, so the leak assertions have something to leak. */
+const SECRET_CARD_ID = "00000000-0000-4000-8000-00000000ce01";
+
 /** Tables the vault, leaderboard, live view and recap all read without a session. */
 const PUBLIC_READ = [
   "public.participants",
@@ -39,6 +42,15 @@ const SERVER_ONLY = [
   // here is what stops a future migration handing the grant back.
   "public.audit_logs",
   "public.running_order_randomizations",
+  // The secret card catalogue. Readable means one person with devtools reads the
+  // whole set without opening a pack, and the feature is over.
+  "public.secret_cards",
+  // Worse than the catalogue: it leaks the card ids, who owns what, and the size
+  // of the set from a row count against the roster.
+  "public.secret_card_pulls",
+  // The aggregate ("7 people have this card") is public and served by a server
+  // function. These rows are not: they say who has never packed whom.
+  "public.card_pulls",
 ];
 
 describe("public reads", () => {
@@ -123,6 +135,52 @@ describe("server-only tables", () => {
     expect(visible === null || visible === 0).toBe(true);
   });
 
+  it("keeps a real secret card out of anon's reach", async () => {
+    // Seeded through the owner, so there is genuinely something to leak — the
+    // `visible === null || visible === 0` idiom above passes vacuously against an
+    // empty table, and an empty table is exactly what this suite would otherwise
+    // be asserting on.
+    await sql(
+      `INSERT INTO public.secret_cards (id, name, flavour, art_path)
+       VALUES ($1, 'Gary the Grill', 'Lit at 11am. Still going at 11pm.', 'secrets/x/art-1.webp')
+       ON CONFLICT (id) DO NOTHING`,
+      [SECRET_CARD_ID],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.secret_cards")).toEqual([{ n: 1 }]);
+    const visible = await visibleRows("anon", "public.secret_cards");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
+  it("keeps who pulled what out of anon's reach", async () => {
+    await sql(
+      `INSERT INTO public.secret_cards (id, name, art_path)
+       VALUES ($1, 'Gary the Grill', 'secrets/x/art-1.webp') ON CONFLICT (id) DO NOTHING`,
+      [SECRET_CARD_ID],
+    );
+    await sql(
+      `INSERT INTO public.secret_card_pulls (participant_id, secret_card_id, pulled_on)
+       VALUES ($1, $2, current_date) ON CONFLICT DO NOTHING`,
+      [IDS.alice, SECRET_CARD_ID],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.secret_card_pulls")).toEqual([
+      { n: 1 },
+    ]);
+    const visible = await visibleRows("anon", "public.secret_card_pulls");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
+  it("keeps who has packed whom out of anon's reach", async () => {
+    await sql(
+      `INSERT INTO public.card_pulls (participant_id, event_participant_id)
+       SELECT $1, id FROM public.event_participants LIMIT 1
+       ON CONFLICT DO NOTHING`,
+      [IDS.alice],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.card_pulls")).toEqual([{ n: 1 }]);
+    const visible = await visibleRows("anon", "public.card_pulls");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
   it("keeps a cast ballot secret before the reveal", async () => {
     await sql(
       `INSERT INTO public.award_votes (event_id, category, voter_participant_id, target_participant_id)
@@ -161,6 +219,9 @@ describe("anon has no write grant anywhere", () => {
     ["stuff the ballot", `INSERT INTO public.award_votes (event_id, category, voter_participant_id, target_participant_id) VALUES ($1, 'mvp', $2, $2)`, [IDS.event, IDS.alice]], // prettier-ignore
     ["issue itself a claim code", `INSERT INTO public.member_codes (participant_id, code_salt, code_hash) VALUES ($1, 's', 'h')`, [IDS.bob]], // prettier-ignore
     ["set its own event PIN", `INSERT INTO public.event_secrets (event_id, pin_salt, pin_hash) VALUES ($1, 's', 'h')`, [IDS.event]], // prettier-ignore
+    ["print itself a secret card", `INSERT INTO public.secret_cards (name, art_path) VALUES ('Pwned', 'secrets/x/art.webp')`, []], // prettier-ignore
+    ["grant itself a secret pull", `INSERT INTO public.secret_card_pulls (participant_id, secret_card_id, pulled_on) SELECT $1, id, current_date FROM public.secret_cards LIMIT 1`, [IDS.alice]], // prettier-ignore
+    ["credit itself a card pull", `INSERT INTO public.card_pulls (participant_id, event_participant_id) SELECT $1, id FROM public.event_participants LIMIT 1`, [IDS.alice]], // prettier-ignore
   ];
 
   it.each(WRITES)("anon cannot %s", async (_label, statement, params) => {
