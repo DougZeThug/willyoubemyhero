@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Award, Lock, Vote } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventAwards } from "@/hooks/use-event-social";
 import { useMemberSession } from "@/lib/member-token";
 import { castAwardVote, getMyAwardVotes } from "@/lib/social.functions";
@@ -29,6 +30,8 @@ export const Route = createFileRoute("/awards")({
 
 function AwardsPage() {
   const { event, bundle } = useEventBundle();
+  const photos = useEventPhotoUrls(event?.id ?? null);
+  const cards = useEventCardUrls(event?.id ?? null);
   const me = useMemberSession();
   const qc = useQueryClient();
   const awards = useEventAwards(event?.id ?? null);
@@ -178,7 +181,8 @@ function AwardsPage() {
                         >
                           <ParticipantAvatar
                             name={p.participant?.name ?? "?"}
-                            photoUrl={p.participant?.profile_image_url ?? null}
+                            cardUrl={cards.data?.[p.id]?.front ?? null}
+                            photoUrl={photos.data?.[p.id] ?? p.participant?.profile_image_url ?? null}
                             size={24}
                           />
                           <span

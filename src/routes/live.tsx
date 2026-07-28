@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { User2, Trophy, Radio } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
+import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { HudTimer } from "@/components/hud-timer";
 import { FinishCelebration } from "@/components/finish-celebration";
@@ -31,6 +31,7 @@ export const Route = createFileRoute("/live")({
 function LivePage() {
   const { event, bundle, loading } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
+  const cards = useEventCardUrls(event?.id ?? null);
   const [celebration, setCelebration] = useState<{
     name: string;
     timeMs: number;
@@ -78,6 +79,7 @@ function LivePage() {
             {current ? (
               <ParticipantAvatar
                 name={current.participant?.name ?? "?"}
+                cardUrl={cards.data?.[current.id]?.front ?? null}
                 photoUrl={
                   photos.data?.[current.id] ?? current.participant?.profile_image_url ?? null
                 }
@@ -140,6 +142,7 @@ function LivePage() {
                     </span>
                     <ParticipantAvatar
                       name={row.ep?.participant?.name ?? "?"}
+                      cardUrl={row.ep ? (cards.data?.[row.ep.id]?.front ?? null) : null}
                       photoUrl={
                         photos.data?.[row.ep?.id ?? ""] ??
                         row.ep?.participant?.profile_image_url ??

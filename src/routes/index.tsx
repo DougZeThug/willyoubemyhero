@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Trophy, Radio, User2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
+import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { HudTimer } from "@/components/hud-timer";
@@ -32,6 +32,7 @@ export const Route = createFileRoute("/")({
 function LiveDashboard() {
   const { event, bundle, loading } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
+  const cards = useEventCardUrls(event?.id ?? null);
   const [celebration, setCelebration] = useState<{
     name: string;
     timeMs: number;
@@ -101,6 +102,7 @@ function LiveDashboard() {
             {current ? (
               <ParticipantAvatar
                 name={current.participant?.name ?? "?"}
+                cardUrl={cards.data?.[current.id]?.front ?? null}
                 photoUrl={
                   photos.data?.[current.id] ?? current.participant?.profile_image_url ?? null
                 }
@@ -156,6 +158,7 @@ function LiveDashboard() {
                 <div className="flex items-center gap-3">
                   <ParticipantAvatar
                     name={next.participant?.name ?? "?"}
+                    cardUrl={cards.data?.[next.id]?.front ?? null}
                     photoUrl={photos.data?.[next.id] ?? next.participant?.profile_image_url ?? null}
                     size={44}
                   />
