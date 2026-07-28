@@ -62,11 +62,11 @@ export const getEventSocial = createServerFn({ method: "GET" })
     const [{ data: reactions }, { data: comments }] = await Promise.all([
       sb
         .from("card_reactions")
-        .select("id, event_participant_id, participant_id, emoji, created_at")
+        .select("id, event_participant_id, participant_id, guest_key, guest_name, emoji, created_at")
         .in("event_participant_id", ids),
       sb
         .from("card_comments")
-        .select("id, event_participant_id, participant_id, body, created_at")
+        .select("id, event_participant_id, participant_id, guest_key, guest_name, body, created_at")
         .in("event_participant_id", ids)
         .order("created_at", { ascending: true }),
     ]);
