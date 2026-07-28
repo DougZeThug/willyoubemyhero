@@ -77,8 +77,8 @@ const FLICK = {
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 export type HoloCardProps = {
-  frontUrl: string | null;
-  backUrl: string | null;
+  frontUrl: ImageUrlSet | string | null;
+  backUrl: ImageUrlSet | string | null;
   name: string;
   rarity: Rarity;
   /** Stable id used to cache the measured aspect ratio between visits. */
