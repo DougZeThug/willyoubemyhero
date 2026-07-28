@@ -1,23 +1,29 @@
-## Diagnosis
+## What's actually happening
 
-The data is fine — the database still has all 21 participants and 18 event_participants for the active event, and an anon PostgREST query with the app's publishable key returns them correctly. So this is not RLS or a missing grant.
+Every player card reads "Packed by 1" because that's literally what the database says — and it's misleading. Only one member (Doug) has claimed a code and opened a pack, but on the very first tear his device backfilled every card he'd ever seen as a guest. That single tear wrote one `card_pulls` row for **all 18** roster cards at once, so the count came out uniform.
 
-What is actually broken: the `getEventBundle` server function that feeds the UI is failing (500) on the deployed environment. When it fails, every screen that reads `bundle.participants` renders the empty state — which is exactly what the screenshots show (Vault "0 of 0", Order empty, Leaderboard empty, Add Player "0 on roster"). The server logs also show a resolver error (`Server function info not found …`) and the dev process has been exiting (`script "dev" exited with code 143`) with Vite reporting `Invalid server function ID` for `getActiveEvent`, which is a stale/desynced server-function manifest after the recent secret-cards + weighted-pull migrations and code churn.
+Confirmed by query:
+- `card_pulls`: 18 rows, 1 distinct member, 18 distinct cards.
+- Claimed members: 1 (Doug Weidensaul).
 
-## Fix
+The backfill is intentional (see the comment on `recordCardPulls` in `src/lib/card-pulls.functions.ts` and the effect at `players.pack.tsx:552`) — it was meant to seed counts on day one. In practice it makes the counter meaningless: the first person to claim always paints every card they've ever revealed with "Packed by 1", and the number will never distinguish which cards were actually dealt in their packs.
 
-1. Rebuild / re-publish so the server-function manifest matches the current client bundle. This alone should restore the roster on production.
-2. In `src/lib/event.functions.ts`, harden `getEventBundle` so a single sub-query failure can't wipe out the whole bundle:
-   - Replace the destructured `Promise.all` with per-query try/catch (or `Promise.allSettled`) that logs the failing table and returns `[]` for just that slice, so participants never disappear because of an unrelated table (splits/penalties/drafts).
-   - Log `error` from each Supabase call (currently only `.data` is read; `.error` is silently dropped).
-   - Switch the deprecated `.inputValidator(...)` to `.validator(...)` on the two functions that use it, matching the framework warnings.
-3. Add a lightweight fallback in `useEventBundle` (`src/hooks/use-event-bundle.ts`): if the bundle query errors, surface it in a toast / dev-console instead of silently rendering "No participants yet.", so a future regression is obvious.
-4. Verify:
-   - Hit `/_serverFn/<getEventBundle id>` on the redeployed site and confirm HTTP 200 with a non-empty `participants` array.
-   - Load `/players`, `/order`, `/board`, and `/admin` in the preview and confirm the 18 roster entries render with names and cards.
-   - Tail worker logs for any residual 500s on `event.functions`.
+## The fix
+
+**1. Stop backfilling.** In `src/routes/players.pack.tsx`, drop the `loadCollection()` merge in the `recordedForRef` effect and send only `dealtIds` (today's three cards). Update the comment so the next reader doesn't reintroduce it.
+
+**2. Reset the inflated rows.** Run a migration that truncates `card_pulls`. This wipes the 18 backfilled rows so counts start from real pack tears going forward. Doug re-opening today's pack will re-record his three real cards; nobody else has any rows to lose.
+
+**3. Soften the "Packed by 0" / "Packed by 1" cases in the UI.** In `src/lib/card-pulls.ts`, keep "Not yet packed" for 0 but change 1 to read "Packed by 1 so far" (or similar) so a lone pull looks like early-days data rather than a stuck counter. Update `src/lib/card-pulls.test.ts` to match.
+
+## Out of scope
+
+- No schema changes beyond the truncate; the `record_card_pulls` RPC and the composite primary key stay as-is.
+- No changes to the secret-cards pull flow.
+- No change to `getCardPullCounts` server function — the aggregate stays public.
 
 ## Technical notes
 
-- Grants and RLS on `participants` / `event_participants` are correct (`anon` has `arwdDxtm` on both; a direct anon curl to `/rest/v1/event_participants?...&select=*,participant:participants!event_participants_participant_id_fkey(*)` returns all 18 rows). No migration is required.
-- No schema changes. No auth changes. Frontend/server-function code + a redeploy only.
+- Files touched: `src/routes/players.pack.tsx` (remove backfill, update comments), `src/lib/card-pulls.ts` + `src/lib/card-pulls.test.ts` (label tweak), one new migration under `supabase/migrations/` that runs `TRUNCATE TABLE public.card_pulls;` and is idempotent.
+- `recordedForRef` guard and the fire-and-forget error handling stay untouched.
+- E2E and unit tests that assert on "Packed by 1" copy get updated in the same change.
