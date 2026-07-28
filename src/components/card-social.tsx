@@ -347,7 +347,7 @@ export function CardSocial({
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value.slice(0, 280))}
-            placeholder={`Talk your talk, ${me?.name ?? guestName || "guest"}…`}
+            placeholder={`Talk your talk, ${me?.name ?? (guestName || "guest")}…`}
             className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary/50"
           />
           <button
