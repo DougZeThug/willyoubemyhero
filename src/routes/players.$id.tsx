@@ -232,6 +232,7 @@ function PlayerCardPage() {
               flipped={flipped}
               onFlippedChange={setFlipped}
               gyro={gyro}
+              tilt="hero"
               backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
             />
           </div>
