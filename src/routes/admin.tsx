@@ -670,8 +670,8 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   async function onPickCard(epId: string, side: CardSide, file: File) {
     setUploadingCardId(`${epId}:${side}`);
     try {
-      const dataUrl = await encodeUploadImage(file);
-      await uploadCardFn({ data: { eventId, eventParticipantId: epId, side, dataUrl } });
+      const dataUrls = await encodeUploadImageVariants(file);
+      await uploadCardFn({ data: { eventId, eventParticipantId: epId, side, dataUrls } });
       await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       toast.success(`Card ${side} uploaded`);
     } catch (e) {
