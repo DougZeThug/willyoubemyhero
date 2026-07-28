@@ -70,5 +70,102 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # Advisory for now. The suite is new, so a red test reports itself without
+      # blocking a Lovable sync; drop continue-on-error once it has settled and
+      # this becomes a real gate like lint and typecheck.
+      - name: Unit tests
+        run: bun run test
+        continue-on-error: true
+
       - name: Build
         run: bun run build
+
+  # Grants, RLS policies and the award RPCs, against a real Postgres.
+  #
+  # No Docker and no Supabase CLI: the harness in tests/db/cluster.ts runs initdb
+  # itself and applies bootstrap.sql plus every migration from empty, which also
+  # means a migration that no longer replays fails here.
+  db:
+    name: database
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Restore Bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The runner already ships postgres binaries; PG_BIN_DIR points the harness
+      # at them rather than leaving it to guess a version-specific path.
+      - name: Locate Postgres
+        run: echo "PG_BIN_DIR=$(dirname "$(command -v pg_ctl || echo /usr/lib/postgresql/16/bin/pg_ctl)")" >> "$GITHUB_ENV"
+
+      - name: Database tests
+        run: bun run test:db
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Restore Bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Chromium only. Both Playwright projects use it — the phone project takes
+      # the iPhone preset's viewport and touch support, not WebKit.
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      # Server functions are stubbed in the browser, so the suite never reaches
+      # Supabase. These values exist only so the dev server starts, and point at
+      # a dead address so anything unstubbed fails loudly instead of quietly
+      # finding the live project.
+      - name: E2E tests
+        run: bun run test:e2e
+        env:
+          SESSION_SECRET: e2e-session-secret
+          SUPABASE_URL: http://127.0.0.1:1
+          SUPABASE_PUBLISHABLE_KEY: e2e-publishable-key
+          SUPABASE_SERVICE_ROLE_KEY: e2e-service-role-key
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
