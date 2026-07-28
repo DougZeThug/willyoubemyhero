@@ -264,9 +264,7 @@ export const getEventCardUrls = createServerFn({ method: "GET" })
     };
     const universalSet = await signSet(universalPaths);
 
-    const rows = (eps ?? []).filter(
-      (r) => r.card_path || r.card_back_path || universalPaths.large,
-    );
+    const rows = (eps ?? []).filter((r) => r.card_path || r.card_back_path || universalPaths.large);
     if (rows.length === 0) return {} as Record<string, CardUrls>;
 
     const out: Record<string, CardUrls> = {};
@@ -286,7 +284,11 @@ export const getEventCardUrls = createServerFn({ method: "GET" })
         ]);
         out[r.id] = {
           front: front.large ? front : null,
-          back: (ownBack.large ? ownBack : universalSet).large ? ownBack.large ? ownBack : universalSet : null,
+          back: (ownBack.large ? ownBack : universalSet).large
+            ? ownBack.large
+              ? ownBack
+              : universalSet
+            : null,
         };
       }),
     );
@@ -302,12 +304,15 @@ export const getEventCardBack = createServerFn({ method: "GET" })
       .select("card_back_path, card_back_path_thumb, card_back_path_medium")
       .eq("id", data.eventId)
       .maybeSingle();
-    if (!event?.card_back_path) return { urls: { thumb: null, medium: null, large: null } as ImageUrlSet };
-    return { urls: await signSet({
-      thumb: event.card_back_path_thumb,
-      medium: event.card_back_path_medium,
-      large: event.card_back_path,
-    }) };
+    if (!event?.card_back_path)
+      return { urls: { thumb: null, medium: null, large: null } as ImageUrlSet };
+    return {
+      urls: await signSet({
+        thumb: event.card_back_path_thumb,
+        medium: event.card_back_path_medium,
+        large: event.card_back_path,
+      }),
+    };
   });
 
 export const uploadEventCardBack = createServerFn({ method: "POST" })
@@ -473,7 +478,9 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row } = await supabaseAdmin
       .from("event_participants")
-      .select("card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium")
+      .select(
+        "card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium",
+      )
       .eq("id", data.eventParticipantId)
       .maybeSingle();
 
@@ -538,7 +545,11 @@ export const getImagePathsNeedingVariants = createServerFn({ method: "GET" })
           "id, photo_path, photo_path_thumb, card_path, card_path_thumb, card_back_path, card_back_path_thumb",
         )
         .eq("event_id", data.eventId),
-      supabaseAdmin.from("events").select("id, card_back_path, card_back_path_thumb").eq("id", data.eventId).maybeSingle(),
+      supabaseAdmin
+        .from("events")
+        .select("id, card_back_path, card_back_path_thumb")
+        .eq("id", data.eventId)
+        .maybeSingle(),
     ]);
 
     const needs: { id: string; kind: string; path: string }[] = [];
@@ -608,7 +619,10 @@ export const writeImageVariants = createServerFn({ method: "POST" })
           patch.card_back_path_thumb = u.paths.thumb;
           patch.card_back_path_medium = u.paths.medium;
         }
-        const { error } = await supabaseAdmin.from("event_participants").update(patch).eq("id", u.id);
+        const { error } = await supabaseAdmin
+          .from("event_participants")
+          .update(patch)
+          .eq("id", u.id);
         if (error) throw error;
       }
     }

@@ -64,11 +64,7 @@ function encodeCanvas(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL(type, QUALITY);
 }
 
-function resizeCanvas(
-  source: CanvasImageSource,
-  width: number,
-  height: number,
-): HTMLCanvasElement {
+function resizeCanvas(source: CanvasImageSource, width: number, height: number): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(width));
   canvas.height = Math.max(1, Math.round(height));

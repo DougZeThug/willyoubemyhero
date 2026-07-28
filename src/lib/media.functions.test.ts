@@ -66,7 +66,14 @@ describe("signed url cache", () => {
     const signer = signingCounter();
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, photo_path: "photos/a.jpg", photo_path_thumb: "photos/a.jpg", photo_path_medium: "photos/a.jpg" }],
+        data: [
+          {
+            id: CARD_ID,
+            photo_path: "photos/a.jpg",
+            photo_path_thumb: "photos/a.jpg",
+            photo_path_medium: "photos/a.jpg",
+          },
+        ],
       },
       "storage.createSignedUrl": signer.response,
     });
@@ -82,7 +89,16 @@ describe("signed url cache", () => {
   it("re-signs once the reuse window has passed", async () => {
     const signer = signingCounter();
     withDb({
-      "event_participants.select": { data: [{ id: CARD_ID, photo_path: "photos/a.jpg", photo_path_thumb: "photos/a.jpg", photo_path_medium: "photos/a.jpg" }] },
+      "event_participants.select": {
+        data: [
+          {
+            id: CARD_ID,
+            photo_path: "photos/a.jpg",
+            photo_path_thumb: "photos/a.jpg",
+            photo_path_medium: "photos/a.jpg",
+          },
+        ],
+      },
       "storage.createSignedUrl": signer.response,
     });
     const mod = await freshModule();
@@ -109,9 +125,33 @@ describe("signed url cache", () => {
     withDb({
       "event_participants.select": {
         data: [
-          { id: "ep-1", card_path: "cards/shared.webp", card_path_thumb: "cards/shared.webp", card_path_medium: "cards/shared.webp", card_back_path: null, card_back_path_thumb: null, card_back_path_medium: null },
-          { id: "ep-2", card_path: "cards/shared.webp", card_path_thumb: "cards/shared.webp", card_path_medium: "cards/shared.webp", card_back_path: null, card_back_path_thumb: null, card_back_path_medium: null },
-          { id: "ep-3", card_path: "cards/shared.webp", card_path_thumb: "cards/shared.webp", card_path_medium: "cards/shared.webp", card_back_path: null, card_back_path_thumb: null, card_back_path_medium: null },
+          {
+            id: "ep-1",
+            card_path: "cards/shared.webp",
+            card_path_thumb: "cards/shared.webp",
+            card_path_medium: "cards/shared.webp",
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+          {
+            id: "ep-2",
+            card_path: "cards/shared.webp",
+            card_path_thumb: "cards/shared.webp",
+            card_path_medium: "cards/shared.webp",
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+          {
+            id: "ep-3",
+            card_path: "cards/shared.webp",
+            card_path_thumb: "cards/shared.webp",
+            card_path_medium: "cards/shared.webp",
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
         ],
       },
       "events.select": { data: { card_back_path: null } },
@@ -127,14 +167,27 @@ describe("signed url cache", () => {
   });
 
   it("returns nothing for a participant with no artwork", async () => {
-    withDb({ "event_participants.select": { data: [{ id: CARD_ID, photo_path: null, photo_path_thumb: null, photo_path_medium: null }] } });
+    withDb({
+      "event_participants.select": {
+        data: [{ id: CARD_ID, photo_path: null, photo_path_thumb: null, photo_path_medium: null }],
+      },
+    });
     const mod = await freshModule();
     expect(await callServerFn(mod.getEventPhotoUrls, { data: { eventId: EVENT_ID } })).toEqual({});
   });
 
   it("omits a card whose signing failed rather than emitting a broken url", async () => {
     withDb({
-      "event_participants.select": { data: [{ id: CARD_ID, photo_path: "photos/a.jpg", photo_path_thumb: "photos/a.jpg", photo_path_medium: "photos/a.jpg" }] },
+      "event_participants.select": {
+        data: [
+          {
+            id: CARD_ID,
+            photo_path: "photos/a.jpg",
+            photo_path_thumb: "photos/a.jpg",
+            photo_path_medium: "photos/a.jpg",
+          },
+        ],
+      },
       "storage.createSignedUrl": { data: null, error: { message: "not found" } },
     });
     const mod = await freshModule();
@@ -147,15 +200,37 @@ describe("getEventCardUrls", () => {
     const signer = signingCounter();
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, card_path: "cards/front.webp", card_path_thumb: "cards/front.webp", card_path_medium: "cards/front.webp", card_back_path: "cards/own.webp", card_back_path_thumb: "cards/own.webp", card_back_path_medium: "cards/own.webp" }],
+        data: [
+          {
+            id: CARD_ID,
+            card_path: "cards/front.webp",
+            card_path_thumb: "cards/front.webp",
+            card_path_medium: "cards/front.webp",
+            card_back_path: "cards/own.webp",
+            card_back_path_thumb: "cards/own.webp",
+            card_back_path_medium: "cards/own.webp",
+          },
+        ],
       },
-      "events.select": { data: { card_back_path: "cards/universal.webp", card_back_path_thumb: "cards/universal.webp", card_back_path_medium: "cards/universal.webp" } },
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal.webp",
+          card_back_path_medium: "cards/universal.webp",
+        },
+      },
       "storage.createSignedUrl": signer.response,
     });
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, { front: import("./media.functions").ImageUrlSet | null; back: import("./media.functions").ImageUrlSet | null }>;
+    })) as Record<
+      string,
+      {
+        front: import("./media.functions").ImageUrlSet | null;
+        back: import("./media.functions").ImageUrlSet | null;
+      }
+    >;
     // universal, front, own — three distinct objects, three distinct url sets.
     expect(signer.count).toBe(3);
     expect(urls[CARD_ID].back).not.toBeNull();
@@ -165,37 +240,92 @@ describe("getEventCardUrls", () => {
   it("falls back to the universal back", async () => {
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, card_path: "cards/front.webp", card_path_thumb: "cards/front.webp", card_path_medium: "cards/front.webp", card_back_path: null, card_back_path_thumb: null, card_back_path_medium: null }],
+        data: [
+          {
+            id: CARD_ID,
+            card_path: "cards/front.webp",
+            card_path_thumb: "cards/front.webp",
+            card_path_medium: "cards/front.webp",
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+        ],
       },
-      "events.select": { data: { card_back_path: "cards/universal.webp", card_back_path_thumb: "cards/universal.webp", card_back_path_medium: "cards/universal.webp" } },
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal.webp",
+          card_back_path_medium: "cards/universal.webp",
+        },
+      },
       "storage.createSignedUrl": { data: { signedUrl: "https://cdn/u" }, error: null },
     });
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
     })) as Record<string, { back: import("./media.functions").ImageUrlSet | null }>;
-    expect(urls[CARD_ID].back).toEqual({ thumb: "https://cdn/u", medium: "https://cdn/u", large: "https://cdn/u" });
+    expect(urls[CARD_ID].back).toEqual({
+      thumb: "https://cdn/u",
+      medium: "https://cdn/u",
+      large: "https://cdn/u",
+    });
   });
 
   it("includes a player with no art of their own once a universal back exists", async () => {
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, card_path: null, card_path_thumb: null, card_path_medium: null, card_back_path: null, card_back_path_thumb: null, card_back_path_medium: null }],
+        data: [
+          {
+            id: CARD_ID,
+            card_path: null,
+            card_path_thumb: null,
+            card_path_medium: null,
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+        ],
       },
-      "events.select": { data: { card_back_path: "cards/universal.webp", card_back_path_thumb: "cards/universal.webp", card_back_path_medium: "cards/universal.webp" } },
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal.webp",
+          card_back_path_medium: "cards/universal.webp",
+        },
+      },
       "storage.createSignedUrl": { data: { signedUrl: "https://cdn/u" }, error: null },
     });
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, { front: import("./media.functions").ImageUrlSet | null; back: import("./media.functions").ImageUrlSet | null }>;
-    expect(urls[CARD_ID]).toEqual({ front: null, back: { thumb: "https://cdn/u", medium: "https://cdn/u", large: "https://cdn/u" } });
+    })) as Record<
+      string,
+      {
+        front: import("./media.functions").ImageUrlSet | null;
+        back: import("./media.functions").ImageUrlSet | null;
+      }
+    >;
+    expect(urls[CARD_ID]).toEqual({
+      front: null,
+      back: { thumb: "https://cdn/u", medium: "https://cdn/u", large: "https://cdn/u" },
+    });
   });
 
   it("drops a player with no art when there is no universal back either", async () => {
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, card_path: null, card_path_thumb: null, card_path_medium: null, card_back_path: null, card_back_path_thumb: null, card_back_path_medium: null }],
+        data: [
+          {
+            id: CARD_ID,
+            card_path: null,
+            card_path_thumb: null,
+            card_path_medium: null,
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+        ],
       },
       "events.select": { data: { card_back_path: null } },
     });
@@ -216,7 +346,10 @@ describe("getEventCardUrls", () => {
 });
 
 describe("uploads", () => {
-  async function upload(dataUrls: { thumb: string; medium: string; large: string }, headers = asAdmin()) {
+  async function upload(
+    dataUrls: { thumb: string; medium: string; large: string },
+    headers = asAdmin(),
+  ) {
     withDb({
       "storage.upload": { data: { path: "ok" }, error: null },
       "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
@@ -232,7 +365,12 @@ describe("uploads", () => {
     const mod = await freshModule();
     await expect(
       callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
       }),
     ).rejects.toThrow("Admin PIN required");
   });
@@ -241,7 +379,12 @@ describe("uploads", () => {
     const mod = await freshModule();
     await expect(
       callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
         headers: memberHeaders(signMemberToken(PARTICIPANT_ID).token),
       }),
     ).rejects.toThrow("Admin PIN required");
@@ -251,7 +394,12 @@ describe("uploads", () => {
     const mod = await freshModule();
     await expect(
       callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
         headers: asAdmin(OTHER_EVENT_ID),
       }),
     ).rejects.toThrow("Admin PIN required");
@@ -276,7 +424,12 @@ describe("uploads", () => {
     });
     const mod = await freshModule();
     await callServerFn(mod.uploadParticipantCard, {
-      data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "back", dataUrls: threeSizes(PNG) },
+      data: {
+        eventId: EVENT_ID,
+        eventParticipantId: CARD_ID,
+        side: "back",
+        dataUrls: threeSizes(PNG),
+      },
       headers: asAdmin(),
     });
     const [update] = mock.callsFor("event_participants", "update");
@@ -318,7 +471,12 @@ describe("uploads", () => {
     const mod = await freshModule();
     for (let i = 0; i < 2; i++) {
       await callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
         headers: asAdmin(),
       });
     }
@@ -332,7 +490,12 @@ describe("uploads", () => {
     const mod = await freshModule();
     await expect(
       callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
         headers: asAdmin(),
       }),
     ).rejects.toBeTruthy();
@@ -408,7 +571,13 @@ describe("getEventCardBack", () => {
 
   it("signs the back when there is one", async () => {
     withDb({
-      "events.select": { data: { card_back_path: "cards/universal.webp", card_back_path_thumb: "cards/universal.webp", card_back_path_medium: "cards/universal.webp" } },
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal.webp",
+          card_back_path_medium: "cards/universal.webp",
+        },
+      },
       "storage.createSignedUrl": { data: { signedUrl: "https://cdn/u" }, error: null },
     });
     const mod = await freshModule();
