@@ -464,6 +464,7 @@ export type Database = {
         Row: {
           active: boolean
           awards_locked: boolean
+          card_back_path: string | null
           created_at: string
           draft_locked: boolean
           draft_size: number
@@ -482,6 +483,7 @@ export type Database = {
         Insert: {
           active?: boolean
           awards_locked?: boolean
+          card_back_path?: string | null
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
@@ -500,6 +502,7 @@ export type Database = {
         Update: {
           active?: boolean
           awards_locked?: boolean
+          card_back_path?: string | null
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
