@@ -1,32 +1,22 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Trophy, Radio, User2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
-import { useFinishWatcher } from "@/hooks/use-finish-watcher";
-import { ParticipantAvatar } from "@/components/participant-avatar";
-import { HudTimer } from "@/components/hud-timer";
-import { FinishCelebration } from "@/components/finish-celebration";
-import { formatTime } from "@/lib/format";
-import { Card, CardContent } from "@/components/ui/card";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Live — Will YOU Be My Hero? Draft Combine" },
+      { title: "Will YOU Be My Hero? Draft Combine" },
       {
         name: "description",
         content:
-          "Watch the Will YOU Be My Hero? Draft Combine live — current runner, timer, and rolling leaderboard.",
+          "Timed athletic-and-drinking combine that sets the fantasy football draft-pick order.",
       },
-      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Live" },
+      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine" },
       {
         property: "og:description",
-        content: "Live timing dashboard for the fantasy football draft combine.",
+        content: "Timed athletic-and-drinking combine that sets the fantasy football draft-pick order.",
       },
     ],
   }),
-  component: LiveDashboard,
+  component: () => <Navigate to="/players" />,
 });
 
 function LiveDashboard() {
