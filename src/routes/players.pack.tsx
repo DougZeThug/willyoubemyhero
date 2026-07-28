@@ -365,27 +365,37 @@ function PackPage() {
     [auto, pack.length, secretDuplicate, status.data?.pulled],
   );
 
-  /** Called when a card has finished flying onto the stage. */
+  /**
+   * A card has finished flying onto the stage.
+   *
+   * Reads `stage` from the closure rather than from a setStage updater. The
+   * scheduling below is a side effect, and a state updater is called twice under
+   * StrictMode — which would have meant two risers over each other and two
+   * timers racing to advance the same card.
+   *
+   * Re-entrant on purpose: both onAnimationComplete and the backstop timer can
+   * land here. Clearing first means a second call reschedules rather than
+   * stacking.
+   */
   const handleEntered = useCallback(() => {
-    setStage((prev) => {
-      if (!prev || prev.phase !== "entering") return prev;
-      const hold = holdBeforeFlip(prev.index);
-      if (hold === 0) return { ...prev, phase: "facedown" };
-      if (prev.index === SECRET_STAGE_INDEX) {
-        // Timed to land on the chime's bottom note rather than run under it.
-        holdTimerRef.current = setTimeout(() => playSecretRiser(0.9), SECRET_RISER_AT_MS);
-      }
-      // Deliberately not cancelling holdTimerRef above: the riser is fire and
-      // forget, and this reassignment is the next thing scheduled either way.
-      const t = setTimeout(
-        () => setStage((s) => (s?.phase === "entering" ? { ...s, phase: "facedown" } : s)),
-        hold,
-      );
-      // Kept on the flight slot so the riser's timer above keeps its own handle.
-      flightTimerRef.current = t;
-      return prev;
-    });
-  }, [holdBeforeFlip]);
+    const s = stage;
+    if (!s || s.phase !== "entering") return;
+    clearTimers();
+
+    const hold = holdBeforeFlip(s.index);
+    if (hold === 0) {
+      setStage({ ...s, phase: "facedown" });
+      return;
+    }
+    if (s.index === SECRET_STAGE_INDEX) {
+      // Timed to land on the chime's bottom note rather than run under it.
+      holdTimerRef.current = setTimeout(() => playSecretRiser(0.9), SECRET_RISER_AT_MS);
+    }
+    flightTimerRef.current = setTimeout(
+      () => setStage((cur) => (cur?.phase === "entering" ? { ...cur, phase: "facedown" } : cur)),
+      hold,
+    );
+  }, [stage, holdBeforeFlip, clearTimers]);
 
   /** The card turned over. This is the reveal: chime, collection, confetti. */
   const handleFlip = useCallback(
