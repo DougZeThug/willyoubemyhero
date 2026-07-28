@@ -240,8 +240,38 @@
  */
 
 @utility holo-scene {
-  perspective: 1200px;
+  /* Perspective is the camera's distance from the card, so it only means anything
+     relative to the card's own width. A flat 1200px put a ~380px hero card at
+     3.1x its width — an 18deg field of view, which is the lens you reach for when
+     you specifically do *not* want depth. holo-card.tsx measures the card and sets
+     this per variant; grid and pack cards leave the default alone. */
+  perspective: var(--holo-perspective, 1200px);
   transform-style: preserve-3d;
+  /* A press-and-hold on artwork is exactly the gesture iOS answers with the
+     "Save Image" callout, and holding the card is now its primary interaction.
+     This lives here rather than in the inline style object because it is static,
+     and because React never emitted it from a `WebkitTouchCallout` style key. */
+  -webkit-touch-callout: none;
+}
+
+/* Carried by the tilt layer only while it is returning to flat. holo-card.tsx
+   toggles it in the same style flush as the angle it belongs to, so tracking a
+   finger stays 1:1 and only the release is eased.
+   Deliberately a plain rule rather than an `@utility`: it is added via classList,
+   and a plain rule can never be dropped by the class scanner. */
+.holo-settle {
+  transition: transform 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-settle {
+    transition: none;
+  }
+  /* The flip is instant under reduced motion, so a half-flip delay on the face
+     swap would just leave a blank card for a quarter second. */
+  .holo-face {
+    transition: none;
+  }
 }
 
 @utility holo-face {
@@ -250,6 +280,14 @@
   overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  /* WebKit does not honour backface-visibility inside this nested preserve-3d
+     structure: on iOS the away-facing side shows through the card, mirrored.
+     Neither `isolation` nor `overflow` nor moving the property onto the flip
+     layer changes it — explicitly hiding the away side is the only thing that
+     does, so holo-card.tsx also toggles `invisible` per face.
+     The zero-duration delay lands that swap on the midpoint of the 500ms flip,
+     where the card is edge-on, so neither face is ever seen reversed. */
+  transition: visibility 0s linear 250ms;
   /* Contain the blend modes so foil never bleeds onto the page background. */
   isolation: isolate;
   border-radius: inherit;

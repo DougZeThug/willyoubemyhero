@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { initialsOf } from "@/lib/format";
 import { cachedCardMeta, primeCardMeta, saveCardMeta } from "@/lib/card-collection";
@@ -8,17 +8,51 @@ import type { Rarity } from "@/lib/card-rarity";
 /** Standard trading card is 2.5in x 3.5in. Used until the real art reports its size. */
 const DEFAULT_ASPECT = 5 / 7;
 
-/** Maximum tilt in degrees at the edges of the card. */
-const MAX_TILT = 16;
-
 /**
- * How much further a finger drag tilts the card than the same distance of mouse
- * travel. A mouse sweeps the whole card and reaches the edges on its own; a thumb
- * plants somewhere near the middle and wiggles maybe a centimetre, which under
- * plain position mapping is a couple of degrees — the card barely moves. Touch is
- * therefore tracked as amplified displacement from wherever the finger landed.
+ * How hard a card leans, and how close the camera stands to it.
+ *
+ * Two profiles, because the two places a card appears want opposite things. One
+ * big card you can put a thumb on wants to move a lot and to own the gesture; a
+ * thumbnail in a scrolling grid wants to stay out of the scroll's way entirely.
+ *
+ * maxTilt   Degrees at the edges of the card.
+ * touchGain How much further a finger drag tilts the card than the same distance
+ *           of mouse travel. A mouse sweeps the whole card and reaches the edges
+ *           on its own; a thumb plants somewhere near the middle and wiggles maybe
+ *           a centimetre. `hero` *lowers* this: it already starts from a landing
+ *           lean and has a bigger maxTilt to spend, and 2.6 on top of both just
+ *           saturates the clamp a few pixels into the drag.
+ * baseGain  How far the point a finger lands on is pushed toward the edges before
+ *           any drag at all. This is what makes press-and-hold do something.
+ * persp     Perspective as a multiple of the card's own measured width, or null to
+ *           leave the stylesheet's 1200px alone. The grid and the pack are null on
+ *           purpose: nothing about them should change.
+ * lift      translateZ in px while the card is engaged, so it pops off the page.
+ * gyroSpan  Degrees of device roll that sweep the card corner to corner.
+ * touchAct  touch-action for the scene. See styleVars for why this is all-or-nothing.
  */
-const TOUCH_GAIN = 2.6;
+const TILT = {
+  calm: {
+    maxTilt: 16,
+    touchGain: 2.6,
+    baseGain: 1,
+    persp: null,
+    lift: 0,
+    gyroSpan: { x: 26, y: 24 },
+    touchAct: "pan-y",
+  },
+  hero: {
+    maxTilt: 22,
+    touchGain: 2.1,
+    baseGain: 1.35,
+    persp: 1.7,
+    lift: 16,
+    gyroSpan: { x: 30, y: 28 },
+    touchAct: "none",
+  },
+} as const;
+
+export type TiltVariant = keyof typeof TILT;
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -44,6 +78,17 @@ export type HoloCardProps = {
    * cards like the vault grid, where a full-strength overlay swamps the artwork.
    */
   intensity?: "full" | "subtle";
+  /**
+   * How dramatic the 3D tilt is. "hero" is for the one full-size card a page is
+   * built around: half again the lean, a camera at 1.7x the card's width instead
+   * of 3.1x, a lift toward the viewer, and it claims the *entire* touch gesture —
+   * the page will not scroll while a finger is on it.
+   *
+   * Deliberately its own prop rather than derived from `intensity`: the pack page
+   * renders full-intensity cards two-up inside a scrolling grid, where claiming
+   * the gesture would trap the scroll across half the screen.
+   */
+  tilt?: TiltVariant;
   /** Device-orientation tilt, enabled by the caller after a permission grant. */
   gyro?: boolean;
   /** Start face-down (shows the back) regardless of art availability. */
@@ -78,6 +123,7 @@ function HoloCardImpl({
   interactive = true,
   touchTilt,
   intensity = "full",
+  tilt = "calm",
   gyro = false,
   faceDown = false,
   backContent,
@@ -85,8 +131,10 @@ function HoloCardImpl({
   onClick,
 }: HoloCardProps) {
   const sceneRef = useRef<HTMLDivElement>(null);
+  const tiltRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
+  const perspRef = useRef(0);
   const pendingRef = useRef<{ px: number; py: number } | null>(null);
   const dragRef = useRef<{ id: number; px: number; py: number } | null>(null);
   const reduced = usePrefersReducedMotion();
@@ -94,6 +142,7 @@ function HoloCardImpl({
 
   // A full-size card is meant to be handled; a thumbnail in a scrolling grid is not.
   const dragTilt = touchTilt ?? intensity === "full";
+  const t = TILT[tilt];
   // The grid is the one place many cards mount at once, and it is the one place
   // the art is small enough that off-screen work is pure waste.
   const eager = intensity === "full";
@@ -145,22 +194,33 @@ function HoloCardImpl({
   // off React's render path entirely. `active` is 1 while the card is being
   // moved and 0 once it settles; every foil layer scales by it, so a card at
   // rest shows the artwork almost clean and only blooms when you tilt it.
-  const applyTilt = useCallback((px: number, py: number, active: number) => {
-    const scene = sceneRef.current;
-    const card = cardRef.current;
-    if (!scene || !card) return;
-    const rx = (0.5 - py) * 2 * MAX_TILT;
-    const ry = (px - 0.5) * 2 * MAX_TILT;
-    scene.style.setProperty("--holo-rx", `${rx.toFixed(2)}deg`);
-    scene.style.setProperty("--holo-ry", `${ry.toFixed(2)}deg`);
-    card.style.setProperty("--holo-active", `${active}`);
-    card.style.setProperty("--holo-gx", `${(px * 100).toFixed(1)}%`);
-    card.style.setProperty("--holo-gy", `${(py * 100).toFixed(1)}%`);
-    card.style.setProperty("--holo-pos", `${(px * 100).toFixed(1)}%`);
-    // Sparkle parallaxes at ~2x so glints crawl independently of the bands.
-    card.style.setProperty("--holo-sparkle-x", `${(px * 200 - 50).toFixed(1)}%`);
-    card.style.setProperty("--holo-sparkle-y", `${(py * 200 - 50).toFixed(1)}%`);
-  }, []);
+  const applyTilt = useCallback(
+    (px: number, py: number, active: number) => {
+      const scene = sceneRef.current;
+      const layer = tiltRef.current;
+      const card = cardRef.current;
+      if (!scene || !layer || !card) return;
+      const rx = (0.5 - py) * 2 * t.maxTilt;
+      const ry = (px - 0.5) * 2 * t.maxTilt;
+      // Easing is switched on in the same style flush as the angle it belongs to.
+      // A transition runs off the *after-change* style, so the return to flat eases
+      // while every tracking frame stays instant — the card never lags the finger.
+      // Keying it on `active` rather than clearing it on pointerdown is what keeps
+      // the mouse path right too: hover re-entry never fires a pointerdown.
+      layer.classList.toggle("holo-settle", active === 0);
+      scene.style.setProperty("--holo-rx", `${rx.toFixed(2)}deg`);
+      scene.style.setProperty("--holo-ry", `${ry.toFixed(2)}deg`);
+      scene.style.setProperty("--holo-lift", `${(active * t.lift).toFixed(1)}px`);
+      card.style.setProperty("--holo-active", `${active}`);
+      card.style.setProperty("--holo-gx", `${(px * 100).toFixed(1)}%`);
+      card.style.setProperty("--holo-gy", `${(py * 100).toFixed(1)}%`);
+      card.style.setProperty("--holo-pos", `${(px * 100).toFixed(1)}%`);
+      // Sparkle parallaxes at ~2x so glints crawl independently of the bands.
+      card.style.setProperty("--holo-sparkle-x", `${(px * 200 - 50).toFixed(1)}%`);
+      card.style.setProperty("--holo-sparkle-y", `${(py * 200 - 50).toFixed(1)}%`);
+    },
+    [t],
+  );
 
   const schedule = useCallback(
     (px: number, py: number) => {
@@ -192,11 +252,42 @@ function HoloCardImpl({
     };
   }, []);
 
+  // Perspective only means anything relative to the card's own width, and that
+  // width is whatever column the caller dropped it into. Taken off the rect
+  // localPoint already measures and written only when it actually moves, so there
+  // is no ResizeObserver on thirty grid cards for a number that changes when the
+  // phone rotates and never otherwise.
+  const syncPerspective = useCallback(
+    (width: number) => {
+      if (t.persp == null) return;
+      const next = Math.round(width * t.persp);
+      if (!next || Math.abs(next - perspRef.current) < 4) return;
+      perspRef.current = next;
+      sceneRef.current?.style.setProperty("--holo-perspective", `${next}px`);
+    },
+    [t.persp],
+  );
+
+  // One measurement at mount so the very first tilt already sits at the right
+  // camera distance instead of popping from the 1200px default on the first frame.
+  // The persp guard has to be out here, not just inside syncPerspective: measuring
+  // is the expensive half, and a vault grid would otherwise force thirty layout
+  // reads at mount to compute a value none of those cards use.
+  useLayoutEffect(() => {
+    if (t.persp == null) return;
+    const w = sceneRef.current?.getBoundingClientRect().width;
+    if (w) syncPerspective(w);
+  }, [t.persp, syncPerspective]);
+
   // Device orientation, offset from the first reading so it works at any resting
   // angle — standing at the bar or lying on the couch.
   useEffect(() => {
     if (!gyro || reduced || typeof window === "undefined") return;
     setEngaged(true);
+    // Nothing on the gyro path goes through localPoint, so without this the card
+    // would tilt at the stylesheet's fallback camera distance.
+    const w = sceneRef.current?.getBoundingClientRect().width;
+    if (w) syncPerspective(w);
     let baseline: { beta: number; gamma: number } | null = null;
     const onOrient = (e: DeviceOrientationEvent) => {
       const { beta, gamma } = e;
@@ -205,21 +296,43 @@ function HoloCardImpl({
         baseline = { beta, gamma };
         return;
       }
-      // Roughly a 20° roll of the phone sweeps the card corner to corner. Wider
-      // than this and normal handling reads as a dead card.
+      // A roll of gyroSpan degrees sweeps the card corner to corner. Wider than
+      // that and normal handling reads as a dead card; narrower and it twitches.
+      // The span widens along with maxTilt so the card gains throw without the one
+      // input the user has no fine control over becoming jumpy.
       schedule(
-        clamp01(0.5 + (gamma - baseline.gamma) / 26),
-        clamp01(0.5 + (beta - baseline.beta) / 24),
+        clamp01(0.5 + (gamma - baseline.gamma) / t.gyroSpan.x),
+        clamp01(0.5 + (beta - baseline.beta) / t.gyroSpan.y),
       );
     };
     window.addEventListener("deviceorientation", onOrient);
-    return () => window.removeEventListener("deviceorientation", onOrient);
-  }, [gyro, reduced, schedule]);
+    return () => {
+      window.removeEventListener("deviceorientation", onOrient);
+      // Switching "Tilt" back off used to leave the card cocked over with the foil
+      // still lit. Now it eases home.
+      resetTilt();
+    };
+  }, [gyro, reduced, schedule, resetTilt, syncPerspective, t]);
 
   function localPoint(e: React.PointerEvent<HTMLDivElement>) {
     const r = e.currentTarget.getBoundingClientRect();
     if (!r.width || !r.height) return null;
+    syncPerspective(r.width);
     return { px: (e.clientX - r.left) / r.width, py: (e.clientY - r.top) / r.height };
+  }
+
+  // The landing point sets the lean the instant you press; the drag adds amplified
+  // displacement on top of it. Put a thumb on a corner and hold perfectly still and
+  // the card should already be leaning away from you. That is the piece that was
+  // missing — this arithmetic only ever ran on pointermove, so a press that did not
+  // travel produced no tilt at all.
+  function touchTarget(drag: { px: number; py: number }, px: number, py: number) {
+    const baseX = 0.5 + (drag.px - 0.5) * t.baseGain;
+    const baseY = 0.5 + (drag.py - 0.5) * t.baseGain;
+    return {
+      px: clamp01(baseX + (px - drag.px) * t.touchGain),
+      py: clamp01(baseY + (py - drag.py) * t.touchGain),
+    };
   }
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -231,8 +344,14 @@ function HoloCardImpl({
     // edge, and so a drag that started here isn't handed off mid-gesture.
     e.currentTarget.setPointerCapture?.(e.pointerId);
     // Mounted now, a frame before anything moves, so the overlays still get to
-    // fade in rather than snapping on with the first tilt.
+    // fade in rather than snapping on with the first tilt. This has to stay ahead
+    // of the schedule() below: React flushes a discrete event's state before the
+    // rAF runs, so the glare layer exists at --holo-active 0 and still gets its
+    // 260ms ramp instead of blinking on at full strength.
     setEngaged(true);
+    // Lean now, from wherever the thumb actually landed — no travel required.
+    const target = touchTarget(p, p.px, p.py);
+    schedule(target.px, target.py);
   }
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
@@ -245,15 +364,18 @@ function HoloCardImpl({
     if (!p) return;
     setEngaged(true);
     if (drag) {
-      schedule(
-        clamp01(drag.px + (p.px - drag.px) * TOUCH_GAIN),
-        clamp01(drag.py + (p.py - drag.py) * TOUCH_GAIN),
-      );
+      const target = touchTarget(drag, p.px, p.py);
+      schedule(target.px, target.py);
       return;
     }
     schedule(p.px, p.py);
   }
 
+  // pointerup and pointercancel deliberately share this. Both should return the
+  // card to flat, and both now do it eased rather than snapping. On a hero card a
+  // cancel is rare once the gesture is owned outright — only a real system steal,
+  // like an app switch or an incoming call — and on a grid card, easing home when
+  // a scroll takes the gesture is a straight improvement over the old hard snap.
   function handlePointerEnd(e: React.PointerEvent<HTMLDivElement>) {
     if (dragRef.current?.id === e.pointerId && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -288,10 +410,23 @@ function HoloCardImpl({
     // near the old flat 0.38, but only while moving and only inside the band.
     "--holo-gain": reduced ? 0 : 0.4 * rarity.strength * scale,
     aspectRatio: aspect ?? DEFAULT_ASPECT,
-    // Vertical drags still scroll the page; anything with sideways intent is the
-    // card's. Without this the browser claims the gesture as a scroll a few pixels
-    // in and cancels the pointer stream, which is why a thumb barely moved the card.
-    touchAction: dragTilt && interactive && !reduced ? "pan-y" : undefined,
+    // "pan-y" for a card in a scrolling grid; "none" for a hero card, which owns
+    // the whole gesture on both axes.
+    //
+    // touch-action is read once, when the gesture starts, off the hit element and
+    // its ancestors, and that decision is final — once the compositor has committed
+    // to a pan it does not hand it back, preventDefault is ignored from then on,
+    // and our pointer stream dies with a pointercancel. So "pan-y" never meant
+    // "scroll unless the card wants it". It meant the card never receives vertical
+    // travel at all — rotateX is simply dead on touch — and the instant a thumb
+    // drifts a few pixels down the browser cancels the pointer and the card snaps
+    // flat mid-drag. That is the bug that reads as "holding it barely tilts".
+    //
+    // There is no adaptive middle ground worth having: changing touch-action
+    // mid-gesture does nothing to the in-flight gesture, and re-capturing after a
+    // pointercancel cannot reclaim a pan. The only alternative is "none" plus a JS
+    // scroll proxy, which costs momentum and rubber-banding.
+    touchAction: dragTilt && interactive && !reduced ? t.touchAct : undefined,
   } as React.CSSProperties;
 
   const Overlays = (
@@ -319,9 +454,19 @@ function HoloCardImpl({
         behind your finger. Sharing one element would force one duration on both.
       */}
       <div
+        ref={tiltRef}
         className="h-full w-full [transform-style:preserve-3d]"
         style={{
-          transform: "rotateX(var(--holo-rx,0deg)) rotateY(var(--holo-ry,0deg))",
+          // translateZ leads: the lift is toward the viewer along the scene's Z,
+          // not along the card's own normal after it has already rotated. It rides
+          // the same transform the settle transition eases, so it costs nothing
+          // extra — and it must not live on the flip layer below, whose 500ms
+          // duration would smear the lift out and make the card feel gluey.
+          transform:
+            "translateZ(var(--holo-lift,0px)) rotateX(var(--holo-rx,0deg)) rotateY(var(--holo-ry,0deg))",
+          // Gated to the hero card: thirty promoted layers is the exact cost the
+          // rest of this file is written to avoid.
+          willChange: tilt === "hero" ? "transform" : undefined,
         }}
       >
         <div
@@ -354,8 +499,9 @@ function HoloCardImpl({
             {name} — {rarity.label} card{canFlip ? ", press to flip" : ""}
           </span>
 
-          {/* Front */}
-          <div className="holo-face">
+          {/* Front. `invisible` rather than backface-visibility alone — see the
+              note on .holo-face; WebKit shows the away side through the card. */}
+          <div className={cn("holo-face", canFlip && showBack && "invisible")}>
             {frontUrl ? (
               <img
                 src={frontUrl}
@@ -383,7 +529,7 @@ function HoloCardImpl({
           {/* Back — skipped entirely on a card that can't turn over, which is every
               thumbnail in the vault grid. */}
           {(canFlip || faceDown) && (
-            <div className="holo-face [transform:rotateY(180deg)]">
+            <div className={cn("holo-face [transform:rotateY(180deg)]", !showBack && "invisible")}>
               {backUrl ? (
                 <img
                   src={backUrl}
