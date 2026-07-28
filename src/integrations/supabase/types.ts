@@ -781,6 +781,101 @@ export type Database = {
           },
         ]
       }
+      secret_card_pulls: {
+        Row: {
+          created_at: string
+          event_id: string | null
+          id: string
+          is_duplicate: boolean
+          participant_id: string
+          pulled_on: string
+          secret_card_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          is_duplicate?: boolean
+          participant_id: string
+          pulled_on: string
+          secret_card_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          is_duplicate?: boolean
+          participant_id?: string
+          pulled_on?: string
+          secret_card_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "secret_card_pulls_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "secret_card_pulls_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "secret_card_pulls_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "secret_card_pulls_secret_card_id_fkey"
+            columns: ["secret_card_id"]
+            isOneToOne: false
+            referencedRelation: "secret_cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      secret_cards: {
+        Row: {
+          active: boolean
+          art_path: string | null
+          back_path: string | null
+          created_at: string
+          flavour: string | null
+          foil: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          art_path?: string | null
+          back_path?: string | null
+          created_at?: string
+          flavour?: string | null
+          foil?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          art_path?: string | null
+          back_path?: string | null
+          created_at?: string
+          flavour?: string | null
+          foil?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       splits: {
         Row: {
           client_key: string | null
@@ -993,7 +1088,12 @@ export type Database = {
         Args: { _categories: Json; _event_id: string }
         Returns: number
       }
+      pull_secret_card: {
+        Args: { _event_id: string; _participant_id: string }
+        Returns: Json
+      }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
+      secret_pull_status: { Args: { _participant_id: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never
