@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Layers, Trash2 } from "lucide-react";
 import { getEventCardBack, uploadEventCardBack, deleteEventCardBack } from "@/lib/media.functions";
+import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -46,12 +47,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
     }
     setBusy(true);
     try {
-      const dataUrl: string = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result as string);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
+      const dataUrl = await encodeUploadImage(file);
       await uploadFn({ data: { eventId, dataUrl } });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["event-card-back", eventId] }),
