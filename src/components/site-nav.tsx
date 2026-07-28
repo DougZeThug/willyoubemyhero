@@ -3,7 +3,7 @@ import { Radio, Trophy, ListOrdered, ClipboardList, Settings, Users } from "luci
 import { cn } from "@/lib/utils";
 
 const links = [
-  { to: "/", label: "Live", icon: Radio },
+  { to: "/live", label: "Live", icon: Radio },
   { to: "/leaderboard", label: "Board", icon: Trophy },
   { to: "/order", label: "Order", icon: ListOrdered },
   { to: "/players", label: "Players", icon: Users },
