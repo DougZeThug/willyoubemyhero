@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteNav } from "@/components/site-nav";
+import { hydrateCardSfxMuted } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
   return (
@@ -142,6 +143,12 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  // The saved mute preference has to be in module state before the first card
+  // is tapped, and card-sfx is imported by components far below this one.
+  useEffect(() => {
+    hydrateCardSfxMuted();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

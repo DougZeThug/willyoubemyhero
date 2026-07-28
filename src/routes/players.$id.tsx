@@ -11,6 +11,8 @@ import {
   RotateCw,
   Share2,
   Smartphone,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -19,12 +21,24 @@ import { requestGyroPermission } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { CardSocial } from "@/components/card-social";
+import { FieldComparison } from "@/components/field-comparison";
 import { useEventSocial, useEventAwards } from "@/hooks/use-event-social";
+import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle, TIER_REASON, type Rarity } from "@/lib/card-rarity";
+import { cardStats } from "@/lib/card-stats";
+import { playReveal, useCardSfx } from "@/lib/card-sfx";
 import { exportCardPng } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+/**
+ * Cards whose reveal has already played this page load.
+ *
+ * Arrowing back and forth through the roster re-mounts the same card over and
+ * over, and a chime on every pass turns a flourish into a machine gun.
+ */
+const revealed = new Set<string>();
 
 export const Route = createFileRoute("/players/$id")({
   head: () => ({
@@ -55,6 +69,8 @@ function PlayerCardPage() {
   const cards = useEventCardUrls(event?.id ?? null);
   const social = useEventSocial(event?.id ?? null);
   const awards = useEventAwards(event?.id ?? null);
+
+  const sfx = useCardSfx();
 
   const [flipped, setFlipped] = useState(false);
   const [gyro, setGyro] = useState(false);
@@ -91,6 +107,42 @@ function PlayerCardPage() {
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
+  // Resolved before the loading guard below so the reveal and the stat hooks
+  // can be plain unconditional hooks. `ep` stays null until the bundle lands.
+  const ep = bundle?.participants.find((p) => p.id === id) ?? null;
+  const rarity = (ep && rarities.get(ep.id)) ?? rarityStyle("base");
+  const stats = useMemo(() => cardStats(bundle, ep?.participant_id), [bundle, ep?.participant_id]);
+
+  // Landing on a card is an event: the tier chime, and a burst in the tier's own
+  // colour for the two tiers worth celebrating. A cold page load has no user
+  // gesture behind it, so the AudioContext stays suspended and this is silent —
+  // which is the correct behaviour, not something to work around.
+  useEffect(() => {
+    if (!ep || revealed.has(ep.id)) return;
+    revealed.add(ep.id);
+    playReveal(rarity.tier);
+    if (rarity.tier !== "champion" && rarity.tier !== "podium") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let cancelled = false;
+    void import("canvas-confetti").then(({ default: confetti }) => {
+      if (cancelled) return;
+      confetti({
+        particleCount: 90,
+        spread: 75,
+        origin: { y: 0.4 },
+        colors: [rarity.accent, rarity.holoA, rarity.holoB, "#ffffff"],
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ep, rarity.tier, rarity.accent, rarity.holoA, rarity.holoB]);
+
+  // Rolled rather than snapped into place. Both return the target verbatim under
+  // reduced motion, and null for a player with no official run.
+  const countedTime = useCountUp(stats.bestRun?.official_time_ms ?? null);
+  const countedRank = useCountUp(stats.rank);
+
   // QR points at this card so a printed card can link to its digital twin.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -114,28 +166,12 @@ function PlayerCardPage() {
     return <div className="p-10 text-center text-sm text-muted-foreground">Loading…</div>;
   }
 
-  const ep = bundle?.participants.find((p) => p.id === id);
   if (!ep) throw notFound();
 
   const urls = cards.data?.[ep.id];
-  const rarity = rarities.get(ep.id) ?? rarityStyle("base");
   const name = ep.participant?.name ?? "—";
   const photoUrl = photos.data?.[ep.id] ?? ep.participant?.profile_image_url ?? null;
-
-  const officialRuns = (bundle?.runs ?? [])
-    .filter((r) => r.is_official && r.participant_id === ep.participant_id)
-    .sort((a, b) => (a.official_time_ms ?? 0) - (b.official_time_ms ?? 0));
-  const bestRun = officialRuns[0];
-
-  // Rank among everyone with an official time.
-  const allBest = new Map<string, number>();
-  for (const r of bundle?.runs ?? []) {
-    if (!r.is_official || r.official_time_ms == null) continue;
-    const cur = allBest.get(r.participant_id);
-    if (cur == null || r.official_time_ms < cur) allBest.set(r.participant_id, r.official_time_ms);
-  }
-  const bestMs = bestRun?.official_time_ms ?? null;
-  const rank = bestMs != null ? [...allBest.values()].filter((ms) => ms < bestMs).length + 1 : null;
+  const { bestRun, rank } = stats;
 
   // Reactions and comments store participant_id; the roster is the only place
   // that maps those back to names.
@@ -302,6 +338,15 @@ function PlayerCardPage() {
           >
             Tilt
           </ActionButton>
+          <ActionButton
+            onClick={sfx.toggle}
+            active={!sfx.muted}
+            icon={
+              sfx.muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />
+            }
+          >
+            {sfx.muted ? "Muted" : "Sound"}
+          </ActionButton>
         </div>
 
         {ep.participant?.trash_talk_quote && (
@@ -319,9 +364,14 @@ function PlayerCardPage() {
             label="Pick"
             value={ep.selected_draft_position != null ? `#${ep.selected_draft_position}` : "—"}
           />
-          <Stat label="Time" value={bestRun ? formatTime(bestRun.official_time_ms) : "—"} mono />
-          <Stat label="Rank" value={rank != null ? `#${rank}` : "—"} />
+          <Stat label="Time" value={countedTime != null ? formatTime(countedTime) : "—"} mono />
+          <Stat
+            label="Rank"
+            value={countedRank != null ? `#${Math.max(1, Math.round(countedRank))}` : "—"}
+          />
         </div>
+
+        <FieldComparison ladder={stats.ladder} rank={rank} fieldSize={stats.fieldSize} />
 
         {event?.id && (
           <CardSocial

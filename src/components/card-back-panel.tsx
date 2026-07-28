@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { formatTime } from "@/lib/format";
 import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
+import { cardStats, type StatsBundle } from "@/lib/card-stats";
 
 /**
  * Generated card back, used when a player has no uploaded back artwork.
@@ -14,17 +15,6 @@ import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
  * flat tab, not on a 3D-transformed face.
  */
 
-type BackBundle = {
-  stations: { id: string; name: string; short_name: string | null; station_order: number }[];
-  runs: {
-    id: string;
-    participant_id: string;
-    official_time_ms: number | null;
-    is_official: boolean;
-  }[];
-  splits: { run_id: string; station_id: string; segment_time_ms: number | null }[];
-};
-
 type BackParticipant = {
   participant_id: string;
   running_order: number;
@@ -33,69 +23,19 @@ type BackParticipant = {
   participant?: { name?: string | null; trash_talk_quote?: string | null } | null;
 };
 
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-type LadderRow = {
-  id: string;
-  label: string;
-  /** This player's segment time at the station, if recorded. */
-  ms: number | null;
-  /** Signed difference from the field median. Negative is faster. */
-  deltaMs: number | null;
-};
-
 export function CardBackPanel({
   ep,
   bundle,
   rarity,
 }: {
   ep: BackParticipant;
-  bundle: BackBundle | null | undefined;
+  bundle: StatsBundle | null | undefined;
   rarity: Rarity;
 }) {
-  const { bestRun, ladder } = useMemo(() => {
-    if (!bundle) return { bestRun: null, ladder: [] as LadderRow[] };
-
-    const mine = bundle.runs
-      .filter((r) => r.is_official && r.participant_id === ep.participant_id)
-      .sort((a, b) => (a.official_time_ms ?? 0) - (b.official_time_ms ?? 0));
-    const best = mine[0] ?? null;
-
-    const runOwner = new Map(bundle.runs.map((r) => [r.id, r.participant_id]));
-    const stations = [...bundle.stations].sort((a, b) => a.station_order - b.station_order);
-
-    const rows: LadderRow[] = stations.map((st) => {
-      const forStation = bundle.splits.filter(
-        (s) => s.station_id === st.id && s.segment_time_ms != null,
-      );
-      // Field median uses one split per participant so a re-run can't skew it.
-      const perParticipant = new Map<string, number>();
-      for (const s of forStation) {
-        const owner = runOwner.get(s.run_id);
-        if (!owner) continue;
-        const ms = s.segment_time_ms as number;
-        const cur = perParticipant.get(owner);
-        if (cur == null || ms < cur) perParticipant.set(owner, ms);
-      }
-      const fieldMedian = median([...perParticipant.values()]);
-      const mineMs = best
-        ? (forStation.find((s) => s.run_id === best.id)?.segment_time_ms ?? null)
-        : null;
-      return {
-        id: st.id,
-        label: st.short_name || st.name,
-        ms: mineMs,
-        deltaMs: mineMs != null && fieldMedian != null ? mineMs - fieldMedian : null,
-      };
-    });
-
-    return { bestRun: best, ladder: rows };
-  }, [bundle, ep.participant_id]);
+  const { bestRun, ladder } = useMemo(
+    () => cardStats(bundle, ep.participant_id),
+    [bundle, ep.participant_id],
+  );
 
   const quote = ep.participant?.trash_talk_quote;
   const worst = Math.max(1, ...ladder.map((r) => r.ms ?? 0));

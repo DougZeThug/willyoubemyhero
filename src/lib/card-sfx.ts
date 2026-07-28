@@ -5,6 +5,10 @@
 // Every entry point is a no-op on the server, when the user prefers reduced motion,
 // or if Web Audio is unavailable.
 
+import { useCallback, useEffect, useState } from "react";
+
+const MUTE_KEY = "wwbh:sfx-muted";
+
 let ctx: AudioContext | null = null;
 let muted = false;
 
@@ -33,10 +37,69 @@ function audio(): AudioContext | null {
 
 export function setCardSfxMuted(next: boolean) {
   muted = next;
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MUTE_KEY, next ? "1" : "0");
+  } catch {
+    /* private mode with storage blocked still mutes for this page load */
+  }
+  // Storage events only fire in *other* tabs, so the hook below listens for
+  // this instead. Same pattern as member-token.ts's token-changed event.
+  window.dispatchEvent(new Event("wwbh:sfx-muted-changed"));
 }
 
 export function isCardSfxMuted() {
   return muted;
+}
+
+function readMuted(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(MUTE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Restore the saved preference into module state. Call once, high in the tree —
+ * the setting has to be live before the first card is ever tapped.
+ */
+export function hydrateCardSfxMuted() {
+  muted = readMuted();
+}
+
+/**
+ * Reactive view of the mute preference for a toggle button.
+ *
+ * Starts unmuted so the server and the first client render agree, then reads
+ * storage in an effect — the same hydration dance as `useMemberSession`.
+ */
+export function useCardSfx() {
+  const [isMuted, setIsMuted] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setIsMuted(readMuted());
+    sync();
+    window.addEventListener("wwbh:sfx-muted-changed", sync);
+    // Covers the app being open in two tabs.
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("wwbh:sfx-muted-changed", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const toggle = useCallback(() => {
+    const next = !isCardSfxMuted();
+    setCardSfxMuted(next);
+    // Unmuting is itself a user gesture, so it is the ideal moment to unlock
+    // Safari's suspended AudioContext — otherwise the first sound after
+    // unmuting is silently dropped.
+    if (!next) audio();
+  }, []);
+
+  return { muted: isMuted, toggle };
 }
 
 // Short burst of filtered white noise — reads as card stock sliding against card stock.
