@@ -12,10 +12,18 @@
  * re-encoded, so an already-optimised file never takes a second generation loss.
  */
 
-const MAX_EDGE = 1600;
+const MAX_EDGE_LARGE = 1600;
+const MAX_EDGE_MEDIUM = 800;
+const MAX_EDGE_THUMB = 320;
 const QUALITY = 0.86;
 /** Below this, re-encoding costs more in quality than it saves in bytes. */
 const PASSTHROUGH_BYTES = 400_000;
+
+export type EncodedImageSizes = {
+  thumb: string;
+  medium: string;
+  large: string;
+};
 
 function readAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -51,42 +59,88 @@ function encodesWebp(canvas: HTMLCanvasElement) {
   return canvas.toDataURL("image/webp").startsWith("data:image/webp");
 }
 
+function encodeCanvas(canvas: HTMLCanvasElement): string {
+  const type = encodesWebp(canvas) ? "image/webp" : "image/jpeg";
+  return canvas.toDataURL(type, QUALITY);
+}
+
+function resizeCanvas(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not create canvas context");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 /**
- * Returns a data URL suitable for the upload server functions: the original when
- * the file is already lean, a downscaled WebP (or JPEG where WebP is unavailable)
- * otherwise. Never throws for image reasons — an undecodable file falls back to
- * the raw data URL so the upload path behaves exactly as it did before.
+ * Returns three data URLs for a single image: thumb, medium, and large. The
+ * browser canvas is used, so this never needs server-side image libraries.
+ *
+ * The original file is passed through unchanged (for all three slots) when it
+ * is already small, so a designer-optimised asset does not take a second generation
+ * hit.
  */
-export async function encodeUploadImage(file: File): Promise<string> {
+export async function encodeUploadImageVariants(file: File): Promise<EncodedImageSizes> {
   try {
     const source = await loadImage(file);
     const w = "naturalWidth" in source ? source.naturalWidth : source.width;
     const h = "naturalHeight" in source ? source.naturalHeight : source.height;
-    if (!w || !h) return await readAsDataUrl(file);
+    if (!w || !h) {
+      const passthrough = await readAsDataUrl(file);
+      return { thumb: passthrough, medium: passthrough, large: passthrough };
+    }
 
-    const scale = Math.min(1, MAX_EDGE / Math.max(w, h));
-    if (scale === 1 && file.size <= PASSTHROUGH_BYTES) return await readAsDataUrl(file);
+    const maxEdge = Math.max(w, h);
+    const scaleLarge = Math.min(1, MAX_EDGE_LARGE / maxEdge);
+    const scaleMedium = Math.min(1, MAX_EDGE_MEDIUM / maxEdge);
+    const scaleThumb = Math.min(1, MAX_EDGE_THUMB / maxEdge);
 
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(w * scale));
-    canvas.height = Math.max(1, Math.round(h * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return await readAsDataUrl(file);
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(source as CanvasImageSource, 0, 0, canvas.width, canvas.height);
+    if (scaleLarge === 1 && file.size <= PASSTHROUGH_BYTES) {
+      const passthrough = await readAsDataUrl(file);
+      if ("close" in source) source.close();
+      return { thumb: passthrough, medium: passthrough, large: passthrough };
+    }
+
+    const large =
+      scaleLarge < 1
+        ? encodeCanvas(resizeCanvas(source as CanvasImageSource, w * scaleLarge, h * scaleLarge))
+        : await readAsDataUrl(file);
+
+    const medium =
+      scaleMedium < 1
+        ? encodeCanvas(resizeCanvas(source as CanvasImageSource, w * scaleMedium, h * scaleMedium))
+        : large;
+
+    const thumb =
+      scaleThumb < 1
+        ? encodeCanvas(resizeCanvas(source as CanvasImageSource, w * scaleThumb, h * scaleThumb))
+        : medium;
+
     if ("close" in source) source.close();
 
-    // WebP keeps the alpha channel that some card art relies on for its corners;
-    // JPEG would flatten it to black, so it is only the fallback.
-    const type = encodesWebp(canvas) ? "image/webp" : "image/jpeg";
-    const out = canvas.toDataURL(type, QUALITY);
-    if (!out.startsWith("data:image/")) return await readAsDataUrl(file);
-    if (scale < 1) return out;
-    // Nothing was resized, so this re-encode only pays off if it actually shrank
-    // the file — an already-optimised JPEG usually comes out bigger.
-    const original = await readAsDataUrl(file);
-    return out.length < original.length ? out : original;
+    return {
+      thumb: thumb.startsWith("data:image/") ? thumb : large,
+      medium: medium.startsWith("data:image/") ? medium : large,
+      large: large.startsWith("data:image/") ? large : await readAsDataUrl(file),
+    };
   } catch {
-    return await readAsDataUrl(file);
+    const passthrough = await readAsDataUrl(file);
+    return { thumb: passthrough, medium: passthrough, large: passthrough };
   }
+}
+
+/**
+ * Single-size variant kept for call sites that do not need responsive sizes
+ * (for example, secret card art that is always shown at one resolution).
+ */
+export async function encodeUploadImage(file: File): Promise<string> {
+  const sizes = await encodeUploadImageVariants(file);
+  return sizes.large;
 }
