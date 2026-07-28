@@ -732,6 +732,10 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       <MemberCodesPanel eventId={eventId} />
       <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
 
+      <div className="md:col-span-2">
+        <AddPlayerPanel eventId={eventId} />
+      </div>
+
       <AdminSection
         icon={<QrCode className="h-4 w-4 shrink-0" />}
         title="Spectator Access"
