@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getEventPhotoUrls, getEventCardUrls } from "@/lib/media.functions";
+import { getEventPhotoUrls, getEventCardUrls, getEventCardBack } from "@/lib/media.functions";
 
 // The storage bucket is private, so these are signed URLs. The server hands back
 // the *same* URL string for a given file until it is close to expiring (see the
@@ -92,4 +92,37 @@ export function useEventPhotoUrls(eventId: string | null | undefined) {
 export function useEventCardUrls(eventId: string | null | undefined) {
   const fn = useServerFn(getEventCardUrls);
   return useSignedUrls("card-urls", eventId, () => fn({ data: { eventId: eventId! } }));
+}
+
+/** How long the admin panel's own refresh cycle assumed. Kept, so nothing changed
+ *  under it when this moved out of the component. */
+const CARD_BACK_STALE_MS = 30 * 60_000;
+const CARD_BACK_REFRESH_MS = 45 * 60_000;
+
+/**
+ * The event's universal card back on its own — no participant anywhere in it.
+ *
+ * Deliberately *not* `useSignedUrls`. That helper keeps a 3.5 hour localStorage
+ * snapshot, and this query gets invalidated the moment an admin uploads or
+ * deletes a back; the snapshot would outlive the invalidation and keep serving
+ * the old URL for the rest of the afternoon.
+ *
+ * The key matches the one the admin panel has always used, so an upload there
+ * still refreshes a pack sitting open on somebody else's phone.
+ *
+ * Use this, never `useEventCardUrls`, anywhere the back is shown *before* the
+ * card it belongs to. That one resolves `ownBack ?? universalUrl` per player, so
+ * on an event where people have their own backs it would print the card's own
+ * back on the sealed wrapper — which is the entire reveal, given away.
+ */
+export function useEventCardBack(eventId: string | null | undefined) {
+  const fn = useServerFn(getEventCardBack);
+  return useQuery({
+    queryKey: ["event-card-back", eventId],
+    queryFn: () => fn({ data: { eventId: eventId! } }),
+    enabled: !!eventId,
+    staleTime: CARD_BACK_STALE_MS,
+    refetchInterval: CARD_BACK_REFRESH_MS,
+    refetchOnWindowFocus: false,
+  });
 }

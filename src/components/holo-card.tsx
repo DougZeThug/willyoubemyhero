@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { initialsOf } from "@/lib/format";
 import { cachedCardMeta, primeCardMeta, saveCardMeta } from "@/lib/card-collection";
 import { playFlip } from "@/lib/card-sfx";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import type { Rarity } from "@/lib/card-rarity";
 
 /** Standard trading card is 2.5in x 3.5in. Used until the real art reports its size. */
@@ -115,19 +116,6 @@ export type HoloCardProps = {
   className?: string;
   onClick?: () => void;
 };
-
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (!mq) return;
-    setReduced(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
-}
 
 function HoloCardImpl({
   frontUrl,
