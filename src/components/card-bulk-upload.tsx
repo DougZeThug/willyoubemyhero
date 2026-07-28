@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Upload, X, CheckCircle2, AlertTriangle } from "lucide-react";
 import { uploadParticipantCardsBulk, type CardSide } from "@/lib/media.functions";
-import { encodeUploadImage } from "@/lib/image-encode";
+import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
