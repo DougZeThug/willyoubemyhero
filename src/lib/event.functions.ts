@@ -41,7 +41,7 @@ export const getEventBundle = createServerFn({ method: "GET" })
       sb.from("events_public").select("*").eq("id", data.eventId).maybeSingle(),
       sb
         .from("event_participants")
-        .select("*, participant:participants(*)")
+        .select("*, participant:participants!event_participants_participant_id_fkey(*)")
         .eq("event_id", data.eventId)
         .order("running_order", { ascending: true }),
       sb
