@@ -21,6 +21,32 @@ async function admin() {
   return supabaseAdmin;
 }
 
+/**
+ * Guest identity forwarded from the browser. `key` is `d:<deviceId>`, minted
+ * per device and stable across reloads. `name` is what the guest typed the
+ * first time they wanted to say something.
+ *
+ * A member session always wins over a guest identity in the same request, so
+ * signing in later can't silently double up your reactions.
+ */
+const guestSchema = z
+  .object({
+    key: z.string().trim().min(4).max(80),
+    name: z.string().trim().min(1).max(40),
+  })
+  .optional();
+type GuestInput = z.infer<typeof guestSchema>;
+
+function actor(input: GuestInput): {
+  member: string | null;
+  guest: { key: string; name: string } | null;
+} {
+  const member = optionalMember();
+  if (member) return { member, guest: null };
+  if (!input) throw new Error("Claim your player or add a name to join in");
+  return { member: null, guest: input };
+}
+
 /** Every reaction and comment for one event, in a single round trip. */
 export const getEventSocial = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
