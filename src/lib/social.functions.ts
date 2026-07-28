@@ -80,29 +80,41 @@ export const toggleReaction = createServerFn({ method: "POST" })
       .object({
         eventParticipantId: z.string().uuid(),
         emoji: reactionEmoji,
+        guest: guestSchema,
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const who = actor(data.guest);
     const sb = await admin();
-    const { data: existing } = await sb
+    const q = sb
       .from("card_reactions")
       .select("id")
       .eq("event_participant_id", data.eventParticipantId)
-      .eq("participant_id", me)
-      .eq("emoji", data.emoji)
-      .maybeSingle();
+      .eq("emoji", data.emoji);
+    const { data: existing } = who.member
+      ? await q.eq("participant_id", who.member).maybeSingle()
+      : await q.eq("guest_key", who.guest!.key).maybeSingle();
 
     if (existing) {
       await sb.from("card_reactions").delete().eq("id", existing.id);
       return { ok: true as const, reacted: false as const };
     }
-    const { error } = await sb.from("card_reactions").insert({
-      event_participant_id: data.eventParticipantId,
-      participant_id: me,
-      emoji: data.emoji,
-    });
+    const { error } = await sb.from("card_reactions").insert(
+      who.member
+        ? {
+            event_participant_id: data.eventParticipantId,
+            participant_id: who.member,
+            emoji: data.emoji,
+          }
+        : {
+            event_participant_id: data.eventParticipantId,
+            participant_id: null,
+            guest_key: who.guest!.key,
+            guest_name: who.guest!.name,
+            emoji: data.emoji,
+          },
+    );
     if (error) throw error;
     return { ok: true as const, reacted: true as const };
   });
