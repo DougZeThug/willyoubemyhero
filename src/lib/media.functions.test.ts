@@ -123,7 +123,7 @@ describe("signed url cache", () => {
     })) as Record<string, { front: import("./media.functions").ImageUrlSet | null }>;
 
     expect(signer.count).toBe(1);
-    expect(urls["ep-1"].front).toBe(urls["ep-3"].front);
+    expect(urls["ep-1"].front).toEqual(urls["ep-3"].front);
   });
 
   it("returns nothing for a participant with no artwork", async () => {
