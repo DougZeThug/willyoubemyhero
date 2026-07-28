@@ -427,9 +427,6 @@ function HoloCardImpl({
     // pointercancel cannot reclaim a pan. The only alternative is "none" plus a JS
     // scroll proxy, which costs momentum and rubber-banding.
     touchAction: dragTilt && interactive && !reduced ? t.touchAct : undefined,
-    // A press-and-hold on artwork is exactly the gesture iOS answers with the
-    // "Save Image" callout, and it is now the card's primary interaction.
-    WebkitTouchCallout: "none",
   } as React.CSSProperties;
 
   const Overlays = (
@@ -502,8 +499,9 @@ function HoloCardImpl({
             {name} — {rarity.label} card{canFlip ? ", press to flip" : ""}
           </span>
 
-          {/* Front */}
-          <div className="holo-face">
+          {/* Front. `invisible` rather than backface-visibility alone — see the
+              note on .holo-face; WebKit shows the away side through the card. */}
+          <div className={cn("holo-face", canFlip && showBack && "invisible")}>
             {frontUrl ? (
               <img
                 src={frontUrl}
@@ -531,7 +529,7 @@ function HoloCardImpl({
           {/* Back — skipped entirely on a card that can't turn over, which is every
               thumbnail in the vault grid. */}
           {(canFlip || faceDown) && (
-            <div className="holo-face [transform:rotateY(180deg)]">
+            <div className={cn("holo-face [transform:rotateY(180deg)]", !showBack && "invisible")}>
               {backUrl ? (
                 <img
                   src={backUrl}

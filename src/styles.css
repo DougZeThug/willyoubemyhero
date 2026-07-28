@@ -247,6 +247,11 @@
      this per variant; grid and pack cards leave the default alone. */
   perspective: var(--holo-perspective, 1200px);
   transform-style: preserve-3d;
+  /* A press-and-hold on artwork is exactly the gesture iOS answers with the
+     "Save Image" callout, and holding the card is now its primary interaction.
+     This lives here rather than in the inline style object because it is static,
+     and because React never emitted it from a `WebkitTouchCallout` style key. */
+  -webkit-touch-callout: none;
 }
 
 /* Carried by the tilt layer only while it is returning to flat. holo-card.tsx
@@ -262,6 +267,11 @@
   .holo-settle {
     transition: none;
   }
+  /* The flip is instant under reduced motion, so a half-flip delay on the face
+     swap would just leave a blank card for a quarter second. */
+  .holo-face {
+    transition: none;
+  }
 }
 
 @utility holo-face {
@@ -270,6 +280,14 @@
   overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  /* WebKit does not honour backface-visibility inside this nested preserve-3d
+     structure: on iOS the away-facing side shows through the card, mirrored.
+     Neither `isolation` nor `overflow` nor moving the property onto the flip
+     layer changes it — explicitly hiding the away side is the only thing that
+     does, so holo-card.tsx also toggles `invisible` per face.
+     The zero-duration delay lands that swap on the midpoint of the 500ms flip,
+     where the card is edge-on, so neither face is ever seen reversed. */
+  transition: visibility 0s linear 250ms;
   /* Contain the blend modes so foil never bleeds onto the page background. */
   isolation: isolate;
   border-radius: inherit;
