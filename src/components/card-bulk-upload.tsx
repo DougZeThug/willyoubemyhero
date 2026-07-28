@@ -154,7 +154,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
         ready.map(async (i) => ({
           eventParticipantId: i.eventParticipantId!,
           side: i.side,
-          dataUrl: await encodeUploadImage(i.file),
+          dataUrls: await encodeUploadImageVariants(i.file),
         })),
       );
       const res = await bulkFn({ data: { eventId, items: payload } });
