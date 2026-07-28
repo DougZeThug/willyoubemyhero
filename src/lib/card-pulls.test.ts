@@ -10,7 +10,7 @@ describe("packedByLabel", () => {
   });
 
   it.each([
-    [1, "Packed by 1"],
+    [1, "Packed by 1 so far"],
     [7, "Packed by 7"],
     [13, "Packed by 13"],
   ])("reads %i as %s", (n, expected) => {
