@@ -71,6 +71,7 @@ export default defineConfig({
           name: "db",
           environment: "node",
           include: ["tests/db/**/*.test.ts"],
+          globalSetup: ["./tests/db/globalSetup.ts"],
           // A local Postgres round trip is slower than a unit test, and the
           // suites share one database — running them in parallel would have
           // them clobbering each other's seed data.
