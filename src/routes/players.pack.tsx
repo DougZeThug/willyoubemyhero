@@ -22,7 +22,12 @@ import {
   type SecretCardView,
 } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
-import { seededRng, shuffle } from "@/lib/format";
+import { usePackIdentity } from "@/lib/device-id";
+import { dealPack, packSeed } from "@/lib/pack";
+import { recordCardPulls } from "@/lib/card-pulls.functions";
+import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
+import { packedByLabel } from "@/lib/card-pulls";
+import { seededRng } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/pack")({
@@ -31,10 +36,11 @@ export const Route = createFileRoute("/players/pack")({
       { title: "Open a Pack — Will YOU Be My Hero? Draft Combine" },
       {
         name: "description",
-        content: "Rip today's pack of combine trading cards. Same pack for the whole league.",
+        content:
+          "Rip today's pack of combine trading cards. Three cards, dealt to you and nobody else.",
       },
       { property: "og:title", content: "Draft Combine — Open a Pack" },
-      { property: "og:description", content: "Three cards. One hit. Same pack for everyone." },
+      { property: "og:description", content: "Three cards. One hit. Nobody else gets this pack." },
     ],
   }),
   component: PackPage,
@@ -295,6 +301,8 @@ function PackPage() {
   const me = useMemberSession();
   const qc = useQueryClient();
   const pull = useServerFn(pullSecretCard);
+  const record = useServerFn(recordCardPulls);
+  const pullCounts = useCardPullCounts(event?.id ?? null);
   const status = useSecretStatus(me?.participantId);
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
@@ -313,7 +321,10 @@ function PackPage() {
   // behind it. The *drop* day is league-owned, decided in Postgres. Two clocks,
   // deliberately — see the server-day effect below.
   const [dayKey, setDayKey] = useState(todayKey);
-  const seed = `${event?.id ?? "no-event"}:${dayKey}`;
+  // Null until the browser has answered. Nothing is dealt against a half-known
+  // identity, or a claimed member would flash a device-seeded pack first.
+  const identity = usePackIdentity();
+  const seed = identity ? packSeed(event?.id ?? null, dayKey, identity) : null;
 
   useEffect(() => {
     loadCollection().then((c) => {
@@ -331,7 +342,10 @@ function PackPage() {
     setStateLoaded(false);
     loadPackState().then((s) => {
       if (cancelled) return;
-      if (s && s.dayKey === dayKey && s.ids.length > 0) {
+      // A missing identity is treated as a match, so nobody mid-reveal on the
+      // day this ships loses their cards to the new field.
+      const mine = s?.identity == null || s.identity === identity;
+      if (s && s.dayKey === dayKey && mine && s.ids.length > 0) {
         setDealtIds(s.ids);
         setRevealed(s.revealed);
         setSecretRevealed(!!s.secretRevealed);
@@ -345,7 +359,7 @@ function PackPage() {
     return () => {
       cancelled = true;
     };
-  }, [dayKey]);
+  }, [dayKey, identity]);
 
   // A tab left open past midnight used to sit on yesterday's pack forever, which
   // with a server-side drop becomes actively confusing: the fourth slot re-arms
@@ -379,18 +393,12 @@ function PackPage() {
     setPackBaseline((prev) => prev ?? collected);
   }, [collectionLoaded, collected]);
 
-  // What today's pack *would* be if torn open right now. Slots 1..n-1 come from a
-  // seeded shuffle — the same for the whole league, and refreshing cannot reroll
-  // it — and the last slot prefers a card the user has not collected yet, so the
-  // set actually completes.
+  // What today's pack *would* be if torn open right now — yours, and nobody
+  // else's, because the seed carries who you are. See src/lib/pack.ts.
   const nextPack = useMemo(() => {
     const all = bundle?.participants ?? [];
-    if (all.length === 0 || !packBaseline) return [];
-    const order = shuffle(all, seededRng(seed));
-    const picks = order.slice(0, Math.min(PACK_SIZE, order.length));
-    const missing = order.find((p) => !packBaseline[p.id] && !picks.slice(0, -1).includes(p));
-    if (missing && picks.length === PACK_SIZE) picks[PACK_SIZE - 1] = missing;
-    return picks;
+    if (all.length === 0 || !packBaseline || !seed) return [];
+    return dealPack(all, seed, packBaseline, PACK_SIZE);
   }, [bundle, seed, packBaseline]);
 
   // Once dealt, the stored ids are the pack. Re-deriving would drift: the last
@@ -510,10 +518,48 @@ function PackPage() {
     return () => clearTimeout(timer);
   }, [torn, me?.participantId, pull, qc]);
 
+  /**
+   * Tell the server which cards were in this pack, so the vault can say how many
+   * people have each one.
+   *
+   * Fired from an effect for the same reason the secret pull is: `tearOpen` misses
+   * the commonest first-timer path, where a guest tears the pack, hits the claim
+   * gate, goes to /claim and comes back to the same already-torn pack. Recorded on
+   * tear rather than on reveal, because "packed by" means the card was in your
+   * pack, not that you got round to tapping it.
+   *
+   * Fire-and-forget in both directions: a guest writes nothing, and a failure is
+   * swallowed. A decorative count must never surface as an error on a screen
+   * somebody is enjoying.
+   */
+  const recordedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pid = me?.participantId;
+    if (!torn || !dealtIds?.length || !pid) return;
+    if (recordedForRef.current === pid) return;
+    recordedForRef.current = pid;
+
+    void (async () => {
+      // The first authenticated tear also carries whatever this device already
+      // had, so cards somebody owns count from day one rather than reading
+      // "packed by nobody" for a fortnight. The composite primary key caps a
+      // person at one row per card, so an inflated list can do nothing.
+      const collectedIds = Object.keys(await loadCollection());
+      const ids = [...new Set([...dealtIds, ...collectedIds])].slice(0, 64);
+      try {
+        await record({ data: { eventParticipantIds: ids } });
+        await qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) });
+      } catch {
+        /* a count nobody asked for is not worth an error nobody can act on */
+      }
+    })();
+  }, [torn, dealtIds, me?.participantId, record, qc, event?.id]);
+
   // A phone changing hands mid-party is a real thing in this league. Re-arm the
   // latch when the member changes so the next person gets their own card.
   useEffect(() => {
     pullFiredRef.current = false;
+    recordedForRef.current = null;
     setSecret(null);
     setSecretRevealed(false);
     setSecretFailed(false);
@@ -567,8 +613,14 @@ function PackPage() {
   // mid-reveal comes back to the cards it had already flipped.
   useEffect(() => {
     if (!dealtIds || !stateLoaded) return;
-    void savePackState({ dayKey, ids: dealtIds, revealed, secretRevealed });
-  }, [dealtIds, dayKey, revealed, secretRevealed, stateLoaded]);
+    void savePackState({
+      dayKey,
+      ids: dealtIds,
+      revealed,
+      secretRevealed,
+      identity: identity ?? undefined,
+    });
+  }, [dealtIds, dayKey, revealed, secretRevealed, stateLoaded, identity]);
 
   const secretSlot: SecretSlot = !torn
     ? "hidden"
@@ -627,8 +679,8 @@ function PackPage() {
                 Today&apos;s Pack
               </h1>
               <p className="mt-2 max-w-sm text-xs text-muted-foreground">
-                One pack a day, and everyone in the league gets this exact one. Refreshing
-                won&apos;t reroll it — drag down to rip it open.
+                One pack a day, dealt to you and nobody else. Refreshing won&apos;t reroll it — drag
+                down to rip it open.
               </p>
             </div>
 
@@ -672,7 +724,7 @@ function PackPage() {
                 <div
                   aria-hidden
                   className="absolute inset-0 bg-background/85"
-                  style={{ clipPath: tearPolygon(seededRng(seed), progress) }}
+                  style={{ clipPath: tearPolygon(seededRng(seed ?? ""), progress) }}
                 />
               )}
             </div>
@@ -770,6 +822,13 @@ function PackPage() {
                           >
                             {rarity.label}
                           </div>
+                          {/* Muted and on its own line: the tier above is what
+                              this card is, this is how many people have one. */}
+                          {packedByLabel(pullCounts.data?.[ep.id]) && (
+                            <div className="text-[8px] font-bold uppercase leading-tight tracking-[0.2em] text-muted-foreground">
+                              {packedByLabel(pullCounts.data?.[ep.id])}
+                            </div>
+                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>

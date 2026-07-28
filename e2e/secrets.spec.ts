@@ -141,13 +141,14 @@ test.describe("the vault's secret shelf", () => {
     server.set("getMySecrets", {
       pulled: 3,
       cards: [
-        { ...SECRET_CARD, firstPulledOn: "2026-07-28", count: 1 },
+        { ...SECRET_CARD, firstPulledOn: "2026-07-28", count: 1, ownerCount: 3 },
         {
           ...SECRET_CARD,
           id: "secret-gazebo",
           name: "The Gazebo",
           firstPulledOn: "2026-07-27",
           count: 2,
+          ownerCount: 1,
         },
       ],
     });
@@ -156,6 +157,10 @@ test.describe("the vault's secret shelf", () => {
     await expect(page.getByText("3 secrets pulled")).toBeVisible();
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible();
     await expect(page.getByText("Pulled ×2")).toBeVisible();
+
+    // A count of PEOPLE is allowed and is stated here deliberately, so the
+    // distinction below is a rule rather than an accident.
+    await expect(page.getByText(/packed by 3/i)).toBeVisible();
 
     // The load-bearing assertion: nowhere on this page is there a denominator, a
     // silhouette, or a "???" slot. An unpulled secret is not missing — it is

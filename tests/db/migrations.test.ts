@@ -13,6 +13,7 @@ const EXPECTED_TABLES = [
   "award_votes",
   "awards",
   "card_comments",
+  "card_pulls",
   "card_reactions",
   "draft_selections",
   "event_archive_snapshots",
@@ -78,6 +79,15 @@ describe("migrations", () => {
       ORDER BY proname
     `);
     expect(rows.map((r) => r.proname)).toEqual(["pull_secret_card", "secret_pull_status"]);
+  });
+
+  it("creates the card-pull RPC the pack calls", async () => {
+    const rows = await sql<{ proname: string }>(`
+      SELECT proname FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND proname = 'record_card_pulls'
+    `);
+    expect(rows.map((r) => r.proname)).toEqual(["record_card_pulls"]);
   });
 
   it("exposes events through a public view", async () => {
@@ -157,6 +167,23 @@ describe("migrations", () => {
     const published = rows.map((r) => r.tablename);
     expect(published).not.toContain("secret_cards");
     expect(published).not.toContain("secret_card_pulls");
+    // Different rationale, same failure mode: publishing card_pulls broadcasts
+    // every pull with the puller's id attached to every connected phone.
+    expect(published).not.toContain("card_pulls");
+  });
+
+  it("enforces one card_pulls row per person per card, which is what makes a row count a people count", async () => {
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'card_pulls'",
+    );
+    expect(
+      rows.some(
+        (r) =>
+          r.indexdef.includes("UNIQUE") &&
+          r.indexdef.includes("participant_id") &&
+          r.indexdef.includes("event_participant_id"),
+      ),
+    ).toBe(true);
   });
 
   it("enforces one secret pull per member per league day in the schema", async () => {

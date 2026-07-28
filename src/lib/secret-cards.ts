@@ -65,6 +65,12 @@ export type OwnedSecret = SecretCardView & {
   firstPulledOn: string;
   /** Pulls including duplicates. 1 means you have found it once. */
   count: number;
+  /**
+   * How many people have found this card. Deliberately on OwnedSecret and not on
+   * SecretCardView: a count only ever appears on a card you already own, and
+   * SecretCardView is what the fourth slot renders mid-reveal.
+   */
+  ownerCount: number;
 };
 
 export type SecretDayStatus = {

@@ -112,6 +112,7 @@ export async function seedEvent() {
       public.award_votes, public.awards, public.card_comments, public.card_reactions,
       public.member_codes, public.draft_selections, public.penalties, public.splits,
       public.runs, public.stations, public.secret_card_pulls, public.secret_cards,
+      public.card_pulls,
       public.event_participants, public.event_secrets,
       public.participants, public.events
     RESTART IDENTITY CASCADE

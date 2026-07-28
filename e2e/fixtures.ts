@@ -127,6 +127,10 @@ export const DEFAULT_RESPONSES: Responses = {
   getMySecrets: { cards: [], pulled: 0 },
   pullSecretCard: { ok: false, reason: "unavailable" },
   listSecretCards: { cards: [], claimedMembers: 0, exhausted: false },
+  // Empty by default, so packedByLabel renders nothing and no existing spec
+  // has to know this feature exists.
+  getCardPullCounts: {},
+  recordCardPulls: { ok: true, recorded: 0 },
 };
 
 /** A secret card as pullSecretCard returns it, for tests that want the fourth slot. */

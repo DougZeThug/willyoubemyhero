@@ -220,6 +220,33 @@ describe("getMySecrets", () => {
     expect(mock.eqValue(call, "participant_id")).toBe(ME);
   });
 
+  it("counts how many people have each card, and asks only about the ones you own", async () => {
+    // The `.in(...)` on the owner query is the leak guard: without it the handler
+    // reads the whole ledger and the size of the set is sitting in a local
+    // variable one careless `return` from the wire.
+    //
+    // getMySecrets now issues TWO secret_card_pulls.select calls and the mock
+    // ignores filters, so the queue form is what tells them apart.
+    withDb({
+      "secret_card_pulls.select": [
+        { data: [{ secret_card_id: CARD_ID, pulled_on: "2026-07-28", is_duplicate: false }] },
+        { data: [{ secret_card_id: CARD_ID }, { secret_card_id: CARD_ID }] },
+      ],
+      "secret_cards.select": { data: [card(CARD_ID)] },
+    });
+    const { getMySecrets } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ cards: { ownerCount: number }[] }>(getMySecrets, {
+      headers: asMe(),
+    });
+    expect(res.cards[0].ownerCount).toBe(2);
+
+    const owners = mock.callsFor("secret_card_pulls", "select")[1];
+    expect(owners.filters.find((f) => f.method === "in")?.args).toEqual([
+      "secret_card_id",
+      [CARD_ID],
+    ]);
+  });
+
   it("returns only the cards this member pulled, and signs only those", async () => {
     // The catalogue holds two cards; the member has pulled one. A signed URL for
     // the other one in the response would defeat the whole feature even if the UI
@@ -305,16 +332,26 @@ describe("getMySecrets", () => {
     expect(res.cards).toHaveLength(1);
   });
 
-  it("carries no total, so nothing in the payload implies a set size", async () => {
+  it("carries a people count, never a set size", async () => {
+    // This test's whole job is to catch a denominator. `ownerCount` is a count of
+    // PEOPLE and is allowed; anything that counts CARDS is not, because the size
+    // of the set is the one thing the feature withholds.
     withDb({
-      "secret_card_pulls.select": {
-        data: [{ secret_card_id: CARD_ID, pulled_on: "2026-07-28", is_duplicate: false }],
-      },
+      "secret_card_pulls.select": [
+        { data: [{ secret_card_id: CARD_ID, pulled_on: "2026-07-28", is_duplicate: false }] },
+        { data: [{ secret_card_id: CARD_ID }, { secret_card_id: CARD_ID }] },
+      ],
       "secret_cards.select": { data: [card(CARD_ID)] },
     });
     const { getMySecrets } = await import("./secret-cards.functions");
-    const res = await callServerFn<Record<string, unknown>>(getMySecrets, { headers: asMe() });
+    const res = await callServerFn<{ cards: { ownerCount: number }[] }>(getMySecrets, {
+      headers: asMe(),
+    });
     expect(Object.keys(res).sort()).toEqual(["cards", "pulled"]);
+    // Two people, one card in the catalogue: the number on the card must be the
+    // people, never the cards.
+    expect(res.cards[0].ownerCount).toBe(2);
+    expect(JSON.stringify(res)).not.toMatch(/"(total|setSize|of)"/);
   });
 });
 

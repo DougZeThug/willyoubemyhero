@@ -48,6 +48,9 @@ const SERVER_ONLY = [
   // Worse than the catalogue: it leaks the card ids, who owns what, and the size
   // of the set from a row count against the roster.
   "public.secret_card_pulls",
+  // The aggregate ("7 people have this card") is public and served by a server
+  // function. These rows are not: they say who has never packed whom.
+  "public.card_pulls",
 ];
 
 describe("public reads", () => {
@@ -166,6 +169,18 @@ describe("server-only tables", () => {
     expect(visible === null || visible === 0).toBe(true);
   });
 
+  it("keeps who has packed whom out of anon's reach", async () => {
+    await sql(
+      `INSERT INTO public.card_pulls (participant_id, event_participant_id)
+       SELECT $1, id FROM public.event_participants LIMIT 1
+       ON CONFLICT DO NOTHING`,
+      [IDS.alice],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.card_pulls")).toEqual([{ n: 1 }]);
+    const visible = await visibleRows("anon", "public.card_pulls");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
   it("keeps a cast ballot secret before the reveal", async () => {
     await sql(
       `INSERT INTO public.award_votes (event_id, category, voter_participant_id, target_participant_id)
@@ -206,6 +221,7 @@ describe("anon has no write grant anywhere", () => {
     ["set its own event PIN", `INSERT INTO public.event_secrets (event_id, pin_salt, pin_hash) VALUES ($1, 's', 'h')`, [IDS.event]], // prettier-ignore
     ["print itself a secret card", `INSERT INTO public.secret_cards (name, art_path) VALUES ('Pwned', 'secrets/x/art.webp')`, []], // prettier-ignore
     ["grant itself a secret pull", `INSERT INTO public.secret_card_pulls (participant_id, secret_card_id, pulled_on) SELECT $1, id, current_date FROM public.secret_cards LIMIT 1`, [IDS.alice]], // prettier-ignore
+    ["credit itself a card pull", `INSERT INTO public.card_pulls (participant_id, event_participant_id) SELECT $1, id FROM public.event_participants LIMIT 1`, [IDS.alice]], // prettier-ignore
   ];
 
   it.each(WRITES)("anon cannot %s", async (_label, statement, params) => {

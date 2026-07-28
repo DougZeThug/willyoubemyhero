@@ -27,6 +27,8 @@ import { CardSocial } from "@/components/card-social";
 import { FieldComparison } from "@/components/field-comparison";
 import { RosterFilmstrip } from "@/components/roster-filmstrip";
 import { CardSlab } from "@/components/card-slab";
+import { useCardPullCounts } from "@/hooks/use-card-pulls";
+import { packedByLabel } from "@/lib/card-pulls";
 import { CardCompare } from "@/components/card-compare";
 import {
   DropdownMenu,
@@ -88,6 +90,7 @@ function PlayerCardPage() {
   const cards = useEventCardUrls(event?.id ?? null);
   const social = useEventSocial(event?.id ?? null);
   const awards = useEventAwards(event?.id ?? null);
+  const pullCounts = useCardPullCounts(event?.id ?? null);
 
   const sfx = useCardSfx();
 
@@ -382,6 +385,7 @@ function PlayerCardPage() {
               serial={ep.running_order}
               ofTotal={roster.length}
               collected={collection[ep.id] ?? null}
+              leagueLine={packedByLabel(pullCounts.data?.[ep.id])}
             >
               <HoloCard
                 frontUrl={urls?.front ?? null}

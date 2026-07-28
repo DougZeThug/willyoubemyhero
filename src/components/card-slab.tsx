@@ -6,9 +6,9 @@ import type { CollectedCard } from "@/lib/card-collection";
  *
  * Purely presentational — it wraps whatever card you hand it and adds the
  * furniture a slab has: a label bar across the top carrying the event, the
- * serial, and whether this device has pulled the card. No new data; the serial
- * is the player's running order over the roster size, which is already the
- * number printed on the physical card.
+ * serial, and whether this device has pulled the card, plus a footer line for how
+ * many people in the league have. The serial is the player's running order over
+ * the roster size, which is already the number printed on the physical card.
  *
  * Nothing here sits over the card. The grade is not repeated on the plate —
  * the tier ribbon above the slab already carries the label and why it was
@@ -25,6 +25,7 @@ export function CardSlab({
   serial,
   ofTotal,
   collected,
+  leagueLine,
   children,
 }: {
   eventName: string;
@@ -33,6 +34,15 @@ export function CardSlab({
   ofTotal: number;
   /** This device's collection entry, if the card has ever been pulled. */
   collected: CollectedCard | null;
+  /**
+   * How many people in the league have packed this one, already formatted.
+   *
+   * A string rather than a count, so the copy lives in one place and this
+   * component stays purely presentational. Deliberately a different subject from
+   * `collected` above — that one is you, this one is everybody else — which is
+   * why it gets its own line at the foot rather than a slot on the plate.
+   */
+  leagueLine?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -63,6 +73,12 @@ export function CardSlab({
       </div>
 
       {children}
+
+      {leagueLine && (
+        <div className="mt-2 px-1.5 text-center text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+          {leagueLine}
+        </div>
+      )}
     </div>
   );
 }
@@ -80,12 +96,16 @@ function slabTitle(eventName: string, eventYear: number | null): string {
 }
 
 /**
- * Whether this device has pulled the card, in the plate's left slot.
+ * Whether *this device* has pulled the card, in the plate's left slot.
  *
  * Absent rather than negative when the card has not been pulled. Every card in
  * the vault is browsable whether or not you own it, so a card with no mark is
  * the ordinary case and does not need labelling — and there is no "New" state,
  * because looking at a card is no longer how you collect one.
+ *
+ * Not to be confused with the `leagueLine` at the foot of the slab: this one is
+ * about you and wears the tier colour, that one is about everybody else and is
+ * muted. They are never on the same line, so the two numbers cannot read as one.
  */
 function CollectionMark({ collected }: { collected: CollectedCard | null }) {
   if (!collected) return null;

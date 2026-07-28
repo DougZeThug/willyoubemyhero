@@ -45,6 +45,16 @@ export type PackState = {
    * pure passthrough of whatever the caller handed it.
    */
   secretRevealed?: boolean;
+  /**
+   * Who this pack was dealt to, as `usePackIdentity` returns it.
+   *
+   * Packs are per-person now, and a phone changes hands mid-party in this league.
+   * Without this, whoever picks the handset up next resumes the previous person's
+   * pack. Optional so a row written before per-person packs still loads — a
+   * missing value counts as a match, so nobody mid-reveal on the day this ships
+   * loses their cards.
+   */
+  identity?: string;
 };
 
 export type CollectedCard = {

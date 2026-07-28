@@ -98,7 +98,19 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
       };
     }
 
-    for (const method of ["eq", "neq", "in", "is", "gt", "lt", "gte", "lte", "order", "limit"]) {
+    for (const method of [
+      "eq",
+      "neq",
+      "in",
+      "is",
+      "not",
+      "gt",
+      "lt",
+      "gte",
+      "lte",
+      "order",
+      "limit",
+    ]) {
       chain[method] = (...args: unknown[]) => {
         call.filters.push({ method, args });
         return chain;

@@ -8,6 +8,8 @@ import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { loadCollection, type CollectedCard } from "@/lib/card-collection";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretStatus } from "@/hooks/use-daily-secret";
+import { useCardPullCounts } from "@/hooks/use-card-pulls";
+import { packedByLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
 import {
   secretFoil,
@@ -53,6 +55,7 @@ function PlayersPage() {
   const member = useMemberSession();
   const secrets = useMySecrets(member?.participantId);
   const secretStatus = useSecretStatus(member?.participantId);
+  const pullCounts = useCardPullCounts(event?.id ?? null);
   const [openSecret, setOpenSecret] = useState<OwnedSecret | null>(null);
   // Set on claim and never cleared, so a member on a new phone gets told where
   // their collection went instead of watching it silently vanish. Read in an
@@ -245,6 +248,11 @@ function PlayersPage() {
                             the collection speak the same language. */}
                         {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
                       </div>
+                      {packedByLabel(s.ownerCount) && (
+                        <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                          {packedByLabel(s.ownerCount)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -293,6 +301,14 @@ function PlayersPage() {
                       {urls?.front ? rarity.label : "No card yet"}
                     </span>
                   </div>
+                  {/* The league's number, not yours. Its own line and muted, so
+                      it never reads as one statement with the tick above it —
+                      that tick is "you have this", this is "they do". */}
+                  {packedByLabel(pullCounts.data?.[p.id]) && (
+                    <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                      {packedByLabel(pullCounts.data?.[p.id])}
+                    </div>
+                  )}
                 </div>
               </Link>
             );

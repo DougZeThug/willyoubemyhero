@@ -222,23 +222,45 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
   }
   if (owned.size === 0) return { cards: [], pulled: 0 };
 
-  const { data: rows } = await db
-    .from("secret_cards")
-    .select("*")
-    .in("id", [...owned.keys()])
-    .returns<SecretCardRow[]>();
+  const ownedIds = [...owned.keys()];
+  const [{ data: rows }, { data: allPulls }] = await Promise.all([
+    db.from("secret_cards").select("*").in("id", ownedIds).returns<SecretCardRow[]>(),
+    // The `.in(...)` is load-bearing, not an optimisation. Without it this reads
+    // the whole ledger and the size of the set is sitting in a local variable one
+    // careless `return` away from the wire — the exact failure the INVARIANT at
+    // the top of this file exists to prevent.
+    //
+    // secret_card_pulls_owned_once makes at most one non-duplicate row per person
+    // per card, so counting rows here IS counting people.
+    db
+      .from("secret_card_pulls")
+      .select("secret_card_id")
+      .in("secret_card_id", ownedIds)
+      .eq("is_duplicate", false)
+      .returns<Pick<SecretPullRow, "secret_card_id">[]>(),
+  ]);
+
+  const owners = new Map<string, number>();
+  for (const p of allPulls ?? []) {
+    owners.set(p.secret_card_id, (owners.get(p.secret_card_id) ?? 0) + 1);
+  }
 
   const cards = await Promise.all(
     (rows ?? []).map(async (row) => ({
       ...(await signCard(row)),
       firstPulledOn: owned.get(row.id)!.firstPulledOn,
       count: owned.get(row.id)!.count,
+      // How many people have found this one. A count of 1 means you are the only
+      // person who ever has — a statement about your card, which leaks nothing
+      // about the cards you have not seen.
+      ownerCount: owners.get(row.id) ?? 1,
     })),
   );
   // Newest pull first, so the card you just turned over is at the front.
   cards.sort((a, b) => b.firstPulledOn.localeCompare(a.firstPulledOn));
-  // `pulled` is how many this member owns. There is no denominator in this
-  // response, and adding one would give away the size of the set.
+  // `pulled` is how many this member owns, and `ownerCount` is a count of people.
+  // Neither is a set size: there is still no denominator over the SET anywhere in
+  // this response, and adding one would give away how many secrets exist.
   return { cards, pulled: cards.length };
 });
 
@@ -269,7 +291,13 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
       .select("secret_card_id, participant_id, is_duplicate")
       .eq("is_duplicate", false)
       .returns<Pick<SecretPullRow, "secret_card_id" | "participant_id">[]>(),
-    sb.from("member_codes").select("participant_id", { count: "exact", head: true }),
+    // Claimed, not issued. Counting every code printed would include people who
+    // never used one, and since an unclaimed player has no identity their pulls
+    // are never recorded — so `exhausted` below could never be reached.
+    sb
+      .from("member_codes")
+      .select("participant_id", { count: "exact", head: true })
+      .not("claimed_at", "is", null),
   ]);
 
   const owners = new Map<string, number>();

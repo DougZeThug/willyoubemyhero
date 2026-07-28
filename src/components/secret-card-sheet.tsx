@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { HoloCard } from "@/components/holo-card";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { secretFoil, type OwnedSecret } from "@/lib/secret-cards";
+import { packedByLabel } from "@/lib/card-pulls";
 
 /**
  * One secret card, big.
@@ -11,7 +12,9 @@ import { secretFoil, type OwnedSecret } from "@/lib/secret-cards";
  * shareable — which is the one thing a secret card must not be. Someone can still
  * show you their phone; that is the intended and only channel.
  *
- * No reactions, no comments, no share button, and no "N of M" anywhere.
+ * No reactions, no comments and no share button. The only number here beyond
+ * your own is how many *people* have found this card — never how many cards
+ * exist, which is the thing the whole feature withholds.
  */
 export function SecretCardSheet({
   card,
@@ -58,6 +61,14 @@ export function SecretCardSheet({
               <span>Pulled {card.firstPulledOn}</span>
               {card.count > 1 && <span style={{ color: rarity.accent }}>Pulled ×{card.count}</span>}
             </div>
+
+            {packedByLabel(card.ownerCount) && (
+              <p className="text-center text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                {card.ownerCount === 1
+                  ? "You are the only one who has found this"
+                  : packedByLabel(card.ownerCount)}
+              </p>
+            )}
           </>
         )}
       </DialogContent>
