@@ -18,5 +18,8 @@ export type CardPullCounts = Record<string, number>;
  */
 export function packedByLabel(count: number | undefined): string | null {
   if (!count || count <= 0) return null;
+  // A lone pull reads too much like a stuck counter when the whole vault shows
+  // it — "so far" makes it obviously early-days data instead.
+  if (count === 1) return "Packed by 1 so far";
   return `Packed by ${count}`;
 }
