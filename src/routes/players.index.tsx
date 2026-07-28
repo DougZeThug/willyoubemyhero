@@ -176,6 +176,7 @@ function PlayersPage() {
                   name={name}
                   rarity={rarity}
                   cacheKey={p.id}
+                  intensity="subtle"
                   className="transition-transform group-hover:scale-[1.02]"
                 />
                 <div className="mt-2 text-center">

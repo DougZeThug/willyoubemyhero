@@ -23,6 +23,11 @@ export type HoloCardProps = {
   onFlippedChange?: (next: boolean) => void;
   /** Whether the card responds to pointer tilt. */
   interactive?: boolean;
+  /**
+   * How loud the foil is. "subtle" halves it for small, mostly-non-interactive
+   * cards like the vault grid, where a full-strength overlay swamps the artwork.
+   */
+  intensity?: "full" | "subtle";
   /** Device-orientation tilt, enabled by the caller after a permission grant. */
   gyro?: boolean;
   /** Start face-down (shows the back) regardless of art availability. */
@@ -55,6 +60,7 @@ export function HoloCard({
   flipped,
   onFlippedChange,
   interactive = true,
+  intensity = "full",
   gyro = false,
   faceDown = false,
   backContent,
@@ -99,8 +105,10 @@ export function HoloCard({
   );
 
   // px/py are 0..1 across the card. Writing CSS variables directly keeps this
-  // off React's render path entirely.
-  const applyTilt = useCallback((px: number, py: number) => {
+  // off React's render path entirely. `active` is 1 while the card is being
+  // moved and 0 once it settles; every foil layer scales by it, so a card at
+  // rest shows the artwork almost clean and only blooms when you tilt it.
+  const applyTilt = useCallback((px: number, py: number, active: number) => {
     const scene = sceneRef.current;
     const card = cardRef.current;
     if (!scene || !card) return;
@@ -108,6 +116,7 @@ export function HoloCard({
     const ry = (px - 0.5) * 2 * MAX_TILT;
     scene.style.setProperty("--holo-rx", `${rx.toFixed(2)}deg`);
     scene.style.setProperty("--holo-ry", `${ry.toFixed(2)}deg`);
+    card.style.setProperty("--holo-active", `${active}`);
     card.style.setProperty("--holo-gx", `${(px * 100).toFixed(1)}%`);
     card.style.setProperty("--holo-gy", `${(py * 100).toFixed(1)}%`);
     card.style.setProperty("--holo-pos", `${(px * 100).toFixed(1)}%`);
@@ -123,18 +132,20 @@ export function HoloCard({
       frameRef.current = requestAnimationFrame(() => {
         frameRef.current = null;
         const p = pendingRef.current;
-        if (p) applyTilt(p.px, p.py);
+        if (p) applyTilt(p.px, p.py, 1);
       });
     },
     [applyTilt],
   );
 
+  // Recentre and fade the foil back out. The CSS opacity transition does the
+  // easing, so there is nothing to animate here.
   const resetTilt = useCallback(() => {
     if (frameRef.current != null) {
       cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
-    applyTilt(0.5, 0.5);
+    applyTilt(0.5, 0.5, 0);
   }, [applyTilt]);
 
   useEffect(() => {
@@ -185,11 +196,19 @@ export function HoloCard({
     if (!onClick) toggleFlip();
   }
 
+  // A grid thumbnail gets half the foil of a full-bleed detail card: the same
+  // overlay reads far heavier at small sizes, and nobody tilts a thumbnail.
+  const scale = intensity === "subtle" ? 0.5 : 1;
+
   const styleVars = {
     "--holo-a": rarity.holoA,
     "--holo-b": rarity.holoB,
-    "--holo-sparkle": reduced ? 0 : rarity.sparkle,
-    "--holo-strength": reduced ? 0.18 : 0.38,
+    "--holo-sparkle": reduced ? 0 : rarity.sparkle * scale,
+    // Resting sheen, kept low so the artwork reads as the artist drew it...
+    "--holo-rest": (reduced ? 0.04 : 0.095) * rarity.strength * scale,
+    // ...and the bloom it gains on top of that at full tilt. A base card peaks
+    // near the old flat 0.38, but only while moving and only inside the band.
+    "--holo-gain": reduced ? 0 : 0.4 * rarity.strength * scale,
     aspectRatio: aspect ?? DEFAULT_ASPECT,
   } as React.CSSProperties;
 
@@ -259,6 +278,9 @@ export function HoloCard({
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
                 className="h-full w-full object-cover"
+                // Buys back the small amount of punch the blend layers still
+                // cost, so the art lands closer to the source file.
+                style={{ filter: "saturate(1.06) contrast(1.04)" }}
                 draggable={false}
               />
             ) : (
