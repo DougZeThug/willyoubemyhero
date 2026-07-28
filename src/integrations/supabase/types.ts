@@ -406,7 +406,11 @@ export type Database = {
         Row: {
           bib_number: number | null
           card_back_path: string | null
+          card_back_path_medium: string | null
+          card_back_path_thumb: string | null
           card_path: string | null
+          card_path_medium: string | null
+          card_path_thumb: string | null
           created_at: string
           draft_choice_priority: number | null
           event_id: string
@@ -414,6 +418,8 @@ export type Database = {
           participant_id: string
           participation_status: string
           photo_path: string | null
+          photo_path_medium: string | null
+          photo_path_thumb: string | null
           running_order: number
           selected_draft_position: number | null
           updated_at: string
@@ -421,7 +427,11 @@ export type Database = {
         Insert: {
           bib_number?: number | null
           card_back_path?: string | null
+          card_back_path_medium?: string | null
+          card_back_path_thumb?: string | null
           card_path?: string | null
+          card_path_medium?: string | null
+          card_path_thumb?: string | null
           created_at?: string
           draft_choice_priority?: number | null
           event_id: string
@@ -429,6 +439,8 @@ export type Database = {
           participant_id: string
           participation_status?: string
           photo_path?: string | null
+          photo_path_medium?: string | null
+          photo_path_thumb?: string | null
           running_order?: number
           selected_draft_position?: number | null
           updated_at?: string
@@ -436,7 +448,11 @@ export type Database = {
         Update: {
           bib_number?: number | null
           card_back_path?: string | null
+          card_back_path_medium?: string | null
+          card_back_path_thumb?: string | null
           card_path?: string | null
+          card_path_medium?: string | null
+          card_path_thumb?: string | null
           created_at?: string
           draft_choice_priority?: number | null
           event_id?: string
@@ -444,6 +460,8 @@ export type Database = {
           participant_id?: string
           participation_status?: string
           photo_path?: string | null
+          photo_path_medium?: string | null
+          photo_path_thumb?: string | null
           running_order?: number
           selected_draft_position?: number | null
           updated_at?: string
@@ -516,6 +534,8 @@ export type Database = {
           active: boolean
           awards_locked: boolean
           card_back_path: string | null
+          card_back_path_medium: string | null
+          card_back_path_thumb: string | null
           created_at: string
           draft_locked: boolean
           draft_size: number
@@ -535,6 +555,8 @@ export type Database = {
           active?: boolean
           awards_locked?: boolean
           card_back_path?: string | null
+          card_back_path_medium?: string | null
+          card_back_path_thumb?: string | null
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
@@ -554,6 +576,8 @@ export type Database = {
           active?: boolean
           awards_locked?: boolean
           card_back_path?: string | null
+          card_back_path_medium?: string | null
+          card_back_path_thumb?: string | null
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
