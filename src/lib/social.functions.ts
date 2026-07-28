@@ -108,9 +108,7 @@ export const postComment = createServerFn({ method: "POST" })
 
 /** You can delete your own trash talk; the commissioner can delete anyone's. */
 export const deleteComment = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ commentId: z.string().uuid() }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ commentId: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: row } = await sb
