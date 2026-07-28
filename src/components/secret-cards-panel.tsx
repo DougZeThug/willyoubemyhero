@@ -2,10 +2,11 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { EyeOff, Pencil, Trash2 } from "lucide-react";
+import { EyeOff, Gift, Pencil, Trash2 } from "lucide-react";
 import {
   createSecretCards,
   deleteSecretCard,
+  grantSecretCard,
   listSecretCards,
   updateSecretCard,
   uploadSecretCardArt,
@@ -51,10 +52,13 @@ type SecretCardAdminRow = {
   name: string;
   flavour: string | null;
   active: boolean;
+  weight: number;
   hasArt: boolean;
   artUrl: string | null;
   ownerCount: number;
 };
+
+type Roster = { id: string; name: string }[];
 
 /**
  * Authoring the secret set.
@@ -72,12 +76,15 @@ export function SecretCardsPanel() {
   const updateFn = useServerFn(updateSecretCard);
   const uploadFn = useServerFn(uploadSecretCardArt);
   const deleteFn = useServerFn(deleteSecretCard);
+  const grantFn = useServerFn(grantSecretCard);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
+  // Per-card grant target: the participant id currently chosen in that row's picker.
+  const [grantTarget, setGrantTarget] = useState<Record<string, string>>({});
   const [editName, setEditName] = useState("");
   const [editFlavour, setEditFlavour] = useState("");
 
