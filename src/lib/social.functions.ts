@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { isAdminFor, requireAdmin, requireMember } from "./require-auth.server";
+import { isAdminFor, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
 import { AWARD_CATEGORIES, isAwardCategory } from "./awards";
 
 /**
