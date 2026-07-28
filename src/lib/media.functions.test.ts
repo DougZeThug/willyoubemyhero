@@ -324,7 +324,7 @@ describe("uploads", () => {
     }
     const paths = mock.storageBucket.upload.mock.calls.map((c) => c[0]);
     expect(paths[0]).toContain(`cards/${EVENT_ID}/${CARD_ID}-front-`);
-    expect(paths).toHaveLength(2);
+    expect(paths).toHaveLength(6);
   });
 
   it("surfaces a storage failure instead of pointing the row at nothing", async () => {
