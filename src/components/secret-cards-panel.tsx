@@ -214,9 +214,7 @@ export function SecretCardsPanel() {
     toast.promise(p, {
       loading: "Saving weight…",
       success:
-        parsed === 0
-          ? "Weight saved — card excluded from packs"
-          : `Weight saved (${parsed})`,
+        parsed === 0 ? "Weight saved — card excluded from packs" : `Weight saved (${parsed})`,
       error: (e) => (e instanceof Error ? e.message : "Save failed"),
     });
     try {
