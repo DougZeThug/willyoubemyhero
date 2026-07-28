@@ -103,6 +103,10 @@ export const DEFAULT_RESPONSES: Responses = {
   getEventSocial: { reactions: [], comments: [] },
   getAwards: [],
   getEventCardUrls: {},
+  // No universal back by default, so the sealed pack renders its wax-foil
+  // fallback. Does not collide with getEventCardUrls above: the stub matcher is
+  // a substring test and neither name contains the other.
+  getEventCardBack: { url: null },
   getEventPhotoUrls: {},
   getAllParticipants: PLAYERS.map((p) => ({ id: p.pid, name: p.name, nickname: null })),
   getAllTimeRecords: [],

@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Layers, Trash2 } from "lucide-react";
-import { getEventCardBack, uploadEventCardBack, deleteEventCardBack } from "@/lib/media.functions";
+import { uploadEventCardBack, deleteEventCardBack } from "@/lib/media.functions";
+import { useEventCardBack } from "@/hooks/use-photo-urls";
 import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
@@ -20,21 +21,15 @@ const ACCEPT = ["image/png", "image/jpeg", "image/webp"];
  */
 export function UniversalCardBack({ eventId }: { eventId: string }) {
   const qc = useQueryClient();
-  const getFn = useServerFn(getEventCardBack);
   const uploadFn = useServerFn(uploadEventCardBack);
   const deleteFn = useServerFn(deleteEventCardBack);
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  const back = useQuery({
-    queryKey: ["event-card-back", eventId],
-    queryFn: () => getFn({ data: { eventId } }),
-    // Signed URLs last an hour; refresh well inside that.
-    staleTime: 30 * 60_000,
-    refetchInterval: 45 * 60_000,
-    refetchOnWindowFocus: false,
-  });
+  // Shared with the sealed pack on /players/pack, which wears this same image —
+  // so an upload here refreshes a pack already open on somebody else's phone.
+  const back = useEventCardBack(eventId);
 
   async function onPick(file: File) {
     if (!ACCEPT.includes(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) {

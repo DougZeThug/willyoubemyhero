@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, Lock, PackageOpen, Sparkles } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventCardUrls } from "@/hooks/use-photo-urls";
+import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { mySecretsKey, secretStatusKey, useSecretStatus } from "@/hooks/use-daily-secret";
 import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
@@ -279,6 +279,10 @@ function SecretSlotView({
 function PackPage() {
   const { event, bundle } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
+  // The event's back, never a player's — see the note on useEventCardBack. The
+  // wrapper is shown before anything has been dealt, so a per-player back here
+  // would be the reveal, printed on the outside of the pack.
+  const packBack = useEventCardBack(event?.id ?? null);
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
   const [collected, setCollected] = useState<Record<string, unknown>>({});
@@ -707,7 +711,31 @@ function PackPage() {
               }}
               className="wax-foil hud-glow relative aspect-[3/4] w-full max-w-xs cursor-grab touch-none overflow-hidden rounded-2xl border border-primary/40 active:cursor-grabbing"
             >
-              <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+              {/* The wax foil underneath is the designed fallback, not a spinner:
+                  a slow network gets a beautiful pack rather than a grey box, and
+                  an event with no uploaded back gets the same thing permanently.
+                  The art fades in on top of it, which reads as intentional rather
+                  than as a pop. aspect-[3/4] is fixed by class either way, so
+                  nothing shifts when it lands. */}
+              {packBack.data?.url && (
+                <img
+                  src={packBack.data.url}
+                  alt=""
+                  aria-hidden
+                  crossOrigin="anonymous"
+                  draggable={false}
+                  onLoad={(e) => e.currentTarget.style.setProperty("opacity", "1")}
+                  className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300"
+                />
+              )}
+              <div
+                className={cn(
+                  "relative flex h-full flex-col items-center justify-center gap-2 p-6 text-center",
+                  // The lettering is the pack's identity only while there is no
+                  // art. Over a real back it is a caption nobody asked for.
+                  packBack.data?.url && "hidden",
+                )}
+              >
                 <Sparkles className="h-8 w-8 text-primary" />
                 <div className="font-display text-xs font-black uppercase tracking-[0.35em] text-primary/90">
                   Will YOU Be My Hero?
@@ -788,9 +816,17 @@ function PackPage() {
                           backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
                         />
                       ) : (
+                        // Real back art, not the wax-foil stand-in: a pack of
+                        // cards face-down should look like the deck it came from.
+                        //
+                        // This makes canFlip true (holo-card.tsx:184), which would
+                        // normally arm flick-to-flip. It doesn't here — both the
+                        // flick and the click are gated on `!onClick`, and this
+                        // card has one. A face-down card still cannot turn itself
+                        // over; only a deliberate reveal does that.
                         <HoloCard
                           frontUrl={cards.data?.[ep.id]?.front ?? null}
-                          backUrl={null}
+                          backUrl={cards.data?.[ep.id]?.back ?? null}
                           name={`Card ${i + 1}`}
                           rarity={rarityStyle("base")}
                           cacheKey={ep.id}
