@@ -7,7 +7,7 @@ import { generateMemberCodes, listMemberClaims } from "@/lib/member.functions";
 import { closeAwardVoting, getAwardTally, reopenAwardVoting } from "@/lib/social.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AWARD_CATEGORIES } from "@/lib/awards";
-import { Card, CardContent } from "@/components/ui/card";
+import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 
 type Issued = { participantId: string; name: string; code: string };
@@ -64,83 +64,72 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
   }
 
   return (
-    <Card className="hud-bezel border-primary/20">
-      <CardContent className="p-5">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-primary">
-            <KeyRound className="h-4 w-4" />
-            <h2 className="font-display text-sm font-black uppercase tracking-[0.3em]">
-              Member Codes
-            </h2>
+    <AdminSection
+      icon={<KeyRound className="h-4 w-4 shrink-0" />}
+      title="Member Codes"
+      meta={`${claimedCount}/${rosterSize} claimed`}
+    >
+      <p className="mb-3 text-xs text-muted-foreground">
+        Each player claims their name once with a code, which lets them react, talk trash, and vote.
+        Codes are stored hashed — the plaintext is shown here once and never again.
+      </p>
+
+      <Button size="sm" onClick={onGenerate} disabled={busy} className="min-h-11 w-full sm:min-h-0">
+        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+        {busy ? "Issuing…" : issued ? "Re-issue all codes" : "Generate codes"}
+      </Button>
+
+      {issued && (
+        <div className="mt-3">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-warn">
+              Copy these now
+            </span>
+            <button
+              onClick={copyAll}
+              className="inline-flex min-h-9 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline sm:min-h-0 sm:px-0"
+            >
+              <Copy className="h-3 w-3" /> Copy all
+            </button>
           </div>
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            {claimedCount}/{rosterSize} claimed
-          </span>
-        </div>
-
-        <p className="mb-3 text-xs text-muted-foreground">
-          Each player claims their name once with a code, which lets them react, talk trash, and
-          vote. Codes are stored hashed — the plaintext is shown here once and never again.
-        </p>
-
-        <Button size="sm" onClick={onGenerate} disabled={busy} className="w-full">
-          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-          {busy ? "Issuing…" : issued ? "Re-issue all codes" : "Generate codes"}
-        </Button>
-
-        {issued && (
-          <div className="mt-3">
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-warn">
-                Copy these now
-              </span>
-              <button
-                onClick={copyAll}
-                className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline"
-              >
-                <Copy className="h-3 w-3" /> Copy all
-              </button>
-            </div>
-            <ul className="max-h-56 space-y-0.5 overflow-auto rounded-md border border-warn/30 bg-warn/5 p-2">
-              {issued.map((i) => (
-                <li
-                  key={i.participantId}
-                  className="flex items-center justify-between gap-2 text-xs"
-                >
-                  <span className="truncate uppercase">{i.name}</span>
-                  <code className="font-mono font-bold tracking-[0.2em] text-warn">{i.code}</code>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {!issued && (claims.data?.length ?? 0) > 0 && (
-          <ul className="mt-3 max-h-40 space-y-0.5 overflow-auto pr-1">
-            {(bundle?.participants ?? []).map((p) => {
-              const claim = claims.data?.find((c) => c.participant_id === p.participant_id);
-              return (
-                <li
-                  key={p.id}
-                  className="flex items-center justify-between gap-2 rounded px-1 py-0.5 text-xs"
-                >
-                  <span className="truncate uppercase">{p.participant?.name}</span>
-                  <span
-                    className={
-                      claim?.claimed_at
-                        ? "text-[10px] uppercase tracking-widest text-primary"
-                        : "text-[10px] uppercase tracking-widest text-muted-foreground"
-                    }
-                  >
-                    {claim?.claimed_at ? "claimed" : claim ? "code issued" : "no code"}
-                  </span>
-                </li>
-              );
-            })}
+          <ul className="max-h-[50vh] space-y-0.5 overflow-auto rounded-md border border-warn/30 bg-warn/5 p-2 sm:max-h-56">
+            {issued.map((i) => (
+              <li key={i.participantId} className="flex items-center justify-between gap-2 text-xs">
+                <span className="truncate uppercase">{i.name}</span>
+                <code className="shrink-0 font-mono font-bold tracking-[0.2em] text-warn">
+                  {i.code}
+                </code>
+              </li>
+            ))}
           </ul>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+
+      {!issued && (claims.data?.length ?? 0) > 0 && (
+        <ul className="mt-3 max-h-[50vh] space-y-0.5 overflow-auto pr-1 sm:max-h-40">
+          {(bundle?.participants ?? []).map((p) => {
+            const claim = claims.data?.find((c) => c.participant_id === p.participant_id);
+            return (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-2 rounded px-1 py-0.5 text-xs"
+              >
+                <span className="truncate uppercase">{p.participant?.name}</span>
+                <span
+                  className={
+                    claim?.claimed_at
+                      ? "shrink-0 text-[10px] uppercase tracking-widest text-primary"
+                      : "shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground"
+                  }
+                >
+                  {claim?.claimed_at ? "claimed" : claim ? "code issued" : "no code"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminSection>
   );
 }
 
@@ -195,72 +184,67 @@ export function AwardsAdminPanel({ eventId, locked }: { eventId: string; locked:
   }
 
   return (
-    <Card className="hud-bezel border-primary/20">
-      <CardContent className="p-5">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-primary">
-            <Trophy className="h-4 w-4" />
-            <h2 className="font-display text-sm font-black uppercase tracking-[0.3em]">
-              League Awards
-            </h2>
-          </div>
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            {tally.data?.totalVotes ?? 0} votes
-          </span>
-        </div>
+    <AdminSection
+      icon={<Trophy className="h-4 w-4 shrink-0" />}
+      title="League Awards"
+      meta={`${tally.data?.totalVotes ?? 0} votes`}
+    >
+      <p className="mb-3 text-xs text-muted-foreground">
+        {locked
+          ? "Voting is closed and winners are published on player cards."
+          : "Only you can see this tally. Members see nothing until you close voting."}
+      </p>
 
-        <p className="mb-3 text-xs text-muted-foreground">
-          {locked
-            ? "Voting is closed and winners are published on player cards."
-            : "Only you can see this tally. Members see nothing until you close voting."}
-        </p>
-
-        <div className="max-h-56 space-y-2 overflow-auto pr-1">
-          {AWARD_CATEGORIES.map((cat) => {
-            const counts = tally.data?.tally?.[cat.id] ?? {};
-            const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-            return (
-              <div key={cat.id}>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-primary/80">
-                  {cat.icon} {cat.label}
-                </div>
-                {ranked.length === 0 ? (
-                  <div className="text-[11px] text-muted-foreground">No votes</div>
-                ) : (
-                  <ul className="text-[11px]">
-                    {ranked.slice(0, 3).map(([pid, n]) => (
-                      <li key={pid} className="flex justify-between gap-2">
-                        <span className="truncate uppercase">{nameOf(pid)}</span>
-                        <span className="tabular text-muted-foreground">{n}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+      <div className="max-h-[50vh] space-y-2 overflow-auto pr-1 sm:max-h-56">
+        {AWARD_CATEGORIES.map((cat) => {
+          const counts = tally.data?.tally?.[cat.id] ?? {};
+          const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+          return (
+            <div key={cat.id}>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-primary/80">
+                {cat.icon} {cat.label}
               </div>
-            );
-          })}
-        </div>
+              {ranked.length === 0 ? (
+                <div className="text-[11px] text-muted-foreground">No votes</div>
+              ) : (
+                <ul className="text-[11px]">
+                  {ranked.slice(0, 3).map(([pid, n]) => (
+                    <li key={pid} className="flex justify-between gap-2">
+                      <span className="truncate uppercase">{nameOf(pid)}</span>
+                      <span className="tabular text-muted-foreground">{n}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
-        <div className="mt-3">
-          {locked ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={onReopen}
-              disabled={busy}
-              className="w-full"
-            >
-              <Unlock className="mr-1.5 h-3.5 w-3.5" />
-              {busy ? "Working…" : "Reopen voting"}
-            </Button>
-          ) : (
-            <Button size="sm" onClick={onClose} disabled={busy} className="w-full">
-              <Lock className="mr-1.5 h-3.5 w-3.5" />
-              {busy ? "Working…" : "Close voting & publish"}
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+      <div className="mt-3">
+        {locked ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={onReopen}
+            disabled={busy}
+            className="min-h-11 w-full sm:min-h-0"
+          >
+            <Unlock className="mr-1.5 h-3.5 w-3.5" />
+            {busy ? "Working…" : "Reopen voting"}
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            onClick={onClose}
+            disabled={busy}
+            className="min-h-11 w-full sm:min-h-0"
+          >
+            <Lock className="mr-1.5 h-3.5 w-3.5" />
+            {busy ? "Working…" : "Close voting & publish"}
+          </Button>
+        )}
+      </div>
+    </AdminSection>
   );
 }
