@@ -1,12 +1,14 @@
 import { forwardRef } from "react";
 import { formatTime } from "@/lib/format";
+import { urlFromSet } from "@/lib/media.functions";
+import type { ImageUrlSet } from "@/lib/media.functions";
 
 export type ResultCardData = {
   eventName: string;
   eventYear?: number | null;
   participantName: string;
   fantasyTeam?: string | null;
-  photoUrl?: string | null;
+  photoUrl?: ImageUrlSet | string | null;
   totalMs: number;
   penaltyMs?: number;
   rank?: number | null;
@@ -17,7 +19,7 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
   { data },
   ref,
 ) {
-  return (
+  const photoUrl = urlFromSet(data.photoUrl);
     <div
       ref={ref}
       style={{
