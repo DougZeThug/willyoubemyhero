@@ -5,7 +5,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
-import { loadCollection } from "@/lib/card-collection";
+import { loadCollection, type CollectedCard } from "@/lib/card-collection";
 import { useMemberSession } from "@/lib/member-token";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,9 @@ function PlayersPage() {
   const cards = useEventCardUrls(event?.id ?? null);
   const [sort, setSort] = useState<SortKey>("name");
   const [shuffleSeed, setShuffleSeed] = useState(0);
-  const [collected, setCollected] = useState<Record<string, unknown>>({});
+  // Typed rather than `unknown`: `{collected[p.id] && <Check/>}` renders the
+  // left operand when it is falsy, and an `unknown` there is not a ReactNode.
+  const [collected, setCollected] = useState<Record<string, CollectedCard>>({});
   const member = useMemberSession();
 
   useEffect(() => {

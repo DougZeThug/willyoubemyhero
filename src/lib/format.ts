@@ -13,7 +13,10 @@ export function formatTime(ms: number | null | undefined): string {
 }
 
 export function initialsOf(name: string): string {
+  // Trim first: splitting " Doug Weidensaul" on whitespace leads with an empty
+  // string, which eats one of the two slots and renders a single initial.
   return name
+    .trim()
     .split(/\s+/)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
