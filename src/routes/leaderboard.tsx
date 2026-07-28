@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventPhotoUrls } from "@/hooks/use-photo-urls";
+import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
@@ -30,6 +30,7 @@ export const Route = createFileRoute("/leaderboard")({
 function LeaderboardPage() {
   const { event, bundle } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
+  const cards = useEventCardUrls(event?.id ?? null);
   const [sharingRunId, setSharingRunId] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => {
@@ -129,6 +130,7 @@ function LeaderboardPage() {
                     </span>
                     <ParticipantAvatar
                       name={row.ep?.participant?.name ?? "?"}
+                      cardUrl={row.ep ? (cards.data?.[row.ep.id]?.front ?? null) : null}
                       photoUrl={
                         photos.data?.[row.ep?.id ?? ""] ??
                         row.ep?.participant?.profile_image_url ??
