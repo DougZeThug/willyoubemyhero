@@ -157,16 +157,19 @@ export const postComment = createServerFn({ method: "POST" })
 
 /** You can delete your own trash talk; the commissioner can delete anyone's. */
 export const deleteComment = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ commentId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ commentId: z.string().uuid(), guest: guestSchema }).parse(d),
+  )
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: row } = await sb
       .from("card_comments")
-      .select("id, participant_id, event_participant:event_participants!inner(event_id)")
+      .select("id, participant_id, guest_key, event_participant:event_participants!inner(event_id)")
       .eq("id", data.commentId)
       .maybeSingle<{
         id: string;
-        participant_id: string;
+        participant_id: string | null;
+        guest_key: string | null;
         event_participant: { event_id: string } | null;
       }>();
     if (!row) return { ok: true };
@@ -175,8 +178,11 @@ export const deleteComment = createServerFn({ method: "POST" })
     // otherwise an admin for event A could delete comments belonging to event B.
     const eventId = row.event_participant?.event_id ?? null;
     if (!eventId || !isAdminFor(eventId)) {
-      const me = await requireMember();
-      if (row.participant_id !== me) throw new Error("Not your comment");
+      const me = optionalMember();
+      const isOwnMember = !!me && row.participant_id === me;
+      const isOwnGuest =
+        !me && !!data.guest && !!row.guest_key && row.guest_key === data.guest.key;
+      if (!isOwnMember && !isOwnGuest) throw new Error("Not your comment");
     }
     await sb.from("card_comments").delete().eq("id", data.commentId);
     return { ok: true };
