@@ -3,7 +3,7 @@ import { Radio, Trophy, ListOrdered, ClipboardList, Settings, Users } from "luci
 import { cn } from "@/lib/utils";
 
 const links = [
-  { to: "/", label: "Live", icon: Radio },
+  { to: "/live", label: "Live", icon: Radio },
   { to: "/leaderboard", label: "Board", icon: Trophy },
   { to: "/order", label: "Order", icon: ListOrdered },
   { to: "/players", label: "Players", icon: Users },
@@ -19,7 +19,7 @@ export function SiteNav() {
       <header className="sticky top-0 z-30 border-b border-primary/10 bg-background/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5">
           <div className="w-8 md:w-16" aria-hidden />
-          <Link to="/" className="flex flex-col items-center leading-none">
+          <Link to="/players" className="flex flex-col items-center leading-none">
             <span className="text-[9px] font-semibold uppercase tracking-[0.35em] text-primary/80">
               Will YOU Be My Hero?
             </span>
@@ -29,7 +29,7 @@ export function SiteNav() {
           </Link>
           <nav className="hidden gap-1 md:flex">
             {links.map((l) => {
-              const active = l.to === "/" ? path === "/" : path.startsWith(l.to);
+              const active = path.startsWith(l.to);
               return (
                 <Link
                   key={l.to}
@@ -55,7 +55,7 @@ export function SiteNav() {
         <ul className="mx-auto grid max-w-md grid-cols-6">
           {links.map((l) => {
             const Icon = l.icon;
-            const active = l.to === "/" ? path === "/" : path.startsWith(l.to);
+            const active = path.startsWith(l.to);
             return (
               <li key={l.to}>
                 <Link
