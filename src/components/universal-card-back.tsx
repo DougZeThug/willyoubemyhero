@@ -42,8 +42,8 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
     }
     setBusy(true);
     try {
-      const dataUrl = await encodeUploadImage(file);
-      await uploadFn({ data: { eventId, dataUrl } });
+      const dataUrls = await encodeUploadImageVariants(file);
+      await uploadFn({ data: { eventId, dataUrls } });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["event-card-back", eventId] }),
         // Every player's back resolves through this query.
