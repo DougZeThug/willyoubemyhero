@@ -162,6 +162,12 @@ function HoloCardImpl({
   const [aspect, setAspect] = useState<number | null>(
     () => cachedCardMeta(cacheKey)?.aspect ?? null,
   );
+
+  const frontSrc = urlFromSet(frontUrl);
+  const frontSrcSet = srcSetFromSet(frontUrl);
+  const backSrc = urlFromSet(backUrl);
+  const backSrcSet = srcSetFromSet(backUrl);
+
   const [uncontrolledFlip, setUncontrolledFlip] = useState(false);
   // The glare and sparkle layers are invisible until the card moves, and each one
   // is a blend-mode layer the compositor has to carry. Thirty cards' worth of them
