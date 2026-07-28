@@ -420,6 +420,69 @@ export function SecretCardsPanel() {
                 <div className="text-[10px] text-muted-foreground">
                   Pulled by {card.ownerCount} of {list.data?.claimedMembers ?? 0}
                 </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Weight
+                    <input
+                      type="number"
+                      min={0}
+                      max={10000}
+                      step={10}
+                      defaultValue={card.weight}
+                      // Uncontrolled so typing doesn't refire the query on every
+                      // keystroke. `key` on the card wrapper isn't set, so the
+                      // default only re-seeds after a server round-trip.
+                      onBlur={(e) => {
+                        if (Number(e.target.value) !== card.weight) {
+                          void saveWeight(card.id, e.target.value);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
+                      disabled={busy}
+                      className="h-6 w-16 rounded border border-white/15 bg-background px-1.5 text-xs tabular-nums"
+                      aria-label={`Pull weight for ${card.name}`}
+                    />
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">
+                    {card.weight === 0
+                      ? "Excluded from packs"
+                      : "Higher = shows up more often (100 = baseline)"}
+                  </span>
+                </div>
+
+                {roster.length > 0 && card.hasArt && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <select
+                      value={grantTarget[card.id] ?? ""}
+                      onChange={(e) =>
+                        setGrantTarget((prev) => ({ ...prev, [card.id]: e.target.value }))
+                      }
+                      disabled={busy}
+                      className="h-7 min-w-0 flex-1 rounded border border-white/15 bg-background px-1.5 text-xs"
+                      aria-label={`Grant ${card.name} to`}
+                    >
+                      <option value="">Grant to…</option>
+                      {roster.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void grant(card)}
+                      disabled={busy || !grantTarget[card.id]}
+                      className="h-7 px-2 text-[10px]"
+                    >
+                      <Gift className="mr-1 h-3 w-3" />
+                      Grant
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
