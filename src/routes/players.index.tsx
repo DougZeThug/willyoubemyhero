@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Users, Shuffle, PackageOpen, Layers, Award, UserRoundCheck } from "lucide-react";
+import { Users, Shuffle, PackageOpen, Layers, Award, Check, UserRoundCheck } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -183,11 +183,18 @@ function PlayersPage() {
                   <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
                     {name}
                   </div>
-                  <div
-                    className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                    style={{ color: rarity.tier === "base" ? undefined : rarity.border }}
-                  >
-                    {urls?.front ? rarity.label : "No card yet"}
+                  {/* A tick, not a word: the tier label is the line's real
+                      content, and the set only fills in a card at a time. */}
+                  <div className="flex items-center justify-center gap-1">
+                    {collected[p.id] && (
+                      <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
+                    )}
+                    <span
+                      className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                      style={{ color: rarity.tier === "base" ? undefined : rarity.border }}
+                    >
+                      {urls?.front ? rarity.label : "No card yet"}
+                    </span>
                   </div>
                 </div>
               </Link>

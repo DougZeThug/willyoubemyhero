@@ -9,6 +9,7 @@ import {
   GitCompareArrows,
   IdCard,
   Link as LinkIcon,
+  MoreHorizontal,
   QrCode,
   RotateCw,
   Share2,
@@ -27,7 +28,13 @@ import { FieldComparison } from "@/components/field-comparison";
 import { RosterFilmstrip } from "@/components/roster-filmstrip";
 import { CardSlab } from "@/components/card-slab";
 import { CardCompare } from "@/components/card-compare";
-import { collectCard, loadCollection, type CollectedCard } from "@/lib/card-collection";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { loadCollection, type CollectedCard } from "@/lib/card-collection";
 import { useEventSocial, useEventAwards } from "@/hooks/use-event-social";
 import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
@@ -180,29 +187,18 @@ function PlayerCardPage() {
     [roster, rarities],
   );
 
-  // Seeing a card adds it to this device's collection, so the store the pack
-  // page has been writing since it shipped finally reflects the whole app.
-  //
-  // Two deliberate details. The snapshot shown to the stamp is the one taken
-  // *before* this visit, so a first sighting reads "New" for the whole visit
-  // rather than flipping to "Collected" a beat after it renders. And a card
-  // already in the collection is not re-written: collectCard bumps a pull
-  // counter, and revisiting a card page is not another pull.
+  // Read-only. Opening a pack is the only thing that collects a card — this page
+  // used to collect on sight, which made walking the vault a one-tap way to
+  // "collect" the whole set without ever ripping a pack.
   useEffect(() => {
-    if (!ep) return;
     let cancelled = false;
-    void loadCollection().then((before) => {
-      if (cancelled) return;
-      setCollection(before);
-      if (!before[ep.id]) void collectCard(ep.id, rarity.tier);
+    void loadCollection().then((c) => {
+      if (!cancelled) setCollection(c);
     });
     return () => {
       cancelled = true;
     };
-    // Keyed on the card alone: a realtime bundle update that promotes someone
-    // mid-combine must not re-run this and log a second pull.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ep?.id]);
+  }, []);
 
   // QR points at this card so a printed card can link to its digital twin.
   useEffect(() => {
@@ -309,6 +305,38 @@ function PlayerCardPage() {
     setGyro(true);
   }
 
+  // Settings rather than actions: they change how the card behaves, and none of
+  // them is the reason anyone opened the page. Declared once and rendered twice,
+  // as chips on a wide screen and as menu items on a phone.
+  const secondary: {
+    key: string;
+    label: string;
+    icon: React.ReactNode;
+    active?: boolean;
+    onClick: () => void;
+  }[] = [
+    {
+      key: "tilt",
+      label: "Tilt",
+      icon: <Smartphone className="h-3.5 w-3.5" />,
+      active: gyro,
+      onClick: () => void onToggleGyro(),
+    },
+    {
+      key: "copy",
+      label: "Copy Link",
+      icon: <LinkIcon className="h-3.5 w-3.5" />,
+      onClick: () => void onCopyLink(),
+    },
+    {
+      key: "sound",
+      label: sfx.muted ? "Muted" : "Sound",
+      icon: sfx.muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />,
+      active: !sfx.muted,
+      onClick: sfx.toggle,
+    },
+  ];
+
   return (
     // Every tier-coloured thing below reads `--tier` off this node rather than
     // taking a prop, so one variable retints the whole page.
@@ -327,10 +355,10 @@ function PlayerCardPage() {
         }}
       />
       <div className="relative mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-2 flex items-center justify-between gap-3 sm:mb-4 sm:items-start">
           <Link
             to="/players"
-            className="inline-flex items-center gap-1 pt-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline sm:pt-1"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Vault
           </Link>
@@ -339,15 +367,16 @@ function PlayerCardPage() {
 
         {/*
           The chevrons overlay the card's margins rather than sitting in a flex
-          row with it. In the row they squeezed the card, which is why they were
-          desktop-only — and that left a phone with no way to move between cards
-          at all, since the hero card claims the whole touch gesture and can't
-          also answer to a swipe.
+          row with it, which squeezed the card. That only works where there are
+          margins to overlay: on a phone the slab fills the column and the
+          buttons landed on the card's own stat panel. So they are desktop-only,
+          and the filmstrip below — built for exactly this, since a hero card
+          claims the whole touch gesture and can't also answer to a swipe — is
+          the phone's way between cards, along with the arrow keys.
         */}
         <div className="relative">
           <div className="mx-auto w-full max-w-sm">
             <CardSlab
-              rarity={rarity}
               eventName={event?.name ?? "Draft Combine"}
               eventYear={event?.year ?? null}
               serial={ep.running_order}
@@ -426,16 +455,6 @@ function PlayerCardPage() {
             {sharing ? "Rendering…" : "Share"}
           </ActionButton>
           <ActionButton
-            onClick={onToggleGyro}
-            active={gyro}
-            icon={<Smartphone className="h-3.5 w-3.5" />}
-          >
-            Tilt
-          </ActionButton>
-          <ActionButton onClick={onCopyLink} icon={<LinkIcon className="h-3.5 w-3.5" />}>
-            Copy Link
-          </ActionButton>
-          <ActionButton
             onClick={() => setComparing(true)}
             active={!!vs}
             icon={<GitCompareArrows className="h-3.5 w-3.5" />}
@@ -443,15 +462,45 @@ function PlayerCardPage() {
           >
             Compare
           </ActionButton>
-          <ActionButton
-            onClick={sfx.toggle}
-            active={!sfx.muted}
-            icon={
-              sfx.muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />
-            }
-          >
-            {sfx.muted ? "Muted" : "Sound"}
-          </ActionButton>
+
+          {/*
+            Six chips wrapped to three rows on a phone and pushed the stats and
+            the filmstrip off the fold. The three that are settings rather than
+            actions fold behind the overflow there; a wide screen has the room
+            to show all six on one line, so it still does.
+
+            Breakpoint classes rather than useIsMobile: the hook's first render
+            is always `false`, which would flash the full row on a phone.
+          */}
+          <div className="hidden items-center gap-2 sm:flex">
+            {secondary.map((a) => (
+              <ActionButton key={a.key} onClick={a.onClick} active={a.active} icon={a.icon}>
+                {a.label}
+              </ActionButton>
+            ))}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="More actions"
+                className="tier-chip inline-flex items-center rounded-full border px-2.5 py-1.5 sm:hidden"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="min-w-[10rem]">
+              {secondary.map((a) => (
+                <DropdownMenuItem
+                  key={a.key}
+                  onSelect={a.onClick}
+                  className="gap-2 text-[11px] font-bold uppercase tracking-[0.2em]"
+                >
+                  {a.icon}
+                  {a.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {ep.participant?.trash_talk_quote && (
@@ -555,7 +604,7 @@ function NavButton({
       disabled={disabled}
       aria-label={label}
       className={cn(
-        "hud-bezel absolute top-1/2 -translate-y-1/2 rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30",
+        "hud-bezel absolute top-1/2 hidden -translate-y-1/2 rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 md:block",
         className,
       )}
     >
@@ -567,12 +616,14 @@ function NavButton({
 /**
  * Tier badge in the page header. The label alone never said what it meant —
  * "Station King" is only a flex if you know it's the fastest split at a station,
- * so the reason rides along underneath.
+ * so the reason rides along underneath — everywhere but a phone, where the pill
+ * shrinks to the label and the reason would be a third line of chrome above a
+ * card that has none of the screen left.
  */
 function TierRibbon({ rarity }: { rarity: Rarity }) {
   return (
     <div
-      className="flex min-w-0 items-center gap-2 rounded-full border py-1.5 pl-3 pr-3.5"
+      className="flex min-w-0 items-center gap-2 rounded-full border py-1 pl-2.5 pr-3 sm:py-1.5 sm:pl-3 sm:pr-3.5"
       style={{
         borderColor: "color-mix(in oklab, var(--tier) 45%, transparent)",
         background: "color-mix(in oklab, var(--tier) 10%, transparent)",
@@ -587,7 +638,7 @@ function TierRibbon({ rarity }: { rarity: Rarity }) {
         >
           {rarity.label}
         </div>
-        <div className="truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+        <div className="hidden truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground sm:block">
           {TIER_REASON[rarity.tier] ?? ""}
         </div>
       </div>
@@ -613,7 +664,9 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "tier-chip inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] transition-colors disabled:opacity-50",
+        // Tighter on a phone: three chips plus the overflow have to sit on one
+        // line, and at the desktop tracking they spill onto a second.
+        "tier-chip inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] transition-colors disabled:opacity-50 sm:px-3.5 sm:tracking-[0.25em]",
         active && "is-active",
       )}
     >

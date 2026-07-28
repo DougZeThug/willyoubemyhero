@@ -1,23 +1,25 @@
 import type { ReactNode } from "react";
-import type { Rarity } from "@/lib/card-rarity";
 import type { CollectedCard } from "@/lib/card-collection";
-import { cn } from "@/lib/utils";
 
 /**
  * The acrylic case a graded card ships in.
  *
  * Purely presentational — it wraps whatever card you hand it and adds the
- * furniture a slab has: a label bar across the top with the grade and the event,
- * a serial down the side, and a collection stamp in the corner. No new data;
- * the serial is the player's running order over the roster size, which is
- * already the number printed on the physical card.
+ * furniture a slab has: a label bar across the top carrying the event, the
+ * serial, and whether this device has pulled the card. No new data; the serial
+ * is the player's running order over the roster size, which is already the
+ * number printed on the physical card.
+ *
+ * Nothing here sits over the card. The grade is not repeated on the plate —
+ * the tier ribbon above the slab already carries the label and why it was
+ * earned — and the collection mark rides in the plate rather than stamped
+ * across the art's top corner, where it clipped the card on a phone.
  *
  * The case deliberately does not intercept pointer events anywhere over the
  * card itself — the whole point of the page is handling the card, and a frame
  * that ate the gesture would be a downgrade dressed as a feature.
  */
 export function CardSlab({
-  rarity,
   eventName,
   eventYear,
   serial,
@@ -25,7 +27,6 @@ export function CardSlab({
   collected,
   children,
 }: {
-  rarity: Rarity;
   eventName: string;
   eventYear: number | null;
   serial: number;
@@ -45,17 +46,13 @@ export function CardSlab({
       }}
     >
       {/*
-        One line, three parts. The tier badge above the card already carries the
-        grade and why it was earned, so repeating either here would just be
-        noise — this is the serial plate, not a second label.
+        One line, three parts: collection mark, event, serial. The tier badge
+        above the card already carries the grade and why it was earned, so
+        repeating either here would just be noise — this is the serial plate,
+        not a second label.
       */}
       <div className="mb-2 flex items-baseline gap-2 px-1.5">
-        <span
-          className="font-display shrink-0 text-[10px] font-black uppercase tracking-[0.25em]"
-          style={{ color: "var(--tier)" }}
-        >
-          {rarity.label}
-        </span>
+        <CollectionMark collected={collected} />
         <span className="min-w-0 flex-1 truncate text-center text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
           {slabTitle(eventName, eventYear)}
         </span>
@@ -65,10 +62,7 @@ export function CardSlab({
         </span>
       </div>
 
-      <div className="relative">
-        {children}
-        <CollectionStamp collected={collected} />
-      </div>
+      {children}
     </div>
   );
 }
@@ -86,29 +80,21 @@ function slabTitle(eventName: string, eventYear: number | null): string {
 }
 
 /**
- * Corner stamp saying whether this device has pulled the card before.
+ * Whether this device has pulled the card, in the plate's left slot.
  *
- * The collection has existed since the pack page shipped and the vault counts
- * it, but the card's own page never said a word about it — you could stare at a
- * card you had never pulled and get no signal either way.
+ * Absent rather than negative when the card has not been pulled. Every card in
+ * the vault is browsable whether or not you own it, so a card with no mark is
+ * the ordinary case and does not need labelling — and there is no "New" state,
+ * because looking at a card is no longer how you collect one.
  */
-function CollectionStamp({ collected }: { collected: CollectedCard | null }) {
-  const isNew = !collected;
+function CollectionMark({ collected }: { collected: CollectedCard | null }) {
+  if (!collected) return null;
   return (
-    <div
-      className={cn(
-        "pointer-events-none absolute -right-1 -top-1 rotate-6 rounded-md border px-2 py-0.5",
-        "font-display text-[9px] font-black uppercase tracking-[0.2em] backdrop-blur-sm",
-      )}
-      style={{
-        borderColor: isNew ? "var(--tier)" : "oklch(1 0 0 / 20%)",
-        background: isNew
-          ? "color-mix(in oklab, var(--tier) 22%, oklch(0.14 0.02 240))"
-          : "oklch(0.14 0.02 240 / 85%)",
-        color: isNew ? "var(--tier)" : "oklch(0.74 0.03 220)",
-      }}
+    <span
+      className="font-display shrink-0 text-[10px] font-black uppercase tracking-[0.2em]"
+      style={{ color: "var(--tier)" }}
     >
-      {isNew ? "New" : collected.count > 1 ? `Pulled ×${collected.count}` : "Collected"}
-    </div>
+      {collected.count > 1 ? `Pulled ×${collected.count}` : "Collected"}
+    </span>
   );
 }
