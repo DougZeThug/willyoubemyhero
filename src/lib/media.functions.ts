@@ -133,7 +133,10 @@ type CardPathColumn =
   | "card_path_medium"
   | "card_back_path"
   | "card_back_path_thumb"
-  | "card_back_path_medium";
+  | "card_back_path_medium"
+  | "photo_path"
+  | "photo_path_thumb"
+  | "photo_path_medium";
 
 function cardPatch(side: CardSide, value: SizedCardPaths | null) {
   if (side === "front") {
