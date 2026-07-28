@@ -118,11 +118,19 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
       });
       return { data: r.data, error: r.error };
     }),
-    upload: vi.fn(async () => {
-      const r = resolve("storage.upload");
-      return { data: r.data, error: r.error };
-    }),
-    remove: vi.fn(async () => {
+    // Parameters mirror the real signature so tests can assert on the path and
+    // content type that were actually uploaded.
+    upload: vi.fn(
+      async (path: string, body: unknown, options?: { contentType?: string; upsert?: boolean }) => {
+        void path;
+        void body;
+        void options;
+        const r = resolve("storage.upload");
+        return { data: r.data, error: r.error };
+      },
+    ),
+    remove: vi.fn(async (paths: string[]) => {
+      void paths;
       const r = resolve("storage.remove");
       return { data: r.data, error: r.error };
     }),

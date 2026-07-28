@@ -60,13 +60,20 @@ export type CallOptions = {
   headers?: Record<string, string>;
 };
 
-type AnyServerFn = (opts?: { data?: unknown }) => Promise<unknown>;
+/**
+ * Loose on purpose. A server function with no inputValidator is typed to accept
+ * `data: undefined`, so a shared `{ data?: unknown }` parameter is not
+ * assignable to it. `never[]` is contravariantly compatible with every server
+ * function shape, and the cast inside is where the looseness is paid for.
+ */
+type AnyServerFn = (...args: never[]) => unknown;
 
 export function callServerFn<T = unknown>(
   fn: AnyServerFn,
   { data, headers = {} }: CallOptions = {},
 ): Promise<T> {
-  return withRequestHeaders(headers, () => fn({ data })) as Promise<T>;
+  const invoke = fn as unknown as (opts: { data?: unknown }) => Promise<T>;
+  return withRequestHeaders(headers, () => invoke({ data }));
 }
 
 /** Header bag for a request carrying an admin token. */
