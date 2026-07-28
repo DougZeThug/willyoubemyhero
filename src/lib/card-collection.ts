@@ -9,9 +9,28 @@ import { openDB, type IDBPDatabase } from "idb";
 const DB_NAME = "wwbh-cards";
 const COLLECTED = "collected";
 const CARD_META = "card-meta";
+const PACK_STATE = "pack-state";
 
 /** Aspect ratio of a player's card art, cached so revisits never re-measure or jump. */
 export type CardMeta = { aspect: number };
+
+/**
+ * Today's pack, and how far through it this device got.
+ *
+ * The dealt cards are stored rather than re-derived. The seed alone is not
+ * enough: the last slot is swapped for a card the user had not collected *at
+ * the moment the pack was dealt*, so re-deriving after the pack is revealed —
+ * when those cards are in the collection — picks a different final card than
+ * the one actually pulled.
+ */
+export type PackState = {
+  /** Local date key the pack was dealt for. A different key means a new pack. */
+  dayKey: string;
+  /** `event_participants.id` for each card in the pack, in dealt order. */
+  ids: string[];
+  /** Indices already flipped face-up. */
+  revealed: number[];
+};
 
 export type CollectedCard = {
   eventParticipantId: string;
@@ -30,10 +49,14 @@ function isBrowser() {
 let dbPromise: Promise<IDBPDatabase> | null = null;
 function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, 1, {
+    dbPromise = openDB(DB_NAME, 2, {
+      // Guarded rather than switched on `oldVersion`: a device upgrading from v1
+      // and a device creating the database fresh both land here, and the only
+      // thing that matters is that all three stores exist afterwards.
       upgrade(db) {
         if (!db.objectStoreNames.contains(COLLECTED)) db.createObjectStore(COLLECTED);
         if (!db.objectStoreNames.contains(CARD_META)) db.createObjectStore(CARD_META);
+        if (!db.objectStoreNames.contains(PACK_STATE)) db.createObjectStore(PACK_STATE);
       },
     });
   }
@@ -56,7 +79,13 @@ export async function loadCollection(): Promise<Record<string, CollectedCard>> {
   }
 }
 
-/** Record a pull. Idempotent per card except for the pull counter. */
+/**
+ * Record a pull. Idempotent per card except for the pull counter.
+ *
+ * Opening a pack is the only thing that calls this. A card page used to collect
+ * on sight, which made the whole vault a one-tap collect-everything path and
+ * left `count` meaning "times seen" rather than "times pulled".
+ */
 export async function collectCard(eventParticipantId: string, tier: string): Promise<void> {
   if (!isBrowser()) return;
   try {
@@ -76,6 +105,32 @@ export async function clearCollection(): Promise<void> {
   try {
     const db = await getDb();
     await db.clear(COLLECTED);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** A single row, so today's state simply overwrites yesterday's. */
+const PACK_STATE_KEY = "today";
+
+/** Today's pack progress, or null if this device has not opened one. */
+export async function loadPackState(): Promise<PackState | null> {
+  if (!isBrowser()) return null;
+  try {
+    const db = await getDb();
+    return ((await db.get(PACK_STATE, PACK_STATE_KEY)) as PackState | undefined) ?? null;
+  } catch {
+    // A device with IndexedDB blocked can't be held to one pack a day. It gets
+    // a fresh pack every load, which is a better failure than no pack at all.
+    return null;
+  }
+}
+
+export async function savePackState(state: PackState): Promise<void> {
+  if (!isBrowser()) return;
+  try {
+    const db = await getDb();
+    await db.put(PACK_STATE, state, PACK_STATE_KEY);
   } catch {
     /* ignore */
   }

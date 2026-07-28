@@ -7,7 +7,7 @@ import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { collectCard, loadCollection } from "@/lib/card-collection";
+import { collectCard, loadCollection, loadPackState, savePackState } from "@/lib/card-collection";
 import { playReveal, playTear } from "@/lib/card-sfx";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -21,13 +21,13 @@ export const Route = createFileRoute("/players/pack")({
         content: "Rip today's pack of combine trading cards. Same pack for the whole league.",
       },
       { property: "og:title", content: "Draft Combine — Open a Pack" },
-      { property: "og:description", content: "Five cards. One hit. Same pack for everyone." },
+      { property: "og:description", content: "Three cards. One hit. Same pack for everyone." },
     ],
   }),
   component: PackPage,
 });
 
-const PACK_SIZE = 5;
+const PACK_SIZE = 3;
 /** Drag distance, as a fraction of the pack width, that completes the tear. */
 const TEAR_THRESHOLD = 0.55;
 
@@ -79,12 +79,18 @@ function PackPage() {
   // must not shift while the user is revealing it, and revealing a card writes
   // straight back into `collected`.
   const [packBaseline, setPackBaseline] = useState<Record<string, unknown> | null>(null);
-  const [packIndex, setPackIndex] = useState(0);
-  const [torn, setTorn] = useState(false);
+  // Today's dealt cards, once the wrapper is off. Null means the pack is still
+  // sealed; undefined-until-loaded is tracked by `stateLoaded` instead, so the
+  // sealed pack never flashes on a day that has already been opened.
+  const [dealtIds, setDealtIds] = useState<string[] | null>(null);
+  const [stateLoaded, setStateLoaded] = useState(false);
   const [progress, setProgress] = useState(0);
   const [revealed, setRevealed] = useState<number[]>([]);
   const [peeking, setPeeking] = useState(false);
   const dragRef = useRef<HTMLDivElement>(null);
+
+  const dayKey = useMemo(() => todayKey(), []);
+  const seed = `${event?.id ?? "no-event"}:${dayKey}`;
 
   useEffect(() => {
     loadCollection().then((c) => {
@@ -93,18 +99,28 @@ function PackPage() {
     });
   }, []);
 
+  // One pack a day, so a return visit resumes rather than deals. Yesterday's row
+  // is simply ignored — the next tear overwrites it.
+  useEffect(() => {
+    loadPackState().then((s) => {
+      if (s && s.dayKey === dayKey && s.ids.length > 0) {
+        setDealtIds(s.ids);
+        setRevealed(s.revealed);
+      }
+      setStateLoaded(true);
+    });
+  }, [dayKey]);
+
   useEffect(() => {
     if (!collectionLoaded) return;
     setPackBaseline((prev) => prev ?? collected);
   }, [collectionLoaded, collected]);
 
-  const dayKey = useMemo(() => todayKey(), []);
-  const seed = `${event?.id ?? "no-event"}:${dayKey}:${packIndex}`;
-
-  // The pack is derived purely from the seed, so refreshing cannot reroll it.
-  // Slots 1..4 come from a seeded shuffle; the last slot prefers a card the user
-  // has not collected yet so the set actually completes.
-  const pack = useMemo(() => {
+  // What today's pack *would* be if torn open right now. Slots 1..n-1 come from a
+  // seeded shuffle — the same for the whole league, and refreshing cannot reroll
+  // it — and the last slot prefers a card the user has not collected yet, so the
+  // set actually completes.
+  const nextPack = useMemo(() => {
     const all = bundle?.participants ?? [];
     if (all.length === 0 || !packBaseline) return [];
     const order = shuffle(all, seededRng(seed));
@@ -114,12 +130,22 @@ function PackPage() {
     return picks;
   }, [bundle, seed, packBaseline]);
 
-  const resetPack = useCallback(() => {
-    setTorn(false);
-    setProgress(0);
-    setRevealed([]);
-    setPeeking(false);
-  }, []);
+  // Once dealt, the stored ids are the pack. Re-deriving would drift: the last
+  // slot depends on what was uncollected when the pack was opened.
+  const pack = useMemo(() => {
+    const all = bundle?.participants ?? [];
+    if (!dealtIds) return nextPack;
+    return dealtIds.map((id) => all.find((p) => p.id === id)).filter((p) => p != null);
+  }, [bundle, dealtIds, nextPack]);
+
+  const torn = dealtIds != null;
+
+  const tearOpen = useCallback(() => {
+    if (dealtIds || nextPack.length === 0) return;
+    const ids = nextPack.map((p) => p.id);
+    setDealtIds(ids);
+    playTear();
+  }, [dealtIds, nextPack]);
 
   function onDrag(clientY: number) {
     const el = dragRef.current;
@@ -127,10 +153,7 @@ function PackPage() {
     const r = el.getBoundingClientRect();
     const p = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
     setProgress(p);
-    if (p >= TEAR_THRESHOLD) {
-      setTorn(true);
-      playTear();
-    }
+    if (p >= TEAR_THRESHOLD) tearOpen();
   }
 
   async function revealAt(i: number) {
@@ -166,9 +189,22 @@ function PackPage() {
     }
   }
 
+  // Written on every step rather than only on tear, so a phone that loses the tab
+  // mid-reveal comes back to the cards it had already flipped.
+  useEffect(() => {
+    if (!dealtIds) return;
+    void savePackState({ dayKey, ids: dealtIds, revealed });
+  }, [dealtIds, dayKey, revealed]);
+
   const allRevealed = pack.length > 0 && revealed.length === pack.length;
   const collectedCount = (bundle?.participants ?? []).filter((p) => collected[p.id]).length;
   const total = bundle?.participants.length ?? 0;
+
+  // The sealed pack must not flash on a day already opened, so nothing renders
+  // until the stored state has been read.
+  if (!stateLoaded) {
+    return <div className="p-10 text-center text-sm text-muted-foreground">Loading…</div>;
+  }
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
@@ -197,8 +233,8 @@ function PackPage() {
                 Today&apos;s Pack
               </h1>
               <p className="mt-2 max-w-sm text-xs text-muted-foreground">
-                Everyone in the league gets this exact pack today. Refreshing won&apos;t reroll it —
-                drag down to rip it open.
+                One pack a day, and everyone in the league gets this exact one. Refreshing
+                won&apos;t reroll it — drag down to rip it open.
               </p>
             </div>
 
@@ -220,8 +256,7 @@ function PackPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  setTorn(true);
-                  playTear();
+                  tearOpen();
                 }
               }}
               className="wax-foil hud-glow relative aspect-[3/4] w-full max-w-xs cursor-grab touch-none overflow-hidden rounded-2xl border border-primary/40 active:cursor-grabbing"
@@ -265,7 +300,9 @@ function PackPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            {/* Three across at every width: the whole pack is in view at once on a
+                phone, which a two-column grid with an orphan third card was not. */}
+            <div className="mx-auto grid max-w-2xl grid-cols-3 gap-2 sm:gap-4">
               {pack.map((ep, i) => {
                 const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
                 const isRevealed = revealed.includes(i);
@@ -362,19 +399,19 @@ function PackPage() {
                   Reveal all
                 </button>
               )}
-              <button
-                onClick={() => {
-                  setPackIndex((n) => n + 1);
-                  // Re-snapshot so the next pack accounts for what was just pulled.
-                  setPackBaseline(collected);
-                  resetPack();
-                }}
-                className="neon-btn !px-4 !py-2 !text-xs"
-              >
-                <PackageOpen className="h-4 w-4" />
-                Next pack
-              </button>
+              {allRevealed && (
+                <Link to="/players" className="neon-btn !px-4 !py-2 !text-xs">
+                  <PackageOpen className="h-4 w-4" />
+                  Back to the vault
+                </Link>
+              )}
             </div>
+
+            {allRevealed && (
+              <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+                That&apos;s today&apos;s pack — come back tomorrow
+              </p>
+            )}
           </div>
         )}
       </div>
