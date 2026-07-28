@@ -143,7 +143,10 @@ function SecretSlotView({
   if (slot === "hidden") return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-[220px] flex-col items-center gap-2 pt-2">
+    // Wider than a board card, which is now ~173px on a phone. The fourth slot
+    // has to stay visibly the biggest thing here or it stops reading as the
+    // thing nobody else on the roster has.
+    <div className="mx-auto flex w-full max-w-[240px] flex-col items-center gap-2 pt-2">
       <div className="text-center">
         <h2
           className="font-display text-sm font-black uppercase tracking-[0.2em]"
@@ -774,9 +777,18 @@ function PackPage() {
               )}
             </div>
 
-            {/* Three across at every width: the whole pack is in view at once on a
-                phone, which a two-column grid with an orphan third card was not. */}
-            <div className="mx-auto grid max-w-2xl grid-cols-3 gap-2 sm:gap-4">
+            {/* Two up on a phone, with the third centred underneath.
+                This was three across at every width, so the whole pack stayed in
+                view at once — but a third of a 390px screen minus gaps comes out
+                around 114px, smaller than the vault's own grid thumbnails and far
+                too small to be the payoff of a ceremony. Seeing all three without
+                scrolling turned out to be worth less than being able to see any
+                of them.
+                Four columns spanning two each, rather than grid-cols-2: it makes
+                the odd card `col-start-2`, where it lands exactly centred at
+                exactly the width of the two above, with no calc() and no
+                half-gap drift. */}
+            <div className="mx-auto grid max-w-2xl grid-cols-4 items-start gap-3 sm:grid-cols-3 sm:gap-4">
               {pack.map((ep, i) => {
                 const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
                 const isRevealed = revealed.includes(i);
@@ -788,7 +800,13 @@ function PackPage() {
                     initial={{ opacity: 0, y: 24 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.07, type: "spring", stiffness: 220, damping: 20 }}
-                    className="flex flex-col gap-2"
+                    className={cn(
+                      "col-span-2 flex flex-col gap-2",
+                      // Only while the grid is two-up. At sm: it is an ordinary
+                      // third column and must let go, or it stays offset.
+                      i === 2 && "col-start-2",
+                      "sm:col-span-1 sm:col-start-auto",
+                    )}
                   >
                     {/* The card owns its own button semantics — wrapping it in
                         another button would nest interactive elements. */}
@@ -845,23 +863,31 @@ function PackPage() {
                           animate={{ opacity: 1 }}
                           className="text-center"
                         >
+                          {/* Wrapped rather than truncated: a name cut off mid-word
+                              is a poor look on the screen that is meant to be the
+                              payoff, and at two-up there is room for two lines.
+                              The grid's items-start absorbs the uneven rows. */}
                           <Link
                             to="/players/$id"
                             params={{ id: ep.id }}
-                            className="block truncate font-display text-xs font-black uppercase tracking-wide hover:text-primary"
+                            className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary sm:text-base"
                           >
                             {name}
                           </Link>
+                          {/* accent, not border: base and dnf set border to a
+                              near-transparent white so their bezel vanishes,
+                              which left this label all but unreadable. Same
+                              reason CardBackPanel does it. */}
                           <div
-                            className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                            style={{ color: rarity.border }}
+                            className="text-[10px] font-bold uppercase tracking-[0.25em] sm:text-xs"
+                            style={{ color: rarity.accent }}
                           >
                             {rarity.label}
                           </div>
                           {/* Muted and on its own line: the tier above is what
                               this card is, this is how many people have one. */}
                           {packedByLabel(pullCounts.data?.[ep.id]) && (
-                            <div className="text-[8px] font-bold uppercase leading-tight tracking-[0.2em] text-muted-foreground">
+                            <div className="text-[9px] font-bold uppercase leading-tight tracking-[0.2em] text-muted-foreground sm:text-[10px]">
                               {packedByLabel(pullCounts.data?.[ep.id])}
                             </div>
                           )}
