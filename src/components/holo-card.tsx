@@ -54,6 +54,23 @@ const TILT = {
 
 export type TiltVariant = keyof typeof TILT;
 
+/**
+ * What counts as a flick rather than a tap or a lean.
+ *
+ * A card that already owns the whole touch gesture may as well answer to being
+ * thrown over, the way you'd actually turn a card in your hand. Horizontal
+ * travel is measured as a fraction of the card's own width so it means the same
+ * thing on a thumbnail and on a hero card.
+ */
+const FLICK = {
+  /** Minimum horizontal travel, as a fraction of card width. */
+  dist: 0.22,
+  /** Longer than this and it was a slow drag someone happened to end off-centre. */
+  ms: 420,
+  /** Horizontal travel must beat vertical by this much, so a scroll isn't a flick. */
+  bias: 1.4,
+} as const;
+
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 export type HoloCardProps = {
@@ -136,7 +153,10 @@ function HoloCardImpl({
   const frameRef = useRef<number | null>(null);
   const perspRef = useRef(0);
   const pendingRef = useRef<{ px: number; py: number } | null>(null);
-  const dragRef = useRef<{ id: number; px: number; py: number } | null>(null);
+  const dragRef = useRef<{ id: number; px: number; py: number; at: number } | null>(null);
+  // Set when a pointerup was a flick, and consumed by the click that follows it,
+  // so throwing the card over doesn't also register as a tap and flip it twice.
+  const flickedRef = useRef(false);
   const reduced = usePrefersReducedMotion();
   const titleId = useId();
 
@@ -339,7 +359,11 @@ function HoloCardImpl({
     if (!interactive || reduced || e.pointerType === "mouse" || !dragTilt) return;
     const p = localPoint(e);
     if (!p) return;
-    dragRef.current = { id: e.pointerId, px: p.px, py: p.py };
+    // A flick whose finger left past the card's edge may not produce a click at
+    // all, which would leave the flag armed to swallow the next real tap.
+    // Clearing it here bounds that to the gesture it belongs to.
+    flickedRef.current = false;
+    dragRef.current = { id: e.pointerId, px: p.px, py: p.py, at: Date.now() };
     // Capture so the tilt keeps tracking once the finger slides past the card's
     // edge, and so a drag that started here isn't handed off mid-gesture.
     e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -383,6 +407,34 @@ function HoloCardImpl({
     resetTilt();
   }
 
+  /**
+   * A fast horizontal throw turns the card over.
+   *
+   * Only on pointerup — a pointercancel means the system took the gesture away
+   * (an app switch, an incoming call), and finishing the flip on the way out
+   * would be the card acting on an interaction the user abandoned.
+   */
+  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (drag && drag.id === e.pointerId && canFlip && !onClick) {
+      const p = localPoint(e);
+      if (p) {
+        const dx = p.px - drag.px;
+        const dy = p.py - drag.py;
+        const flick =
+          Math.abs(dx) >= FLICK.dist &&
+          Math.abs(dx) >= Math.abs(dy) * FLICK.bias &&
+          Date.now() - drag.at <= FLICK.ms;
+        if (flick) {
+          // Claimed before handlePointerEnd, whose resetTilt clears dragRef.
+          flickedRef.current = true;
+          toggleFlip();
+        }
+      }
+    }
+    handlePointerEnd(e);
+  }
+
   function toggleFlip() {
     if (!canFlip) return;
     const next = !isFlipped;
@@ -392,6 +444,12 @@ function HoloCardImpl({
   }
 
   function handleClick() {
+    // A flick already turned the card; the click the browser synthesises after
+    // that same pointerup would turn it straight back.
+    if (flickedRef.current) {
+      flickedRef.current = false;
+      return;
+    }
     onClick?.();
     if (!onClick) toggleFlip();
   }
@@ -429,9 +487,16 @@ function HoloCardImpl({
     touchAction: dragTilt && interactive && !reduced ? t.touchAct : undefined,
   } as React.CSSProperties;
 
+  // A resting card only crawls if the tier earned it, and only at hero size —
+  // the vault grid is the one place many cards mount at once, and a permanently
+  // animating layer on each is the same cost `engaged` exists to avoid. It also
+  // yields the moment the pointer's own band takes over.
+  const idle = rarity.idle && tilt === "hero" && !reduced && !engaged;
+
   const Overlays = (
     <>
-      <div className="holo-foil" aria-hidden />
+      <div className={cn("holo-foil", `holo-pattern-${rarity.pattern}`)} aria-hidden />
+      {idle && <div className="holo-idle" aria-hidden />}
       {engaged && <div className="holo-glare" aria-hidden />}
       {engaged && rarity.sparkle > 0 && <div className="holo-sparkle" aria-hidden />}
     </>
@@ -444,7 +509,7 @@ function HoloCardImpl({
       style={styleVars}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerEnd}
+      onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerEnd}
       onPointerLeave={handlePointerEnd}
     >

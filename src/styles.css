@@ -328,6 +328,149 @@
   mask-position: var(--holo-pos, 50%) 50%;
 }
 
+/*
+ * Per-tier foil textures.
+ *
+ * `holo-foil` above is the shared chassis — blend mode, opacity ramp, the band
+ * mask that follows the pointer. These override only the geometry, so a tier is
+ * distinguishable by texture and not just by hue. A champion and a base card
+ * used to sweep the identical rainbow band in different colours, which is
+ * exactly the tell a real foil card doesn't have.
+ *
+ * Plain rules rather than `@utility`, for the same reason `.holo-settle` is:
+ * these class names are assembled at runtime from `rarity.pattern`, so the
+ * Tailwind class scanner can never see them in source and would drop them.
+ */
+
+/* Cross-hatched bands at two angles, so the light shatters instead of sweeping.
+   The second gradient is layered under the first at a shallower angle and a
+   different period, so the two never resolve into a regular grid. */
+.holo-pattern-prismatic {
+  background-image:
+    repeating-linear-gradient(
+      115deg,
+      transparent 0% 6%,
+      var(--holo-a, oklch(0.82 0.14 210)) 12%,
+      var(--holo-b, oklch(0.75 0.13 195)) 17%,
+      transparent 24% 32%
+    ),
+    /* The cross band is deliberately thinner than the primary. Two gradients on
+       one colour-dodge layer stack their contribution, and matching widths made
+       a champion's resting sheen twice everyone else's rather than differently
+       shaped. */
+    repeating-linear-gradient(
+        58deg,
+        transparent 0% 9%,
+        var(--holo-b, oklch(0.75 0.13 195)) 12%,
+        var(--holo-a, oklch(0.82 0.14 210)) 14%,
+        transparent 17% 30%
+      );
+  background-size:
+    220% 220%,
+    170% 170%;
+  background-position: var(--holo-pos, 50%) 50%;
+  /* Wider than the shared mask: a shattered foil should light most of the card
+     at once, where a single refractor band should not. */
+  -webkit-mask-image: linear-gradient(
+    115deg,
+    transparent 6%,
+    black 34%,
+    black 66%,
+    transparent 94%
+  );
+  mask-image: linear-gradient(115deg, transparent 6%, black 34%, black 66%, transparent 94%);
+}
+
+/* Tight vertical refractor lines — the "cracked ice" look, minus the crack. */
+.holo-pattern-scanline {
+  background-image: repeating-linear-gradient(
+    92deg,
+    transparent 0% 1.2%,
+    var(--holo-a, oklch(0.82 0.14 210)) 2%,
+    var(--holo-b, oklch(0.75 0.13 195)) 2.8%,
+    transparent 4% 5.4%
+  );
+  background-size: 200% 200%;
+}
+
+/* Caution stripes. The penalty box should look like something went wrong. */
+.holo-pattern-hazard {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0% 5%,
+    var(--holo-a, oklch(0.82 0.19 85)) 7%,
+    var(--holo-a, oklch(0.82 0.19 85)) 11%,
+    transparent 13% 18%
+  );
+  background-size: 160% 160%;
+}
+
+/* No band at all — a flat, dull wash that barely moves. A DNF card is supposed
+   to feel like unfoiled cardstock, so the mask is dropped entirely and the
+   gradient is a single soft sheen rather than a repeating one. */
+.holo-pattern-matte {
+  mix-blend-mode: soft-light;
+  background-image: linear-gradient(
+    115deg,
+    transparent 20%,
+    var(--holo-a, oklch(0.6 0.02 240)) 50%,
+    transparent 80%
+  );
+  background-size: 200% 200%;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/*
+ * Slow sheen that crawls across a card left untouched, so a headline card reads
+ * as alive on the shelf. Driven by background-position rather than the
+ * `--holo-pos` custom property, which is not animatable without @property and
+ * is owned by the pointer path anyway.
+ *
+ * holo-card.tsx mounts this only for `tilt: "hero"` on a tier that opts in, and
+ * unmounts it the moment the card is engaged — the pointer's own band takes
+ * over from there. It must never reach the vault grid: thirty permanently
+ * animating compositor layers is the exact cost that file is written to avoid.
+ */
+.holo-idle {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  mix-blend-mode: color-dodge;
+  opacity: calc(var(--holo-rest, 0.1) * 1.5);
+  /* A narrow band, not a wash. The whole reason the pointer foil above is masked
+     to a moving stripe is that filming colour-dodge over the entire face lifts
+     the art's textured blacks into grey haze — an idle layer would do exactly
+     the same thing, and it would do it permanently. Six percent of a 340%-wide
+     gradient is a finger-width of light travelling across the card. */
+  background-image: linear-gradient(
+    115deg,
+    transparent 44%,
+    var(--holo-a, oklch(0.82 0.14 210)) 49%,
+    var(--holo-b, oklch(0.75 0.13 195)) 51%,
+    transparent 56%
+  );
+  background-size: 340% 340%;
+  animation: holo-idle-sweep 6.5s linear infinite;
+}
+
+@keyframes holo-idle-sweep {
+  from {
+    background-position: 120% 50%;
+  }
+  to {
+    background-position: -20% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-idle {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Wet specular hotspot that follows the finger. */
 @utility holo-glare {
   position: absolute;
@@ -369,6 +512,29 @@
   background-position:
     var(--holo-sparkle-x, 50%) var(--holo-sparkle-y, 50%),
     calc(var(--holo-sparkle-x, 50%) * -0.6) calc(var(--holo-sparkle-y, 50%) * 0.8);
+}
+
+/*
+ * Pill button that wears whatever `--tier` its ancestor set — the player page
+ * sets it from the card's rarity, so the same button is cyan on a base card and
+ * gold on a champion's.
+ *
+ * A plain rule rather than an `@utility` because hover and active states need
+ * `color-mix` against a runtime variable, which does not survive being written
+ * as a Tailwind arbitrary value.
+ */
+.tier-chip {
+  border-color: oklch(1 0 0 / 10%);
+  color: var(--color-muted-foreground);
+  &:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--tier, var(--color-primary)) 50%, transparent);
+    color: var(--tier, var(--color-primary));
+  }
+  &.is-active {
+    border-color: var(--tier, var(--color-primary));
+    background: color-mix(in oklab, var(--tier, var(--color-primary)) 15%, transparent);
+    color: var(--tier, var(--color-primary));
+  }
 }
 
 /* Sealed wax pack wrapper — pure CSS, no image assets. */
