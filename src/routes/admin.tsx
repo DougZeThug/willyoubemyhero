@@ -859,3 +859,115 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
     </div>
   );
 }
+
+function AddPlayerPanel({ eventId }: { eventId: string }) {
+  const qc = useQueryClient();
+  const upsertFn = useServerFn(upsertParticipant);
+  const addFn = useServerFn(addParticipantToEvent);
+  const removeFn = useServerFn(removeParticipantFromEvent);
+  const { bundle } = useEventBundle();
+  const [name, setName] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function onAdd(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    try {
+      const p = await upsertFn({
+        data: {
+          eventId,
+          name: trimmed,
+          nickname: nickname.trim() || null,
+        },
+      });
+      await addFn({ data: { eventId, participantId: p.id } });
+      await qc.invalidateQueries();
+      setName("");
+      setNickname("");
+      toast.success(`Added ${trimmed}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add player");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onRemove(epId: string, playerName: string) {
+    if (!confirm(`Remove ${playerName} from this event?`)) return;
+    try {
+      await removeFn({ data: { eventId, eventParticipantId: epId } });
+      await qc.invalidateQueries();
+      toast.success(`Removed ${playerName}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove player");
+    }
+  }
+
+  const roster = bundle?.participants ?? [];
+
+  return (
+    <AdminSection
+      icon={<UserPlus className="h-4 w-4 shrink-0" />}
+      title="Add Player"
+      meta={`${roster.length} on roster`}
+    >
+      <form onSubmit={onAdd} className="space-y-2">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="new-player-name" className="text-[10px] uppercase tracking-widest">
+              Name
+            </Label>
+            <Input
+              id="new-player-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full name"
+              maxLength={80}
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <Label htmlFor="new-player-nick" className="text-[10px] uppercase tracking-widest">
+              Nickname (optional)
+            </Label>
+            <Input
+              id="new-player-nick"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder="Nickname"
+              maxLength={80}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+        <Button type="submit" size="sm" disabled={busy || !name.trim()} className="min-h-11 w-full sm:min-h-0">
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          {busy ? "Adding…" : "Add to event"}
+        </Button>
+      </form>
+
+      {roster.length > 0 && (
+        <ul className="mt-3 max-h-56 space-y-0.5 overflow-auto pr-1">
+          {roster.map((p) => (
+            <li
+              key={p.id}
+              className="flex items-center justify-between gap-2 rounded px-1 py-1 text-xs"
+            >
+              <span className="truncate uppercase">{p.participant?.name}</span>
+              <button
+                onClick={() => onRemove(p.id, p.participant?.name ?? "player")}
+                className="shrink-0 rounded p-2 text-muted-foreground hover:text-destructive"
+                aria-label="Remove player"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </AdminSection>
+  );
+}
