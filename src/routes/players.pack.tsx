@@ -343,14 +343,23 @@ function PackPage() {
   // One pack a day, so a return visit resumes rather than deals. Yesterday's row
   // is simply ignored — the next tear overwrites it.
   useEffect(() => {
+    // Wait for the browser to answer who this pack is for. usePackIdentity
+    // returns null for one render on every mount while it reads localStorage,
+    // and running the load then would compare a stored `d:xxx` against `null`,
+    // decide the pack isn't mine, and clear dealtIds — briefly rendering a
+    // tearable sealed pack that a fast tap can deal straight over the saved
+    // one. Skipping this pass keeps `stateLoaded` false until we know.
+    if (identity == null) return;
     let cancelled = false;
     // Cleared first so the rollover below cannot write today's key over
     // yesterday's ids in the window before this resolves.
     setStateLoaded(false);
     loadPackState().then((s) => {
       if (cancelled) return;
-      // A missing identity is treated as a match, so nobody mid-reveal on the
-      // day this ships loses their cards to the new field.
+      // A stored row without an identity predates per-person packs; treat it
+      // as a match so nobody mid-reveal on the day this ships loses their
+      // cards. Now that we always wait for `identity` above, a mismatch here
+      // means the phone genuinely changed hands.
       const mine = s?.identity == null || s.identity === identity;
       if (s && s.dayKey === dayKey && mine && s.ids.length > 0) {
         setDealtIds(s.ids);
