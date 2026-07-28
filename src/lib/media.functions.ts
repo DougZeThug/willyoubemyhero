@@ -70,6 +70,24 @@ export type ImageUrlSet = {
   large: string | null;
 };
 
+export function urlFromSet(
+  set: ImageUrlSet | string | null | undefined,
+  size: keyof ImageUrlSet = "large",
+): string | null {
+  if (!set) return null;
+  if (typeof set === "string") return set;
+  return set[size] ?? set.large ?? set.medium ?? set.thumb;
+}
+
+export function srcSetFromSet(set: ImageUrlSet | string | null | undefined): string | undefined {
+  if (!set || typeof set === "string") return undefined;
+  const parts: string[] = [];
+  if (set.thumb) parts.push(`${set.thumb} 320w`);
+  if (set.medium) parts.push(`${set.medium} 800w`);
+  if (set.large) parts.push(`${set.large} 1600w`);
+  return parts.length ? parts.join(", ") : undefined;
+}
+
 export type SizedPhotoUrls = Record<string, ImageUrlSet>;
 
 export type CardUrls = {
