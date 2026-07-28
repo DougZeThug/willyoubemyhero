@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
+import { getActiveEvent } from "@/lib/event.functions";
+import { getEventCardUrls } from "@/lib/media.functions";
 import { HoloCard } from "@/components/holo-card";
 import { requestGyroPermission } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
