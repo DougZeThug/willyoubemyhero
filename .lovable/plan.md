@@ -1,19 +1,38 @@
 ## Goal
 
-Fix the 79 stale-type errors at the root by regenerating `src/integrations/supabase/types.ts` from the current DB schema, then re-enable the Typecheck step in CI so future drift fails the build.
+Apply two database migrations that add the secret-cards catalogue/ledger and the player-card pull counter, exactly as specified in the pasted prompt. No app code changes.
 
-## Steps
+## What to apply
 
-1. **Regenerate `src/integrations/supabase/types.ts`** from the live schema so it includes:
-   - `events.awards_locked`
-   - `event_participants.card_back_path`
-   - Tables `award_votes`, `card_reactions`, `card_comments`, `member_codes`, `event_secrets`
-   - RPC signatures for `cast_award_vote`, `close_award_voting`, `reopen_award_voting`
-2. **Run `bun run typecheck`** locally to confirm all 79 errors clear. If any residual errors remain (real code bugs, not codegen drift), fix them in the same pass.
-3. **Re-enable the Typecheck step** in `.github/workflows/ci.yml`: uncomment the step and delete the explanatory comment block above it so CI gates type errors going forward.
+Run as two separate migrations, in order:
 
-## Notes
+1. **`20260728143000_secret_holo_cards.sql`** — creates `public.secret_cards` and `public.secret_card_pulls` (RLS on, zero policies, no grants to anon/authenticated), the `events_one_active` partial unique index, and the `SECURITY DEFINER` functions `pull_secret_card(uuid, uuid)` and `secret_pull_status(uuid)` with `SET timezone = 'America/New_York'` and `REVOKE ... FROM PUBLIC` / `GRANT EXECUTE ... TO service_role`.
 
-- `types.ts` is auto-generated and normally untouched by hand; regeneration is the correct fix, not editing it.
-- No app behavior changes — types-only.
-- No DB migration needed; schema is already correct, only the generated file is stale.
+2. **`20260728160000_player_card_pulls.sql`** — creates `public.card_pulls` (composite PK `(participant_id, event_participant_id)`, RLS on, zero policies, no grants to anon/authenticated) plus `card_pulls_card_idx`, and the `SECURITY DEFINER` function `record_card_pulls(uuid, uuid[])` with `REVOKE ... FROM PUBLIC` / `GRANT EXECUTE ... TO service_role`.
+
+Both migrations use `IF NOT EXISTS` / `CREATE OR REPLACE` throughout so re-runs are safe.
+
+## Hard rules (from the prompt)
+
+- Do NOT add any RLS policy to `secret_cards`, `secret_card_pulls`, or `card_pulls`. RLS-on-with-zero-policies is the intended state.
+- Do NOT grant anything on these tables to `anon`, `authenticated`, or `PUBLIC`.
+- Do NOT add them to the `supabase_realtime` publication.
+- Do NOT change `SECURITY DEFINER` → `SECURITY INVOKER`, and do NOT drop the `REVOKE ... FROM PUBLIC` lines on the two RPCs.
+- Do NOT change the `SET timezone = 'America/New_York'` on either RPC.
+- Do NOT edit any application code (TS side arrives via git; `secret-cards-db.server.ts` stays until types are regenerated).
+
+## Verification
+
+After each migration is approved and applied, run the four verification queries from section 3 of the prompt via `supabase--read_query`:
+
+1. Three tables present, `rls_enabled = t`, `policy_count = 0`.
+2. Zero rows of grants to anon/authenticated/PUBLIC on those tables.
+3. Zero project functions executable by anon/authenticated.
+4. Zero of the three tables in the `supabase_realtime` publication.
+
+If any check fails, do not proceed — re-apply the DDL exactly as written.
+
+## Out of scope
+
+- No TypeScript changes, no regenerated `types.ts`, no deletion of `secret-cards-db.server.ts` in this pass.
+- Storage bucket privacy (`participant-photos`) is dashboard state; not touched by migrations.
