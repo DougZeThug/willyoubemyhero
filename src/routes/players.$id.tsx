@@ -22,6 +22,7 @@ import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { CardSocial } from "@/components/card-social";
 import { FieldComparison } from "@/components/field-comparison";
+import { RosterFilmstrip } from "@/components/roster-filmstrip";
 import { useEventSocial, useEventAwards } from "@/hooks/use-event-social";
 import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
@@ -143,6 +144,18 @@ function PlayerCardPage() {
   const countedTime = useCountUp(stats.bestRun?.official_time_ms ?? null);
   const countedRank = useCountUp(stats.rank);
 
+  // Same running order as prev/next, so the strip and the chevrons agree.
+  const filmstrip = useMemo(
+    () =>
+      roster.map((p) => ({
+        id: p.id,
+        name: p.participant?.name ?? "—",
+        frontUrl: cards.data?.[p.id]?.front ?? null,
+        rarity: rarities.get(p.id) ?? rarityStyle("base"),
+      })),
+    [roster, cards.data, rarities],
+  );
+
   // QR points at this card so a printed card can link to its digital twin.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -261,13 +274,14 @@ function PlayerCardPage() {
           <TierRibbon rarity={rarity} />
         </div>
 
-        <div className="flex items-center gap-3">
-          <NavButton
-            onClick={() => go(prev?.id)}
-            label={`Previous: ${prev?.participant?.name ?? ""}`}
-            icon={<ChevronLeft className="h-5 w-5" />}
-            disabled={roster.length < 2}
-          />
+        {/*
+          The chevrons overlay the card's margins rather than sitting in a flex
+          row with it. In the row they squeezed the card, which is why they were
+          desktop-only — and that left a phone with no way to move between cards
+          at all, since the hero card claims the whole touch gesture and can't
+          also answer to a swipe.
+        */}
+        <div className="relative">
           <div className="mx-auto w-full max-w-sm">
             <HoloCard
               frontUrl={urls?.front ?? null}
@@ -283,10 +297,18 @@ function PlayerCardPage() {
             />
           </div>
           <NavButton
+            onClick={() => go(prev?.id)}
+            label={`Previous: ${prev?.participant?.name ?? ""}`}
+            icon={<ChevronLeft className="h-5 w-5" />}
+            disabled={roster.length < 2}
+            className="left-0"
+          />
+          <NavButton
             onClick={() => go(next?.id)}
             label={`Next: ${next?.participant?.name ?? ""}`}
             icon={<ChevronRight className="h-5 w-5" />}
             disabled={roster.length < 2}
+            className="right-0"
           />
         </div>
 
@@ -373,6 +395,8 @@ function PlayerCardPage() {
 
         <FieldComparison ladder={stats.ladder} rank={rank} fieldSize={stats.fieldSize} />
 
+        <RosterFilmstrip entries={filmstrip} currentId={ep.id} onSelect={go} />
+
         {event?.id && (
           <CardSocial
             eventId={event.id}
@@ -412,18 +436,23 @@ function NavButton({
   label,
   icon,
   disabled,
+  className,
 }: {
   onClick: () => void;
   label: string;
   icon: React.ReactNode;
   disabled?: boolean;
+  className?: string;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="hud-bezel hidden shrink-0 rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 sm:block"
+      className={cn(
+        "hud-bezel absolute top-1/2 -translate-y-1/2 rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30",
+        className,
+      )}
     >
       {icon}
     </button>
