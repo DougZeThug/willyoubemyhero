@@ -238,6 +238,12 @@ function HoloCardImpl({
       // Sparkle parallaxes at ~2x so glints crawl independently of the bands.
       card.style.setProperty("--holo-sparkle-x", `${(px * 200 - 50).toFixed(1)}%`);
       card.style.setProperty("--holo-sparkle-y", `${(py * 200 - 50).toFixed(1)}%`);
+      // Rosette spin. The rosette is the only pattern whose texture radiates
+      // rather than sweeps, so translating it with the finger is not enough — a
+      // real diffraction pattern rotates as the viewing angle changes. Half a turn
+      // across the width of the card. Unitless because @property types
+      // --prism-angle as an <angle> and this one is multiplied by 1deg in CSS.
+      card.style.setProperty("--holo-spin", `${(px * 180 - 90).toFixed(1)}`);
     },
     [t],
   );
@@ -493,12 +499,23 @@ function HoloCardImpl({
   // yields the moment the pointer's own band takes over.
   const idle = rarity.idle && tilt === "hero" && !reduced && !engaged;
 
+  // A named variable rather than part of `Overlays`, because `Overlays` renders on
+  // the front *and* on an uploaded back — inlining the ring there would mount two
+  // of them on a secret card that has back art.
+  const prismEdge = rarity.prismEdge ? (
+    <div
+      className={cn("holo-prism-edge", tilt === "hero" && !reduced && "is-spinning")}
+      aria-hidden
+    />
+  ) : null;
+
   const Overlays = (
     <>
       <div className={cn("holo-foil", `holo-pattern-${rarity.pattern}`)} aria-hidden />
       {idle && <div className="holo-idle" aria-hidden />}
       {engaged && <div className="holo-glare" aria-hidden />}
       {engaged && rarity.sparkle > 0 && <div className="holo-sparkle" aria-hidden />}
+      {prismEdge}
     </>
   );
 
@@ -614,8 +631,17 @@ function HoloCardImpl({
                 (backContent ?? <CardPlaceholder name={name} label="No back art" />)
               )}
               {/* Uploaded art gets the full foil treatment; a generated back only
-                takes the glare, so the stats stay legible. */}
-              {backUrl ? Overlays : engaged && <div className="holo-glare" aria-hidden />}
+                takes the glare, so the stats stay legible. The prism edge rides
+                along either way: it traces the bezel and never sits over the
+                panel, so the reason the foil is held back here doesn't apply. */}
+              {backUrl ? (
+                Overlays
+              ) : (
+                <>
+                  {engaged && <div className="holo-glare" aria-hidden />}
+                  {prismEdge}
+                </>
+              )}
             </div>
           )}
         </div>

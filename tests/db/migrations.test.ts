@@ -24,6 +24,8 @@ const EXPECTED_TABLES = [
   "penalties",
   "running_order_randomizations",
   "runs",
+  "secret_card_pulls",
+  "secret_cards",
   "splits",
   "stations",
 ];
@@ -65,6 +67,17 @@ describe("migrations", () => {
       "close_award_voting",
       "reopen_award_voting",
     ]);
+  });
+
+  it("creates the secret-card RPCs the app calls", async () => {
+    const rows = await sql<{ proname: string }>(`
+      SELECT proname FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND proname IN ('pull_secret_card', 'secret_pull_status')
+      ORDER BY proname
+    `);
+    expect(rows.map((r) => r.proname)).toEqual(["pull_secret_card", "secret_pull_status"]);
   });
 
   it("exposes events through a public view", async () => {
@@ -130,5 +143,33 @@ describe("migrations", () => {
     for (const table of ["runs", "splits", "penalties", "event_participants", "draft_selections"]) {
       expect(published).toContain(table);
     }
+  });
+
+  it("keeps the secret tables out of realtime", async () => {
+    // Publishing either one broadcasts every pull to every connected phone,
+    // which leaks the card ids, who owns what, and — from a row count against
+    // the roster — the size of the set. The assertion above is one-directional,
+    // so without this a "enable realtime" checkbox in the dashboard is all it
+    // takes to undo the feature.
+    const rows = await sql<{ tablename: string }>(
+      "SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime'",
+    );
+    const published = rows.map((r) => r.tablename);
+    expect(published).not.toContain("secret_cards");
+    expect(published).not.toContain("secret_card_pulls");
+  });
+
+  it("enforces one secret pull per member per league day in the schema", async () => {
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'secret_card_pulls'",
+    );
+    expect(
+      rows.some(
+        (r) =>
+          r.indexdef.includes("UNIQUE") &&
+          r.indexdef.includes("participant_id") &&
+          r.indexdef.includes("pulled_on"),
+      ),
+    ).toBe(true);
   });
 });

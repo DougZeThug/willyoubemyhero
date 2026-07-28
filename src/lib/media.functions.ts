@@ -60,7 +60,14 @@ async function mintSignedUrl(path: string): Promise<string | null> {
   return signed.signedUrl;
 }
 
-async function signPath(path: string | null): Promise<string | null> {
+/**
+ * Exported for secret-cards.functions.ts, which signs art in the same bucket.
+ *
+ * Deliberately shared rather than copied: a second cache would mint a second URL
+ * for the same object, and the whole point of the cache above is that the string
+ * stays stable long enough for the browser to cache the bytes behind it.
+ */
+export async function signPath(path: string | null): Promise<string | null> {
   if (!path) return null;
   const hit = signedCache.get(path);
   if (hit && Date.now() - hit.mintedAt < SIGNED_REUSE_MS) return hit.url;
@@ -72,7 +79,7 @@ async function signPath(path: string | null): Promise<string | null> {
 }
 
 /** Drop a cached URL when its object is deleted, so nothing hands out a 404. */
-function forgetSignedPath(path: string | null | undefined) {
+export function forgetSignedPath(path: string | null | undefined) {
   if (path) signedCache.delete(path);
 }
 
@@ -113,7 +120,7 @@ function cardPatch(side: CardSide, value: string | null) {
 }
 
 // Decode a base64 data URL into bytes, rejecting anything that isn't an image we accept.
-function decodeImageDataUrl(dataUrl: string) {
+export function decodeImageDataUrl(dataUrl: string) {
   const m = dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/);
   if (!m) throw new Error("Unsupported image format");
   return {

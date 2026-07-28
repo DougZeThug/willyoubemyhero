@@ -13,7 +13,7 @@ export type RarityTier = "champion" | "podium" | "stationKing" | "penaltyBox" | 
  * rainbow band, just in different hues. Each pattern is a `.holo-pattern-*` rule
  * in styles.css that overrides the band geometry.
  */
-export type FoilPattern = "refractor" | "prismatic" | "scanline" | "hazard" | "matte";
+export type FoilPattern = "refractor" | "prismatic" | "scanline" | "hazard" | "matte" | "rosette";
 
 export type Rarity = {
   tier: RarityTier;
@@ -46,6 +46,13 @@ export type Rarity = {
    * gating in holo-card.tsx.
    */
   idle: boolean;
+  /**
+   * Rainbow bezel around the card. Secret cards only, and the reason it is a flag
+   * rather than another `pattern` is that it is not a foil at all: every other
+   * layer is a blend mode filmed over the artwork, which ambient light destroys,
+   * and this one is opaque chrome that survives being looked at outdoors.
+   */
+  prismEdge?: boolean;
   /** Ranked best-to-worst, for sorting the vault. */
   rank: number;
 };

@@ -421,6 +421,49 @@
   mask-image: none;
 }
 
+/* Diffraction rosette. Every other pattern sweeps a straight band across the
+   card; this one radiates from wherever the finger is and counter-rotates as the
+   card turns, so it reads as light coming out of the card rather than over it. A
+   tier can't have this — the six tiers are earned on a course, and a rosette is a
+   printing artefact, not a result.
+
+   Masked to a disc rather than a stripe, for the same reason everything above is
+   masked at all: a conic gradient covers the whole face by construction, and
+   colour-dodge over the whole face is precisely what lifts the artwork's textured
+   blacks into grey haze. The arms are wide (12/16/20/24deg) because the vault
+   grid renders these at ~180px, where thin arms go sub-pixel and moire on scroll.
+   The bloom is capped well short of the corners for the same reason the band mask
+   exists — this art is admin-uploaded and its content is unknown. */
+.holo-pattern-rosette {
+  background-image: repeating-conic-gradient(
+    from calc(var(--holo-spin, 0) * 1deg) at var(--holo-gx, 50%) var(--holo-gy, 50%),
+    transparent 0deg 12deg,
+    var(--holo-a, oklch(0.92 0.17 160)) 16deg,
+    var(--holo-b, oklch(0.85 0.2 325)) 20deg,
+    transparent 24deg 36deg
+  );
+  /* Overrides holo-foil's 220% / --holo-pos band scrolling: a conic gradient is
+     positioned by its own centre, not by background-position. */
+  background-size: 100% 100%;
+  background-position: 0 0;
+  -webkit-mask-image: radial-gradient(
+    circle at var(--holo-gx, 50%) var(--holo-gy, 50%),
+    oklch(0 0 0) 0%,
+    oklch(0 0 0) calc(16% + var(--holo-active, 0) * 18%),
+    transparent calc(38% + var(--holo-active, 0) * 24%)
+  );
+  mask-image: radial-gradient(
+    circle at var(--holo-gx, 50%) var(--holo-gy, 50%),
+    oklch(0 0 0) 0%,
+    oklch(0 0 0) calc(16% + var(--holo-active, 0) * 18%),
+    transparent calc(38% + var(--holo-active, 0) * 24%)
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-position: 0 0;
+  mask-position: 0 0;
+}
+
 /*
  * Slow sheen that crawls across a card left untouched, so a headline card reads
  * as alive on the shelf. Driven by background-position rather than the
@@ -466,6 +509,123 @@
 
 @media (prefers-reduced-motion: reduce) {
   .holo-idle {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/*
+ * Rainbow bezel. Secret cards only.
+ *
+ * `strength` and `sparkle` are already 1 for a champion and both are 0..1, so
+ * there is no headroom left to build a rarer card out of more of the same
+ * overlays. A secret has to be a different mechanism. Every layer above films the
+ * *face* and is a blend mode, which ambient light destroys — a champion's sheen
+ * is already borderline in bright sun. An opaque bezel is not a blend mode, so it
+ * survives daylight and is legible from three feet, which is the actual use case:
+ * somebody holding their phone out for you to look at.
+ *
+ * A conic gradient masked to a ring: border-box mask minus content-box mask
+ * leaves exactly the frame. `border-image` cannot follow a rounded radius, and
+ * four separate gradient edges never meet cleanly at the corners.
+ *
+ * Not colour-dodge. This layer never sits over artwork, so it can be its own
+ * light source — the whole reason every other foil layer is blended and masked is
+ * to protect the art underneath, and there is no art underneath a bezel.
+ *
+ * The ring is the tell and is always mounted; the rotation is the flourish and is
+ * hero-only, for the same reason .holo-idle is. A shelf of secrets is a grid, and
+ * a grid of permanently animating compositor layers is the exact cost
+ * holo-card.tsx is written to avoid.
+ */
+@property --prism-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.holo-prism-edge {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  /* Two device pixels reads as a printed foil edge; three reads as a UI border
+     somebody forgot to remove. */
+  padding: 2px;
+  background: conic-gradient(
+    from var(--prism-angle),
+    var(--holo-a, oklch(0.92 0.17 160)),
+    var(--holo-b, oklch(0.85 0.2 325)),
+    oklch(0.93 0.15 210),
+    var(--holo-a, oklch(0.92 0.17 160))
+  );
+  -webkit-mask:
+    linear-gradient(oklch(0 0 0)) content-box,
+    linear-gradient(oklch(0 0 0));
+  mask:
+    linear-gradient(oklch(0 0 0)) content-box,
+    linear-gradient(oklch(0 0 0));
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  /* Visible at rest — this is what tells you the card is a secret before you
+     touch it — and brighter while it is being handled. */
+  opacity: calc(0.55 + var(--holo-active, 0) * 0.45);
+  transition: opacity 260ms ease-out;
+}
+
+.holo-prism-edge.is-spinning {
+  animation: holo-prism-spin 4.5s linear infinite;
+}
+
+@keyframes holo-prism-spin {
+  to {
+    --prism-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-prism-edge.is-spinning {
+    animation: none;
+  }
+  /* Still visibly a secret, just not moving. The rainbow frame is the tell; the
+     rotation is only the flourish. */
+  .holo-prism-edge {
+    opacity: 0.5;
+  }
+}
+
+/* One pass of light across a duplicate secret, once, on reveal. The card is still
+   the card; this is the app acknowledging you turned it up again, not apologising
+   for it. Deliberately not a second confetti burst and deliberately not a duller
+   card — a dupe should read as a wink, and a wink is short. */
+.secret-dupe-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: linear-gradient(115deg, transparent 42%, oklch(1 0 0 / 55%) 50%, transparent 58%);
+  background-size: 300% 300%;
+  animation: secret-dupe-sweep 900ms ease-out 1 both;
+}
+
+@keyframes secret-dupe-sweep {
+  from {
+    background-position: 130% 50%;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    background-position: -30% 50%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .secret-dupe-shimmer::after {
     animation: none;
     opacity: 0;
   }

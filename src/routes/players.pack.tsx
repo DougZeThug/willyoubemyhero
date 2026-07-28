@@ -1,14 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, PackageOpen, Sparkles } from "lucide-react";
+import { ArrowLeft, Lock, PackageOpen, Sparkles } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
+import { mySecretsKey, secretStatusKey, useSecretStatus } from "@/hooks/use-daily-secret";
 import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
+import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { collectCard, loadCollection, loadPackState, savePackState } from "@/lib/card-collection";
-import { playReveal, playTear } from "@/lib/card-sfx";
+import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
+import { celebrate, celebrateSecret } from "@/lib/card-confetti";
+import { pullSecretCard } from "@/lib/secret-cards.functions";
+import {
+  secretFoil,
+  SECRET_CHIME,
+  SECRET_DUPE_CHIME,
+  type SecretCardView,
+} from "@/lib/secret-cards";
+import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -31,12 +44,38 @@ const PACK_SIZE = 3;
 /** Drag distance, as a fraction of the pack width, that completes the tear. */
 const TEAR_THRESHOLD = 0.55;
 
+/** Hold on the glowing edge before the hit lands. */
+const PEEK_MS = 900;
+/** The once-a-day card holds longer. It is the only card here nobody has seen. */
+const SECRET_PEEK_MS = 1600;
+/** Where in that hold the riser starts, so it lands on the chime's bottom note. */
+const SECRET_RISER_AT_MS = 700;
+/**
+ * Short on purpose: staring at a pulsing card while your friends look at theirs
+ * is worse than a retry tap. Giving up does not cancel the request — a row may
+ * still land — which is exactly why the server re-reads rather than re-rolls.
+ */
+const SECRET_PULL_TIMEOUT_MS = 6_000;
+/** Full ceremony for the first few duplicates; after that it is a tax. */
+const DUPE_CEREMONY_LIMIT = 3;
+/** How often to notice the date changed under a tab nobody closed. */
+const DAY_TICK_MS = 60_000;
+
 /** Local date key so the pack rolls over at midnight in the user's own timezone. */
 function todayKey(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+/**
+ * How the fourth slot is doing.
+ *
+ * Derived rather than kept as four booleans, two of which could be true at once.
+ * The order matters: a pull that succeeds after a failure lands straight on
+ * "sealed" rather than staying stuck on the error.
+ */
+type SecretSlot = "hidden" | "gated" | "pending" | "failed" | "sealed" | "open";
 
 /**
  * A ragged tear edge, deterministic for a given seed so the same pack always
@@ -68,6 +107,169 @@ function SealedBack() {
   );
 }
 
+/**
+ * The fourth slot.
+ *
+ * Appended below the three, never a replaced slot: `nextPack` swaps its *last*
+ * entry for a card the user has not collected, and that swap is the only
+ * mechanism by which the thirteen-card set ever completes. It also keeps
+ * PackState.ids at exactly three roster ids, which is what the e2e suite asserts.
+ */
+function SecretSlotView({
+  slot,
+  card,
+  rarity,
+  duplicate,
+  peeking,
+  pulledCount,
+  onReveal,
+  onRetry,
+}: {
+  slot: SecretSlot;
+  card: SecretCardView | null;
+  rarity: Rarity;
+  duplicate: boolean;
+  peeking: boolean;
+  pulledCount: number;
+  onReveal: () => void;
+  onRetry: () => void;
+}) {
+  if (slot === "hidden") return null;
+
+  return (
+    <div className="mx-auto flex w-full max-w-[220px] flex-col items-center gap-2 pt-2">
+      <div className="text-center">
+        <h2
+          className="font-display text-sm font-black uppercase tracking-[0.2em]"
+          style={{ color: rarity.accent }}
+        >
+          One More Card
+        </h2>
+        {slot === "gated" && (
+          <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+            Claim your player to open it. Ask whoever&apos;s running the combine for your code.
+          </p>
+        )}
+        {(slot === "sealed" || slot === "pending") && !peeking && (
+          <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+            {slot === "pending"
+              ? "Checking the wrapper…"
+              : "Not on the roster. One a day, and it's yours for good."}
+          </p>
+        )}
+        {peeking && (
+          <p
+            className="mt-1 text-[10px] font-bold uppercase tracking-[0.3em]"
+            style={{ color: rarity.accent }}
+          >
+            Something else…
+          </p>
+        )}
+      </div>
+
+      {slot === "gated" ? (
+        // Card-shaped, not a bordered link box — that reads as a cookie banner
+        // and gets ignored.
+        <Link
+          to="/claim"
+          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center"
+        >
+          <Lock className="h-6 w-6 text-muted-foreground" />
+          <span className="font-display text-[10px] font-black uppercase tracking-[0.25em] text-primary">
+            Claim your player
+          </span>
+        </Link>
+      ) : slot === "failed" ? (
+        <button
+          onClick={onRetry}
+          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
+        >
+          <span className="font-display text-xs font-black uppercase tracking-[0.2em]">
+            No signal
+          </span>
+          {/* Never a toast: a toast announces a fourth card to whoever is
+              glancing at the phone over your shoulder. */}
+          <span className="text-[10px] leading-snug text-muted-foreground">
+            Tap to try again — you haven&apos;t used today&apos;s.
+          </span>
+        </button>
+      ) : slot === "pending" ? (
+        <div className="wax-foil flex aspect-[5/7] w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
+      ) : slot === "sealed" && card ? (
+        <div
+          // w-full is load-bearing: the column above centres its items, which
+          // makes a flex child shrink to its content, and HoloCard sizes itself
+          // from its width via aspect-ratio — so without this the card collapses
+          // to nothing and the slot renders as a sliver.
+          className={cn("relative w-full rounded-xl transition-shadow", peeking && "animate-pulse")}
+          style={
+            peeking
+              ? {
+                  // Deliberately thinner than the hit's 6px inset, so it reads as
+                  // a different thing rather than as a bigger one.
+                  boxShadow: `inset 0 0 0 8px ${rarity.border}, 0 0 70px ${rarity.border}`,
+                }
+              : { boxShadow: `inset 0 0 0 3px ${rarity.border}, 0 0 20px ${rarity.border}` }
+          }
+        >
+          <motion.div
+            animate={peeking ? { scale: 1.06 } : { scale: 1 }}
+            transition={{ duration: 0.9 }}
+          >
+            <HoloCard
+              frontUrl={null}
+              backUrl={null}
+              name="Secret"
+              rarity={rarity}
+              cacheKey={`secret-sealed-${card.id}`}
+              faceDown
+              flipped={false}
+              interactive={false}
+              backContent={<SealedBack />}
+              onClick={onReveal}
+            />
+          </motion.div>
+        </div>
+      ) : card ? (
+        <>
+          <div className={cn("relative w-full rounded-xl", duplicate && "secret-dupe-shimmer")}>
+            <HoloCard
+              frontUrl={card.artUrl}
+              backUrl={card.backUrl}
+              name={card.name}
+              rarity={rarity}
+              cacheKey={card.id}
+              tilt="hero"
+              backContent={<SecretBackPanel card={card} rarity={rarity} />}
+            />
+          </div>
+          <div className="text-center">
+            <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+              {card.name}
+            </div>
+            {duplicate ? (
+              <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing off.
+              </div>
+            ) : (
+              <div
+                className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                style={{ color: rarity.border }}
+              >
+                {/* Taught once, on the first secret anyone ever pulls. Without it
+                    the empty vault shelf afterwards reads as a bug. */}
+                {pulledCount <= 1
+                  ? "Secret · Not on the roster. Nobody knows how many there are."
+                  : "Secret · Yours for good, even on a new phone."}
+              </div>
+            )}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function PackPage() {
   const { event, bundle } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
@@ -89,7 +291,28 @@ function PackPage() {
   const [peeking, setPeeking] = useState(false);
   const dragRef = useRef<HTMLDivElement>(null);
 
-  const dayKey = useMemo(() => todayKey(), []);
+  // ---- the fourth slot ----
+  const me = useMemberSession();
+  const qc = useQueryClient();
+  const pull = useServerFn(pullSecretCard);
+  const status = useSecretStatus(me?.participantId);
+  const [secret, setSecret] = useState<SecretCardView | null>(null);
+  const [secretDuplicate, setSecretDuplicate] = useState(false);
+  const [secretRevealed, setSecretRevealed] = useState(false);
+  const [secretPeeking, setSecretPeeking] = useState(false);
+  const [secretPulling, setSecretPulling] = useState(false);
+  const [secretFailed, setSecretFailed] = useState(false);
+  const [secretUnavailable, setSecretUnavailable] = useState(false);
+  // Set synchronously before the request goes out. setDealtIds is async, so two
+  // Enter presses in one tick both see the old state; this also survives
+  // StrictMode mounting every effect twice in development.
+  const pullFiredRef = useRef(false);
+  const revealingRef = useRef(false);
+
+  // The *pack* day is device-local: a pack has no identity and no constraint
+  // behind it. The *drop* day is league-owned, decided in Postgres. Two clocks,
+  // deliberately — see the server-day effect below.
+  const [dayKey, setDayKey] = useState(todayKey);
   const seed = `${event?.id ?? "no-event"}:${dayKey}`;
 
   useEffect(() => {
@@ -102,14 +325,54 @@ function PackPage() {
   // One pack a day, so a return visit resumes rather than deals. Yesterday's row
   // is simply ignored — the next tear overwrites it.
   useEffect(() => {
+    let cancelled = false;
+    // Cleared first so the rollover below cannot write today's key over
+    // yesterday's ids in the window before this resolves.
+    setStateLoaded(false);
     loadPackState().then((s) => {
+      if (cancelled) return;
       if (s && s.dayKey === dayKey && s.ids.length > 0) {
         setDealtIds(s.ids);
         setRevealed(s.revealed);
+        setSecretRevealed(!!s.secretRevealed);
+      } else {
+        setDealtIds(null);
+        setRevealed([]);
+        setSecretRevealed(false);
       }
       setStateLoaded(true);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [dayKey]);
+
+  // A tab left open past midnight used to sit on yesterday's pack forever, which
+  // with a server-side drop becomes actively confusing: the fourth slot re-arms
+  // while the three cards do not. Polled rather than scheduled, because a phone
+  // suspends timers the moment the screen goes dark.
+  useEffect(() => {
+    function check() {
+      // Never re-seal a pack under somebody's thumb. Eating a card mid-reveal is
+      // a far worse bug than the stale tab this is fixing.
+      if (revealingRef.current) return;
+      const next = todayKey();
+      setDayKey((prev) => {
+        if (prev === next) return prev;
+        // The baseline effect keys on [collectionLoaded, collected], neither of
+        // which changes at midnight — so nulling the baseline here would leave it
+        // null forever, nextPack empty and the pack permanently un-openable.
+        setPackBaseline(collected);
+        return next;
+      });
+    }
+    const id = setInterval(check, DAY_TICK_MS);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [collected]);
 
   useEffect(() => {
     if (!collectionLoaded) return;
@@ -163,40 +426,171 @@ function PackPage() {
     const rarity = rarities.get(ep.id) ?? rarityStyle("base");
     const isHit = i === pack.length - 1;
 
-    // Hold on the glowing edge before the hit lands. The pause is the whole trick.
-    if (isHit) {
-      setPeeking(true);
-      await new Promise((r) => setTimeout(r, 900));
-      setPeeking(false);
-    }
-
-    setRevealed((prev) => [...prev, i]);
-    playReveal(rarity.tier);
-    void collectCard(ep.id, rarity.tier);
-    setCollected((prev) => ({ ...prev, [ep.id]: true }));
-
-    if (rarity.tier === "champion" || rarity.tier === "podium") {
-      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      if (!reduce) {
-        const { default: confetti } = await import("canvas-confetti");
-        confetti({
-          particleCount: 90,
-          spread: 75,
-          origin: { y: 0.55 },
-          colors: ["#38bdf8", "#22d3ee", "#a5f3fc", "#fbbf24"],
-        });
+    revealingRef.current = true;
+    try {
+      // Hold on the glowing edge before the hit lands. The pause is the whole trick.
+      if (isHit) {
+        setPeeking(true);
+        await new Promise((r) => setTimeout(r, PEEK_MS));
+        setPeeking(false);
       }
+
+      setRevealed((prev) => [...prev, i]);
+      playReveal(rarity.tier);
+      void collectCard(ep.id, rarity.tier);
+      setCollected((prev) => ({ ...prev, [ep.id]: true }));
+
+      if (rarity.tier === "champion" || rarity.tier === "podium") {
+        await celebrate(rarity);
+      }
+    } finally {
+      revealingRef.current = false;
+    }
+  }
+
+  /**
+   * The one-a-day card.
+   *
+   * Fired from an effect keyed on the torn pack and the member, rather than from
+   * `tearOpen`. Not on mount, because reaching this route is one mis-tap from the
+   * vault and must not spend the drop; not on tapping the card, because an
+   * unbounded round trip racing the hold either stalls or lies; and not inside
+   * `tearOpen`, because that misses the commonest first-timer path — a guest
+   * tears the pack, hits the gate, goes to /claim, and comes back to the same
+   * already-torn pack, where `tearOpen` will never run again.
+   */
+  useEffect(() => {
+    if (!torn || !me?.participantId || pullFiredRef.current) return;
+    pullFiredRef.current = true;
+    setSecretPulling(true);
+    setSecretFailed(false);
+
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      // A row may still land server-side. That is fine: the retry re-reads the
+      // day's pull rather than rolling a new one, so nothing is lost either way.
+      setSecretPulling(false);
+      setSecretFailed(true);
+    }, SECRET_PULL_TIMEOUT_MS);
+
+    void (async () => {
+      try {
+        const res = await pull();
+        settled = true;
+        if (res.ok) {
+          setSecret(res.card);
+          setSecretDuplicate(res.duplicate);
+          setSecretUnavailable(false);
+          qc.invalidateQueries({ queryKey: secretStatusKey(me.participantId) });
+          qc.invalidateQueries({ queryKey: mySecretsKey(me.participantId) });
+        } else {
+          // Nothing in the set yet, or every card still missing its art. Not a
+          // failure to retry — there is genuinely nothing to hand over.
+          setSecretUnavailable(true);
+        }
+        setSecretFailed(false);
+      } catch (e) {
+        settled = true;
+        // The only place this app matches on an error string, justified because
+        // the messages in require-auth.server.ts are explicitly contractual. A
+        // token the server rejects is a token worth dropping, so the gate shows
+        // instead of a retry that can never work.
+        if (e instanceof Error && e.message.includes("Claim your player first")) {
+          clearMemberToken();
+        } else {
+          setSecretFailed(true);
+        }
+      } finally {
+        clearTimeout(timer);
+        setSecretPulling(false);
+      }
+    })();
+
+    return () => clearTimeout(timer);
+  }, [torn, me?.participantId, pull, qc]);
+
+  // A phone changing hands mid-party is a real thing in this league. Re-arm the
+  // latch when the member changes so the next person gets their own card.
+  useEffect(() => {
+    pullFiredRef.current = false;
+    setSecret(null);
+    setSecretRevealed(false);
+    setSecretFailed(false);
+    setSecretUnavailable(false);
+  }, [me?.participantId]);
+
+  // The drop rolls over on the *server's* day, not this device's. Guarded on the
+  // first observed value, or this would clobber the secretRevealed that the
+  // resume effect has just restored from IndexedDB.
+  const serverDayRef = useRef<string | null>(null);
+  useEffect(() => {
+    const day = status.data?.day ?? null;
+    if (!day) return;
+    if (serverDayRef.current && serverDayRef.current !== day) {
+      pullFiredRef.current = false;
+      setSecret(null);
+      setSecretRevealed(false);
+    }
+    serverDayRef.current = day;
+  }, [status.data?.day]);
+
+  const secretRarity = secretFoil(secret?.foil);
+
+  async function revealSecret() {
+    if (!secret || secretRevealed) return;
+    revealingRef.current = true;
+    try {
+      // A duplicate you have seen three times does not need the full production.
+      const ceremony = !secretDuplicate || (status.data?.pulled ?? 0) <= DUPE_CEREMONY_LIMIT;
+      if (ceremony) {
+        setSecretPeeking(true);
+        await new Promise((r) => setTimeout(r, SECRET_RISER_AT_MS));
+        playSecretRiser(0.9);
+        await new Promise((r) => setTimeout(r, SECRET_PEEK_MS - SECRET_RISER_AT_MS));
+        setSecretPeeking(false);
+      }
+
+      setSecretRevealed(true);
+      // Not a tier: SECRET_RARITY carries tier "base" so it satisfies the type,
+      // and nothing may branch on that. The chime is named explicitly.
+      playReveal(secretDuplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
+      navigator.vibrate?.([10, 60, 10, 60, 26]);
+      // A duplicate gets the shimmer, never a second burst — a wink, not a parade.
+      if (!secretDuplicate) await celebrateSecret(secretRarity);
+    } finally {
+      revealingRef.current = false;
     }
   }
 
   // Written on every step rather than only on tear, so a phone that loses the tab
   // mid-reveal comes back to the cards it had already flipped.
   useEffect(() => {
-    if (!dealtIds) return;
-    void savePackState({ dayKey, ids: dealtIds, revealed });
-  }, [dealtIds, dayKey, revealed]);
+    if (!dealtIds || !stateLoaded) return;
+    void savePackState({ dayKey, ids: dealtIds, revealed, secretRevealed });
+  }, [dealtIds, dayKey, revealed, secretRevealed, stateLoaded]);
 
-  const allRevealed = pack.length > 0 && revealed.length === pack.length;
+  const secretSlot: SecretSlot = !torn
+    ? "hidden"
+    : !me
+      ? "gated"
+      : secret
+        ? secretRevealed
+          ? "open"
+          : "sealed"
+        : secretUnavailable
+          ? "hidden"
+          : secretFailed
+            ? "failed"
+            : secretPulling
+              ? "pending"
+              : "hidden";
+
+  const allPlayerCardsRevealed = pack.length > 0 && revealed.length === pack.length;
+  // A slot still working counts as outstanding, or "Pack Complete" flashes for a
+  // beat before the fourth card turns up. For a guest, or a pull that failed,
+  // this reduces to exactly the old expression.
+  const allRevealed = allPlayerCardsRevealed && secretSlot !== "pending" && secretSlot !== "sealed";
   const collectedCount = (bundle?.participants ?? []).filter((p) => collected[p.id]).length;
   const total = bundle?.participants.length ?? 0;
 
@@ -384,6 +778,23 @@ function PackPage() {
               })}
             </div>
 
+            <SecretSlotView
+              slot={secretSlot}
+              card={secret}
+              rarity={secretRarity}
+              duplicate={secretDuplicate}
+              peeking={secretPeeking}
+              pulledCount={status.data?.pulled ?? 0}
+              onReveal={() => void revealSecret()}
+              onRetry={() => {
+                pullFiredRef.current = false;
+                setSecretFailed(false);
+                // Flipping this back off re-runs the pull effect, whose latch was
+                // just cleared.
+                setSecretPulling(false);
+              }}
+            />
+
             <div className="flex flex-wrap justify-center gap-2 pt-2">
               {!allRevealed && (
                 <button
@@ -393,6 +804,9 @@ function PackPage() {
                       await revealAt(i);
                       await new Promise((r) => setTimeout(r, 260));
                     }
+                    // The secret goes last, or its hold lands underneath the hit's
+                    // and neither of them reads.
+                    await revealSecret();
                   }}
                   className="rounded-full border border-white/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground hover:border-primary/50 hover:text-primary"
                 >
@@ -409,7 +823,9 @@ function PackPage() {
 
             {allRevealed && (
               <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-                That&apos;s today&apos;s pack — come back tomorrow
+                {secretSlot === "open"
+                  ? "That's today's pack, secret and all — come back tomorrow"
+                  : "That's today's pack — come back tomorrow"}
               </p>
             )}
           </div>

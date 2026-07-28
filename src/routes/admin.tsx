@@ -21,6 +21,7 @@ import {
 import { encodeUploadImage } from "@/lib/image-encode";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { UniversalCardBack } from "@/components/universal-card-back";
+import { SecretCardsPanel } from "@/components/secret-cards-panel";
 import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
 import { AdminSection } from "@/components/admin-section";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -718,6 +719,12 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
 
       <div className="md:col-span-2">
         <UniversalCardBack eventId={eventId} />
+      </div>
+
+      {/* No eventId: these rows are league-wide, and the panel resolves the
+          current combine server-side to authorize. */}
+      <div className="md:col-span-2">
+        <SecretCardsPanel />
       </div>
 
       <MemberCodesPanel eventId={eventId} />

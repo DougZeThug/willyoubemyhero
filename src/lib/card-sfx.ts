@@ -146,7 +146,15 @@ export function playTear() {
 }
 
 // Triads chosen so better pulls sound brighter and more resolved.
+//
+// `secret` is the exception, deliberately: four voices where everything else has
+// three, and an open stack of fifths and octaves with no third in it at all, so
+// it rings rather than lands. Its lowest note is the champion triad's middle note
+// and its top note is an exact octave above the champion's top. Every other entry
+// resolves; this one does not, which is what "there is more of this" sounds like.
 const CHIMES: Record<string, number[]> = {
+  secret: [659.25, 987.77, 1318.51, 1975.53], // E5 B5 E6 B6
+  secretDupe: [1318.51, 1975.53], // the top half of the same bell
   champion: [523.25, 659.25, 987.77],
   podium: [523.25, 659.25, 783.99],
   stationKing: [493.88, 622.25, 739.99],
@@ -155,7 +163,34 @@ const CHIMES: Record<string, number[]> = {
   dnf: [261.63, 311.13, 349.23],
 };
 
-/** Rarity reveal chime — three detuned sines with an exponential tail. */
+/**
+ * The room going quiet before a secret lands.
+ *
+ * The 900ms hold before a hit is silent, which carries one beat; the secret's
+ * hold is nearly twice that, and silence over that long reads as a dropped frame
+ * rather than as suspense. Peak gain sits under the chime's on purpose — this is
+ * the intake of breath, not a second instrument.
+ */
+export function playSecretRiser(durationSec = 0.9) {
+  const ac = audio();
+  if (!ac) return;
+  const osc = ac.createOscillator();
+  osc.type = "triangle";
+  const start = ac.currentTime;
+  osc.frequency.setValueAtTime(164.81, start); // E3
+  osc.frequency.exponentialRampToValueAtTime(659.25, start + durationSec); // up to E5
+
+  const amp = ac.createGain();
+  amp.gain.setValueAtTime(0.0001, start);
+  amp.gain.exponentialRampToValueAtTime(0.055, start + durationSec * 0.8);
+  amp.gain.exponentialRampToValueAtTime(0.0001, start + durationSec);
+
+  osc.connect(amp).connect(ac.destination);
+  osc.start(start);
+  osc.stop(start + durationSec + 0.05);
+}
+
+/** Rarity reveal chime — three or four detuned sines with an exponential tail. */
 export function playReveal(tier: string) {
   const ac = audio();
   if (!ac) return;

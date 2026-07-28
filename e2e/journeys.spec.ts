@@ -223,6 +223,10 @@ test.describe("opening a pack", () => {
     await expect.poll(() => readPackState(page)).not.toBeNull();
 
     const state = (await readPackState(page))!;
+    // Exactly three, always. The daily secret is appended as a fourth slot on
+    // screen but is never a roster id and never enters this row — its ownership
+    // is a Postgres row keyed on the claimed member. This doubles as the
+    // regression guard for that.
     expect(state.ids).toHaveLength(PACK_SIZE);
     // Every dealt card is a real roster entry, never a stale or invented id.
     expect(new Set(state.ids).size).toBe(PACK_SIZE);
@@ -236,13 +240,19 @@ test.describe("opening a pack", () => {
     expect((await readPackState(page))?.ids).toEqual(state.ids);
   });
 
-  test("deals the same pack to everyone in the league", async ({ page, browser }) => {
+  test("deals the same three roster cards to everyone in the league", async ({ page, browser }) => {
     // Slots come from a seeded shuffle keyed on the event and the day, so two
     // devices opening today's pack must agree — that is the shared-pack promise.
+    //
+    // The length assertion is load-bearing now that a fourth card exists: without
+    // it, two empty packs would satisfy `toEqual` and this test would pass while
+    // testing nothing. The secret is per-member and deliberately NOT shared, so
+    // it must never appear here — see secrets.spec.ts.
     await page.goto("/players/pack");
     await sealedPack(page).press("Enter");
     await expect.poll(() => readPackState(page)).not.toBeNull();
     const mine = (await readPackState(page))!.ids;
+    expect(mine).toHaveLength(PACK_SIZE);
 
     const other = await browser.newPage();
     try {

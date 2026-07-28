@@ -1,0 +1,66 @@
+// A supabase client that will talk to tables `types.ts` has never heard of.
+//
+// src/integrations/supabase/types.ts is `supabase gen types` output, must not be
+// hand-edited, and is .prettierignore'd — so the two tables and two RPCs this
+// feature adds are invisible to the typed client until somebody regenerates it,
+// long after this lands. `.from("secret_cards")` and `.rpc("pull_secret_card")`
+// are compile errors against the generated Database type, and `Database` is a
+// type alias rather than an interface, so declaration merging cannot rescue it.
+//
+// Rather than hand-write a Database slice (whose exact shape depends on
+// supabase-js generic arity that has moved across 2.x minors), widen to the
+// ungenericised client and recover shape per query with `.returns<T>()` /
+// `.maybeSingle<T>()`, which is already the house style in social.functions.ts.
+// It is not `any` in our source, so @typescript-eslint/no-explicit-any is happy.
+//
+// DELETE THIS FILE once types.ts has been regenerated against a project with
+// 20260728143000_secret_holo_cards.sql applied: every call site then switches to
+// plain `supabaseAdmin` unchanged.
+import type { SupabaseClient } from "@supabase/supabase-js";
+// A top-level client.server import is safe here and nowhere else: this is a
+// *.server.ts module, so it never reaches the client bundle.
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+
+export type SecretCardRow = {
+  id: string;
+  name: string;
+  flavour: string | null;
+  foil: string;
+  art_path: string | null;
+  back_path: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SecretPullRow = {
+  id: string;
+  participant_id: string;
+  secret_card_id: string;
+  pulled_on: string;
+  event_id: string | null;
+  is_duplicate: boolean;
+  created_at: string;
+};
+
+/** What public.pull_secret_card returns. Null when nothing is pullable. */
+export type PullSecretCardResult = {
+  pullId: string;
+  cardId: string;
+  day: string;
+  duplicate: boolean;
+  fresh: boolean;
+} | null;
+
+/** What public.secret_pull_status returns. Note the absence of a set size. */
+export type SecretPullStatusResult = {
+  day: string;
+  pulledToday: boolean;
+  pulled: number;
+  available: boolean;
+  resetsAt: string;
+};
+
+export function secretsDb(): SupabaseClient {
+  return supabaseAdmin as unknown as SupabaseClient;
+}
