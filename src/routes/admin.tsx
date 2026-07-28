@@ -934,7 +934,12 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
             />
           </div>
         </div>
-        <Button type="submit" size="sm" disabled={busy || !name.trim()} className="min-h-11 w-full sm:min-h-0">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={busy || !name.trim()}
+          className="min-h-11 w-full sm:min-h-0"
+        >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           {busy ? "Adding…" : "Add to event"}
         </Button>

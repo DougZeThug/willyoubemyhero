@@ -182,7 +182,9 @@ function AwardsPage() {
                           <ParticipantAvatar
                             name={p.participant?.name ?? "?"}
                             cardUrl={cards.data?.[p.id]?.front ?? null}
-                            photoUrl={photos.data?.[p.id] ?? p.participant?.profile_image_url ?? null}
+                            photoUrl={
+                              photos.data?.[p.id] ?? p.participant?.profile_image_url ?? null
+                            }
                             size={24}
                           />
                           <span
