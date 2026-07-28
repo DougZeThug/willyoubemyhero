@@ -610,9 +610,11 @@ function HoloCardImpl({
               thumbnail in the vault grid. */}
           {(canFlip || faceDown) && (
             <div className={cn("holo-face [transform:rotateY(180deg)]", !showBack && "invisible")}>
-              {backUrl ? (
+              {backSrc ? (
                 <img
-                  src={backUrl}
+                  src={backSrc}
+                  srcSet={backSrcSet}
+                  sizes="(max-width: 640px) 90vw, 420px"
                   alt={`${name} card back`}
                   crossOrigin="anonymous"
                   loading="lazy"
@@ -632,7 +634,7 @@ function HoloCardImpl({
                 takes the glare, so the stats stay legible. The prism edge rides
                 along either way: it traces the bezel and never sits over the
                 panel, so the reason the foil is held back here doesn't apply. */}
-              {backUrl ? (
+              {backSrc ? (
                 Overlays
               ) : (
                 <>
