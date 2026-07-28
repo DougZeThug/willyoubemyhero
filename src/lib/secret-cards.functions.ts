@@ -537,3 +537,44 @@ export const deleteSecretCard = createServerFn({ method: "POST" })
     }
     return { ok: true as const };
   });
+
+/**
+ * Hand a specific secret card to a participant.
+ *
+ * Ledger entry is marked `granted = true`, so it neither collides with today's
+ * daily pull nor spends it. If the participant already owns the card this
+ * records a duplicate (their vault still shows count +1); if not, they now own
+ * it. Uses grant_secret_card so the check runs inside the same transaction as
+ * the insert.
+ */
+export const grantSecretCard = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        participantId: z.string().uuid(),
+        cardId: z.string().uuid(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireLeagueAdmin();
+    const sb = await admin();
+    const db = await secrets();
+
+    const { data: event } = await sb
+      .from("events")
+      .select("id")
+      .eq("active", true)
+      .order("year", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: result, error } = await db.rpc("grant_secret_card", {
+      _participant_id: data.participantId,
+      _secret_card_id: data.cardId,
+      _event_id: event?.id ?? null,
+    });
+    if (error) throw new Error(error.message);
+    const row = result as { duplicate: boolean } | null;
+    return { ok: true as const, duplicate: row?.duplicate ?? false };
+  });
