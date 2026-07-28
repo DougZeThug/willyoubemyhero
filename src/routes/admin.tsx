@@ -656,8 +656,8 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   async function onPickPhoto(epId: string, file: File) {
     setUploadingId(epId);
     try {
-      const dataUrl = await encodeUploadImage(file);
-      await uploadFn({ data: { eventId, eventParticipantId: epId, dataUrl } });
+      const dataUrls = await encodeUploadImageVariants(file);
+      await uploadFn({ data: { eventId, eventParticipantId: epId, dataUrls } });
       await qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
       toast.success("Photo uploaded");
     } catch (e) {
