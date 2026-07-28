@@ -6,7 +6,9 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  GitCompareArrows,
   IdCard,
+  Link as LinkIcon,
   QrCode,
   RotateCw,
   Share2,
@@ -23,6 +25,9 @@ import { CardBackPanel } from "@/components/card-back-panel";
 import { CardSocial } from "@/components/card-social";
 import { FieldComparison } from "@/components/field-comparison";
 import { RosterFilmstrip } from "@/components/roster-filmstrip";
+import { CardSlab } from "@/components/card-slab";
+import { CardCompare } from "@/components/card-compare";
+import { collectCard, loadCollection, type CollectedCard } from "@/lib/card-collection";
 import { useEventSocial, useEventAwards } from "@/hooks/use-event-social";
 import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
@@ -50,6 +55,11 @@ export const Route = createFileRoute("/players/$id")({
       { property: "og:description", content: "Tilt it, flip it, send it to the group chat." },
     ],
   }),
+  // `?vs=` makes a head-to-head a link you can drop in the group chat, rather
+  // than something only reachable by tapping through the drawer.
+  validateSearch: (search: Record<string, unknown>) => ({
+    vs: typeof search.vs === "string" && search.vs ? search.vs : undefined,
+  }),
   component: PlayerCardPage,
   notFoundComponent: () => (
     <div className="p-10 text-center text-muted-foreground">
@@ -63,6 +73,7 @@ export const Route = createFileRoute("/players/$id")({
 
 function PlayerCardPage() {
   const { id } = Route.useParams();
+  const { vs } = Route.useSearch();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { event, bundle, loading } = useEventBundle();
@@ -77,6 +88,8 @@ function PlayerCardPage() {
   const [gyro, setGyro] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [collection, setCollection] = useState<Record<string, CollectedCard>>({});
+  const [comparing, setComparing] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
 
   // Roster in running order gives prev/next a stable, meaningful sequence.
@@ -156,6 +169,41 @@ function PlayerCardPage() {
     [roster, cards.data, rarities],
   );
 
+  const comparePool = useMemo(
+    () =>
+      roster.map((p) => ({
+        id: p.id,
+        participantId: p.participant_id,
+        name: p.participant?.name ?? "—",
+        rarity: rarities.get(p.id) ?? rarityStyle("base"),
+      })),
+    [roster, rarities],
+  );
+
+  // Seeing a card adds it to this device's collection, so the store the pack
+  // page has been writing since it shipped finally reflects the whole app.
+  //
+  // Two deliberate details. The snapshot shown to the stamp is the one taken
+  // *before* this visit, so a first sighting reads "New" for the whole visit
+  // rather than flipping to "Collected" a beat after it renders. And a card
+  // already in the collection is not re-written: collectCard bumps a pull
+  // counter, and revisiting a card page is not another pull.
+  useEffect(() => {
+    if (!ep) return;
+    let cancelled = false;
+    void loadCollection().then((before) => {
+      if (cancelled) return;
+      setCollection(before);
+      if (!before[ep.id]) void collectCard(ep.id, rarity.tier);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the card alone: a realtime bundle update that promotes someone
+    // mid-combine must not re-run this and log a second pull.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ep?.id]);
+
   // QR points at this card so a printed card can link to its digital twin.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -207,7 +255,10 @@ function PlayerCardPage() {
     fantasyTeam: ep.participant?.fantasy_team_name ?? null,
     quote: ep.participant?.trash_talk_quote ?? null,
     rarityLabel: rarity.label,
-    rarityColor: rarity.border,
+    // accent rather than border, so the exported PNG carries the tier's colour.
+    // base and dnf set border to a near-transparent white, which rasterised as
+    // an invisible rule on the share card.
+    rarityColor: rarity.accent,
     cardUrl: urls?.front ?? null,
     photoUrl,
     runningOrder: ep.running_order,
@@ -230,6 +281,18 @@ function PlayerCardPage() {
       toast.error(e instanceof Error ? e.message : "Could not export card");
     } finally {
       setSharing(false);
+    }
+  }
+
+  async function onCopyLink() {
+    const url = `${window.location.origin}/players/${id}${vs ? `?vs=${vs}` : ""}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied");
+    } catch {
+      // Clipboard access needs a secure context and, on some browsers, an
+      // explicit permission. Showing the URL still lets someone copy it by hand.
+      toast.message(url);
     }
   }
 
@@ -283,18 +346,27 @@ function PlayerCardPage() {
         */}
         <div className="relative">
           <div className="mx-auto w-full max-w-sm">
-            <HoloCard
-              frontUrl={urls?.front ?? null}
-              backUrl={urls?.back ?? null}
-              name={name}
+            <CardSlab
               rarity={rarity}
-              cacheKey={ep.id}
-              flipped={flipped}
-              onFlippedChange={setFlipped}
-              gyro={gyro}
-              tilt="hero"
-              backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
-            />
+              eventName={event?.name ?? "Draft Combine"}
+              eventYear={event?.year ?? null}
+              serial={ep.running_order}
+              ofTotal={roster.length}
+              collected={collection[ep.id] ?? null}
+            >
+              <HoloCard
+                frontUrl={urls?.front ?? null}
+                backUrl={urls?.back ?? null}
+                name={name}
+                rarity={rarity}
+                cacheKey={ep.id}
+                flipped={flipped}
+                onFlippedChange={setFlipped}
+                gyro={gyro}
+                tilt="hero"
+                backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+              />
+            </CardSlab>
           </div>
           <NavButton
             onClick={() => go(prev?.id)}
@@ -360,6 +432,17 @@ function PlayerCardPage() {
           >
             Tilt
           </ActionButton>
+          <ActionButton onClick={onCopyLink} icon={<LinkIcon className="h-3.5 w-3.5" />}>
+            Copy Link
+          </ActionButton>
+          <ActionButton
+            onClick={() => setComparing(true)}
+            active={!!vs}
+            icon={<GitCompareArrows className="h-3.5 w-3.5" />}
+            disabled={roster.length < 2}
+          >
+            Compare
+          </ActionButton>
           <ActionButton
             onClick={sfx.toggle}
             active={!sfx.muted}
@@ -422,6 +505,28 @@ function PlayerCardPage() {
           </div>
         )}
       </div>
+
+      <CardCompare
+        open={comparing}
+        onOpenChange={setComparing}
+        bundle={bundle}
+        left={{
+          id: ep.id,
+          participantId: ep.participant_id,
+          name,
+          rarity,
+        }}
+        right={comparePool.find((p) => p.id === vs) ?? null}
+        roster={comparePool}
+        onPick={(targetId) =>
+          navigate({
+            to: "/players/$id",
+            params: { id },
+            search: { vs: targetId ?? undefined },
+            replace: true,
+          })
+        }
+      />
 
       {/* Offscreen 1080x1350 composite that html-to-image rasterises. */}
       <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
