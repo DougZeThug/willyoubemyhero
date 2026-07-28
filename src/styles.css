@@ -221,11 +221,18 @@
  * ---------------------------------------------------------------------------
  * Trading cards
  *
- * The foil is not masked to the artwork — it can't be, the card art is an opaque
- * raster with no alpha. Instead `color-dodge` does the masking for free: it is
- * mathematically incapable of brightening pure black, so dark regions of the art
- * stay dark while already-bright regions (helmets, numerals, logos) bloom into
- * rainbow. The artwork's own luminance decides where the foil catches light.
+ * The card art is an opaque raster with no alpha, so the foil can't be masked to
+ * the artwork. `color-dodge` does most of that masking for free — it barely moves
+ * pure black while already-bright regions (helmets, numerals, logos) bloom into
+ * rainbow. But "barely" is the operative word: the art's blacks are textured
+ * charcoal, not #000, and dodge divides by (1 - blend), so at high opacity it
+ * still lifts them into a grey haze and washes the reds out. The foil is
+ * therefore kept weak and *masked to a moving band* rather than filmed over the
+ * whole face, so most of the artwork is untouched at any instant.
+ *
+ * Intensity is driven by `--holo-active` (0 at rest, 1 while the card is moving).
+ * Real foil is quiet until you tilt it; a permanently-on overlay just reads as a
+ * dirty screen. Each layer transitions its own opacity, so the ramp costs no JS.
  *
  * Every layer reads pointer position from custom properties set imperatively by
  * holo-card.tsx, so tracking the pointer never re-renders React.
@@ -255,16 +262,32 @@
   pointer-events: none;
   border-radius: inherit;
   mix-blend-mode: color-dodge;
-  opacity: var(--holo-strength, 0.38);
+  opacity: calc(var(--holo-rest, 0.1) + var(--holo-active, 0) * var(--holo-gain, 0.22));
+  transition: opacity 260ms ease-out;
   background-image: repeating-linear-gradient(
     115deg,
-    transparent 0%,
+    transparent 0% 6%,
     var(--holo-a, oklch(0.82 0.14 210)) 12%,
-    var(--holo-b, oklch(0.75 0.13 195)) 20%,
-    transparent 32%
+    var(--holo-b, oklch(0.75 0.13 195)) 17%,
+    transparent 24% 32%
   );
   background-size: 220% 220%;
   background-position: var(--holo-pos, 50%) 50%;
+  /* Confine the rainbow to one soft band that sweeps with the pointer. Filming it
+     over the whole face is what turned the black stat panel grey — outside the
+     band the artwork now comes through untouched. */
+  -webkit-mask-image: linear-gradient(
+    115deg,
+    transparent 14%,
+    black 42%,
+    black 58%,
+    transparent 86%
+  );
+  mask-image: linear-gradient(115deg, transparent 14%, black 42%, black 58%, transparent 86%);
+  -webkit-mask-size: 260% 260%;
+  mask-size: 260% 260%;
+  -webkit-mask-position: var(--holo-pos, 50%) 50%;
+  mask-position: var(--holo-pos, 50%) 50%;
 }
 
 /* Wet specular hotspot that follows the finger. */
@@ -274,29 +297,40 @@
   pointer-events: none;
   border-radius: inherit;
   mix-blend-mode: overlay;
+  /* Gated entirely on movement. The hotspot defaults to the middle of the card,
+     and with no pointer — every touch device, at rest — it used to sit there
+     permanently at 55% white, hazing the art. Now it only exists while moving. */
+  opacity: var(--holo-active, 0);
+  transition: opacity 260ms ease-out;
   background: radial-gradient(
     circle at var(--holo-gx, 50%) var(--holo-gy, 50%),
-    oklch(1 0 0 / 55%) 0%,
-    transparent 45%
+    oklch(1 0 0 / 34%) 0%,
+    transparent 42%
   );
 }
 
-/* Fine glint field, parallaxed faster than the foil so sparkles crawl. */
+/* Fine glint field, parallaxed faster than the foil so sparkles crawl.
+ * One dot per tile at two tile sizes that don't share a factor, counter-panned so
+ * the fields crawl against each other. Note these are plain radial-gradients:
+ * repeating-radial-gradient radiates from a single centre, so tiling it draws a
+ * grid of concentric rings over the artwork rather than a field of points. */
 @utility holo-sparkle {
   position: absolute;
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
   mix-blend-mode: screen;
-  filter: contrast(3);
-  opacity: var(--holo-sparkle, 0.35);
-  background-image: repeating-radial-gradient(
-    circle at 50% 50%,
-    oklch(1 0 0 / 70%) 0 1px,
-    transparent 1px 7px
-  );
-  background-size: 90px 90px;
-  background-position: var(--holo-sparkle-x, 50%) var(--holo-sparkle-y, 50%);
+  opacity: calc(var(--holo-sparkle, 0) * var(--holo-active, 0));
+  transition: opacity 260ms ease-out;
+  background-image:
+    radial-gradient(circle at 30% 30%, oklch(1 0 0 / 70%) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 72% 64%, oklch(1 0 0 / 45%) 0 0.8px, transparent 1.3px);
+  background-size:
+    112px 112px,
+    73px 73px;
+  background-position:
+    var(--holo-sparkle-x, 50%) var(--holo-sparkle-y, 50%),
+    calc(var(--holo-sparkle-x, 50%) * -0.6) calc(var(--holo-sparkle-y, 50%) * 0.8);
 }
 
 /* Sealed wax pack wrapper — pure CSS, no image assets. */

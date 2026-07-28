@@ -13,6 +13,11 @@ export type Rarity = {
   /** Foil gradient endpoints, fed straight into CSS custom properties. */
   holoA: string;
   holoB: string;
+  /**
+   * How hard the foil catches light, 0..1. Scales both the resting sheen and the
+   * bloom on tilt, so the tier is readable at a glance without reading the badge.
+   */
+  strength: number;
   /** 0 = no sparkle layer, 1 = maximum glint density. */
   sparkle: number;
   /** Border colour for the card bezel and grid tiles. */
@@ -25,7 +30,12 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
   champion: {
     label: "1 of 1",
     holoA: "oklch(0.92 0.19 95)",
-    holoB: "oklch(0.75 0.21 30)",
+    // Gold into magenta rather than gold into red-orange. Under color-dodge a
+    // warm second stop compounds with the crimson the card art is already full
+    // of and floods it; swinging to magenta keeps the prismatic gold read while
+    // leaving the blues in the artwork alone.
+    holoB: "oklch(0.8 0.16 330)",
+    strength: 1,
     sparkle: 1,
     border: "oklch(0.88 0.17 90)",
     rank: 0,
@@ -34,6 +44,7 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     label: "Gold",
     holoA: "oklch(0.9 0.15 95)",
     holoB: "oklch(0.82 0.14 210)",
+    strength: 0.92,
     sparkle: 0.7,
     border: "oklch(0.85 0.14 95)",
     rank: 1,
@@ -42,6 +53,7 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     label: "Station King",
     holoA: "oklch(0.85 0.16 300)",
     holoB: "oklch(0.82 0.14 210)",
+    strength: 0.86,
     sparkle: 0.6,
     border: "oklch(0.8 0.16 300)",
     rank: 2,
@@ -50,6 +62,7 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     label: "Base",
     holoA: "oklch(0.82 0.14 210)",
     holoB: "oklch(0.75 0.13 195)",
+    strength: 0.8,
     sparkle: 0.35,
     border: "oklch(1 0 0 / 12%)",
     rank: 3,
@@ -58,7 +71,8 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     label: "Penalty Box",
     holoA: "oklch(0.82 0.19 85)",
     holoB: "oklch(0.65 0.24 25)",
-    sparkle: 0.25,
+    strength: 0.66,
+    sparkle: 0.22,
     border: "oklch(0.82 0.19 85)",
     rank: 4,
   },
@@ -66,6 +80,7 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     label: "DNF",
     holoA: "oklch(0.6 0.02 240)",
     holoB: "oklch(0.45 0.02 240)",
+    strength: 0.22,
     sparkle: 0,
     border: "oklch(1 0 0 / 8%)",
     rank: 5,

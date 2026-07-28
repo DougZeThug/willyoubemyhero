@@ -14,6 +14,7 @@ import {
   type CardSide,
 } from "@/lib/media.functions";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
+import { UniversalCardBack } from "@/components/universal-card-back";
 import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
 import { AdminSection } from "@/components/admin-section";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -716,6 +717,10 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
     <div className="grid gap-4 md:grid-cols-2">
       <div className="md:col-span-2">
         <CardBulkUpload eventId={eventId} targets={bulkTargets} />
+      </div>
+
+      <div className="md:col-span-2">
+        <UniversalCardBack eventId={eventId} />
       </div>
 
       <MemberCodesPanel eventId={eventId} />

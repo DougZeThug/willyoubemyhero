@@ -98,17 +98,29 @@ async function storeCard(
 }
 
 // Signed URLs for both faces of every uploaded player card, keyed by event_participant id.
+//
+// The event's universal back is resolved here rather than at each call site, so
+// every surface that already reads `urls.back` — the vault detail page, the pack
+// reveal — picks it up without changing. A player's own card_back_path still wins.
 export const getEventCardUrls = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = publicClient();
-    const { data: eps } = await sb
-      .from("event_participants")
-      .select("id, card_path, card_back_path")
-      .eq("event_id", data.eventId);
-    const rows = (eps ?? []).filter((r) => r.card_path || r.card_back_path);
-    if (rows.length === 0) return {} as Record<string, CardUrls>;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // `events` is service-role only (public reads go through events_public), so
+    // the universal back has to come off the admin client.
+    const [{ data: eps }, { data: event }] = await Promise.all([
+      sb
+        .from("event_participants")
+        .select("id, card_path, card_back_path")
+        .eq("event_id", data.eventId),
+      supabaseAdmin.from("events").select("card_back_path").eq("id", data.eventId).maybeSingle(),
+    ]);
+    const universalPath = event?.card_back_path ?? null;
+    // With a universal back set, every participant has a back — including those
+    // with no art of their own yet — so they can't be filtered out here.
+    const rows = (eps ?? []).filter((r) => r.card_path || r.card_back_path || universalPath);
+    if (rows.length === 0) return {} as Record<string, CardUrls>;
     const sign = async (path: string | null) => {
       if (!path) return null;
       const { data: signed } = await supabaseAdmin.storage
@@ -116,14 +128,91 @@ export const getEventCardUrls = createServerFn({ method: "GET" })
         .createSignedUrl(path, 60 * 60);
       return signed?.signedUrl ?? null;
     };
+    // Signed once and shared, rather than re-signing the same object per player.
+    const universalUrl = await sign(universalPath);
     const out: Record<string, CardUrls> = {};
     await Promise.all(
       rows.map(async (r) => {
-        const [front, back] = await Promise.all([sign(r.card_path), sign(r.card_back_path)]);
-        out[r.id] = { front, back };
+        const [front, ownBack] = await Promise.all([sign(r.card_path), sign(r.card_back_path)]);
+        out[r.id] = { front, back: ownBack ?? universalUrl };
       }),
     );
     return out;
+  });
+
+// The universal back on its own, for the admin panel's preview.
+export const getEventCardBack = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: event } = await supabaseAdmin
+      .from("events")
+      .select("card_back_path")
+      .eq("id", data.eventId)
+      .maybeSingle();
+    if (!event?.card_back_path) return { url: null as string | null };
+    const { data: signed } = await supabaseAdmin.storage
+      .from("participant-photos")
+      .createSignedUrl(event.card_back_path, 60 * 60);
+    return { url: signed?.signedUrl ?? null };
+  });
+
+// Upload one image and make it the back of every card in the event.
+export const uploadEventCardBack = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: z.string().uuid(),
+        dataUrl: z.string().min(32).max(12_000_000),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { contentType, ext, bytes } = decodeImageDataUrl(data.dataUrl);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: prev } = await supabaseAdmin
+      .from("events")
+      .select("card_back_path")
+      .eq("id", data.eventId)
+      .maybeSingle();
+    // Timestamped filename so the signed URL changes and nobody keeps seeing a
+    // cached copy of the old back after a re-upload.
+    const path = `cards/${data.eventId}/universal-back-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabaseAdmin.storage
+      .from("participant-photos")
+      .upload(path, bytes, { contentType, upsert: true });
+    if (upErr) throw upErr;
+    const { error: dbErr } = await supabaseAdmin
+      .from("events")
+      .update({ card_back_path: path })
+      .eq("id", data.eventId);
+    if (dbErr) throw dbErr;
+    // Only bin the old file once the new one is safely referenced.
+    if (prev?.card_back_path && prev.card_back_path !== path) {
+      await supabaseAdmin.storage.from("participant-photos").remove([prev.card_back_path]);
+    }
+    const { data: signed } = await supabaseAdmin.storage
+      .from("participant-photos")
+      .createSignedUrl(path, 60 * 60);
+    return { ok: true, url: signed?.signedUrl ?? null, path };
+  });
+
+export const deleteEventCardBack = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: event } = await supabaseAdmin
+      .from("events")
+      .select("card_back_path")
+      .eq("id", data.eventId)
+      .maybeSingle();
+    if (event?.card_back_path) {
+      await supabaseAdmin.storage.from("participant-photos").remove([event.card_back_path]);
+    }
+    await supabaseAdmin.from("events").update({ card_back_path: null }).eq("id", data.eventId);
+    return { ok: true };
   });
 
 export const uploadParticipantCard = createServerFn({ method: "POST" })
