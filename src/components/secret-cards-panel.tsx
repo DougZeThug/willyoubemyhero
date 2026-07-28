@@ -163,20 +163,19 @@ export function SecretCardsPanel() {
 
   async function saveEdit(id: string) {
     setBusy(true);
+    const p = updateFn({
+      data: { id, name: editName.trim(), flavour: editFlavour.trim() || null },
+    }).then(async (r) => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(p, {
+      loading: "Saving card…",
+      success: "Card updated",
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
     try {
-      await toast.promise(
-        updateFn({
-          data: { id, name: editName.trim(), flavour: editFlavour.trim() || null },
-        }).then(async (r) => {
-          await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-          return r;
-        }),
-        {
-          loading: "Saving card…",
-          success: "Card updated",
-          error: (e) => (e instanceof Error ? e.message : "Save failed"),
-        },
-      ).unwrap();
+      await p;
       setEditing(null);
     } catch {
       // toast.promise already surfaced the error
@@ -208,21 +207,20 @@ export function SecretCardsPanel() {
       return;
     }
     setSavingWeightId(id);
+    const p = updateFn({ data: { id, weight: parsed } }).then(async (r) => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(p, {
+      loading: "Saving weight…",
+      success:
+        parsed === 0
+          ? "Weight saved — card excluded from packs"
+          : `Weight saved (${parsed})`,
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
     try {
-      await toast.promise(
-        updateFn({ data: { id, weight: parsed } }).then(async (r) => {
-          await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-          return r;
-        }),
-        {
-          loading: "Saving weight…",
-          success:
-            parsed === 0
-              ? "Weight saved — card excluded from packs"
-              : `Weight saved (${parsed})`,
-          error: (e) => (e instanceof Error ? e.message : "Save failed"),
-        },
-      ).unwrap();
+      await p;
     } catch {
       // toast.promise already surfaced the error
     } finally {
@@ -238,22 +236,20 @@ export function SecretCardsPanel() {
     }
     const who = roster.find((p) => p.id === participantId)?.name ?? "participant";
     setGrantingId(card.id);
+    const p = grantFn({ data: { participantId, cardId: card.id } }).then(async (r) => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(p, {
+      loading: `Granting "${card.name}" to ${who}…`,
+      success: (r) =>
+        r.duplicate
+          ? `${who} already had "${card.name}" — logged as a duplicate`
+          : `Granted "${card.name}" to ${who}`,
+      error: (e) => (e instanceof Error ? e.message : "Grant failed"),
+    });
     try {
-      const res = await toast.promise(
-        grantFn({ data: { participantId, cardId: card.id } }).then(async (r) => {
-          await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-          return r;
-        }),
-        {
-          loading: `Granting "${card.name}" to ${who}…`,
-          success: (r) =>
-            r.duplicate
-              ? `${who} already had "${card.name}" — logged as a duplicate`
-              : `Granted "${card.name}" to ${who}`,
-          error: (e) => (e instanceof Error ? e.message : "Grant failed"),
-        },
-      ).unwrap();
-      void res;
+      await p;
       setGrantTarget((prev) => ({ ...prev, [card.id]: "" }));
     } catch {
       // toast.promise already surfaced the error
