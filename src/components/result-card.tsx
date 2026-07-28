@@ -90,9 +90,9 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
             border: "4px solid rgba(56,189,248,0.5)",
           }}
         >
-          {data.photoUrl ? (
+          {photoUrl ? (
             <img
-              src={data.photoUrl}
+              src={photoUrl}
               alt=""
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
