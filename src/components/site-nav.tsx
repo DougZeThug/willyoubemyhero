@@ -86,8 +86,6 @@ export function SiteNav() {
         </ul>
         <div className="h-[env(safe-area-inset-bottom)]" />
       </nav>
-      {/* spacer so content doesn't sit under mobile nav */}
-      <div className="pointer-events-none h-16 md:hidden" aria-hidden />
     </>
   );
 }
