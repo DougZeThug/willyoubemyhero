@@ -2,10 +2,11 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { EyeOff, Pencil, Trash2 } from "lucide-react";
+import { EyeOff, Gift, Pencil, Trash2 } from "lucide-react";
 import {
   createSecretCards,
   deleteSecretCard,
+  grantSecretCard,
   listSecretCards,
   updateSecretCard,
   uploadSecretCardArt,
@@ -51,10 +52,13 @@ type SecretCardAdminRow = {
   name: string;
   flavour: string | null;
   active: boolean;
+  weight: number;
   hasArt: boolean;
   artUrl: string | null;
   ownerCount: number;
 };
+
+type Roster = { id: string; name: string }[];
 
 /**
  * Authoring the secret set.
@@ -72,12 +76,15 @@ export function SecretCardsPanel() {
   const updateFn = useServerFn(updateSecretCard);
   const uploadFn = useServerFn(uploadSecretCardArt);
   const deleteFn = useServerFn(deleteSecretCard);
+  const grantFn = useServerFn(grantSecretCard);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
+  // Per-card grant target: the participant id currently chosen in that row's picker.
+  const [grantTarget, setGrantTarget] = useState<Record<string, string>>({});
   const [editName, setEditName] = useState("");
   const [editFlavour, setEditFlavour] = useState("");
 
@@ -92,6 +99,7 @@ export function SecretCardsPanel() {
   });
 
   const cards = (list.data?.cards ?? []) as SecretCardAdminRow[];
+  const roster: Roster = list.data?.participants ?? [];
 
   function addFiles(files: File[]) {
     const next: Draft[] = [];
@@ -172,6 +180,50 @@ export function SecretCardsPanel() {
       toast.success("Art replaced");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Weight edits save on blur / enter. Debouncing on every keystroke would hide
+  // the "did it save?" moment; a full save button per row is more taps than the
+  // change deserves. Leave clears back to 100 (baseline uniform).
+  async function saveWeight(id: string, raw: string) {
+    const parsed = raw.trim() === "" ? 100 : Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 10_000) {
+      toast.error("Weight must be a whole number between 0 and 10,000");
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateFn({ data: { id, weight: parsed } });
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function grant(card: SecretCardAdminRow) {
+    const participantId = grantTarget[card.id];
+    if (!participantId) {
+      toast.error("Pick a participant first");
+      return;
+    }
+    const who = roster.find((p) => p.id === participantId)?.name ?? "participant";
+    setBusy(true);
+    try {
+      const res = await grantFn({ data: { participantId, cardId: card.id } });
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      setGrantTarget((prev) => ({ ...prev, [card.id]: "" }));
+      toast.success(
+        res.duplicate
+          ? `${who} already had "${card.name}" — logged as a duplicate`
+          : `Granted "${card.name}" to ${who}`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Grant failed");
     } finally {
       setBusy(false);
     }
@@ -368,6 +420,69 @@ export function SecretCardsPanel() {
                 <div className="text-[10px] text-muted-foreground">
                   Pulled by {card.ownerCount} of {list.data?.claimedMembers ?? 0}
                 </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Weight
+                    <input
+                      type="number"
+                      min={0}
+                      max={10000}
+                      step={10}
+                      defaultValue={card.weight}
+                      // Uncontrolled so typing doesn't refire the query on every
+                      // keystroke. `key` on the card wrapper isn't set, so the
+                      // default only re-seeds after a server round-trip.
+                      onBlur={(e) => {
+                        if (Number(e.target.value) !== card.weight) {
+                          void saveWeight(card.id, e.target.value);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
+                      disabled={busy}
+                      className="h-6 w-16 rounded border border-white/15 bg-background px-1.5 text-xs tabular-nums"
+                      aria-label={`Pull weight for ${card.name}`}
+                    />
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">
+                    {card.weight === 0
+                      ? "Excluded from packs"
+                      : "Higher = shows up more often (100 = baseline)"}
+                  </span>
+                </div>
+
+                {roster.length > 0 && card.hasArt && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <select
+                      value={grantTarget[card.id] ?? ""}
+                      onChange={(e) =>
+                        setGrantTarget((prev) => ({ ...prev, [card.id]: e.target.value }))
+                      }
+                      disabled={busy}
+                      className="h-7 min-w-0 flex-1 rounded border border-white/15 bg-background px-1.5 text-xs"
+                      aria-label={`Grant ${card.name} to`}
+                    >
+                      <option value="">Grant to…</option>
+                      {roster.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void grant(card)}
+                      disabled={busy || !grantTarget[card.id]}
+                      className="h-7 px-2 text-[10px]"
+                    >
+                      <Gift className="mr-1 h-3 w-3" />
+                      Grant
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 

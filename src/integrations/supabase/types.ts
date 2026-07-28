@@ -836,6 +836,7 @@ export type Database = {
         Row: {
           created_at: string
           event_id: string | null
+          granted: boolean
           id: string
           is_duplicate: boolean
           participant_id: string
@@ -845,6 +846,7 @@ export type Database = {
         Insert: {
           created_at?: string
           event_id?: string | null
+          granted?: boolean
           id?: string
           is_duplicate?: boolean
           participant_id: string
@@ -854,6 +856,7 @@ export type Database = {
         Update: {
           created_at?: string
           event_id?: string | null
+          granted?: boolean
           id?: string
           is_duplicate?: boolean
           participant_id?: string
@@ -902,6 +905,7 @@ export type Database = {
           id: string
           name: string
           updated_at: string
+          weight: number
         }
         Insert: {
           active?: boolean
@@ -913,6 +917,7 @@ export type Database = {
           id?: string
           name: string
           updated_at?: string
+          weight?: number
         }
         Update: {
           active?: boolean
@@ -924,6 +929,7 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string
+          weight?: number
         }
         Relationships: []
       }
@@ -1138,6 +1144,14 @@ export type Database = {
       close_award_voting: {
         Args: { _categories: Json; _event_id: string }
         Returns: number
+      }
+      grant_secret_card: {
+        Args: {
+          _event_id: string
+          _participant_id: string
+          _secret_card_id: string
+        }
+        Returns: Json
       }
       pull_secret_card: {
         Args: { _event_id: string; _participant_id: string }

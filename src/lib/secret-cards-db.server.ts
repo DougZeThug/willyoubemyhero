@@ -30,6 +30,7 @@ export type SecretCardRow = {
   art_path: string | null;
   back_path: string | null;
   active: boolean;
+  weight: number;
   created_at: string;
   updated_at: string;
 };
@@ -41,6 +42,7 @@ export type SecretPullRow = {
   pulled_on: string;
   event_id: string | null;
   is_duplicate: boolean;
+  granted: boolean;
   created_at: string;
 };
 

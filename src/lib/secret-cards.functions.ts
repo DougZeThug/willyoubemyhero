@@ -312,6 +312,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
       flavour: row.flavour,
       foil: row.foil,
       active: row.active,
+      weight: row.weight,
       hasArt: !!row.art_path,
       artUrl: await signPath(row.art_path),
       ownerCount: owners.get(row.id) ?? 0,
@@ -319,6 +320,20 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
   );
 
   const pullable = cards.filter((c) => c.active && c.hasArt);
+
+  // Roster for the grant control: id + display name only, sorted for the picker.
+  // Kept on this response so the panel needs no second round trip; the admin
+  // already sees the whole set here, so exposing the roster is not a new leak.
+  const { data: rosterRows } = await sb
+    .from("participants")
+    .select("id, name, nickname")
+    .eq("active", true)
+    .order("name", { ascending: true });
+  const participants = (rosterRows ?? []).map((p) => ({
+    id: p.id as string,
+    name: (p.nickname as string | null) || (p.name as string),
+  }));
+
   return {
     cards,
     claimedMembers: claimed,
@@ -326,6 +341,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
     // because otherwise the admin has no way to know the daily drop has gone
     // quiet and turned into nothing but duplicates.
     exhausted: claimed > 0 && pullable.length > 0 && pullable.every((c) => c.ownerCount >= claimed),
+    participants,
   };
 });
 
@@ -445,6 +461,8 @@ export const updateSecretCard = createServerFn({ method: "POST" })
         name: cardName.optional(),
         flavour: cardFlavour.nullable().optional(),
         active: z.boolean().optional(),
+        // Same bounds as the CHECK constraint on secret_cards.weight.
+        weight: z.number().int().min(0).max(10_000).optional(),
       })
       .parse(d),
   )
@@ -453,10 +471,16 @@ export const updateSecretCard = createServerFn({ method: "POST" })
     const db = await secrets();
     // Built as a literal rather than spread from `data`: supabase-js rejects an
     // index-signature object in .update(), and a spread would let a caller set id.
-    const patch: { name?: string; flavour?: string | null; active?: boolean } = {};
+    const patch: {
+      name?: string;
+      flavour?: string | null;
+      active?: boolean;
+      weight?: number;
+    } = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.flavour !== undefined) patch.flavour = data.flavour;
     if (data.active !== undefined) patch.active = data.active;
+    if (data.weight !== undefined) patch.weight = data.weight;
     if (Object.keys(patch).length === 0) return { ok: true as const };
 
     // .select() after the update so a nonexistent id reports failure rather than
@@ -512,4 +536,45 @@ export const deleteSecretCard = createServerFn({ method: "POST" })
       forgetSignedPath(row.art_path);
     }
     return { ok: true as const };
+  });
+
+/**
+ * Hand a specific secret card to a participant.
+ *
+ * Ledger entry is marked `granted = true`, so it neither collides with today's
+ * daily pull nor spends it. If the participant already owns the card this
+ * records a duplicate (their vault still shows count +1); if not, they now own
+ * it. Uses grant_secret_card so the check runs inside the same transaction as
+ * the insert.
+ */
+export const grantSecretCard = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        participantId: z.string().uuid(),
+        cardId: z.string().uuid(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireLeagueAdmin();
+    const sb = await admin();
+    const db = await secrets();
+
+    const { data: event } = await sb
+      .from("events")
+      .select("id")
+      .eq("active", true)
+      .order("year", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: result, error } = await db.rpc("grant_secret_card", {
+      _participant_id: data.participantId,
+      _secret_card_id: data.cardId,
+      _event_id: event?.id ?? null,
+    });
+    if (error) throw new Error(error.message);
+    const row = result as { duplicate: boolean } | null;
+    return { ok: true as const, duplicate: row?.duplicate ?? false };
   });
