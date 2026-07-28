@@ -427,7 +427,7 @@ export const uploadParticipantCardsBulk = createServerFn({ method: "POST" })
   });
 
 async function removePaths(
-  supabaseAdmin: Awaited<ReturnType<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"]>,
+  supabaseAdmin: SupabaseClient<Database>,
   paths: (string | null | undefined)[],
 ) {
   const toRemove = paths.filter((p): p is string => !!p);
