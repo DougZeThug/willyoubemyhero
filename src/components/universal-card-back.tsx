@@ -75,7 +75,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
     }
   }
 
-  const url = back.data?.url ?? null;
+  const url = urlFromSet(back.data?.urls);
 
   return (
     <AdminSection
