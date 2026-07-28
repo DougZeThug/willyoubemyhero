@@ -7,7 +7,9 @@ import { getEventSocial, getAwards } from "@/lib/social.functions";
 export type ReactionRow = {
   id: string;
   event_participant_id: string;
-  participant_id: string;
+  participant_id: string | null;
+  guest_key?: string | null;
+  guest_name?: string | null;
   emoji: string;
   created_at: string;
 };
@@ -15,7 +17,9 @@ export type ReactionRow = {
 export type CommentRow = {
   id: string;
   event_participant_id: string;
-  participant_id: string;
+  participant_id: string | null;
+  guest_key?: string | null;
+  guest_name?: string | null;
   body: string;
   created_at: string;
 };
