@@ -215,6 +215,45 @@ export type Database = {
           },
         ]
       }
+      card_pulls: {
+        Row: {
+          event_participant_id: string
+          first_pulled_at: string
+          last_pulled_at: string
+          participant_id: string
+          pull_count: number
+        }
+        Insert: {
+          event_participant_id: string
+          first_pulled_at?: string
+          last_pulled_at?: string
+          participant_id: string
+          pull_count?: number
+        }
+        Update: {
+          event_participant_id?: string
+          first_pulled_at?: string
+          last_pulled_at?: string
+          participant_id?: string
+          pull_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_pulls_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_pulls_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_reactions: {
         Row: {
           created_at: string
@@ -1091,6 +1130,10 @@ export type Database = {
       pull_secret_card: {
         Args: { _event_id: string; _participant_id: string }
         Returns: Json
+      }
+      record_card_pulls: {
+        Args: { _event_participant_ids: string[]; _participant_id: string }
+        Returns: number
       }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
       secret_pull_status: { Args: { _participant_id: string }; Returns: Json }
