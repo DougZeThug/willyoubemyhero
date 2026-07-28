@@ -556,12 +556,12 @@ function PackPage() {
     recordedForRef.current = pid;
 
     void (async () => {
-      // The first authenticated tear also carries whatever this device already
-      // had, so cards somebody owns count from day one rather than reading
-      // "packed by nobody" for a fortnight. The composite primary key caps a
-      // person at one row per card, so an inflated list can do nothing.
-      const collectedIds = Object.keys(await loadCollection());
-      const ids = [...new Set([...dealtIds, ...collectedIds])].slice(0, 64);
+      // Record only today's dealt cards. An earlier version also backfilled the
+      // device's whole collection here so counts weren't zero on day one — but
+      // in practice the first person to claim painted every card they'd ever
+      // revealed with "Packed by 1", making the counter meaningless. Better an
+      // honest ramp than a uniform stripe.
+      const ids = dealtIds.slice(0, 64);
       try {
         await record({ data: { eventParticipantIds: ids } });
         await qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) });
