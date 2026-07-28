@@ -167,7 +167,7 @@ export function decodeImageDataUrl(dataUrl: string) {
 }
 
 async function uploadSized(
-  supabaseAdmin: Awaited<ReturnType<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"]>,
+  supabaseAdmin: SupabaseClient<Database>,
   basePath: string,
   dataUrls: SizedDataUrls,
 ): Promise<SizedCardPaths> {
