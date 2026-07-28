@@ -28,6 +28,7 @@ import { recordCardPulls } from "@/lib/card-pulls.functions";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
 import { seededRng } from "@/lib/format";
+import { urlFromSet } from "@/lib/media.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/pack")({
