@@ -17,8 +17,6 @@ import {
   uploadParticipantCard,
   deleteParticipantCard,
   type CardSide,
-  getImagePathsNeedingVariants,
-  writeImageVariants,
 } from "@/lib/media.functions";
 import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
