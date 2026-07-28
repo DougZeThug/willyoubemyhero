@@ -7,6 +7,11 @@ import { verifyEventPin } from "@/lib/admin.functions";
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
 import { saveCompletedRun, setParticipantStatus } from "@/lib/admin-write.functions";
 import {
+  upsertParticipant,
+  addParticipantToEvent,
+  removeParticipantFromEvent,
+} from "@/lib/admin-write.functions";
+import {
   archiveEvent,
   uploadParticipantPhoto,
   uploadParticipantCard,
@@ -50,6 +55,7 @@ import {
   ExternalLink,
   IdCard,
   Trash2,
+  UserPlus,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
