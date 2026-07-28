@@ -28,6 +28,8 @@ const PARTICIPANT_ID = "00000000-0000-4000-8000-0000000000aa";
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
+const threeSizes = (large: string) => ({ thumb: large, medium: large, large });
+
 function withDb(responses: SupabaseResponses = {}) {
   mock = createSupabaseMock(responses);
 }
@@ -58,12 +60,21 @@ beforeEach(() => {
 });
 
 describe("signed url cache", () => {
-  it("hands back the same url string for the same object", async () => {
+  it("hands back the same url set for the same object", async () => {
     // A fresh token per call is what made 30 full-size images re-download on
     // every refetch: the browser had never seen the URL before.
     const signer = signingCounter();
     withDb({
-      "event_participants.select": { data: [{ id: CARD_ID, photo_path: "photos/a.jpg" }] },
+      "event_participants.select": {
+        data: [
+          {
+            id: CARD_ID,
+            photo_path: "photos/a.jpg",
+            photo_path_thumb: "photos/a.jpg",
+            photo_path_medium: "photos/a.jpg",
+          },
+        ],
+      },
       "storage.createSignedUrl": signer.response,
     });
     const mod = await freshModule();
@@ -78,7 +89,16 @@ describe("signed url cache", () => {
   it("re-signs once the reuse window has passed", async () => {
     const signer = signingCounter();
     withDb({
-      "event_participants.select": { data: [{ id: CARD_ID, photo_path: "photos/a.jpg" }] },
+      "event_participants.select": {
+        data: [
+          {
+            id: CARD_ID,
+            photo_path: "photos/a.jpg",
+            photo_path_thumb: "photos/a.jpg",
+            photo_path_medium: "photos/a.jpg",
+          },
+        ],
+      },
       "storage.createSignedUrl": signer.response,
     });
     const mod = await freshModule();
@@ -89,9 +109,13 @@ describe("signed url cache", () => {
     vi.setSystemTime(Date.now() + 7 * 60 * 60_000);
     const later = (await callServerFn(mod.getEventPhotoUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, string>;
+    })) as Record<string, import("./media.functions").ImageUrlSet>;
     expect(signer.count).toBe(2);
-    expect(later[CARD_ID]).toBe("https://cdn/signed-2");
+    expect(later[CARD_ID]).toEqual({
+      thumb: "https://cdn/signed-2",
+      medium: "https://cdn/signed-2",
+      large: "https://cdn/signed-2",
+    });
   });
 
   it("signs one object once even when many cards ask at the same moment", async () => {
@@ -101,9 +125,33 @@ describe("signed url cache", () => {
     withDb({
       "event_participants.select": {
         data: [
-          { id: "ep-1", card_path: "cards/shared.webp", card_back_path: null },
-          { id: "ep-2", card_path: "cards/shared.webp", card_back_path: null },
-          { id: "ep-3", card_path: "cards/shared.webp", card_back_path: null },
+          {
+            id: "ep-1",
+            card_path: "cards/shared.webp",
+            card_path_thumb: "cards/shared.webp",
+            card_path_medium: "cards/shared.webp",
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+          {
+            id: "ep-2",
+            card_path: "cards/shared.webp",
+            card_path_thumb: "cards/shared.webp",
+            card_path_medium: "cards/shared.webp",
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+          {
+            id: "ep-3",
+            card_path: "cards/shared.webp",
+            card_path_thumb: "cards/shared.webp",
+            card_path_medium: "cards/shared.webp",
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
         ],
       },
       "events.select": { data: { card_back_path: null } },
@@ -112,21 +160,34 @@ describe("signed url cache", () => {
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, { front: string | null }>;
+    })) as Record<string, { front: import("./media.functions").ImageUrlSet | null }>;
 
     expect(signer.count).toBe(1);
-    expect(urls["ep-1"].front).toBe(urls["ep-3"].front);
+    expect(urls["ep-1"].front).toEqual(urls["ep-3"].front);
   });
 
   it("returns nothing for a participant with no artwork", async () => {
-    withDb({ "event_participants.select": { data: [{ id: CARD_ID, photo_path: null }] } });
+    withDb({
+      "event_participants.select": {
+        data: [{ id: CARD_ID, photo_path: null, photo_path_thumb: null, photo_path_medium: null }],
+      },
+    });
     const mod = await freshModule();
     expect(await callServerFn(mod.getEventPhotoUrls, { data: { eventId: EVENT_ID } })).toEqual({});
   });
 
   it("omits a card whose signing failed rather than emitting a broken url", async () => {
     withDb({
-      "event_participants.select": { data: [{ id: CARD_ID, photo_path: "photos/a.jpg" }] },
+      "event_participants.select": {
+        data: [
+          {
+            id: CARD_ID,
+            photo_path: "photos/a.jpg",
+            photo_path_thumb: "photos/a.jpg",
+            photo_path_medium: "photos/a.jpg",
+          },
+        ],
+      },
       "storage.createSignedUrl": { data: null, error: { message: "not found" } },
     });
     const mod = await freshModule();
@@ -139,16 +200,38 @@ describe("getEventCardUrls", () => {
     const signer = signingCounter();
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, card_path: "cards/front.webp", card_back_path: "cards/own.webp" }],
+        data: [
+          {
+            id: CARD_ID,
+            card_path: "cards/front.webp",
+            card_path_thumb: "cards/front.webp",
+            card_path_medium: "cards/front.webp",
+            card_back_path: "cards/own.webp",
+            card_back_path_thumb: "cards/own.webp",
+            card_back_path_medium: "cards/own.webp",
+          },
+        ],
       },
-      "events.select": { data: { card_back_path: "cards/universal.webp" } },
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal.webp",
+          card_back_path_medium: "cards/universal.webp",
+        },
+      },
       "storage.createSignedUrl": signer.response,
     });
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, { front: string | null; back: string | null }>;
-    // universal, front, own — three distinct objects, three distinct urls.
+    })) as Record<
+      string,
+      {
+        front: import("./media.functions").ImageUrlSet | null;
+        back: import("./media.functions").ImageUrlSet | null;
+      }
+    >;
+    // universal, front, own — three distinct objects, three distinct url sets.
     expect(signer.count).toBe(3);
     expect(urls[CARD_ID].back).not.toBeNull();
     expect(urls[CARD_ID].back).not.toBe(urls[CARD_ID].front);
@@ -157,37 +240,92 @@ describe("getEventCardUrls", () => {
   it("falls back to the universal back", async () => {
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, card_path: "cards/front.webp", card_back_path: null }],
+        data: [
+          {
+            id: CARD_ID,
+            card_path: "cards/front.webp",
+            card_path_thumb: "cards/front.webp",
+            card_path_medium: "cards/front.webp",
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+        ],
       },
-      "events.select": { data: { card_back_path: "cards/universal.webp" } },
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal.webp",
+          card_back_path_medium: "cards/universal.webp",
+        },
+      },
       "storage.createSignedUrl": { data: { signedUrl: "https://cdn/u" }, error: null },
     });
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, { back: string | null }>;
-    expect(urls[CARD_ID].back).toBe("https://cdn/u");
+    })) as Record<string, { back: import("./media.functions").ImageUrlSet | null }>;
+    expect(urls[CARD_ID].back).toEqual({
+      thumb: "https://cdn/u",
+      medium: "https://cdn/u",
+      large: "https://cdn/u",
+    });
   });
 
   it("includes a player with no art of their own once a universal back exists", async () => {
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, card_path: null, card_back_path: null }],
+        data: [
+          {
+            id: CARD_ID,
+            card_path: null,
+            card_path_thumb: null,
+            card_path_medium: null,
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+        ],
       },
-      "events.select": { data: { card_back_path: "cards/universal.webp" } },
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal.webp",
+          card_back_path_medium: "cards/universal.webp",
+        },
+      },
       "storage.createSignedUrl": { data: { signedUrl: "https://cdn/u" }, error: null },
     });
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, { front: string | null; back: string | null }>;
-    expect(urls[CARD_ID]).toEqual({ front: null, back: "https://cdn/u" });
+    })) as Record<
+      string,
+      {
+        front: import("./media.functions").ImageUrlSet | null;
+        back: import("./media.functions").ImageUrlSet | null;
+      }
+    >;
+    expect(urls[CARD_ID]).toEqual({
+      front: null,
+      back: { thumb: "https://cdn/u", medium: "https://cdn/u", large: "https://cdn/u" },
+    });
   });
 
   it("drops a player with no art when there is no universal back either", async () => {
     withDb({
       "event_participants.select": {
-        data: [{ id: CARD_ID, card_path: null, card_back_path: null }],
+        data: [
+          {
+            id: CARD_ID,
+            card_path: null,
+            card_path_thumb: null,
+            card_path_medium: null,
+            card_back_path: null,
+            card_back_path_thumb: null,
+            card_back_path_medium: null,
+          },
+        ],
       },
       "events.select": { data: { card_back_path: null } },
     });
@@ -208,14 +346,17 @@ describe("getEventCardUrls", () => {
 });
 
 describe("uploads", () => {
-  async function upload(dataUrl: string, headers = asAdmin()) {
+  async function upload(
+    dataUrls: { thumb: string; medium: string; large: string },
+    headers = asAdmin(),
+  ) {
     withDb({
       "storage.upload": { data: { path: "ok" }, error: null },
       "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
     });
     const mod = await freshModule();
     return callServerFn(mod.uploadParticipantCard, {
-      data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrl },
+      data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrls },
       headers,
     });
   }
@@ -224,7 +365,12 @@ describe("uploads", () => {
     const mod = await freshModule();
     await expect(
       callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrl: PNG },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
       }),
     ).rejects.toThrow("Admin PIN required");
   });
@@ -233,7 +379,12 @@ describe("uploads", () => {
     const mod = await freshModule();
     await expect(
       callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrl: PNG },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
         headers: memberHeaders(signMemberToken(PARTICIPANT_ID).token),
       }),
     ).rejects.toThrow("Admin PIN required");
@@ -243,19 +394,24 @@ describe("uploads", () => {
     const mod = await freshModule();
     await expect(
       callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrl: PNG },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
         headers: asAdmin(OTHER_EVENT_ID),
       }),
     ).rejects.toThrow("Admin PIN required");
   });
 
   it("accepts a png and points card_path at it", async () => {
-    await upload(PNG);
+    await upload(threeSizes(PNG));
     const [update] = mock.callsFor("event_participants", "update");
     expect(update.payload).toHaveProperty("card_path");
     expect(update.payload).not.toHaveProperty("card_back_path");
     expect(mock.storageBucket.upload).toHaveBeenCalledWith(
-      expect.stringMatching(/^cards\/.+-front-\d+\.png$/),
+      expect.stringMatching(/^cards\/.+-front-\d+-(large|medium|thumb)\.png$/),
       expect.any(Uint8Array),
       expect.objectContaining({ contentType: "image/png" }),
     );
@@ -268,7 +424,12 @@ describe("uploads", () => {
     });
     const mod = await freshModule();
     await callServerFn(mod.uploadParticipantCard, {
-      data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "back", dataUrl: PNG },
+      data: {
+        eventId: EVENT_ID,
+        eventParticipantId: CARD_ID,
+        side: "back",
+        dataUrls: threeSizes(PNG),
+      },
       headers: asAdmin(),
     });
     const [update] = mock.callsFor("event_participants", "update");
@@ -280,11 +441,11 @@ describe("uploads", () => {
     ["a jpeg", "data:image/jpeg;base64,/9j/4AAQSkZJRg=="],
     ["a webp", "data:image/webp;base64,UklGRh4AAABXRUJQ"],
   ])("accepts %s", async (_label, dataUrl) => {
-    await expect(upload(dataUrl)).resolves.toBeTruthy();
+    await expect(upload(threeSizes(dataUrl))).resolves.toBeTruthy();
   });
 
   it("normalises a jpg extension to jpeg", async () => {
-    await upload("data:image/jpg;base64,/9j/4AAQSkZJRg==");
+    await upload(threeSizes("data:image/jpg;base64,/9j/4AAQSkZJRg=="));
     expect(mock.storageBucket.upload).toHaveBeenCalledWith(
       expect.stringMatching(/\.jpeg$/),
       expect.any(Uint8Array),
@@ -299,7 +460,7 @@ describe("uploads", () => {
     ["bare base64 with no data url wrapper", "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAA"],
     ["a remote url", "https://example.com/evil.png?x=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
   ])("rejects %s", async (_label, dataUrl) => {
-    await expect(upload(dataUrl)).rejects.toThrow("Unsupported image format");
+    await expect(upload(threeSizes(dataUrl))).rejects.toThrow("Unsupported image format");
   });
 
   it("gives every upload a distinct path, so a re-upload cannot be cached stale", async () => {
@@ -310,13 +471,18 @@ describe("uploads", () => {
     const mod = await freshModule();
     for (let i = 0; i < 2; i++) {
       await callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrl: PNG },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
         headers: asAdmin(),
       });
     }
     const paths = mock.storageBucket.upload.mock.calls.map((c) => c[0]);
     expect(paths[0]).toContain(`cards/${EVENT_ID}/${CARD_ID}-front-`);
-    expect(paths).toHaveLength(2);
+    expect(paths).toHaveLength(6);
   });
 
   it("surfaces a storage failure instead of pointing the row at nothing", async () => {
@@ -324,7 +490,12 @@ describe("uploads", () => {
     const mod = await freshModule();
     await expect(
       callServerFn(mod.uploadParticipantCard, {
-        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front", dataUrl: PNG },
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
         headers: asAdmin(),
       }),
     ).rejects.toBeTruthy();
@@ -339,7 +510,7 @@ describe("uploadParticipantCardsBulk", () => {
       callServerFn(mod.uploadParticipantCardsBulk, {
         data: {
           eventId: EVENT_ID,
-          items: [{ eventParticipantId: CARD_ID, side: "front", dataUrl: PNG }],
+          items: [{ eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) }],
         },
       }),
     ).rejects.toThrow("Admin PIN required");
@@ -355,11 +526,11 @@ describe("uploadParticipantCardsBulk", () => {
       data: {
         eventId: EVENT_ID,
         items: [
-          { eventParticipantId: CARD_ID, side: "front", dataUrl: PNG },
+          { eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) },
           {
             eventParticipantId: CARD_ID,
             side: "back",
-            dataUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
+            dataUrls: threeSizes("data:image/gif;base64,R0lGODlhAQABAAAAACw="),
           },
         ],
       },
@@ -373,7 +544,7 @@ describe("uploadParticipantCardsBulk", () => {
 
   it("rejects an empty batch and one over the 40-item cap", async () => {
     const mod = await freshModule();
-    const item = { eventParticipantId: CARD_ID, side: "front", dataUrl: PNG };
+    const item = { eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) };
     await expect(
       callServerFn(mod.uploadParticipantCardsBulk, {
         data: { eventId: EVENT_ID, items: [] },
@@ -390,22 +561,28 @@ describe("uploadParticipantCardsBulk", () => {
 });
 
 describe("getEventCardBack", () => {
-  it("returns null when the event has no universal back", async () => {
+  it("returns null urls when the event has no universal back", async () => {
     withDb({ "events.select": { data: { card_back_path: null } } });
     const mod = await freshModule();
     expect(await callServerFn(mod.getEventCardBack, { data: { eventId: EVENT_ID } })).toEqual({
-      url: null,
+      urls: { thumb: null, medium: null, large: null },
     });
   });
 
   it("signs the back when there is one", async () => {
     withDb({
-      "events.select": { data: { card_back_path: "cards/universal.webp" } },
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal.webp",
+          card_back_path_medium: "cards/universal.webp",
+        },
+      },
       "storage.createSignedUrl": { data: { signedUrl: "https://cdn/u" }, error: null },
     });
     const mod = await freshModule();
     expect(await callServerFn(mod.getEventCardBack, { data: { eventId: EVENT_ID } })).toEqual({
-      url: "https://cdn/u",
+      urls: { thumb: "https://cdn/u", medium: "https://cdn/u", large: "https://cdn/u" },
     });
   });
 });

@@ -3,9 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Layers, Trash2 } from "lucide-react";
-import { uploadEventCardBack, deleteEventCardBack } from "@/lib/media.functions";
+import { uploadEventCardBack, deleteEventCardBack, urlFromSet } from "@/lib/media.functions";
 import { useEventCardBack } from "@/hooks/use-photo-urls";
-import { encodeUploadImage } from "@/lib/image-encode";
+import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -42,8 +42,8 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
     }
     setBusy(true);
     try {
-      const dataUrl = await encodeUploadImage(file);
-      await uploadFn({ data: { eventId, dataUrl } });
+      const dataUrls = await encodeUploadImageVariants(file);
+      await uploadFn({ data: { eventId, dataUrls } });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["event-card-back", eventId] }),
         // Every player's back resolves through this query.
@@ -75,7 +75,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
     }
   }
 
-  const url = back.data?.url ?? null;
+  const url = urlFromSet(back.data?.urls);
 
   return (
     <AdminSection

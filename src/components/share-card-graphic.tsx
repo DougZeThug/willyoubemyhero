@@ -1,5 +1,7 @@
 import { forwardRef } from "react";
 import { formatTime, initialsOf } from "@/lib/format";
+import { urlFromSet } from "@/lib/media.functions";
+import type { ImageUrlSet } from "@/lib/media.functions";
 
 /**
  * 1080x1350 shareable graphic for a single player's trading card.
@@ -17,8 +19,8 @@ export type ShareCardData = {
   quote?: string | null;
   rarityLabel: string;
   rarityColor: string;
-  cardUrl?: string | null;
-  photoUrl?: string | null;
+  cardUrl?: ImageUrlSet | string | null;
+  photoUrl?: ImageUrlSet | string | null;
   runningOrder: number;
   draftPick?: number | null;
   timeMs?: number | null;
@@ -29,7 +31,7 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(fun
   { data },
   ref,
 ) {
-  const art = data.cardUrl ?? data.photoUrl ?? null;
+  const art = urlFromSet(data.cardUrl) ?? urlFromSet(data.photoUrl) ?? null;
   return (
     <div
       ref={ref}

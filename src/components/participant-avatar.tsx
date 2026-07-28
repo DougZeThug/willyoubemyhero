@@ -1,5 +1,7 @@
 import { hueOf, initialsOf } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { urlFromSet } from "@/lib/media.functions";
+import type { ImageUrlSet } from "@/lib/media.functions";
 
 export function ParticipantAvatar({
   name,
@@ -9,13 +11,13 @@ export function ParticipantAvatar({
   className,
 }: {
   name: string;
-  photoUrl?: string | null;
-  cardUrl?: string | null;
+  photoUrl?: ImageUrlSet | string | null;
+  cardUrl?: ImageUrlSet | string | null;
   size?: number;
   className?: string;
 }) {
   const hue = hueOf(name);
-  const src = cardUrl ?? photoUrl ?? null;
+  const src = urlFromSet(cardUrl ?? photoUrl);
   const style = {
     width: size,
     height: size,

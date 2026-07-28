@@ -28,6 +28,7 @@ import { recordCardPulls } from "@/lib/card-pulls.functions";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
 import { seededRng } from "@/lib/format";
+import { urlFromSet } from "@/lib/media.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/pack")({
@@ -729,9 +730,9 @@ function PackPage() {
                   The art fades in on top of it, which reads as intentional rather
                   than as a pop. aspect-[3/4] is fixed by class either way, so
                   nothing shifts when it lands. */}
-              {packBack.data?.url && (
+              {urlFromSet(packBack.data?.urls) && (
                 <img
-                  src={packBack.data.url}
+                  src={urlFromSet(packBack.data?.urls) ?? undefined}
                   alt=""
                   aria-hidden
                   crossOrigin="anonymous"
@@ -745,7 +746,7 @@ function PackPage() {
                   "relative flex h-full flex-col items-center justify-center gap-2 p-6 text-center",
                   // The lettering is the pack's identity only while there is no
                   // art. Over a real back it is a caption nobody asked for.
-                  packBack.data?.url && "hidden",
+                  urlFromSet(packBack.data?.urls) && "hidden",
                 )}
               >
                 <Sparkles className="h-8 w-8 text-primary" />

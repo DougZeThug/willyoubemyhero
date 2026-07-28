@@ -82,9 +82,9 @@ describe("toggleReaction", () => {
     return callServerFn(toggleReaction, { data, headers });
   }
 
-  it("requires a claimed player", async () => {
+  it("requires a member or guest identity", async () => {
     await expect(toggle({ eventParticipantId: CARD_ID, emoji: "🔥" })).rejects.toThrow(
-      "Claim your player first",
+      "Claim your player or add a name to join in",
     );
   });
 
@@ -137,9 +137,9 @@ describe("postComment", () => {
     return callServerFn(postComment, { data, headers });
   }
 
-  it("requires a claimed player", async () => {
+  it("requires a member or guest identity", async () => {
     await expect(post({ eventParticipantId: CARD_ID, body: "hi" })).rejects.toThrow(
-      "Claim your player first",
+      "Claim your player or add a name to join in",
     );
   });
 
@@ -235,9 +235,9 @@ describe("deleteComment", () => {
 
   it("falls back to ownership when the comment's event cannot be resolved", async () => {
     // No event id means no admin claim can apply, so the caller has to own it.
-    // An admin token alone does not even get as far as the ownership check.
+    // An admin token alone does not own the comment, so it is rejected.
     withDb(commentBy(THEM, null));
-    await expect(del(asAdmin())).rejects.toThrow("Claim your player first");
+    await expect(del(asAdmin())).rejects.toThrow("Not your comment");
 
     withDb(commentBy(THEM, null));
     await expect(del({ ...asAdmin(), ...asMe() })).rejects.toThrow("Not your comment");
@@ -248,7 +248,7 @@ describe("deleteComment", () => {
 
   it("requires some session at all", async () => {
     withDb(commentBy(ME));
-    await expect(del()).rejects.toThrow("Claim your player first");
+    await expect(del()).rejects.toThrow("Not your comment");
   });
 });
 

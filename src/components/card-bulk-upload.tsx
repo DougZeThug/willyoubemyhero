@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Upload, X, CheckCircle2, AlertTriangle } from "lucide-react";
 import { uploadParticipantCardsBulk, type CardSide } from "@/lib/media.functions";
-import { encodeUploadImage } from "@/lib/image-encode";
+import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -154,7 +154,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
         ready.map(async (i) => ({
           eventParticipantId: i.eventParticipantId!,
           side: i.side,
-          dataUrl: await encodeUploadImage(i.file),
+          dataUrls: await encodeUploadImageVariants(i.file),
         })),
       );
       const res = await bulkFn({ data: { eventId, items: payload } });

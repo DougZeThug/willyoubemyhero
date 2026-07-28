@@ -4,6 +4,8 @@ import { initialsOf } from "@/lib/format";
 import { cachedCardMeta, primeCardMeta, saveCardMeta } from "@/lib/card-collection";
 import { playFlip } from "@/lib/card-sfx";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+import { urlFromSet, srcSetFromSet } from "@/lib/media.functions";
+import type { ImageUrlSet } from "@/lib/media.functions";
 import type { Rarity } from "@/lib/card-rarity";
 
 /** Standard trading card is 2.5in x 3.5in. Used until the real art reports its size. */
@@ -75,8 +77,8 @@ const FLICK = {
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 export type HoloCardProps = {
-  frontUrl: string | null;
-  backUrl: string | null;
+  frontUrl: ImageUrlSet | string | null;
+  backUrl: ImageUrlSet | string | null;
   name: string;
   rarity: Rarity;
   /** Stable id used to cache the measured aspect ratio between visits. */
@@ -160,6 +162,12 @@ function HoloCardImpl({
   const [aspect, setAspect] = useState<number | null>(
     () => cachedCardMeta(cacheKey)?.aspect ?? null,
   );
+
+  const frontSrc = urlFromSet(frontUrl);
+  const frontSrcSet = srcSetFromSet(frontUrl);
+  const backSrc = urlFromSet(backUrl);
+  const backSrcSet = srcSetFromSet(backUrl);
+
   const [uncontrolledFlip, setUncontrolledFlip] = useState(false);
   // The glare and sparkle layers are invisible until the card moves, and each one
   // is a blend-mode layer the compositor has to carry. Thirty cards' worth of them
@@ -572,9 +580,11 @@ function HoloCardImpl({
           {/* Front. `invisible` rather than backface-visibility alone — see the
               note on .holo-face; WebKit shows the away side through the card. */}
           <div className={cn("holo-face", canFlip && showBack && "invisible")}>
-            {frontUrl ? (
+            {frontSrc ? (
               <img
-                src={frontUrl}
+                src={frontSrc}
+                srcSet={frontSrcSet}
+                sizes="(max-width: 640px) 90vw, 420px"
                 alt={`${name} card front`}
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
@@ -600,9 +610,11 @@ function HoloCardImpl({
               thumbnail in the vault grid. */}
           {(canFlip || faceDown) && (
             <div className={cn("holo-face [transform:rotateY(180deg)]", !showBack && "invisible")}>
-              {backUrl ? (
+              {backSrc ? (
                 <img
-                  src={backUrl}
+                  src={backSrc}
+                  srcSet={backSrcSet}
+                  sizes="(max-width: 640px) 90vw, 420px"
                   alt={`${name} card back`}
                   crossOrigin="anonymous"
                   loading="lazy"
@@ -622,7 +634,7 @@ function HoloCardImpl({
                 takes the glare, so the stats stay legible. The prism edge rides
                 along either way: it traces the bezel and never sits over the
                 panel, so the reason the foil is held back here doesn't apply. */}
-              {backUrl ? (
+              {backSrc ? (
                 Overlays
               ) : (
                 <>

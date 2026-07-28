@@ -18,7 +18,7 @@ import {
   deleteParticipantCard,
   type CardSide,
 } from "@/lib/media.functions";
-import { encodeUploadImage } from "@/lib/image-encode";
+import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { UniversalCardBack } from "@/components/universal-card-back";
 import { SecretCardsPanel } from "@/components/secret-cards-panel";
@@ -656,8 +656,8 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   async function onPickPhoto(epId: string, file: File) {
     setUploadingId(epId);
     try {
-      const dataUrl = await encodeUploadImage(file);
-      await uploadFn({ data: { eventId, eventParticipantId: epId, dataUrl } });
+      const dataUrls = await encodeUploadImageVariants(file);
+      await uploadFn({ data: { eventId, eventParticipantId: epId, dataUrls } });
       await qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
       toast.success("Photo uploaded");
     } catch (e) {
@@ -670,8 +670,8 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   async function onPickCard(epId: string, side: CardSide, file: File) {
     setUploadingCardId(`${epId}:${side}`);
     try {
-      const dataUrl = await encodeUploadImage(file);
-      await uploadCardFn({ data: { eventId, eventParticipantId: epId, side, dataUrl } });
+      const dataUrls = await encodeUploadImageVariants(file);
+      await uploadCardFn({ data: { eventId, eventParticipantId: epId, side, dataUrls } });
       await qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       toast.success(`Card ${side} uploaded`);
     } catch (e) {

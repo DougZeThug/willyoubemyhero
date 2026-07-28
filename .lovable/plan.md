@@ -1,29 +1,61 @@
-## What's actually happening
+Plan: responsive image sizes + LCP preload + backfill
 
-Every player card reads "Packed by 1" because that's literally what the database says — and it's misleading. Only one member (Doug) has claimed a code and opened a pack, but on the very first tear his device backfilled every card he'd ever seen as a guest. That single tear wrote one `card_pulls` row for **all 18** roster cards at once, so the count came out uniform.
+Current state
+- Every card/photo is stored as a single ~1600px WebP via `encodeUploadImage` in `src/lib/image-encode.ts`.
+- The same 1600px signed URL is used for a 40px avatar, a 64px filmstrip chip, a 160px vault thumbnail, and a full-bleed hero card.
+- Components already have `loading="lazy"`, `decoding="async"`, and a signed-URL cache, but the *file bytes* are still 6–10x larger than needed on phones.
+- No `srcset`/`sizes`, no LCP preloading, and no smaller variants exist.
 
-Confirmed by query:
-- `card_pulls`: 18 rows, 1 distinct member, 18 distinct cards.
-- Claimed members: 1 (Doug Weidensaul).
+What we will build
 
-The backfill is intentional (see the comment on `recordCardPulls` in `src/lib/card-pulls.functions.ts` and the effect at `players.pack.tsx:552`) — it was meant to seed counts on day one. In practice it makes the counter meaningless: the first person to claim always paints every card they've ever revealed with "Packed by 1", and the number will never distinguish which cards were actually dealt in their packs.
+1. Generate multiple variants at upload time (browser-side)
+   - Extend `encodeUploadImage` to produce three sizes from one file:
+     - thumb: 320px max edge
+     - medium: 800px max edge
+     - large: 1600px max edge (existing)
+   - All three are encoded as WebP 0.86 quality (or JPEG fallback where WebP is unsupported).
+   - Keep the current passthrough logic for already-small files.
 
-## The fix
+2. Store the variant paths in the database
+   - Migration adds new columns to `event_participants`:
+     - `photo_path_thumb`, `photo_path_medium`
+     - `card_path_thumb`, `card_path_medium`
+     - `card_back_path_thumb`, `card_back_path_medium`
+   - Add `card_back_path_thumb` and `card_back_path_medium` to `events` for the universal back.
+   - Update `media.functions.ts` upload helpers to upload all three variants and write every column.
 
-**1. Stop backfilling.** In `src/routes/players.pack.tsx`, drop the `loadCollection()` merge in the `recordedForRef` effect and send only `dealtIds` (today's three cards). Update the comment so the next reader doesn't reintroduce it.
+3. Return size-aware URLs from server functions
+   - `getEventPhotoUrls` returns `{ id: { thumb, medium, large } }`.
+   - `getEventCardUrls` returns `{ id: { front: { thumb, medium, large }, back: { thumb, medium, large } } }`.
+   - `getEventCardBack` returns `{ thumb, medium, large }`.
+   - Keep the existing signed-URL cache; the same path is still signed once per size.
 
-**2. Reset the inflated rows.** Run a migration that truncates `card_pulls`. This wipes the 18 backfilled rows so counts start from real pack tears going forward. Doug re-opening today's pack will re-record his three real cards; nobody else has any rows to lose.
+4. Update UI components to use responsive images
+   - `HoloCard` accepts `frontUrl` and `backUrl` as either a string or a `{ thumb, medium, large }` object; render `<img srcset sizes ...>` with `src` as the large fallback.
+   - `ParticipantAvatar` renders `srcset`/`sizes` and picks the thumb for its 40–50px display.
+   - `RosterFilmstrip` uses the thumb variant for its 64px chips.
+   - Vault grid uses `sizes` so phones pick `medium`, while 64px filmstrip uses `thumb`.
+   - Player detail hero uses the `medium` source for the LCP card.
 
-**3. Soften the "Packed by 0" / "Packed by 1" cases in the UI.** In `src/lib/card-pulls.ts`, keep "Not yet packed" for 0 but change 1 to read "Packed by 1 so far" (or similar) so a lone pull looks like early-days data rather than a stuck counter. Update `src/lib/card-pulls.test.ts` to match.
+5. Preload the LCP image on player detail
+   - In `src/routes/players.$id.tsx` `head()`, add a `<link rel="preload" as="image" href={...}>` for the current player's card front `medium` URL.
+   - Preconnect the Supabase storage origin in `src/routes/__root.tsx` to cut connection setup time.
 
-## Out of scope
+6. Backfill existing images
+   - Add an admin-panel button "Regenerate image sizes" that, for every existing `photo_path`/`card_path`/`card_back_path`, downloads the original, re-encodes it to three sizes, and updates the new columns.
+   - This runs as a client-side batch process (canvas in the admin's browser) so it does not require edge-side image libraries.
+   - Existing images continue to work if a backfill is skipped: the UI falls back to the `large` URL when no variants exist.
 
-- No schema changes beyond the truncate; the `record_card_pulls` RPC and the composite primary key stay as-is.
-- No changes to the secret-cards pull flow.
-- No change to `getCardPullCounts` server function — the aggregate stays public.
+7. Tests and verification
+   - Update `src/lib/media.functions.test.ts` to expect the new multi-size payloads.
+   - Add a small test for `encodeUploadImage` returning multiple sizes.
+   - Run `bun run lint`, `bun run typecheck`, and a manual check in the preview that vault thumbnails and avatars load visibly faster.
 
-## Technical notes
+Out of scope
+- Server-side image transformation services (would require additional providers or edge-incompatible native libraries).
+- Changing the upload quality or the 1600px master size.
+- Re-compressing already uploaded files outside the admin backfill button.
 
-- Files touched: `src/routes/players.pack.tsx` (remove backfill, update comments), `src/lib/card-pulls.ts` + `src/lib/card-pulls.test.ts` (label tweak), one new migration under `supabase/migrations/` that runs `TRUNCATE TABLE public.card_pulls;` and is idempotent.
-- `recordedForRef` guard and the fire-and-forget error handling stay untouched.
-- E2E and unit tests that assert on "Packed by 1" copy get updated in the same change.
+Expected result
+- A phone on the vault page should download roughly 1/3 to 1/6 the image bytes it does today, because most visible cards are rendered from `medium` or `thumb` instead of `large`.
+- The first player card page should paint its LCP image sooner because the browser discovers it earlier via `preload` and `preconnect`.
