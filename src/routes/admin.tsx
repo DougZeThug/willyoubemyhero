@@ -16,6 +16,8 @@ import {
   uploadParticipantPhoto,
   uploadParticipantCard,
   deleteParticipantCard,
+  getImagePathsNeedingVariants,
+  writeImageVariants,
   type CardSide,
 } from "@/lib/media.functions";
 import { encodeUploadImageVariants } from "@/lib/image-encode";
@@ -58,6 +60,7 @@ import {
   IdCard,
   Trash2,
   UserPlus,
+  Wand2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
