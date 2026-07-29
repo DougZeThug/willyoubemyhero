@@ -853,6 +853,26 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
             <Archive className="mr-1.5 h-3.5 w-3.5" />
             {archiving ? "Archiving…" : "Archive Event"}
           </Button>
+          <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onRegenerateVariants}
+              disabled={regenState.running}
+              className="min-h-11 w-full sm:min-h-0 sm:w-auto"
+            >
+              <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+              {regenState.running
+                ? `Regenerating ${regenState.done}/${regenState.total}…`
+                : "Regenerate image sizes"}
+            </Button>
+            {!regenState.running && regenState.total > 0 && (
+              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                {regenState.done}/{regenState.total} done
+                {regenState.failed > 0 ? ` · ${regenState.failed} failed` : ""}
+              </span>
+            )}
+          </div>
         </div>
         {/* Uncapped on phones — the section already collapses, so a nested
             scroll box here would just trap touch scrolling. */}
