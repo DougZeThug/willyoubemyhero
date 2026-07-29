@@ -16,6 +16,8 @@ import {
   uploadParticipantPhoto,
   uploadParticipantCard,
   deleteParticipantCard,
+  getImagePathsNeedingVariants,
+  writeImageVariants,
   type CardSide,
 } from "@/lib/media.functions";
 import { encodeUploadImageVariants } from "@/lib/image-encode";
@@ -58,6 +60,7 @@ import {
   IdCard,
   Trash2,
   UserPlus,
+  Wand2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -629,10 +632,18 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   const uploadCardFn = useServerFn(uploadParticipantCard);
   const deleteCardFn = useServerFn(deleteParticipantCard);
   const archiveFn = useServerFn(archiveEvent);
+  const scanVariantsFn = useServerFn(getImagePathsNeedingVariants);
+  const writeVariantsFn = useServerFn(writeImageVariants);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadingCardId, setUploadingCardId] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
+  const [regenState, setRegenState] = useState<{
+    running: boolean;
+    done: number;
+    total: number;
+    failed: number;
+  }>({ running: false, done: 0, total: 0, failed: 0 });
 
   const liveUrl = typeof window !== "undefined" ? `${window.location.origin}/live` : "/live";
   const tvUrl = typeof window !== "undefined" ? `${window.location.origin}/tv` : "/tv";
@@ -702,6 +713,66 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       toast.error(e instanceof Error ? e.message : "Archive failed");
     } finally {
       setArchiving(false);
+    }
+  }
+
+  async function onRegenerateVariants() {
+    setRegenState({ running: true, done: 0, total: 0, failed: 0 });
+    try {
+      const { needs } = await scanVariantsFn({ data: { eventId } });
+      if (needs.length === 0) {
+        toast.success("All images already have responsive variants.");
+        setRegenState({ running: false, done: 0, total: 0, failed: 0 });
+        return;
+      }
+      setRegenState({ running: true, done: 0, total: needs.length, failed: 0 });
+      let done = 0;
+      let failed = 0;
+      // Process one at a time — canvas re-encoding on a phone is memory-heavy.
+      for (const need of needs) {
+        try {
+          const res = await fetch(need.url);
+          if (!res.ok) throw new Error(`fetch ${res.status}`);
+          const blob = await res.blob();
+          const filename = need.path.split("/").pop() ?? "image";
+          const file = new File([blob], filename, { type: blob.type || "image/webp" });
+          const dataUrls = await encodeUploadImageVariants(file);
+          await writeVariantsFn({
+            data: {
+              eventId,
+              updates: [
+                {
+                  id: need.id,
+                  kind: need.kind as
+                    | "photo"
+                    | "card_front"
+                    | "card_back"
+                    | "universal_back",
+                  dataUrls,
+                },
+              ],
+            },
+          });
+          done += 1;
+        } catch (err) {
+          failed += 1;
+          console.error("Variant regeneration failed", need, err);
+        }
+        setRegenState({ running: true, done, total: needs.length, failed });
+      }
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["photo-urls", eventId] }),
+        qc.invalidateQueries({ queryKey: ["card-urls", eventId] }),
+      ]);
+      setRegenState({ running: false, done, total: needs.length, failed });
+      if (failed === 0) {
+        toast.success(`Regenerated ${done} image${done === 1 ? "" : "s"}.`);
+      } else {
+        toast.error(`Regenerated ${done}, ${failed} failed.`);
+      }
+    } catch (e) {
+      setRegenState({ running: false, done: 0, total: 0, failed: 0 });
+      toast.error(e instanceof Error ? e.message : "Regeneration failed");
     }
   }
 
@@ -782,6 +853,26 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
             <Archive className="mr-1.5 h-3.5 w-3.5" />
             {archiving ? "Archiving…" : "Archive Event"}
           </Button>
+          <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onRegenerateVariants}
+              disabled={regenState.running}
+              className="min-h-11 w-full sm:min-h-0 sm:w-auto"
+            >
+              <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+              {regenState.running
+                ? `Regenerating ${regenState.done}/${regenState.total}…`
+                : "Regenerate image sizes"}
+            </Button>
+            {!regenState.running && regenState.total > 0 && (
+              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                {regenState.done}/{regenState.total} done
+                {regenState.failed > 0 ? ` · ${regenState.failed} failed` : ""}
+              </span>
+            )}
+          </div>
         </div>
         {/* Uncapped on phones — the section already collapses, so a nested
             scroll box here would just trap touch scrolling. */}

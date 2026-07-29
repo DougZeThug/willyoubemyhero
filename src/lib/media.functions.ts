@@ -567,7 +567,12 @@ export const getImagePathsNeedingVariants = createServerFn({ method: "GET" })
     if (event?.card_back_path && !event.card_back_path_thumb) {
       needs.push({ id: event.id, kind: "universal_back", path: event.card_back_path });
     }
-    return { needs };
+    // Sign each original so the admin's browser can fetch, re-encode, and
+    // send variant data URLs back through writeImageVariants.
+    const signed = await Promise.all(
+      needs.map(async (n) => ({ ...n, url: await signPath(n.path) })),
+    );
+    return { needs: signed.filter((n): n is typeof signed[number] & { url: string } => !!n.url) };
   });
 
 export const writeImageVariants = createServerFn({ method: "POST" })
@@ -579,10 +584,10 @@ export const writeImageVariants = createServerFn({ method: "POST" })
           z.object({
             id: z.string().uuid(),
             kind: z.enum(["photo", "card_front", "card_back", "universal_back"]),
-            paths: z.object({
-              thumb: z.string(),
-              medium: z.string(),
-              large: z.string(),
+            dataUrls: z.object({
+              thumb: z.string().min(32),
+              medium: z.string().min(32),
+              large: z.string().min(32),
             }),
           }),
         ),
@@ -594,30 +599,42 @@ export const writeImageVariants = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     for (const u of data.updates) {
+      const basePath =
+        u.kind === "universal_back"
+          ? `cards/${data.eventId}/universal-back-backfill-${Date.now()}-${u.id}`
+          : u.kind === "photo"
+            ? `${data.eventId}/${u.id}-backfill-${Date.now()}`
+            : `cards/${data.eventId}/${u.id}-${u.kind === "card_front" ? "front" : "back"}-backfill-${Date.now()}`;
+      const paths = await uploadSized(supabaseAdmin, basePath, u.dataUrls);
+      const patchPaths = {
+        large: paths.large ?? "",
+        medium: paths.medium ?? "",
+        thumb: paths.thumb ?? "",
+      };
       if (u.kind === "universal_back") {
         const { error } = await supabaseAdmin
           .from("events")
           .update({
-            card_back_path: u.paths.large,
-            card_back_path_thumb: u.paths.thumb,
-            card_back_path_medium: u.paths.medium,
+            card_back_path: patchPaths.large,
+            card_back_path_thumb: patchPaths.thumb,
+            card_back_path_medium: patchPaths.medium,
           })
           .eq("id", u.id);
         if (error) throw error;
       } else {
         const patch: Partial<Record<CardPathColumn, string | null>> = {};
         if (u.kind === "photo") {
-          patch.photo_path = u.paths.large;
-          patch.photo_path_thumb = u.paths.thumb;
-          patch.photo_path_medium = u.paths.medium;
+          patch.photo_path = patchPaths.large;
+          patch.photo_path_thumb = patchPaths.thumb;
+          patch.photo_path_medium = patchPaths.medium;
         } else if (u.kind === "card_front") {
-          patch.card_path = u.paths.large;
-          patch.card_path_thumb = u.paths.thumb;
-          patch.card_path_medium = u.paths.medium;
+          patch.card_path = patchPaths.large;
+          patch.card_path_thumb = patchPaths.thumb;
+          patch.card_path_medium = patchPaths.medium;
         } else if (u.kind === "card_back") {
-          patch.card_back_path = u.paths.large;
-          patch.card_back_path_thumb = u.paths.thumb;
-          patch.card_back_path_medium = u.paths.medium;
+          patch.card_back_path = patchPaths.large;
+          patch.card_back_path_thumb = patchPaths.thumb;
+          patch.card_back_path_medium = patchPaths.medium;
         }
         const { error } = await supabaseAdmin
           .from("event_participants")
