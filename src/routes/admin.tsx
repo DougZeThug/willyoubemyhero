@@ -743,11 +743,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
               updates: [
                 {
                   id: need.id,
-                  kind: need.kind as
-                    | "photo"
-                    | "card_front"
-                    | "card_back"
-                    | "universal_back",
+                  kind: need.kind as "photo" | "card_front" | "card_back" | "universal_back",
                   dataUrls,
                 },
               ],

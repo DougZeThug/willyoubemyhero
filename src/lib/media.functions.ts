@@ -572,7 +572,7 @@ export const getImagePathsNeedingVariants = createServerFn({ method: "GET" })
     const signed = await Promise.all(
       needs.map(async (n) => ({ ...n, url: await signPath(n.path) })),
     );
-    return { needs: signed.filter((n): n is typeof signed[number] & { url: string } => !!n.url) };
+    return { needs: signed.filter((n): n is (typeof signed)[number] & { url: string } => !!n.url) };
   });
 
 export const writeImageVariants = createServerFn({ method: "POST" })
