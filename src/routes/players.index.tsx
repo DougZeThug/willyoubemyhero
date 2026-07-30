@@ -5,6 +5,9 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import { attributeMap } from "@/lib/card-attributes";
+import { EMPTY_SLOT_STATS, layoutMap } from "@/lib/card-layout";
+import { CardFrontPanel } from "@/components/card-front-panel";
 import { loadCollection, type CollectedCard } from "@/lib/card-collection";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretStatus } from "@/hooks/use-daily-secret";
@@ -71,6 +74,8 @@ function PlayersPage() {
   }, []);
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
+  const attributes = useMemo(() => attributeMap(bundle), [bundle]);
+  const layouts = useMemo(() => layoutMap(bundle?.participants, event), [bundle, event]);
 
   const rows = useMemo(() => {
     const list = [...(bundle?.participants ?? [])];
@@ -97,6 +102,45 @@ function PlayersPage() {
         return list.sort((a, b) => byName(a).localeCompare(byName(b)));
     }
   }, [bundle, event?.id, sort, shuffleSeed, rarities]);
+
+  /**
+   * One stat overlay per card, built once.
+   *
+   * HoloCard is memo'd precisely because this grid mounts the whole roster and
+   * its parent re-renders on every sort, every collection read and every signed
+   * URL refresh. A `frontContent` element built inline in the map below would be
+   * a new object on each of those and defeat the memo for all thirty cards, so
+   * the nodes are built here and only rebuilt when their inputs actually change.
+   *
+   * `compact` draws the overall and nothing else, which is why the empty stats
+   * stand in: a full cardStats pass per thumbnail would walk every split thirty
+   * times over to fill fields none of these cards render.
+   */
+  const fronts = useMemo(() => {
+    const out = new Map<string, React.ReactNode>();
+    for (const p of bundle?.participants ?? []) {
+      const layout = layouts.get(p.id) ?? null;
+      if (!layout) continue;
+      const rarity = rarities.get(p.id) ?? rarityStyle("base");
+      out.set(
+        p.id,
+        <CardFrontPanel
+          compact
+          layout={layout}
+          context={{
+            attributes: attributes.get(p.id) ?? null,
+            stats: EMPTY_SLOT_STATS,
+            name: p.participant?.name ?? "—",
+            bib: p.bib_number ?? null,
+            pick: p.selected_draft_position ?? null,
+            rarityLabel: rarity.label,
+          }}
+          tierColor={rarity.accent}
+        />,
+      );
+    }
+    return out;
+  }, [bundle?.participants, layouts, rarities, attributes]);
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
   const collectedCount = rows.filter((p) => collected[p.id]).length;
@@ -283,6 +327,7 @@ function PlayersPage() {
                   cacheKey={p.id}
                   intensity="subtle"
                   className="transition-transform group-hover:scale-[1.02]"
+                  frontContent={fronts.get(p.id)}
                 />
                 <div className="mt-2 text-center">
                   <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">

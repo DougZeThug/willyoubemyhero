@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { formatTime } from "@/lib/format";
 import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
 import { cardStats, type StatsBundle } from "@/lib/card-stats";
+import type { PlayerAttributes } from "@/lib/card-attributes";
+import { AttributeChips } from "@/components/attribute-panel";
 
 /**
  * Generated card back, used when a player has no uploaded back artwork.
@@ -27,10 +29,13 @@ export function CardBackPanel({
   ep,
   bundle,
   rarity,
+  attributes,
 }: {
   ep: BackParticipant;
   bundle: StatsBundle | null | undefined;
   rarity: Rarity;
+  /** Card ratings for this player. Omit and the ratings row is left off. */
+  attributes?: PlayerAttributes | null;
 }) {
   const { bestRun, ladder } = useMemo(
     () => cardStats(bundle, ep.participant_id),
@@ -68,14 +73,34 @@ export function CardBackPanel({
         />
       </div>
 
-      <div className="rounded border border-white/10 bg-white/[0.03] py-1.5 text-center">
-        <div className="text-[8px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-          Official Time
+      <div className="grid grid-cols-3 gap-1.5">
+        <div className="col-span-2 rounded border border-white/10 bg-white/[0.03] py-1.5 text-center">
+          <div className="text-[8px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+            Official Time
+          </div>
+          <div className="timer-digits tabular text-2xl text-primary">
+            {bestRun ? formatTime(bestRun.official_time_ms) : "—:—"}
+          </div>
         </div>
-        <div className="timer-digits tabular text-2xl text-primary">
-          {bestRun ? formatTime(bestRun.official_time_ms) : "—:—"}
+        {/* OVR rides beside the time rather than in the ratings row below: it is
+            the composite of that row, not another member of it. */}
+        <div
+          className="rounded border py-1.5 text-center"
+          style={{ borderColor: rarity.border, background: "rgba(255,255,255,0.03)" }}
+        >
+          <div className="text-[8px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+            OVR
+          </div>
+          <div
+            className="font-display text-2xl font-black leading-tight tabular"
+            style={{ color: rarity.accent }}
+          >
+            {attributes?.ovr ?? "—"}
+          </div>
         </div>
       </div>
+
+      {attributes && <AttributeChips attributes={attributes} />}
 
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="mb-1 text-[8px] font-bold uppercase tracking-[0.3em] text-muted-foreground">

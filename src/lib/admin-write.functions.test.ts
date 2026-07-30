@@ -32,6 +32,15 @@ beforeEach(() => {
   withDb();
 });
 
+/** One well-formed slot — enough for parseCardLayout to accept the layout. */
+const SAMPLE_LAYOUT = {
+  version: 1,
+  aspect: 5 / 7,
+  slots: [
+    { id: "slot-ovr", key: "ovr", x: 0.06, y: 0.05, w: 0.2, h: 0.14, size: 0.12, align: "center" },
+  ],
+};
+
 /**
  * A minimal valid payload per handler, so the auth sweep below reaches the
  * guard rather than tripping over its own input validation.
@@ -85,6 +94,17 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
   },
   undoLastDraftSelection: { eventId: EVENT_ID },
   updateEvent: { eventId: EVENT_ID, status: "live" },
+  setEventCardLayout: { eventId: EVENT_ID, layout: SAMPLE_LAYOUT },
+  setParticipantCardLayout: {
+    eventId: EVENT_ID,
+    eventParticipantId: EVENT_PARTICIPANT_ID,
+    layout: SAMPLE_LAYOUT,
+  },
+  setParticipantCardAttributes: {
+    eventId: EVENT_ID,
+    eventParticipantId: EVENT_PARTICIPANT_ID,
+    attributes: { speed: 91 },
+  },
 };
 
 describe("every write requires the commissioner", () => {
@@ -448,5 +468,101 @@ describe("updateEvent", () => {
       headers: asAdmin(),
     });
     expect(mock.callsFor("events", "update")[0].payload).toEqual({ status: "live" });
+  });
+});
+
+describe("card layout and rating overrides", () => {
+  async function callAs(name: string, data: unknown) {
+    const mod = (await import("./admin-write.functions")) as unknown as Record<
+      string,
+      (o?: { data?: unknown }) => Promise<unknown>
+    >;
+    return callServerFn(mod[name], { data, headers: asAdmin() });
+  }
+
+  it("stores a normalised layout on the event", async () => {
+    await callAs("setEventCardLayout", { eventId: EVENT_ID, layout: SAMPLE_LAYOUT });
+    const [update] = mock.callsFor("events", "update");
+    const payload = update.payload as { card_layout: { slots: unknown[] } };
+    expect(payload.card_layout.slots).toHaveLength(1);
+    expect(mock.eqValue(update, "id")).toBe(EVENT_ID);
+  });
+
+  it("clears the event layout when handed null", async () => {
+    await callAs("setEventCardLayout", { eventId: EVENT_ID, layout: null });
+    expect(mock.callsFor("events", "update")[0].payload).toEqual({ card_layout: null });
+  });
+
+  it("refuses a layout with nothing drawable in it", async () => {
+    // An empty slot list would save as "calibrated" and then render nothing,
+    // which is indistinguishable from the feature being broken.
+    await expect(
+      callAs("setEventCardLayout", { eventId: EVENT_ID, layout: { version: 1, slots: [] } }),
+    ).rejects.toThrow("no usable slots");
+    expect(mock.callsFor("events", "update")).toHaveLength(0);
+  });
+
+  it("drops a slot bound to a stat that does not exist", async () => {
+    await callAs("setEventCardLayout", {
+      eventId: EVENT_ID,
+      layout: {
+        version: 1,
+        slots: [...SAMPLE_LAYOUT.slots, { id: "junk", key: "salary", x: 0, y: 0, w: 1, h: 1 }],
+      },
+    });
+    const payload = mock.callsFor("events", "update")[0].payload as {
+      card_layout: { slots: { key: string }[] };
+    };
+    expect(payload.card_layout.slots.map((s) => s.key)).toEqual(["ovr"]);
+  });
+
+  it("clamps a slot that would run off the card", async () => {
+    await callAs("setEventCardLayout", {
+      eventId: EVENT_ID,
+      layout: {
+        version: 1,
+        slots: [{ id: "wide", key: "ovr", x: 0.9, y: 0.9, w: 5, h: 5, size: 0.1 }],
+      },
+    });
+    const payload = mock.callsFor("events", "update")[0].payload as {
+      card_layout: { slots: { w: number; h: number }[] };
+    };
+    expect(payload.card_layout.slots[0].w).toBeCloseTo(0.1);
+    expect(payload.card_layout.slots[0].h).toBeCloseTo(0.1);
+  });
+
+  it("scopes a player layout to the event the token was issued for", async () => {
+    // Without the event_id filter a valid token for one combine could rewrite a
+    // participant row belonging to another.
+    await callAs("setParticipantCardLayout", {
+      eventId: EVENT_ID,
+      eventParticipantId: EVENT_PARTICIPANT_ID,
+      layout: SAMPLE_LAYOUT,
+    });
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(mock.eqValue(update, "id")).toBe(EVENT_PARTICIPANT_ID);
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
+  });
+
+  it("keeps only the ratings it recognises, rounded into the scale", async () => {
+    await callAs("setParticipantCardAttributes", {
+      eventId: EVENT_ID,
+      eventParticipantId: EVENT_PARTICIPANT_ID,
+      attributes: { speed: 91.6, salary: 12, burst: 400 },
+    });
+    expect(mock.callsFor("event_participants", "update")[0].payload).toEqual({
+      card_attributes: { speed: 92, burst: 99 },
+    });
+  });
+
+  it("stores null rather than an empty override", async () => {
+    await callAs("setParticipantCardAttributes", {
+      eventId: EVENT_ID,
+      eventParticipantId: EVENT_PARTICIPANT_ID,
+      attributes: {},
+    });
+    expect(mock.callsFor("event_participants", "update")[0].payload).toEqual({
+      card_attributes: null,
+    });
   });
 });

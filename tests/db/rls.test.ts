@@ -98,6 +98,24 @@ describe("public reads", () => {
     expect(Array.isArray(rows)).toBe(true);
     expect(await isDenied("anon", "SELECT client_key FROM public.runs")).toBe(true);
   });
+
+  it("lets anon read the card layout and rating override columns", async () => {
+    // Every card in the vault is drawn from these, and the vault has no session.
+    // Column grants are opt-in per column, so a missing GRANT here would render
+    // as "no overlay anywhere" rather than as an error — hence the assertion.
+    const rows = await asRole(
+      "anon",
+      "SELECT card_layout, card_attributes FROM public.event_participants",
+    );
+    expect(Array.isArray(rows)).toBe(true);
+  });
+
+  it("carries card_layout through the events_public view", async () => {
+    // events itself is read through the view, so a column added to the table and
+    // not to the view is invisible to the app no matter what the grant says.
+    const rows = await asRole("anon", "SELECT card_layout FROM public.events_public");
+    expect(Array.isArray(rows)).toBe(true);
+  });
 });
 
 describe("server-only tables", () => {

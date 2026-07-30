@@ -23,6 +23,7 @@ import {
 import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { UniversalCardBack } from "@/components/universal-card-back";
+import { CardLayoutEditor } from "@/components/card-layout-editor";
 import { SecretCardsPanel } from "@/components/secret-cards-panel";
 import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
 import { AdminSection } from "@/components/admin-section";
@@ -786,6 +787,12 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
 
       <div className="md:col-span-2">
         <UniversalCardBack eventId={eventId} />
+      </div>
+
+      {/* Sits under the uploaders on purpose: there is nothing to calibrate
+          against until the card art is in. */}
+      <div className="md:col-span-2">
+        <CardLayoutEditor eventId={eventId} />
       </div>
 
       {/* No eventId: these rows are league-wide, and the panel resolves the

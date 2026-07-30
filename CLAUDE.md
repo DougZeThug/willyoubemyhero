@@ -205,3 +205,29 @@ sync back into the editor.
   and `awards.award_type`. **Add a category; never rename one.**
 - Times are milliseconds everywhere, formatted only at the edge via `formatTime`
   in `src/lib/format.ts`.
+- Card ratings (`src/lib/card-attributes.ts`) and slot keys
+  (`src/lib/card-layout.ts`) are the same kind of frozen vocabulary. Both end up
+  inside jsonb — a slot's `key` in `events.card_layout`, a rating's name in
+  `event_participants.card_attributes` — so renaming one silently drops the slot
+  or the override instead of failing loudly. **Add; never rename.**
+
+## Card fronts
+
+A card front is an uploaded image plus a **layout**: named slots in normalised
+0..1 coordinates that draw live numbers over the artwork. The admin calibrates
+one per event in `src/components/card-layout-editor.tsx`, against the real art.
+
+- `src/lib/card-attributes.ts` derives 40–99 ratings from run times, station
+  splits and penalties. Pure and unstored, for the reason `card-rarity.ts` gives
+  about tiers: the maths is field-relative, so one person finishing moves
+  everyone's numbers and a per-run write would mean recomputing the event.
+- Layout resolution is `event_participants.card_layout` → `events.card_layout` →
+  none, mirroring how card backs already resolve. **No layout means no overlay** —
+  the card renders exactly as it did before this existed, and that is the
+  regression bar for any change here.
+- `frontContent` renders **after** the foil overlays in `holo-card.tsx`. The band
+  mask note in `styles.css` records what happens otherwise: a color-dodge film
+  over a stat panel turns it grey.
+- Anything on a `.holo-face` is inside a `rotateY` with `backface-visibility:
+hidden` and measures as zero width. Slot type is sized in `cqw` against a
+  container query for that reason — never from a measured width.

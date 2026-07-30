@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
+import { parseCardLayout } from "./card-layout";
+import { parseAttributeOverride } from "./card-attributes";
 
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })
@@ -400,4 +402,90 @@ export const updateEvent = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin.from("events").update(rest).eq("id", eventId);
     if (error) throw error;
     return { ok: true };
+  });
+
+// ---------- Card layout and rating overrides ----------
+//
+// Three jsonb columns added by 20260730120000_card_layout_and_attributes.sql.
+// `supabase gen types` output has not been regenerated since — it is still
+// missing card_rarity from before this — so each patch is cast on its way into
+// the update. Same `as never` escape media.functions.ts uses for the archive
+// snapshot, and all three casts come out together when the types are refreshed.
+//
+// Nothing is trusted off the wire. The layout and the override both go through
+// the same parser the renderer uses, so a value that reaches the database is by
+// construction a value a card can draw.
+
+export const setEventCardLayout = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ eventId: z.string().uuid(), layout: z.unknown() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    // Null clears the layout and puts every card in the event back to plain art.
+    const layout = data.layout == null ? null : parseCardLayout(data.layout);
+    if (data.layout != null && !layout) throw new Error("Card layout has no usable slots");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("events")
+      .update({ card_layout: layout } as never)
+      .eq("id", data.eventId);
+    if (error) throw error;
+    return { ok: true, layout };
+  });
+
+export const setParticipantCardLayout = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: z.string().uuid(),
+        eventParticipantId: z.string().uuid(),
+        layout: z.unknown(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    // Null here means "fall back to the event default", not "no overlay".
+    const layout = data.layout == null ? null : parseCardLayout(data.layout);
+    if (data.layout != null && !layout) throw new Error("Card layout has no usable slots");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("event_participants")
+      .update({ card_layout: layout } as never)
+      .eq("id", data.eventParticipantId)
+      // Scoped to the event the admin token was issued for, so a valid token for
+      // one event cannot be pointed at a participant row in another.
+      .eq("event_id", data.eventId);
+    if (error) throw error;
+    return { ok: true, layout };
+  });
+
+export const setParticipantCardAttributes = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: z.string().uuid(),
+        eventParticipantId: z.string().uuid(),
+        attributes: z.unknown(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const parsed = data.attributes == null ? null : parseAttributeOverride(data.attributes);
+    // An override with nothing usable in it is a clear, not an error: it is what
+    // the panel sends when every field has been emptied back out.
+    const override = parsed && Object.keys(parsed).length > 0 ? parsed : null;
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("event_participants")
+      .update({ card_attributes: override } as never)
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
+    if (error) throw error;
+    return { ok: true, attributes: override };
   });

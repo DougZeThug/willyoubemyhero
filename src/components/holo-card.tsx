@@ -115,6 +115,16 @@ export type HoloCardProps = {
   faceDown?: boolean;
   /** Rendered on the back face when there is no uploaded back artwork. */
   backContent?: React.ReactNode;
+  /**
+   * Rendered on the front face, over the artwork *and* over the foil.
+   *
+   * The counterpart to `backContent`, but it stacks differently on purpose: a
+   * back panel is the whole face, whereas this is a layer on somebody's card
+   * art. It goes above the overlays because the foil is a color-dodge film and
+   * putting live numbers under it is what turned the black stat panel grey the
+   * first time round — see the band mask note in styles.css.
+   */
+  frontContent?: React.ReactNode;
   className?: string;
   onClick?: () => void;
 };
@@ -134,6 +144,7 @@ function HoloCardImpl({
   gyro = false,
   faceDown = false,
   backContent,
+  frontContent,
   className,
   onClick,
 }: HoloCardProps) {
@@ -604,6 +615,10 @@ function HoloCardImpl({
               <CardPlaceholder name={name} label="No card art" />
             )}
             {Overlays}
+            {/* After the overlays, so the numbers sit on top of the foil rather
+                than under it. A card with no art at all still gets its stats —
+                the placeholder is a background like any other. */}
+            {frontContent}
           </div>
 
           {/* Back — skipped entirely on a card that can't turn over, which is every

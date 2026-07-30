@@ -181,7 +181,11 @@ type RarityBundle = {
 // The live app only ever writes queued | running | finished | scratched
 // (admin.tsx, admin-write.functions.ts). The extra values are the wider
 // vocabulary the schema allows and archived snapshots may still contain.
-const DNF_STATUSES = new Set(["scratched", "dq", "dnp", "absent"]);
+//
+// Exported because card-attributes.ts has to agree with this exactly: a card
+// wearing the dnf foil must not also be carrying a rating, and two copies of
+// this set would drift the first time the vocabulary grew.
+export const DNF_STATUSES = new Set(["scratched", "dq", "dnp", "absent"]);
 
 function isTier(v: string): v is RarityTier {
   return v in RARITY;

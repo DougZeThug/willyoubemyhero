@@ -24,6 +24,10 @@ export type FixtureParticipant = {
   participant_id: string;
   participation_status: string;
   card_rarity: string | null;
+  /** jsonb admin override read by card-attributes.ts. */
+  card_attributes: unknown;
+  /** jsonb per-player slot layout read by card-layout.ts. */
+  card_layout: unknown;
   running_order: number;
   bib_number: number | null;
   photo_path: string | null;
@@ -90,6 +94,8 @@ export function makeParticipant(over: Partial<FixtureParticipant> = {}): Fixture
     participant_id: participantId,
     participation_status: "queued",
     card_rarity: null,
+    card_attributes: null,
+    card_layout: null,
     running_order: 1,
     bib_number: null,
     photo_path: null,

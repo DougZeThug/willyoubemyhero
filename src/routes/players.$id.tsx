@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Download,
   GitCompareArrows,
   IdCard,
   Link as LinkIcon,
@@ -42,6 +43,15 @@ import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle, TIER_REASON, type Rarity } from "@/lib/card-rarity";
 import { cardStats } from "@/lib/card-stats";
+import { attributeMap } from "@/lib/card-attributes";
+import { AttributePanel } from "@/components/attribute-panel";
+import { DEFAULT_ASPECT, layoutMap, type SlotContext } from "@/lib/card-layout";
+import { CardFrontPanel } from "@/components/card-front-panel";
+import {
+  CardFrontGraphic,
+  CARD_PRINT_WIDTH,
+  type CardFrontGraphicData,
+} from "@/components/card-front-graphic";
 import { playReveal, useCardSfx } from "@/lib/card-sfx";
 import { exportCardPng } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
@@ -101,6 +111,7 @@ function PlayerCardPage() {
   const [collection, setCollection] = useState<Record<string, CollectedCard>>({});
   const [comparing, setComparing] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
+  const frontRef = useRef<HTMLDivElement>(null);
 
   // Roster in running order gives prev/next a stable, meaningful sequence.
   const roster = useMemo(
@@ -130,11 +141,14 @@ function PlayerCardPage() {
   }, [go, prev?.id, next?.id]);
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
+  const attributes = useMemo(() => attributeMap(bundle), [bundle]);
+  const layouts = useMemo(() => layoutMap(bundle?.participants, event), [bundle, event]);
 
   // Resolved before the loading guard below so the reveal and the stat hooks
   // can be plain unconditional hooks. `ep` stays null until the bundle lands.
   const ep = bundle?.participants.find((p) => p.id === id) ?? null;
   const rarity = (ep && rarities.get(ep.id)) ?? rarityStyle("base");
+  const attrs = (ep && attributes.get(ep.id)) ?? null;
   const stats = useMemo(() => cardStats(bundle, ep?.participant_id), [bundle, ep?.participant_id]);
 
   // Landing on a card is an event: the tier chime, and a burst in the tier's own
@@ -247,6 +261,23 @@ function PlayerCardPage() {
   );
   const myAwards = ep.participant_id ? (awards.byParticipant.get(ep.participant_id) ?? []) : [];
 
+  const slotContext: SlotContext = {
+    attributes: attrs,
+    stats,
+    name,
+    bib: ep.bib_number ?? null,
+    pick: ep.selected_draft_position ?? null,
+    rarityLabel: rarity.label,
+  };
+
+  const frontGraphic: CardFrontGraphicData = {
+    layout: layouts.get(ep.id) ?? null,
+    context: slotContext,
+    cardUrl: urls?.front ?? null,
+    photoUrl,
+    tierColor: rarity.accent,
+  };
+
   const shareData: ShareCardData = {
     eventName: event?.name ?? "Draft Combine",
     eventYear: event?.year ?? null,
@@ -276,6 +307,31 @@ function PlayerCardPage() {
       const node = shareRef.current;
       if (!node) throw new Error("Share card not ready");
       await exportCardPng(node, `${name.replace(/\s+/g, "-").toLowerCase()}-card.png`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not export card");
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  /**
+   * The card on its own, at print size, with today's numbers burnt in.
+   *
+   * Separate from Share, which exports the branded poster. This one is the
+   * artefact: ratings move all afternoon, and this is how you keep the version
+   * that was true when you were winning.
+   */
+  async function onSaveCard() {
+    setSharing(true);
+    try {
+      await qc.refetchQueries({ queryKey: ["card-urls", event?.id] });
+      await new Promise((r) => setTimeout(r, 350));
+      const node = frontRef.current;
+      if (!node) throw new Error("Card not ready");
+      await exportCardPng(node, `${name.replace(/\s+/g, "-").toLowerCase()}-front.png`, {
+        width: CARD_PRINT_WIDTH,
+        height: Math.round(CARD_PRINT_WIDTH / (frontGraphic.layout?.aspect || DEFAULT_ASPECT)),
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not export card");
     } finally {
@@ -331,6 +387,18 @@ function PlayerCardPage() {
       icon: <LinkIcon className="h-3.5 w-3.5" />,
       onClick: () => void onCopyLink(),
     },
+    // Only when there is a calibrated layout: without one this exports the same
+    // frozen artwork the admin uploaded, which is nothing worth a button.
+    ...(layouts.get(id)
+      ? [
+          {
+            key: "save-card",
+            label: "Save Card",
+            icon: <Download className="h-3.5 w-3.5" />,
+            onClick: () => void onSaveCard(),
+          },
+        ]
+      : []),
     {
       key: "sound",
       label: sfx.muted ? "Muted" : "Sound",
@@ -397,7 +465,16 @@ function PlayerCardPage() {
                 onFlippedChange={setFlipped}
                 gyro={gyro}
                 tilt="hero"
-                backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+                backContent={
+                  <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} attributes={attrs} />
+                }
+                frontContent={
+                  <CardFrontPanel
+                    layout={layouts.get(ep.id) ?? null}
+                    context={slotContext}
+                    tierColor={rarity.accent}
+                  />
+                }
               />
             </CardSlab>
           </div>
@@ -529,6 +606,8 @@ function PlayerCardPage() {
           />
         </div>
 
+        <AttributePanel attributes={attrs} />
+
         <FieldComparison ladder={stats.ladder} rank={rank} fieldSize={stats.fieldSize} />
 
         <RosterFilmstrip entries={filmstrip} currentId={ep.id} onSelect={go} />
@@ -581,9 +660,11 @@ function PlayerCardPage() {
         }
       />
 
-      {/* Offscreen 1080x1350 composite that html-to-image rasterises. */}
+      {/* Offscreen composites that html-to-image rasterises: the branded poster,
+          and the card on its own at print size with the live numbers on it. */}
       <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
         <ShareCard ref={shareRef} data={shareData} />
+        <CardFrontGraphic ref={frontRef} data={frontGraphic} />
       </div>
     </div>
   );

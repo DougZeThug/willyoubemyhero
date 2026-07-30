@@ -11,6 +11,10 @@ import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
+import { attributeMap } from "@/lib/card-attributes";
+import { layoutMap } from "@/lib/card-layout";
+import { CardFrontPanel } from "@/components/card-front-panel";
+import { cardStats } from "@/lib/card-stats";
 import { collectCard, loadCollection, loadPackState, savePackState } from "@/lib/card-collection";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
@@ -288,6 +292,8 @@ function PackPage() {
   // would be the reveal, printed on the outside of the pack.
   const packBack = useEventCardBack(event?.id ?? null);
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
+  const attributes = useMemo(() => attributeMap(bundle), [bundle]);
+  const layouts = useMemo(() => layoutMap(bundle?.participants, event), [bundle, event]);
 
   const [collected, setCollected] = useState<Record<string, unknown>>({});
   const [collectionLoaded, setCollectionLoaded] = useState(false);
@@ -427,6 +433,39 @@ function PackPage() {
   }, [bundle, dealtIds, nextPack]);
 
   const torn = dealtIds != null;
+
+  /**
+   * The stat overlay for each card in today's pack, built once.
+   *
+   * Out here rather than inline in the map for two reasons: cardStats walks
+   * every split in the event and this page re-renders on every reveal, every
+   * tear frame and every realtime bundle update; and HoloCard is memo'd, which a
+   * freshly-built element prop would defeat on all three cards at once.
+   */
+  const fronts = useMemo(() => {
+    const out = new Map<string, React.ReactNode>();
+    for (const ep of pack) {
+      const layout = layouts.get(ep.id) ?? null;
+      if (!layout) continue;
+      const rarity = rarities.get(ep.id) ?? rarityStyle("base");
+      out.set(
+        ep.id,
+        <CardFrontPanel
+          layout={layout}
+          context={{
+            attributes: attributes.get(ep.id) ?? null,
+            stats: cardStats(bundle, ep.participant_id),
+            name: ep.participant?.name ?? "—",
+            bib: ep.bib_number ?? null,
+            pick: ep.selected_draft_position ?? null,
+            rarityLabel: rarity.label,
+          }}
+          tierColor={rarity.accent}
+        />,
+      );
+    }
+    return out;
+  }, [pack, bundle, layouts, rarities, attributes]);
 
   const tearOpen = useCallback(() => {
     if (dealtIds || nextPack.length === 0) return;
@@ -841,7 +880,15 @@ function PackPage() {
                           name={name}
                           rarity={rarity}
                           cacheKey={ep.id}
-                          backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+                          backContent={
+                            <CardBackPanel
+                              ep={ep}
+                              bundle={bundle}
+                              rarity={rarity}
+                              attributes={attributes.get(ep.id) ?? null}
+                            />
+                          }
+                          frontContent={fronts.get(ep.id)}
                         />
                       ) : (
                         // Real back art, not the wax-foil stand-in: a pack of
