@@ -125,6 +125,25 @@ export async function collectCard(eventParticipantId: string, tier: string): Pro
   }
 }
 
+/**
+ * Delete specific cards from this device's collection.
+ *
+ * For rows the server has disowned — see `mergeCollection`. Deliberately deletes
+ * keys rather than bumping the database version to wipe the store: the version is
+ * hardcoded in e2e/journeys.spec.ts (see the note at the top of this file), and a
+ * bump would take out the pack state and card art cache along with it.
+ */
+export async function forgetCards(eventParticipantIds: readonly string[]): Promise<void> {
+  if (!isBrowser() || eventParticipantIds.length === 0) return;
+  try {
+    const db = await getDb();
+    const tx = db.transaction(COLLECTED, "readwrite");
+    await Promise.all([...eventParticipantIds.map((id) => tx.store.delete(id)), tx.done]);
+  } catch {
+    /* a device with IndexedDB blocked has nothing to forget */
+  }
+}
+
 export async function clearCollection(): Promise<void> {
   if (!isBrowser()) return;
   try {

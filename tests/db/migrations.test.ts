@@ -21,6 +21,7 @@ const EXPECTED_TABLES = [
   "event_secrets",
   "events",
   "member_codes",
+  "pack_opens",
   "participants",
   "penalties",
   "running_order_randomizations",
@@ -81,13 +82,14 @@ describe("migrations", () => {
     expect(rows.map((r) => r.proname)).toEqual(["pull_secret_card", "secret_pull_status"]);
   });
 
-  it("creates the card-pull RPC the pack calls", async () => {
+  it("creates the two RPCs the pack calls when it is torn", async () => {
     const rows = await sql<{ proname: string }>(`
       SELECT proname FROM pg_proc p
       JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE n.nspname = 'public' AND proname = 'record_card_pulls'
+      WHERE n.nspname = 'public' AND proname IN ('record_card_pulls', 'record_pack_open')
+      ORDER BY proname
     `);
-    expect(rows.map((r) => r.proname)).toEqual(["record_card_pulls"]);
+    expect(rows.map((r) => r.proname)).toEqual(["record_card_pulls", "record_pack_open"]);
   });
 
   it("exposes events through a public view", async () => {
@@ -170,6 +172,21 @@ describe("migrations", () => {
     // Different rationale, same failure mode: publishing card_pulls broadcasts
     // every pull with the puller's id attached to every connected phone.
     expect(published).not.toContain("card_pulls");
+    expect(published).not.toContain("pack_opens");
+  });
+
+  it("enforces one pack_opens row per person per league day, which is what makes a row count a pack count", async () => {
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'pack_opens'",
+    );
+    expect(
+      rows.some(
+        (r) =>
+          r.indexdef.includes("UNIQUE") &&
+          r.indexdef.includes("participant_id") &&
+          r.indexdef.includes("opened_on"),
+      ),
+    ).toBe(true);
   });
 
   it("enforces one card_pulls row per person per card, which is what makes a row count a people count", async () => {

@@ -41,11 +41,41 @@ describe("recordCardPulls", () => {
     // so a throw would be an invisible console error rather than anything a
     // person could act on.
     const { recordCardPulls } = await import("./card-pulls.functions");
-    const res = await callServerFn<{ ok: boolean; recorded: number }>(recordCardPulls, {
-      data: { eventParticipantIds: [CARD_A] },
-    });
-    expect(res).toEqual({ ok: true, recorded: 0 });
+    const res = await callServerFn<{ ok: boolean; recorded: number; packsOpened: number }>(
+      recordCardPulls,
+      { data: { eventParticipantIds: [CARD_A] } },
+    );
+    expect(res).toEqual({ ok: true, recorded: 0, packsOpened: 0 });
     expect(mock.client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("records the pack itself in the same call", async () => {
+    // A pack of three cards you already own writes no new card_pulls row, so
+    // counting packs from that table would stop counting the moment somebody's
+    // collection filled up. The pack open is its own record.
+    withDb({ "rpc.record_card_pulls": { data: 0 }, "rpc.record_pack_open": { data: 4 } });
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    const res = await callServerFn<{ packsOpened: number }>(recordCardPulls, {
+      data: { eventParticipantIds: [CARD_A, CARD_B], eventId: EVENT_ID },
+      headers: asMe(),
+    });
+    expect(mock.client.rpc).toHaveBeenCalledWith("record_pack_open", {
+      _participant_id: ME,
+      _event_id: EVENT_ID,
+      _card_count: 2,
+    });
+    expect(res.packsOpened).toBe(4);
+  });
+
+  it("credits the pack to the token holder, whatever the payload claims", async () => {
+    withDb({ "rpc.record_card_pulls": { data: 1 }, "rpc.record_pack_open": { data: 1 } });
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    await callServerFn(recordCardPulls, {
+      data: { eventParticipantIds: [CARD_A], participantId: THEM },
+      headers: asMe(),
+    });
+    const call = mock.client.rpc.mock.calls.find((c) => c[0] === "record_pack_open");
+    expect(call?.[1]).toMatchObject({ _participant_id: ME });
   });
 
   it("credits the token holder, never a caller-supplied id", async () => {
@@ -147,5 +177,122 @@ describe("getCardPullCounts", () => {
     await expect(callServerFn(getCardPullCounts, { data: { eventId: EVENT_ID } })).resolves.toEqual(
       { [CARD_A]: 1 },
     );
+  });
+});
+
+describe("getMyCardStats", () => {
+  const twoPacks = { data: [{ opened_on: "2026-07-29" }, { opened_on: "2026-07-31" }] };
+
+  it("refuses an unclaimed caller, unlike its neighbours", async () => {
+    // The private half of card_pulls. `getCardPullCounts` serves everyone because
+    // it is an aggregate; this returns rows, so there has to be a member behind it.
+    const { getMyCardStats } = await import("./card-pulls.functions");
+    await expect(callServerFn(getMyCardStats, { data: { eventId: EVENT_ID } })).rejects.toThrow();
+  });
+
+  it("returns your packs and your cards", async () => {
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }, { id: CARD_B }] },
+      "pack_opens.select": twoPacks,
+      "card_pulls.select": {
+        data: [
+          { event_participant_id: CARD_A, pull_count: 3, first_pulled_at: "2026-07-29T10:00:00Z" },
+          { event_participant_id: CARD_B, pull_count: 1, first_pulled_at: "2026-07-31T10:00:00Z" },
+        ],
+      },
+    });
+    const { getMyCardStats } = await import("./card-pulls.functions");
+    const res = await callServerFn<{
+      packsOpened: number;
+      firstPackOn: string | null;
+      lastPackOn: string | null;
+      cards: { eventParticipantId: string; pullCount: number }[];
+    }>(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
+
+    expect(res.packsOpened).toBe(2);
+    expect(res.firstPackOn).toBe("2026-07-29");
+    expect(res.lastPackOn).toBe("2026-07-31");
+    expect(res.cards).toHaveLength(2);
+    expect(res.cards[0]).toEqual({
+      eventParticipantId: CARD_A,
+      pullCount: 3,
+      firstPulledAt: "2026-07-29T10:00:00Z",
+    });
+  });
+
+  it("reads the rows of the token holder and nobody else", async () => {
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "pack_opens.select": { data: [] },
+      "card_pulls.select": { data: [] },
+    });
+    const { getMyCardStats } = await import("./card-pulls.functions");
+    await callServerFn(getMyCardStats, {
+      data: { eventId: EVENT_ID, participantId: THEM },
+      headers: asMe(),
+    });
+    const [pulls] = mock.callsFor("card_pulls", "select");
+    expect(mock.eqValue(pulls, "participant_id")).toBe(ME);
+    const [opens] = mock.callsFor("pack_opens", "select");
+    expect(mock.eqValue(opens, "participant_id")).toBe(ME);
+  });
+
+  it("scopes the cards to this event, so it cannot enumerate another one", async () => {
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "pack_opens.select": { data: [] },
+      "card_pulls.select": { data: [] },
+    });
+    const { getMyCardStats } = await import("./card-pulls.functions");
+    await callServerFn(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
+    const [pulls] = mock.callsFor("card_pulls", "select");
+    expect(pulls.filters.find((f) => f.method === "in")?.args).toEqual([
+      "event_participant_id",
+      [CARD_A],
+    ]);
+  });
+
+  it("still reports packs for an event with no roster", async () => {
+    // The pack count is about the person, not the roster — an event stripped back
+    // to nothing must not erase what they opened.
+    withDb({ "event_participants.select": { data: [] }, "pack_opens.select": twoPacks });
+    const { getMyCardStats } = await import("./card-pulls.functions");
+    const res = await callServerFn<{ packsOpened: number; cards: unknown[] }>(getMyCardStats, {
+      data: { eventId: EVENT_ID },
+      headers: asMe(),
+    });
+    expect(res).toMatchObject({ packsOpened: 2, cards: [] });
+    expect(mock.callsFor("card_pulls")).toHaveLength(0);
+  });
+
+  it("carries no total, so it cannot leak a set size", async () => {
+    // The rule from the header of card-pulls.ts: the "of 18" a screen shows comes
+    // from the roster it already has, never from a response.
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "pack_opens.select": { data: [] },
+      "card_pulls.select": { data: [] },
+    });
+    const { getMyCardStats } = await import("./card-pulls.functions");
+    const res = await callServerFn<Record<string, unknown>>(getMyCardStats, {
+      data: { eventId: EVENT_ID },
+      headers: asMe(),
+    });
+    expect(Object.keys(res).sort()).toEqual(["cards", "firstPackOn", "lastPackOn", "packsOpened"]);
+  });
+
+  it("reports nothing rather than nulls for a member who has never opened a pack", async () => {
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "pack_opens.select": { data: [] },
+      "card_pulls.select": { data: [] },
+    });
+    const { getMyCardStats } = await import("./card-pulls.functions");
+    const res = await callServerFn<{
+      packsOpened: number;
+      firstPackOn: string | null;
+      cards: unknown[];
+    }>(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
+    expect(res).toEqual({ packsOpened: 0, firstPackOn: null, lastPackOn: null, cards: [] });
   });
 });

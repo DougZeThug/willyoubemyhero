@@ -5,11 +5,11 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
-import { loadCollection, type CollectedCard } from "@/lib/card-collection";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretStatus } from "@/hooks/use-daily-secret";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
-import { packedByLabel } from "@/lib/card-pulls";
+import { useMyCollection } from "@/hooks/use-my-collection";
+import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
 import {
   secretFoil,
@@ -49,9 +49,6 @@ function PlayersPage() {
   const cards = useEventCardUrls(event?.id ?? null);
   const [sort, setSort] = useState<SortKey>("name");
   const [shuffleSeed, setShuffleSeed] = useState(0);
-  // Typed rather than `unknown`: `{collected[p.id] && <Check/>}` renders the
-  // left operand when it is falsy, and an `unknown` there is not a ReactNode.
-  const [collected, setCollected] = useState<Record<string, CollectedCard>>({});
   const member = useMemberSession();
   const secrets = useMySecrets(member?.participantId);
   const secretStatus = useSecretStatus(member?.participantId);
@@ -64,10 +61,6 @@ function PlayersPage() {
   const [wasMember, setWasMember] = useState(false);
   useEffect(() => {
     setWasMember(localStorage.getItem(WAS_MEMBER_KEY) === "1");
-  }, []);
-
-  useEffect(() => {
-    loadCollection().then(setCollected);
   }, []);
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
@@ -98,8 +91,11 @@ function PlayersPage() {
     }
   }, [bundle, event?.id, sort, shuffleSeed, rarities]);
 
+  const rosterIds = useMemo(() => rows.map((p) => p.id), [rows]);
+  const mine = useMyCollection(event?.id ?? null, rosterIds);
+  const collected = mine.collection;
+
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
-  const collectedCount = rows.filter((p) => collected[p.id]).length;
   const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
   const ownedSecrets = secrets.data?.cards ?? [];
 
@@ -118,10 +114,19 @@ function PlayersPage() {
               <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">
                 The Vault
               </h1>
+              {/* The collected count waits for `ready`. It used to be read straight
+                  off IndexedDB, which had been inflated to the whole roster by the
+                  old collect-on-sight behaviour — rendering it early would show
+                  that number for a frame before it snapped down to the real one. */}
               <p className="mt-2 text-xs text-muted-foreground">
                 {withCards} of {rows.length} cards printed
-                {collectedCount > 0 && ` · ${collectedCount} collected`}
+                {mine.ready && mine.collectedCount > 0 && ` · ${mine.collectedCount} collected`}
               </p>
+              {mine.ready && packsOpenedLabel(mine.packsOpened) && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {packsOpenedLabel(mine.packsOpened)}
+                </p>
+              )}
               {/* Only ever rendered above zero. "0 secrets pulled" would announce
                   that a set exists at all, which is the one thing withheld — and
                   `?? 0` keeps a zero from flashing during the loading frame. */}
