@@ -29,6 +29,7 @@ import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
 import { seededRng } from "@/lib/format";
 import { urlFromSet } from "@/lib/media.functions";
+import type { ImageUrlSet } from "@/lib/media.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/pack")({
@@ -919,6 +920,7 @@ function PackPage() {
               duplicate={secretDuplicate}
               peeking={secretPeeking}
               pulledCount={status.data?.pulled ?? 0}
+              universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
               onReveal={() => void revealSecret()}
               onRetry={() => {
                 pullFiredRef.current = false;
