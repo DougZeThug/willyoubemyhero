@@ -866,14 +866,12 @@ function PackPage() {
                           animate={{ opacity: 1 }}
                           className="text-center"
                         >
-                          {/* Wrapped rather than truncated: a name cut off mid-word
-                              is a poor look on the screen that is meant to be the
-                              payoff, and at two-up there is room for two lines.
-                              The grid's items-start absorbs the uneven rows. */}
+                          {/* Two lines at most: at three-up the column is narrow,
+                              and the grid's items-start absorbs uneven rows. */}
                           <Link
                             to="/players/$id"
                             params={{ id: ep.id }}
-                            className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary sm:text-base"
+                            className="block line-clamp-2 font-display text-[11px] font-black uppercase leading-tight tracking-wide hover:text-primary sm:text-sm"
                           >
                             {name}
                           </Link>
@@ -882,7 +880,7 @@ function PackPage() {
                               which left this label all but unreadable. Same
                               reason CardBackPanel does it. */}
                           <div
-                            className="text-[10px] font-bold uppercase tracking-[0.25em] sm:text-xs"
+                            className="text-[9px] font-bold uppercase tracking-[0.2em] sm:text-[10px]"
                             style={{ color: rarity.accent }}
                           >
                             {rarity.label}
@@ -890,7 +888,7 @@ function PackPage() {
                           {/* Muted and on its own line: the tier above is what
                               this card is, this is how many people have one. */}
                           {packedByLabel(pullCounts.data?.[ep.id]) && (
-                            <div className="text-[9px] font-bold uppercase leading-tight tracking-[0.2em] text-muted-foreground sm:text-[10px]">
+                            <div className="text-[8px] font-bold uppercase leading-tight tracking-[0.15em] text-muted-foreground sm:text-[9px]">
                               {packedByLabel(pullCounts.data?.[ep.id])}
                             </div>
                           )}
