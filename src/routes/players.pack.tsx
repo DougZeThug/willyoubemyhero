@@ -129,6 +129,7 @@ function SecretSlotView({
   duplicate,
   peeking,
   pulledCount,
+  universalBack,
   onReveal,
   onRetry,
 }: {
@@ -138,6 +139,8 @@ function SecretSlotView({
   duplicate: boolean;
   peeking: boolean;
   pulledCount: number;
+  /** The event's universal deck back. Secrets share it with every other card. */
+  universalBack: ImageUrlSet | null;
   onReveal: () => void;
   onRetry: () => void;
 }) {
@@ -245,7 +248,7 @@ function SecretSlotView({
           <div className={cn("relative w-full rounded-xl", duplicate && "secret-dupe-shimmer")}>
             <HoloCard
               frontUrl={card.artUrl}
-              backUrl={card.backUrl}
+              backUrl={universalBack}
               name={card.name}
               rarity={rarity}
               cacheKey={card.id}
