@@ -3,6 +3,9 @@ import { HoloCard } from "@/components/holo-card";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { secretFoil, type OwnedSecret } from "@/lib/secret-cards";
 import { packedByLabel } from "@/lib/card-pulls";
+import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useEventCardBack } from "@/hooks/use-photo-urls";
+import { urlFromSet } from "@/lib/media.functions";
 
 /**
  * One secret card, big.
@@ -24,6 +27,11 @@ export function SecretCardSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const rarity = secretFoil(card?.foil);
+  // Secrets wear the same deck back as every other card — these are universal
+  // backs, so the per-card back_path is deliberately not read here.
+  const { event } = useEventBundle();
+  const universalBack = useEventCardBack(event?.id ?? null);
+  const backUrl = urlFromSet(universalBack.data?.urls) ? universalBack.data!.urls : null;
 
   return (
     <Dialog open={!!card} onOpenChange={onOpenChange}>
@@ -40,7 +48,7 @@ export function SecretCardSheet({
             <div className="mx-auto w-full max-w-[260px]">
               <HoloCard
                 frontUrl={card.artUrl}
-                backUrl={card.backUrl}
+                backUrl={backUrl}
                 name={card.name}
                 rarity={rarity}
                 cacheKey={card.id}
