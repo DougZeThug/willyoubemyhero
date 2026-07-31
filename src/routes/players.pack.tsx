@@ -807,9 +807,7 @@ function PackPage() {
                     initial={{ opacity: 0, y: 24 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.07, type: "spring", stiffness: 220, damping: 20 }}
-                    className={cn(
-                      "flex flex-col gap-1",
-                    )}
+                    className={cn("flex flex-col gap-1")}
                   >
                     {/* The card owns its own button semantics — wrapping it in
                         another button would nest interactive elements. */}
