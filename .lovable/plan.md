@@ -1,61 +1,48 @@
-Plan: responsive image sizes + LCP preload + backfill
+# Pack page: tighter trio, universal card back for secrets
 
-Current state
-- Every card/photo is stored as a single ~1600px WebP via `encodeUploadImage` in `src/lib/image-encode.ts`.
-- The same 1600px signed URL is used for a 40px avatar, a 64px filmstrip chip, a 160px vault thumbnail, and a full-bleed hero card.
-- Components already have `loading="lazy"`, `decoding="async"`, and a signed-URL cache, but the *file bytes* are still 6–10x larger than needed on phones.
-- No `srcset`/`sizes`, no LCP preloading, and no smaller variants exist.
+## 1. Make the three roster cards take less vertical space
 
-What we will build
+On the pack page (`src/routes/players.pack.tsx`), the trio currently renders two-up
+(each card spans two of four columns, the third centred underneath), so on a phone
+it costs roughly two full card heights before the secret card even starts.
 
-1. Generate multiple variants at upload time (browser-side)
-   - Extend `encodeUploadImage` to produce three sizes from one file:
-     - thumb: 320px max edge
-     - medium: 800px max edge
-     - large: 1600px max edge (existing)
-   - All three are encoded as WebP 0.86 quality (or JPEG fallback where WebP is unsupported).
-   - Keep the current passthrough logic for already-small files.
+Change it to a compact single row:
 
-2. Store the variant paths in the database
-   - Migration adds new columns to `event_participants`:
-     - `photo_path_thumb`, `photo_path_medium`
-     - `card_path_thumb`, `card_path_medium`
-     - `card_back_path_thumb`, `card_back_path_medium`
-   - Add `card_back_path_thumb` and `card_back_path_medium` to `events` for the universal back.
-   - Update `media.functions.ts` upload helpers to upload all three variants and write every column.
+- Three columns at every width, with a tighter gap.
+- Cap the trio's overall width so cards stay a sensible size and the row does not
+  stretch on tablets.
+- Shrink the caption block under each card: smaller name/rarity type, single line
+  clamp, less vertical gap.
+- Drop the `col-start-2` centring logic that only existed for the two-up layout.
 
-3. Return size-aware URLs from server functions
-   - `getEventPhotoUrls` returns `{ id: { thumb, medium, large } }`.
-   - `getEventCardUrls` returns `{ id: { front: { thumb, medium, large }, back: { thumb, medium, large } } }`.
-   - `getEventCardBack` returns `{ thumb, medium, large }`.
-   - Keep the existing signed-URL cache; the same path is still signed once per size.
+The secret slot keeps its current size exactly as-is — it stays the biggest,
+most prominent thing on the page, and the trio above it reads as the supporting row.
 
-4. Update UI components to use responsive images
-   - `HoloCard` accepts `frontUrl` and `backUrl` as either a string or a `{ thumb, medium, large }` object; render `<img srcset sizes ...>` with `src` as the large fallback.
-   - `ParticipantAvatar` renders `srcset`/`sizes` and picks the thumb for its 40–50px display.
-   - `RosterFilmstrip` uses the thumb variant for its 64px chips.
-   - Vault grid uses `sizes` so phones pick `medium`, while 64px filmstrip uses `thumb`.
-   - Player detail hero uses the `medium` source for the LCP card.
+## 2. Secret cards use the universal deck back
 
-5. Preload the LCP image on player detail
-   - In `src/routes/players.$id.tsx` `head()`, add a `<link rel="preload" as="image" href={...}>` for the current player's card front `medium` URL.
-   - Preconnect the Supabase storage origin in `src/routes/__root.tsx` to cut connection setup time.
+Today a secret card's back is its own uploaded `back_path` art, falling back to the
+generated `SecretBackPanel`. Both the pack reveal and the vault sheet should instead
+show the same universal deck back every other card uses (the event's uploaded
+universal back, already fetched by `useEventCardBack`).
 
-6. Backfill existing images
-   - Add an admin-panel button "Regenerate image sizes" that, for every existing `photo_path`/`card_path`/`card_back_path`, downloads the original, re-encodes it to three sizes, and updates the new columns.
-   - This runs as a client-side batch process (canvas in the admin's browser) so it does not require edge-side image libraries.
-   - Existing images continue to work if a backfill is skipped: the UI falls back to the `large` URL when no variants exist.
+- Pack page: pass the event's universal back URL set into the revealed secret
+  `HoloCard` as `backUrl` instead of `card.backUrl`.
+- Vault sheet (`src/components/secret-card-sheet.tsx`): fetch the same universal
+  back and use it for `backUrl`.
+- Keep `SecretBackPanel` as the rendered fallback only when the event has no
+  universal back uploaded, so nothing regresses to a blank face.
+- No database or upload changes: `secret_cards.back_path` stays in the schema and
+  the admin panel keeps working; the pack and vault simply stop reading it for
+  display.
 
-7. Tests and verification
-   - Update `src/lib/media.functions.test.ts` to expect the new multi-size payloads.
-   - Add a small test for `encodeUploadImage` returning multiple sizes.
-   - Run `bun run lint`, `bun run typecheck`, and a manual check in the preview that vault thumbnails and avatars load visibly faster.
+## Verification
 
-Out of scope
-- Server-side image transformation services (would require additional providers or edge-incompatible native libraries).
-- Changing the upload quality or the 1600px master size.
-- Re-compressing already uploaded files outside the admin backfill button.
+- `bun run lint` and `bun run typecheck`.
+- Preview at 360px: confirm the three cards fit in one row above the fold and the
+  secret card is reachable with far less scrolling, and that flipping a secret card
+  shows the same back as a roster card.
 
-Expected result
-- A phone on the vault page should download roughly 1/3 to 1/6 the image bytes it does today, because most visible cards are rendered from `medium` or `thumb` instead of `large`.
-- The first player card page should paint its LCP image sooner because the browser discovers it earlier via `preload` and `preconnect`.
+## Out of scope
+
+- Changing the secret card's front art, rarity foil, or reveal ceremony.
+- Removing `back_path` from the database or the admin upload UI.
