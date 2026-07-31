@@ -791,18 +791,11 @@ function PackPage() {
               )}
             </div>
 
-            {/* Two up on a phone, with the third centred underneath.
-                This was three across at every width, so the whole pack stayed in
-                view at once — but a third of a 390px screen minus gaps comes out
-                around 114px, smaller than the vault's own grid thumbnails and far
-                too small to be the payoff of a ceremony. Seeing all three without
-                scrolling turned out to be worth less than being able to see any
-                of them.
-                Four columns spanning two each, rather than grid-cols-2: it makes
-                the odd card `col-start-2`, where it lands exactly centred at
-                exactly the width of the two above, with no calc() and no
-                half-gap drift. */}
-            <div className="mx-auto grid max-w-2xl grid-cols-4 items-start gap-3 sm:grid-cols-3 sm:gap-4">
+            {/* One row of three, deliberately small. The fourth slot below is the
+                payoff and has to be reachable without a long scroll on a phone,
+                so the roster trio reads as the supporting row rather than
+                competing with it for height. */}
+            <div className="mx-auto grid max-w-sm grid-cols-3 items-start gap-2 sm:max-w-lg sm:gap-3">
               {pack.map((ep, i) => {
                 const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
                 const isRevealed = revealed.includes(i);
@@ -815,11 +808,7 @@ function PackPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.07, type: "spring", stiffness: 220, damping: 20 }}
                     className={cn(
-                      "col-span-2 flex flex-col gap-2",
-                      // Only while the grid is two-up. At sm: it is an ordinary
-                      // third column and must let go, or it stays offset.
-                      i === 2 && "col-start-2",
-                      "sm:col-span-1 sm:col-start-auto",
+                      "flex flex-col gap-1",
                     )}
                   >
                     {/* The card owns its own button semantics — wrapping it in
