@@ -195,8 +195,6 @@ async function serialize(value: unknown): Promise<string> {
 }
 
 export type ServerFnMock = {
-  /** Hold a response back, to reproduce a request that is still in flight. */
-  delay: (key: string, ms: number) => void;
   /** Override or add a response for one server function. */
   set: (key: string, value: unknown) => void;
   /** Fail one server function with an error the UI has to handle. */
@@ -235,9 +233,6 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
       });
       return;
     }
-
-    const delayKey = Object.keys(delays).find((k) => matches(name, k));
-    if (delayKey) await new Promise((r) => setTimeout(r, delays[delayKey]));
 
     const key = Object.keys(responses).find((k) => matches(name, k));
     await route.fulfill({
