@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Lock, PackageOpen } from "lucide-react";
+import { ArrowLeft, PackageOpen } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { mySecretsKey, secretStatusKey, useSecretStatus } from "@/hooks/use-daily-secret";
 import { HoloCard } from "@/components/holo-card";
@@ -131,26 +132,9 @@ function SecretSlotView({
         >
           One More Card
         </h2>
-        {slot === "gated" && (
-          <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-            Claim your player to open it. Ask whoever&apos;s running the combine for your code.
-          </p>
-        )}
       </div>
 
-      {slot === "gated" ? (
-        // Card-shaped, not a bordered link box — that reads as a cookie banner
-        // and gets ignored.
-        <Link
-          to="/claim"
-          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center"
-        >
-          <Lock className="h-6 w-6 text-muted-foreground" />
-          <span className="font-display text-[10px] font-black uppercase tracking-[0.25em] text-primary">
-            Claim your player
-          </span>
-        </Link>
-      ) : slot === "failed" ? (
+      {slot === "failed" ? (
         <button
           onClick={onRetry}
           className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
@@ -247,7 +231,12 @@ function PackPage() {
   const pull = useServerFn(pullSecretCard);
   const record = useServerFn(recordCardPulls);
   const pullCounts = useCardPullCounts(event?.id ?? null);
-  const status = useSecretStatus(me?.participantId);
+  // A guest gets an identity minted for them the moment they land here, so the
+  // fourth card is theirs rather than a locked slot. Only for the unclaimed —
+  // a member already has one.
+  useEnsureGuestSession(true);
+  const actor = useSecretActor();
+  const status = useSecretStatus(actor);
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
   const [secretRevealed, setSecretRevealed] = useState(false);
@@ -462,7 +451,7 @@ function PackPage() {
    * already-torn pack, where `tearOpen` will never run again.
    */
   useEffect(() => {
-    if (!torn || !me?.participantId || pullFiredRef.current) return;
+    if (!torn || !actor || pullFiredRef.current) return;
     pullFiredRef.current = true;
     setSecretPulling(true);
     setSecretFailed(false);
@@ -484,8 +473,8 @@ function PackPage() {
           setSecret(res.card);
           setSecretDuplicate(res.duplicate);
           setSecretUnavailable(false);
-          qc.invalidateQueries({ queryKey: secretStatusKey(me.participantId) });
-          qc.invalidateQueries({ queryKey: mySecretsKey(me.participantId) });
+          qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+          qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
         } else {
           // Nothing in the set yet, or every card still missing its art. Not a
           // failure to retry — there is genuinely nothing to hand over.
@@ -510,7 +499,7 @@ function PackPage() {
     })();
 
     return () => clearTimeout(timer);
-  }, [torn, me?.participantId, pull, qc]);
+  }, [torn, actor, pull, qc]);
 
   /**
    * Tell the server which cards were in this pack, so the vault can say how many
@@ -558,7 +547,7 @@ function PackPage() {
     setSecretRevealed(false);
     setSecretFailed(false);
     setSecretUnavailable(false);
-  }, [me?.participantId]);
+  }, [actor]);
 
   // The drop rolls over on the *server's* day, not this device's. Guarded on the
   // first observed value, or this would clobber the secretRevealed that the
@@ -623,8 +612,10 @@ function PackPage() {
 
   const secretSlot: SecretSlot = !torn
     ? "hidden"
-    : !me
-      ? "gated"
+    : // No identity yet means the guest session is still in flight, so this is a
+      // blank slot for a beat rather than a wall. Guests get the card.
+      !actor
+      ? "pending"
       : secret
         ? secretRevealed
           ? "open"
