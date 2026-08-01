@@ -109,7 +109,7 @@ describe("useMyCollection, revealing a card", () => {
     const { result } = await mount();
     await waitFor(() => expect(result.current.ready).toBe(true));
 
-    act(() => result.current.markCollected("ep-5", "champion"));
+    act(() => result.current.markCollected("ep-5", "champion", 1));
     expect(result.current.collection["ep-5"]).toMatchObject({ count: 1, tier: "champion" });
 
     // Nothing is deleted *after* the reveal. The stale row this device already
@@ -117,7 +117,7 @@ describe("useMyCollection, revealing a card", () => {
     // collect-on-sight artefact, and the pack screen's own `collectCard` writes
     // the genuine pull back.
     const deletedAfter = forgetCards.mock.calls.length;
-    act(() => result.current.markCollected("ep-6", "base"));
+    act(() => result.current.markCollected("ep-6", "base", 1));
     expect(forgetCards.mock.calls.length).toBe(deletedAfter);
   });
 
@@ -128,7 +128,7 @@ describe("useMyCollection, revealing a card", () => {
     const { result, client } = await mount();
     await waitFor(() => expect(result.current.ready).toBe(true));
 
-    act(() => result.current.markCollected("ep-5", "base"));
+    act(() => result.current.markCollected("ep-5", "base", 1));
     expect(result.current.collection["ep-5"].count).toBe(1);
 
     // The tear told the server about this card before it was turned over, so the
@@ -146,7 +146,34 @@ describe("useMyCollection, revealing a card", () => {
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(result.current.collection["ep-0"].count).toBe(2);
 
-    act(() => result.current.markCollected("ep-0", "base"));
+    // Three because the pack was dealt against a collection holding two, not
+    // because the caller asked for "one more than whatever you have now".
+    act(() => result.current.markCollected("ep-0", "base", 3));
     expect(result.current.collection["ep-0"].count).toBe(3);
+  });
+
+  it("does not add a pull the server has already counted", async () => {
+    // The tear records the pack before any of it is turned over, so on a fast
+    // connection the reconciled number can already include this very pull by the
+    // time the card is tapped. The floor is computed from the snapshot the pack
+    // was dealt against — two — so it lands under the server's three and leaves
+    // it alone. Derived from the *current* number instead, this read four.
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"], 3));
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.collection["ep-0"].count).toBe(3);
+
+    act(() => result.current.markCollected("ep-0", "base", 3));
+    expect(result.current.collection["ep-0"].count).toBe(3);
+  });
+
+  it("holds a floor once, however many times the same card is marked", async () => {
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.markCollected("ep-5", "base", 1));
+    act(() => result.current.markCollected("ep-5", "base", 1));
+    expect(result.current.collection["ep-5"].count).toBe(1);
   });
 });

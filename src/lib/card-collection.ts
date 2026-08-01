@@ -64,28 +64,16 @@ export type PackState = {
    * resuming from `revealed` alone dropped you on the *following* card and you
    * never got the one you were holding back. Optional, so a row written before
    * the stand existed still loads and falls back to `resumeCursor`.
+   *
+   * Its absence is also how a pre-stand row is recognised, which matters beyond
+   * the fallback: that ceremony wrote every index into `revealed` the moment the
+   * wrapper came off, so resuming one faithfully lands past the end of the stand
+   * and renders the finished grid — no wrapper to rip and no cards to step
+   * through for the rest of that day, which is indistinguishable from the stand
+   * not having shipped. See the resume effect in players.pack.tsx.
    */
   cursor?: number;
-  /**
-   * Which ceremony wrote this row.
-   *
-   * A row saved by the pre-stand pack screen has all three indices in `revealed`
-   * the moment the wrapper comes off, so resuming from it puts the cursor past
-   * the end and the screen renders the finished grid — no wrapper to rip, no
-   * cards to step through, for the rest of that day. Which is exactly what the
-   * tearing ceremony looks like when it has not shipped. Missing means pre-stand
-   * and gets replayed once; see the resume effect in players.pack.tsx.
-   */
-  v?: number;
 };
-
-/**
- * The ceremony `PackState` rows are written by.
- *
- * Bump only when a resumed row would render the *wrong screen* rather than merely
- * a stale one — every bump costs somebody a replay of cards they have seen.
- */
-export const PACK_STATE_V = 1;
 
 export type CollectedCard = {
   eventParticipantId: string;

@@ -19,7 +19,12 @@ import { SecretBackPanel } from "@/components/secret-back-panel";
 import { PackWrapper } from "@/components/pack-wrapper";
 import { PackStand } from "@/components/pack-stand";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { collectCard, loadPackState, savePackState, PACK_STATE_V } from "@/lib/card-collection";
+import {
+  collectCard,
+  loadPackState,
+  savePackState,
+  type CollectedCard,
+} from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
@@ -224,7 +229,7 @@ function PackPage() {
   // Snapshot of the collection taken when a pack is dealt. The pack composition
   // must not shift while the user is revealing it, and revealing a card writes
   // straight back into `collected`.
-  const [packBaseline, setPackBaseline] = useState<Record<string, unknown> | null>(null);
+  const [packBaseline, setPackBaseline] = useState<Record<string, CollectedCard> | null>(null);
   // Today's dealt cards, once the wrapper is off. Null means the pack is still
   // sealed; undefined-until-loaded is tracked by `stateLoaded` instead, so the
   // sealed pack never flashes on a day that has already been opened.
@@ -277,6 +282,20 @@ function PackPage() {
    * same tick — or during a hold — cannot see yet.
    */
   const revealedRef = useRef<number[]>([]);
+  /**
+   * Indices being turned over for a second time, on a pack migrated off the
+   * pre-stand ceremony. They get the flip and the chime and nothing that writes:
+   * the pull they represent was recorded the first time round.
+   */
+  const replayedRef = useRef<Set<number>>(new Set());
+  /**
+   * This pack was already open when the screen loaded.
+   *
+   * Which means `recordCardPulls` ran in whatever session tore it, so for a
+   * claimed member the reconciled collection already counts every card in it —
+   * including the ones still face-down. See the floor in `revealAt`.
+   */
+  const resumedRef = useRef(false);
   /** Set while "Reveal all" owns the sequence, so nothing else can drive it. */
   const autoRef = useRef(false);
   const [autoRunning, setAutoRunning] = useState(false);
@@ -322,15 +341,28 @@ function PackPage() {
       // means the phone genuinely changed hands.
       const mine = s?.identity == null || s.identity === identity;
       if (s && s.dayKey === dayKey && mine && s.ids.length > 0) {
-        // A row from the pre-stand ceremony has every card already in `revealed`,
-        // so resuming it faithfully would drop straight into the finished grid and
-        // this pack would never get a stand at all. The cards are kept — re-dealing
-        // against a collection they are now *in* picks a different last slot — but
-        // the ceremony is replayed once. collectCard is idempotent, so nothing is
-        // counted twice for the sake of it.
-        const preStand = s.v == null;
+        // A row the pre-stand ceremony left finished.
+        //
+        // That screen put every card into `revealed` as the wrapper came off, so
+        // resuming one faithfully lands past the end of the stand and renders the
+        // finished grid — no wrapper to rip and no cards to step through for the
+        // rest of that day, which is indistinguishable from the stand not having
+        // shipped. Only those are replayed. A pre-stand row that stopped partway
+        // still has cards to turn and is resumed exactly as it stands.
+        //
+        // Recognised by the missing cursor, because every row the stand has ever
+        // written carries one. A version field would have caught the stand's own
+        // early rows too and marched somebody back to the first card.
+        const replay = s.cursor === undefined && s.revealed.length >= s.ids.length;
         setDealtIds(s.ids);
-        const revealedNow = preStand ? [] : s.revealed;
+        const revealedNow = replay ? [] : s.revealed;
+        // These cards were pulled once already, under the old ceremony. Turning
+        // them over again is theatre; counting them again is not — `collectCard`
+        // increments rather than being idempotent, and for a guest the local store
+        // *is* the collection, so a replayed pull would inflate "Pulled ×N" for
+        // good.
+        replayedRef.current = new Set(replay ? s.revealed : []);
+        resumedRef.current = true;
         revealedRef.current = revealedNow;
         setRevealed(revealedNow);
         setSecretRevealed(!!s.secretRevealed);
@@ -339,7 +371,7 @@ function PackPage() {
         // row written before the stand existed, and can only ever land on the
         // next unturned card.
         setCursor(
-          preStand
+          replay
             ? 0
             : (s.cursor ??
                 resumeCursor({
@@ -351,6 +383,8 @@ function PackPage() {
       } else {
         setDealtIds(null);
         revealedRef.current = [];
+        replayedRef.current = new Set();
+        resumedRef.current = false;
         setRevealed([]);
         setSecretRevealed(false);
         setCursor(0);
@@ -405,8 +439,19 @@ function PackPage() {
    */
   const baselineForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!collectionLoaded || !identity) return;
-    setPackBaseline((prev) => (prev !== null && baselineForRef.current === identity ? prev : collected)); // prettier-ignore
+    if (!identity) return;
+    const somebodyNew = baselineForRef.current !== identity;
+    if (!collectionLoaded) {
+      // Their reconciliation is still out. Drop the previous person's snapshot
+      // rather than deal against it: `nextPack` is empty without a baseline and
+      // `tearOpen` refuses on an empty pack, so the wrapper simply is not
+      // tearable for the beat it takes the server to answer. Holding the old one
+      // would have dealt this person the guaranteed-new card that was new to
+      // somebody else.
+      if (somebodyNew) setPackBaseline(null);
+      return;
+    }
+    setPackBaseline((prev) => (prev !== null && !somebodyNew ? prev : collected));
     baselineForRef.current = identity;
   }, [collectionLoaded, collected, identity]);
 
@@ -433,6 +478,8 @@ function PackPage() {
     const ids = nextPack.map((p) => p.id);
     setDealtIds(ids);
     revealedRef.current = [];
+    replayedRef.current = new Set();
+    resumedRef.current = false;
     setCursor(0);
     playTear();
   }, [dealtIds, nextPack]);
@@ -459,11 +506,29 @@ function PackPage() {
       revealedRef.current = [...revealedRef.current, i];
       setRevealed(revealedRef.current);
       playReveal(rarity.tier);
-      void collectCard(ep.id, rarity.tier);
-      // Optimistic, and held apart from the reconciled collection: the server was
-      // told about this pack at tear time, but until that query comes back a card
-      // it has not vouched for is exactly what the merge would prune.
-      mine.markCollected(ep.id, rarity.tier);
+      // A migrated pack turns cards that were already pulled. Writing here would
+      // charge somebody a second pull for a ceremony they were given, not asked
+      // for. See replayedRef.
+      if (!replayedRef.current.has(i)) {
+        void collectCard(ep.id, rarity.tier);
+        // Optimistic, and held apart from the reconciled collection: a card the
+        // server has not vouched for is exactly what the merge would prune, so
+        // without this it would light up as you flipped it and then vanish.
+        //
+        // The floor is counted from the snapshot the pack was dealt against, not
+        // from whatever the collection holds now. `recordCardPulls` fires at tear
+        // time and can answer before a card is turned over, and a floor derived
+        // from the reconciled number then stacked this pull on top of the server's
+        // own row for the rest of the session.
+        //
+        // On a resumed pack that recording already happened, in the session that
+        // tore it — so for a member the snapshot itself contains this pull and
+        // there is nothing to add. A guest has no server row either way, and their
+        // local store only reaches this hook on mount, so they are still owed it.
+        const held = packBaseline?.[ep.id]?.count ?? 0;
+        const counted = resumedRef.current && !!me?.participantId;
+        mine.markCollected(ep.id, rarity.tier, counted ? Math.max(held, 1) : held + 1);
+      }
 
       if (rarity.tier === "champion" || rarity.tier === "podium") {
         await celebrate(rarity);
@@ -652,7 +717,6 @@ function PackPage() {
       secretRevealed,
       identity: identity ?? undefined,
       cursor,
-      v: PACK_STATE_V,
     });
   }, [dealtIds, dayKey, revealed, secretRevealed, stateLoaded, identity, cursor]);
 

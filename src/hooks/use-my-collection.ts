@@ -29,8 +29,17 @@ export type MyCollection = {
   ready: boolean;
   /** True once a claimed member has been resolved on this device. */
   isMember: boolean;
-  /** Optimistically add a card the pack screen has just revealed. */
-  markCollected: (eventParticipantId: string, tier: string) => void;
+  /**
+   * Optimistically add a card the pack screen has just revealed.
+   *
+   * `count` is the absolute floor to hold — "this card has at least this many
+   * pulls" — and the caller owns it, because only the caller knows what the
+   * number was *before* the pack it is revealing was dealt. Deriving it here
+   * from the reconciled collection double-counted: the tear tells the server
+   * about the pack, and if that round trip lands before the card is turned over
+   * then the number this hook holds already includes the very pull being marked.
+   */
+  markCollected: (eventParticipantId: string, tier: string, count: number) => void;
 };
 
 /**
@@ -150,18 +159,11 @@ export function useMyCollection(
     void forgetCards(fresh);
   }, [merged.stale, bumps]);
 
-  // What the server has vouched for, for `markCollected` to raise its floor above
-  // without taking the whole collection as a dependency and rebuilding the
-  // callback on every reconciliation.
-  const knownRef = useRef<Record<string, CollectedCard>>({});
-  useEffect(() => {
-    knownRef.current = merged.collection;
-  }, [merged.collection]);
-
-  const markCollected = useCallback((eventParticipantId: string, tier: string) => {
+  const markCollected = useCallback((eventParticipantId: string, tier: string, count: number) => {
     setBumps((prev) => {
-      const known = knownRef.current[eventParticipantId]?.count ?? 0;
-      const floor = Math.max(prev[eventParticipantId]?.count ?? 0, known) + 1;
+      // Never lowered, so marking the same card twice is a no-op rather than a
+      // card that blinks backwards.
+      const floor = Math.max(prev[eventParticipantId]?.count ?? 0, count);
       return {
         ...prev,
         [eventParticipantId]: {
