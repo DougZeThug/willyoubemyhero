@@ -18,19 +18,16 @@
 // three rows for the member who was seeing eighteen. It cannot inflate. So for a
 // claimed member the server is not merged with the local store, it *replaces* it,
 // and whatever the local store had left over is deleted.
+//
+// A guest is left completely alone. There was briefly a cutoff here that dropped
+// anything a guest's device recorded before collect-on-sight was removed, but a
+// browse and a pull wrote identical rows back then — the heuristic could not tell
+// them apart, and unlike a member there is no server record to restore a genuine
+// pull it guessed wrong about. Better an honestly unadjudicated number than a
+// confidently deleted card.
 
 import type { CollectedCard } from "./card-collection";
 import type { MyCard } from "./card-pulls";
-
-/**
- * Collect-on-sight was removed in "Three-card daily pack, pack-only collection,
- * quieter card page" (2026-07-28 13:36 UTC). Anything this device recorded before
- * that was a card someone looked at, not a card they pulled.
- *
- * Only guests are judged by this date. A claimed member does not need a heuristic,
- * because the server knows exactly which cards are theirs.
- */
-export const LEGACY_CUTOFF_MS = Date.UTC(2026, 6, 28, 13, 36, 33);
 
 export type MergeResult = {
   /** What the screens should show. */
@@ -45,13 +42,18 @@ export type MergeResult = {
  * @param local     everything in this device's `collected` store.
  * @param server    your own `card_pulls` rows, or null when nobody is claimed here.
  * @param rosterIds the cards of the event on screen.
+ *
+ * `rosterIds` scopes the prune, not the result: a card from another event is
+ * outside the server query and so is never something this can disown.
  */
 export function mergeCollection(
   local: Record<string, CollectedCard>,
   server: readonly MyCard[] | null,
   rosterIds: ReadonlySet<string>,
 ): MergeResult {
-  if (server === null) return pruneGuest(local, rosterIds);
+  // Nobody claimed on this device: nothing can adjudicate these rows, so nothing
+  // touches them.
+  if (server === null) return { collection: local, stale: [] };
 
   const collection: Record<string, CollectedCard> = {};
   for (const card of server) {
@@ -78,23 +80,5 @@ export function mergeCollection(
     if (!rosterIds.has(id) && !collection[id]) collection[id] = card;
   }
 
-  return { collection, stale };
-}
-
-/**
- * A guest has no server record to reconcile against, so the cutoff is the only
- * evidence available. Rows from before it are dropped; a guest's genuine pulls
- * since survive, which is the most that can be done without an identity.
- */
-function pruneGuest(
-  local: Record<string, CollectedCard>,
-  rosterIds: ReadonlySet<string>,
-): MergeResult {
-  const collection: Record<string, CollectedCard> = {};
-  const stale: string[] = [];
-  for (const [id, card] of Object.entries(local)) {
-    if (rosterIds.has(id) && card.pulledAt < LEGACY_CUTOFF_MS) stale.push(id);
-    else collection[id] = card;
-  }
   return { collection, stale };
 }

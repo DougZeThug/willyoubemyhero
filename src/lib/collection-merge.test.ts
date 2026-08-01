@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { LEGACY_CUTOFF_MS, mergeCollection } from "./collection-merge";
+import { mergeCollection } from "./collection-merge";
 import type { CollectedCard } from "./card-collection";
 import type { MyCard } from "./card-pulls";
 
-const AFTER = LEGACY_CUTOFF_MS + 86_400_000;
-const BEFORE = LEGACY_CUTOFF_MS - 86_400_000;
+/** Two ages of local row, from either side of the collect-on-sight removal. */
+const AFTER = Date.UTC(2026, 6, 31);
+const BEFORE = Date.UTC(2026, 6, 20);
 
 function card(id: string, pulledAt = AFTER, count = 1, tier = "base"): CollectedCard {
   return { eventParticipantId: id, pulledAt, count, tier };
@@ -107,31 +108,25 @@ describe("mergeCollection, for a claimed member", () => {
 });
 
 describe("mergeCollection, for a guest", () => {
-  it("drops the pre-cutoff rows and keeps the genuine ones", () => {
-    // No identity, so the deploy date of the collect-on-sight fix is the only
-    // evidence there is.
-    const ids = roster(3);
-    const { collection, stale } = mergeCollection(
-      {
-        [ids[0]]: card(ids[0], BEFORE),
-        [ids[1]]: card(ids[1], AFTER),
-        [ids[2]]: card(ids[2], BEFORE),
-      },
-      null,
-      new Set(ids),
-    );
-    expect(Object.keys(collection)).toEqual([ids[1]]);
-    expect(stale.sort()).toEqual([ids[0], ids[2]].sort());
+  it("never deletes anything, however old the row is", () => {
+    // There is no server record to adjudicate a guest's rows, and a browse and a
+    // pull wrote identical ones before collect-on-sight was removed. Guessing
+    // wrong deletes a card nothing can restore, so nothing is guessed.
+    const ids = roster(18);
+    const { collection, stale } = mergeCollection(localFor(ids, BEFORE), null, new Set(ids));
+    expect(Object.keys(collection)).toHaveLength(18);
+    expect(stale).toEqual([]);
   });
 
-  it("keeps a row written exactly on the cutoff", () => {
-    const ids = roster(1);
-    const { collection, stale } = mergeCollection(
-      { [ids[0]]: card(ids[0], LEGACY_CUTOFF_MS) },
-      null,
-      new Set(ids),
-    );
-    expect(collection[ids[0]]).toBeDefined();
+  it("hands back the local store untouched, old and new alike", () => {
+    const ids = roster(3);
+    const local = {
+      [ids[0]]: card(ids[0], BEFORE),
+      [ids[1]]: card(ids[1], AFTER),
+      [ids[2]]: card(ids[2], BEFORE, 4, "champion"),
+    };
+    const { collection, stale } = mergeCollection(local, null, new Set(ids));
+    expect(collection).toEqual(local);
     expect(stale).toEqual([]);
   });
 
