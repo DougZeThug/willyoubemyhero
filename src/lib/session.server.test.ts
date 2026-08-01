@@ -8,14 +8,17 @@ import {
   hashCode,
   hashPin,
   signAdminToken,
+  signGuestToken,
   signMemberToken,
   timingSafeEq,
   verifyAdminToken,
+  verifyGuestToken,
   verifyMemberToken,
 } from "./session.server";
 
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
 const PARTICIPANT_ID = "00000000-0000-4000-8000-0000000000aa";
+const GUEST_ID = "00000000-0000-4000-8000-0000000000e1";
 
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret");
@@ -195,9 +198,56 @@ describe("member tokens", () => {
   });
 });
 
-describe("the two token types cannot be interchanged", () => {
+describe("guest tokens", () => {
+  it("round-trips the guest id", () => {
+    const { token } = signGuestToken(GUEST_ID);
+    expect(verifyGuestToken(token)?.guestId).toBe(GUEST_ID);
+  });
+
+  it("issues a 90 day token", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-01T12:00:00Z"));
+    const { expiresAt } = signGuestToken(GUEST_ID);
+    expect(expiresAt).toBe(Date.parse("2026-10-30T12:00:00Z"));
+  });
+
+  it("rejects a tampered guest id", () => {
+    const { token } = signGuestToken(GUEST_ID);
+    const [prefix, , exp, sig] = token.split(".");
+    expect(verifyGuestToken(`${prefix}.${PARTICIPANT_ID}.${exp}.${sig}`)).toBeNull();
+  });
+
+  it("rejects an extended expiry", () => {
+    const { token } = signGuestToken(GUEST_ID);
+    const [prefix, gid, , sig] = token.split(".");
+    expect(verifyGuestToken(`${prefix}.${gid}.${Date.now() + 999_999_999}.${sig}`)).toBeNull();
+  });
+
+  it("rejects a wrong prefix even when the rest is intact", () => {
+    const { token } = signGuestToken(GUEST_ID);
+    const [, gid, exp, sig] = token.split(".");
+    expect(verifyGuestToken(`x.${gid}.${exp}.${sig}`)).toBeNull();
+  });
+
+  it("rejects an expired token", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-01T12:00:00Z"));
+    const { token } = signGuestToken(GUEST_ID);
+    vi.setSystemTime(new Date("2026-12-01T12:00:00Z"));
+    expect(verifyGuestToken(token)).toBeNull();
+  });
+
+  it("throws when SESSION_SECRET is unset rather than signing with undefined", () => {
+    vi.stubEnv("SESSION_SECRET", "");
+    expect(() => signGuestToken(GUEST_ID)).toThrow();
+  });
+});
+
+describe("the three token types cannot be interchanged", () => {
   // The prefix is inside the signed payload precisely so a signature cannot be
-  // transplanted between the two schemes. Nothing else pins that down.
+  // transplanted between the schemes. Nothing else pins that down — and it matters
+  // most for the member/guest pair, which are both four parts and differ in
+  // nothing but that prefix.
   it("an admin token does not verify as a member token", () => {
     const { token } = signAdminToken(EVENT_ID);
     expect(verifyMemberToken(token)).toBeNull();
@@ -219,5 +269,36 @@ describe("the two token types cannot be interchanged", () => {
     const { token, expiresAt } = signMemberToken(EVENT_ID);
     const sig = token.split(".")[3];
     expect(verifyAdminToken(`${EVENT_ID}.${expiresAt}.${sig}`)).toBeNull();
+  });
+
+  it("a member token does not verify as a guest token", () => {
+    const { token } = signMemberToken(PARTICIPANT_ID);
+    expect(verifyGuestToken(token)).toBeNull();
+  });
+
+  it("a guest token does not verify as a member token", () => {
+    // The one that would matter most: a guest promoting themselves to a claimed
+    // player would inherit that player's whole identity, not just a card.
+    const { token } = signGuestToken(GUEST_ID);
+    expect(verifyMemberToken(token)).toBeNull();
+  });
+
+  it("a guest signature cannot be replayed inside a member token envelope", () => {
+    // Identical shape, identical id, identical expiry — only the signed prefix
+    // differs, which is exactly the transplant the prefix exists to stop.
+    const { token, expiresAt } = signGuestToken(PARTICIPANT_ID);
+    const sig = token.split(".")[3];
+    expect(verifyMemberToken(`m.${PARTICIPANT_ID}.${expiresAt}.${sig}`)).toBeNull();
+  });
+
+  it("a member signature cannot be replayed inside a guest token envelope", () => {
+    const { token, expiresAt } = signMemberToken(GUEST_ID);
+    const sig = token.split(".")[3];
+    expect(verifyGuestToken(`g.${GUEST_ID}.${expiresAt}.${sig}`)).toBeNull();
+  });
+
+  it("a guest token does not verify as an admin token", () => {
+    const { token } = signGuestToken(GUEST_ID);
+    expect(verifyAdminToken(token)).toBeNull();
   });
 });

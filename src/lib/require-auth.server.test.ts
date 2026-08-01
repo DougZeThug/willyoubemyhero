@@ -3,13 +3,21 @@
 // than a stubbed one — so a token that would be accepted in production is
 // accepted in the test, and nothing else is.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { signAdminToken, signMemberToken } from "./session.server";
-import { isAdminFor, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
-import { adminHeaders, memberHeaders, withRequestHeaders } from "@/test/server-fn";
+import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
+import {
+  isAdminFor,
+  optionalGuest,
+  optionalMember,
+  requireActor,
+  requireAdmin,
+  requireMember,
+} from "./require-auth.server";
+import { adminHeaders, guestHeaders, memberHeaders, withRequestHeaders } from "@/test/server-fn";
 
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
 const OTHER_EVENT_ID = "00000000-0000-4000-8000-0000000000ee";
 const PARTICIPANT_ID = "00000000-0000-4000-8000-0000000000aa";
+const GUEST_ID = "00000000-0000-4000-8000-0000000000e1";
 
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret");
@@ -111,6 +119,78 @@ describe("optionalMember", () => {
     const { token } = signMemberToken(PARTICIPANT_ID);
     await expect(withRequestHeaders(memberHeaders(token), () => optionalMember())).resolves.toBe(
       PARTICIPANT_ID,
+    );
+  });
+});
+
+describe("optionalGuest", () => {
+  it("returns null instead of throwing when there is no guest token", async () => {
+    await expect(withRequestHeaders({}, () => optionalGuest())).resolves.toBeNull();
+  });
+
+  it("returns null for a forged token", async () => {
+    const forged = `g.${GUEST_ID}.${Date.now() + 60_000}.nope`;
+    await expect(
+      withRequestHeaders(guestHeaders(forged), () => optionalGuest()),
+    ).resolves.toBeNull();
+  });
+
+  it("returns the guest id for a valid token", async () => {
+    const { token } = signGuestToken(GUEST_ID);
+    await expect(withRequestHeaders(guestHeaders(token), () => optionalGuest())).resolves.toBe(
+      GUEST_ID,
+    );
+  });
+
+  it("does not accept a member token in the guest header", async () => {
+    // Both schemes are four parts; only the signed prefix separates them.
+    const { token } = signMemberToken(PARTICIPANT_ID);
+    await expect(
+      withRequestHeaders(guestHeaders(token), () => optionalGuest()),
+    ).resolves.toBeNull();
+  });
+});
+
+describe("requireActor", () => {
+  it("throws when the device holds no token of either kind", async () => {
+    await expect(withRequestHeaders({}, () => requireActor())).rejects.toThrow(
+      "Claim your player first",
+    );
+  });
+
+  it("resolves a member", async () => {
+    const { token } = signMemberToken(PARTICIPANT_ID);
+    await expect(withRequestHeaders(memberHeaders(token), () => requireActor())).resolves.toEqual({
+      kind: "member",
+      id: PARTICIPANT_ID,
+    });
+  });
+
+  it("resolves a guest", async () => {
+    const { token } = signGuestToken(GUEST_ID);
+    await expect(withRequestHeaders(guestHeaders(token), () => requireActor())).resolves.toEqual({
+      kind: "guest",
+      id: GUEST_ID,
+    });
+  });
+
+  it("prefers the member when the device carries both", async () => {
+    // A guest who claims a player keeps their guest token. Their pulls were
+    // merged onto the participant at claim time, so the member is the identity
+    // that owns them — resolving the guest here would strand the collection.
+    const member = signMemberToken(PARTICIPANT_ID).token;
+    const guest = signGuestToken(GUEST_ID).token;
+    await expect(
+      withRequestHeaders({ ...memberHeaders(member), ...guestHeaders(guest) }, () =>
+        requireActor(),
+      ),
+    ).resolves.toEqual({ kind: "member", id: PARTICIPANT_ID });
+  });
+
+  it("is not satisfied by an admin token", async () => {
+    const { token } = signAdminToken(EVENT_ID);
+    await expect(withRequestHeaders(adminHeaders(token), () => requireActor())).rejects.toThrow(
+      "Claim your player first",
     );
   });
 });

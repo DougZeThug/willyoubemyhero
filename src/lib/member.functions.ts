@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { hashCode, signMemberToken } from "./session.server";
-import { requireAdmin, requireMember } from "./require-auth.server";
+import { optionalGuest, requireAdmin, requireMember } from "./require-auth.server";
 import { timingSafeEq } from "./session.server";
 
 // Codes get read off paper and typed on a phone, so the alphabet drops every
@@ -90,6 +90,27 @@ export const claimPlayer = createServerFn({ method: "POST" })
       .select("name")
       .eq("id", data.participantId)
       .maybeSingle();
+
+    // Anything they pulled as a guest is theirs, and now it is on their name
+    // rather than on this handset. The guest id comes from the verified guest
+    // token, never the payload — otherwise claiming your own player would be a
+    // way to harvest somebody else's cards.
+    //
+    // Swallowed on failure and awaited rather than fired off: a claim that
+    // half-worked is worth far less than a claim that worked, and nobody can act
+    // on "your old secrets did not come across" in the moment anyway.
+    const guestId = optionalGuest();
+    if (guestId) {
+      try {
+        const { secretsDb } = await import("./secret-cards-db.server");
+        await secretsDb().rpc("claim_guest_secrets", {
+          _participant_id: data.participantId,
+          _guest_id: guestId,
+        });
+      } catch {
+        /* the claim itself stands; the cards can be reconciled by pulling again */
+      }
+    }
 
     const { token, expiresAt } = signMemberToken(data.participantId);
     return { ok: true as const, token, expiresAt, name: participant?.name ?? "Player" };

@@ -1,9 +1,10 @@
 // A supabase client that will talk to tables `types.ts` has never heard of.
 //
 // src/integrations/supabase/types.ts is `supabase gen types` output, must not be
-// hand-edited, and is .prettierignore'd — so `secret_cards`, `secret_card_pulls`
-// and `card_pulls`, along with `pull_secret_card`, `secret_pull_status` and
-// `record_card_pulls`, are invisible to the typed client until somebody regenerates it,
+// hand-edited, and is .prettierignore'd — so `secret_cards`, `secret_card_pulls`,
+// `card_pulls` and `pack_opens`, along with `pull_secret_card`, `secret_pull_status`,
+// `record_card_pulls` and `record_pack_open`, are invisible to the typed client
+// until somebody regenerates it,
 // long after this lands. `.from("secret_cards")` and `.rpc("pull_secret_card")`
 // are compile errors against the generated Database type, and `Database` is a
 // type alias rather than an interface, so declaration merging cannot rescue it.
@@ -15,8 +16,9 @@
 // It is not `any` in our source, so @typescript-eslint/no-explicit-any is happy.
 //
 // DELETE THIS FILE once types.ts has been regenerated against a project with
-// 20260728143000_secret_holo_cards.sql and 20260728160000_player_card_pulls.sql
-// applied: every call site then switches to plain `supabaseAdmin` unchanged.
+// 20260728143000_secret_holo_cards.sql, 20260728160000_player_card_pulls.sql and
+// 20260731120000_pack_opens.sql applied: every call site then switches to plain
+// `supabaseAdmin` unchanged.
 import type { SupabaseClient } from "@supabase/supabase-js";
 // A top-level client.server import is safe here and nowhere else: this is a
 // *.server.ts module, so it never reaches the client bundle.
@@ -70,6 +72,14 @@ export type CardPullRow = {
   pull_count: number;
   first_pulled_at: string;
   last_pulled_at: string;
+};
+
+export type PackOpenRow = {
+  participant_id: string;
+  opened_on: string;
+  event_id: string | null;
+  card_count: number;
+  created_at: string;
 };
 
 export function secretsDb(): SupabaseClient {

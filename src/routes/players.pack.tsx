@@ -3,15 +3,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Lock, PackageOpen, Sparkles } from "lucide-react";
+import { ArrowLeft, PackageOpen, Sparkles } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
-import { mySecretsKey, secretStatusKey, useSecretStatus } from "@/hooks/use-daily-secret";
+import {
+  mySecretsKey,
+  secretStatusKey,
+  useSecretActor,
+  useSecretStatus,
+} from "@/hooks/use-daily-secret";
+import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { collectCard, loadCollection, loadPackState, savePackState } from "@/lib/card-collection";
+import { collectCard, loadPackState, savePackState } from "@/lib/card-collection";
+import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
 import { pullSecretCard } from "@/lib/secret-cards.functions";
@@ -83,7 +90,10 @@ function todayKey(): string {
  * The order matters: a pull that succeeds after a failure lands straight on
  * "sealed" rather than staying stuck on the error.
  */
-type SecretSlot = "hidden" | "gated" | "pending" | "failed" | "sealed" | "open";
+// No "gated" any more. A visitor who has not claimed a player gets a
+// server-minted guest identity and the card that comes with it, so the only
+// reason the slot is ever not a card is that something is still in flight.
+type SecretSlot = "hidden" | "pending" | "failed" | "sealed" | "open";
 
 /**
  * A ragged tear edge, deterministic for a given seed so the same pack always
@@ -159,11 +169,6 @@ function SecretSlotView({
         >
           One More Card
         </h2>
-        {slot === "gated" && (
-          <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-            Claim your player to open it. Ask whoever&apos;s running the combine for your code.
-          </p>
-        )}
         {(slot === "sealed" || slot === "pending") && !peeking && (
           <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
             {slot === "pending"
@@ -181,19 +186,7 @@ function SecretSlotView({
         )}
       </div>
 
-      {slot === "gated" ? (
-        // Card-shaped, not a bordered link box — that reads as a cookie banner
-        // and gets ignored.
-        <Link
-          to="/claim"
-          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center"
-        >
-          <Lock className="h-6 w-6 text-muted-foreground" />
-          <span className="font-display text-[10px] font-black uppercase tracking-[0.25em] text-primary">
-            Claim your player
-          </span>
-        </Link>
-      ) : slot === "failed" ? (
+      {slot === "failed" ? (
         <button
           onClick={onRetry}
           className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
@@ -293,8 +286,14 @@ function PackPage() {
   const packBack = useEventCardBack(event?.id ?? null);
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
-  const [collected, setCollected] = useState<Record<string, unknown>>({});
-  const [collectionLoaded, setCollectionLoaded] = useState(false);
+  // Reconciled against the server rather than read straight off this device — the
+  // local store had been inflated to the whole roster by the old collect-on-sight
+  // behaviour, which also meant `dealPack` believed there was nothing left to
+  // pick as the guaranteed-new last card.
+  const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
+  const mine = useMyCollection(event?.id ?? null, rosterIds);
+  const collected = mine.collection;
+  const collectionLoaded = mine.ready;
   // Snapshot of the collection taken when a pack is dealt. The pack composition
   // must not shift while the user is revealing it, and revealing a card writes
   // straight back into `collected`.
@@ -315,7 +314,12 @@ function PackPage() {
   const pull = useServerFn(pullSecretCard);
   const record = useServerFn(recordCardPulls);
   const pullCounts = useCardPullCounts(event?.id ?? null);
-  const status = useSecretStatus(me?.participantId);
+  // A guest gets an identity minted for them the moment they land here, so the
+  // fourth card is theirs rather than a locked slot. Only for the unclaimed —
+  // a member already has one.
+  useEnsureGuestSession(true);
+  const actor = useSecretActor();
+  const status = useSecretStatus(actor);
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
   const [secretRevealed, setSecretRevealed] = useState(false);
@@ -328,6 +332,8 @@ function PackPage() {
   // StrictMode mounting every effect twice in development.
   const pullFiredRef = useRef(false);
   const revealingRef = useRef(false);
+  /** A secret reveal in flight. See revealSecret for why revealingRef won't do. */
+  const secretRevealingRef = useRef(false);
 
   // The *pack* day is device-local: a pack has no identity and no constraint
   // behind it. The *drop* day is league-owned, decided in Postgres. Two clocks,
@@ -337,13 +343,6 @@ function PackPage() {
   // identity, or a claimed member would flash a device-seeded pack first.
   const identity = usePackIdentity();
   const seed = identity ? packSeed(event?.id ?? null, dayKey, identity) : null;
-
-  useEffect(() => {
-    loadCollection().then((c) => {
-      setCollected(c);
-      setCollectionLoaded(true);
-    });
-  }, []);
 
   // One pack a day, so a return visit resumes rather than deals. Yesterday's row
   // is simply ignored — the next tear overwrites it.
@@ -409,10 +408,26 @@ function PackPage() {
     };
   }, [collected]);
 
+  /**
+   * Snapshot the collection the pack is dealt against, once per person.
+   *
+   * Two things have to be true at the same time. It must not move while somebody
+   * is revealing — `dealPack` swaps the last slot for a card they do not own, and
+   * a baseline that shifted mid-reveal would re-deal it underneath them. And it
+   * must not be somebody *else's*: a phone changes hands in this league, and a
+   * write-once baseline meant the next person's guaranteed-new card was chosen
+   * from the previous person's collection.
+   *
+   * So it is latched per identity rather than once, and `collectionLoaded` is
+   * `mine.ready` — which is false until the server has reconciled, so the snapshot
+   * is never taken from the unreconciled local store.
+   */
+  const baselineForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!collectionLoaded) return;
-    setPackBaseline((prev) => prev ?? collected);
-  }, [collectionLoaded, collected]);
+    if (!collectionLoaded || !identity) return;
+    setPackBaseline((prev) => (prev !== null && baselineForRef.current === identity ? prev : collected)); // prettier-ignore
+    baselineForRef.current = identity;
+  }, [collectionLoaded, collected, identity]);
 
   // What today's pack *would* be if torn open right now — yours, and nobody
   // else's, because the seed carries who you are. See src/lib/pack.ts.
@@ -467,7 +482,10 @@ function PackPage() {
       setRevealed((prev) => [...prev, i]);
       playReveal(rarity.tier);
       void collectCard(ep.id, rarity.tier);
-      setCollected((prev) => ({ ...prev, [ep.id]: true }));
+      // Optimistic, and held apart from the reconciled collection: the server was
+      // told about this pack at tear time, but until that query comes back a card
+      // it has not vouched for is exactly what the merge would prune.
+      mine.markCollected(ep.id, rarity.tier);
 
       if (rarity.tier === "champion" || rarity.tier === "podium") {
         await celebrate(rarity);
@@ -480,16 +498,17 @@ function PackPage() {
   /**
    * The one-a-day card.
    *
-   * Fired from an effect keyed on the torn pack and the member, rather than from
+   * Fired from an effect keyed on the torn pack and the actor, rather than from
    * `tearOpen`. Not on mount, because reaching this route is one mis-tap from the
    * vault and must not spend the drop; not on tapping the card, because an
    * unbounded round trip racing the hold either stalls or lies; and not inside
-   * `tearOpen`, because that misses the commonest first-timer path — a guest
-   * tears the pack, hits the gate, goes to /claim, and comes back to the same
-   * already-torn pack, where `tearOpen` will never run again.
+   * `tearOpen`, because the identity can arrive *after* the tear and `tearOpen`
+   * will never run again on an already-torn pack. That last case used to be a
+   * guest going off to /claim and coming back; it is now the ordinary first
+   * visit, where the guest session is still in flight as the wrapper comes off.
    */
   useEffect(() => {
-    if (!torn || !me?.participantId || pullFiredRef.current) return;
+    if (!torn || !actor || pullFiredRef.current) return;
     pullFiredRef.current = true;
     setSecretPulling(true);
     setSecretFailed(false);
@@ -511,8 +530,8 @@ function PackPage() {
           setSecret(res.card);
           setSecretDuplicate(res.duplicate);
           setSecretUnavailable(false);
-          qc.invalidateQueries({ queryKey: secretStatusKey(me.participantId) });
-          qc.invalidateQueries({ queryKey: mySecretsKey(me.participantId) });
+          qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+          qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
         } else {
           // Nothing in the set yet, or every card still missing its art. Not a
           // failure to retry — there is genuinely nothing to hand over.
@@ -537,7 +556,7 @@ function PackPage() {
     })();
 
     return () => clearTimeout(timer);
-  }, [torn, me?.participantId, pull, qc]);
+  }, [torn, actor, pull, qc]);
 
   /**
    * Tell the server which cards were in this pack, so the vault can say how many
@@ -566,10 +585,21 @@ function PackPage() {
       // in practice the first person to claim painted every card they'd ever
       // revealed with "Packed by 1", making the counter meaningless. Better an
       // honest ramp than a uniform stripe.
-      const ids = dealtIds.slice(0, 64);
+      const ids = dealtIds.slice(0, 16);
       try {
+        // The same call records the pack itself. A pack of three cards you already
+        // own writes no new card_pulls row, so counting packs from that table
+        // would stop counting the moment somebody's collection filled up.
+        //
+        // No event is sent: the handler resolves the active one itself. A resumed
+        // pack reaches here before the event query has answered, so passing it
+        // from the client stamped a null and the latch below stopped it ever
+        // being retried.
         await record({ data: { eventParticipantIds: ids } });
-        await qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) });
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
+          qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) }),
+        ]);
       } catch {
         /* a count nobody asked for is not worth an error nobody can act on */
       }
@@ -585,7 +615,10 @@ function PackPage() {
     setSecretRevealed(false);
     setSecretFailed(false);
     setSecretUnavailable(false);
-  }, [me?.participantId]);
+    // Keyed on the actor, not the member: a guest claiming their player mid-pack
+    // changes who the fourth card belongs to just as surely as a phone changing
+    // hands does, and the pull has to be re-armed for the identity that won.
+  }, [actor]);
 
   // The drop rolls over on the *server's* day, not this device's. Guarded on the
   // first observed value, or this would clobber the secretRevealed that the
@@ -604,8 +637,27 @@ function PackPage() {
 
   const secretRarity = secretFoil(secret?.foil);
 
+  /**
+   * "Reveal all" asked for the fourth card, whether or not it had arrived yet.
+   *
+   * The three roster cards take a couple of seconds to flip, and the pull that
+   * fetches the secret runs alongside them — usually it wins, but on a slow
+   * connection it does not. `revealSecret` used to be called once at the end of
+   * that loop and simply return if the card was not there, leaving it sealed with
+   * the button that would have opened it already gone. This latch lets the effect
+   * below finish the job when the card finally lands.
+   */
+  const revealAllRef = useRef(false);
+
   async function revealSecret() {
-    if (!secret || secretRevealed) return;
+    // `secretRevealed` is not enough on its own: it is only set after the hold,
+    // so between the effect below starting a reveal and that state landing there
+    // is a second or more in which the tail of the "Reveal all" loop would start
+    // a second one — two chimes, two bursts, over the top of each other. This ref
+    // is separate from `revealingRef`, which flips per roster card and would make
+    // the effect bail for the wrong reason.
+    if (!secret || secretRevealed || secretRevealingRef.current) return;
+    secretRevealingRef.current = true;
     revealingRef.current = true;
     try {
       // A duplicate you have seen three times does not need the full production.
@@ -627,8 +679,23 @@ function PackPage() {
       if (!secretDuplicate) await celebrateSecret(secretRarity);
     } finally {
       revealingRef.current = false;
+      secretRevealingRef.current = false;
+      revealAllRef.current = false;
     }
   }
+
+  // The other half of the latch. `revealSecret` is redefined every render, so the
+  // one "Reveal all" captured closes over whatever `secret` was at click time —
+  // a ref would not have been enough on its own, because there is nothing to
+  // re-run it. This effect is that trigger.
+  useEffect(() => {
+    if (!revealAllRef.current || !secret || secretRevealed) return;
+    void revealSecret();
+    // Deliberately not depending on revealSecret: it is a fresh function object
+    // on every render, and the arrival of the card is the only thing that should
+    // set this going.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secret, secretRevealed]);
 
   // Written on every step rather than only on tear, so a phone that loses the tab
   // mid-reveal comes back to the cards it had already flipped.
@@ -645,8 +712,10 @@ function PackPage() {
 
   const secretSlot: SecretSlot = !torn
     ? "hidden"
-    : !me
-      ? "gated"
+    : // No identity yet means the guest session is still in flight, so this is a
+      // blank slot for a beat rather than a wall. Guests get the card.
+      !actor
+      ? "pending"
       : secret
         ? secretRevealed
           ? "open"
@@ -664,7 +733,7 @@ function PackPage() {
   // beat before the fourth card turns up. For a guest, or a pull that failed,
   // this reduces to exactly the old expression.
   const allRevealed = allPlayerCardsRevealed && secretSlot !== "pending" && secretSlot !== "sealed";
-  const collectedCount = (bundle?.participants ?? []).filter((p) => collected[p.id]).length;
+  const collectedCount = mine.collectedCount;
   const total = bundle?.participants.length ?? 0;
 
   // The sealed pack must not flash on a day already opened, so nothing renders
@@ -687,8 +756,10 @@ function PackPage() {
             <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
               Collected
             </div>
+            {/* Dashed until reconciled — this counter used to read the whole
+                roster off a local store the old collect-on-sight write had filled. */}
             <div className="font-display text-lg font-black text-primary">
-              {collectedCount} / {total}
+              {mine.ready ? `${collectedCount} / ${total}` : `— / ${total}`}
             </div>
           </div>
         </div>
@@ -920,13 +991,17 @@ function PackPage() {
               {!allRevealed && (
                 <button
                   onClick={async () => {
+                    // Set before the loop, so a card that arrives *during* it is
+                    // still covered by the tap that asked for everything.
+                    revealAllRef.current = true;
                     // Sequential so the chimes stagger instead of stacking into noise.
                     for (let i = 0; i < pack.length; i++) {
                       await revealAt(i);
                       await new Promise((r) => setTimeout(r, 260));
                     }
                     // The secret goes last, or its hold lands underneath the hit's
-                    // and neither of them reads.
+                    // and neither of them reads. If it has not landed yet this is a
+                    // no-op and the effect above picks it up when it does.
                     await revealSecret();
                   }}
                   className="rounded-full border border-white/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground hover:border-primary/50 hover:text-primary"

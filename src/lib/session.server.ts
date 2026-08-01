@@ -87,3 +87,46 @@ export function verifyMemberToken(
   if (Date.now() > expiresAt) return null;
   return { participantId, expiresAt };
 }
+
+// ---------- Guest sessions ----------
+//
+// A third scheme, so somebody who has not claimed a player can still own a daily
+// secret card. Same construction again, with a "g" prefix that is likewise inside
+// the signed payload — this one matters more than the admin/member pair, because a
+// guest token and a member token are BOTH four parts. The prefix is the only thing
+// distinguishing them, and signing it is what stops a guest token being presented
+// as a member token or the reverse.
+//
+// The id inside is minted by the server (see startGuestSession) and never taken
+// from the client. That is the whole point: a handler that signed whatever id it
+// was handed would let anyone mint a token for somebody else's guest id and spend
+// their pull, which is exactly the attack the signature is here to prevent.
+
+const GUEST_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days, same as a member
+const GUEST_PREFIX = "g";
+
+export function signGuestToken(guestId: string): { token: string; expiresAt: number } {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("SESSION_SECRET is not set");
+  const expiresAt = Date.now() + GUEST_TOKEN_TTL_MS;
+  const payload = `${GUEST_PREFIX}.${guestId}.${expiresAt}`;
+  return { token: `${payload}.${sign(payload, secret)}`, expiresAt };
+}
+
+export function verifyGuestToken(
+  token: string | null | undefined,
+): { guestId: string; expiresAt: number } | null {
+  if (!token) return null;
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) return null;
+  const parts = token.split(".");
+  if (parts.length !== 4) return null;
+  const [prefix, guestId, expStr, sig] = parts;
+  if (prefix !== GUEST_PREFIX) return null;
+  const expiresAt = Number(expStr);
+  if (!guestId || !Number.isFinite(expiresAt)) return null;
+  const expected = sign(`${GUEST_PREFIX}.${guestId}.${expiresAt}`, secret);
+  if (!timingSafeEq(sig, expected)) return null;
+  if (Date.now() > expiresAt) return null;
+  return { guestId, expiresAt };
+}

@@ -36,7 +36,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { loadCollection, type CollectedCard } from "@/lib/card-collection";
+import { useMyCollection } from "@/hooks/use-my-collection";
+import { useMemberSession } from "@/lib/member-token";
+import { PackStats } from "@/components/pack-stats";
+import { StatTile } from "@/components/stat-tile";
 import { useEventSocial, useEventAwards } from "@/hooks/use-event-social";
 import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
@@ -91,6 +94,7 @@ function PlayerCardPage() {
   const social = useEventSocial(event?.id ?? null);
   const awards = useEventAwards(event?.id ?? null);
   const pullCounts = useCardPullCounts(event?.id ?? null);
+  const member = useMemberSession();
 
   const sfx = useCardSfx();
 
@@ -98,7 +102,6 @@ function PlayerCardPage() {
   const [gyro, setGyro] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
-  const [collection, setCollection] = useState<Record<string, CollectedCard>>({});
   const [comparing, setComparing] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
 
@@ -130,6 +133,24 @@ function PlayerCardPage() {
   }, [go, prev?.id, next?.id]);
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
+
+  // Read-only. Opening a pack is the only thing that collects a card — this page
+  // used to collect on sight, which made walking the vault a one-tap way to
+  // "collect" the whole set without ever ripping a pack, and left every device
+  // that did so claiming the full roster until the hook below started pruning it.
+  const rosterIds = useMemo(() => roster.map((p) => p.id), [roster]);
+  const mine = useMyCollection(event?.id ?? null, rosterIds);
+  const collection = mine.collection;
+
+  // Rarest card you hold. `rank` runs rarest-first, so the lowest wins.
+  const bestPull = useMemo(() => {
+    let best: Rarity | null = null;
+    for (const cardId of Object.keys(collection)) {
+      const r = rarities.get(cardId);
+      if (r && (!best || r.rank < best.rank)) best = r;
+    }
+    return best;
+  }, [collection, rarities]);
 
   // Resolved before the loading guard below so the reveal and the stat hooks
   // can be plain unconditional hooks. `ep` stays null until the bundle lands.
@@ -189,19 +210,6 @@ function PlayerCardPage() {
       })),
     [roster, rarities],
   );
-
-  // Read-only. Opening a pack is the only thing that collects a card — this page
-  // used to collect on sight, which made walking the vault a one-tap way to
-  // "collect" the whole set without ever ripping a pack.
-  useEffect(() => {
-    let cancelled = false;
-    void loadCollection().then((c) => {
-      if (!cancelled) setCollection(c);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // QR points at this card so a printed card can link to its digital twin.
   useEffect(() => {
@@ -517,13 +525,13 @@ function PlayerCardPage() {
         )}
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Order" value={`#${ep.running_order}`} />
-          <Stat
+          <StatTile label="Order" value={`#${ep.running_order}`} />
+          <StatTile
             label="Pick"
             value={ep.selected_draft_position != null ? `#${ep.selected_draft_position}` : "—"}
           />
-          <Stat label="Time" value={countedTime != null ? formatTime(countedTime) : "—"} mono />
-          <Stat
+          <StatTile label="Time" value={countedTime != null ? formatTime(countedTime) : "—"} mono />
+          <StatTile
             label="Rank"
             value={countedRank != null ? `#${Math.max(1, Math.round(countedRank))}` : "—"}
           />
@@ -540,6 +548,19 @@ function PlayerCardPage() {
             reactions={cardReactions}
             comments={cardComments}
             nameOf={nameOf}
+          />
+        )}
+
+        {/* Your own numbers, on your own card only. `ready` keeps the inflated
+            pre-prune count from ever reaching the screen. */}
+        {mine.ready && member?.participantId === ep.participant_id && (
+          <PackStats
+            packsOpened={mine.packsOpened}
+            collectedCount={mine.collectedCount}
+            rosterSize={roster.length}
+            dupes={mine.dupes}
+            firstPackOn={mine.firstPackOn}
+            best={bestPull}
           />
         )}
 
@@ -677,24 +698,5 @@ function ActionButton({
       {icon}
       {children}
     </button>
-  );
-}
-
-function Stat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div
-      className="hud-bezel rounded-md border px-4 py-2 text-center"
-      style={{ borderColor: "color-mix(in oklab, var(--tier) 30%, oklch(1 0 0 / 10%))" }}
-    >
-      <div className="text-[9px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-        {label}
-      </div>
-      <div
-        className={"font-display text-xl font-black " + (mono ? "timer-digits tabular" : "")}
-        style={{ color: "var(--tier)" }}
-      >
-        {value}
-      </div>
-    </div>
   );
 }

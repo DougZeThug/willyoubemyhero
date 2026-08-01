@@ -63,9 +63,10 @@ describe("record_card_pulls", () => {
     expect((await counts())[ids[0]]).toBe(1);
   });
 
-  it("bumps the invisible pull_count while leaving the visible number alone", async () => {
+  it("bumps the invisible pull_count on a later day, leaving the visible number alone", async () => {
     const ids = await cardIds();
     await record(IDS.alice, [ids[0]]);
+    await sql("UPDATE public.card_pulls SET last_pulled_at = last_pulled_at - interval '1 day'");
     await record(IDS.alice, [ids[0]]);
     const [row] = await sql<{ pull_count: number }>(
       "SELECT pull_count FROM public.card_pulls WHERE event_participant_id = $1",
@@ -73,6 +74,32 @@ describe("record_card_pulls", () => {
     );
     expect(row.pull_count).toBe(2);
     expect((await counts())[ids[0]]).toBe(1);
+  });
+
+  it("does not count the same card twice in one league day", async () => {
+    // A pack is once a day, so a second call today is a replay — the pack screen
+    // fires this once per mount for whatever pack is stored, so reopening an
+    // already-torn pack used to add a duplicate to the stats every time.
+    const ids = await cardIds();
+    for (let i = 0; i < 5; i++) await record(IDS.alice, [ids[0]]);
+    const [row] = await sql<{ pull_count: number }>(
+      "SELECT pull_count FROM public.card_pulls WHERE event_participant_id = $1",
+      [ids[0]],
+    );
+    expect(row.pull_count).toBe(1);
+  });
+
+  it("still moves last_pulled_at on a replay, which is what makes the day check work", async () => {
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]]);
+    await sql("UPDATE public.card_pulls SET last_pulled_at = last_pulled_at - interval '2 days'");
+    await record(IDS.alice, [ids[0]]);
+    const [row] = await sql<{ today: boolean }>(
+      `SELECT (last_pulled_at AT TIME ZONE 'America/New_York')::date = current_date AS today
+         FROM public.card_pulls WHERE event_participant_id = $1`,
+      [ids[0]],
+    );
+    expect(row.today).toBe(true);
   });
 
   it("counts two people on the same card as two", async () => {
