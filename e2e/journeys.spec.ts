@@ -199,7 +199,7 @@ test.describe("opening a pack", () => {
   const PACK_SIZE = 3;
 
   /** Today's pack row straight out of IndexedDB, or null if nothing is stored. */
-  type PackState = { dayKey: string; ids: string[]; revealed: number[] };
+  type PackState = { dayKey: string; ids: string[]; revealed: number[]; cursor?: number };
 
   function readPackState(page: import("@playwright/test").Page) {
     return page.evaluate(
@@ -220,6 +220,10 @@ test.describe("opening a pack", () => {
 
   const sealedPack = (page: import("@playwright/test").Page) =>
     page.getByRole("button", { name: /tear the pack open/i });
+
+  /** The card currently on the reveal stand. */
+  const standCard = (page: import("@playwright/test").Page) =>
+    page.locator('[role="button"][aria-pressed]').first();
 
   /** Where the perforation runs, as a fraction of the pack's height. */
   const TEAR_LINE = 0.15;
@@ -271,6 +275,99 @@ test.describe("opening a pack", () => {
 
     // The sealed wrapper is gone once it has been torn.
     await expect(pack).toBeHidden();
+  });
+
+  test("resumes on the card you were looking at, not the one after it", async ({ page }) => {
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+
+    // Turn the first card over and stop there, the way you would to read it.
+    await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
+    await standCard(page).click();
+    await expect(page.getByTestId("pack-advance")).toBeVisible();
+
+    await page.reload();
+
+    // `revealed` alone cannot tell "looking at a card I just turned" from
+    // "finished with it", so resuming from it dropped you on card 2 and card 1
+    // was simply gone. The stored cursor is what distinguishes them.
+    await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
+    await expect(page.getByTestId("pack-advance")).toBeVisible();
+  });
+
+  test("counts a card once however many times it is tapped mid-ceremony", async ({ page }) => {
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+
+    // Walk to the last card, which is the one that holds before it turns.
+    for (const n of [1, 2]) {
+      await expect(page.getByText(new RegExp(`card ${n} of 3`, "i"))).toBeVisible();
+      await standCard(page).click();
+      await page.getByTestId("pack-advance").click();
+    }
+    await expect(page.getByText(/card 3 of 3/i)).toBeVisible();
+
+    // It stays face-down and tappable for the whole 900ms hold. Every tap in
+    // that window used to start another ceremony over the same card.
+    const card = standCard(page);
+    await card.click();
+    await card.click({ force: true });
+    await card.click({ force: true });
+
+    await expect(page.getByTestId("pack-advance")).toBeVisible({ timeout: 15_000 });
+    // Long enough for a second and third 900ms hold to have finished too. The
+    // first ceremony completing is what makes the button appear, so reading
+    // straight away would sample the row before any duplicate could land in it.
+    await page.waitForTimeout(3_000);
+
+    const state = (await readPackState(page))!;
+    expect(state.revealed).toEqual([...new Set(state.revealed)]);
+    expect(state.revealed).toHaveLength(PACK_SIZE);
+  });
+
+  test("reveal all turns every card face-down first, so none of them skip the flip", async ({
+    page,
+  }) => {
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+
+    // A MutationObserver sees every intermediate render, which is what makes
+    // this deterministic — the face-down beat is only ~300ms and polling would
+    // race it. The stand's helper line is the tell: it reads "tap the card to
+    // turn it" only while the card on it has not been turned.
+    await page.evaluate(() => {
+      const seen = new Set<string>();
+      (window as unknown as { __faceDown: Set<string> }).__faceDown = seen;
+      const sample = () => {
+        const text = document.body.textContent ?? "";
+        const at = text.match(/Card (\d) of 3/i);
+        if (at && /tap the card to turn it/i.test(text)) seen.add(at[1]);
+      };
+      sample();
+      new MutationObserver(sample).observe(document.body, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    });
+
+    await page.getByRole("button", { name: /reveal all/i }).click();
+
+    // The run drives the stand rather than skipping it, so it ends past the last
+    // slot with the finished pack on screen.
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    // Every card was on the stand face-down before it turned. Without the beat,
+    // the cursor move and the reveal batch into one render and cards 2 and 3
+    // mount already face-up — the flip, the whole point of the stand, never
+    // happens for them.
+    const faceDown = await page.evaluate(() =>
+      [...(window as unknown as { __faceDown: Set<string> }).__faceDown].sort(),
+    );
+    expect(faceDown).toEqual(["1", "2", "3"]);
+
+    const state = (await readPackState(page))!;
+    expect(state.revealed.slice().sort()).toEqual([0, 1, 2]);
   });
 
   test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {

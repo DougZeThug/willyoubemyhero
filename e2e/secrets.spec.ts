@@ -144,6 +144,26 @@ test.describe("the daily secret", () => {
     await expect(page.getByText(/whole set/i)).toBeVisible();
   });
 
+  test("reveal all waits for a pull that was still in the air when it started", async ({
+    page,
+    server,
+  }) => {
+    await asMember(page);
+    withSecret(server);
+    // Still in flight when the button is pressed, landing partway through the
+    // roster sequence. The run used to read the `secret` its closure captured at
+    // click time — null — and stop, stranding the user on a sealed fourth card
+    // they then had to tap themselves.
+    server.delay("pullSecretCard", 2_000);
+
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+    await revealAll(page);
+
+    await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+  });
+
   test("nothing appears when the set is empty", async ({ page }) => {
     await asMember(page);
     // Default stub: pullSecretCard answers { ok: false, reason: "unavailable" }.

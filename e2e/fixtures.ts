@@ -179,6 +179,8 @@ async function serialize(value: unknown): Promise<string> {
 }
 
 export type ServerFnMock = {
+  /** Hold a response back, to reproduce a request that is still in flight. */
+  delay: (key: string, ms: number) => void;
   /** Override or add a response for one server function. */
   set: (key: string, value: unknown) => void;
   /** Fail one server function with an error the UI has to handle. */
@@ -190,6 +192,7 @@ export type ServerFnMock = {
 export async function stubServerFns(page: Page): Promise<ServerFnMock> {
   const responses: Responses = { ...DEFAULT_RESPONSES };
   const failures: Record<string, string> = {};
+  const delays: Record<string, number> = {};
   const calls: string[] = [];
 
   await page.route("**/_serverFn/**", async (route: Route) => {
@@ -206,6 +209,9 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
       return;
     }
 
+    const delayKey = Object.keys(delays).find((k) => matches(name, k));
+    if (delayKey) await new Promise((r) => setTimeout(r, delays[delayKey]));
+
     const key = Object.keys(responses).find((k) => matches(name, k));
     await route.fulfill({
       status: 200,
@@ -220,6 +226,9 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
     },
     fail: (key, message) => {
       failures[key] = message;
+    },
+    delay: (key, ms) => {
+      delays[key] = ms;
     },
     calls,
   };

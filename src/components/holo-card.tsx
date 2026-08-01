@@ -12,6 +12,15 @@ import type { Rarity } from "@/lib/card-rarity";
 const DEFAULT_ASPECT = 5 / 7;
 
 /**
+ * How wide a card renders, for the browser's `srcSet` pick.
+ *
+ * Exported because src/lib/preload.ts has to hand the browser the identical
+ * string: the candidate it warms is only the candidate the card requests if both
+ * run the selection algorithm on the same inputs.
+ */
+export const CARD_SIZES = "(max-width: 640px) 90vw, 420px";
+
+/**
  * How hard a card leans, and how close the camera stands to it.
  *
  * Two profiles, because the two places a card appears want opposite things. One
@@ -603,7 +612,7 @@ function HoloCardImpl({
               <img
                 src={frontSrc}
                 srcSet={frontSrcSet}
-                sizes="(max-width: 640px) 90vw, 420px"
+                sizes={CARD_SIZES}
                 alt={`${name} card front`}
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
@@ -633,7 +642,7 @@ function HoloCardImpl({
                 <img
                   src={backSrc}
                   srcSet={backSrcSet}
-                  sizes="(max-width: 640px) 90vw, 420px"
+                  sizes={CARD_SIZES}
                   alt={`${name} card back`}
                   crossOrigin="anonymous"
                   loading="lazy"

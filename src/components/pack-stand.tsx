@@ -109,6 +109,7 @@ export function PackStand({
   secretDuplicate,
   secretPeeking,
   peeking,
+  busy,
   onReveal,
   onRevealSecret,
   onAdvance,
@@ -128,6 +129,8 @@ export function PackStand({
   secretDuplicate: boolean;
   secretPeeking: boolean;
   peeking: boolean;
+  /** True while "Reveal all" is driving, so a tap cannot cut across it. */
+  busy: boolean;
   onReveal: (i: number) => void;
   onRevealSecret: () => void;
   onAdvance: () => void;
@@ -161,6 +164,8 @@ export function PackStand({
     return () => clearTimeout(t);
   }, [isRevealed, onSecret, reduced]);
 
+  // The card is mid-ceremony: turned over already in everything but appearance.
+  const holding = onSecret ? secretPeeking : peeking;
   const rarity = onSecret ? secretRarity : (rarities.get(ep?.id ?? "") ?? rarityStyle("base"));
   const name = onSecret ? (secret?.name ?? "Secret") : (ep?.participant?.name ?? "—");
   const showStats = isRevealed && settled;
@@ -284,8 +289,17 @@ export function PackStand({
                   // ceremony, not just rotate quietly. Handing the tap back once
                   // revealed is what re-arms HoloCard's own flip, so examining the
                   // back needs no code here.
+                  //
+                  // Dropped during the hold and while the automatic run owns the
+                  // sequence. A card holds face-down for 900ms (1600ms for the
+                  // secret) before it turns, and every tap in that window used to
+                  // start another ceremony over the same card.
                   onClick={
-                    isRevealed ? undefined : onSecret ? onRevealSecret : () => onReveal(cursor)
+                    isRevealed || holding || busy
+                      ? undefined
+                      : onSecret
+                        ? onRevealSecret
+                        : () => onReveal(cursor)
                   }
                 />
               </motion.div>
@@ -340,7 +354,11 @@ export function PackStand({
         {isRevealed && (
           <button
             onClick={onAdvance}
-            className="neon-btn !px-4 !py-2 !text-xs"
+            // The automatic run owns the cursor while it is going. Letting this
+            // through mid-sequence moves the stand out from under the card the
+            // run is about to turn.
+            disabled={busy}
+            className="neon-btn !px-4 !py-2 !text-xs disabled:opacity-40"
             data-testid="pack-advance"
           >
             {onSecret ? "See the whole pack" : "Next card"}

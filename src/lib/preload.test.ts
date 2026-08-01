@@ -1,19 +1,31 @@
-// Warming card art before a reveal. The only property that matters is that this
-// can never strand the sequence — a card that failed to preload is still a card
-// the user is entitled to turn over.
+// Warming card art before a reveal. Two properties matter: this can never
+// strand the sequence, and it warms the candidate the card will actually
+// request — a preload of the wrong width is a fetch nobody uses plus a fetch
+// during the flip, which is the exact failure it exists to prevent.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { preloadImage } from "./preload";
+import { preloadCard } from "./preload";
+import { CARD_SIZES } from "@/components/holo-card";
+
+const SET = {
+  thumb: "https://example.test/c-320.webp",
+  medium: "https://example.test/c-800.webp",
+  large: "https://example.test/c-1600.webp",
+};
+
+type Captured = { src: string; srcset: string; sizes: string; crossOrigin: string | null };
 
 /** Stand in for HTMLImageElement with a decode() we control. */
 function stubImage(decode: () => Promise<void>) {
-  const instances: { src: string; crossOrigin: string | null }[] = [];
+  const instances: Captured[] = [];
   class FakeImage {
     src = "";
+    srcset = "";
+    sizes = "";
     crossOrigin: string | null = null;
     decoding = "";
     constructor() {
-      instances.push(this);
+      instances.push(this as unknown as Captured);
     }
     decode = decode;
   }
@@ -25,32 +37,54 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("preloadImage", () => {
+describe("preloadCard", () => {
   it("decodes the image it was given", async () => {
     const instances = stubImage(() => Promise.resolve());
-    await preloadImage("https://example.test/card.webp");
+    await preloadCard(SET);
     expect(instances).toHaveLength(1);
-    expect(instances[0].src).toBe("https://example.test/card.webp");
+    expect(instances[0].src).toBe(SET.large);
   });
 
-  // HoloCard renders card art with crossOrigin="anonymous". A preload that does
-  // not match fetches the same bytes twice instead of warming anything.
+  // The card renders every width and lets the browser choose. Warming only the
+  // 1600w image missed on any device whose pick was the 800w or 320w one.
+  it("offers every width, so the browser warms the one it will render", async () => {
+    const instances = stubImage(() => Promise.resolve());
+    await preloadCard(SET);
+    expect(instances[0].srcset).toContain(SET.thumb);
+    expect(instances[0].srcset).toContain(SET.medium);
+    expect(instances[0].srcset).toContain(SET.large);
+  });
+
+  // Same candidate only if both run the selection algorithm on the same inputs.
+  it("uses the card's own sizes attribute", async () => {
+    const instances = stubImage(() => Promise.resolve());
+    await preloadCard(SET);
+    expect(instances[0].sizes).toBe(CARD_SIZES);
+  });
+
   it("requests it the same way the card will", async () => {
     const instances = stubImage(() => Promise.resolve());
-    await preloadImage("https://example.test/card.webp");
+    await preloadCard(SET);
     expect(instances[0].crossOrigin).toBe("anonymous");
+  });
+
+  it("takes a bare url too, for art that has no size set", async () => {
+    const instances = stubImage(() => Promise.resolve());
+    await preloadCard("https://example.test/secret.webp");
+    expect(instances[0].src).toBe("https://example.test/secret.webp");
   });
 
   it("resolves rather than throwing when the image cannot be decoded", async () => {
     stubImage(() => Promise.reject(new Error("decode failed")));
-    await expect(preloadImage("https://example.test/broken.webp")).resolves.toBeUndefined();
+    await expect(preloadCard(SET)).resolves.toBeUndefined();
   });
 
   it("does nothing at all without a url", async () => {
     const instances = stubImage(() => Promise.resolve());
-    await preloadImage(null);
-    await preloadImage(undefined);
-    await preloadImage("");
+    await preloadCard(null);
+    await preloadCard(undefined);
+    await preloadCard("");
+    await preloadCard({ thumb: null, medium: null, large: null });
     expect(instances).toHaveLength(0);
   });
 });
