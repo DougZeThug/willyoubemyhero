@@ -85,3 +85,8 @@ export function adminHeaders(token: string) {
 export function memberHeaders(token: string) {
   return { "x-member-token": token };
 }
+
+/** Header bag for a request carrying an anonymous guest token. */
+export function guestHeaders(token: string) {
+  return { "x-guest-token": token };
+}

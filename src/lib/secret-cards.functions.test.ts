@@ -7,8 +7,8 @@
 // away just as completely as a readable table would.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
-import { adminHeaders, callServerFn, memberHeaders } from "@/test/server-fn";
-import { signAdminToken, signMemberToken } from "./session.server";
+import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/server-fn";
+import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
 
 let mock = createSupabaseMock();
 
@@ -24,6 +24,7 @@ const ME = "00000000-0000-4000-8000-0000000000aa";
 const THEM = "00000000-0000-4000-8000-0000000000bb";
 const CARD_ID = "00000000-0000-4000-8000-00000000ce01";
 const OTHER_CARD = "00000000-0000-4000-8000-00000000ce02";
+const GUEST = "00000000-0000-4000-8000-0000000000e1";
 
 const activeEvent = { "events.select": { data: { id: EVENT_ID } } };
 
@@ -32,6 +33,7 @@ function withDb(responses: SupabaseResponses = {}) {
 }
 
 const asMe = () => memberHeaders(signMemberToken(ME).token);
+const asGuest = (id = GUEST) => guestHeaders(signGuestToken(id).token);
 const asAdmin = (eventId = EVENT_ID) => adminHeaders(signAdminToken(eventId).token);
 
 const card = (id = CARD_ID, over: Record<string, unknown> = {}) => ({
@@ -53,7 +55,9 @@ beforeEach(() => {
 });
 
 describe("pullSecretCard", () => {
-  it("requires a claimed player", async () => {
+  it("requires an identity of some kind", async () => {
+    // No member token and no guest token: a device that has never been through
+    // the pack screen has nothing to attach a card to.
     const { pullSecretCard } = await import("./secret-cards.functions");
     await expect(callServerFn(pullSecretCard)).rejects.toThrow("Claim your player first");
   });
@@ -80,7 +84,47 @@ describe("pullSecretCard", () => {
     await callServerFn(pullSecretCard, { data: { participantId: THEM }, headers: asMe() });
     expect(mock.client.rpc).toHaveBeenCalledWith(
       "pull_secret_card",
-      expect.objectContaining({ _participant_id: ME }),
+      expect.objectContaining({ _participant_id: ME, _guest_id: null }),
+    );
+  });
+
+  it("pulls for the guest the token names, never for a caller-supplied id", async () => {
+    // The whole reason the guest identity is signed rather than a plain device
+    // id: without this, naming somebody else's id would spend their pull.
+    withDb({
+      "rpc.pull_secret_card": {
+        data: { pullId: "p1", cardId: CARD_ID, day: "2026-08-01", duplicate: false, fresh: true },
+      },
+      "secret_cards.select": { data: card() },
+      "storage.createSignedUrl": { data: { signedUrl: "https://signed/art" } },
+    });
+    const { pullSecretCard } = await import("./secret-cards.functions");
+    await callServerFn(pullSecretCard, {
+      data: { guestId: "00000000-0000-4000-8000-0000000000ff" },
+      headers: asGuest(),
+    });
+    expect(mock.client.rpc).toHaveBeenCalledWith(
+      "pull_secret_card",
+      expect.objectContaining({ _participant_id: null, _guest_id: GUEST }),
+    );
+  });
+
+  it("prefers the member when a device carries both tokens", async () => {
+    // A guest who claims a player keeps their old guest token in storage. Their
+    // collection was merged onto the participant at claim time, so the member is
+    // the identity that owns it — splitting them again would strand cards.
+    withDb({
+      "rpc.pull_secret_card": {
+        data: { pullId: "p1", cardId: CARD_ID, day: "2026-08-01", duplicate: false, fresh: true },
+      },
+      "secret_cards.select": { data: card() },
+      "storage.createSignedUrl": { data: { signedUrl: "https://signed/art" } },
+    });
+    const { pullSecretCard } = await import("./secret-cards.functions");
+    await callServerFn(pullSecretCard, { headers: { ...asMe(), ...asGuest() } });
+    expect(mock.client.rpc).toHaveBeenCalledWith(
+      "pull_secret_card",
+      expect.objectContaining({ _participant_id: ME, _guest_id: null }),
     );
   });
 
@@ -146,7 +190,7 @@ describe("pullSecretCard", () => {
 });
 
 describe("getSecretStatus", () => {
-  it("tells an unclaimed visitor nothing, and does not throw at them", async () => {
+  it("tells a visitor with no identity at all nothing, and does not throw at them", async () => {
     const { getSecretStatus } = await import("./secret-cards.functions");
     const res = await callServerFn<Record<string, unknown>>(getSecretStatus);
     expect(res).toEqual({
@@ -177,8 +221,36 @@ describe("getSecretStatus", () => {
     const res = await callServerFn<{ claimed: boolean; pulled: number }>(getSecretStatus, {
       headers: asMe(),
     });
-    expect(mock.client.rpc).toHaveBeenCalledWith("secret_pull_status", { _participant_id: ME });
+    expect(mock.client.rpc).toHaveBeenCalledWith("secret_pull_status", {
+      _participant_id: ME,
+      _guest_id: null,
+    });
     expect(res).toMatchObject({ claimed: true, pulled: 2 });
+  });
+
+  it("answers a guest about their own drop", async () => {
+    // `claimed` is a misnomer kept on purpose — it has always meant "there is a
+    // drop for you", and now a guest has one.
+    withDb({
+      "rpc.secret_pull_status": {
+        data: {
+          day: "2026-08-01",
+          pulledToday: true,
+          pulled: 1,
+          available: true,
+          resetsAt: "2026-08-02T04:00:00Z",
+        },
+      },
+    });
+    const { getSecretStatus } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ claimed: boolean; pulled: number }>(getSecretStatus, {
+      headers: asGuest(),
+    });
+    expect(mock.client.rpc).toHaveBeenCalledWith("secret_pull_status", {
+      _participant_id: null,
+      _guest_id: GUEST,
+    });
+    expect(res).toMatchObject({ claimed: true, pulled: 1 });
   });
 
   it("carries no denominator", async () => {
@@ -207,7 +279,7 @@ describe("getSecretStatus", () => {
 });
 
 describe("getMySecrets", () => {
-  it("requires a claimed player", async () => {
+  it("requires an identity of some kind", async () => {
     const { getMySecrets } = await import("./secret-cards.functions");
     await expect(callServerFn(getMySecrets)).rejects.toThrow("Claim your player first");
   });
@@ -218,6 +290,15 @@ describe("getMySecrets", () => {
     await callServerFn(getMySecrets, { headers: asMe() });
     const [call] = mock.callsFor("secret_card_pulls", "select");
     expect(mock.eqValue(call, "participant_id")).toBe(ME);
+  });
+
+  it("reads a guest's ledger by their guest id, not by a participant", async () => {
+    withDb({ "secret_card_pulls.select": { data: [] } });
+    const { getMySecrets } = await import("./secret-cards.functions");
+    await callServerFn(getMySecrets, { headers: asGuest() });
+    const [call] = mock.callsFor("secret_card_pulls", "select");
+    expect(mock.eqValue(call, "guest_id")).toBe(GUEST);
+    expect(mock.eqValue(call, "participant_id")).toBeUndefined();
   });
 
   it("counts how many people have each card, and asks only about the ones you own", async () => {
@@ -440,6 +521,33 @@ describe("the admin catalogue", () => {
     const { listSecretCards } = await import("./secret-cards.functions");
     const res = await callServerFn<{ exhausted: boolean }>(listSecretCards, { headers: asAdmin() });
     expect(res.exhausted).toBe(true);
+  });
+
+  it("does not let guest pulls declare the set exhausted early", async () => {
+    // `exhausted` is measured against the claimed-member count, so it has to be
+    // counted in members. Two guests holding a card would otherwise clear the bar
+    // for two members while both members still had it to find, and the panel
+    // would tell the admin the drop had gone quiet while it had not.
+    withDb({
+      "secret_cards.select": { data: [card(CARD_ID)] },
+      "secret_card_pulls.select": {
+        data: [
+          { secret_card_id: CARD_ID, participant_id: ME },
+          { secret_card_id: CARD_ID, participant_id: null },
+          { secret_card_id: CARD_ID, participant_id: null },
+        ],
+      },
+      "member_codes.select": { data: null, count: 2 },
+    });
+    const { listSecretCards } = await import("./secret-cards.functions");
+    const res = await callServerFn<{
+      cards: { ownerCount: number }[];
+      exhausted: boolean;
+    }>(listSecretCards, { headers: asAdmin() });
+    // Three people hold it, and the admin sees that…
+    expect(res.cards[0].ownerCount).toBe(3);
+    // …but only one of the two members does.
+    expect(res.exhausted).toBe(false);
   });
 
   it("creates a card without art rather than failing, and leaves it unpullable", async () => {

@@ -6,7 +6,7 @@ import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
-import { useMySecrets, useSecretStatus } from "@/hooks/use-daily-secret";
+import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
@@ -50,8 +50,12 @@ function PlayersPage() {
   const [sort, setSort] = useState<SortKey>("name");
   const [shuffleSeed, setShuffleSeed] = useState(0);
   const member = useMemberSession();
-  const secrets = useMySecrets(member?.participantId);
-  const secretStatus = useSecretStatus(member?.participantId);
+  // A guest holds secrets too, so the shelf follows whoever this device is
+  // pulling as. No session is minted here — that happens on the pack screen,
+  // where a card is actually at stake; the vault only ever reads.
+  const actor = useSecretActor();
+  const secrets = useMySecrets(actor);
+  const secretStatus = useSecretStatus(actor);
   const pullCounts = useCardPullCounts(event?.id ?? null);
   const [openSecret, setOpenSecret] = useState<OwnedSecret | null>(null);
   // Set on claim and never cleared, so a member on a new phone gets told where

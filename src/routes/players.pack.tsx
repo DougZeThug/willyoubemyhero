@@ -3,10 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Lock, PackageOpen, Sparkles } from "lucide-react";
+import { ArrowLeft, PackageOpen, Sparkles } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
-import { mySecretsKey, secretStatusKey, useSecretStatus } from "@/hooks/use-daily-secret";
+import {
+  mySecretsKey,
+  secretStatusKey,
+  useSecretActor,
+  useSecretStatus,
+} from "@/hooks/use-daily-secret";
+import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
@@ -83,7 +89,10 @@ function todayKey(): string {
  * The order matters: a pull that succeeds after a failure lands straight on
  * "sealed" rather than staying stuck on the error.
  */
-type SecretSlot = "hidden" | "gated" | "pending" | "failed" | "sealed" | "open";
+// No "gated" any more. A visitor who has not claimed a player gets a
+// server-minted guest identity and the card that comes with it, so the only
+// reason the slot is ever not a card is that something is still in flight.
+type SecretSlot = "hidden" | "pending" | "failed" | "sealed" | "open";
 
 /**
  * A ragged tear edge, deterministic for a given seed so the same pack always
@@ -156,11 +165,6 @@ function SecretSlotView({
         >
           One More Card
         </h2>
-        {slot === "gated" && (
-          <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-            Claim your player to open it. Ask whoever&apos;s running the combine for your code.
-          </p>
-        )}
         {(slot === "sealed" || slot === "pending") && !peeking && (
           <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
             {slot === "pending"
@@ -178,19 +182,7 @@ function SecretSlotView({
         )}
       </div>
 
-      {slot === "gated" ? (
-        // Card-shaped, not a bordered link box — that reads as a cookie banner
-        // and gets ignored.
-        <Link
-          to="/claim"
-          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center"
-        >
-          <Lock className="h-6 w-6 text-muted-foreground" />
-          <span className="font-display text-[10px] font-black uppercase tracking-[0.25em] text-primary">
-            Claim your player
-          </span>
-        </Link>
-      ) : slot === "failed" ? (
+      {slot === "failed" ? (
         <button
           onClick={onRetry}
           className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
@@ -318,7 +310,12 @@ function PackPage() {
   const pull = useServerFn(pullSecretCard);
   const record = useServerFn(recordCardPulls);
   const pullCounts = useCardPullCounts(event?.id ?? null);
-  const status = useSecretStatus(me?.participantId);
+  // A guest gets an identity minted for them the moment they land here, so the
+  // fourth card is theirs rather than a locked slot. Only for the unclaimed —
+  // a member already has one.
+  useEnsureGuestSession(true);
+  const actor = useSecretActor();
+  const status = useSecretStatus(actor);
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
   const [secretRevealed, setSecretRevealed] = useState(false);
@@ -479,16 +476,17 @@ function PackPage() {
   /**
    * The one-a-day card.
    *
-   * Fired from an effect keyed on the torn pack and the member, rather than from
+   * Fired from an effect keyed on the torn pack and the actor, rather than from
    * `tearOpen`. Not on mount, because reaching this route is one mis-tap from the
    * vault and must not spend the drop; not on tapping the card, because an
    * unbounded round trip racing the hold either stalls or lies; and not inside
-   * `tearOpen`, because that misses the commonest first-timer path — a guest
-   * tears the pack, hits the gate, goes to /claim, and comes back to the same
-   * already-torn pack, where `tearOpen` will never run again.
+   * `tearOpen`, because the identity can arrive *after* the tear and `tearOpen`
+   * will never run again on an already-torn pack. That last case used to be a
+   * guest going off to /claim and coming back; it is now the ordinary first
+   * visit, where the guest session is still in flight as the wrapper comes off.
    */
   useEffect(() => {
-    if (!torn || !me?.participantId || pullFiredRef.current) return;
+    if (!torn || !actor || pullFiredRef.current) return;
     pullFiredRef.current = true;
     setSecretPulling(true);
     setSecretFailed(false);
@@ -510,8 +508,8 @@ function PackPage() {
           setSecret(res.card);
           setSecretDuplicate(res.duplicate);
           setSecretUnavailable(false);
-          qc.invalidateQueries({ queryKey: secretStatusKey(me.participantId) });
-          qc.invalidateQueries({ queryKey: mySecretsKey(me.participantId) });
+          qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+          qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
         } else {
           // Nothing in the set yet, or every card still missing its art. Not a
           // failure to retry — there is genuinely nothing to hand over.
@@ -536,7 +534,7 @@ function PackPage() {
     })();
 
     return () => clearTimeout(timer);
-  }, [torn, me?.participantId, pull, qc]);
+  }, [torn, actor, pull, qc]);
 
   /**
    * Tell the server which cards were in this pack, so the vault can say how many
@@ -590,7 +588,10 @@ function PackPage() {
     setSecretRevealed(false);
     setSecretFailed(false);
     setSecretUnavailable(false);
-  }, [me?.participantId]);
+    // Keyed on the actor, not the member: a guest claiming their player mid-pack
+    // changes who the fourth card belongs to just as surely as a phone changing
+    // hands does, and the pull has to be re-armed for the identity that won.
+  }, [actor]);
 
   // The drop rolls over on the *server's* day, not this device's. Guarded on the
   // first observed value, or this would clobber the secretRevealed that the
@@ -650,8 +651,10 @@ function PackPage() {
 
   const secretSlot: SecretSlot = !torn
     ? "hidden"
-    : !me
-      ? "gated"
+    : // No identity yet means the guest session is still in flight, so this is a
+      // blank slot for a beat rather than a wall. Guests get the card.
+      !actor
+      ? "pending"
       : secret
         ? secretRevealed
           ? "open"

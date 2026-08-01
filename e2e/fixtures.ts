@@ -97,6 +97,10 @@ export type Responses = Record<string, unknown>;
  * loud failure: an unmatched name falls through to `result: null` with a 200, so
  * the screen renders its empty state and the test passes for the wrong reason.
  */
+/** The anonymous identity every unclaimed visitor in this suite pulls as. */
+const GUEST_ID = "00000000-0000-4000-8000-0000000000e1";
+const GUEST_EXPIRES = Date.now() + 90 * 24 * 60 * 60 * 1000;
+
 export const DEFAULT_RESPONSES: Responses = {
   getActiveEvent: BUNDLE.event,
   getEventBundle: BUNDLE,
@@ -118,8 +122,20 @@ export const DEFAULT_RESPONSES: Responses = {
     claimed: false,
   })),
   getMyAwardVotes: [],
-  // Secret cards. Off by default: a visitor with no member token gets no drop,
-  // which is what every existing pack test runs as.
+  // A guest identity is minted on the pack screen so an unclaimed visitor can own
+  // a secret card. The token only has to satisfy the client's parse — four parts,
+  // a "g" prefix and a future expiry — because the signature is checked on the
+  // server, which is stubbed out here anyway. Without a storable token the client
+  // never resolves an actor and the fourth slot stays pending forever.
+  startGuestSession: {
+    ok: true,
+    guestId: GUEST_ID,
+    token: `g.${GUEST_ID}.${GUEST_EXPIRES}.e2e-signature`,
+    expiresAt: GUEST_EXPIRES,
+  },
+  // Secret cards. Off by default: `available: false` means there is nothing to
+  // pull, which is what every existing pack test runs as — for a guest and a
+  // member alike, now that both can pull.
   getSecretStatus: {
     claimed: false,
     day: null,
