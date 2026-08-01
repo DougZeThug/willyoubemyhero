@@ -76,6 +76,9 @@ const FLICK = {
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
+/** Long enough to read as a turn, short enough not to be in the way. */
+const DEFAULT_FLIP_MS = 500;
+
 export type HoloCardProps = {
   frontUrl: ImageUrlSet | string | null;
   backUrl: ImageUrlSet | string | null;
@@ -113,6 +116,12 @@ export type HoloCardProps = {
   gyro?: boolean;
   /** Start face-down (shows the back) regardless of art availability. */
   faceDown?: boolean;
+  /**
+   * How long the turn takes. The default suits a card you flip to read the back
+   * of; the pack's secret slows it right down, because that flip is the payoff
+   * rather than a way of getting at the stats.
+   */
+  flipMs?: number;
   /** Rendered on the back face when there is no uploaded back artwork. */
   backContent?: React.ReactNode;
   className?: string;
@@ -133,6 +142,7 @@ function HoloCardImpl({
   tilt = "calm",
   gyro = false,
   faceDown = false,
+  flipMs = DEFAULT_FLIP_MS,
   backContent,
   className,
   onClick,
@@ -418,7 +428,7 @@ function HoloCardImpl({
    */
   function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
-    if (drag && drag.id === e.pointerId && canFlip && !onClick) {
+    if (drag && drag.id === e.pointerId && canFlip) {
       const p = localPoint(e);
       if (p) {
         const dx = p.px - drag.px;
@@ -430,7 +440,11 @@ function HoloCardImpl({
         if (flick) {
           // Claimed before handlePointerEnd, whose resetTilt clears dragRef.
           flickedRef.current = true;
-          toggleFlip();
+          // A caller that owns the tap owns the throw too. On the pack's reveal
+          // stand, throwing the card over *is* the reveal — it has to run the
+          // ceremony rather than silently turn the card behind its back.
+          if (onClick) onClick();
+          else toggleFlip();
         }
       }
     }
@@ -469,6 +483,11 @@ function HoloCardImpl({
     // ...and the bloom it gains on top of that at full tilt. A base card peaks
     // near the old flat 0.38, but only while moving and only inside the band.
     "--holo-gain": reduced ? 0 : 0.4 * rarity.strength * scale,
+    // The midpoint of the flip, where the card is edge-on. holo-face lands its
+    // visibility swap there, so a slower flip has to move it — left at the default
+    // 250ms, a 1100ms turn swaps faces a third of the way in and WebKit shows the
+    // away side mirrored through the card.
+    "--holo-flip-half": `${Math.round(flipMs / 2)}ms`,
     aspectRatio: aspect ?? DEFAULT_ASPECT,
     // "pan-y" for a card in a scrolling grid; "none" for a hero card, which owns
     // the whole gesture on both axes.
@@ -569,7 +588,7 @@ function HoloCardImpl({
           style={{
             borderColor: rarity.border,
             transform: `rotateY(${showBack ? 180 : 0}deg)`,
-            transitionDuration: reduced ? "0ms" : undefined,
+            transitionDuration: reduced ? "0ms" : `${flipMs}ms`,
             boxShadow: `0 0 28px -6px ${rarity.border}`,
           }}
         >

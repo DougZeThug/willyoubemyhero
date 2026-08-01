@@ -191,21 +191,54 @@ test.describe("opening a pack", () => {
   }
 
   const sealedPack = (page: import("@playwright/test").Page) =>
-    page.getByRole("button", { name: /drag down to open the pack/i });
+    page.getByRole("button", { name: /tear the pack open/i });
 
-  test("a drag past the threshold tears the pack open", async ({ page }) => {
+  /** Where the perforation runs, as a fraction of the pack's height. */
+  const TEAR_LINE = 0.15;
+
+  test("a tap on the pack does not open it", async ({ page }) => {
     await page.goto("/players/pack");
 
     const pack = sealedPack(page);
     await expect(pack).toBeVisible();
 
-    // The handler tears at 55% of the element's own height, measured from its
-    // top edge — so the drag has to start high on the pack and finish low.
+    // The handler this replaced compared the pointer's absolute Y against the
+    // pack's own top edge, so a press below 55% of its height opened the pack
+    // having travelled nowhere. Progress is measured as travel now, and a tap
+    // travels nothing.
+    const box = (await pack.boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.7);
+    await expect(pack).toBeVisible();
+  });
+
+  test("a drag that stops short springs shut", async ({ page }) => {
+    await page.goto("/players/pack");
+
+    const pack = sealedPack(page);
+    const box = (await pack.boundingBox())!;
+    // A full rip is 80% of the pack's width and commits at 60% of that, so a
+    // third of the way across is a rip somebody thought better of.
+    await page.mouse.move(box.x + box.width * 0.1, box.y + box.height * TEAR_LINE);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * TEAR_LINE, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(pack).toBeVisible();
+  });
+
+  test("a rip across the top tears the pack open", async ({ page }) => {
+    await page.goto("/players/pack");
+
+    const pack = sealedPack(page);
+    await expect(pack).toBeVisible();
+
+    // Horizontal travel along the perforation, left to right, the way you would
+    // actually rip foil.
     const box = (await pack.boundingBox())!;
     expect(box).toBeTruthy();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.1);
+    await page.mouse.move(box.x + box.width * 0.08, box.y + box.height * TEAR_LINE);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.95, { steps: 12 });
+    await page.mouse.move(box.x + box.width * 0.95, box.y + box.height * TEAR_LINE, { steps: 12 });
     await page.mouse.up();
 
     // The sealed wrapper is gone once it has been torn.
