@@ -83,6 +83,29 @@ describe("collection", () => {
     await mod.clearCollection();
     expect(await mod.loadCollection()).toEqual({});
   });
+
+  it("forgets only the cards it is given", async () => {
+    // How the rows left behind by collect-on-sight get removed once the server
+    // has disowned them. See collection-merge.ts.
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "base");
+    await mod.collectCard(CARD_B, "podium");
+    await mod.forgetCards([CARD_A]);
+    expect(Object.keys(await mod.loadCollection())).toEqual([CARD_B]);
+  });
+
+  it("shrugs at an empty list and at a card it has never seen", async () => {
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "base");
+    await mod.forgetCards([]);
+    await mod.forgetCards(["never-dealt"]);
+    expect(Object.keys(await mod.loadCollection())).toEqual([CARD_A]);
+  });
+
+  it("does nothing on the server, where there is no IndexedDB", async () => {
+    const mod = await serverModule();
+    await expect(mod.forgetCards([CARD_A])).resolves.toBeUndefined();
+  });
 });
 
 describe("pack state", () => {

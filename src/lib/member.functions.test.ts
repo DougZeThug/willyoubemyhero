@@ -1,8 +1,14 @@
 // Claiming a player, and the commissioner side of issuing codes.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
-import { adminHeaders, callServerFn, memberHeaders } from "@/test/server-fn";
-import { hashCode, signAdminToken, signMemberToken, verifyMemberToken } from "./session.server";
+import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/server-fn";
+import {
+  hashCode,
+  signAdminToken,
+  signGuestToken,
+  signMemberToken,
+  verifyMemberToken,
+} from "./session.server";
 
 let mock = createSupabaseMock();
 
@@ -41,11 +47,74 @@ beforeEach(() => {
   withDb({});
 });
 
+const GUEST_ID = "00000000-0000-4000-8000-0000000000e1";
+
 describe("claimPlayer", () => {
-  async function claim(data: unknown) {
+  async function claim(data: unknown, headers?: Record<string, string>) {
     const { claimPlayer } = await import("./member.functions");
-    return callServerFn(claimPlayer, { data });
+    return callServerFn(claimPlayer, { data, headers });
   }
+
+  it("carries a guest's secrets onto the player they claim", async () => {
+    // Pulling a card as a guest and then claiming has to keep the card, or
+    // letting guests pull at all is a trap.
+    withDb({
+      "member_codes.select": codeRow(),
+      "participants.select": { data: { name: "Doug" }, error: null },
+      "rpc.claim_guest_secrets": { data: 2 },
+    });
+    await claim(
+      { participantId: PARTICIPANT_ID, code: CODE },
+      guestHeaders(signGuestToken(GUEST_ID).token),
+    );
+    expect(mock.client.rpc).toHaveBeenCalledWith("claim_guest_secrets", {
+      _participant_id: PARTICIPANT_ID,
+      _guest_id: GUEST_ID,
+    });
+  });
+
+  it("takes the guest id from the token, never from the payload", async () => {
+    // Otherwise claiming your own player would be a way to harvest somebody
+    // else's cards by naming their guest id.
+    withDb({
+      "member_codes.select": codeRow(),
+      "participants.select": { data: { name: "Doug" }, error: null },
+      "rpc.claim_guest_secrets": { data: 0 },
+    });
+    await claim(
+      { participantId: PARTICIPANT_ID, code: CODE, guestId: OTHER_ID },
+      guestHeaders(signGuestToken(GUEST_ID).token),
+    );
+    expect(mock.client.rpc).toHaveBeenCalledWith(
+      "claim_guest_secrets",
+      expect.objectContaining({ _guest_id: GUEST_ID }),
+    );
+  });
+
+  it("does not reach for guest secrets when the device never had a guest session", async () => {
+    withDb({
+      "member_codes.select": codeRow(),
+      "participants.select": { data: { name: "Doug" }, error: null },
+    });
+    await claim({ participantId: PARTICIPANT_ID, code: CODE });
+    expect(mock.client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("still issues the token when carrying the secrets over fails", async () => {
+    // A claim that half-worked is worth far less than a claim that worked, and
+    // nobody can act on "your old secrets did not come across" in the moment.
+    withDb({
+      "member_codes.select": codeRow(),
+      "participants.select": { data: { name: "Doug" }, error: null },
+      "rpc.claim_guest_secrets": { error: { message: "boom" } },
+    });
+    const res = (await claim(
+      { participantId: PARTICIPANT_ID, code: CODE },
+      guestHeaders(signGuestToken(GUEST_ID).token),
+    )) as { ok: true; token: string };
+    expect(res.ok).toBe(true);
+    expect(verifyMemberToken(res.token)?.participantId).toBe(PARTICIPANT_ID);
+  });
 
   it("issues a member token for the right code", async () => {
     withDb({

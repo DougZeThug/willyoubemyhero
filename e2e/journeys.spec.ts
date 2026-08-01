@@ -192,6 +192,20 @@ test.describe("a player's card", () => {
     // the page shows it took the answer rather than just closing the form.
     await expect(prompt).toBeHidden();
     await expect(page.getByPlaceholder(/talk your talk, garden guest/i)).toBeVisible();
+  test("asks a signed-out visitor for a name before reacting", async ({ page }) => {
+    // This used to assert a "Claim your player" link, and went stale when the
+    // members-only gate on reactions was replaced by an anonymous guest identity:
+    // a signed-out visitor can react and talk trash, they just have to say what
+    // to call them first. Asserting the old copy was asserting a wall the product
+    // deliberately pulled down.
+    await page.goto("/players/ep-alice");
+    // Matched on the label prefix rather than the emoji, which is brittle inside
+    // an accessible-name filter.
+    await page
+      .getByRole("button", { name: /^React with/ })
+      .first()
+      .click();
+    await expect(page.getByText(/what should we call you/i)).toBeVisible();
   });
 });
 

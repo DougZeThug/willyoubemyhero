@@ -30,14 +30,26 @@ async function addCard(name: string, over: { active?: boolean; artPath?: string 
 }
 
 async function pull(participantId = IDS.alice, eventId: string | null = IDS.event): Promise<Pull> {
-  const [row] = await sql<{ pull_secret_card: Pull }>("SELECT public.pull_secret_card($1, $2)", [
-    participantId,
-    eventId,
-  ]);
+  const [row] = await sql<{ pull_secret_card: Pull }>(
+    "SELECT public.pull_secret_card($1, $2, $3)",
+    [participantId, null, eventId],
+  );
   return row.pull_secret_card;
 }
 
-async function status(participantId = IDS.alice) {
+/** The same pull, as a guest. Guests carry a server-minted id, not a participant. */
+async function pullAsGuest(guestId = GUEST_A, eventId: string | null = IDS.event): Promise<Pull> {
+  const [row] = await sql<{ pull_secret_card: Pull }>(
+    "SELECT public.pull_secret_card($1, $2, $3)",
+    [null, guestId, eventId],
+  );
+  return row.pull_secret_card;
+}
+
+const GUEST_A = "00000000-0000-4000-8000-0000000000e1";
+const GUEST_B = "00000000-0000-4000-8000-0000000000e2";
+
+async function status(participantId: string | null = IDS.alice, guestId: string | null = null) {
   const [row] = await sql<{
     secret_pull_status: {
       day: string;
@@ -46,7 +58,7 @@ async function status(participantId = IDS.alice) {
       available: boolean;
       resetsAt: string;
     };
-  }>("SELECT public.secret_pull_status($1)", [participantId]);
+  }>("SELECT public.secret_pull_status($1, $2)", [participantId, guestId]);
   return row.secret_pull_status;
 }
 
@@ -61,16 +73,28 @@ describe("the RPCs are unreachable with the publishable key", () => {
   it.each(["anon", "authenticated"] as const)(
     "%s cannot execute pull_secret_card",
     async (role) => {
-      expect(await isDenied(role, "SELECT public.pull_secret_card($1, null)", [IDS.alice])).toBe(
-        true,
-      );
+      expect(
+        await isDenied(role, "SELECT public.pull_secret_card($1, null, null)", [IDS.alice]),
+      ).toBe(true);
     },
   );
 
   it.each(["anon", "authenticated"] as const)(
     "%s cannot execute secret_pull_status",
     async (role) => {
-      expect(await isDenied(role, "SELECT public.secret_pull_status($1)", [IDS.alice])).toBe(true);
+      expect(await isDenied(role, "SELECT public.secret_pull_status($1, null)", [IDS.alice])).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each(["anon", "authenticated"] as const)(
+    "%s cannot execute claim_guest_secrets",
+    async (role) => {
+      // Reachable, it would let anyone graft a guest's cards onto any player.
+      expect(
+        await isDenied(role, "SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]),
+      ).toBe(true);
     },
   );
 
@@ -161,8 +185,8 @@ describe("pull_secret_card", () => {
     const [a, b] = [await newClient(), await newClient()];
     try {
       const results = await Promise.all([
-        a.query("SELECT public.pull_secret_card($1, $2)", [IDS.alice, IDS.event]),
-        b.query("SELECT public.pull_secret_card($1, $2)", [IDS.alice, IDS.event]),
+        a.query("SELECT public.pull_secret_card($1, null, $2)", [IDS.alice, IDS.event]),
+        b.query("SELECT public.pull_secret_card($1, null, $2)", [IDS.alice, IDS.event]),
       ]);
       // The loser of the race gets a card, not an error — and the same card.
       const cards = results.map((r) => r.rows[0].pull_secret_card.cardId);
@@ -225,6 +249,174 @@ describe("pull_secret_card", () => {
       "SELECT event_id FROM public.secret_card_pulls",
     );
     expect(rows).toEqual([{ event_id: null }]);
+  });
+
+  it("refuses a call with neither a participant nor a guest", async () => {
+    await addCard("Gary the Grill");
+    await expect(sql("SELECT public.pull_secret_card(null, null, null)")).rejects.toThrow();
+  });
+
+  it("refuses a call claiming to be both at once", async () => {
+    // The CHECK on the table says exactly one owner; the RPC refuses before it
+    // gets there, so the failure names the problem instead of citing a constraint.
+    await addCard("Gary the Grill");
+    await expect(
+      sql("SELECT public.pull_secret_card($1, $2, null)", [IDS.alice, GUEST_A]),
+    ).rejects.toThrow();
+  });
+});
+
+describe("pull_secret_card, as a guest", () => {
+  // Everything the member rules guarantee has to hold for a guest too, keyed on
+  // a server-minted guest id instead of a participant row.
+  it("hands a guest a card without any participant behind it", async () => {
+    const id = await addCard("Gary the Grill");
+    const res = await pullAsGuest();
+    expect(res).toMatchObject({ cardId: id, duplicate: false, fresh: true });
+    const rows = await sql<{ participant_id: string | null; guest_id: string }>(
+      "SELECT participant_id, guest_id FROM public.secret_card_pulls",
+    );
+    expect(rows).toEqual([{ participant_id: null, guest_id: GUEST_A }]);
+  });
+
+  it("gives a guest the same card twice in a day, and only one row", async () => {
+    await addCard("Gary the Grill");
+    const first = await pullAsGuest();
+    const second = await pullAsGuest();
+    expect(second!.cardId).toBe(first!.cardId);
+    expect(second!.fresh).toBe(false);
+    expect(await ledger()).toHaveLength(1);
+  });
+
+  it("refuses a second guest pull inserted directly, so the rule is the schema's", async () => {
+    const id = await addCard("Gary the Grill");
+    await pullAsGuest();
+    await expect(
+      sql(
+        `INSERT INTO public.secret_card_pulls (guest_id, secret_card_id, pulled_on)
+         VALUES ($1, $2, current_date)`,
+        [GUEST_A, id],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("keeps two guests apart on the same day", async () => {
+    await addCard("Gary the Grill");
+    await pullAsGuest(GUEST_A);
+    await pullAsGuest(GUEST_B);
+    expect(await ledger()).toHaveLength(2);
+  });
+
+  it("keeps a guest and a member apart on the same day", async () => {
+    await addCard("Gary the Grill");
+    await pull(IDS.alice);
+    await pullAsGuest(GUEST_A);
+    expect(await ledger()).toHaveLength(2);
+  });
+
+  it("leaves exactly one row when two connections race for one guest", async () => {
+    // A guest has no participant row to lock, so this is carried by an advisory
+    // lock instead. Without it the unique index is all that is left and the loser
+    // of the race gets an error rather than a card.
+    await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    const [a, b] = [await newClient(), await newClient()];
+    try {
+      const results = await Promise.all([
+        a.query("SELECT public.pull_secret_card(null, $1, $2)", [GUEST_A, IDS.event]),
+        b.query("SELECT public.pull_secret_card(null, $1, $2)", [GUEST_A, IDS.event]),
+      ]);
+      const cards = results.map((r) => r.rows[0].pull_secret_card.cardId);
+      expect(cards[0]).toBe(cards[1]);
+      expect(await ledger()).toHaveLength(1);
+    } finally {
+      await Promise.all([a.end(), b.end()]);
+    }
+  });
+
+  it("never deals a guest the same card twice while they still have one to find", async () => {
+    const a = await addCard("Gary the Grill");
+    const b = await addCard("The Gazebo");
+    const first = await pullAsGuest();
+    await sql("UPDATE public.secret_card_pulls SET pulled_on = pulled_on - 1");
+    const second = await pullAsGuest();
+    expect(second!.duplicate).toBe(false);
+    expect([first!.cardId, second!.cardId].sort()).toEqual([a, b].sort());
+  });
+
+  it("hands a guest a duplicate once they own the whole set", async () => {
+    await addCard("Gary the Grill");
+    await pullAsGuest();
+    await sql("UPDATE public.secret_card_pulls SET pulled_on = pulled_on - 1");
+    expect((await pullAsGuest())!.duplicate).toBe(true);
+    expect(await status(null, GUEST_A)).toMatchObject({ pulled: 1 });
+  });
+
+  it("reports a guest's own status, and nobody else's", async () => {
+    await addCard("Gary the Grill");
+    await pullAsGuest(GUEST_A);
+    expect(await status(null, GUEST_A)).toMatchObject({ pulledToday: true, pulled: 1 });
+    expect(await status(null, GUEST_B)).toMatchObject({ pulledToday: false, pulled: 0 });
+    expect(await status(IDS.alice)).toMatchObject({ pulledToday: false, pulled: 0 });
+  });
+});
+
+describe("claim_guest_secrets", () => {
+  it("carries a guest's cards onto the player they claim", async () => {
+    const id = await addCard("Gary the Grill");
+    await pullAsGuest(GUEST_A);
+    expect(await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A])).toEqual([
+      { claim_guest_secrets: 1 },
+    ]);
+    const rows = await sql<{ participant_id: string | null; guest_id: string | null }>(
+      "SELECT participant_id, guest_id FROM public.secret_card_pulls",
+    );
+    expect(rows).toEqual([{ participant_id: IDS.alice, guest_id: null }]);
+    expect(await status(IDS.alice)).toMatchObject({ pulled: 1 });
+    expect(id).toBeTruthy();
+  });
+
+  it("keeps the member's own row when both spent the same day", async () => {
+    // Their own pull is the one attached to the name the cards live on.
+    await addCard("Gary the Grill");
+    await pull(IDS.alice);
+    await pullAsGuest(GUEST_A);
+    await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+    const rows = await ledger();
+    expect(rows).toHaveLength(1);
+    expect(await status(IDS.alice)).toMatchObject({ pulled: 1 });
+  });
+
+  it("arrives as a duplicate when the member already owns the card", async () => {
+    await addCard("Gary the Grill");
+    await pull(IDS.alice);
+    await pullAsGuest(GUEST_A);
+    // Move the guest's row off the member's day so only the ownership rule bites.
+    await sql("UPDATE public.secret_card_pulls SET pulled_on = pulled_on - 1 WHERE guest_id = $1", [
+      GUEST_A,
+    ]);
+    await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+    const rows = await ledger();
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((r) => !r.is_duplicate)).toHaveLength(1);
+    expect(await status(IDS.alice)).toMatchObject({ pulled: 1 });
+  });
+
+  it("does nothing, and does not raise, for a participant who no longer exists", async () => {
+    await addCard("Gary the Grill");
+    await pullAsGuest(GUEST_A);
+    expect(
+      await sql("SELECT public.claim_guest_secrets($1, $2)", [
+        "00000000-0000-4000-8000-0000000000ee",
+        GUEST_A,
+      ]),
+    ).toEqual([{ claim_guest_secrets: 0 }]);
+  });
+
+  it("does nothing for a guest with no cards", async () => {
+    expect(await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_B])).toEqual([
+      { claim_guest_secrets: 0 },
+    ]);
   });
 });
 

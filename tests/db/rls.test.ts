@@ -51,6 +51,9 @@ const SERVER_ONLY = [
   // The aggregate ("7 people have this card") is public and served by a server
   // function. These rows are not: they say who has never packed whom.
   "public.card_pulls",
+  // Unlike card_pulls there is no public aggregate over this at all — a pack
+  // count is shown to the person it belongs to and to nobody else.
+  "public.pack_opens",
 ];
 
 describe("public reads", () => {
@@ -181,6 +184,17 @@ describe("server-only tables", () => {
     expect(visible === null || visible === 0).toBe(true);
   });
 
+  it("keeps how many packs somebody has opened out of anon's reach", async () => {
+    await sql(
+      `INSERT INTO public.pack_opens (participant_id, opened_on)
+       VALUES ($1, current_date) ON CONFLICT DO NOTHING`,
+      [IDS.alice],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.pack_opens")).toEqual([{ n: 1 }]);
+    const visible = await visibleRows("anon", "public.pack_opens");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
   it("keeps a cast ballot secret before the reveal", async () => {
     await sql(
       `INSERT INTO public.award_votes (event_id, category, voter_participant_id, target_participant_id)
@@ -222,6 +236,11 @@ describe("anon has no write grant anywhere", () => {
     ["print itself a secret card", `INSERT INTO public.secret_cards (name, art_path) VALUES ('Pwned', 'secrets/x/art.webp')`, []], // prettier-ignore
     ["grant itself a secret pull", `INSERT INTO public.secret_card_pulls (participant_id, secret_card_id, pulled_on) SELECT $1, id, current_date FROM public.secret_cards LIMIT 1`, [IDS.alice]], // prettier-ignore
     ["credit itself a card pull", `INSERT INTO public.card_pulls (participant_id, event_participant_id) SELECT $1, id FROM public.event_participants LIMIT 1`, [IDS.alice]], // prettier-ignore
+    // Bob on a past date, not Alice on today's: this suite seeds once for the
+    // whole file and the read test above already inserted (alice, current_date),
+    // so that key would collide on the primary key and `isDenied` — which counts
+    // any error as a denial — would pass without ever reaching the grant.
+    ["inflate its own pack count", `INSERT INTO public.pack_opens (participant_id, opened_on) VALUES ($1, current_date - 30)`, [IDS.bob]], // prettier-ignore
   ];
 
   it.each(WRITES)("anon cannot %s", async (_label, statement, params) => {

@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader, setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { optionalMember, requireAdmin, requireMember } from "./require-auth.server";
+import { optionalActor, requireActor, requireAdmin } from "./require-auth.server";
 import { decodeImageDataUrl, forgetSignedPath, signPath } from "./media.functions";
 import type {
   PullSecretCardResult,
@@ -113,14 +113,18 @@ async function signCard(row: SecretCardRow) {
 // ------- Member-facing -------
 
 /**
- * Today's secret card. Takes no input at all: the member comes from the verified
- * token and the card is chosen by Postgres.
+ * Today's secret card. Takes no input at all: whoever is asking comes from a
+ * verified token and the card is chosen by Postgres.
+ *
+ * Guests get one too, keyed on a server-minted `g.` token rather than a
+ * participant. The id is never read from the payload for either kind — that is
+ * the entire reason the guest identity is signed rather than just a device id.
  *
  * Calling twice in one league day returns the same card with `fresh: false`
  * rather than failing, so a double-tap or a retried request resumes the reveal.
  */
 export const pullSecretCard = createServerFn({ method: "POST" }).handler(async () => {
-  const me = await requireMember();
+  const actor = requireActor();
   noStore();
   const sb = await admin();
   const db = await secrets();
@@ -136,7 +140,8 @@ export const pullSecretCard = createServerFn({ method: "POST" }).handler(async (
     .maybeSingle();
 
   const { data, error } = await db.rpc("pull_secret_card", {
-    _participant_id: me,
+    _participant_id: actor.kind === "member" ? actor.id : null,
+    _guest_id: actor.kind === "guest" ? actor.id : null,
     _event_id: event?.id ?? null,
   });
   if (error) throw new Error(error.message);
@@ -166,13 +171,18 @@ export const pullSecretCard = createServerFn({ method: "POST" }).handler(async (
  * Whether there is a card waiting today. A pure read — opening the pack screen
  * must never spend the drop.
  *
- * Answers for an unclaimed visitor too, with everything false, so a guest can
- * reach the pack screen without this throwing at them.
+ * Answers for a device with no identity at all too, with everything false, so the
+ * pack screen can render before a guest session exists without this throwing.
+ *
+ * `claimed` is a misnomer kept on purpose. It has always driven "is there a drop
+ * for you", and now that a guest has one too it means "has an identity that can
+ * pull" rather than "has claimed a player". Renaming it would ripple through the
+ * exact-key assertions that keep a set size out of this response, for no gain.
  */
 export const getSecretStatus = createServerFn({ method: "GET" }).handler(async () => {
   noStore();
-  const me = optionalMember();
-  if (!me) {
+  const actor = optionalActor();
+  if (!actor) {
     return {
       claimed: false as const,
       day: null,
@@ -183,27 +193,30 @@ export const getSecretStatus = createServerFn({ method: "GET" }).handler(async (
     };
   }
   const db = await secrets();
-  const { data, error } = await db.rpc("secret_pull_status", { _participant_id: me });
+  const { data, error } = await db.rpc("secret_pull_status", {
+    _participant_id: actor.kind === "member" ? actor.id : null,
+    _guest_id: actor.kind === "guest" ? actor.id : null,
+  });
   if (error) throw new Error(error.message);
   const status = data as SecretPullStatusResult;
   return { claimed: true as const, ...status };
 });
 
 /**
- * The secrets this member has pulled, and only those.
+ * The secrets whoever is asking has pulled, and only those.
  *
  * Deactivated cards are deliberately not filtered out: you pulled it, you keep
  * it. Retiring a card removes it from future pulls, never from somebody's vault.
  */
 export const getMySecrets = createServerFn({ method: "GET" }).handler(async () => {
-  const me = await requireMember();
+  const actor = requireActor();
   noStore();
   const db = await secrets();
 
   const { data: pulls, error } = await db
     .from("secret_card_pulls")
     .select("secret_card_id, pulled_on, is_duplicate")
-    .eq("participant_id", me)
+    .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
     .order("pulled_on", { ascending: false })
     .returns<Pick<SecretPullRow, "secret_card_id" | "pulled_on" | "is_duplicate">[]>();
   if (error) throw error;
@@ -230,8 +243,9 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
     // careless `return` away from the wire — the exact failure the INVARIANT at
     // the top of this file exists to prevent.
     //
-    // secret_card_pulls_owned_once makes at most one non-duplicate row per person
-    // per card, so counting rows here IS counting people.
+    // secret_card_pulls_owned_once and its guest twin together make at most one
+    // non-duplicate row per identity per card, so counting rows here IS counting
+    // people — guests among them, which is the point of them having identities.
     db
       .from("secret_card_pulls")
       .select("secret_card_id")
@@ -292,17 +306,26 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
       .eq("is_duplicate", false)
       .returns<Pick<SecretPullRow, "secret_card_id" | "participant_id">[]>(),
     // Claimed, not issued. Counting every code printed would include people who
-    // never used one, and since an unclaimed player has no identity their pulls
-    // are never recorded — so `exhausted` below could never be reached.
+    // never used one, and `exhausted` below is measured against this number.
     sb
       .from("member_codes")
       .select("participant_id", { count: "exact", head: true })
       .not("claimed_at", "is", null),
   ]);
 
+  // Two counts, because they answer different questions. `owners` is how many
+  // people hold a card — guests included, matching the number everyone else sees.
+  // `memberOwners` is the one `exhausted` is measured with, because it is
+  // compared against the claimed-member count: guests would push it over the line
+  // while members still had cards to find, and the panel would go quiet early.
   const owners = new Map<string, number>();
-  for (const p of pulls ?? [])
+  const memberOwners = new Map<string, number>();
+  for (const p of pulls ?? []) {
     owners.set(p.secret_card_id, (owners.get(p.secret_card_id) ?? 0) + 1);
+    if (p.participant_id) {
+      memberOwners.set(p.secret_card_id, (memberOwners.get(p.secret_card_id) ?? 0) + 1);
+    }
+  }
 
   const claimed = claimedCount ?? 0;
   const cards = await Promise.all(
@@ -340,7 +363,10 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
     // Everyone who could pull has pulled everything there is. The panel says so,
     // because otherwise the admin has no way to know the daily drop has gone
     // quiet and turned into nothing but duplicates.
-    exhausted: claimed > 0 && pullable.length > 0 && pullable.every((c) => c.ownerCount >= claimed),
+    exhausted:
+      claimed > 0 &&
+      pullable.length > 0 &&
+      pullable.every((c) => (memberOwners.get(c.id) ?? 0) >= claimed),
     participants,
   };
 });

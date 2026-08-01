@@ -95,7 +95,11 @@ test.describe("the daily secret", () => {
     expect(state!.ids).not.toContain(SECRET_CARD.id);
   });
 
-  test("an unclaimed guest gets three cards and an invitation, not a wall", async ({ page }) => {
+  test("an unclaimed guest gets the fourth card too, not a wall", async ({ page, server }) => {
+    // This used to assert the opposite — a lock icon and a link to /claim. Guests
+    // are in the garden holding a beer as well, so they get a server-minted
+    // identity and the card that comes with it. What they no longer get is a gate.
+    withSecret(server);
     await page.goto("/players/pack");
     await sealedPack(page).press("Enter");
     await revealAll(page);
@@ -108,6 +112,18 @@ test.describe("the daily secret", () => {
     await expect(page.getByText(/ask whoever/i)).toBeVisible();
     // Nothing about the drop is spent or promised.
     await expect(page.getByText(SECRET_CARD.name).first()).toBeHidden();
+    await expect(page.getByText(/one more card/i)).toBeVisible();
+    await expect(page.getByText(/not on the roster/i).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /claim your player/i })).toHaveCount(0);
+  });
+
+  test("says nothing to a guest when there is no drop to be had", async ({ page }) => {
+    // The default fixture: available: false. A guest with nothing to pull must
+    // see no slot at all rather than an empty one — the same rule a member gets,
+    // because an empty slot announces that a set exists.
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+    await expect(page.getByText(/one more card/i)).toBeHidden();
   });
 
   test("reveals the card, and does not pull a second time after a reload", async ({
@@ -162,6 +178,23 @@ test.describe("the daily secret", () => {
 
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+  test("reveals a fourth card that only arrives after Reveal all was tapped", async ({
+    page,
+    server,
+  }) => {
+    // The three roster cards take a couple of seconds to flip and the pull runs
+    // alongside them. Usually it wins; when it does not, "Reveal all" used to
+    // find no card, do nothing, and disappear — leaving the secret sealed with
+    // nothing left to open it. This was the flake in the duplicate test above,
+    // reproduced deliberately by holding the pull back.
+    await asMember(page);
+    withSecret(server);
+    server.delay("pullSecretCard", 4000);
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+    await page.getByRole("button", { name: /reveal all/i }).click();
+
+    await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 20_000 });
   });
 
   test("nothing appears when the set is empty", async ({ page }) => {

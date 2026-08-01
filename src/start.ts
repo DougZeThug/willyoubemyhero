@@ -4,6 +4,7 @@ import { renderErrorPage } from "./lib/error-page";
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 import { attachAdminToken } from "@/lib/attach-admin-token";
 import { attachMemberToken } from "@/lib/attach-member-token";
+import { attachGuestToken } from "@/lib/attach-guest-token";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -21,6 +22,6 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
 });
 
 export const startInstance = createStart(() => ({
-  functionMiddleware: [attachSupabaseAuth, attachAdminToken, attachMemberToken],
+  functionMiddleware: [attachSupabaseAuth, attachAdminToken, attachMemberToken, attachGuestToken],
   requestMiddleware: [errorMiddleware],
 }));
