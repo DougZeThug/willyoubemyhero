@@ -36,6 +36,7 @@ import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
 import { seededRng } from "@/lib/format";
 import { urlFromSet } from "@/lib/media.functions";
+import type { ImageUrlSet } from "@/lib/media.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/pack")({
@@ -139,6 +140,7 @@ function SecretSlotView({
   duplicate,
   peeking,
   pulledCount,
+  universalBack,
   onReveal,
   onRetry,
 }: {
@@ -148,6 +150,8 @@ function SecretSlotView({
   duplicate: boolean;
   peeking: boolean;
   pulledCount: number;
+  /** The event's universal deck back. Secrets share it with every other card. */
+  universalBack: ImageUrlSet | null;
   onReveal: () => void;
   onRetry: () => void;
 }) {
@@ -238,7 +242,7 @@ function SecretSlotView({
           <div className={cn("relative w-full rounded-xl", duplicate && "secret-dupe-shimmer")}>
             <HoloCard
               frontUrl={card.artUrl}
-              backUrl={card.backUrl}
+              backUrl={universalBack}
               name={card.name}
               rarity={rarity}
               cacheKey={card.id}
@@ -822,18 +826,11 @@ function PackPage() {
               )}
             </div>
 
-            {/* Two up on a phone, with the third centred underneath.
-                This was three across at every width, so the whole pack stayed in
-                view at once — but a third of a 390px screen minus gaps comes out
-                around 114px, smaller than the vault's own grid thumbnails and far
-                too small to be the payoff of a ceremony. Seeing all three without
-                scrolling turned out to be worth less than being able to see any
-                of them.
-                Four columns spanning two each, rather than grid-cols-2: it makes
-                the odd card `col-start-2`, where it lands exactly centred at
-                exactly the width of the two above, with no calc() and no
-                half-gap drift. */}
-            <div className="mx-auto grid max-w-2xl grid-cols-4 items-start gap-3 sm:grid-cols-3 sm:gap-4">
+            {/* One row of three, deliberately small. The fourth slot below is the
+                payoff and has to be reachable without a long scroll on a phone,
+                so the roster trio reads as the supporting row rather than
+                competing with it for height. */}
+            <div className="mx-auto grid max-w-sm grid-cols-3 items-start gap-2 sm:max-w-lg sm:gap-3">
               {pack.map((ep, i) => {
                 const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
                 const isRevealed = revealed.includes(i);
@@ -845,13 +842,7 @@ function PackPage() {
                     initial={{ opacity: 0, y: 24 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.07, type: "spring", stiffness: 220, damping: 20 }}
-                    className={cn(
-                      "col-span-2 flex flex-col gap-2",
-                      // Only while the grid is two-up. At sm: it is an ordinary
-                      // third column and must let go, or it stays offset.
-                      i === 2 && "col-start-2",
-                      "sm:col-span-1 sm:col-start-auto",
-                    )}
+                    className={cn("flex flex-col gap-1")}
                   >
                     {/* The card owns its own button semantics — wrapping it in
                         another button would nest interactive elements. */}
@@ -908,14 +899,12 @@ function PackPage() {
                           animate={{ opacity: 1 }}
                           className="text-center"
                         >
-                          {/* Wrapped rather than truncated: a name cut off mid-word
-                              is a poor look on the screen that is meant to be the
-                              payoff, and at two-up there is room for two lines.
-                              The grid's items-start absorbs the uneven rows. */}
+                          {/* Two lines at most: at three-up the column is narrow,
+                              and the grid's items-start absorbs uneven rows. */}
                           <Link
                             to="/players/$id"
                             params={{ id: ep.id }}
-                            className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary sm:text-base"
+                            className="block line-clamp-2 font-display text-[11px] font-black uppercase leading-tight tracking-wide hover:text-primary sm:text-sm"
                           >
                             {name}
                           </Link>
@@ -924,7 +913,7 @@ function PackPage() {
                               which left this label all but unreadable. Same
                               reason CardBackPanel does it. */}
                           <div
-                            className="text-[10px] font-bold uppercase tracking-[0.25em] sm:text-xs"
+                            className="text-[9px] font-bold uppercase tracking-[0.2em] sm:text-[10px]"
                             style={{ color: rarity.accent }}
                           >
                             {rarity.label}
@@ -932,7 +921,7 @@ function PackPage() {
                           {/* Muted and on its own line: the tier above is what
                               this card is, this is how many people have one. */}
                           {packedByLabel(pullCounts.data?.[ep.id]) && (
-                            <div className="text-[9px] font-bold uppercase leading-tight tracking-[0.2em] text-muted-foreground sm:text-[10px]">
+                            <div className="text-[8px] font-bold uppercase leading-tight tracking-[0.15em] text-muted-foreground sm:text-[9px]">
                               {packedByLabel(pullCounts.data?.[ep.id])}
                             </div>
                           )}
@@ -951,6 +940,7 @@ function PackPage() {
               duplicate={secretDuplicate}
               peeking={secretPeeking}
               pulledCount={status.data?.pulled ?? 0}
+              universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
               onReveal={() => void revealSecret()}
               onRetry={() => {
                 pullFiredRef.current = false;
