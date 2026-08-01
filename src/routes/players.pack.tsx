@@ -7,7 +7,12 @@ import { ArrowLeft, PackageOpen } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
-import { mySecretsKey, secretStatusKey, useSecretStatus } from "@/hooks/use-daily-secret";
+import {
+  mySecretsKey,
+  secretStatusKey,
+  useSecretActor,
+  useSecretStatus,
+} from "@/hooks/use-daily-secret";
 import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
