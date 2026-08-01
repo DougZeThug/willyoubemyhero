@@ -161,9 +161,37 @@ test.describe("a player's card", () => {
     await expect(page.locator("body")).toContainText(/DNF|did not finish/i);
   });
 
-  test("prompts a signed-out visitor to claim before reacting", async ({ page }) => {
+  /**
+   * This used to assert a "Claim your player" link on the card, and had been
+   * failing since a22f1dd removed the one it was looking for. That commit was
+   * not a regression: it deleted the claim gate on purpose and let guests join
+   * in by naming themselves on the device instead — which is why the server
+   * says "Claim your player *or add a name* to join in".
+   *
+   * So the behaviour worth pinning is the replacement, not the thing that went.
+   * The load-bearing part is that the tap survives: a guest who reacts, gets
+   * asked who they are, and answers should not then have to react again.
+   */
+  test("asks a signed-out visitor for a name before their first reaction", async ({ page }) => {
     await page.goto("/players/ep-alice");
-    await expect(page.getByRole("link", { name: /claim your player/i }).first()).toBeVisible();
+
+    const prompt = page.getByText(/what should we call you/i);
+    const react = page.getByRole("button", { name: /react with/i }).first();
+
+    // Not gated: a guest may tap, and is asked only once they actually do.
+    await expect(react).toBeEnabled();
+    await expect(prompt).toBeHidden();
+
+    await react.click();
+    await expect(prompt).toBeVisible();
+
+    await page.getByPlaceholder("Your name").fill("Garden Guest");
+    await page.getByRole("button", { name: /^save$/i }).click();
+
+    // Gone, and the name is now the one offered for trash talk — which is how
+    // the page shows it took the answer rather than just closing the form.
+    await expect(prompt).toBeHidden();
+    await expect(page.getByPlaceholder(/talk your talk, garden guest/i)).toBeVisible();
   });
 });
 
