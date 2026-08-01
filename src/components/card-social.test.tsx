@@ -1,5 +1,7 @@
-// Reactions and trash talk. Everything here is gated on being a claimed member,
-// and the reaction count is optimistic — both are easy to get subtly wrong.
+// Reactions and trash talk. A claimed member acts as themselves and a guest acts
+// under a name they give this device, so every action has two identity paths —
+// and the reaction count is optimistic on top of that. Both are easy to get
+// subtly wrong.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -111,6 +113,49 @@ describe("when signed out", () => {
     await renderSocial({ reactions: [reaction()], comments: [comment()] });
     expect(screen.getByText("All mouth, results pending.")).toBeInTheDocument();
     expect(screen.getByText("Alice")).toBeInTheDocument();
+  });
+
+  // The stashed tap is the whole point of the prompt: a guest who reacts, gets
+  // asked who they are and answers should not have to react a second time.
+  // Replaying it used to re-enter ensureIdentity through a closure that had not
+  // seen the new name yet, which put the prompt straight back up and dropped
+  // the reaction on the floor.
+  it("sends the reaction the guest was trying to make once they name themselves", async () => {
+    await renderSocial();
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+    await screen.findByText(/What should we call you/i);
+
+    await userEvent.type(screen.getByPlaceholderText("Your name"), "Garden Guest");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(toggleReaction).toHaveBeenCalledTimes(1));
+    expect(toggleReaction).toHaveBeenCalledWith({
+      data: {
+        eventParticipantId: CARD_ID,
+        emoji: "🔥",
+        guest: { key: expect.any(String), name: "Garden Guest" },
+      },
+    });
+    expect(screen.queryByText(/What should we call you/i)).not.toBeInTheDocument();
+  });
+
+  it("posts the comment the guest had already typed once they name themselves", async () => {
+    await renderSocial();
+    await userEvent.type(screen.getByRole("textbox"), "hello");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+    await screen.findByText(/What should we call you/i);
+
+    await userEvent.type(screen.getByPlaceholderText("Your name"), "Garden Guest");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(postComment).toHaveBeenCalledTimes(1));
+    expect(postComment).toHaveBeenCalledWith({
+      data: {
+        eventParticipantId: CARD_ID,
+        body: "hello",
+        guest: { key: expect.any(String), name: "Garden Guest" },
+      },
+    });
   });
 });
 

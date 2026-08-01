@@ -41,8 +41,18 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
   });
 }
 
-const sealedPack = (page: Page) =>
-  page.getByRole("button", { name: /drag down to open the pack/i });
+const sealedPack = (page: Page) => page.getByRole("button", { name: /tear the pack open/i });
+
+/**
+ * Run the whole reveal sequence.
+ *
+ * The fourth slot is behind the stand now — cards are turned one at a time and
+ * the secret goes last, so nothing about it is on screen the instant the pack is
+ * torn. "Reveal all" is the same sequence without the taps.
+ */
+async function revealAll(page: Page) {
+  await page.getByRole("button", { name: /reveal all/i }).click();
+}
 
 test.describe("the daily secret", () => {
   test("a claimed member gets a fourth card, and it never enters the pack row", async ({
@@ -53,9 +63,17 @@ test.describe("the daily secret", () => {
     withSecret(server);
     await page.goto("/players/pack");
     await sealedPack(page).press("Enter");
+    await revealAll(page);
 
-    await expect(page.getByText(/one more card/i)).toBeVisible();
-    await expect(page.getByText(/not on the roster/i).first()).toBeVisible();
+    await expect(page.getByText(/one more card/i)).toBeVisible({ timeout: 15_000 });
+    // Filtered to what is actually on screen: the phrase also appears on the
+    // card's own back face, which is rotated away behind backface-visibility.
+    await expect(
+      page
+        .getByText(/not on the roster/i)
+        .filter({ visible: true })
+        .first(),
+    ).toBeVisible();
 
     // The three roster cards are still exactly three. The secret lives server
     // side, keyed on the member, so nothing about it belongs in IndexedDB beyond
@@ -84,7 +102,16 @@ test.describe("the daily secret", () => {
     withSecret(server);
     await page.goto("/players/pack");
     await sealedPack(page).press("Enter");
+    await revealAll(page);
 
+    await expect(page.getByText(/one more card/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("link", { name: /claim your player/i }).first()).toBeVisible();
+    // The copy has to name where the code comes from — /claim asks for six
+    // characters the guest has never heard of, and in a garden the answer is
+    // "ask whoever's running it".
+    await expect(page.getByText(/ask whoever/i)).toBeVisible();
+    // Nothing about the drop is spent or promised.
+    await expect(page.getByText(SECRET_CARD.name).first()).toBeHidden();
     await expect(page.getByText(/one more card/i)).toBeVisible();
     await expect(page.getByText(/not on the roster/i).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /claim your player/i })).toHaveCount(0);
@@ -108,7 +135,7 @@ test.describe("the daily secret", () => {
     await page.goto("/players/pack");
     await sealedPack(page).press("Enter");
 
-    await page.getByRole("button", { name: /reveal all/i }).click();
+    await revealAll(page);
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 15_000 });
 
     const before = server.calls.filter((c) => c.includes("pullSecretCard")).length;
@@ -127,12 +154,30 @@ test.describe("the daily secret", () => {
     withSecret(server, { pull: { duplicate: true }, status: { pulled: 9 } });
     await page.goto("/players/pack");
     await sealedPack(page).press("Enter");
-    await page.getByRole("button", { name: /reveal all/i }).click();
+    await revealAll(page);
 
     await expect(page.getByText(/already yours/i)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/whole set/i)).toBeVisible();
   });
 
+  test("reveal all waits for a pull that was still in the air when it started", async ({
+    page,
+    server,
+  }) => {
+    await asMember(page);
+    withSecret(server);
+    // Still in flight when the button is pressed, landing partway through the
+    // roster sequence. The run used to read the `secret` its closure captured at
+    // click time — null — and stop, stranding the user on a sealed fourth card
+    // they then had to tap themselves.
+    server.delay("pullSecretCard", 2_000);
+
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+    await revealAll(page);
+
+    await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
   test("reveals a fourth card that only arrives after Reveal all was tapped", async ({
     page,
     server,

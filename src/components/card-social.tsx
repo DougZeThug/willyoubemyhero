@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion } from "motion/react";
@@ -66,9 +66,23 @@ export function CardSocial({
   // client render disagree on what the button shows.
   const [guestKey, setGuestKey] = useState<string | null>(null);
   const [guestName, setGuestName] = useState<string>("");
+  /**
+   * The same name, readable synchronously.
+   *
+   * saveGuestName replays the stashed action in the tick it sets the name, so a
+   * replayed handler re-enters ensureIdentity through a closure React has not
+   * re-rendered yet — where the name is still empty. Reading state there put the
+   * prompt straight back up in front of the guest who had just answered it, and
+   * the reaction never landed. Same reason players.pack.tsx latches its pull.
+   */
+  const guestNameRef = useRef("");
+  function rememberGuestName(next: string) {
+    guestNameRef.current = next;
+    setGuestName(next);
+  }
   useEffect(() => {
     setGuestKey(deviceId());
-    setGuestName(readGuestName());
+    rememberGuestName(readGuestName());
   }, []);
 
   // Ask for a name once, only when the guest actually tries to do something.
@@ -91,7 +105,7 @@ export function CardSocial({
   function ensureIdentity(runAfterNamed: () => void): Actor | null {
     if (me) return { kind: "member" };
     if (!guestKey) return null;
-    const trimmed = guestName.trim();
+    const trimmed = guestNameRef.current.trim();
     if (trimmed.length > 0) {
       return { kind: "guest", guest: { key: guestKey, name: trimmed } };
     }
@@ -105,7 +119,7 @@ export function CardSocial({
   function saveGuestName() {
     const cleaned = nameDraft.trim().slice(0, 40);
     if (!cleaned) return;
-    setGuestName(cleaned);
+    rememberGuestName(cleaned);
     writeGuestName(cleaned);
     setNamePrompt(false);
     setNameDraft("");

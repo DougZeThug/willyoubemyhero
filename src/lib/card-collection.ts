@@ -55,6 +55,17 @@ export type PackState = {
    * loses their cards.
    */
   identity?: string;
+  /**
+   * Which card the reveal stand was on.
+   *
+   * `revealed` cannot answer this on its own: it records which cards have been
+   * turned, not which one you are looking at. A card you flipped but had not yet
+   * pressed Next on is indistinguishable from one you finished with, so
+   * resuming from `revealed` alone dropped you on the *following* card and you
+   * never got the one you were holding back. Optional, so a row written before
+   * the stand existed still loads and falls back to `resumeCursor`.
+   */
+  cursor?: number;
 };
 
 export type CollectedCard = {

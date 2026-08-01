@@ -145,6 +145,19 @@ export function playTear() {
   }
 }
 
+/**
+ * One crinkle of foil, fired repeatedly as the rip travels under a finger.
+ *
+ * Quiet and very short on purpose: this plays eight or so times across a single
+ * drag, so anything with a tail stacks into mush before the tear itself lands.
+ */
+export function playTearTick() {
+  noiseBurst(0.05, 6000, 2400, 0.05);
+  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
+    navigator.vibrate?.([4]);
+  }
+}
+
 // Triads chosen so better pulls sound brighter and more resolved.
 //
 // `secret` is the exception, deliberately: four voices where everything else has

@@ -285,9 +285,11 @@
      Neither `isolation` nor `overflow` nor moving the property onto the flip
      layer changes it — explicitly hiding the away side is the only thing that
      does, so holo-card.tsx also toggles `invisible` per face.
-     The zero-duration delay lands that swap on the midpoint of the 500ms flip,
-     where the card is edge-on, so neither face is ever seen reversed. */
-  transition: visibility 0s linear 250ms;
+     The zero-duration delay lands that swap on the midpoint of the flip, where
+     the card is edge-on, so neither face is ever seen reversed. holo-card.tsx
+     writes the midpoint from its own `flipMs`, because the pack's secret turns
+     over in 1100ms and a fixed 250ms would swap faces a third of the way in. */
+  transition: visibility 0s linear var(--holo-flip-half, 250ms);
   /* Contain the blend modes so foil never bleeds onto the page background. */
   isolation: isolate;
   border-radius: inherit;
@@ -694,6 +696,102 @@
     border-color: var(--tier, var(--color-primary));
     background: color-mix(in oklab, var(--tier, var(--color-primary)) 15%, transparent);
     color: var(--tier, var(--color-primary));
+  }
+}
+
+/*
+ * The perforation you drag along to rip the pack.
+ *
+ * A pack that only says "drag" gets tapped. The dashes are the affordance and the
+ * travelling highlight is what says which way — the rip runs left to right, so the
+ * hint does too.
+ */
+.tear-hint {
+  animation: tear-hint-travel 2.4s ease-in-out infinite;
+}
+
+@keyframes tear-hint-travel {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateX(6px);
+    opacity: 1;
+  }
+}
+
+/*
+ * The sealed secret, breathing.
+ *
+ * The three roster cards sit still while they wait to be turned. This one does
+ * not, and that difference is the whole tell — before any art is on screen, the
+ * fourth card has already said it is a different kind of thing. Slow enough to
+ * read as anticipation rather than as a notification badge.
+ */
+.secret-seal {
+  animation: secret-seal-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes secret-seal-breathe {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 3px var(--seal-edge),
+      0 0 24px -4px var(--seal-edge);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 5px var(--seal-edge),
+      0 0 64px 2px var(--seal-edge);
+  }
+}
+
+/* One slow pass of light across the secret as it turns over. Timed to the 1100ms
+   flip, so the sweep crosses the card while the card is crossing edge-on. */
+.secret-reveal-sweep::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  mix-blend-mode: screen;
+  background: linear-gradient(108deg, transparent 40%, oklch(1 0 0 / 68%) 50%, transparent 60%);
+  background-size: 300% 300%;
+  animation: secret-reveal-glide 1100ms cubic-bezier(0.33, 0.9, 0.3, 1) 1 both;
+}
+
+@keyframes secret-reveal-glide {
+  from {
+    background-position: 140% 50%;
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    background-position: -40% 50%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tear-hint,
+  .secret-seal {
+    animation: none;
+  }
+  /* The ring is the tell; the breathing is only the flourish — same reasoning as
+     the prism edge above, so a still card still reads as sealed and special. */
+  .secret-seal {
+    box-shadow:
+      inset 0 0 0 3px var(--seal-edge),
+      0 0 24px -4px var(--seal-edge);
+  }
+  .secret-reveal-sweep::after {
+    animation: none;
+    opacity: 0;
   }
 }
 
