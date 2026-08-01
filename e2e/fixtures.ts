@@ -199,6 +199,14 @@ export type ServerFnMock = {
   set: (key: string, value: unknown) => void;
   /** Fail one server function with an error the UI has to handle. */
   fail: (key: string, message: string) => void;
+  /**
+   * Hold one server function's answer back, for the races a fast stub hides.
+   *
+   * Every response here is instant, which quietly makes "the data is already
+   * there" the only ordering any test exercises — and the screens this suite
+   * covers deal cards and run reveal animations while requests are still out.
+   */
+  delay: (key: string, ms: number) => void;
   /** Every server function the page called, in order. */
   calls: string[];
 };
@@ -206,11 +214,15 @@ export type ServerFnMock = {
 export async function stubServerFns(page: Page): Promise<ServerFnMock> {
   const responses: Responses = { ...DEFAULT_RESPONSES };
   const failures: Record<string, string> = {};
+  const delays: Record<string, number> = {};
   const calls: string[] = [];
 
   await page.route("**/_serverFn/**", async (route: Route) => {
     const name = serverFnName(route.request().url());
     calls.push(name);
+
+    const delayKey = Object.keys(delays).find((k) => matches(name, k));
+    if (delayKey) await new Promise((r) => setTimeout(r, delays[delayKey]));
 
     const failureKey = Object.keys(failures).find((k) => matches(name, k));
     if (failureKey) {
@@ -236,6 +248,9 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
     },
     fail: (key, message) => {
       failures[key] = message;
+    },
+    delay: (key, ms) => {
+      delays[key] = ms;
     },
     calls,
   };

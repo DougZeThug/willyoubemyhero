@@ -133,6 +133,25 @@ test.describe("the daily secret", () => {
     await expect(page.getByText(/whole set/i)).toBeVisible();
   });
 
+  test("reveals a fourth card that only arrives after Reveal all was tapped", async ({
+    page,
+    server,
+  }) => {
+    // The three roster cards take a couple of seconds to flip and the pull runs
+    // alongside them. Usually it wins; when it does not, "Reveal all" used to
+    // find no card, do nothing, and disappear — leaving the secret sealed with
+    // nothing left to open it. This was the flake in the duplicate test above,
+    // reproduced deliberately by holding the pull back.
+    await asMember(page);
+    withSecret(server);
+    server.delay("pullSecretCard", 4000);
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+    await page.getByRole("button", { name: /reveal all/i }).click();
+
+    await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 20_000 });
+  });
+
   test("nothing appears when the set is empty", async ({ page }) => {
     await asMember(page);
     // Default stub: pullSecretCard answers { ok: false, reason: "unavailable" }.

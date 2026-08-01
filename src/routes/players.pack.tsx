@@ -332,6 +332,8 @@ function PackPage() {
   // StrictMode mounting every effect twice in development.
   const pullFiredRef = useRef(false);
   const revealingRef = useRef(false);
+  /** A secret reveal in flight. See revealSecret for why revealingRef won't do. */
+  const secretRevealingRef = useRef(false);
 
   // The *pack* day is device-local: a pack has no identity and no constraint
   // behind it. The *drop* day is league-owned, decided in Postgres. Two clocks,
@@ -635,8 +637,27 @@ function PackPage() {
 
   const secretRarity = secretFoil(secret?.foil);
 
+  /**
+   * "Reveal all" asked for the fourth card, whether or not it had arrived yet.
+   *
+   * The three roster cards take a couple of seconds to flip, and the pull that
+   * fetches the secret runs alongside them — usually it wins, but on a slow
+   * connection it does not. `revealSecret` used to be called once at the end of
+   * that loop and simply return if the card was not there, leaving it sealed with
+   * the button that would have opened it already gone. This latch lets the effect
+   * below finish the job when the card finally lands.
+   */
+  const revealAllRef = useRef(false);
+
   async function revealSecret() {
-    if (!secret || secretRevealed) return;
+    // `secretRevealed` is not enough on its own: it is only set after the hold,
+    // so between the effect below starting a reveal and that state landing there
+    // is a second or more in which the tail of the "Reveal all" loop would start
+    // a second one — two chimes, two bursts, over the top of each other. This ref
+    // is separate from `revealingRef`, which flips per roster card and would make
+    // the effect bail for the wrong reason.
+    if (!secret || secretRevealed || secretRevealingRef.current) return;
+    secretRevealingRef.current = true;
     revealingRef.current = true;
     try {
       // A duplicate you have seen three times does not need the full production.
@@ -658,8 +679,23 @@ function PackPage() {
       if (!secretDuplicate) await celebrateSecret(secretRarity);
     } finally {
       revealingRef.current = false;
+      secretRevealingRef.current = false;
+      revealAllRef.current = false;
     }
   }
+
+  // The other half of the latch. `revealSecret` is redefined every render, so the
+  // one "Reveal all" captured closes over whatever `secret` was at click time —
+  // a ref would not have been enough on its own, because there is nothing to
+  // re-run it. This effect is that trigger.
+  useEffect(() => {
+    if (!revealAllRef.current || !secret || secretRevealed) return;
+    void revealSecret();
+    // Deliberately not depending on revealSecret: it is a fresh function object
+    // on every render, and the arrival of the card is the only thing that should
+    // set this going.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secret, secretRevealed]);
 
   // Written on every step rather than only on tear, so a phone that loses the tab
   // mid-reveal comes back to the cards it had already flipped.
@@ -955,13 +991,17 @@ function PackPage() {
               {!allRevealed && (
                 <button
                   onClick={async () => {
+                    // Set before the loop, so a card that arrives *during* it is
+                    // still covered by the tap that asked for everything.
+                    revealAllRef.current = true;
                     // Sequential so the chimes stagger instead of stacking into noise.
                     for (let i = 0; i < pack.length; i++) {
                       await revealAt(i);
                       await new Promise((r) => setTimeout(r, 260));
                     }
                     // The secret goes last, or its hold lands underneath the hit's
-                    // and neither of them reads.
+                    // and neither of them reads. If it has not landed yet this is a
+                    // no-op and the effect above picks it up when it does.
                     await revealSecret();
                   }}
                   className="rounded-full border border-white/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground hover:border-primary/50 hover:text-primary"
