@@ -76,13 +76,29 @@ export const getCardPullCounts = createServerFn({ method: "GET" })
  * than two endpoints because they describe one event, and because a pack of three
  * cards you already own writes no new `card_pulls` row at all — counting packs
  * from that table would quietly stop counting once somebody's collection filled up.
+ *
+ * WHAT THIS DOES NOT VERIFY, deliberately: that the ids are the pack the app
+ * actually dealt. Everything derivable server-side now is — the participant, the
+ * event, the card count — and the payload is capped at a pack-sized list, but a
+ * member posting valid roster ids by hand can still credit themselves cards and a
+ * pack-open for today. That was already true of the card half before pack_opens
+ * existed, and the ceiling is low: `card_pulls` caps a person at one row per card
+ * and `pack_opens` at one row per league day, so the most anyone can manufacture
+ * is one phantom pack a day on a stat only they can see.
+ *
+ * Closing it properly means re-deriving the deal server-side, and the deal is
+ * seeded partly on the *device's* local date and on the collection it held at the
+ * moment it was dealt — neither of which the server knows. Guessing at either
+ * would silently drop genuine packs on a timezone edge, which is a worse failure
+ * than the one it prevents for a thirteen-person party.
  */
 export const recordCardPulls = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventParticipantIds: z.array(z.string().uuid()).min(1).max(64),
-        eventId: z.string().uuid().nullish(),
+        // A pack is three cards. The ceiling is loose enough to survive PACK_SIZE
+        // changing and tight enough that nobody can post the roster as one pack.
+        eventParticipantIds: z.array(z.string().uuid()).min(1).max(16),
       })
       .parse(d),
   )
@@ -96,19 +112,38 @@ export const recordCardPulls = createServerFn({ method: "POST" })
       _event_participant_ids: data.eventParticipantIds,
     });
     if (error) throw new Error(error.message);
+    const recorded = (n as number | null) ?? 0;
+
+    // Resolved here rather than taken from the caller, the way pullSecretCard
+    // does it. It used to be a payload field, which made it both spoofable and
+    // racy: the pack screen sends this the moment the wrapper comes off, and on a
+    // resumed pack that can be before the event query has answered — so the stamp
+    // was null and the participant latch stopped it ever being retried.
+    const sb = await admin();
+    const { data: event } = await sb
+      .from("events")
+      .select("id")
+      .eq("active", true)
+      .order("year", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     // The pack open is keyed on the league day, so this is idempotent however many
     // times a reveal re-fires it. Its own errors are swallowed: the cards are
     // already recorded by this point and a counter must not fail a pack.
+    //
+    // `recorded` rather than the payload length: it is what record_card_pulls
+    // actually matched against the roster, so a caller cannot store a card count
+    // that never corresponded to real cards.
     const { data: packs } = await secrets.rpc("record_pack_open", {
       _participant_id: me,
-      _event_id: data.eventId ?? null,
-      _card_count: data.eventParticipantIds.length,
+      _event_id: event?.id ?? null,
+      _card_count: recorded,
     });
 
     return {
       ok: true as const,
-      recorded: (n as number | null) ?? 0,
+      recorded,
       packsOpened: (packs as number | null) ?? 0,
     };
   });
@@ -131,10 +166,17 @@ export const getMyCardStats = createServerFn({ method: "GET" })
     // Resolve the event's own cards first and constrain to them, exactly as
     // getCardPullCounts does — so a member's stats can never be used to
     // enumerate another event's roster.
-    const { data: eps } = await sb
+    //
+    // The error is checked rather than coalesced away, unlike its counterpart in
+    // getCardPullCounts. There a failed read costs a decorative count; here it
+    // would come back as "you own nothing", and the caller treats this response as
+    // the truth about a member's collection — so an empty one deletes their local
+    // rows. Throwing puts the hook on its error path, which keeps the collection.
+    const { data: eps, error: epsError } = await sb
       .from("event_participants")
       .select("id")
       .eq("event_id", data.eventId);
+    if (epsError) throw epsError;
     const ids = (eps ?? []).map((r) => r.id);
 
     const secrets = await db();

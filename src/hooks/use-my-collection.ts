@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyCardStats } from "@/lib/card-pulls.functions";
@@ -54,13 +54,19 @@ export function useMyCollection(
 
   const [local, setLocal] = useState<Record<string, CollectedCard>>({});
   const [localLoaded, setLocalLoaded] = useState(false);
-  // Cards revealed on this screen, just now, as pulls to *add* rather than as
-  // finished rows. Held apart from `local` because the server has not been told
-  // about them yet, and a card the server has not vouched for is exactly what the
-  // merge is built to delete — without this a card would light up as you flipped
-  // it and then vanish. A delta rather than a replacement so a card you already
-  // owned still reads "Pulled ×3" and not "×1".
-  const [bumps, setBumps] = useState<Record<string, { n: number; tier: string; at: number }>>({});
+  // Cards revealed on this screen, just now. Held apart from `local` because the
+  // server has not been told about them yet, and a card the server has not
+  // vouched for is exactly what the merge is built to delete — without this a
+  // card would light up as you flipped it and then vanish.
+  //
+  // A floor ("this card has at least N pulls"), not a delta. A delta has to be
+  // retracted at exactly the right moment: too early and the card blinks out,
+  // too late and it is counted twice on top of the server's own row. A floor is
+  // monotonic, so it can be held until the server's number catches up to it and
+  // dropped then, and neither mistake is possible in between.
+  const [bumps, setBumps] = useState<Record<string, { count: number; tier: string; at: number }>>(
+    {},
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -95,45 +101,74 @@ export function useMyCollection(
   const roster = useMemo(() => new Set(rosterIds), [rosterIds]);
 
   const merged = useMemo(() => {
-    if (!settled) return { collection: local, stale: [] as string[] };
-    // A failed query falls back to the guest path rather than wiping anything:
-    // without an answer from the server there is nothing to disown a row with.
+    // Empty rather than `local` until the server has answered. The local store is
+    // the thing this hook exists to distrust — handing it out here would put the
+    // old inflated ticks on the vault and "Collected" on a card slab for as long
+    // as the query takes, which is the bug with a shorter fuse rather than a fix.
+    // `ready` gates the counters; this gates everything else that reads a card.
+    if (!settled) return { collection: {}, stale: [] as string[] };
+    // A failed query leaves the local store exactly as it is: with no answer from
+    // the server there is nothing to disown a row with, so nothing is disowned.
     return mergeCollection(local, stats.data?.cards ?? null, roster);
   }, [settled, local, stats.data, roster]);
 
-  // The tear reports the whole pack to the server and invalidates this query, so a
-  // fresh answer already contains everything the bumps were standing in for.
-  // Keeping them past that point would count each of today's cards twice.
+  // Drop a floor once the server's own row has reached it. Not on "a response
+  // arrived" — a refetch already in flight when the card was revealed knows
+  // nothing about it, and clearing against that one blinks the card off the
+  // screen. Comparing the numbers instead means a stale response, a failed one,
+  // or none at all simply leaves the floor standing.
   useEffect(() => {
-    if (!stats.data) return;
-    setBumps((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-  }, [stats.data]);
+    setBumps((prev) => {
+      const kept = Object.entries(prev).filter(
+        ([id, b]) => (merged.collection[id]?.count ?? 0) < b.count,
+      );
+      if (kept.length === Object.keys(prev).length) return prev;
+      return Object.fromEntries(kept);
+    });
+  }, [merged.collection]);
 
   const collection = useMemo(() => {
     const out = { ...merged.collection };
     for (const [id, bump] of Object.entries(bumps)) {
       const existing = out[id];
       out[id] = existing
-        ? { ...existing, count: existing.count + bump.n }
-        : { eventParticipantId: id, pulledAt: bump.at, count: bump.n, tier: bump.tier };
+        ? { ...existing, count: Math.max(existing.count, bump.count) }
+        : { eventParticipantId: id, pulledAt: bump.at, count: bump.count, tier: bump.tier };
     }
     return out;
   }, [merged.collection, bumps]);
 
-  const staleKey = merged.stale.filter((id) => !bumps[id]).join(",");
+  // Delete each disowned row once and remember that we did. Keyed off a set
+  // rather than off the stale list itself because that list is rebuilt on every
+  // reconciliation *and* every reveal — turning a card over removes it from the
+  // list, which used to re-fire the whole delete for everything still on it.
+  const forgottenRef = useRef(new Set<string>());
   useEffect(() => {
-    if (!staleKey) return;
-    void forgetCards(staleKey.split(","));
-  }, [staleKey]);
+    const fresh = merged.stale.filter((id) => !forgottenRef.current.has(id) && !bumps[id]);
+    if (fresh.length === 0) return;
+    for (const id of fresh) forgottenRef.current.add(id);
+    void forgetCards(fresh);
+  }, [merged.stale, bumps]);
+
+  // What the server has vouched for, for `markCollected` to raise its floor above
+  // without taking the whole collection as a dependency and rebuilding the
+  // callback on every reconciliation.
+  const knownRef = useRef<Record<string, CollectedCard>>({});
+  useEffect(() => {
+    knownRef.current = merged.collection;
+  }, [merged.collection]);
 
   const markCollected = useCallback((eventParticipantId: string, tier: string) => {
     setBumps((prev) => {
-      const existing = prev[eventParticipantId];
+      const known = knownRef.current[eventParticipantId]?.count ?? 0;
+      const floor = Math.max(prev[eventParticipantId]?.count ?? 0, known) + 1;
       return {
         ...prev,
-        [eventParticipantId]: existing
-          ? { ...existing, n: existing.n + 1 }
-          : { n: 1, tier, at: Date.now() },
+        [eventParticipantId]: {
+          count: floor,
+          tier: prev[eventParticipantId]?.tier ?? tier,
+          at: prev[eventParticipantId]?.at ?? Date.now(),
+        },
       };
     });
   }, []);

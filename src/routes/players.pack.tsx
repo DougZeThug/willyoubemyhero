@@ -402,10 +402,26 @@ function PackPage() {
     };
   }, [collected]);
 
+  /**
+   * Snapshot the collection the pack is dealt against, once per person.
+   *
+   * Two things have to be true at the same time. It must not move while somebody
+   * is revealing — `dealPack` swaps the last slot for a card they do not own, and
+   * a baseline that shifted mid-reveal would re-deal it underneath them. And it
+   * must not be somebody *else's*: a phone changes hands in this league, and a
+   * write-once baseline meant the next person's guaranteed-new card was chosen
+   * from the previous person's collection.
+   *
+   * So it is latched per identity rather than once, and `collectionLoaded` is
+   * `mine.ready` — which is false until the server has reconciled, so the snapshot
+   * is never taken from the unreconciled local store.
+   */
+  const baselineForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!collectionLoaded) return;
-    setPackBaseline((prev) => prev ?? collected);
-  }, [collectionLoaded, collected]);
+    if (!collectionLoaded || !identity) return;
+    setPackBaseline((prev) => (prev !== null && baselineForRef.current === identity ? prev : collected)); // prettier-ignore
+    baselineForRef.current = identity;
+  }, [collectionLoaded, collected, identity]);
 
   // What today's pack *would* be if torn open right now — yours, and nobody
   // else's, because the seed carries who you are. See src/lib/pack.ts.
@@ -563,12 +579,17 @@ function PackPage() {
       // in practice the first person to claim painted every card they'd ever
       // revealed with "Packed by 1", making the counter meaningless. Better an
       // honest ramp than a uniform stripe.
-      const ids = dealtIds.slice(0, 64);
+      const ids = dealtIds.slice(0, 16);
       try {
         // The same call records the pack itself. A pack of three cards you already
         // own writes no new card_pulls row, so counting packs from that table
         // would stop counting the moment somebody's collection filled up.
-        await record({ data: { eventParticipantIds: ids, eventId: event?.id ?? null } });
+        //
+        // No event is sent: the handler resolves the active one itself. A resumed
+        // pack reaches here before the event query has answered, so passing it
+        // from the client stamped a null and the latch below stopped it ever
+        // being retried.
+        await record({ data: { eventParticipantIds: ids } });
         await Promise.all([
           qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
           qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) }),

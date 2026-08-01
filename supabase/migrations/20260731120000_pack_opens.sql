@@ -107,7 +107,12 @@ SELECT cp.participant_id,
        -- Any one of the day's events. There is only ever one in practice, and
        -- uuid has no max() to pick with.
        (array_agg(ep.event_id))[1],
-       count(*)::int
+       -- A pack has always been three cards for as long as card_pulls has
+       -- existed, and count(*) here is how many of them were *new* — a pack with
+       -- two duplicates in it would otherwise be recorded as a pack of one.
+       -- GREATEST rather than a flat 3 so a day that somehow holds more rows than
+       -- a pack is not quietly rounded down.
+       GREATEST(count(*)::int, 3)
   FROM public.card_pulls cp
   JOIN public.event_participants ep ON ep.id = cp.event_participant_id
  GROUP BY cp.participant_id, (cp.first_pulled_at AT TIME ZONE 'America/New_York')::date

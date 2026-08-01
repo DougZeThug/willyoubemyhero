@@ -159,4 +159,27 @@ describe("the backfill", () => {
     const [row] = await sql<{ card_count: number }>("SELECT card_count FROM public.pack_opens");
     expect(row.card_count).toBe(3);
   });
+
+  it("records a full pack for a day where only one card was new", async () => {
+    // count(*) over card_pulls counts cards somebody did not already own, not
+    // cards in the pack. A day with two duplicates in it is still a pack of three.
+    const ids = (
+      await sql<{ id: string }>("SELECT id FROM public.event_participants ORDER BY running_order")
+    ).map((r) => r.id);
+    await sql("SELECT public.record_card_pulls($1, $2)", [IDS.alice, [ids[0]]]);
+
+    await sql(`
+      INSERT INTO public.pack_opens (participant_id, opened_on, event_id, card_count)
+      SELECT cp.participant_id,
+             (cp.first_pulled_at AT TIME ZONE 'America/New_York')::date,
+             (array_agg(ep.event_id))[1],
+             GREATEST(count(*)::int, 3)
+        FROM public.card_pulls cp
+        JOIN public.event_participants ep ON ep.id = cp.event_participant_id
+       GROUP BY cp.participant_id, (cp.first_pulled_at AT TIME ZONE 'America/New_York')::date
+      ON CONFLICT (participant_id, opened_on) DO NOTHING`);
+
+    const [row] = await sql<{ card_count: number }>("SELECT card_count FROM public.pack_opens");
+    expect(row.card_count).toBe(3);
+  });
 });
