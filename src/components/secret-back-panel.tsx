@@ -49,7 +49,7 @@ export function SecretBackPanel({
         style={{ borderColor: rarity.border }}
       >
         <span
-          className="font-display text-[10px] font-black uppercase tracking-[0.25em]"
+          className={`font-display font-black uppercase tracking-[0.25em] ${large ? "text-xs" : "text-[10px]"}`}
           style={{ color: rarity.accent }}
         >
           {rarity.label}
@@ -57,30 +57,32 @@ export function SecretBackPanel({
         {/* Hardcoded, never TIER_REASON[rarity.tier] — SECRET_RARITY carries
             tier: "base" to satisfy the type, and that lookup would print
             "Combine athlete" on a card that was never at the combine. */}
-        <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <span className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}>
           {SECRET_REASON}
         </span>
       </div>
 
       <div className="relative flex flex-1 flex-col items-center justify-center gap-2 text-center">
-        <div className="font-display text-base font-black uppercase leading-tight text-foreground/95">
+        <div
+          className={`font-display font-black uppercase leading-tight text-foreground/95 ${large ? "text-xl" : "text-base"}`}
+        >
           {card.name}
         </div>
         {card.flavour ? (
-          <p className="line-clamp-4 text-[10px] italic leading-snug text-muted-foreground">
+          <p className={`italic leading-snug text-muted-foreground ${large ? "text-sm line-clamp-5" : "text-[10px] line-clamp-4"}`}>
             &ldquo;{card.flavour}&rdquo;
           </p>
         ) : (
-          <p className="text-[10px] italic text-muted-foreground/70">Will YOU Be My Hero?</p>
+          <p className={`italic text-muted-foreground/70 ${large ? "text-sm" : "text-[10px]"}`}>Will YOU Be My Hero?</p>
         )}
       </div>
 
       <div className="relative flex items-center justify-between border-t border-white/10 pt-1.5">
-        <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <span className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}>
           Secret
         </span>
         {pulledOn && (
-          <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+          <span className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}>
             Pulled {pulledOn}
           </span>
         )}
