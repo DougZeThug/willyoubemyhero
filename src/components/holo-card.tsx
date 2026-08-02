@@ -106,6 +106,11 @@ export type HoloCardProps = {
    */
   touchTilt?: boolean;
   /**
+   * Whether a fast horizontal throw turns the card over. Off where the same
+   * gesture means "next card" — the two full-size surfaces flip on tap instead.
+   */
+  flickToFlip?: boolean;
+  /**
    * How loud the foil is. "subtle" halves it for small, mostly-non-interactive
    * cards like the vault grid, where a full-strength overlay swamps the artwork.
    */
@@ -147,6 +152,7 @@ function HoloCardImpl({
   onFlippedChange,
   interactive = true,
   touchTilt,
+  flickToFlip = true,
   intensity = "full",
   tilt = "calm",
   gyro = false,
@@ -437,7 +443,7 @@ function HoloCardImpl({
    */
   function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
-    if (drag && drag.id === e.pointerId && canFlip) {
+    if (drag && drag.id === e.pointerId && canFlip && flickToFlip) {
       const p = localPoint(e);
       if (p) {
         const dx = p.px - drag.px;

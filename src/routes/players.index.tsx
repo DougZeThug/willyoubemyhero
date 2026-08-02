@@ -11,12 +11,7 @@ import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
-import {
-  secretFoil,
-  secretsPulledLabel,
-  SECRET_RARITY,
-  type OwnedSecret,
-} from "@/lib/secret-cards";
+import { secretFoil, secretsPulledLabel, SECRET_RARITY } from "@/lib/secret-cards";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +52,9 @@ function PlayersPage() {
   const secrets = useMySecrets(actor);
   const secretStatus = useSecretStatus(actor);
   const pullCounts = useCardPullCounts(event?.id ?? null);
-  const [openSecret, setOpenSecret] = useState<OwnedSecret | null>(null);
+  // An index rather than the card itself: the sheet swipes between secrets, so it
+  // needs to know where in the shelf the open one sits.
+  const [openSecret, setOpenSecret] = useState<number | null>(null);
   // Set on claim and never cleared, so a member on a new phone gets told where
   // their collection went instead of watching it silently vanish. Read in an
   // effect rather than during render: SSR has no localStorage, and a mismatched
@@ -243,7 +240,7 @@ function PlayersPage() {
                       cacheKey={s.id}
                       intensity="subtle"
                       interactive={false}
-                      onClick={() => setOpenSecret(s)}
+                      onClick={() => setOpenSecret(ownedSecrets.indexOf(s))}
                     />
                     <div className="text-center">
                       <div className="truncate font-display text-xs font-black uppercase tracking-wide">
@@ -270,7 +267,12 @@ function PlayersPage() {
           </section>
         )}
 
-        <SecretCardSheet card={openSecret} onOpenChange={(open) => !open && setOpenSecret(null)} />
+        <SecretCardSheet
+          cards={ownedSecrets}
+          index={openSecret}
+          onIndexChange={setOpenSecret}
+          onOpenChange={(open) => !open && setOpenSecret(null)}
+        />
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {rows.map((p) => {
