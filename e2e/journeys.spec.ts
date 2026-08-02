@@ -304,24 +304,40 @@ test.describe("opening a pack", () => {
   });
 
   test("skip cuts the ceremony short rather than waiting it out", async ({ page }) => {
+    // The ceremony runs on setTimeout and reads performance.now() for its skip
+    // dead zone, so a fake clock owns both. Wall-clock timing here used to be the
+    // assertion, and it flaked: the budget included Playwright's own keypress and
+    // click round-trips, which on a loaded runner can eat the whole 2.2s of slack
+    // even when skipping worked perfectly.
+    await page.clock.install();
     await page.goto("/players/pack");
+    // A faked clock does not tick on its own, and hydration, query settling and
+    // motion all wait on timers, so the page needs time handed to it before it is
+    // a pack at all.
+    await page.clock.runFor(2000);
+    await expect(sealedPack(page)).toBeVisible();
 
-    const started = Date.now();
-    await sealedPack(page).press("Enter");
+    // The pack refuses to tear until the collection has reconciled, and under a
+    // clock the test owns that beat can land after the first keypress. Press
+    // until it takes, handing the page a little time on each attempt.
+    const skip = page.getByRole("button", { name: /^skip$/i });
+    await expect(async () => {
+      if (await sealedPack(page).isVisible()) await sealedPack(page).press("Enter");
+      await page.clock.runFor(100);
+      expect(await skip.isVisible()).toBe(true);
+    }).toPass({ timeout: 20_000 });
 
     // Past the dead zone that stops the pointerup ending a drag-rip from also
     // eating the ceremony, and far short of the ~2.2s the sequence would take on
     // its own.
-    await page.waitForTimeout(SKIP_AFTER_MS);
-    await page.getByRole("button", { name: /^skip$/i }).click();
+    await page.clock.runFor(SKIP_AFTER_MS);
+    await skip.click();
     await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
 
-    // The assertion that makes this a test of *skipping*. Reaching the stand
-    // proves nothing on its own — the ceremony gets there by itself — so what is
-    // measured is that it got there sooner than the ceremony could have. An
-    // earlier version asserted only the stand and passed identically whether the
-    // button did anything at all.
-    expect(Date.now() - started).toBeLessThan(CEREMONY_MS);
+    // What makes this a test of *skipping*: the page's clock has only advanced
+    // SKIP_AFTER_MS of the ceremony's CEREMONY_MS, so its own handover timer
+    // cannot have fired. Reaching the stand can only be the button's doing.
+    expect(SKIP_AFTER_MS).toBeLessThan(CEREMONY_MS);
   });
 
   test("gets to the stand on its own if the ceremony is left to finish", async ({ page }) => {
