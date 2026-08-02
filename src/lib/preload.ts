@@ -34,10 +34,9 @@ export async function preloadCard(set: ImageUrlSet | string | null | undefined):
   if (!src) return;
   try {
     const img = new Image();
-    // Card art is served from a private bucket as signed URLs, and HoloCard
-    // renders it with crossOrigin="anonymous". Matching that here is what makes
-    // the two requests share a cache entry rather than fetch twice.
-    img.crossOrigin = "anonymous";
+    // Do not opt private signed URLs into CORS mode. The card is never drawn to
+    // a canvas, and requiring CORS here can turn an otherwise valid image into a
+    // browser-level load failure when object and transform endpoints differ.
     img.decoding = "async";
     const srcSet = srcSetFromSet(set);
     if (srcSet) {

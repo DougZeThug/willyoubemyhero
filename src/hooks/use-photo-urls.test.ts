@@ -20,7 +20,7 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
 });
 
 const EVENT_ID = "event-1";
-const CARD_KEY = `wwbh:card-urls:${EVENT_ID}`;
+const CARD_KEY = `wwbh:v2:card-urls:${EVENT_ID}`;
 const CARDS = { "ep-1": { front: "https://cdn/front.webp", back: null } };
 
 beforeEach(() => {
@@ -64,6 +64,22 @@ describe("useEventCardUrls", () => {
     const { wrapper } = createQueryWrapper();
     const { result } = renderHook(() => useEventCardUrls(EVENT_ID), { wrapper });
     await waitFor(() => expect(result.current.data).toEqual(stored));
+    expect(getEventCardUrls).toHaveBeenCalledWith({ data: { eventId: EVENT_ID } });
+  });
+
+  it("ignores snapshots written by an older URL-path strategy", async () => {
+    window.localStorage.setItem(
+      `wwbh:card-urls:${EVENT_ID}`,
+      JSON.stringify({
+        at: Date.now(),
+        data: { "ep-old": { front: "https://cdn/removed-file.png", back: null } },
+      }),
+    );
+    const { useEventCardUrls } = await import("./use-photo-urls");
+    const { wrapper } = createQueryWrapper();
+    const { result } = renderHook(() => useEventCardUrls(EVENT_ID), { wrapper });
+    await waitFor(() => expect(result.current.data).toEqual(CARDS));
+    expect(result.current.data).not.toHaveProperty("ep-old");
   });
 
   it("discards a snapshot old enough that its token may be near expiry", async () => {
@@ -134,7 +150,7 @@ describe("useEventPhotoUrls", () => {
     const { result } = renderHook(() => useEventPhotoUrls(EVENT_ID), { wrapper });
     await waitFor(() => expect(result.current.data).toBeTruthy());
     await waitFor(() =>
-      expect(window.localStorage.getItem(`wwbh:photo-urls:${EVENT_ID}`)).toBeTruthy(),
+      expect(window.localStorage.getItem(`wwbh:v2:photo-urls:${EVENT_ID}`)).toBeTruthy(),
     );
     expect(window.localStorage.getItem(CARD_KEY)).toBeNull();
   });

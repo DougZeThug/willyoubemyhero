@@ -20,6 +20,9 @@ const URL_GC_MS = 8 * 60 * 60_000;
 // the first frame. Capped well inside the token's 8 hour life so a stored URL is
 // never handed out anywhere near expiry.
 const SNAPSHOT_MAX_AGE_MS = 3.5 * 60 * 60_000;
+// Bump whenever the URL-set/path strategy changes. Older snapshots can point at
+// files replaced by an admin backfill even though their signed token is valid.
+const SNAPSHOT_VERSION = 2;
 
 type Snapshot<T> = { at: number; data: T };
 
@@ -51,7 +54,7 @@ function useSignedUrls<T>(
   eventId: string | null | undefined,
   fetcher: () => Promise<T>,
 ) {
-  const storageKey = `wwbh:${kind}:${eventId ?? ""}`;
+  const storageKey = `wwbh:v${SNAPSHOT_VERSION}:${kind}:${eventId ?? ""}`;
   const qc = useQueryClient();
 
   // Seeded after hydration rather than as `initialData`: the server has no
@@ -62,7 +65,9 @@ function useSignedUrls<T>(
     const key = [kind, eventId];
     if (qc.getQueryData(key)) return;
     const snapshot = readSnapshot<T>(storageKey);
-    if (snapshot) qc.setQueryData(key, snapshot.data, { updatedAt: snapshot.at });
+    // Snapshot data is only a first-paint hint. Marking it fresh for hours kept
+    // pre-backfill file paths alive on phones long after the database changed.
+    if (snapshot) qc.setQueryData(key, snapshot.data, { updatedAt: 0 });
   }, [qc, kind, eventId, storageKey]);
 
   const query = useQuery({

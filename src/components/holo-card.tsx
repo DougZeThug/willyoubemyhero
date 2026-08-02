@@ -33,8 +33,11 @@ const SIZE_STEPS = ["large", "medium", "thumb"] as const;
 function useSteppedImage(set: Parameters<typeof urlFromSet>[0], eager: boolean) {
   const start = eager ? 0 : 1;
   const [step, setStep] = useState(start);
-  const key = urlFromSet(set, "large") ?? "";
-  // A re-signed URL is a fresh chance; start over at the preferred size.
+  const key =
+    typeof set === "string"
+      ? set
+      : [set?.large ?? "", set?.medium ?? "", set?.thumb ?? ""].join("|");
+  // Any re-signed or replaced rendition is a fresh chance, not only `large`.
   useEffect(() => setStep(start), [key, start]);
 
   const failed = step >= SIZE_STEPS.length;
@@ -42,7 +45,10 @@ function useSteppedImage(set: Parameters<typeof urlFromSet>[0], eager: boolean) 
   return {
     failed,
     src: failed ? null : urlFromSet(set, size),
-    srcSet: failed ? undefined : srcSetFromSet(set, size),
+    // Once the browser rejects its selected srcset candidate, retry one exact
+    // URL at a time. Keeping srcset here can make it select the same bad file
+    // again even though `src` stepped down.
+    srcSet: failed || step > start ? undefined : srcSetFromSet(set, size),
     onError: () => setStep((s) => s + 1),
   };
 }
@@ -652,7 +658,6 @@ function HoloCardImpl({
                 srcSet={frontSrcSet}
                 sizes={imgSizes}
                 alt={`${name} card front`}
-                crossOrigin="anonymous"
                 onLoad={onImageLoad}
                 onError={front.onError}
                 // A vault grid is thirty cards deep. Fetching and decoding the
@@ -683,7 +688,6 @@ function HoloCardImpl({
                   srcSet={backSrcSet}
                   sizes={imgSizes}
                   alt={`${name} card back`}
-                  crossOrigin="anonymous"
                   onError={back.onError}
                   loading="lazy"
                   decoding="async"
