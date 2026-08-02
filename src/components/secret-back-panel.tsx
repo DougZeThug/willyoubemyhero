@@ -17,12 +17,16 @@ export function SecretBackPanel({
   card,
   rarity,
   pulledOn,
+  size = "small",
 }: {
   card: SecretCardView | OwnedSecret;
   rarity: Rarity;
   /** ISO date of the first pull, when the caller knows it. */
   pulledOn?: string | null;
+  /** Large renders bigger text for the full-sheet view. */
+  size?: "small" | "large";
 }) {
+  const large = size === "large";
   return (
     <div className="relative flex h-full w-full flex-col gap-2 overflow-hidden bg-[oklch(0.13_0.02_240)] p-3 text-left">
       {/* A rosette ghosted behind the text, so the panel reads as printed rather
