@@ -575,8 +575,24 @@
   transition: opacity 260ms ease-out;
 }
 
+/* The is-* classes are assembled at runtime in holo-card.tsx from the BorderFx
+   id an admin picked, so — like the pattern classes — they must stay plain CSS
+   rules the Tailwind scanner never has to find. */
 .holo-prism-edge.is-spinning {
   animation: holo-prism-spin 4.5s linear infinite;
+}
+
+/* A running opacity animation wins over the declared calc() opacity, which is
+   the point: the breath replaces the handled-brightness while it plays. */
+.holo-prism-edge.is-pulsing {
+  animation: holo-prism-pulse 2.8s ease-in-out infinite;
+}
+
+/* Spin and breath together, the breath quick enough to read as glitter. */
+.holo-prism-edge.is-shimmering {
+  animation:
+    holo-prism-spin 4.5s linear infinite,
+    holo-prism-pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes holo-prism-spin {
@@ -585,8 +601,20 @@
   }
 }
 
+@keyframes holo-prism-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .holo-prism-edge.is-spinning {
+  .holo-prism-edge.is-spinning,
+  .holo-prism-edge.is-pulsing,
+  .holo-prism-edge.is-shimmering {
     animation: none;
   }
   /* Still visibly a secret, just not moving. The rainbow frame is the tell; the

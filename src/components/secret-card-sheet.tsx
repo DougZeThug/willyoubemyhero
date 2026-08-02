@@ -36,7 +36,7 @@ export function SecretCardSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const card = index == null ? null : (cards[index] ?? null);
-  const rarity = secretFoil(card?.foil);
+  const rarity = secretFoil(card?.foil, card?.borderFx);
   const [flipped, setFlipped] = useState(false);
 
   // A new card always lands face up, however the last one was left.

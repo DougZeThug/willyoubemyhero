@@ -736,7 +736,7 @@ function PackPage() {
     serverDayRef.current = day;
   }, [status.data?.day]);
 
-  const secretRarity = secretFoil(secret?.foil);
+  const secretRarity = secretFoil(secret?.foil, secret?.borderFx);
 
   async function revealSecret() {
     // revealingRef first: the secret holds for 1600ms before it turns, and

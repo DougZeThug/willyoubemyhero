@@ -15,6 +15,13 @@ export type RarityTier = "champion" | "podium" | "stationKing" | "penaltyBox" | 
  */
 export type FoilPattern = "refractor" | "prismatic" | "scanline" | "hazard" | "matte" | "rosette";
 
+/**
+ * How the prism edge moves. Its own vocabulary rather than a pattern for the
+ * same reason `prismEdge` is a flag: the ring is opaque chrome, not a foil.
+ * Each animated id is a plain `.holo-prism-edge.is-*` rule in styles.css.
+ */
+export type BorderFx = "spin" | "pulse" | "shimmer" | "steady";
+
 export type Rarity = {
   tier: RarityTier;
   label: string;
@@ -53,6 +60,12 @@ export type Rarity = {
    * and this one is opaque chrome that survives being looked at outdoors.
    */
   prismEdge?: boolean;
+  /**
+   * How the prism edge animates. Only meaningful alongside `prismEdge`;
+   * undefined means "spin", so the six earned tiers never carry it and every
+   * existing Rarity literal keeps its behaviour.
+   */
+  borderFx?: BorderFx;
   /** Ranked best-to-worst, for sorting the vault. */
   rank: number;
 };
