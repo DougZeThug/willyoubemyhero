@@ -48,8 +48,11 @@ export const CEREMONY: readonly { readonly phase: CeremonyPhase; readonly ms: nu
   { phase: "mouth", ms: 200 },
   { phase: "launch", ms: 340 },
   { phase: "fan", ms: 460 },
-  { phase: "hold", ms: 240 },
-  { phase: "collapse", ms: 260 },
+  { phase: "hold", ms: 180 },
+  // Long enough for the gather to actually finish. The deck spring takes about
+  // 300ms to settle, and a collapse shorter than that hands PackStand a deck that
+  // is still moving — which is a jump on the one frame both are on screen.
+  { phase: "collapse", ms: 340 },
 ] as const;
 
 /** Total run time. Derived, so the table stays the single source of truth. */
@@ -112,7 +115,12 @@ export function riseTransform(
   i: number,
   n: number,
 ): { x: number; y: number; rotate: number; z: number } {
-  const depth = n - 1 - i;
+  // Card 0 is the front of the stack, at zero offset, with the rest behind it —
+  // the same order `layer()` paints them in. Counted the other way round, the card
+  // drawn on top is the one furthest off the mark, which only stays invisible for
+  // as long as the offsets stay small. `n` is unused and kept for symmetry with
+  // the other two, which need it.
+  const depth = i;
   return { x: depth * 2, y: -104 + depth * 5, rotate: depth * 1.2, z: 60 - depth * 8 };
 }
 
@@ -162,8 +170,10 @@ export function deckTransform(
   i: number,
   n: number,
 ): { x: number; y: number; rotate: number; z: number } {
-  // Counted from the back of the deck, so card 0 — the one the stand is about to
-  // show — ends on top and on the mark.
-  const depth = n - 1 - i;
+  // Card 0 lands *on* the mark, because it is the card PackStand mounts with a
+  // beat later and any offset it still carries is a jump at the handoff. The rest
+  // stack behind it. This used to count from the back, which put the one card
+  // that had to be exact at the far end of the stagger.
+  const depth = i;
   return { x: depth * 1.6, y: -38 + depth * 4, rotate: depth * 1.1, z: depth * -5 };
 }

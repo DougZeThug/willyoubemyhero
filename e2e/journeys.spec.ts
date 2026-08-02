@@ -5,6 +5,7 @@ import { test, expect, BUNDLE, EVENT_ID, PLAYERS, stubServerFns } from "./fixtur
 // a three-card pack, "assert two packs differ" collides often enough to be flaky;
 // "assert this pack is the one this identity earns" never does.
 import { dealPack, packSeed } from "../src/lib/pack";
+import { CEREMONY_MS } from "../src/lib/pack-ceremony";
 
 const MEMBER_KEY = "wwbh:member-token";
 /** Matches playwright.config.ts. Pages opened via browser.newPage() get no baseURL. */
@@ -228,6 +229,16 @@ test.describe("opening a pack", () => {
   /** Where the perforation runs, as a fraction of the pack's height. */
   const TEAR_LINE = 0.15;
 
+  /**
+   * When to press Skip.
+   *
+   * Past the ceremony's own 140ms dead zone — a click inside it is deliberately
+   * ignored, and would leave the test waiting out the full sequence and failing
+   * for the wrong reason — and with most of the ceremony still to run, so the
+   * elapsed-time assertion has real headroom.
+   */
+  const SKIP_AFTER_MS = 300;
+
   test("a tap on the pack does not open it", async ({ page }) => {
     await page.goto("/players/pack");
 
@@ -277,7 +288,7 @@ test.describe("opening a pack", () => {
     await expect(pack).toBeHidden();
   });
 
-  test("plays the opening ceremony, and lets you cut it short", async ({ page }) => {
+  test("plays the opening ceremony over the torn pack", async ({ page }) => {
     await page.goto("/players/pack");
     await sealedPack(page).press("Enter");
 
@@ -285,16 +296,32 @@ test.describe("opening a pack", () => {
     // every other test here relies on to mean "opened" — while the ceremony that
     // follows it is still on screen.
     await expect(sealedPack(page)).toBeHidden();
-    const skip = page.getByRole("button", { name: /^skip$/i });
-    await expect(skip).toBeVisible();
+    await expect(page.getByRole("button", { name: /^skip$/i })).toBeVisible();
 
     // The cards leaving the pack are decoration and are hidden from the tree, so
-    // they are found by test id rather than by role.
+    // they are found by test id rather than by role. One per card actually dealt.
     await expect(page.locator('[data-testid="opening-card"]')).toHaveCount(PACK_SIZE);
+  });
 
-    await skip.click();
+  test("skip cuts the ceremony short rather than waiting it out", async ({ page }) => {
+    await page.goto("/players/pack");
+
+    const started = Date.now();
+    await sealedPack(page).press("Enter");
+
+    // Past the dead zone that stops the pointerup ending a drag-rip from also
+    // eating the ceremony, and far short of the ~2.2s the sequence would take on
+    // its own.
+    await page.waitForTimeout(SKIP_AFTER_MS);
+    await page.getByRole("button", { name: /^skip$/i }).click();
     await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
-    await expect(skip).toBeHidden();
+
+    // The assertion that makes this a test of *skipping*. Reaching the stand
+    // proves nothing on its own — the ceremony gets there by itself — so what is
+    // measured is that it got there sooner than the ceremony could have. An
+    // earlier version asserted only the stand and passed identically whether the
+    // button did anything at all.
+    expect(Date.now() - started).toBeLessThan(CEREMONY_MS);
   });
 
   test("gets to the stand on its own if the ceremony is left to finish", async ({ page }) => {

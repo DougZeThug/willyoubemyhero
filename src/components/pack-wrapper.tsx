@@ -236,6 +236,20 @@ export function PackWrapper({
   const tickRef = useRef(0);
   const [progress, setProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
+  /**
+   * How far the rip had actually got when it committed.
+   *
+   * Read once, by the strip that finishes the job. The committed strip is a
+   * *different element* from the one under the finger — it has to be, because the
+   * one under the finger lives inside the pack's clipped box and this one cannot —
+   * so there is no transition to inherit and a plain style would paint it at full
+   * travel on its first frame. Which is what "the last 40% of the rip doesn't
+   * animate" looked like: a jump, then a glow racing across on its own.
+   *
+   * Zero on the keyboard path, where nothing was dragged and the whole rip is the
+   * ceremony's to play.
+   */
+  const committedAt = useRef(0);
   const reduced = usePrefersReducedMotion();
 
   const stripPct = TEAR.stripH * 100;
@@ -329,6 +343,8 @@ export function PackWrapper({
               if (p >= TEAR.threshold) {
                 dragRef.current = null;
                 setDragging(false);
+                // Where the strip that takes over has to start from.
+                committedAt.current = p;
                 // The capture used to be released by the pointerup landing on
                 // `end()`. From here on this element has no handlers left, so
                 // release it now or the capture outlives the gesture that took it
@@ -478,17 +494,33 @@ export function PackWrapper({
         )}
       </motion.div>
 
-      {/* The strip once the rip has committed, still one piece.
+      {/* The strip finishing the rip on its own, still one piece.
 
           Out here rather than in the box above, because a full rip rotates it 8°
           about its right edge and lifts the left end some 44px — clean off the top
           of the pack. Clipped, that read as the strip blinking out of existence
           rather than peeling. Its top corners are square out here, and for the
-          300ms it is violently rotating away nobody has ever noticed. */}
+          300ms it is violently rotating away nobody has ever noticed.
+
+          It animates from wherever the finger actually got to. A brand-new element
+          has no transition to inherit from the one it replaced, so given a plain
+          style it would paint at full travel on its very first frame — the last
+          40% of the rip arriving as a jump. On the keyboard path `committedAt` is
+          0 and this plays the whole rip, which is the only rip that path has. */}
       {!sealed && !shed && !reduced && (
-        <div aria-hidden className="pointer-events-none absolute inset-0" style={stripStyle}>
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{ clipPath: stripClip(edge), transformOrigin: "right center" }}
+          initial={{ rotate: -committedAt.current * 8, y: -committedAt.current * 14 }}
+          animate={{ rotate: -8, y: -14 }}
+          // Plainer than the house easeOutQuint used everywhere else here, and
+          // measured rather than guessed: quint is 91% travelled by 60ms of a
+          // 300ms phase, which to an eye is the jump this exists to remove.
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
           <PackFace art={art} size={packSize} year={year} />
-        </div>
+        </motion.div>
       )}
 
       {/* What is coming out. Outside the clipped box so it can leave the pack, and

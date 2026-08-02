@@ -145,15 +145,12 @@ export function PackOpening({
     }
     timers.current.push(setTimeout(finish, CEREMONY_MS));
 
-    // The pack coming apart, and the cards leaving it. Both hang off the strip
-    // letting go rather than off the commit, because that is the moment there is
-    // anything to hear.
-    timers.current.push(
-      setTimeout(() => {
-        playPackOpen();
-        playPackBurst();
-      }, CEREMONY_START.peel),
-    );
+    // Each sound sits on the thing it is the sound of. The pack coming apart is
+    // the strip letting go; the burst is the cards actually moving, which is 620ms
+    // later — played at `peel` it was a whoosh for something still sitting inside
+    // the wrapper.
+    timers.current.push(setTimeout(playPackOpen, CEREMONY_START.peel));
+    timers.current.push(setTimeout(playPackBurst, CEREMONY_START.launch));
     timers.current.push(setTimeout(playDeckGather, CEREMONY_START.collapse));
   }
 
@@ -269,13 +266,17 @@ export function PackOpening({
         rotateZ: t.rotate,
         scale: 0.94,
         opacity: 1,
-        // Reverse stagger, so the back of the deck lands first and card 0 — the
-        // one the stand is about to show — ends on top.
+        // Card 0 goes first and unstaggered. It is the one the stand mounts over,
+        // so it is the one that has to be *settled* when the handoff comes — under
+        // the old reverse stagger it started last, 90ms into a phase 340ms long,
+        // and was still travelling when PackStand took the screen. Paint order is
+        // `layer()`'s job, not the stagger's, so nothing is lost by leading with
+        // it.
         transition: {
           type: "spring",
-          stiffness: 220,
-          damping: 26,
-          delay: (slots - 1 - i) * 0.045,
+          stiffness: 260,
+          damping: 30,
+          delay: i * 0.04,
         },
       };
     },

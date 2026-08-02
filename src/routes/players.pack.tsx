@@ -874,13 +874,22 @@ function PackPage() {
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-4xl px-4 py-6">
-        {/* Folded away for the ceremony. A phone screen is short, and this row is
-            90px of running total above a card whose whole job is to be the biggest
-            thing on it — with the bar in place the Next button falls below the
-            fold. It comes back with the finished pack, which is where a collection
-            counter belongs anyway. */}
+        {/* Folded away for the stand. A phone screen is short, and this row is 90px
+            of running total above a card whose whole job is to be the biggest thing
+            on it — with the bar in place the Next button falls below the fold. It
+            comes back with the finished pack, which is where a collection counter
+            belongs anyway. */}
         {stage !== "revealing" && (
-          <div className="mb-5 flex items-center justify-between border-b border-primary/20 pb-4">
+          // Kept mounted through the ceremony rather than folded away with it, and
+          // made inert instead. Unmounting 90px of header above the pack reflows
+          // the pack upward on the exact frame the tear is meant to be the only
+          // thing moving — but a Vault link that is dimmed under a backdrop and
+          // still reachable by Tab is its own bug, and `inert` fixes that one
+          // without moving anything.
+          <div
+            inert={stage === "opening"}
+            className="mb-5 flex items-center justify-between border-b border-primary/20 pb-4"
+          >
             <Link
               to="/players"
               className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline"
@@ -924,7 +933,13 @@ function PackPage() {
               artUrl={packBack.data?.urls ?? null}
               packSize={PACK_SIZE}
               year={String(event?.year ?? "")}
-              slots={PACK_SIZE}
+              // The pack that is actually being dealt, not the nominal three.
+              // `dealPack` hands back only what the roster has, so a league that
+              // has not filled up yet gets a two-card pack — and a ceremony
+              // hard-coded to three would fly out a card that then never appears
+              // on the stand. `pack` is `nextPack` until the rip commits and the
+              // dealt row afterwards, so it is right on both sides of the tear.
+              slots={pack.length}
               onTear={tearOpen}
               onDone={closeCeremony}
             />

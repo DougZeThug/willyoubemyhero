@@ -138,6 +138,18 @@ describe("fanTransform", () => {
 });
 
 describe("riseTransform", () => {
+  // Same ordering as the deck, and for the same reason: `layer()` paints card 0
+  // on top, so card 0 has to be the one at the front of the stack.
+  it("puts card 0 at the front of the stack", () => {
+    const top = riseTransform(0, 3);
+    expect(top.x).toBe(0);
+    expect(top.rotate).toBe(0);
+    for (let i = 1; i < 3; i++) {
+      expect(riseTransform(i, 3).x).toBeGreaterThan(top.x);
+      expect(riseTransform(i, 3).z).toBeLessThan(top.z);
+    }
+  });
+
   it("brings the cards out as a stack, not as a fan", () => {
     const cards = Array.from({ length: 3 }, (_, i) => riseTransform(i, 3));
     for (const card of cards) {
@@ -156,13 +168,19 @@ describe("riseTransform", () => {
 });
 
 describe("deckTransform", () => {
-  it("lands the top card on the stand's mark, with the rest stacked behind it", () => {
+  /**
+   * Card 0 is the one PackStand mounts over a beat later, so any offset it still
+   * carries is a visible jump at the handoff. This used to count depth from the
+   * back, which put card 0 at the *far* end of the stack while `layer()` painted
+   * it on top — the visible card was the one furthest off the mark.
+   */
+  it("lands card 0 on the stand's mark, with the rest stacked behind it", () => {
     const n = 3;
-    const top = deckTransform(n - 1, n);
+    const top = deckTransform(0, n);
     expect(top.x).toBe(0);
     expect(top.rotate).toBe(0);
     expect(top.z).toBeCloseTo(0);
-    for (let i = 0; i < n - 1; i++) {
+    for (let i = 1; i < n; i++) {
       expect(deckTransform(i, n).x).toBeGreaterThan(top.x);
       expect(deckTransform(i, n).z).toBeLessThan(top.z);
     }
