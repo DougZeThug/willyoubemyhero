@@ -23,6 +23,31 @@ export const CARD_SIZES = "(max-width: 640px) 90vw, 420px";
 export const CARD_GRID_SIZES = "(max-width: 640px) 45vw, 220px";
 
 /**
+ * Sizes to try, widest first. A stalled fetch used to leave a broken-image icon
+ * and then, briefly, a permanent "no card art" placeholder — so instead of
+ * giving up on the first error, drop to the next smaller (cheaper) rendition
+ * and only show the placeholder once every size has failed.
+ */
+const SIZE_STEPS = ["large", "medium", "thumb"] as const;
+
+function useSteppedImage(set: Parameters<typeof urlFromSet>[0], eager: boolean) {
+  const start = eager ? 0 : 1;
+  const [step, setStep] = useState(start);
+  const key = urlFromSet(set, "large") ?? "";
+  // A re-signed URL is a fresh chance; start over at the preferred size.
+  useEffect(() => setStep(start), [key, start]);
+
+  const failed = step >= SIZE_STEPS.length;
+  const size = SIZE_STEPS[Math.min(step, SIZE_STEPS.length - 1)];
+  return {
+    failed,
+    src: failed ? null : urlFromSet(set, size),
+    srcSet: failed ? undefined : srcSetFromSet(set, size),
+    onError: () => setStep((s) => s + 1),
+  };
+}
+
+/**
  * How hard a card leans, and how close the camera stands to it.
  *
  * Two profiles, because the two places a card appears want opposite things. One
