@@ -654,7 +654,7 @@ function HoloCardImpl({
                 alt={`${name} card front`}
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
-                onError={() => setFrontFailed(true)}
+                onError={front.onError}
                 // A vault grid is thirty cards deep. Fetching and decoding the
                 // ones below the fold up front is what starves the handful that
                 // are actually on screen.
@@ -684,7 +684,7 @@ function HoloCardImpl({
                   sizes={imgSizes}
                   alt={`${name} card back`}
                   crossOrigin="anonymous"
-                  onError={() => setBackFailed(true)}
+                  onError={back.onError}
                   loading="lazy"
                   decoding="async"
                   // object-cover, not contain: the card's aspect is measured from
