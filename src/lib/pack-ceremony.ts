@@ -104,6 +104,16 @@ export function ceremonyReached(phase: CeremonyPhase, at: CeremonyPhase): boolea
 export const CEREMONY_BASIS = 320;
 
 /**
+ * How wide the fan spreads, and how much it tilts across that spread, in total.
+ *
+ * Totals rather than per-card steps, because the pack holds three cards on most
+ * days and four on a day with a secret in it, and a fan that grew with the count
+ * would run off the sides of a phone on exactly the days worth watching.
+ */
+const FAN_SPREAD = 104;
+const FAN_TILT = 18;
+
+/**
  * Where card `i` of `n` sits as it clears the mouth — out of the pack, but still
  * a stack.
  *
@@ -143,12 +153,19 @@ export function fanTransform(
   // Normalised -1..1 across the fan, for the arc. Guarded at n = 1, where every
   // card is the middle one.
   const u = n > 1 ? (2 * t) / (n - 1) : 0;
+  // Per-slot step, sized so the fan spans the same width whatever it is holding.
+  // A fixed step is fine at three and pushes a four-card fan — the pack plus its
+  // secret — past the edges of a phone, where `overflow-x: hidden` silently eats
+  // the outer cards. Capped rather than purely divided, so two cards sit close
+  // together instead of stretching to fill a width they do not need.
+  const step = n > 1 ? Math.min(58, FAN_SPREAD / (n - 1)) : 0;
+  const tilt = n > 1 ? Math.min(9, FAN_TILT / (n - 1)) : 0;
   return {
-    x: t * 58,
+    x: t * step,
     // Up out of the pack, plus an arc that lifts the middle — the shape a hand of
     // cards makes, and the thing that stops this reading as a row.
     y: -148 - (1 - u * u) * 22,
-    rotate: t * 9,
+    rotate: t * tilt,
     // The outer cards sit further back, so the fan has depth rather than being a
     // flat plane that happens to be rotated.
     z: 96 - Math.abs(u) * 24,

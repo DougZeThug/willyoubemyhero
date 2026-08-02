@@ -81,7 +81,68 @@ describe("the ceremony", () => {
     await tearAndRun(container, CEREMONY_START.launch);
     expect(container.querySelectorAll('[data-testid="opening-card"]')).toHaveLength(3);
   });
+});
 
+/**
+ * The pack is genuinely four cards on a day with a drop in it, so the fan holds
+ * four. What it must not do is give the card away: the face is the same universal
+ * back the other three are showing, and the only tell is the rainbow bezel every
+ * other secret surface in the app wears.
+ */
+describe("the daily secret in the fan", () => {
+  it("takes a slot of its own, wearing the bezel", async () => {
+    const { container } = renderOpening({ slots: 4, secret: true });
+    await tearAndRun(container, CEREMONY_START.fan);
+
+    const cards = container.querySelectorAll('[data-testid="opening-card"]');
+    expect(cards).toHaveLength(4);
+    // The last slot, matching the order the stand turns them in.
+    expect(cards[3].querySelector(".holo-prism-edge")).not.toBeNull();
+    for (const i of [0, 1, 2]) {
+      expect(cards[i].querySelector(".holo-prism-edge")).toBeNull();
+    }
+  });
+
+  it("is held in front of the roster while the fan is open", async () => {
+    const { container } = renderOpening({ slots: 4, secret: true });
+    await tearAndRun(container, CEREMONY_START.fan);
+
+    const z = [...container.querySelectorAll<HTMLElement>('[data-testid="opening-card"]')].map(
+      (el) => Number(el.style.zIndex),
+    );
+    expect(Math.max(...z)).toBe(z[3]);
+  });
+
+  // The stand turns the secret last, so the deck it is handed has to have the
+  // secret at the bottom and the first roster card on top.
+  it("drops to the back of the deck once the fan gathers", async () => {
+    const { container } = renderOpening({ slots: 4, secret: true });
+    await tearAndRun(container, CEREMONY_START.collapse);
+
+    const z = [...container.querySelectorAll<HTMLElement>('[data-testid="opening-card"]')].map(
+      (el) => Number(el.style.zIndex),
+    );
+    expect(Math.max(...z)).toBe(z[0]);
+    expect(Math.min(...z)).toBe(z[3]);
+  });
+
+  it("gives nothing away that a roster card does not", async () => {
+    const { container } = renderOpening({ slots: 4, secret: true });
+    await tearAndRun(container, CEREMONY_START.fan);
+    // No name, no art, no label — the ceremony knows nothing about which secret
+    // it is and must not start pretending otherwise.
+    expect(container.textContent).not.toMatch(/secret/i);
+  });
+
+  it("is absent on a day with no drop", async () => {
+    const { container } = renderOpening({ slots: 3, secret: false });
+    await tearAndRun(container, CEREMONY_START.fan);
+    expect(container.querySelectorAll('[data-testid="opening-card"]')).toHaveLength(3);
+    expect(container.querySelector(".holo-prism-edge")).toBeNull();
+  });
+});
+
+describe("the ceremony, continued", () => {
   /**
    * There is a beat on arrival where the collection has not been reconciled, so
    * there is nothing to deal from and `tearOpen` refuses. A ceremony that started

@@ -14,7 +14,9 @@ import {
   riseTransform,
   type CeremonyPhase,
 } from "@/lib/pack-ceremony";
+import { SECRET_RARITY } from "@/lib/secret-cards";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media.functions";
 
 /**
@@ -29,6 +31,16 @@ const SKIP_DEAD_MS = 140;
 
 /** How wide a flying card is, against the pack. Roughly the printed proportion. */
 const CARD_W = 0.62;
+
+/**
+ * The pause the secret takes before following the roster out, in seconds.
+ *
+ * Long enough to read as a separate arrival and short enough that the fan still
+ * lands inside the phase it has. The stand is where the secret's real ceremony
+ * happens — a 1600ms hold, a riser and a flip twice the house length — so this is
+ * only the hint that there is a fourth card, not the payoff.
+ */
+const SECRET_BEAT = 0.11;
 
 /**
  * The pack opening: the rest of the rip, and the cards coming out of it.
@@ -48,6 +60,7 @@ export function PackOpening({
   packSize,
   year,
   slots,
+  secret = false,
   onTear,
   onDone,
 }: {
@@ -56,16 +69,20 @@ export function PackOpening({
   packSize: number;
   year: string;
   /**
-   * How many cards fly out.
-   *
-   * The three in the pack, and deliberately not the daily secret. At the moment
-   * the rip commits the secret has not been pulled — it is `pending` at best and
-   * `hidden` for a guest whose session has not minted yet — so a fourth back here
-   * would be a coin flip. More to the point the stand goes out of its way to keep
-   * the fourth card off the screen until the last step, and a fourth foil back in
-   * the fan telegraphs it two seconds early.
+   * How many cards fly out. The roster cards dealt, plus the secret when one is
+   * coming — see `secret`.
    */
   slots: number;
+  /**
+   * The last slot is the daily secret rather than a roster card.
+   *
+   * It comes forward in the fan wearing the rainbow bezel, and that is the *only*
+   * thing the ceremony gives away about it: the face is the same universal back
+   * every other card in the fan is showing, so which secret it is stays for the
+   * stand. The pack is genuinely four cards on a day with a drop in it, and a fan
+   * of three was quietly under-counting it.
+   */
+  secret?: boolean;
   /**
    * The ceremony has begun. Deal the pack now, so the network gets a head start.
    *
@@ -203,16 +220,27 @@ export function PackOpening({
   // rather than as a pause, so it breathes while it is being looked at.
   const hovering = target === "fan";
 
+  /** Whether slot `i` is the daily secret. Always the last one, as on the stand. */
+  const isSecret = (i: number) => secret && i === slots - 1;
+
   /**
-   * Paint order, which the fan cannot get from depth.
+   * Paint order, as a tiebreaker for cards at equal depth.
    *
-   * The mouth clip is a grouping property, so it flattens this subtree and the
-   * cards' `z` stops sorting them — left to DOM order, the rightmost card lands on
-   * top and the arc reads as a cascade leaning one way rather than as a hand held
-   * up. In the fan the middle card is the one nearest the viewer; everywhere else
-   * it is a stack, and the top of a stack is the card the stand is about to show.
+   * The real sorting is `z` — the perspective on the container makes this a 3D
+   * rendering context, where the browser orders by computed depth. But the fan is
+   * an arc, so its two outermost cards sit at exactly the same depth as each other
+   * and fall back to DOM order, which is how the rightmost one ended up on top and
+   * the arc read as a cascade leaning one way. This settles those ties the same way
+   * the depths do, so the two never disagree.
+   *
+   * In the fan that means the middle card, or the secret when there is one, because
+   * being held out in front of the others is most of what marks it as different.
+   * Everywhere else it is a stack, and the top of a stack is the card the stand is
+   * about to show — which leaves the secret at the *back* of the deck, exactly
+   * where it belongs, since the stand turns it last.
    */
   function layer(i: number): number {
+    if (target === "fan" && isSecret(i)) return (slots + 1) * 10;
     const from = target === "fan" ? Math.abs(i - (slots - 1) / 2) : i;
     return Math.round((slots - from) * 10);
   }
@@ -240,7 +268,15 @@ export function PackOpening({
         rotateZ: t.rotate,
         scale: 0.78,
         opacity: 1,
-        transition: { type: "spring", stiffness: 200, damping: 22, delay: i * 0.055 },
+        // The secret waits a beat behind the roster, so it leaves the pack on its
+        // own rather than in the crowd. It is already last in the order; this is
+        // the gap that makes that legible at speed.
+        transition: {
+          type: "spring",
+          stiffness: 200,
+          damping: 22,
+          delay: i * 0.055 + (isSecret(i) ? SECRET_BEAT : 0),
+        },
       };
     },
     fan: (i: number) => {
@@ -248,12 +284,26 @@ export function PackOpening({
       return {
         x: t.x * scale,
         y: t.y * scale,
-        z: t.z,
+        // Brought properly forward, in depth rather than in paint order. The
+        // perspective on the container makes this a 3D rendering context, and in
+        // one of those the browser sorts by computed depth and ignores z-index
+        // outright — so `layer()` alone left the secret sharing the *back* of the
+        // fan with the far roster card, which is the opposite of the point.
+        z: isSecret(i) ? t.z + 60 : t.z,
         rotateX: -10,
         rotateZ: t.rotate,
+        // Same nominal size as the rest. Being 60 closer to the camera already
+        // renders it about 6% bigger, and stacking an explicit scale on top of
+        // that took it to 14% — large enough to read as a different card rather
+        // than a nearer one, and wide enough to crowd the edge of a phone.
         scale: 0.8,
         opacity: 1,
-        transition: { type: "spring", stiffness: 190, damping: 21, delay: i * 0.06 },
+        transition: {
+          type: "spring",
+          stiffness: 190,
+          damping: 21,
+          delay: i * 0.06 + (isSecret(i) ? SECRET_BEAT : 0),
+        },
       };
     },
     deck: (i: number) => {
@@ -337,10 +387,15 @@ export function PackOpening({
                   aspectRatio: "5 / 7",
                   zIndex: layer(i),
                   transformStyle: "preserve-3d",
-                  boxShadow:
-                    "0 22px 36px -14px oklch(0 0 0 / 72%), 0 0 22px -8px oklch(0.82 0.14 210 / 45%)",
+                  // The secret's own green rather than the app's cyan, and a
+                  // deeper one — the same colour it wears on the stand and in the
+                  // vault, so it is recognisable before it is readable.
+                  boxShadow: isSecret(i)
+                    ? `0 24px 40px -14px oklch(0 0 0 / 76%), 0 0 34px -6px ${SECRET_RARITY.border}`
+                    : "0 22px 36px -14px oklch(0 0 0 / 72%), 0 0 22px -8px oklch(0.82 0.14 210 / 45%)",
+                  borderColor: isSecret(i) ? SECRET_RARITY.border : undefined,
                 }}
-                className="rounded-xl border border-primary/30"
+                className={cn("rounded-xl border", !isSecret(i) && "border-primary/30")}
               >
                 {/* Nested, so the breath composes with the fan transform rather
                     than overwriting it. */}
@@ -358,6 +413,13 @@ export function PackOpening({
                 >
                   <PackCardBack art={artUrl} />
                 </motion.div>
+
+                {/* The rainbow bezel, the one thing that says "secret" across this
+                    whole app. Outside the breathing layer so it stays welded to the
+                    card's edge, and the same `.holo-prism-edge` HoloCard mounts —
+                    opaque chrome rather than a blend mode, which is the reason it
+                    survives being looked at in a garden. */}
+                {isSecret(i) && <div className="holo-prism-edge is-spinning" aria-hidden />}
               </motion.div>
             ))}
         </PackWrapper>

@@ -250,6 +250,15 @@ function PackPage() {
   // Readable from the day-tick interval, whose closure cannot see the state.
   const openingRef = useRef(false);
   /**
+   * The fan gets a fourth card, because a secret is on its way.
+   *
+   * Latched at the tear rather than read live. The pull is fired *by* the tear, so
+   * `secretSlot` moves from hidden to pending to sealed while the ceremony is
+   * playing, and a card count that changed mid-flight would remount the cards
+   * halfway through their arc.
+   */
+  const [secretComing, setSecretComing] = useState(false);
+  /**
    * A ceremony ran on this screen, so the stand is mounting out of a deck rather
    * than out of nothing. Survives `opening` going false, which is the whole point
    * — it is read on the render *after* the ceremony ends.
@@ -520,9 +529,17 @@ function PackPage() {
     openingRef.current = !reduced;
     ceremonyRanRef.current = !reduced;
     setOpening(!reduced);
+    // Whether the fan is holding three cards or four, decided once, here.
+    //
+    // `available` is the server's own "there is something to pull", and it has to
+    // be a positive answer: a status query still in flight counts as no. Flying a
+    // fourth card that then never lands on the stand is a worse lie than a fan
+    // that simply did not preview one — and the secret keeps its whole production
+    // on the stand either way.
+    setSecretComing(!!actor && status.data?.available === true);
     playTear();
     return true;
-  }, [dealtIds, nextPack, reduced]);
+  }, [dealtIds, nextPack, reduced, actor, status.data?.available]);
 
   const closeCeremony = useCallback(() => {
     openingRef.current = false;
@@ -933,13 +950,15 @@ function PackPage() {
               artUrl={packBack.data?.urls ?? null}
               packSize={PACK_SIZE}
               year={String(event?.year ?? "")}
-              // The pack that is actually being dealt, not the nominal three.
-              // `dealPack` hands back only what the roster has, so a league that
-              // has not filled up yet gets a two-card pack — and a ceremony
-              // hard-coded to three would fly out a card that then never appears
-              // on the stand. `pack` is `nextPack` until the rip commits and the
-              // dealt row afterwards, so it is right on both sides of the tear.
-              slots={pack.length}
+              // What the pack actually holds, not the nominal three. `dealPack`
+              // hands back only what the roster has, so a league that has not
+              // filled up yet gets a two-card pack — and a ceremony hard-coded to
+              // three would fly out a card that then never appears on the stand.
+              // `pack` is `nextPack` until the rip commits and the dealt row
+              // afterwards, so it is right on both sides of the tear. The secret
+              // is a real fourth card on a day with a drop, and rides along.
+              slots={pack.length + (secretComing ? 1 : 0)}
+              secret={secretComing}
               onTear={tearOpen}
               onDone={closeCeremony}
             />

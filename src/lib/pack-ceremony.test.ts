@@ -135,6 +135,37 @@ describe("fanTransform", () => {
       expect(card.y).toBeLessThan(0);
     }
   });
+
+  /**
+   * The pack is three cards most days and four on a day with a secret in it, and
+   * the fan has to fit a phone on both. A fixed per-card step did not: four cards
+   * spread half a pack wider than three, and `html, body` carry
+   * `overflow-x: hidden`, so the outer cards would have been silently clipped
+   * rather than pushing a scrollbar anybody could notice.
+   */
+  it("spans the same width whether it is holding three cards or four", () => {
+    const width = (n: number) => {
+      const cards = xs(n);
+      return cards[n - 1].x - cards[0].x;
+    };
+    expect(width(4)).toBeCloseTo(width(3));
+    expect(width(3)).toBeLessThanOrEqual(120);
+  });
+
+  it("tilts across the same total angle at three cards or four", () => {
+    const tilt = (n: number) => {
+      const cards = xs(n);
+      return cards[n - 1].rotate - cards[0].rotate;
+    };
+    expect(tilt(4)).toBeCloseTo(tilt(3));
+  });
+
+  // Two cards should sit close together rather than stretching to fill the width
+  // four of them need, so the step is capped rather than purely divided.
+  it("does not stretch a two-card fan to the full width", () => {
+    const two = xs(2);
+    expect(two[1].x - two[0].x).toBeLessThan(xs(3)[2].x - xs(3)[0].x);
+  });
 });
 
 describe("riseTransform", () => {
