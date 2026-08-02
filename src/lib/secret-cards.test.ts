@@ -104,6 +104,17 @@ describe("secretFoil", () => {
     expect(secretFoil(undefined)).toBe(SECRET_RARITY);
   });
 
+  it.each(["__proto__", "constructor", "toString", "hasOwnProperty"])(
+    "falls back for %s rather than resolving an inherited property",
+    (id) => {
+      // The registry is a plain object literal. Without an own-key check these
+      // stored values would return Object.prototype (or a function) as the
+      // Rarity, and HoloCard would render with every field undefined.
+      expect(secretFoil(id)).toBe(SECRET_RARITY);
+      expect(secretFoil(id, "pulse").holoA).toBe(SECRET_RARITY.holoA);
+    },
+  );
+
   it("resolves the treatment the migration defaults to", () => {
     expect(secretFoil("rosette")).toBe(SECRET_RARITY);
   });

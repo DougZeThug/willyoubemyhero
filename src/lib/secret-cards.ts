@@ -177,11 +177,15 @@ const BORDER_FX_IDS = new Set<string>(SECRET_BORDER_FX_OPTIONS.map((o) => o.id))
 const FX_VARIANTS = new Map<string, Rarity>();
 
 export function secretFoil(id: string | null | undefined, borderFx?: string | null): Rarity {
-  const base = (id && SECRET_FOILS[id]) || SECRET_RARITY;
+  // hasOwn, not a truthiness check on the lookup: the registry is a plain
+  // object, so a stored id like "__proto__" or "constructor" would otherwise
+  // resolve to an inherited property and dodge the fallback.
+  const known = id != null && Object.hasOwn(SECRET_FOILS, id);
+  const base = known ? SECRET_FOILS[id] : SECRET_RARITY;
   // "spin" is what an absent borderFx already means, so it takes the base object
   // unchanged — same fallback contract as an unknown id.
   if (!borderFx || borderFx === "spin" || !BORDER_FX_IDS.has(borderFx)) return base;
-  const key = `${id && SECRET_FOILS[id] ? id : "rosette"}.${borderFx}`;
+  const key = `${known ? id : "rosette"}.${borderFx}`;
   let variant = FX_VARIANTS.get(key);
   if (!variant) {
     variant = { ...base, borderFx: borderFx as BorderFx };

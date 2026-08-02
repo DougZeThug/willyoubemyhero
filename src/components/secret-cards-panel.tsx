@@ -92,7 +92,11 @@ export function SecretCardsPanel() {
   // stay interactive while one card is saving.
   const [grantingId, setGrantingId] = useState<string | null>(null);
   const [savingWeightId, setSavingWeightId] = useState<string | null>(null);
-  const [savingLookId, setSavingLookId] = useState<string | null>(null);
+  // A set rather than a single id like the two above: look saves fire on every
+  // select change, so two rows can genuinely be in flight at once — and one
+  // row's finally must not re-enable the other mid-save, or a second change
+  // there races the first and the older request can land last.
+  const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
   const [editName, setEditName] = useState("");
   const [editFlavour, setEditFlavour] = useState("");
 
@@ -233,7 +237,7 @@ export function SecretCardsPanel() {
   // Unlike weight there is no blur ambiguity: picking an option *is* the intent,
   // so a look saves on change.
   async function saveLook(id: string, look: { foil?: string; borderFx?: string }) {
-    setSavingLookId(id);
+    setSavingLookIds((prev) => new Set(prev).add(id));
     const p = updateFn({ data: { id, ...look } }).then(async (r) => {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
       return r;
@@ -248,7 +252,11 @@ export function SecretCardsPanel() {
     } catch {
       // toast.promise already surfaced the error
     } finally {
-      setSavingLookId(null);
+      setSavingLookIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -524,7 +532,7 @@ export function SecretCardsPanel() {
                         SECRET_FOIL_OPTIONS.some((o) => o.id === card.foil) ? card.foil : "rosette"
                       }
                       onChange={(e) => void saveLook(card.id, { foil: e.target.value })}
-                      disabled={savingLookId === card.id}
+                      disabled={savingLookIds.has(card.id)}
                       className="h-6 rounded border border-white/15 bg-background px-1.5 text-xs normal-case tracking-normal"
                       aria-label={`Color effect for ${card.name}`}
                     >
@@ -544,7 +552,7 @@ export function SecretCardsPanel() {
                           : "spin"
                       }
                       onChange={(e) => void saveLook(card.id, { borderFx: e.target.value })}
-                      disabled={savingLookId === card.id}
+                      disabled={savingLookIds.has(card.id)}
                       className="h-6 rounded border border-white/15 bg-background px-1.5 text-xs normal-case tracking-normal"
                       aria-label={`Border animation for ${card.name}`}
                     >
@@ -555,7 +563,7 @@ export function SecretCardsPanel() {
                       ))}
                     </select>
                   </label>
-                  {savingLookId === card.id && (
+                  {savingLookIds.has(card.id) && (
                     <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden />
                   )}
                 </div>
