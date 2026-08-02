@@ -323,15 +323,15 @@ export function PackOpening({
         opacity: 1,
         // Card 0 goes first and unstaggered. It is the one the stand mounts over,
         // so it is the one that has to be *settled* when the handoff comes — under
-        // the old reverse stagger it started last, 90ms into a phase 340ms long,
+        // the old reverse stagger it started last, 90ms into a phase 560ms long,
         // and was still travelling when PackStand took the screen. Paint order is
         // `layer()`'s job, not the stagger's, so nothing is lost by leading with
         // it.
         transition: {
           type: "spring",
-          stiffness: 260,
-          damping: 30,
-          delay: i * 0.04,
+          stiffness: 210,
+          damping: 28,
+          delay: i * 0.07,
         },
       };
     },
