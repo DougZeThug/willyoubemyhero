@@ -102,8 +102,18 @@ export function useCardSfx() {
   return { muted: isMuted, toggle };
 }
 
-// Short burst of filtered white noise — reads as card stock sliding against card stock.
-function noiseBurst(durationSec: number, fromHz: number, toHz: number, gain: number) {
+/**
+ * Short burst of filtered white noise — reads as card stock sliding against card
+ * stock.
+ *
+ * `afterSec` schedules the burst against the AudioContext's own clock rather than
+ * the caller waiting on a timer. That clock is sample-accurate and keeps running
+ * when the tab is throttled, which a `setTimeout` chain does not: backgrounded,
+ * several short timers coalesce and fire together, turning a sequence of taps into
+ * one thud. It also means a scheduled burst needs no cleanup — it is already in
+ * the audio graph, not in a pending callback.
+ */
+function noiseBurst(durationSec: number, fromHz: number, toHz: number, gain: number, afterSec = 0) {
   const ac = audio();
   if (!ac) return;
   const frames = Math.floor(ac.sampleRate * durationSec);
@@ -114,19 +124,21 @@ function noiseBurst(durationSec: number, fromHz: number, toHz: number, gain: num
   const source = ac.createBufferSource();
   source.buffer = buffer;
 
+  const start = ac.currentTime + afterSec;
+
   const filter = ac.createBiquadFilter();
   filter.type = "bandpass";
   filter.Q.value = 0.8;
-  filter.frequency.setValueAtTime(fromHz, ac.currentTime);
-  filter.frequency.exponentialRampToValueAtTime(toHz, ac.currentTime + durationSec);
+  filter.frequency.setValueAtTime(fromHz, start);
+  filter.frequency.exponentialRampToValueAtTime(toHz, start + durationSec);
 
   const amp = ac.createGain();
-  amp.gain.setValueAtTime(gain, ac.currentTime);
-  amp.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + durationSec);
+  amp.gain.setValueAtTime(gain, start);
+  amp.gain.exponentialRampToValueAtTime(0.0001, start + durationSec);
 
   source.connect(filter).connect(amp).connect(ac.destination);
-  source.start();
-  source.stop(ac.currentTime + durationSec);
+  source.start(start);
+  source.stop(start + durationSec);
 }
 
 /** Card flip: a fast upward noise sweep plus a light haptic tick. */
@@ -142,6 +154,50 @@ export function playTear() {
   noiseBurst(0.42, 5200, 700, 0.13);
   if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
     navigator.vibrate?.([12, 30, 18]);
+  }
+}
+
+/**
+ * The mouth of the pack parting, a beat after the rip.
+ *
+ * Two voices, because one of them is a rip and this is the moment *after* it: a
+ * long downward body — foil letting go — under a short bright crackle, which is
+ * the fibre. `playTear` is the gesture; this is the consequence of it.
+ */
+export function playPackOpen() {
+  noiseBurst(0.5, 3800, 240, 0.14);
+  noiseBurst(0.09, 7000, 3000, 0.06);
+  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
+    navigator.vibrate?.([20, 40, 30]);
+  }
+}
+
+/**
+ * The cards leaving the pack.
+ *
+ * One sweep for all of them, not one each. Three staggered whooshes inside 200ms
+ * stack into a single smear anyway — the same mistake `playTearTick` exists to
+ * avoid. Upward, which nothing else in this file does: every other burst falls,
+ * so a rising one reads as the only thing coming toward you.
+ */
+export function playPackBurst() {
+  noiseBurst(0.38, 420, 2800, 0.075);
+}
+
+/**
+ * The fan gathering into a deck — a riffle, not a chime.
+ *
+ * Three near-identical taps 45ms apart, because a riffle is a countable number of
+ * edges where a single burst is a shuffle. All three are queued on the audio clock
+ * in one call rather than chained through `setTimeout`: 45ms apart is inside the
+ * window a throttled tab coalesces timers into, which would collapse the riffle
+ * into exactly the one smear this exists to avoid — and timers started here would
+ * outlive the caller's own cleanup.
+ */
+export function playDeckGather() {
+  for (let i = 0; i < 3; i++) noiseBurst(0.06, 2600, 900, 0.05, i * 0.045);
+  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
+    navigator.vibrate?.([6, 30, 6]);
   }
 }
 

@@ -8,7 +8,7 @@ import { stepIndex } from "@/lib/zoom";
 import { packedByLabel } from "@/lib/card-pulls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack } from "@/hooks/use-photo-urls";
-import { urlFromSet } from "@/lib/media.functions";
+import { urlFromSet } from "@/lib/media";
 
 /**
  * One secret card, big.

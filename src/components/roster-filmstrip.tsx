@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { HoloCard } from "@/components/holo-card";
 import { initialsOf } from "@/lib/format";
 import type { Rarity } from "@/lib/card-rarity";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
 export type FilmstripEntry = {

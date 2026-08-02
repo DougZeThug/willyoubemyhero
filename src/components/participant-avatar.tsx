@@ -1,7 +1,7 @@
 import { hueOf, initialsOf } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { urlFromSet } from "@/lib/media.functions";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import { urlFromSet } from "@/lib/media";
+import type { ImageUrlSet } from "@/lib/media";
 
 export function ParticipantAvatar({
   name,

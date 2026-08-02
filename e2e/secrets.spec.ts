@@ -4,7 +4,7 @@
 // browser owns: the claim gate, the reveal, what survives a reload, and — the
 // point of the whole feature — that the vault shows only what you pulled and
 // never hints at what you did not.
-import { test, expect, SECRET_CARD, type ServerFnMock } from "./fixtures";
+import { test, expect, SECRET_CARD, serverFnName, type ServerFnMock } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 const MEMBER_KEY = "wwbh:member-token";
@@ -42,6 +42,22 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
 }
 
 const sealedPack = (page: Page) => page.getByRole("button", { name: /tear the pack open/i });
+
+/**
+ * Wait until a rip will actually take.
+ *
+ * `tearOpen` refuses while the collection is still being reconciled — without a
+ * baseline there is nothing to deal a pack from — and it refuses *silently*, so a
+ * test that presses Enter too early gets a pack that stays sealed and an assertion
+ * that times out somewhere unrelated. The Collected counter is the one thing on
+ * this screen that says so out loud: it reads a dash until the reconcile lands.
+ *
+ * In practice the stubs answer during hydration and this returns immediately. It
+ * exists for the machine where they do not.
+ */
+async function packReady(page: Page) {
+  await expect(page.getByTestId("collected-count")).not.toHaveText(/—/);
+}
 
 /**
  * Run the whole reveal sequence.
@@ -172,6 +188,58 @@ test.describe("the daily secret", () => {
 
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("the fourth card flies out of the pack with the other three", async ({ page, server }) => {
+    await asMember(page);
+    withSecret(server);
+
+    // The slot count is latched when the rip commits, off the day's status — so
+    // the rip has to wait for that answer or this races it. Waiting on the
+    // response rather than on a timeout, because a timeout short enough to be
+    // worth having is one that passes for the wrong reason on a fast machine.
+    //
+    // Armed before the navigation, not after: the query fires during hydration
+    // and can be answered before `goto` resolves, and a listener attached then
+    // waits for a response that has already been and gone.
+    const statusAnswered = page.waitForResponse(
+      // `serverFnName` yields the whole export — `getSecretStatus_createServerFn_handler`
+      // — so this is a contains, the same way the stub itself matches its keys.
+      (r) => r.url().includes("/_serverFn/") && serverFnName(r.url()).includes("getSecretStatus"),
+    );
+    await page.goto("/players/pack");
+    await statusAnswered;
+    // The response has landed; this is the beat TanStack Query needs to put it in
+    // the cache and re-render, which is what the rip actually reads.
+    await page.waitForTimeout(100);
+    // And the pack has to be dealable at all, or the rip is a no-op.
+    await packReady(page);
+    await sealedPack(page).press("Enter");
+
+    // Three roster cards and the secret. It wears the same universal back as the
+    // rest — the bezel is the only tell, and which secret it is stays for the
+    // stand.
+    await expect(page.locator('[data-testid="opening-card"]')).toHaveCount(4);
+    await expect(page.locator('[data-testid="opening-card"] .holo-prism-edge')).toHaveCount(1);
+
+    // And it still gets its whole production at the end of the sequence.
+    await revealAll(page);
+    await expect(page.getByText(/one more card/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("flies out three cards on a day with no drop", async ({ page }) => {
+    await asMember(page);
+    // Default stub: `available: false`. A fourth card in the fan that never lands
+    // on the stand is a worse lie than a fan that did not preview one.
+    await page.goto("/players/pack");
+    // The slot count is not what is at risk here — it is three either way. The
+    // rip *taking* is: an unreconciled collection makes `tearOpen` refuse, and the
+    // ceremony that never starts fails this on a count that stays at zero.
+    await packReady(page);
+    await sealedPack(page).press("Enter");
+    await expect(page.locator('[data-testid="opening-card"]')).toHaveCount(3);
+    await expect(page.locator(".holo-prism-edge")).toHaveCount(0);
   });
 
   test("nothing appears when the set is empty", async ({ page }) => {

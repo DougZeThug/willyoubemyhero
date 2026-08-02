@@ -1,7 +1,7 @@
 import { forwardRef } from "react";
 import { formatTime, initialsOf } from "@/lib/format";
-import { urlFromSet } from "@/lib/media.functions";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import { urlFromSet } from "@/lib/media";
+import type { ImageUrlSet } from "@/lib/media";
 
 /**
  * 1080x1350 shareable graphic for a single player's trading card.

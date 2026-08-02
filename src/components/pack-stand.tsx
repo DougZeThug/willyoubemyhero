@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
+import { SealedBack } from "@/components/pack-card-back";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretSlot } from "@/lib/pack";
 import { packedByLabel } from "@/lib/card-pulls";
-import type { CardUrls, ImageUrlSet } from "@/lib/media.functions";
+import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
@@ -22,21 +23,6 @@ export const FLIP_MS = 500;
  * whose turn is the payoff rather than a way of getting at the stats on the back.
  */
 export const SECRET_FLIP_MS = 1100;
-
-/** Generic card back shown while a pulled card is still face-down. */
-function SealedBack() {
-  return (
-    <div className="wax-foil flex h-full w-full flex-col items-center justify-center gap-1 p-3 text-center">
-      <Sparkles className="h-5 w-5 text-primary/80" />
-      <div className="font-display text-[8px] font-black uppercase tracking-[0.3em] text-primary/80">
-        Will YOU Be My Hero?
-      </div>
-      <div className="font-display text-sm font-black uppercase leading-none text-foreground/90">
-        Draft Combine
-      </div>
-    </div>
-  );
-}
 
 type StandParticipant = {
   id: string;
@@ -110,6 +96,7 @@ export function PackStand({
   secretPeeking,
   peeking,
   busy,
+  fromPack = false,
   onReveal,
   onRevealSecret,
   onAdvance,
@@ -131,6 +118,16 @@ export function PackStand({
   peeking: boolean;
   /** True while "Reveal all" is driving, so a tap cannot cut across it. */
   busy: boolean;
+  /**
+   * The stand is mounting straight out of the opening ceremony.
+   *
+   * The house entrance slides in from the right, which is right for stepping from
+   * one card to the next and wrong for the first one: the ceremony has just
+   * gathered a deck onto this exact mark, so a card arriving from off-screen
+   * reads as the deck having been thrown away. Only the first mount — after that
+   * the sequence is stepping again and the slide is correct.
+   */
+  fromPack?: boolean;
   onReveal: (i: number) => void;
   onRevealSecret: () => void;
   onAdvance: () => void;
@@ -147,6 +144,13 @@ export function PackStand({
   // until the card is front-on, so the swap happens somewhere nobody is looking.
   const [settled, setSettled] = useState(false);
   const [flipped, setFlipped] = useState(false);
+  // Latched on the first render, so only the card the ceremony handed over gets
+  // the gather entrance. Every card after it is a step, and a step slides.
+  const firstMountRef = useRef(true);
+  const gathered = fromPack && firstMountRef.current;
+  useEffect(() => {
+    firstMountRef.current = false;
+  }, []);
 
   useEffect(() => {
     setSettled(false);
@@ -222,7 +226,11 @@ export function PackStand({
         <AnimatePresence mode="wait">
           <motion.div
             key={onSecret ? "secret" : (ep?.id ?? cursor)}
-            initial={{ opacity: 0, x: reduced ? 0 : 64, scale: 0.94 }}
+            initial={
+              gathered
+                ? { opacity: 0, x: 0, scale: reduced ? 1 : 0.94 }
+                : { opacity: 0, x: reduced ? 0 : 64, scale: 0.94 }
+            }
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: reduced ? 0 : -64, scale: 0.94 }}
             transition={{ type: "spring", stiffness: 240, damping: 26 }}

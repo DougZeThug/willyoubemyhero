@@ -5,8 +5,8 @@
 // cannot survive. Nothing else in the app preloads: the vault grid can afford to
 // stream in, because nothing there is a surprise.
 
-import { srcSetFromSet, urlFromSet } from "@/lib/media.functions";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import { srcSetFromSet, urlFromSet } from "@/lib/media";
+import type { ImageUrlSet } from "@/lib/media";
 import { CARD_SIZES } from "@/components/holo-card";
 
 /**

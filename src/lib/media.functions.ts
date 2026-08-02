@@ -1,6 +1,17 @@
+// The server side of images: signing, uploading, the storage bucket. The shapes
+// these hand back — and the pure helpers that read them — live in ./media, so a
+// component that only wants a URL out of an ImageUrlSet never has to import a
+// module that pulls in the admin guard.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
+import {
+  VARIANT_WIDTHS,
+  type CardSide,
+  type CardUrls,
+  type ImageUrlSet,
+  type SizedPhotoUrls,
+} from "./media";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -33,19 +44,6 @@ const SIGNED_CACHE_MAX = 600;
 
 const signedCache = new Map<string, { url: string; mintedAt: number }>();
 const signingNow = new Map<string, Promise<string | null>>();
-
-/**
- * Widths the storage renderer resizes to. The originals are ~3 MB PNGs and a
- * phone grid asks for a dozen at once, which is what left tiles showing their
- * alt text. Signing with a transform hands back a WebP a fraction of the size
- * and needs no re-upload, so it also covers every image whose variant columns
- * were never backfilled.
- *
- * `large` is deliberately 1200 and not 1600: a 1600px resize of a 3.1 MB PNG
- * measured 3.1 MB, i.e. no saving at all, and the browser picks the widest
- * srcset entry on a 3x phone screen — which is what stalled the grid.
- */
-export const VARIANT_WIDTHS = { thumb: 320, medium: 800, large: 1200 } as const;
 
 /** Lower quality where the image is small enough that nobody can tell. */
 const QUALITY_FOR_WIDTH: Record<number, number> = {
@@ -102,44 +100,6 @@ export function forgetSignedPath(path: string | null | undefined) {
   for (const w of Object.values(VARIANT_WIDTHS)) signedCache.delete(cacheKey(path, w));
 }
 
-export type ImageUrlSet = {
-  thumb: string | null;
-  medium: string | null;
-  large: string | null;
-};
-
-export function urlFromSet(
-  set: ImageUrlSet | string | null | undefined,
-  size: keyof ImageUrlSet = "large",
-): string | null {
-  if (!set) return null;
-  if (typeof set === "string") return set;
-  return set[size] ?? set.large ?? set.medium ?? set.thumb;
-}
-
-export function srcSetFromSet(
-  set: ImageUrlSet | string | null | undefined,
-  /**
-   * Grid tiles never render wider than ~220 CSS px, so offering the widest
-   * entry there just invites a phone with a 3x screen to download it.
-   */
-  max: keyof ImageUrlSet = "large",
-): string | undefined {
-  if (!set || typeof set === "string") return undefined;
-  const parts: string[] = [];
-  if (set.thumb) parts.push(`${set.thumb} ${VARIANT_WIDTHS.thumb}w`);
-  if (max !== "thumb" && set.medium) parts.push(`${set.medium} ${VARIANT_WIDTHS.medium}w`);
-  if (max === "large" && set.large) parts.push(`${set.large} ${VARIANT_WIDTHS.large}w`);
-  return parts.length ? parts.join(", ") : undefined;
-}
-
-export type SizedPhotoUrls = Record<string, ImageUrlSet>;
-
-export type CardUrls = {
-  front: ImageUrlSet | null;
-  back: ImageUrlSet | null;
-};
-
 async function signSet(paths: {
   thumb: string | null;
   medium: string | null;
@@ -182,8 +142,6 @@ export const getEventPhotoUrls = createServerFn({ method: "GET" })
   });
 
 // ------- Player trading cards -------
-
-export type CardSide = "front" | "back";
 
 const cardSide = z.enum(["front", "back"]);
 
