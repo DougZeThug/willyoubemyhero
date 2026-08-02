@@ -275,9 +275,12 @@ export function PackOpening({
         // the gap that makes that legible at speed.
         transition: {
           type: "spring",
-          stiffness: 200,
-          damping: 22,
-          delay: i * 0.055 + (isSecret(i) ? SECRET_BEAT : 0),
+          // Softer than the old snap. A spring that arrives in 200ms and then
+          // waits out the rest of a 720ms phase reads as a jump followed by a
+          // freeze; this one is still travelling when the eye gets to it.
+          stiffness: 160,
+          damping: 21,
+          delay: i * 0.12 + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
@@ -302,9 +305,9 @@ export function PackOpening({
         opacity: 1,
         transition: {
           type: "spring",
-          stiffness: 190,
-          damping: 21,
-          delay: i * 0.06 + (isSecret(i) ? SECRET_BEAT : 0),
+          stiffness: 150,
+          damping: 20,
+          delay: i * 0.13 + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
