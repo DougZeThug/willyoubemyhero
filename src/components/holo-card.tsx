@@ -190,10 +190,19 @@ function HoloCardImpl({
     () => cachedCardMeta(cacheKey)?.aspect ?? null,
   );
 
-  const frontSrc = urlFromSet(frontUrl);
+  const frontSrc = urlFromSet(frontUrl, eager ? "large" : "medium");
   const frontSrcSet = srcSetFromSet(frontUrl);
-  const backSrc = urlFromSet(backUrl);
+  const backSrc = urlFromSet(backUrl, eager ? "large" : "medium");
   const backSrcSet = srcSetFromSet(backUrl);
+  const imgSizes = eager ? CARD_SIZES : CARD_GRID_SIZES;
+
+  // A dropped fetch used to leave a broken-image icon on the tile forever. Track
+  // the failure per source so the card falls back to its initials placeholder,
+  // and reset when a fresh (re-signed) URL arrives.
+  const [frontFailed, setFrontFailed] = useState(false);
+  const [backFailed, setBackFailed] = useState(false);
+  useEffect(() => setFrontFailed(false), [frontSrc]);
+  useEffect(() => setBackFailed(false), [backSrc]);
 
   const [uncontrolledFlip, setUncontrolledFlip] = useState(false);
   // The glare and sparkle layers are invisible until the card moves, and each one
