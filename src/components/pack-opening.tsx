@@ -36,11 +36,13 @@ const CARD_W = 0.62;
  * The pause the secret takes before following the roster out, in seconds.
  *
  * Long enough to read as a separate arrival and short enough that the fan still
- * lands inside the phase it has. The stand is where the secret's real ceremony
- * happens — a 1600ms hold, a riser and a flip twice the house length — so this is
- * only the hint that there is a fourth card, not the payoff.
+ * lands inside the phase it has. Scaled up with the cinematic timeline: at 0.11s
+ * against the longer launch it was swallowed by the roster's own stagger. The
+ * stand is where the secret's real ceremony happens — a 1600ms hold, a riser and
+ * a flip twice the house length — so this is only the hint that there is a fourth
+ * card, not the payoff.
  */
-const SECRET_BEAT = 0.11;
+const SECRET_BEAT = 0.35;
 
 /**
  * The pack opening: the rest of the rip, and the cards coming out of it.
@@ -273,9 +275,12 @@ export function PackOpening({
         // the gap that makes that legible at speed.
         transition: {
           type: "spring",
-          stiffness: 200,
-          damping: 22,
-          delay: i * 0.055 + (isSecret(i) ? SECRET_BEAT : 0),
+          // Softer than the old snap. A spring that arrives in 200ms and then
+          // waits out the rest of a 720ms phase reads as a jump followed by a
+          // freeze; this one is still travelling when the eye gets to it.
+          stiffness: 160,
+          damping: 21,
+          delay: i * 0.12 + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
@@ -300,9 +305,9 @@ export function PackOpening({
         opacity: 1,
         transition: {
           type: "spring",
-          stiffness: 190,
-          damping: 21,
-          delay: i * 0.06 + (isSecret(i) ? SECRET_BEAT : 0),
+          stiffness: 150,
+          damping: 20,
+          delay: i * 0.13 + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
@@ -318,15 +323,15 @@ export function PackOpening({
         opacity: 1,
         // Card 0 goes first and unstaggered. It is the one the stand mounts over,
         // so it is the one that has to be *settled* when the handoff comes — under
-        // the old reverse stagger it started last, 90ms into a phase 340ms long,
+        // the old reverse stagger it started last, 90ms into a phase 560ms long,
         // and was still travelling when PackStand took the screen. Paint order is
         // `layer()`'s job, not the stagger's, so nothing is lost by leading with
         // it.
         transition: {
           type: "spring",
-          stiffness: 260,
-          damping: 30,
-          delay: i * 0.04,
+          stiffness: 210,
+          damping: 28,
+          delay: i * 0.07,
         },
       };
     },

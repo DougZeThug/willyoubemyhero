@@ -38,21 +38,22 @@ export type CeremonyPhase =
  * off, and the fan spreading — and the two short ones (`mouth`, `hold`) are
  * pauses that stop those reading as one continuous slide.
  *
- * The total is a shade over two seconds because that is about how long somebody
- * will happily watch an animation they did not ask to watch a second time, and
- * this one plays every day.
+ * The total is a shade under five seconds — the "cinematic" pacing. The earlier
+ * two-second cut read as a flicker: the strip was gone before the eye found it
+ * and the fan collapsed before it could be looked at. Skip is always on screen
+ * for anyone who has seen it enough times.
  */
 export const CEREMONY: readonly { readonly phase: CeremonyPhase; readonly ms: number }[] = [
-  { phase: "rip", ms: 300 },
-  { phase: "peel", ms: 420 },
-  { phase: "mouth", ms: 200 },
-  { phase: "launch", ms: 340 },
-  { phase: "fan", ms: 460 },
-  { phase: "hold", ms: 180 },
+  { phase: "rip", ms: 500 },
+  { phase: "peel", ms: 760 },
+  { phase: "mouth", ms: 360 },
+  { phase: "launch", ms: 720 },
+  { phase: "fan", ms: 840 },
+  { phase: "hold", ms: 560 },
   // Long enough for the gather to actually finish. The deck spring takes about
   // 300ms to settle, and a collapse shorter than that hands PackStand a deck that
   // is still moving — which is a jump on the one frame both are on screen.
-  { phase: "collapse", ms: 340 },
+  { phase: "collapse", ms: 560 },
 ] as const;
 
 /** Total run time. Derived, so the table stays the single source of truth. */

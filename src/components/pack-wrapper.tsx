@@ -122,9 +122,11 @@ const SHARDS = [
 const SHARD_FLIGHT = [
   // `sec`, not ms — motion's own unit for a duration, and mixing the two here is
   // a thousandfold mistake that looks like a frozen animation.
-  { x: -74, y: -196, rz: -34, rx: 52, sec: 0.66 },
-  { x: 24, y: -238, rz: 22, rx: 38, sec: 0.72 },
-  { x: 98, y: -176, rz: 48, rx: 64, sec: 0.6 },
+  // Sized to the `peel` phase, which is 760ms on the cinematic timeline. Shards
+  // that finished in 600ms left a third of the phase with an empty sky in it.
+  { x: -74, y: -196, rz: -34, rx: 52, sec: 0.98 },
+  { x: 24, y: -238, rz: 22, rx: 38, sec: 1.06 },
+  { x: 98, y: -176, rz: 48, rx: 64, sec: 0.9 },
 ] as const;
 
 /**
@@ -289,8 +291,9 @@ export function PackWrapper({
     transform: `rotate(${(-lift * 8).toFixed(2)}deg) translateY(${(-lift * 14).toFixed(1)}px)`,
     opacity: reduced ? 1 - travel : 1,
     // Eased rather than tracked once the finger is off it — during the ceremony
-    // that is what carries the edge across the rest of the pack.
-    transition: dragging ? undefined : "transform 300ms cubic-bezier(0.22, 1, 0.36, 1)",
+    // that is what carries the edge across the rest of the pack. Matched to the
+    // `rip` phase so the strip is still travelling when the shards take over.
+    transition: dragging ? undefined : "transform 500ms cubic-bezier(0.22, 1, 0.36, 1)",
   };
 
   return (
@@ -517,7 +520,7 @@ export function PackWrapper({
           // Plainer than the house easeOutQuint used everywhere else here, and
           // measured rather than guessed: quint is 91% travelled by 60ms of a
           // 300ms phase, which to an eye is the jump this exists to remove.
-          transition={{ duration: 0.3, ease: "easeOut" }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
         >
           <PackFace art={art} size={packSize} year={year} />
         </motion.div>
@@ -532,7 +535,7 @@ export function PackWrapper({
           className="pointer-events-none absolute inset-0"
           initial={false}
           animate={{ clipPath: mouthClip(edge, spilled || reduced ? 1 : 0) }}
-          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
         >
           {/* Its own camera. The clip above is a grouping property, so it flattens
               this subtree out of the pack's 3D context and the perspective from

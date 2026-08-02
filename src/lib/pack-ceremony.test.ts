@@ -23,8 +23,8 @@ describe("the timeline", () => {
   it("runs about as long as a rip actually takes to watch", () => {
     // Loose bounds on purpose: this is a taste range, not a contract. It exists
     // so a stray zero in the table shows up as a failing test.
-    expect(CEREMONY_MS).toBeGreaterThan(1500);
-    expect(CEREMONY_MS).toBeLessThan(3000);
+    expect(CEREMONY_MS).toBeGreaterThan(3000);
+    expect(CEREMONY_MS).toBeLessThan(6000);
   });
 
   it("starts each phase where the previous one ended", () => {
