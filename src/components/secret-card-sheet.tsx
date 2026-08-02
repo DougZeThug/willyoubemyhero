@@ -54,7 +54,12 @@ export function SecretCardSheet({
                 cacheKey={card.id}
                 tilt="hero"
                 backContent={
-                  <SecretBackPanel card={card} rarity={rarity} pulledOn={card.firstPulledOn} size="large" />
+                  <SecretBackPanel
+                    card={card}
+                    rarity={rarity}
+                    pulledOn={card.firstPulledOn}
+                    size="large"
+                  />
                 }
               />
             </div>

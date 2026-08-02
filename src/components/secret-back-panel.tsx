@@ -57,7 +57,9 @@ export function SecretBackPanel({
         {/* Hardcoded, never TIER_REASON[rarity.tier] — SECRET_RARITY carries
             tier: "base" to satisfy the type, and that lookup would print
             "Combine athlete" on a card that was never at the combine. */}
-        <span className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}>
+        <span
+          className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}
+        >
           {SECRET_REASON}
         </span>
       </div>
@@ -69,20 +71,28 @@ export function SecretBackPanel({
           {card.name}
         </div>
         {card.flavour ? (
-          <p className={`italic leading-snug text-muted-foreground ${large ? "text-sm line-clamp-5" : "text-[10px] line-clamp-4"}`}>
+          <p
+            className={`italic leading-snug text-muted-foreground ${large ? "text-sm line-clamp-5" : "text-[10px] line-clamp-4"}`}
+          >
             &ldquo;{card.flavour}&rdquo;
           </p>
         ) : (
-          <p className={`italic text-muted-foreground/70 ${large ? "text-sm" : "text-[10px]"}`}>Will YOU Be My Hero?</p>
+          <p className={`italic text-muted-foreground/70 ${large ? "text-sm" : "text-[10px]"}`}>
+            Will YOU Be My Hero?
+          </p>
         )}
       </div>
 
       <div className="relative flex items-center justify-between border-t border-white/10 pt-1.5">
-        <span className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}>
+        <span
+          className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}
+        >
           Secret
         </span>
         {pulledOn && (
-          <span className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}>
+          <span
+            className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}
+          >
             Pulled {pulledOn}
           </span>
         )}
