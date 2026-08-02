@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader, setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { optionalActor, requireActor, requireAdmin } from "./require-auth.server";
-import { decodeImageDataUrl, forgetSignedPath, signPath } from "./media.functions";
+import { decodeImageDataUrl, forgetSignedPath, signPath, VARIANT_WIDTHS } from "./media.functions";
 import type {
   PullSecretCardResult,
   SecretCardRow,
@@ -106,7 +106,12 @@ function toView(row: SecretCardRow, artUrl: string | null, backUrl: string | nul
 }
 
 async function signCard(row: SecretCardRow) {
-  const [artUrl, backUrl] = await Promise.all([signPath(row.art_path), signPath(row.back_path)]);
+  // Originals are multi-megabyte PNGs; the renderer hands back a WebP a fraction
+  // of the size at the biggest width the card is ever shown at.
+  const [artUrl, backUrl] = await Promise.all([
+    signPath(row.art_path, VARIANT_WIDTHS.large),
+    signPath(row.back_path, VARIANT_WIDTHS.large),
+  ]);
   return toView(row, artUrl, backUrl);
 }
 
@@ -337,7 +342,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
       active: row.active,
       weight: row.weight,
       hasArt: !!row.art_path,
-      artUrl: await signPath(row.art_path),
+      artUrl: await signPath(row.art_path, VARIANT_WIDTHS.medium),
       ownerCount: owners.get(row.id) ?? 0,
     })),
   );
