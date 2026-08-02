@@ -222,6 +222,20 @@ test.describe("opening a pack", () => {
   const sealedPack = (page: import("@playwright/test").Page) =>
     page.getByRole("button", { name: /tear the pack open/i });
 
+  /**
+   * Wait for a tear to take, then press Enter. `tearOpen` silently refuses
+   * while the collection is still reconciling — the Collected counter reads a
+   * dash until then — and on a loaded CI runner the stubs can answer after the
+   * keypress, leaving the pack sealed and the test timing out somewhere
+   * unrelated. Same helper as secrets.spec.ts, for the same reason. The
+   * fake-clock test keeps its own press-until-it-takes loop instead: under an
+   * installed clock this wait and the reconcile would deadlock on each other.
+   */
+  async function tearPack(page: import("@playwright/test").Page) {
+    await expect(page.getByTestId("collected-count")).not.toHaveText(/—/);
+    await sealedPack(page).press("Enter");
+  }
+
   /** The card currently on the reveal stand. */
   const standCard = (page: import("@playwright/test").Page) =>
     page.locator('[role="button"][aria-pressed]').first();
@@ -290,7 +304,7 @@ test.describe("opening a pack", () => {
 
   test("plays the opening ceremony over the torn pack", async ({ page }) => {
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
 
     // The pack stops being a control the instant the rip commits — which is what
     // every other test here relies on to mean "opened" — while the ceremony that
@@ -342,7 +356,7 @@ test.describe("opening a pack", () => {
 
   test("gets to the stand on its own if the ceremony is left to finish", async ({ page }) => {
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
     // And the card it hands over is face-down, so the flip is still to come.
     await expect(page.getByText(/tap the card to turn it/i)).toBeVisible();
@@ -350,7 +364,7 @@ test.describe("opening a pack", () => {
 
   test("resumes on the card you were looking at, not the one after it", async ({ page }) => {
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
 
     // Turn the first card over and stop there, the way you would to read it.
     await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
@@ -368,7 +382,7 @@ test.describe("opening a pack", () => {
 
   test("counts a card once however many times it is tapped mid-ceremony", async ({ page }) => {
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
 
     // Walk to the last card, which is the one that holds before it turns.
     for (const n of [1, 2]) {
@@ -400,7 +414,7 @@ test.describe("opening a pack", () => {
     page,
   }) => {
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
 
     // A MutationObserver sees every intermediate render, which is what makes
     // this deterministic — the face-down beat is only ~300ms and polling would
@@ -450,7 +464,7 @@ test.describe("opening a pack", () => {
     // Keyboard rather than the drag: this test is about what gets persisted, and
     // the pack exposes Enter for exactly this. The gesture has its own test above,
     // so a broken drag fails there instead of silently hollowing this one out.
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await expect(sealedPack(page)).toBeHidden();
 
     // The row is written from an effect, so give it a beat to land — but it must
@@ -491,7 +505,7 @@ test.describe("opening a pack", () => {
         for (const [k, v] of entries) localStorage.setItem(k, v);
       }, Object.entries(storage));
       await other.goto("/players/pack");
-      await sealedPack(other).press("Enter");
+      await tearPack(other);
       await expect.poll(() => readPackState(other)).not.toBeNull();
       return (await readPackState(other))!.ids;
     } finally {
