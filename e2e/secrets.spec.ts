@@ -4,7 +4,15 @@
 // browser owns: the claim gate, the reveal, what survives a reload, and — the
 // point of the whole feature — that the vault shows only what you pulled and
 // never hints at what you did not.
-import { test, expect, SECRET_CARD, serverFnName, type ServerFnMock } from "./fixtures";
+import {
+  test,
+  expect,
+  SECRET_CARD,
+  sealedPack,
+  serverFnName,
+  tearPack,
+  type ServerFnMock,
+} from "./fixtures";
 import type { Page } from "@playwright/test";
 
 const MEMBER_KEY = "wwbh:member-token";
@@ -39,36 +47,6 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
     card: SECRET_CARD,
     ...(over.pull as object),
   });
-}
-
-const sealedPack = (page: Page) => page.getByRole("button", { name: /tear the pack open/i });
-
-/**
- * Wait until a rip will actually take.
- *
- * `tearOpen` refuses while the collection is still being reconciled — without a
- * baseline there is nothing to deal a pack from — and it refuses *silently*, so a
- * test that presses Enter too early gets a pack that stays sealed and an assertion
- * that times out somewhere unrelated. The Collected counter is the one thing on
- * this screen that says so out loud: it reads a dash until the reconcile lands.
- *
- * In practice the stubs answer during hydration and this returns immediately. It
- * exists for the machine where they do not.
- */
-async function packReady(page: Page) {
-  await expect(page.getByTestId("collected-count")).not.toHaveText(/—/);
-}
-
-/**
- * The one way any test here opens the pack. On a loaded CI runner the stubs
- * can answer *after* the keypress, the refused tear swallows the Enter, and
- * the pack then sits sealed until the test times out somewhere unrelated —
- * which is exactly the failure packReady's comment warns about, so the wait
- * is fused to the press rather than left to each test to remember.
- */
-async function tearPack(page: Page) {
-  await packReady(page);
-  await sealedPack(page).press("Enter");
 }
 
 /**

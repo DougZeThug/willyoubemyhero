@@ -1,5 +1,14 @@
 // The flows that matter: getting in, seeing results, and opening a pack.
-import { test, expect, BUNDLE, EVENT_ID, PLAYERS, stubServerFns } from "./fixtures";
+import {
+  test,
+  expect,
+  BUNDLE,
+  EVENT_ID,
+  PLAYERS,
+  sealedPack,
+  stubServerFns,
+  tearPack,
+} from "./fixtures";
 // The same pure functions the pack route deals from, so these tests can compute
 // the pack they expect rather than guess at one. With a four-player fixture and
 // a three-card pack, "assert two packs differ" collides often enough to be flaky;
@@ -217,23 +226,6 @@ test.describe("opening a pack", () => {
           open.onerror = () => resolve(null);
         }),
     );
-  }
-
-  const sealedPack = (page: import("@playwright/test").Page) =>
-    page.getByRole("button", { name: /tear the pack open/i });
-
-  /**
-   * Wait for a tear to take, then press Enter. `tearOpen` silently refuses
-   * while the collection is still reconciling — the Collected counter reads a
-   * dash until then — and on a loaded CI runner the stubs can answer after the
-   * keypress, leaving the pack sealed and the test timing out somewhere
-   * unrelated. Same helper as secrets.spec.ts, for the same reason. The
-   * fake-clock test keeps its own press-until-it-takes loop instead: under an
-   * installed clock this wait and the reconcile would deadlock on each other.
-   */
-  async function tearPack(page: import("@playwright/test").Page) {
-    await expect(page.getByTestId("collected-count")).not.toHaveText(/—/);
-    await sealedPack(page).press("Enter");
   }
 
   /** The card currently on the reveal stand. */
