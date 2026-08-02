@@ -61,21 +61,19 @@ function cacheKey(path: string, width?: number) {
 async function mintSignedUrl(path: string, width?: number): Promise<string | null> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const key = cacheKey(path, width);
-  const { data: signed } = await supabaseAdmin.storage
-    .from("participant-photos")
-    .createSignedUrl(
-      path,
-      SIGNED_TTL_S,
-      width
-        ? {
-            transform: {
-              width,
-              quality: QUALITY_FOR_WIDTH[width] ?? 72,
-              resize: "contain",
-            },
-          }
-        : undefined,
-    );
+  const { data: signed } = await supabaseAdmin.storage.from("participant-photos").createSignedUrl(
+    path,
+    SIGNED_TTL_S,
+    width
+      ? {
+          transform: {
+            width,
+            quality: QUALITY_FOR_WIDTH[width] ?? 72,
+            resize: "contain",
+          },
+        }
+      : undefined,
+  );
   if (!signed?.signedUrl) return null;
   if (signedCache.size >= SIGNED_CACHE_MAX) {
     const oldest = signedCache.keys().next().value;
@@ -153,9 +151,7 @@ async function signSet(paths: {
     paths.thumb ? signPath(paths.thumb) : signPath(paths.large, VARIANT_WIDTHS.thumb),
     paths.medium ? signPath(paths.medium) : signPath(paths.large, VARIANT_WIDTHS.medium),
     // Never hand back the untouched original: it is the multi-megabyte PNG.
-    paths.medium
-      ? signPath(paths.large)
-      : signPath(paths.large, VARIANT_WIDTHS.large),
+    paths.medium ? signPath(paths.large) : signPath(paths.large, VARIANT_WIDTHS.large),
   ]);
   return { thumb, medium, large };
 }
