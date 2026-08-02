@@ -395,18 +395,34 @@ function PlayerCardPage() {
               collected={collection[ep.id] ?? null}
               leagueLine={packedByLabel(pullCounts.data?.[ep.id])}
             >
-              <HoloCard
-                frontUrl={urls?.front ?? null}
-                backUrl={urls?.back ?? null}
-                name={name}
-                rarity={rarity}
-                cacheKey={ep.id}
-                flipped={flipped}
-                onFlippedChange={setFlipped}
-                gyro={gyro}
-                tilt="hero"
-                backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
-              />
+              <ZoomPanFrame
+                onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
+                onTap={() => setFlipped((f) => !f)}
+                canNavigate={roster.length > 1}
+                prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
+                nextLabel={`Next: ${next?.participant?.name ?? ""}`}
+                position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
+                hint="Pinch to zoom · swipe for the next card"
+              >
+                {({ zoomed }) => (
+                  <HoloCard
+                    frontUrl={urls?.front ?? null}
+                    backUrl={urls?.back ?? null}
+                    name={name}
+                    rarity={rarity}
+                    cacheKey={ep.id}
+                    flipped={flipped}
+                    onFlippedChange={setFlipped}
+                    gyro={gyro}
+                    tilt="hero"
+                    // While magnified the frame owns the pointer; a card leaning
+                    // under a pan would make the thing you are reading move.
+                    interactive={!zoomed}
+                    flickToFlip={false}
+                    backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+                  />
+                )}
+              </ZoomPanFrame>
             </CardSlab>
           </div>
           <NavButton
