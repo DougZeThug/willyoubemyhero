@@ -19,6 +19,8 @@ const DEFAULT_ASPECT = 5 / 7;
  * run the selection algorithm on the same inputs.
  */
 export const CARD_SIZES = "(max-width: 640px) 90vw, 420px";
+/** Vault tiles sit two-up on a phone, so 90vw would over-fetch by a factor of four. */
+export const CARD_GRID_SIZES = "(max-width: 640px) 45vw, 220px";
 
 /**
  * How hard a card leans, and how close the camera stands to it.
