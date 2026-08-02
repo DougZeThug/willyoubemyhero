@@ -1,7 +1,10 @@
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { HoloCard } from "@/components/holo-card";
+import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { secretFoil, type OwnedSecret } from "@/lib/secret-cards";
+import { stepIndex } from "@/lib/zoom";
 import { packedByLabel } from "@/lib/card-pulls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack } from "@/hooks/use-photo-urls";
@@ -20,18 +23,35 @@ import { urlFromSet } from "@/lib/media.functions";
  * exist, which is the thing the whole feature withholds.
  */
 export function SecretCardSheet({
-  card,
+  cards,
+  index,
+  onIndexChange,
   onOpenChange,
 }: {
-  card: OwnedSecret | null;
+  /** Every secret this device holds, so one can be swiped to the next. */
+  cards: OwnedSecret[];
+  /** Which one is open, or null for closed. */
+  index: number | null;
+  onIndexChange: (next: number) => void;
   onOpenChange: (open: boolean) => void;
 }) {
+  const card = index == null ? null : (cards[index] ?? null);
   const rarity = secretFoil(card?.foil);
+  const [flipped, setFlipped] = useState(false);
+
+  // A new card always lands face up, however the last one was left.
+  useEffect(() => setFlipped(false), [card?.id]);
+
   // Secrets wear the same deck back as every other card — these are universal
   // backs, so the per-card back_path is deliberately not read here.
   const { event } = useEventBundle();
   const universalBack = useEventCardBack(event?.id ?? null);
   const backUrl = urlFromSet(universalBack.data?.urls) ? universalBack.data!.urls : null;
+
+  const go = (dir: -1 | 1) => {
+    if (index == null || cards.length < 2) return;
+    onIndexChange(stepIndex(index, cards.length, dir));
+  };
 
   return (
     <Dialog open={!!card} onOpenChange={onOpenChange}>
@@ -46,22 +66,38 @@ export function SecretCardSheet({
             </DialogDescription>
 
             <div className="mx-auto w-full max-w-[320px] sm:max-w-[420px]">
-              <HoloCard
-                frontUrl={card.artUrl}
-                backUrl={backUrl}
-                name={card.name}
-                rarity={rarity}
-                cacheKey={card.id}
-                tilt="hero"
-                backContent={
-                  <SecretBackPanel
-                    card={card}
+              <ZoomPanFrame
+                onSwipe={go}
+                onTap={() => setFlipped((f) => !f)}
+                canNavigate={cards.length > 1}
+                prevLabel="Previous secret"
+                nextLabel="Next secret"
+                position={index != null ? `${index + 1} / ${cards.length}` : undefined}
+                hint="Pinch to zoom · tap to flip"
+              >
+                {({ zoomed }) => (
+                  <HoloCard
+                    frontUrl={card.artUrl}
+                    backUrl={backUrl}
+                    name={card.name}
                     rarity={rarity}
-                    pulledOn={card.firstPulledOn}
-                    size="large"
+                    cacheKey={card.id}
+                    tilt="hero"
+                    flipped={flipped}
+                    onFlippedChange={setFlipped}
+                    interactive={!zoomed}
+                    flickToFlip={false}
+                    backContent={
+                      <SecretBackPanel
+                        card={card}
+                        rarity={rarity}
+                        pulledOn={card.firstPulledOn}
+                        size="large"
+                      />
+                    }
                   />
-                }
-              />
+                )}
+              </ZoomPanFrame>
             </div>
 
             {card.flavour && (
