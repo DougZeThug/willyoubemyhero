@@ -16,7 +16,7 @@ import {
 import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
-import { PackWrapper } from "@/components/pack-wrapper";
+import { PackOpening } from "@/components/pack-opening";
 import { PackStand } from "@/components/pack-stand";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
@@ -26,6 +26,7 @@ import {
   type CollectedCard,
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
 import { pullSecretCard } from "@/lib/secret-cards.functions";
@@ -237,6 +238,23 @@ function PackPage() {
   const [stateLoaded, setStateLoaded] = useState(false);
   const [revealed, setRevealed] = useState<number[]>([]);
   const [peeking, setPeeking] = useState(false);
+  /**
+   * The opening ceremony is playing.
+   *
+   * Set only by `tearOpen`, never by the resume path: coming back to a pack you
+   * already tore should land you on the card you were looking at, not replay the
+   * production. Same argument `resumeCursor` makes about the secret — a payoff,
+   * not a toll.
+   */
+  const [opening, setOpening] = useState(false);
+  // Readable from the day-tick interval, whose closure cannot see the state.
+  const openingRef = useRef(false);
+  /**
+   * A ceremony ran on this screen, so the stand is mounting out of a deck rather
+   * than out of nothing. Survives `opening` going false, which is the whole point
+   * — it is read on the render *after* the ceremony ends.
+   */
+  const ceremonyRanRef = useRef(false);
   // Which card is on the stand. Advanced only by the user: revealing a card does
   // not move it on, because a card you have not looked at yet is not a card you
   // are finished with.
@@ -403,8 +421,10 @@ function PackPage() {
   useEffect(() => {
     function check() {
       // Never re-seal a pack under somebody's thumb. Eating a card mid-reveal is
-      // a far worse bug than the stale tab this is fixing.
-      if (revealingRef.current) return;
+      // a far worse bug than the stale tab this is fixing — and the same goes for
+      // pulling the pack out from under the opening ceremony, which is three
+      // cards in the air rather than one on a stand.
+      if (revealingRef.current || openingRef.current) return;
       const next = todayKey();
       setDayKey((prev) => {
         if (prev === next) return prev;
@@ -472,17 +492,42 @@ function PackPage() {
   }, [bundle, dealtIds, nextPack]);
 
   const torn = dealtIds != null;
+  const reduced = usePrefersReducedMotion();
 
-  const tearOpen = useCallback(() => {
-    if (dealtIds || nextPack.length === 0) return;
+  /**
+   * Deal today's pack. Answers whether it did.
+   *
+   * The false case is the beat on arrival where the server has not reconciled the
+   * collection yet: `nextPack` is empty without a baseline, so the wrapper is
+   * simply not tearable for that beat. The ceremony has to hear about it, or it
+   * plays a full production over a pack that was never dealt.
+   */
+  const tearOpen = useCallback((): boolean => {
+    if (dealtIds || nextPack.length === 0) return false;
     const ids = nextPack.map((p) => p.id);
+    // Dealt at the moment the rip commits rather than when the ceremony ends, so
+    // the two round trips this unblocks — the daily secret's pull and the pack
+    // recording, both keyed on `torn` below — get the ceremony's whole run as a
+    // head start. The secret's own six-second timeout is the thing most likely to
+    // make somebody wait, and this is two free seconds off it.
     setDealtIds(ids);
     revealedRef.current = [];
     replayedRef.current = new Set();
     resumedRef.current = false;
     setCursor(0);
+    // The ceremony is the only thing the preference silences. Everything above is
+    // the pack actually opening and happens either way.
+    openingRef.current = !reduced;
+    ceremonyRanRef.current = !reduced;
+    setOpening(!reduced);
     playTear();
-  }, [dealtIds, nextPack]);
+    return true;
+  }, [dealtIds, nextPack, reduced]);
+
+  const closeCeremony = useCallback(() => {
+    openingRef.current = false;
+    setOpening(false);
+  }, []);
 
   async function revealAt(i: number) {
     // Both guards read refs, not state. A tap during the hit's hold, and a second
@@ -738,7 +783,7 @@ function PackPage() {
               ? "pending"
               : "hidden";
 
-  const stage = packStage({ torn, packSize: pack.length, cursor, secretSlot });
+  const stage = packStage({ torn, opening, packSize: pack.length, cursor, secretSlot });
   const onSecretStep = cursor >= pack.length;
 
   /**
@@ -801,7 +846,11 @@ function PackPage() {
   // and nothing else in the app preloads — the vault grid can afford to stream in
   // because nothing there is a surprise.
   useEffect(() => {
-    if (stage !== "revealing") return;
+    // Started during the ceremony, not when the stand appears. The pack is dealt
+    // the instant the rip commits, so the first two fronts get the whole opening
+    // to fetch and decode in — which is exactly the head start this comment used
+    // to say the flip could not do without.
+    if (stage !== "revealing" && stage !== "opening") return;
     for (const ep of [pack[cursor], pack[cursor + 1]]) {
       if (ep) void preloadCard(cards.data?.[ep.id]?.front ?? null);
     }
@@ -851,9 +900,16 @@ function PackPage() {
           </div>
         )}
 
-        {stage === "sealed" ? (
+        {stage === "sealed" || stage === "opening" ? (
           <div className="flex flex-col items-center gap-5 py-6">
-            <div className="text-center">
+            {/* Faded rather than unmounted. Removing the copy at the moment the
+                rip commits reflows the pack upward on the exact frame the tear is
+                meant to be the only thing moving. */}
+            <motion.div
+              className="text-center"
+              animate={{ opacity: stage === "opening" ? 0.12 : 1 }}
+              transition={{ duration: 0.3 }}
+            >
               <h1 className="font-display text-3xl font-black uppercase leading-none">
                 Today&apos;s Pack
               </h1>
@@ -861,19 +917,25 @@ function PackPage() {
                 One pack a day, dealt to you and nobody else. Refreshing won&apos;t reroll it — rip
                 the top off to open it.
               </p>
-            </div>
+            </motion.div>
 
-            <PackWrapper
+            <PackOpening
               seed={seed ?? ""}
               artUrl={packBack.data?.urls ?? null}
               packSize={PACK_SIZE}
               year={String(event?.year ?? "")}
+              slots={PACK_SIZE}
               onTear={tearOpen}
+              onDone={closeCeremony}
             />
 
-            <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+            <motion.div
+              className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground"
+              animate={{ opacity: stage === "opening" ? 0 : 1 }}
+              transition={{ duration: 0.2 }}
+            >
               Drag across the tear · or press Enter
-            </div>
+            </motion.div>
           </div>
         ) : stage === "revealing" ? (
           <div className="space-y-3">
@@ -900,6 +962,7 @@ function PackPage() {
               secretPeeking={secretPeeking}
               peeking={peeking}
               busy={autoRunning}
+              fromPack={ceremonyRanRef.current}
               onReveal={(i) => void revealAt(i)}
               onRevealSecret={() => void revealSecret()}
               onAdvance={() => setCursor((c) => c + 1)}

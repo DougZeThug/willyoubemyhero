@@ -146,6 +146,49 @@ export function playTear() {
 }
 
 /**
+ * The mouth of the pack parting, a beat after the rip.
+ *
+ * Two voices, because one of them is a rip and this is the moment *after* it: a
+ * long downward body — foil letting go — under a short bright crackle, which is
+ * the fibre. `playTear` is the gesture; this is the consequence of it.
+ */
+export function playPackOpen() {
+  noiseBurst(0.5, 3800, 240, 0.14);
+  noiseBurst(0.09, 7000, 3000, 0.06);
+  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
+    navigator.vibrate?.([20, 40, 30]);
+  }
+}
+
+/**
+ * The cards leaving the pack.
+ *
+ * One sweep for all of them, not one each. Three staggered whooshes inside 200ms
+ * stack into a single smear anyway — the same mistake `playTearTick` exists to
+ * avoid. Upward, which nothing else in this file does: every other burst falls,
+ * so a rising one reads as the only thing coming toward you.
+ */
+export function playPackBurst() {
+  noiseBurst(0.38, 420, 2800, 0.075);
+}
+
+/**
+ * The fan gathering into a deck — a riffle, not a chime.
+ *
+ * Three near-identical taps 45ms apart. Scheduled rather than fired as one burst
+ * because a riffle is a countable number of edges and a single burst is a
+ * shuffle.
+ */
+export function playDeckGather() {
+  for (let i = 0; i < 3; i++) {
+    setTimeout(() => noiseBurst(0.06, 2600, 900, 0.05), i * 45);
+  }
+  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
+    navigator.vibrate?.([6, 30, 6]);
+  }
+}
+
+/**
  * One crinkle of foil, fired repeatedly as the rip travels under a finger.
  *
  * Quiet and very short on purpose: this plays eight or so times across a single

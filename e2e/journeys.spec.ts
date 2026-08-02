@@ -277,6 +277,34 @@ test.describe("opening a pack", () => {
     await expect(pack).toBeHidden();
   });
 
+  test("plays the opening ceremony, and lets you cut it short", async ({ page }) => {
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+
+    // The pack stops being a control the instant the rip commits — which is what
+    // every other test here relies on to mean "opened" — while the ceremony that
+    // follows it is still on screen.
+    await expect(sealedPack(page)).toBeHidden();
+    const skip = page.getByRole("button", { name: /^skip$/i });
+    await expect(skip).toBeVisible();
+
+    // The cards leaving the pack are decoration and are hidden from the tree, so
+    // they are found by test id rather than by role.
+    await expect(page.locator('[data-testid="opening-card"]')).toHaveCount(PACK_SIZE);
+
+    await skip.click();
+    await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
+    await expect(skip).toBeHidden();
+  });
+
+  test("gets to the stand on its own if the ceremony is left to finish", async ({ page }) => {
+    await page.goto("/players/pack");
+    await sealedPack(page).press("Enter");
+    await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
+    // And the card it hands over is face-down, so the flip is still to come.
+    await expect(page.getByText(/tap the card to turn it/i)).toBeVisible();
+  });
+
   test("resumes on the card you were looking at, not the one after it", async ({ page }) => {
     await page.goto("/players/pack");
     await sealedPack(page).press("Enter");

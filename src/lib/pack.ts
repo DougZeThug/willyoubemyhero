@@ -57,11 +57,12 @@ export type SecretSlot = "hidden" | "gated" | "pending" | "failed" | "sealed" | 
 /**
  * Where the ceremony is up to.
  *
- * "revealing" is the one-card-at-a-time stand; "complete" is the columns. The
- * grid is the destination, never the stage — showing the final layout while cards
- * are still face-down spends the payoff before it is earned.
+ * "opening" is the rip finishing and the cards leaving the pack; "revealing" is
+ * the one-card-at-a-time stand; "complete" is the columns. The grid is the
+ * destination, never the stage — showing the final layout while cards are still
+ * face-down spends the payoff before it is earned.
  */
-export type PackStage = "sealed" | "revealing" | "complete";
+export type PackStage = "sealed" | "opening" | "revealing" | "complete";
 
 /**
  * Whether the daily secret gets a turn on the stand.
@@ -95,12 +96,24 @@ export function lastStandStep(packSize: number, slot: SecretSlot): number {
  */
 export function packStage(args: {
   torn: boolean;
+  /** The opening ceremony is still playing. Its timeline is in pack-ceremony.ts. */
+  opening: boolean;
   packSize: number;
   cursor: number;
   secretSlot: SecretSlot;
 }): PackStage {
-  const { torn, packSize, cursor, secretSlot } = args;
+  const { torn, opening, packSize, cursor, secretSlot } = args;
   if (!torn) return "sealed";
+  // Both orderings here are load-bearing.
+  //
+  // Behind `torn`, because a tab left open across midnight has its pack re-sealed
+  // under it by the day-tick effect, and a ceremony that outlived the pack it was
+  // opening must not go on holding the screen.
+  //
+  // Ahead of the cursor check, because the daily secret is pulled the moment the
+  // pack is dealt — so `secretSlot` moves under the ceremony while it plays, and
+  // without this the stage could flip out from under a running animation.
+  if (opening) return "opening";
   return cursor > lastStandStep(packSize, secretSlot) ? "complete" : "revealing";
 }
 

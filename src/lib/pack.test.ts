@@ -90,10 +90,43 @@ describe("dealPack", () => {
 
 describe("packStage", () => {
   const at = (cursor: number, secretSlot: SecretSlot = "sealed") =>
-    packStage({ torn: true, packSize: 3, cursor, secretSlot });
+    packStage({ torn: true, opening: false, packSize: 3, cursor, secretSlot });
 
   it("is sealed until the wrapper comes off", () => {
-    expect(packStage({ torn: false, packSize: 3, cursor: 0, secretSlot: "hidden" })).toBe("sealed");
+    expect(
+      packStage({ torn: false, opening: false, packSize: 3, cursor: 0, secretSlot: "hidden" }),
+    ).toBe("sealed");
+  });
+
+  it("plays the opening ceremony before handing over to the stand", () => {
+    expect(
+      packStage({ torn: true, opening: true, packSize: 3, cursor: 0, secretSlot: "pending" }),
+    ).toBe("opening");
+  });
+
+  // The secret is pulled the moment the pack is dealt, so the slot moves under
+  // the ceremony while it plays. None of those moves may change the stage.
+  it("holds the ceremony however the secret slot moves under it", () => {
+    for (const slot of ["hidden", "pending", "sealed", "failed"] as const) {
+      expect(
+        packStage({ torn: true, opening: true, packSize: 3, cursor: 3, secretSlot: slot }),
+      ).toBe("opening");
+    }
+  });
+
+  // A tab left open across midnight has its pack re-sealed under it by the day
+  // tick. A ceremony that outlived the pack it was opening must not hold the
+  // screen against a pack that no longer exists.
+  it("never opens a pack that is no longer torn", () => {
+    expect(
+      packStage({ torn: false, opening: true, packSize: 3, cursor: 0, secretSlot: "hidden" }),
+    ).toBe("sealed");
+  });
+
+  it("hands to the stand the moment the ceremony ends", () => {
+    expect(
+      packStage({ torn: true, opening: false, packSize: 3, cursor: 0, secretSlot: "pending" }),
+    ).toBe("revealing");
   });
 
   it("keeps the stand while there are cards left to turn", () => {
