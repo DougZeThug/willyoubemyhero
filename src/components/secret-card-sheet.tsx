@@ -35,17 +35,17 @@ export function SecretCardSheet({
 
   return (
     <Dialog open={!!card} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm border-white/10 bg-background/95">
+      <DialogContent className="w-[92vw] max-w-[92vw] border-white/10 bg-background/95 p-4 sm:max-w-md md:max-w-lg md:p-6">
         {card && (
           <>
-            <DialogTitle className="font-display text-xl font-black uppercase leading-none">
+            <DialogTitle className="font-display text-2xl font-black uppercase leading-none sm:text-3xl">
               {card.name}
             </DialogTitle>
             <DialogDescription className="sr-only">
               A secret card you pulled from a pack.
             </DialogDescription>
 
-            <div className="mx-auto w-full max-w-[260px]">
+            <div className="mx-auto w-full max-w-[320px] sm:max-w-[420px]">
               <HoloCard
                 frontUrl={card.artUrl}
                 backUrl={backUrl}
@@ -54,24 +54,29 @@ export function SecretCardSheet({
                 cacheKey={card.id}
                 tilt="hero"
                 backContent={
-                  <SecretBackPanel card={card} rarity={rarity} pulledOn={card.firstPulledOn} />
+                  <SecretBackPanel
+                    card={card}
+                    rarity={rarity}
+                    pulledOn={card.firstPulledOn}
+                    size="large"
+                  />
                 }
               />
             </div>
 
             {card.flavour && (
-              <p className="text-center text-xs italic text-muted-foreground">
+              <p className="text-center text-sm italic text-muted-foreground sm:text-base">
                 &ldquo;{card.flavour}&rdquo;
               </p>
             )}
 
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.25em] text-muted-foreground">
               <span>Pulled {card.firstPulledOn}</span>
               {card.count > 1 && <span style={{ color: rarity.accent }}>Pulled ×{card.count}</span>}
             </div>
 
             {packedByLabel(card.ownerCount) && (
-              <p className="text-center text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+              <p className="text-center text-xs font-bold uppercase tracking-[0.25em] text-muted-foreground">
                 {card.ownerCount === 1
                   ? "You are the only one who has found this"
                   : packedByLabel(card.ownerCount)}
