@@ -520,7 +520,7 @@ export function PackWrapper({
           // Plainer than the house easeOutQuint used everywhere else here, and
           // measured rather than guessed: quint is 91% travelled by 60ms of a
           // 300ms phase, which to an eye is the jump this exists to remove.
-          transition={{ duration: 0.3, ease: "easeOut" }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
         >
           <PackFace art={art} size={packSize} year={year} />
         </motion.div>
@@ -535,7 +535,7 @@ export function PackWrapper({
           className="pointer-events-none absolute inset-0"
           initial={false}
           animate={{ clipPath: mouthClip(edge, spilled || reduced ? 1 : 0) }}
-          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
         >
           {/* Its own camera. The clip above is a grouping property, so it flattens
               this subtree out of the pack's 3D context and the perspective from
