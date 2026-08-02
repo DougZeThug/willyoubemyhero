@@ -43,8 +43,8 @@ import { preloadCard } from "@/lib/preload";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
-import { urlFromSet } from "@/lib/media.functions";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import { urlFromSet } from "@/lib/media";
+import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/pack")({
@@ -897,14 +897,21 @@ function PackPage() {
             comes back with the finished pack, which is where a collection counter
             belongs anyway. */}
         {stage !== "revealing" && (
-          // Kept mounted through the ceremony rather than folded away with it, and
-          // made inert instead. Unmounting 90px of header above the pack reflows
-          // the pack upward on the exact frame the tear is meant to be the only
-          // thing moving — but a Vault link that is dimmed under a backdrop and
-          // still reachable by Tab is its own bug, and `inert` fixes that one
-          // without moving anything.
-          <div
+          // For the opening it fades out and goes inert rather than unmounting.
+          //
+          // Gone from the screen and gone from the tab order, which is the part
+          // that was a bug — a Vault link dimmed to 20% under a backdrop is still
+          // a link somebody can reach. What it deliberately does *not* do is give
+          // its 90px back: taking those out of the flow at the moment the rip
+          // commits slides the pack, the strip and the cards in it upward on the
+          // one frame the tear is meant to be the only thing moving. The ceremony
+          // does not need the room — the fan clears the top of the pack by a wide
+          // margin even on a short phone — so the reserved space costs nothing and
+          // the jump would cost the whole effect.
+          <motion.div
             inert={stage === "opening"}
+            animate={{ opacity: stage === "opening" ? 0 : 1 }}
+            transition={{ duration: 0.3 }}
             className="mb-5 flex items-center justify-between border-b border-primary/20 pb-4"
           >
             <Link
@@ -918,12 +925,22 @@ function PackPage() {
                 Collected
               </div>
               {/* Dashed until reconciled — this counter used to read the whole
-                  roster off a local store the old collect-on-sight write had filled. */}
-              <div className="font-display text-lg font-black text-primary">
+                  roster off a local store the old collect-on-sight write had
+                  filled.
+
+                  Also the one place on this screen that says out loud whether the
+                  collection has landed, which is what decides whether a rip will
+                  take at all: `tearOpen` refuses while `packBaseline` is still
+                  null. The e2e suite waits on the dash clearing for exactly that
+                  reason, hence the test id. */}
+              <div
+                data-testid="collected-count"
+                className="font-display text-lg font-black text-primary"
+              >
                 {mine.ready ? `${collectedCount} / ${total}` : `— / ${total}`}
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {stage === "sealed" || stage === "opening" ? (

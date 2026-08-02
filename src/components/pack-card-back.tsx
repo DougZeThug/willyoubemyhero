@@ -1,5 +1,5 @@
 import { Sparkles } from "lucide-react";
-import { urlFromSet, type ImageUrlSet } from "@/lib/media.functions";
+import { urlFromSet, type ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
 /**

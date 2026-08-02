@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader, setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { optionalActor, requireActor, requireAdmin } from "./require-auth.server";
-import { decodeImageDataUrl, forgetSignedPath, signPath, VARIANT_WIDTHS } from "./media.functions";
+import { decodeImageDataUrl, forgetSignedPath, signPath } from "./media.functions";
+import { VARIANT_WIDTHS } from "./media";
 import type {
   PullSecretCardResult,
   SecretCardRow,

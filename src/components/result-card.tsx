@@ -1,7 +1,7 @@
 import { forwardRef } from "react";
 import { formatTime } from "@/lib/format";
-import { urlFromSet } from "@/lib/media.functions";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import { urlFromSet } from "@/lib/media";
+import type { ImageUrlSet } from "@/lib/media";
 
 export type ResultCardData = {
   eventName: string;

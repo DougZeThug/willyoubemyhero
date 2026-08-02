@@ -4,8 +4,8 @@ import { initialsOf } from "@/lib/format";
 import { cachedCardMeta, primeCardMeta, saveCardMeta } from "@/lib/card-collection";
 import { playFlip } from "@/lib/card-sfx";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import { urlFromSet, srcSetFromSet } from "@/lib/media.functions";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import { urlFromSet, srcSetFromSet } from "@/lib/media";
+import type { ImageUrlSet } from "@/lib/media";
 import type { Rarity } from "@/lib/card-rarity";
 
 /** Standard trading card is 2.5in x 3.5in. Used until the real art reports its size. */

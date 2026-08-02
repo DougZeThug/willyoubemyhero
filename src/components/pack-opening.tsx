@@ -17,7 +17,7 @@ import {
 import { SECRET_RARITY } from "@/lib/secret-cards";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import type { ImageUrlSet } from "@/lib/media";
 
 /**
  * How long after the ceremony starts a tap is allowed to end it.

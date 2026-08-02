@@ -18,8 +18,8 @@ import {
   deleteParticipantCard,
   getImagePathsNeedingVariants,
   writeImageVariants,
-  type CardSide,
 } from "@/lib/media.functions";
+import type { CardSide } from "@/lib/media";
 import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { UniversalCardBack } from "@/components/universal-card-back";

@@ -5,8 +5,8 @@ import { playTearTick } from "@/lib/card-sfx";
 import { seededRng } from "@/lib/format";
 import { TEAR, tearProgress } from "@/lib/pack";
 import { ceremonyReached, type CeremonyPhase } from "@/lib/pack-ceremony";
-import { urlFromSet } from "@/lib/media.functions";
-import type { ImageUrlSet } from "@/lib/media.functions";
+import { urlFromSet } from "@/lib/media";
+import type { ImageUrlSet } from "@/lib/media";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
 

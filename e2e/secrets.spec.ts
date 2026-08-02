@@ -44,6 +44,22 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
 const sealedPack = (page: Page) => page.getByRole("button", { name: /tear the pack open/i });
 
 /**
+ * Wait until a rip will actually take.
+ *
+ * `tearOpen` refuses while the collection is still being reconciled — without a
+ * baseline there is nothing to deal a pack from — and it refuses *silently*, so a
+ * test that presses Enter too early gets a pack that stays sealed and an assertion
+ * that times out somewhere unrelated. The Collected counter is the one thing on
+ * this screen that says so out loud: it reads a dash until the reconcile lands.
+ *
+ * In practice the stubs answer during hydration and this returns immediately. It
+ * exists for the machine where they do not.
+ */
+async function packReady(page: Page) {
+  await expect(page.getByTestId("collected-count")).not.toHaveText(/—/);
+}
+
+/**
  * Run the whole reveal sequence.
  *
  * The fourth slot is behind the stand now — cards are turned one at a time and
@@ -195,8 +211,9 @@ test.describe("the daily secret", () => {
     await statusAnswered;
     // The response has landed; this is the beat TanStack Query needs to put it in
     // the cache and re-render, which is what the rip actually reads.
-    await expect(page.getByRole("button", { name: /tear the pack open/i })).toBeVisible();
     await page.waitForTimeout(100);
+    // And the pack has to be dealable at all, or the rip is a no-op.
+    await packReady(page);
     await sealedPack(page).press("Enter");
 
     // Three roster cards and the secret. It wears the same universal back as the
@@ -216,6 +233,10 @@ test.describe("the daily secret", () => {
     // Default stub: `available: false`. A fourth card in the fan that never lands
     // on the stand is a worse lie than a fan that did not preview one.
     await page.goto("/players/pack");
+    // The slot count is not what is at risk here — it is three either way. The
+    // rip *taking* is: an unreconciled collection makes `tearOpen` refuse, and the
+    // ceremony that never starts fails this on a count that stays at zero.
+    await packReady(page);
     await sealedPack(page).press("Enter");
     await expect(page.locator('[data-testid="opening-card"]')).toHaveCount(3);
     await expect(page.locator(".holo-prism-edge")).toHaveCount(0);

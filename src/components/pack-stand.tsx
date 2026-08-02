@@ -9,7 +9,7 @@ import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretSlot } from "@/lib/pack";
 import { packedByLabel } from "@/lib/card-pulls";
-import type { CardUrls, ImageUrlSet } from "@/lib/media.functions";
+import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";

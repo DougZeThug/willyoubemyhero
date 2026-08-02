@@ -109,7 +109,7 @@ describe("signed url cache", () => {
     vi.setSystemTime(Date.now() + 7 * 60 * 60_000);
     const later = (await callServerFn(mod.getEventPhotoUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, import("./media.functions").ImageUrlSet>;
+    })) as Record<string, import("./media").ImageUrlSet>;
     expect(signer.count).toBe(2);
     expect(later[CARD_ID]).toEqual({
       thumb: "https://cdn/signed-2",
@@ -160,7 +160,7 @@ describe("signed url cache", () => {
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, { front: import("./media.functions").ImageUrlSet | null }>;
+    })) as Record<string, { front: import("./media").ImageUrlSet | null }>;
 
     expect(signer.count).toBe(1);
     expect(urls["ep-1"].front).toEqual(urls["ep-3"].front);
@@ -227,8 +227,8 @@ describe("getEventCardUrls", () => {
     })) as Record<
       string,
       {
-        front: import("./media.functions").ImageUrlSet | null;
-        back: import("./media.functions").ImageUrlSet | null;
+        front: import("./media").ImageUrlSet | null;
+        back: import("./media").ImageUrlSet | null;
       }
     >;
     // universal, front, own — three distinct objects, three distinct url sets.
@@ -264,7 +264,7 @@ describe("getEventCardUrls", () => {
     const mod = await freshModule();
     const urls = (await callServerFn(mod.getEventCardUrls, {
       data: { eventId: EVENT_ID },
-    })) as Record<string, { back: import("./media.functions").ImageUrlSet | null }>;
+    })) as Record<string, { back: import("./media").ImageUrlSet | null }>;
     expect(urls[CARD_ID].back).toEqual({
       thumb: "https://cdn/u",
       medium: "https://cdn/u",
@@ -302,8 +302,8 @@ describe("getEventCardUrls", () => {
     })) as Record<
       string,
       {
-        front: import("./media.functions").ImageUrlSet | null;
-        back: import("./media.functions").ImageUrlSet | null;
+        front: import("./media").ImageUrlSet | null;
+        back: import("./media").ImageUrlSet | null;
       }
     >;
     expect(urls[CARD_ID]).toEqual({
