@@ -311,6 +311,11 @@ test.describe("opening a pack", () => {
     // even when skipping worked perfectly.
     await page.clock.install();
     await page.goto("/players/pack");
+    // A faked clock does not tick on its own, and hydration, query settling and
+    // motion all wait on timers, so the page needs time handed to it before it is
+    // a pack at all.
+    await page.clock.runFor(2000);
+    await expect(sealedPack(page)).toBeVisible();
     await sealedPack(page).press("Enter");
 
     // Past the dead zone that stops the pointerup ending a drag-rip from also
