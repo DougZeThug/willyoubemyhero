@@ -11,12 +11,7 @@ import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
-import {
-  secretFoil,
-  secretsPulledLabel,
-  SECRET_RARITY,
-  type OwnedSecret,
-} from "@/lib/secret-cards";
+import { secretFoil, secretsPulledLabel, SECRET_RARITY } from "@/lib/secret-cards";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
