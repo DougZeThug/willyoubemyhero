@@ -23,6 +23,31 @@ export const CARD_SIZES = "(max-width: 640px) 90vw, 420px";
 export const CARD_GRID_SIZES = "(max-width: 640px) 45vw, 220px";
 
 /**
+ * Sizes to try, widest first. A stalled fetch used to leave a broken-image icon
+ * and then, briefly, a permanent "no card art" placeholder — so instead of
+ * giving up on the first error, drop to the next smaller (cheaper) rendition
+ * and only show the placeholder once every size has failed.
+ */
+const SIZE_STEPS = ["large", "medium", "thumb"] as const;
+
+function useSteppedImage(set: Parameters<typeof urlFromSet>[0], eager: boolean) {
+  const start = eager ? 0 : 1;
+  const [step, setStep] = useState(start);
+  const key = urlFromSet(set, "large") ?? "";
+  // A re-signed URL is a fresh chance; start over at the preferred size.
+  useEffect(() => setStep(start), [key, start]);
+
+  const failed = step >= SIZE_STEPS.length;
+  const size = SIZE_STEPS[Math.min(step, SIZE_STEPS.length - 1)];
+  return {
+    failed,
+    src: failed ? null : urlFromSet(set, size),
+    srcSet: failed ? undefined : srcSetFromSet(set, size),
+    onError: () => setStep((s) => s + 1),
+  };
+}
+
+/**
  * How hard a card leans, and how close the camera stands to it.
  *
  * Two profiles, because the two places a card appears want opposite things. One
@@ -190,19 +215,15 @@ function HoloCardImpl({
     () => cachedCardMeta(cacheKey)?.aspect ?? null,
   );
 
-  const frontSrc = urlFromSet(frontUrl, eager ? "large" : "medium");
-  const frontSrcSet = srcSetFromSet(frontUrl);
-  const backSrc = urlFromSet(backUrl, eager ? "large" : "medium");
-  const backSrcSet = srcSetFromSet(backUrl);
   const imgSizes = eager ? CARD_SIZES : CARD_GRID_SIZES;
-
-  // A dropped fetch used to leave a broken-image icon on the tile forever. Track
-  // the failure per source so the card falls back to its initials placeholder,
-  // and reset when a fresh (re-signed) URL arrives.
-  const [frontFailed, setFrontFailed] = useState(false);
-  const [backFailed, setBackFailed] = useState(false);
-  useEffect(() => setFrontFailed(false), [frontSrc]);
-  useEffect(() => setBackFailed(false), [backSrc]);
+  const front = useSteppedImage(frontUrl, eager);
+  const back = useSteppedImage(backUrl, eager);
+  const frontSrc = front.src;
+  const frontSrcSet = front.srcSet;
+  const frontFailed = front.failed;
+  const backSrc = back.src;
+  const backSrcSet = back.srcSet;
+  const backFailed = back.failed;
 
   const [uncontrolledFlip, setUncontrolledFlip] = useState(false);
   // The glare and sparkle layers are invisible until the card moves, and each one
@@ -633,7 +654,7 @@ function HoloCardImpl({
                 alt={`${name} card front`}
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
-                onError={() => setFrontFailed(true)}
+                onError={front.onError}
                 // A vault grid is thirty cards deep. Fetching and decoding the
                 // ones below the fold up front is what starves the handful that
                 // are actually on screen.
@@ -663,7 +684,7 @@ function HoloCardImpl({
                   sizes={imgSizes}
                   alt={`${name} card back`}
                   crossOrigin="anonymous"
-                  onError={() => setBackFailed(true)}
+                  onError={back.onError}
                   loading="lazy"
                   decoding="async"
                   // object-cover, not contain: the card's aspect is measured from
