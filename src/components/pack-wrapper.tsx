@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { playTearTick } from "@/lib/card-sfx";
 import { seededRng } from "@/lib/format";
@@ -52,27 +52,45 @@ function bodyClip(points: TearPoint[]): string {
  * The wax foil underneath is the designed fallback, not a spinner: a slow network
  * gets a beautiful pack rather than a grey box, and an event with no uploaded back
  * gets the same thing permanently.
+ *
+ * The lettering hides on `loaded`, never on "an art URL exists". A cached image
+ * completes before React attaches onLoad, and an expired signed URL never
+ * completes at all — both used to leave a blank foil with the caption already
+ * hidden, which is what "the universal back isn't showing" looked like.
  */
 function PackFace({ art, size, year }: { art: string | null; size: number; year: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  // Runs on mount too, so an image the browser already had decoded — which fires
+  // its load event before the handler exists — still reports itself.
+  const settle = useCallback((img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth > 0) setLoaded(true);
+  }, []);
+  const showArt = !!art && !failed;
   return (
     <div className="wax-foil absolute inset-0">
-      {art && (
+      {showArt && (
         <img
+          ref={settle}
           src={art}
           alt=""
           aria-hidden
           crossOrigin="anonymous"
           draggable={false}
-          onLoad={(e) => e.currentTarget.style.setProperty("opacity", "1")}
-          className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          className={cn(
+            "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
+            loaded ? "opacity-100" : "opacity-0",
+          )}
         />
       )}
       <div
         className={cn(
           "relative flex h-full flex-col items-center justify-center gap-2 p-6 text-center",
-          // The lettering is the pack's identity only while there is no art. Over
-          // a real back it is a caption nobody asked for.
-          art && "hidden",
+          // The lettering is the pack's identity until real art is actually on
+          // screen. Over a loaded back it is a caption nobody asked for.
+          showArt && loaded && "hidden",
         )}
       >
         <Sparkles className="h-8 w-8 text-primary" />
