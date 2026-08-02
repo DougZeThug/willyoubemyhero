@@ -316,13 +316,22 @@ test.describe("opening a pack", () => {
     // a pack at all.
     await page.clock.runFor(2000);
     await expect(sealedPack(page)).toBeVisible();
-    await sealedPack(page).press("Enter");
+
+    // The pack refuses to tear until the collection has reconciled, and under a
+    // clock the test owns that beat can land after the first keypress. Press
+    // until it takes, handing the page a little time on each attempt.
+    const skip = page.getByRole("button", { name: /^skip$/i });
+    await expect(async () => {
+      if (await sealedPack(page).isVisible()) await sealedPack(page).press("Enter");
+      await page.clock.runFor(100);
+      expect(await skip.isVisible()).toBe(true);
+    }).toPass({ timeout: 20_000 });
 
     // Past the dead zone that stops the pointerup ending a drag-rip from also
     // eating the ceremony, and far short of the ~2.2s the sequence would take on
     // its own.
     await page.clock.runFor(SKIP_AFTER_MS);
-    await page.getByRole("button", { name: /^skip$/i }).click();
+    await skip.click();
     await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
 
     // What makes this a test of *skipping*: the page's clock has only advanced
