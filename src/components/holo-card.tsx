@@ -625,14 +625,15 @@ function HoloCardImpl({
           {/* Front. `invisible` rather than backface-visibility alone — see the
               note on .holo-face; WebKit shows the away side through the card. */}
           <div className={cn("holo-face", canFlip && showBack && "invisible")}>
-            {frontSrc ? (
+            {frontSrc && !frontFailed ? (
               <img
                 src={frontSrc}
                 srcSet={frontSrcSet}
-                sizes={CARD_SIZES}
+                sizes={imgSizes}
                 alt={`${name} card front`}
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
+                onError={() => setFrontFailed(true)}
                 // A vault grid is thirty cards deep. Fetching and decoding the
                 // ones below the fold up front is what starves the handful that
                 // are actually on screen.
@@ -655,13 +656,14 @@ function HoloCardImpl({
               thumbnail in the vault grid. */}
           {(canFlip || faceDown) && (
             <div className={cn("holo-face [transform:rotateY(180deg)]", !showBack && "invisible")}>
-              {backSrc ? (
+              {backSrc && !backFailed ? (
                 <img
                   src={backSrc}
                   srcSet={backSrcSet}
-                  sizes={CARD_SIZES}
+                  sizes={imgSizes}
                   alt={`${name} card back`}
                   crossOrigin="anonymous"
+                  onError={() => setBackFailed(true)}
                   loading="lazy"
                   decoding="async"
                   // object-cover, not contain: the card's aspect is measured from
@@ -679,7 +681,7 @@ function HoloCardImpl({
                 takes the glare, so the stats stay legible. The prism edge rides
                 along either way: it traces the bezel and never sits over the
                 panel, so the reason the foil is held back here doesn't apply. */}
-              {backSrc ? (
+              {backSrc && !backFailed ? (
                 Overlays
               ) : (
                 <>
