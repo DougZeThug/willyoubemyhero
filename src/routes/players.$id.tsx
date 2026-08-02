@@ -20,6 +20,7 @@ import {
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
+import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { requestGyroPermission } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
 import { CardBackPanel } from "@/components/card-back-panel";
