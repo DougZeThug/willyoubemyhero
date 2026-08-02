@@ -19,7 +19,13 @@ import { SecretBackPanel } from "@/components/secret-back-panel";
 import { PackWrapper } from "@/components/pack-wrapper";
 import { PackStand } from "@/components/pack-stand";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { collectCard, loadCollection, loadPackState, savePackState } from "@/lib/card-collection";
+import {
+  collectCard,
+  loadPackState,
+  savePackState,
+  type CollectedCard,
+} from "@/lib/card-collection";
+import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
 import { pullSecretCard } from "@/lib/secret-cards.functions";
@@ -212,12 +218,18 @@ function PackPage() {
   const packBack = useEventCardBack(event?.id ?? null);
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
-  const [collected, setCollected] = useState<Record<string, unknown>>({});
-  const [collectionLoaded, setCollectionLoaded] = useState(false);
+  // Reconciled against the server rather than read straight off this device — the
+  // local store had been inflated to the whole roster by the old collect-on-sight
+  // behaviour, which also meant `dealPack` believed there was nothing left to
+  // pick as the guaranteed-new last card.
+  const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
+  const mine = useMyCollection(event?.id ?? null, rosterIds);
+  const collected = mine.collection;
+  const collectionLoaded = mine.ready;
   // Snapshot of the collection taken when a pack is dealt. The pack composition
   // must not shift while the user is revealing it, and revealing a card writes
   // straight back into `collected`.
-  const [packBaseline, setPackBaseline] = useState<Record<string, unknown> | null>(null);
+  const [packBaseline, setPackBaseline] = useState<Record<string, CollectedCard> | null>(null);
   // Today's dealt cards, once the wrapper is off. Null means the pack is still
   // sealed; undefined-until-loaded is tracked by `stateLoaded` instead, so the
   // sealed pack never flashes on a day that has already been opened.
@@ -270,6 +282,20 @@ function PackPage() {
    * same tick — or during a hold — cannot see yet.
    */
   const revealedRef = useRef<number[]>([]);
+  /**
+   * Indices being turned over for a second time, on a pack migrated off the
+   * pre-stand ceremony. They get the flip and the chime and nothing that writes:
+   * the pull they represent was recorded the first time round.
+   */
+  const replayedRef = useRef<Set<number>>(new Set());
+  /**
+   * This pack was already open when the screen loaded.
+   *
+   * Which means `recordCardPulls` ran in whatever session tore it, so for a
+   * claimed member the reconciled collection already counts every card in it —
+   * including the ones still face-down. See the floor in `revealAt`.
+   */
+  const resumedRef = useRef(false);
   /** Set while "Reveal all" owns the sequence, so nothing else can drive it. */
   const autoRef = useRef(false);
   const [autoRunning, setAutoRunning] = useState(false);
@@ -293,13 +319,6 @@ function PackPage() {
   const identity = usePackIdentity();
   const seed = identity ? packSeed(event?.id ?? null, dayKey, identity) : null;
 
-  useEffect(() => {
-    loadCollection().then((c) => {
-      setCollected(c);
-      setCollectionLoaded(true);
-    });
-  }, []);
-
   // One pack a day, so a return visit resumes rather than deals. Yesterday's row
   // is simply ignored — the next tear overwrites it.
   useEffect(() => {
@@ -322,25 +341,50 @@ function PackPage() {
       // means the phone genuinely changed hands.
       const mine = s?.identity == null || s.identity === identity;
       if (s && s.dayKey === dayKey && mine && s.ids.length > 0) {
+        // A row the pre-stand ceremony left finished.
+        //
+        // That screen put every card into `revealed` as the wrapper came off, so
+        // resuming one faithfully lands past the end of the stand and renders the
+        // finished grid — no wrapper to rip and no cards to step through for the
+        // rest of that day, which is indistinguishable from the stand not having
+        // shipped. Only those are replayed. A pre-stand row that stopped partway
+        // still has cards to turn and is resumed exactly as it stands.
+        //
+        // Recognised by the missing cursor, because every row the stand has ever
+        // written carries one. A version field would have caught the stand's own
+        // early rows too and marched somebody back to the first card.
+        const replay = s.cursor === undefined && s.revealed.length >= s.ids.length;
         setDealtIds(s.ids);
-        revealedRef.current = s.revealed;
-        setRevealed(s.revealed);
+        const revealedNow = replay ? [] : s.revealed;
+        // These cards were pulled once already, under the old ceremony. Turning
+        // them over again is theatre; counting them again is not — `collectCard`
+        // increments rather than being idempotent, and for a guest the local store
+        // *is* the collection, so a replayed pull would inflate "Pulled ×N" for
+        // good.
+        replayedRef.current = new Set(replay ? s.revealed : []);
+        resumedRef.current = true;
+        revealedRef.current = revealedNow;
+        setRevealed(revealedNow);
         setSecretRevealed(!!s.secretRevealed);
         // Come back to the card you were on, not to the start. The stored cursor
         // is the answer when there is one; `resumeCursor` is the fallback for a
         // row written before the stand existed, and can only ever land on the
         // next unturned card.
         setCursor(
-          s.cursor ??
-            resumeCursor({
-              packSize: s.ids.length,
-              revealed: s.revealed,
-              secretRevealed: !!s.secretRevealed,
-            }),
+          replay
+            ? 0
+            : (s.cursor ??
+                resumeCursor({
+                  packSize: s.ids.length,
+                  revealed: s.revealed,
+                  secretRevealed: !!s.secretRevealed,
+                })),
         );
       } else {
         setDealtIds(null);
         revealedRef.current = [];
+        replayedRef.current = new Set();
+        resumedRef.current = false;
         setRevealed([]);
         setSecretRevealed(false);
         setCursor(0);
@@ -379,10 +423,37 @@ function PackPage() {
     };
   }, [collected]);
 
+  /**
+   * Snapshot the collection the pack is dealt against, once per person.
+   *
+   * Two things have to be true at the same time. It must not move while somebody
+   * is revealing — `dealPack` swaps the last slot for a card they do not own, and
+   * a baseline that shifted mid-reveal would re-deal it underneath them. And it
+   * must not be somebody *else's*: a phone changes hands in this league, and a
+   * write-once baseline meant the next person's guaranteed-new card was chosen
+   * from the previous person's collection.
+   *
+   * So it is latched per identity rather than once, and `collectionLoaded` is
+   * `mine.ready` — which is false until the server has reconciled, so the snapshot
+   * is never taken from the unreconciled local store.
+   */
+  const baselineForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!collectionLoaded) return;
-    setPackBaseline((prev) => prev ?? collected);
-  }, [collectionLoaded, collected]);
+    if (!identity) return;
+    const somebodyNew = baselineForRef.current !== identity;
+    if (!collectionLoaded) {
+      // Their reconciliation is still out. Drop the previous person's snapshot
+      // rather than deal against it: `nextPack` is empty without a baseline and
+      // `tearOpen` refuses on an empty pack, so the wrapper simply is not
+      // tearable for the beat it takes the server to answer. Holding the old one
+      // would have dealt this person the guaranteed-new card that was new to
+      // somebody else.
+      if (somebodyNew) setPackBaseline(null);
+      return;
+    }
+    setPackBaseline((prev) => (prev !== null && !somebodyNew ? prev : collected));
+    baselineForRef.current = identity;
+  }, [collectionLoaded, collected, identity]);
 
   // What today's pack *would* be if torn open right now — yours, and nobody
   // else's, because the seed carries who you are. See src/lib/pack.ts.
@@ -407,6 +478,8 @@ function PackPage() {
     const ids = nextPack.map((p) => p.id);
     setDealtIds(ids);
     revealedRef.current = [];
+    replayedRef.current = new Set();
+    resumedRef.current = false;
     setCursor(0);
     playTear();
   }, [dealtIds, nextPack]);
@@ -433,8 +506,29 @@ function PackPage() {
       revealedRef.current = [...revealedRef.current, i];
       setRevealed(revealedRef.current);
       playReveal(rarity.tier);
-      void collectCard(ep.id, rarity.tier);
-      setCollected((prev) => ({ ...prev, [ep.id]: true }));
+      // A migrated pack turns cards that were already pulled. Writing here would
+      // charge somebody a second pull for a ceremony they were given, not asked
+      // for. See replayedRef.
+      if (!replayedRef.current.has(i)) {
+        void collectCard(ep.id, rarity.tier);
+        // Optimistic, and held apart from the reconciled collection: a card the
+        // server has not vouched for is exactly what the merge would prune, so
+        // without this it would light up as you flipped it and then vanish.
+        //
+        // The floor is counted from the snapshot the pack was dealt against, not
+        // from whatever the collection holds now. `recordCardPulls` fires at tear
+        // time and can answer before a card is turned over, and a floor derived
+        // from the reconciled number then stacked this pull on top of the server's
+        // own row for the rest of the session.
+        //
+        // On a resumed pack that recording already happened, in the session that
+        // tore it — so for a member the snapshot itself contains this pull and
+        // there is nothing to add. A guest has no server row either way, and their
+        // local store only reaches this hook on mount, so they are still owed it.
+        const held = packBaseline?.[ep.id]?.count ?? 0;
+        const counted = resumedRef.current && !!me?.participantId;
+        mine.markCollected(ep.id, rarity.tier, counted ? Math.max(held, 1) : held + 1);
+      }
 
       if (rarity.tier === "champion" || rarity.tier === "podium") {
         await celebrate(rarity);
@@ -533,10 +627,21 @@ function PackPage() {
       // in practice the first person to claim painted every card they'd ever
       // revealed with "Packed by 1", making the counter meaningless. Better an
       // honest ramp than a uniform stripe.
-      const ids = dealtIds.slice(0, 64);
+      const ids = dealtIds.slice(0, 16);
       try {
+        // The same call records the pack itself. A pack of three cards you already
+        // own writes no new card_pulls row, so counting packs from that table
+        // would stop counting the moment somebody's collection filled up.
+        //
+        // No event is sent: the handler resolves the active one itself. A resumed
+        // pack reaches here before the event query has answered, so passing it
+        // from the client stamped a null and the latch above stopped it ever
+        // being retried.
         await record({ data: { eventParticipantIds: ids } });
-        await qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) });
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
+          qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) }),
+        ]);
       } catch {
         /* a count nobody asked for is not worth an error nobody can act on */
       }
@@ -703,7 +808,7 @@ function PackPage() {
     if (secret?.artUrl) void preloadCard(secret.artUrl);
   }, [stage, cursor, pack, cards.data, secret?.artUrl]);
 
-  const collectedCount = (bundle?.participants ?? []).filter((p) => collected[p.id]).length;
+  const collectedCount = mine.collectedCount;
   const total = bundle?.participants.length ?? 0;
 
   // The sealed pack must not flash on a day already opened, so nothing renders
@@ -737,8 +842,10 @@ function PackPage() {
               <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
                 Collected
               </div>
+              {/* Dashed until reconciled — this counter used to read the whole
+                  roster off a local store the old collect-on-sight write had filled. */}
               <div className="font-display text-lg font-black text-primary">
-                {collectedCount} / {total}
+                {mine.ready ? `${collectedCount} / ${total}` : `— / ${total}`}
               </div>
             </div>
           </div>

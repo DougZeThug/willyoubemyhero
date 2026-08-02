@@ -64,6 +64,13 @@ export type PackState = {
    * resuming from `revealed` alone dropped you on the *following* card and you
    * never got the one you were holding back. Optional, so a row written before
    * the stand existed still loads and falls back to `resumeCursor`.
+   *
+   * Its absence is also how a pre-stand row is recognised, which matters beyond
+   * the fallback: that ceremony wrote every index into `revealed` the moment the
+   * wrapper came off, so resuming one faithfully lands past the end of the stand
+   * and renders the finished grid — no wrapper to rip and no cards to step
+   * through for the rest of that day, which is indistinguishable from the stand
+   * not having shipped. See the resume effect in players.pack.tsx.
    */
   cursor?: number;
 };
