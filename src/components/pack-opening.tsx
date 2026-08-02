@@ -36,11 +36,13 @@ const CARD_W = 0.62;
  * The pause the secret takes before following the roster out, in seconds.
  *
  * Long enough to read as a separate arrival and short enough that the fan still
- * lands inside the phase it has. The stand is where the secret's real ceremony
- * happens — a 1600ms hold, a riser and a flip twice the house length — so this is
- * only the hint that there is a fourth card, not the payoff.
+ * lands inside the phase it has. Scaled up with the cinematic timeline: at 0.11s
+ * against the longer launch it was swallowed by the roster's own stagger. The
+ * stand is where the secret's real ceremony happens — a 1600ms hold, a riser and
+ * a flip twice the house length — so this is only the hint that there is a fourth
+ * card, not the payoff.
  */
-const SECRET_BEAT = 0.11;
+const SECRET_BEAT = 0.35;
 
 /**
  * The pack opening: the rest of the rip, and the cards coming out of it.
