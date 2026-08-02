@@ -169,8 +169,9 @@ export const sealedPack = (page: Page) => page.getByRole("button", { name: /tear
 /**
  * The one way any spec opens the pack.
  *
- * `tearOpen` refuses while the collection is still being reconciled — without a
- * baseline there is nothing to deal a pack from — and it refuses *silently*, so
+ * The app's tear handler — `tearOpen` in src/routes/players.pack.tsx — refuses
+ * while the collection is still being reconciled, because without a baseline
+ * there is nothing to deal a pack from. And it refuses *silently*, so
  * a test that presses Enter too early gets a pack that stays sealed and an
  * assertion that times out somewhere unrelated. The Collected counter is the
  * one thing on the screen that says so out loud: it reads a dash until the
