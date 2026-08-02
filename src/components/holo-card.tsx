@@ -19,6 +19,8 @@ const DEFAULT_ASPECT = 5 / 7;
  * run the selection algorithm on the same inputs.
  */
 export const CARD_SIZES = "(max-width: 640px) 90vw, 420px";
+/** Vault tiles sit two-up on a phone, so 90vw would over-fetch by a factor of four. */
+export const CARD_GRID_SIZES = "(max-width: 640px) 45vw, 220px";
 
 /**
  * How hard a card leans, and how close the camera stands to it.
@@ -188,10 +190,19 @@ function HoloCardImpl({
     () => cachedCardMeta(cacheKey)?.aspect ?? null,
   );
 
-  const frontSrc = urlFromSet(frontUrl);
+  const frontSrc = urlFromSet(frontUrl, eager ? "large" : "medium");
   const frontSrcSet = srcSetFromSet(frontUrl);
-  const backSrc = urlFromSet(backUrl);
+  const backSrc = urlFromSet(backUrl, eager ? "large" : "medium");
   const backSrcSet = srcSetFromSet(backUrl);
+  const imgSizes = eager ? CARD_SIZES : CARD_GRID_SIZES;
+
+  // A dropped fetch used to leave a broken-image icon on the tile forever. Track
+  // the failure per source so the card falls back to its initials placeholder,
+  // and reset when a fresh (re-signed) URL arrives.
+  const [frontFailed, setFrontFailed] = useState(false);
+  const [backFailed, setBackFailed] = useState(false);
+  useEffect(() => setFrontFailed(false), [frontSrc]);
+  useEffect(() => setBackFailed(false), [backSrc]);
 
   const [uncontrolledFlip, setUncontrolledFlip] = useState(false);
   // The glare and sparkle layers are invisible until the card moves, and each one
@@ -614,14 +625,15 @@ function HoloCardImpl({
           {/* Front. `invisible` rather than backface-visibility alone — see the
               note on .holo-face; WebKit shows the away side through the card. */}
           <div className={cn("holo-face", canFlip && showBack && "invisible")}>
-            {frontSrc ? (
+            {frontSrc && !frontFailed ? (
               <img
                 src={frontSrc}
                 srcSet={frontSrcSet}
-                sizes={CARD_SIZES}
+                sizes={imgSizes}
                 alt={`${name} card front`}
                 crossOrigin="anonymous"
                 onLoad={onImageLoad}
+                onError={() => setFrontFailed(true)}
                 // A vault grid is thirty cards deep. Fetching and decoding the
                 // ones below the fold up front is what starves the handful that
                 // are actually on screen.
@@ -644,13 +656,14 @@ function HoloCardImpl({
               thumbnail in the vault grid. */}
           {(canFlip || faceDown) && (
             <div className={cn("holo-face [transform:rotateY(180deg)]", !showBack && "invisible")}>
-              {backSrc ? (
+              {backSrc && !backFailed ? (
                 <img
                   src={backSrc}
                   srcSet={backSrcSet}
-                  sizes={CARD_SIZES}
+                  sizes={imgSizes}
                   alt={`${name} card back`}
                   crossOrigin="anonymous"
+                  onError={() => setBackFailed(true)}
                   loading="lazy"
                   decoding="async"
                   // object-cover, not contain: the card's aspect is measured from
@@ -668,7 +681,7 @@ function HoloCardImpl({
                 takes the glare, so the stats stay legible. The prism edge rides
                 along either way: it traces the bezel and never sits over the
                 panel, so the reason the foil is held back here doesn't apply. */}
-              {backSrc ? (
+              {backSrc && !backFailed ? (
                 Overlays
               ) : (
                 <>

@@ -34,34 +34,55 @@ const SIGNED_CACHE_MAX = 600;
 const signedCache = new Map<string, { url: string; mintedAt: number }>();
 const signingNow = new Map<string, Promise<string | null>>();
 
-async function mintSignedUrl(path: string): Promise<string | null> {
+/**
+ * Widths the storage renderer resizes to. The originals are ~3 MB PNGs and a
+ * phone grid asks for a dozen at once, which is what left tiles showing their
+ * alt text. Signing with a transform hands back a WebP a fiftieth the size and
+ * needs no re-upload, so it also covers every image whose variant columns were
+ * never backfilled.
+ */
+export const VARIANT_WIDTHS = { thumb: 320, medium: 800, large: 1600 } as const;
+
+function cacheKey(path: string, width?: number) {
+  return width ? `${path}@${width}` : path;
+}
+
+async function mintSignedUrl(path: string, width?: number): Promise<string | null> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const key = cacheKey(path, width);
   const { data: signed } = await supabaseAdmin.storage
     .from("participant-photos")
-    .createSignedUrl(path, SIGNED_TTL_S);
+    .createSignedUrl(
+      path,
+      SIGNED_TTL_S,
+      width ? { transform: { width, quality: 72, resize: "contain" } } : undefined,
+    );
   if (!signed?.signedUrl) return null;
   if (signedCache.size >= SIGNED_CACHE_MAX) {
     const oldest = signedCache.keys().next().value;
     if (oldest) signedCache.delete(oldest);
   }
-  signedCache.delete(path);
-  signedCache.set(path, { url: signed.signedUrl, mintedAt: Date.now() });
+  signedCache.delete(key);
+  signedCache.set(key, { url: signed.signedUrl, mintedAt: Date.now() });
   return signed.signedUrl;
 }
 
-export async function signPath(path: string | null): Promise<string | null> {
+export async function signPath(path: string | null, width?: number): Promise<string | null> {
   if (!path) return null;
-  const hit = signedCache.get(path);
+  const key = cacheKey(path, width);
+  const hit = signedCache.get(key);
   if (hit && Date.now() - hit.mintedAt < SIGNED_REUSE_MS) return hit.url;
-  const pending = signingNow.get(path);
+  const pending = signingNow.get(key);
   if (pending) return pending;
-  const p = mintSignedUrl(path).finally(() => signingNow.delete(path));
-  signingNow.set(path, p);
+  const p = mintSignedUrl(path, width).finally(() => signingNow.delete(key));
+  signingNow.set(key, p);
   return p;
 }
 
 export function forgetSignedPath(path: string | null | undefined) {
-  if (path) signedCache.delete(path);
+  if (!path) return;
+  signedCache.delete(path);
+  for (const w of Object.values(VARIANT_WIDTHS)) signedCache.delete(cacheKey(path, w));
 }
 
 export type ImageUrlSet = {
@@ -100,10 +121,12 @@ async function signSet(paths: {
   medium: string | null;
   large: string | null;
 }): Promise<ImageUrlSet> {
+  // A missing variant path is the common case — nothing was ever backfilled —
+  // so fall back to a resize of the original rather than to the original itself.
   const [thumb, medium, large] = await Promise.all([
-    signPath(paths.thumb),
-    signPath(paths.medium),
-    signPath(paths.large),
+    paths.thumb ? signPath(paths.thumb) : signPath(paths.large, VARIANT_WIDTHS.thumb),
+    paths.medium ? signPath(paths.medium) : signPath(paths.large, VARIANT_WIDTHS.medium),
+    signPath(paths.large, paths.thumb ? undefined : VARIANT_WIDTHS.large),
   ]);
   return { thumb, medium, large };
 }
