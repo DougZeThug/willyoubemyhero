@@ -636,6 +636,52 @@ export type Database = {
           },
         ]
       }
+      pack_opens: {
+        Row: {
+          card_count: number
+          created_at: string
+          event_id: string | null
+          opened_on: string
+          participant_id: string
+        }
+        Insert: {
+          card_count?: number
+          created_at?: string
+          event_id?: string | null
+          opened_on: string
+          participant_id: string
+        }
+        Update: {
+          card_count?: number
+          created_at?: string
+          event_id?: string | null
+          opened_on?: string
+          participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pack_opens_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pack_opens_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pack_opens_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       participants: {
         Row: {
           active: boolean
@@ -861,9 +907,10 @@ export type Database = {
           created_at: string
           event_id: string | null
           granted: boolean
+          guest_id: string | null
           id: string
           is_duplicate: boolean
-          participant_id: string
+          participant_id: string | null
           pulled_on: string
           secret_card_id: string
         }
@@ -871,9 +918,10 @@ export type Database = {
           created_at?: string
           event_id?: string | null
           granted?: boolean
+          guest_id?: string | null
           id?: string
           is_duplicate?: boolean
-          participant_id: string
+          participant_id?: string | null
           pulled_on: string
           secret_card_id: string
         }
@@ -881,9 +929,10 @@ export type Database = {
           created_at?: string
           event_id?: string | null
           granted?: boolean
+          guest_id?: string | null
           id?: string
           is_duplicate?: boolean
-          participant_id?: string
+          participant_id?: string | null
           pulled_on?: string
           secret_card_id?: string
         }
@@ -1165,6 +1214,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      claim_guest_secrets: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: number
+      }
       close_award_voting: {
         Args: { _categories: Json; _event_id: string }
         Returns: number
@@ -1178,15 +1231,26 @@ export type Database = {
         Returns: Json
       }
       pull_secret_card: {
-        Args: { _event_id: string; _participant_id: string }
+        Args: { _event_id: string; _guest_id: string; _participant_id: string }
         Returns: Json
       }
       record_card_pulls: {
         Args: { _event_participant_ids: string[]; _participant_id: string }
         Returns: number
       }
+      record_pack_open: {
+        Args: {
+          _card_count?: number
+          _event_id?: string
+          _participant_id: string
+        }
+        Returns: number
+      }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
-      secret_pull_status: { Args: { _participant_id: string }; Returns: Json }
+      secret_pull_status: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
