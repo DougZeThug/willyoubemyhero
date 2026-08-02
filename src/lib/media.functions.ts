@@ -37,11 +37,22 @@ const signingNow = new Map<string, Promise<string | null>>();
 /**
  * Widths the storage renderer resizes to. The originals are ~3 MB PNGs and a
  * phone grid asks for a dozen at once, which is what left tiles showing their
- * alt text. Signing with a transform hands back a WebP a fiftieth the size and
- * needs no re-upload, so it also covers every image whose variant columns were
- * never backfilled.
+ * alt text. Signing with a transform hands back a WebP a fraction of the size
+ * and needs no re-upload, so it also covers every image whose variant columns
+ * were never backfilled.
+ *
+ * `large` is deliberately 1200 and not 1600: a 1600px resize of a 3.1 MB PNG
+ * measured 3.1 MB, i.e. no saving at all, and the browser picks the widest
+ * srcset entry on a 3x phone screen — which is what stalled the grid.
  */
-export const VARIANT_WIDTHS = { thumb: 320, medium: 800, large: 1600 } as const;
+export const VARIANT_WIDTHS = { thumb: 320, medium: 800, large: 1200 } as const;
+
+/** Lower quality where the image is small enough that nobody can tell. */
+const QUALITY_FOR_WIDTH: Record<number, number> = {
+  [320]: 58,
+  [800]: 68,
+  [1200]: 74,
+};
 
 function cacheKey(path: string, width?: number) {
   return width ? `${path}@${width}` : path;
@@ -55,7 +66,15 @@ async function mintSignedUrl(path: string, width?: number): Promise<string | nul
     .createSignedUrl(
       path,
       SIGNED_TTL_S,
-      width ? { transform: { width, quality: 72, resize: "contain" } } : undefined,
+      width
+        ? {
+            transform: {
+              width,
+              quality: QUALITY_FOR_WIDTH[width] ?? 72,
+              resize: "contain",
+            },
+          }
+        : undefined,
     );
   if (!signed?.signedUrl) return null;
   if (signedCache.size >= SIGNED_CACHE_MAX) {
@@ -100,12 +119,19 @@ export function urlFromSet(
   return set[size] ?? set.large ?? set.medium ?? set.thumb;
 }
 
-export function srcSetFromSet(set: ImageUrlSet | string | null | undefined): string | undefined {
+export function srcSetFromSet(
+  set: ImageUrlSet | string | null | undefined,
+  /**
+   * Grid tiles never render wider than ~220 CSS px, so offering the widest
+   * entry there just invites a phone with a 3x screen to download it.
+   */
+  max: keyof ImageUrlSet = "large",
+): string | undefined {
   if (!set || typeof set === "string") return undefined;
   const parts: string[] = [];
-  if (set.thumb) parts.push(`${set.thumb} 320w`);
-  if (set.medium) parts.push(`${set.medium} 800w`);
-  if (set.large) parts.push(`${set.large} 1600w`);
+  if (set.thumb) parts.push(`${set.thumb} ${VARIANT_WIDTHS.thumb}w`);
+  if (max !== "thumb" && set.medium) parts.push(`${set.medium} ${VARIANT_WIDTHS.medium}w`);
+  if (max === "large" && set.large) parts.push(`${set.large} ${VARIANT_WIDTHS.large}w`);
   return parts.length ? parts.join(", ") : undefined;
 }
 
@@ -126,7 +152,10 @@ async function signSet(paths: {
   const [thumb, medium, large] = await Promise.all([
     paths.thumb ? signPath(paths.thumb) : signPath(paths.large, VARIANT_WIDTHS.thumb),
     paths.medium ? signPath(paths.medium) : signPath(paths.large, VARIANT_WIDTHS.medium),
-    signPath(paths.large, paths.thumb ? undefined : VARIANT_WIDTHS.large),
+    // Never hand back the untouched original: it is the multi-megabyte PNG.
+    paths.medium
+      ? signPath(paths.large)
+      : signPath(paths.large, VARIANT_WIDTHS.large),
   ]);
   return { thumb, medium, large };
 }
