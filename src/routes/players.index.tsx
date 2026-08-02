@@ -229,7 +229,7 @@ function PlayersPage() {
             </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {ownedSecrets.map((s) => {
-                const rarity = secretFoil(s.foil);
+                const rarity = secretFoil(s.foil, s.borderFx);
                 return (
                   <div key={s.id} className="flex flex-col gap-2">
                     <HoloCard

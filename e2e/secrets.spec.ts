@@ -4,7 +4,15 @@
 // browser owns: the claim gate, the reveal, what survives a reload, and — the
 // point of the whole feature — that the vault shows only what you pulled and
 // never hints at what you did not.
-import { test, expect, SECRET_CARD, serverFnName, type ServerFnMock } from "./fixtures";
+import {
+  test,
+  expect,
+  SECRET_CARD,
+  sealedPack,
+  serverFnName,
+  tearPack,
+  type ServerFnMock,
+} from "./fixtures";
 import type { Page } from "@playwright/test";
 
 const MEMBER_KEY = "wwbh:member-token";
@@ -41,24 +49,6 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
   });
 }
 
-const sealedPack = (page: Page) => page.getByRole("button", { name: /tear the pack open/i });
-
-/**
- * Wait until a rip will actually take.
- *
- * `tearOpen` refuses while the collection is still being reconciled — without a
- * baseline there is nothing to deal a pack from — and it refuses *silently*, so a
- * test that presses Enter too early gets a pack that stays sealed and an assertion
- * that times out somewhere unrelated. The Collected counter is the one thing on
- * this screen that says so out loud: it reads a dash until the reconcile lands.
- *
- * In practice the stubs answer during hydration and this returns immediately. It
- * exists for the machine where they do not.
- */
-async function packReady(page: Page) {
-  await expect(page.getByTestId("collected-count")).not.toHaveText(/—/);
-}
-
 /**
  * Run the whole reveal sequence.
  *
@@ -78,7 +68,7 @@ test.describe("the daily secret", () => {
     await asMember(page);
     withSecret(server);
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await revealAll(page);
 
     await expect(page.getByText(/one more card/i)).toBeVisible({ timeout: 15_000 });
@@ -117,7 +107,7 @@ test.describe("the daily secret", () => {
     // identity and the card that comes with it. What they no longer get is a gate.
     withSecret(server);
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await revealAll(page);
 
     await expect(page.getByText(/one more card/i)).toBeVisible({ timeout: 15_000 });
@@ -132,7 +122,7 @@ test.describe("the daily secret", () => {
     // see no slot at all rather than an empty one — an empty slot announces that
     // a set exists.
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await expect(page.getByText(/one more card/i)).toBeHidden();
   });
 
@@ -143,7 +133,7 @@ test.describe("the daily secret", () => {
     await asMember(page);
     withSecret(server);
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
 
     await revealAll(page);
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 15_000 });
@@ -163,7 +153,7 @@ test.describe("the daily secret", () => {
     await asMember(page);
     withSecret(server, { pull: { duplicate: true }, status: { pulled: 9 } });
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await revealAll(page);
 
     await expect(page.getByText(/already yours/i)).toBeVisible({ timeout: 15_000 });
@@ -183,7 +173,7 @@ test.describe("the daily secret", () => {
     server.delay("pullSecretCard", 2_000);
 
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await revealAll(page);
 
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 30_000 });
@@ -213,8 +203,7 @@ test.describe("the daily secret", () => {
     // the cache and re-render, which is what the rip actually reads.
     await page.waitForTimeout(100);
     // And the pack has to be dealable at all, or the rip is a no-op.
-    await packReady(page);
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
 
     // Three roster cards and the secret. It wears the same universal back as the
     // rest — the bezel is the only tell, and which secret it is stays for the
@@ -236,8 +225,7 @@ test.describe("the daily secret", () => {
     // The slot count is not what is at risk here — it is three either way. The
     // rip *taking* is: an unreconciled collection makes `tearOpen` refuse, and the
     // ceremony that never starts fails this on a count that stays at zero.
-    await packReady(page);
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await expect(page.locator('[data-testid="opening-card"]')).toHaveCount(3);
     await expect(page.locator(".holo-prism-edge")).toHaveCount(0);
   });
@@ -246,7 +234,7 @@ test.describe("the daily secret", () => {
     await asMember(page);
     // Default stub: pullSecretCard answers { ok: false, reason: "unavailable" }.
     await page.goto("/players/pack");
-    await sealedPack(page).press("Enter");
+    await tearPack(page);
     await expect(page.getByText(/one more card/i)).toBeHidden();
     await expect(page.getByText(/pack complete|tap to reveal/i).first()).toBeVisible();
   });

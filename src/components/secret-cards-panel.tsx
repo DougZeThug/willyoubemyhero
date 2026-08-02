@@ -12,6 +12,7 @@ import {
   uploadSecretCardArt,
 } from "@/lib/secret-cards.functions";
 import { encodeUploadImage } from "@/lib/image-encode";
+import { SECRET_BORDER_FX_OPTIONS, SECRET_FOIL_OPTIONS, secretFoil } from "@/lib/secret-cards";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,8 @@ type SecretCardAdminRow = {
   id: string;
   name: string;
   flavour: string | null;
+  foil: string;
+  borderFx: string;
   active: boolean;
   weight: number;
   hasArt: boolean;
@@ -89,6 +92,11 @@ export function SecretCardsPanel() {
   // stay interactive while one card is saving.
   const [grantingId, setGrantingId] = useState<string | null>(null);
   const [savingWeightId, setSavingWeightId] = useState<string | null>(null);
+  // A set rather than a single id like the two above: look saves fire on every
+  // select change, so two rows can genuinely be in flight at once — and one
+  // row's finally must not re-enable the other mid-save, or a second change
+  // there races the first and the older request can land last.
+  const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
   const [editName, setEditName] = useState("");
   const [editFlavour, setEditFlavour] = useState("");
 
@@ -223,6 +231,32 @@ export function SecretCardsPanel() {
       // toast.promise already surfaced the error
     } finally {
       setSavingWeightId(null);
+    }
+  }
+
+  // Unlike weight there is no blur ambiguity: picking an option *is* the intent,
+  // so a look saves on change.
+  async function saveLook(id: string, look: { foil?: string; borderFx?: string }) {
+    setSavingLookIds((prev) => new Set(prev).add(id));
+    const p = updateFn({ data: { id, ...look } }).then(async (r) => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(p, {
+      loading: "Saving look…",
+      success: "Look saved",
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
+    try {
+      await p;
+    } catch {
+      // toast.promise already surfaced the error
+    } finally {
+      setSavingLookIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -481,6 +515,57 @@ export function SecretCardsPanel() {
                       ? "Excluded from packs"
                       : "Higher = shows up more often (100 = baseline)"}
                   </span>
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Foil
+                    {/* At-a-glance confirmation the save landed: the dot is the
+                        chosen foil's own chrome colour. */}
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: secretFoil(card.foil).accent }}
+                      aria-hidden
+                    />
+                    <select
+                      value={
+                        SECRET_FOIL_OPTIONS.some((o) => o.id === card.foil) ? card.foil : "rosette"
+                      }
+                      onChange={(e) => void saveLook(card.id, { foil: e.target.value })}
+                      disabled={savingLookIds.has(card.id)}
+                      className="h-6 rounded border border-white/15 bg-background px-1.5 text-xs normal-case tracking-normal"
+                      aria-label={`Color effect for ${card.name}`}
+                    >
+                      {SECRET_FOIL_OPTIONS.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Border
+                    <select
+                      value={
+                        SECRET_BORDER_FX_OPTIONS.some((o) => o.id === card.borderFx)
+                          ? card.borderFx
+                          : "spin"
+                      }
+                      onChange={(e) => void saveLook(card.id, { borderFx: e.target.value })}
+                      disabled={savingLookIds.has(card.id)}
+                      className="h-6 rounded border border-white/15 bg-background px-1.5 text-xs normal-case tracking-normal"
+                      aria-label={`Border animation for ${card.name}`}
+                    >
+                      {SECRET_BORDER_FX_OPTIONS.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {savingLookIds.has(card.id) && (
+                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden />
+                  )}
                 </div>
 
                 {roster.length > 0 && card.hasArt && (

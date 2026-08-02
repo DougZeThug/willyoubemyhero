@@ -16,9 +16,9 @@
 // It is not `any` in our source, so @typescript-eslint/no-explicit-any is happy.
 //
 // DELETE THIS FILE once types.ts has been regenerated against a project with
-// 20260728143000_secret_holo_cards.sql, 20260728160000_player_card_pulls.sql and
-// 20260731120000_pack_opens.sql applied: every call site then switches to plain
-// `supabaseAdmin` unchanged.
+// 20260728143000_secret_holo_cards.sql, 20260728160000_player_card_pulls.sql,
+// 20260731120000_pack_opens.sql and 20260802120000_secret_card_border_fx.sql
+// applied: every call site then switches to plain `supabaseAdmin` unchanged.
 import type { SupabaseClient } from "@supabase/supabase-js";
 // A top-level client.server import is safe here and nowhere else: this is a
 // *.server.ts module, so it never reaches the client bundle.
@@ -29,6 +29,7 @@ export type SecretCardRow = {
   name: string;
   flavour: string | null;
   foil: string;
+  border_fx: string;
   art_path: string | null;
   back_path: string | null;
   active: boolean;

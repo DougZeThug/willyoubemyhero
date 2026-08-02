@@ -394,7 +394,9 @@ export function PackOpening({
                   transformStyle: "preserve-3d",
                   // The secret's own green rather than the app's cyan, and a
                   // deeper one — the same colour it wears on the stand and in the
-                  // vault, so it is recognisable before it is readable.
+                  // vault, so it is recognisable before it is readable. Always
+                  // the default green, never the card's own foil: the sealed
+                  // slot must not leak which look is inside before the reveal.
                   boxShadow: isSecret(i)
                     ? `0 24px 40px -14px oklch(0 0 0 / 76%), 0 0 34px -6px ${SECRET_RARITY.border}`
                     : "0 22px 36px -14px oklch(0 0 0 / 72%), 0 0 22px -8px oklch(0.82 0.14 210 / 45%)",

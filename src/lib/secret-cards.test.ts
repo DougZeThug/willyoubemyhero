@@ -1,8 +1,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { rarityStyle, type FoilPattern, type RarityTier } from "./card-rarity";
-import { SECRET_RARITY, secretFoil, secretsPulledLabel, SECRET_REASON } from "./secret-cards";
+import { rarityStyle, type BorderFx, type FoilPattern, type RarityTier } from "./card-rarity";
+import {
+  SECRET_BORDER_FX_OPTIONS,
+  SECRET_FOIL_OPTIONS,
+  SECRET_RARITY,
+  secretFoil,
+  secretsPulledLabel,
+  SECRET_REASON,
+} from "./secret-cards";
 
 const RARITY_TIERS: RarityTier[] = [
   "champion",
@@ -13,43 +20,68 @@ const RARITY_TIERS: RarityTier[] = [
   "base",
 ];
 
-describe("SECRET_RARITY", () => {
-  it("keeps its accent opaque, like every real tier does", () => {
+// Every admin-pickable foil, resolved through the same function the app uses.
+const FOILS = SECRET_FOIL_OPTIONS.map((o) => ({ id: o.id, rarity: secretFoil(o.id) }));
+
+describe("every secret foil", () => {
+  it.each(FOILS)("$id keeps its accent opaque, like every real tier does", ({ rarity }) => {
     // The same invariant card-rarity.test.ts pins for the six tiers: `accent`
     // paints text and glows, and a translucent white there is invisible.
-    expect(SECRET_RARITY.accent).not.toMatch(/\/\s*\d+%/);
+    expect(rarity.accent).not.toMatch(/\/\s*\d+%/);
   });
 
-  it("stays inside the 0..1 range the holo engine scales by", () => {
-    expect(SECRET_RARITY.strength).toBeGreaterThan(0);
-    expect(SECRET_RARITY.strength).toBeLessThanOrEqual(1);
-    expect(SECRET_RARITY.sparkle).toBeGreaterThanOrEqual(0);
-    expect(SECRET_RARITY.sparkle).toBeLessThanOrEqual(1);
+  it.each(FOILS)("$id stays inside the 0..1 range the holo engine scales by", ({ rarity }) => {
+    expect(rarity.strength).toBeGreaterThan(0);
+    expect(rarity.strength).toBeLessThanOrEqual(1);
+    expect(rarity.sparkle).toBeGreaterThanOrEqual(0);
+    expect(rarity.sparkle).toBeLessThanOrEqual(1);
   });
 
-  it("uses oklch everywhere, like the rest of the palette", () => {
-    for (const colour of [
-      SECRET_RARITY.holoA,
-      SECRET_RARITY.holoB,
-      SECRET_RARITY.border,
-      SECRET_RARITY.accent,
-    ]) {
+  it.each(FOILS)("$id uses oklch everywhere, like the rest of the palette", ({ rarity }) => {
+    for (const colour of [rarity.holoA, rarity.holoB, rarity.border, rarity.accent]) {
       expect(colour).toMatch(/^oklch\(/);
     }
   });
 
-  it("sits outside the tier ladder so it never sorts against the roster", () => {
+  it.each(FOILS)("$id sits outside the tier ladder", ({ rarity }) => {
     const ranks = RARITY_TIERS.map((t) => rarityStyle(t).rank);
-    expect(ranks).not.toContain(SECRET_RARITY.rank);
+    expect(ranks).not.toContain(rarity.rank);
   });
 
+  it.each(FOILS)("$id wears a prism edge — the tell no earned tier may carry", ({ rarity }) => {
+    // Since foils became admin-picked, the green is only the default look; the
+    // prism edge is the invariant that marks a secret across every foil.
+    expect(rarity.prismEdge).toBe(true);
+  });
+
+  it.each(FOILS)("$id still says Secret, never the look's own name", ({ rarity }) => {
+    // SecretBackPanel prints rarity.label. "Aurora" on the card back would leak
+    // authoring vocabulary onto a player's screen.
+    expect(rarity.label).toBe("Secret");
+  });
+
+  it.each(FOILS)("$id wears a pattern the holo engine has a rule for", ({ rarity }) => {
+    const patterns: FoilPattern[] = [
+      "refractor",
+      "prismatic",
+      "scanline",
+      "hazard",
+      "matte",
+      "rosette",
+    ];
+    expect(patterns).toContain(rarity.pattern);
+  });
+});
+
+describe("SECRET_RARITY", () => {
   it("wears a pattern no earned tier can have", () => {
+    // Only the *default* foil holds this — the variants deliberately reuse tier
+    // textures, because the prism edge (above) took over as the universal tell.
     const tierPatterns = RARITY_TIERS.map((t) => rarityStyle(t).pattern);
     expect(tierPatterns).not.toContain(SECRET_RARITY.pattern);
   });
 
-  it("is the only thing in the app with a prism edge", () => {
-    expect(SECRET_RARITY.prismEdge).toBe(true);
+  it("is the only kind of thing in the app with a prism edge", () => {
     for (const tier of RARITY_TIERS) {
       expect(rarityStyle(tier).prismEdge).toBeUndefined();
     }
@@ -72,8 +104,49 @@ describe("secretFoil", () => {
     expect(secretFoil(undefined)).toBe(SECRET_RARITY);
   });
 
+  it.each(["__proto__", "constructor", "toString", "hasOwnProperty"])(
+    "falls back for %s rather than resolving an inherited property",
+    (id) => {
+      // The registry is a plain object literal. Without an own-key check these
+      // stored values would return Object.prototype (or a function) as the
+      // Rarity, and HoloCard would render with every field undefined.
+      expect(secretFoil(id)).toBe(SECRET_RARITY);
+      expect(secretFoil(id, "pulse").holoA).toBe(SECRET_RARITY.holoA);
+    },
+  );
+
   it("resolves the treatment the migration defaults to", () => {
     expect(secretFoil("rosette")).toBe(SECRET_RARITY);
+  });
+
+  it("resolves every foil an admin can pick to its own look", () => {
+    const seen = new Set(FOILS.map(({ rarity }) => `${rarity.holoA}|${rarity.holoB}`));
+    // Distinct gradients, or two options in the picker are secretly the same.
+    expect(seen.size).toBe(SECRET_FOIL_OPTIONS.length);
+  });
+
+  it("carries the chosen border animation on the resolved rarity", () => {
+    expect(secretFoil("rosette", "pulse").borderFx).toBe("pulse");
+    expect(secretFoil("aurora", "shimmer").borderFx).toBe("shimmer");
+    expect(secretFoil("aurora", "steady").borderFx).toBe("steady");
+  });
+
+  it("treats spin, the column default, as the base object unchanged", () => {
+    // holo-card reads `borderFx ?? "spin"`, so an explicit spin needs no variant.
+    expect(secretFoil("rosette", "spin")).toBe(SECRET_RARITY);
+    expect(secretFoil("rosette", "spin").borderFx).toBeUndefined();
+  });
+
+  it("falls back for a border animation nobody has written", () => {
+    expect(secretFoil("rosette", "wobble")).toBe(SECRET_RARITY);
+    expect(secretFoil("rosette", null)).toBe(SECRET_RARITY);
+  });
+
+  it("returns referentially stable objects across calls", () => {
+    // Render sites call this every render; a fresh spread each time would make
+    // the rarity prop churn and defeat holo-card's memo.
+    expect(secretFoil("aurora", "pulse")).toBe(secretFoil("aurora", "pulse"));
+    expect(secretFoil("ember")).toBe(secretFoil("ember"));
   });
 });
 
@@ -116,8 +189,47 @@ describe("every foil pattern has a rule to render it", () => {
     expect(css).toMatch(/^\.holo-prism-edge\s*\{/m);
     expect(css).toMatch(/^\.secret-dupe-shimmer::after\s*\{/m);
   });
+});
 
-  it("still turns the prism edge off under reduced motion", () => {
-    expect(css).toMatch(/\.holo-prism-edge\.is-spinning\s*\{\s*animation:\s*none/);
+describe("every border animation has a rule to render it", () => {
+  // Same runtime-assembly story as the patterns: holo-card maps a BorderFx id to
+  // an is-* class, so an id with no plain rule is a picker option that does
+  // nothing, silently, on a phone, in a garden.
+  const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+  const animated: Exclude<BorderFx, "steady">[] = ["spin", "pulse", "shimmer"];
+  const CLASS: Record<Exclude<BorderFx, "steady">, string> = {
+    spin: "is-spinning",
+    pulse: "is-pulsing",
+    shimmer: "is-shimmering",
+  };
+
+  it("offers exactly the ids the picker offers", () => {
+    expect(SECRET_BORDER_FX_OPTIONS.map((o) => o.id).sort()).toEqual(
+      [...animated, "steady"].sort(),
+    );
+  });
+
+  it.each(animated)("declares a plain animating rule for %s", (fx) => {
+    const rule = new RegExp(
+      String.raw`^\.holo-prism-edge\.${CLASS[fx]}\s*\{[^}]*animation:[^}]*holo-prism-`,
+      "m",
+    );
+    expect(css).toMatch(rule);
+  });
+
+  it.each(animated)("still turns %s off under reduced motion", (fx) => {
+    // Matches the grouped selector list inside the reduced-motion block: no `}`
+    // may sit between the class and the `animation: none` that silences it.
+    const silenced = new RegExp(
+      String.raw`\.holo-prism-edge\.${CLASS[fx]}[^}]*\{[^}]*animation:\s*none`,
+    );
+    expect(css).toMatch(silenced);
+  });
+
+  it("declares no is-* rule nothing can ask for", () => {
+    const declared = [...css.matchAll(/\.holo-prism-edge\.(is-[a-z-]+)/g)].map((m) => m[1]);
+    for (const cls of declared) {
+      expect(Object.values(CLASS)).toContain(cls);
+    }
   });
 });

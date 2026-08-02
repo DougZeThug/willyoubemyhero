@@ -163,6 +163,29 @@ export const SECRET_CARD = {
   backUrl: null,
 };
 
+/** The sealed pack control on /players/pack. */
+export const sealedPack = (page: Page) => page.getByRole("button", { name: /tear the pack open/i });
+
+/**
+ * The one way any spec opens the pack.
+ *
+ * The app's tear handler — `tearOpen` in src/routes/players.pack.tsx — refuses
+ * while the collection is still being reconciled, because without a baseline
+ * there is nothing to deal a pack from. And it refuses *silently*, so
+ * a test that presses Enter too early gets a pack that stays sealed and an
+ * assertion that times out somewhere unrelated. The Collected counter is the
+ * one thing on the screen that says so out loud: it reads a dash until the
+ * reconcile lands. On a loaded CI runner the stubs can answer *after* the
+ * keypress, so the wait is fused to the press rather than left to each test to
+ * remember. The one exception is the fake-clock test in journeys, which keeps
+ * its own press-until-it-takes loop: under an installed clock this wait and
+ * the reconcile would deadlock on each other.
+ */
+export async function tearPack(page: Page) {
+  await expect(page.getByTestId("collected-count")).not.toHaveText(/—/);
+  await sealedPack(page).press("Enter");
+}
+
 /**
  * The path segment after `/_serverFn/` is base64url JSON, e.g.
  * `{"file":"/src/lib/event.functions.ts?tss-serverfn-split",

@@ -11,6 +11,7 @@ import type {
   SecretPullStatusResult,
 } from "./secret-cards-db.server";
 import type { SecretCardView } from "./secret-cards";
+import { SECRET_BORDER_FX_OPTIONS, SECRET_FOIL_OPTIONS } from "./secret-cards";
 
 /**
  * The daily secret card: a permanent league collection nobody can browse.
@@ -101,6 +102,7 @@ function toView(row: SecretCardRow, artUrl: string | null, backUrl: string | nul
     name: row.name,
     flavour: row.flavour,
     foil: row.foil,
+    borderFx: row.border_fx,
     artUrl,
     backUrl,
   };
@@ -340,6 +342,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
       name: row.name,
       flavour: row.flavour,
       foil: row.foil,
+      borderFx: row.border_fx,
       active: row.active,
       weight: row.weight,
       hasArt: !!row.art_path,
@@ -379,6 +382,10 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
 
 const cardName = z.string().trim().min(1).max(60);
 const cardFlavour = z.string().trim().max(240);
+// The columns carry no CHECK, so these enums are the whole enforcement layer —
+// derived from the same option lists the panel renders, so the two cannot drift.
+const cardFoil = z.enum(SECRET_FOIL_OPTIONS.map((o) => o.id) as [string, ...string[]]);
+const cardBorderFx = z.enum(SECRET_BORDER_FX_OPTIONS.map((o) => o.id) as [string, ...string[]]);
 // Same cap as every other upload path: base64 expands by 4/3, so this is the
 // 8.8 MB the client-side check enforces before encoding.
 const cardArt = z.string().min(32).max(12_000_000);
@@ -495,6 +502,8 @@ export const updateSecretCard = createServerFn({ method: "POST" })
         active: z.boolean().optional(),
         // Same bounds as the CHECK constraint on secret_cards.weight.
         weight: z.number().int().min(0).max(10_000).optional(),
+        foil: cardFoil.optional(),
+        borderFx: cardBorderFx.optional(),
       })
       .parse(d),
   )
@@ -508,11 +517,15 @@ export const updateSecretCard = createServerFn({ method: "POST" })
       flavour?: string | null;
       active?: boolean;
       weight?: number;
+      foil?: string;
+      border_fx?: string;
     } = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.flavour !== undefined) patch.flavour = data.flavour;
     if (data.active !== undefined) patch.active = data.active;
     if (data.weight !== undefined) patch.weight = data.weight;
+    if (data.foil !== undefined) patch.foil = data.foil;
+    if (data.borderFx !== undefined) patch.border_fx = data.borderFx;
     if (Object.keys(patch).length === 0) return { ok: true as const };
 
     // .select() after the update so a nonexistent id reports failure rather than

@@ -120,6 +120,37 @@ describe("the RPCs are unreachable with the publishable key", () => {
   });
 });
 
+describe("the look columns", () => {
+  it("defaults a bare insert to the rosette spinner", async () => {
+    const id = await addCard("Gary the Grill");
+    const [row] = await sql<{ foil: string; border_fx: string }>(
+      "SELECT foil, border_fx FROM public.secret_cards WHERE id = $1",
+      [id],
+    );
+    expect(row).toEqual({ foil: "rosette", border_fx: "spin" });
+  });
+
+  it("rejects NULL, which no fallback in TS would catch", async () => {
+    const id = await addCard("Gary the Grill");
+    await expect(
+      sql("UPDATE public.secret_cards SET border_fx = NULL WHERE id = $1", [id]),
+    ).rejects.toThrow(/not-null/);
+  });
+
+  it("accepts an arbitrary string — the vocabulary lives in TS, not a CHECK", async () => {
+    // Deliberate, and worth pinning: an unknown value falls back in secretFoil
+    // the way an unrecognised card_rarity falls back to base, so a vocabulary
+    // change never needs a data migration.
+    const id = await addCard("Gary the Grill");
+    await sql("UPDATE public.secret_cards SET foil = 'from-the-future', border_fx = 'wobble' WHERE id = $1", [id]); // prettier-ignore
+    const [row] = await sql<{ foil: string; border_fx: string }>(
+      "SELECT foil, border_fx FROM public.secret_cards WHERE id = $1",
+      [id],
+    );
+    expect(row).toEqual({ foil: "from-the-future", border_fx: "wobble" });
+  });
+});
+
 describe("pull_secret_card", () => {
   it("hands out a card and records the league day", async () => {
     const id = await addCard("Gary the Grill");

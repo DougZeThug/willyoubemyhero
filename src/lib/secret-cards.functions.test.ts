@@ -41,6 +41,7 @@ const card = (id = CARD_ID, over: Record<string, unknown> = {}) => ({
   name: "Gary the Grill",
   flavour: "Lit at 11am. Still going at 11pm.",
   foil: "rosette",
+  border_fx: "spin",
   art_path: `secrets/${id}/art-1.webp`,
   back_path: null,
   active: true,
@@ -151,13 +152,17 @@ describe("pullSecretCard", () => {
       "storage.createSignedUrl": { data: { signedUrl: "https://signed/art" } },
     });
     const { pullSecretCard } = await import("./secret-cards.functions");
-    const res = await callServerFn<{ ok: true; card: { name: string; artUrl: string } }>(
-      pullSecretCard,
-      { headers: asMe() },
-    );
+    const res = await callServerFn<{
+      ok: true;
+      card: { name: string; artUrl: string; foil: string; borderFx: string };
+    }>(pullSecretCard, { headers: asMe() });
     expect(res.ok).toBe(true);
     expect(res.card.name).toBe("Gary the Grill");
     expect(res.card.artUrl).toBe("https://signed/art");
+    // The look is the admin's choice, so the view must carry it — without these
+    // two, every pulled card silently renders the default green spinner.
+    expect(res.card.foil).toBe("rosette");
+    expect(res.card.borderFx).toBe("spin");
   });
 
   it("reports a duplicate rather than pretending it is new", async () => {
@@ -496,13 +501,17 @@ describe("the admin catalogue", () => {
     });
     const { listSecretCards } = await import("./secret-cards.functions");
     const res = await callServerFn<{
-      cards: { id: string; ownerCount: number }[];
+      cards: { id: string; ownerCount: number; foil: string; borderFx: string }[];
       exhausted: boolean;
     }>(listSecretCards, { headers: asAdmin() });
     expect(res.cards.map((c) => [c.id, c.ownerCount])).toEqual([
       [CARD_ID, 2],
       [OTHER_CARD, 0],
     ]);
+    // The panel's look pickers seed from these — a missing field would render
+    // every select back at its default after a save.
+    expect(res.cards[0].foil).toBe("rosette");
+    expect(res.cards[0].borderFx).toBe("spin");
     // One card nobody has found, so the set is not exhausted.
     expect(res.exhausted).toBe(false);
   });
@@ -625,11 +634,39 @@ describe("the admin catalogue", () => {
     withDb({ "secret_cards.update": { data: { id: CARD_ID } } });
     const { updateSecretCard } = await import("./secret-cards.functions");
     await callServerFn(updateSecretCard, {
-      data: { id: CARD_ID, name: "Renamed", active: false, foil: "nope" },
+      data: { id: CARD_ID, name: "Renamed", active: false, art_path: "secrets/evil.webp" },
       headers: asAdmin(),
     });
     const [update] = mock.callsFor("secret_cards", "update");
+    // The alien key vanished: the patch is a literal, not a spread of the input.
     expect(update.payload).toEqual({ name: "Renamed", active: false });
+  });
+
+  it("saves an admin-picked look, in the column casing the table uses", async () => {
+    withDb({ "secret_cards.update": { data: { id: CARD_ID } } });
+    const { updateSecretCard } = await import("./secret-cards.functions");
+    await callServerFn(updateSecretCard, {
+      data: { id: CARD_ID, foil: "aurora", borderFx: "pulse" },
+      headers: asAdmin(),
+    });
+    const [update] = mock.callsFor("secret_cards", "update");
+    // Pins the camelCase→snake_case mapping: a payload of `borderFx` would be a
+    // column Postgres has never heard of.
+    expect(update.payload).toEqual({ foil: "aurora", border_fx: "pulse" });
+  });
+
+  it.each([
+    ["foil", { foil: "nope" }],
+    ["border animation", { borderFx: "wobble" }],
+  ])("rejects an unknown %s instead of writing it", async (_what, look) => {
+    // The columns carry no CHECK, so the validator is the entire enforcement
+    // layer between a request and a string secretFoil would silently swallow.
+    withDb({ "secret_cards.update": { data: { id: CARD_ID } } });
+    const { updateSecretCard } = await import("./secret-cards.functions");
+    await expect(
+      callServerFn(updateSecretCard, { data: { id: CARD_ID, ...look }, headers: asAdmin() }),
+    ).rejects.toThrow();
+    expect(mock.callsFor("secret_cards", "update")).toHaveLength(0);
   });
 
   it("reports a missing card instead of succeeding against zero rows", async () => {
