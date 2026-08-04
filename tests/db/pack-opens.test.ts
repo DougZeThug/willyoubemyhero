@@ -113,9 +113,18 @@ describe("record_pack_open", () => {
   it("refuses a second row for the same person and day, inserted directly", async () => {
     // The rule is the schema's, not the RPC's.
     await open(IDS.alice);
+    // The RPC writes the *league* day (America/New_York), while this session's
+    // current_date is the UTC date — a different day for the first hours after
+    // midnight UTC, which put the duplicate on its own row and let the insert
+    // through. Read the day back rather than recomputing it.
+    const [{ opened_on }] = await sql<{ opened_on: string }>(
+      "SELECT opened_on FROM public.pack_opens WHERE participant_id = $1",
+      [IDS.alice],
+    );
     await expect(
-      sql("INSERT INTO public.pack_opens (participant_id, opened_on) VALUES ($1, current_date)", [
+      sql("INSERT INTO public.pack_opens (participant_id, opened_on) VALUES ($1, $2)", [
         IDS.alice,
+        opened_on,
       ]),
     ).rejects.toThrow();
   });

@@ -237,7 +237,14 @@ export function PackStand({
       </AnimatePresence>
 
       <div
-        className="relative z-10 flex w-full flex-col items-center gap-3"
+        // touch-pan-y is load-bearing, not styling: touch-action is read at
+        // gesture start off the hit element and its ancestors (see the note in
+        // holo-card.tsx), and without it a horizontal throw starting beside the
+        // card — or on it, when reduced motion strips the card's own
+        // touch-action — is a pan the browser may claim. It answers with
+        // pointercancel, the swipe dies, and with no Next button that is a
+        // player stuck on the card.
+        className="relative z-10 flex w-full touch-pan-y flex-col items-center gap-3"
         onPointerDown={handleSwipeDown}
         onPointerUp={handleSwipeUp}
         onPointerCancel={() => {
