@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowRight } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
 import { SealedBack } from "@/components/pack-card-back";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
+import { swipeDirection } from "@/lib/zoom";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretSlot } from "@/lib/pack";
 import { packedByLabel } from "@/lib/card-pulls";
@@ -170,6 +170,50 @@ export function PackStand({
 
   // The card is mid-ceremony: turned over already in everything but appearance.
   const holding = onSecret ? secretPeeking : peeking;
+  const canAdvance = isRevealed && !busy && !holding;
+
+  // The step gesture. Swiping the card away is how you move on — there is no
+  // Next button — so the whole stand reads the throw, not just the card.
+  const swipeRef = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
+  // A swipe can end in a click the browser synthesises over whatever the finger
+  // lifted on, and the card underneath must not also treat that as a tap —
+  // same trap useCardZoom swallows. Cleared again on the next pointerdown,
+  // because a touch drag produces no click at all and a stale flag here would
+  // eat the next genuine tap.
+  const swallowClickRef = useRef(false);
+
+  function handleSwipeDown(e: React.PointerEvent) {
+    swallowClickRef.current = false;
+    swipeRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at: Date.now() };
+  }
+  function handleSwipeUp(e: React.PointerEvent) {
+    const d = swipeRef.current;
+    swipeRef.current = null;
+    if (!d || d.id !== e.pointerId) return;
+    const dir = swipeDirection(e.clientX - d.x, e.clientY - d.y, Date.now() - d.at);
+    if (dir === 0) return;
+    // Swallowed for either direction, advanced or not: a throw across a
+    // face-down card must not fall through and run the reveal ceremony.
+    swallowClickRef.current = true;
+    if (dir === 1 && canAdvance) onAdvance();
+  }
+  function handleSwipeClickCapture(e: React.MouseEvent) {
+    if (!swallowClickRef.current) return;
+    swallowClickRef.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  // Desktop has no natural swipe; the arrow key is the same step.
+  useEffect(() => {
+    if (!canAdvance) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") onAdvance();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canAdvance, onAdvance]);
+
   const rarity = onSecret ? secretRarity : (rarities.get(ep?.id ?? "") ?? rarityStyle("base"));
   const name = onSecret ? (secret?.name ?? "Secret") : (ep?.participant?.name ?? "—");
   const showStats = isRevealed && settled;
@@ -192,7 +236,15 @@ export function PackStand({
         )}
       </AnimatePresence>
 
-      <div className="relative z-10 flex w-full flex-col items-center gap-3">
+      <div
+        className="relative z-10 flex w-full flex-col items-center gap-3"
+        onPointerDown={handleSwipeDown}
+        onPointerUp={handleSwipeUp}
+        onPointerCancel={() => {
+          swipeRef.current = null;
+        }}
+        onClickCapture={handleSwipeClickCapture}
+      >
         <div className="text-center">
           <div
             className="font-display text-[10px] font-black uppercase tracking-[0.3em]"
@@ -207,10 +259,10 @@ export function PackStand({
                 ? secretSlot === "pending"
                   ? "Checking the wrapper…"
                   : isRevealed
-                    ? ""
+                    ? "Swipe to see the whole pack"
                     : "Not on the roster. One a day, and it's yours for good."
                 : isRevealed
-                  ? "Turn it again for the back"
+                  ? "Swipe for the next card · tap for the back"
                   : "Tap the card to turn it"}
           </p>
           {(peeking || secretPeeking) && (
@@ -236,8 +288,8 @@ export function PackStand({
             transition={{ type: "spring", stiffness: 240, damping: 26 }}
             // Sized off the viewport's *height*, not just its width. HoloCard
             // derives its height from its width via aspect-ratio, so on a short
-            // phone a 300px-wide card is 420px tall and pushes the Next button
-            // below the fold — the one control the sequence cannot do without.
+            // phone a 300px-wide card is 420px tall and pushes the name and the
+            // step dots below the fold.
             className="w-full max-w-[min(280px,calc((100svh-21rem)*5/7))]"
           >
             {onSecret && secretSlot === "pending" ? (
@@ -309,14 +361,17 @@ export function PackStand({
                         ? onRevealSecret
                         : () => onReveal(cursor)
                   }
+                  // A horizontal throw is the stand's own gesture now — it means
+                  // "next card", read by the wrapper above — so the card must not
+                  // also answer to it. Same split as the player detail page.
+                  flickToFlip={false}
                 />
               </motion.div>
             )}
           </motion.div>
         </AnimatePresence>
 
-        {/* Reserved height, so turning a card never shunts the button under a thumb
-            that is already on its way there. */}
+        {/* Reserved height, so turning a card never shunts the dots below it. */}
         <div className="flex min-h-12 flex-col items-center justify-start gap-0.5 text-center">
           <AnimatePresence>
             {isRevealed && (
@@ -358,21 +413,6 @@ export function PackStand({
           at={cursor}
           accent={onSecret ? secretRarity.accent : "oklch(0.82 0.14 210)"}
         />
-
-        {isRevealed && (
-          <button
-            onClick={onAdvance}
-            // The automatic run owns the cursor while it is going. Letting this
-            // through mid-sequence moves the stand out from under the card the
-            // run is about to turn.
-            disabled={busy}
-            className="neon-btn !px-4 !py-2 !text-xs disabled:opacity-40"
-            data-testid="pack-advance"
-          >
-            {onSecret ? "See the whole pack" : "Next card"}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        )}
       </div>
     </div>
   );

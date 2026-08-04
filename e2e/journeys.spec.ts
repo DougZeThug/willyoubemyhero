@@ -232,6 +232,25 @@ test.describe("opening a pack", () => {
   const standCard = (page: import("@playwright/test").Page) =>
     page.locator('[role="button"][aria-pressed]').first();
 
+  /** The line that says the card on the stand is revealed and swiping steps on. */
+  const swipeHint = (page: import("@playwright/test").Page) =>
+    page.getByText(/swipe for the next card/i);
+
+  /**
+   * Step to the next card the way a thumb does: a fast leftward throw across
+   * the revealed card. There is no Next button — the stand reads the gesture
+   * with swipeDirection() from src/lib/zoom.ts, which wants ≥48px of mostly
+   * horizontal travel inside 700ms.
+   */
+  async function swipeNext(page: import("@playwright/test").Page) {
+    const box = (await standCard(page).boundingBox())!;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width * 0.85, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.15, y, { steps: 4 });
+    await page.mouse.up();
+  }
+
   /** Where the perforation runs, as a fraction of the pack's height. */
   const TEAR_LINE = 0.15;
 
@@ -361,7 +380,7 @@ test.describe("opening a pack", () => {
     // Turn the first card over and stop there, the way you would to read it.
     await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
     await standCard(page).click();
-    await expect(page.getByTestId("pack-advance")).toBeVisible();
+    await expect(swipeHint(page)).toBeVisible();
 
     await page.reload();
 
@@ -369,7 +388,7 @@ test.describe("opening a pack", () => {
     // "finished with it", so resuming from it dropped you on card 2 and card 1
     // was simply gone. The stored cursor is what distinguishes them.
     await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
-    await expect(page.getByTestId("pack-advance")).toBeVisible();
+    await expect(swipeHint(page)).toBeVisible();
   });
 
   test("counts a card once however many times it is tapped mid-ceremony", async ({ page }) => {
@@ -380,7 +399,8 @@ test.describe("opening a pack", () => {
     for (const n of [1, 2]) {
       await expect(page.getByText(new RegExp(`card ${n} of 3`, "i"))).toBeVisible();
       await standCard(page).click();
-      await page.getByTestId("pack-advance").click();
+      await expect(swipeHint(page)).toBeVisible();
+      await swipeNext(page);
     }
     await expect(page.getByText(/card 3 of 3/i)).toBeVisible();
 
@@ -391,7 +411,7 @@ test.describe("opening a pack", () => {
     await card.click({ force: true });
     await card.click({ force: true });
 
-    await expect(page.getByTestId("pack-advance")).toBeVisible({ timeout: 15_000 });
+    await expect(swipeHint(page)).toBeVisible({ timeout: 15_000 });
     // Long enough for a second and third 900ms hold to have finished too. The
     // first ceremony completing is what makes the button appear, so reading
     // straight away would sample the row before any duplicate could land in it.
