@@ -194,7 +194,6 @@ function HoloCardImpl({
   backUrl,
   name,
   rarity,
-  cacheKey,
   flipped,
   onFlippedChange,
   interactive = true,

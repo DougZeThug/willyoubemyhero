@@ -92,7 +92,6 @@ export function RosterFilmstrip({
                   backUrl={null}
                   name={entry.name}
                   rarity={entry.rarity}
-                  cacheKey={entry.id}
                   intensity="subtle"
                   interactive={false}
                 />

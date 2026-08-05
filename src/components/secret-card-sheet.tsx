@@ -81,7 +81,6 @@ export function SecretCardSheet({
                     backUrl={backUrl}
                     name={card.name}
                     rarity={rarity}
-                    cacheKey={card.id}
                     tilt="hero"
                     flipped={flipped}
                     onFlippedChange={setFlipped}
