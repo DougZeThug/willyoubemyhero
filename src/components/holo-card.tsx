@@ -231,12 +231,6 @@ function HoloCardImpl({
   // the art is small enough that off-screen work is pure waste.
   const eager = intensity === "full";
 
-  // Reading straight out of the in-memory cache means a revisit lays the grid out
-  // at the right size on the first render, with no async round trip and no reflow.
-  const [aspect, setAspect] = useState<number | null>(
-    () => cachedCardMeta(cacheKey)?.aspect ?? null,
-  );
-
   const imgSizes = eager ? CARD_SIZES : CARD_GRID_SIZES;
   const front = useSteppedImage(frontUrl, eager);
   const back = useSteppedImage(backUrl, eager);
@@ -257,33 +251,6 @@ function HoloCardImpl({
   const showBack = faceDown ? !isFlipped : isFlipped;
   // A generated back is just as flippable as uploaded back artwork.
   const canFlip = !!backUrl || !!backContent;
-
-  // Restore the cached aspect ratio before the image loads so the grid never reflows.
-  useEffect(() => {
-    if (!cacheKey || aspect != null) return;
-    let cancelled = false;
-    primeCardMeta().then(() => {
-      const meta = cachedCardMeta(cacheKey);
-      if (!cancelled && meta?.aspect) setAspect(meta.aspect);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // Only ever runs for a card whose ratio is still unknown; re-running it once
-    // the image has reported its own size would be pointless work.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey]);
-
-  const onImageLoad = useCallback(
-    (e: React.SyntheticEvent<HTMLImageElement>) => {
-      const img = e.currentTarget;
-      if (!img.naturalWidth || !img.naturalHeight) return;
-      const next = img.naturalWidth / img.naturalHeight;
-      setAspect(next);
-      if (cacheKey) void saveCardMeta(cacheKey, { aspect: next });
-    },
-    [cacheKey],
-  );
 
   // px/py are 0..1 across the card. Writing CSS variables directly keeps this
   // off React's render path entirely. `active` is 1 while the card is being
