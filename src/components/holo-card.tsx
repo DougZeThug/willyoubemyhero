@@ -1,15 +1,19 @@
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { initialsOf } from "@/lib/format";
-import { cachedCardMeta, primeCardMeta, saveCardMeta } from "@/lib/card-collection";
 import { playFlip } from "@/lib/card-sfx";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { urlFromSet, srcSetFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
 import type { BorderFx, Rarity } from "@/lib/card-rarity";
 
-/** Standard trading card is 2.5in x 3.5in. Used until the real art reports its size. */
-const DEFAULT_ASPECT = 5 / 7;
+/**
+ * Standard trading card is 2.5in x 3.5in, and every card in the app is that
+ * shape — full stop. The frame used to take its ratio from whatever the art
+ * happened to be exported at, which left the vault grid with tiles of subtly
+ * different heights. Off-ratio art is cropped to the frame by `object-cover`.
+ */
+const CARD_ASPECT = 5 / 7;
 
 /**
  * How wide a card renders, for the browser's `srcSet` pick.
