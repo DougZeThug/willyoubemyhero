@@ -972,6 +972,7 @@ export type Database = {
           active: boolean
           art_path: string | null
           back_path: string | null
+          border_fx: string
           created_at: string
           flavour: string | null
           foil: string
@@ -984,6 +985,7 @@ export type Database = {
           active?: boolean
           art_path?: string | null
           back_path?: string | null
+          border_fx?: string
           created_at?: string
           flavour?: string | null
           foil?: string
@@ -996,6 +998,7 @@ export type Database = {
           active?: boolean
           art_path?: string | null
           back_path?: string | null
+          border_fx?: string
           created_at?: string
           flavour?: string | null
           foil?: string
