@@ -142,8 +142,6 @@ export type HoloCardProps = {
   backUrl: ImageUrlSet | string | null;
   name: string;
   rarity: Rarity;
-  /** Stable id used to cache the measured aspect ratio between visits. */
-  cacheKey?: string;
   /** Controlled flip state. Omit for an uncontrolled card. */
   flipped?: boolean;
   onFlippedChange?: (next: boolean) => void;
