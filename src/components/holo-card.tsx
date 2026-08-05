@@ -1,4 +1,4 @@
-import { memo, useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { initialsOf } from "@/lib/format";
 import { playFlip } from "@/lib/card-sfx";
@@ -524,7 +524,7 @@ function HoloCardImpl({
     // 250ms, a 1100ms turn swaps faces a third of the way in and WebKit shows the
     // away side mirrored through the card.
     "--holo-flip-half": `${Math.round(flipMs / 2)}ms`,
-    aspectRatio: aspect ?? DEFAULT_ASPECT,
+    aspectRatio: CARD_ASPECT,
     // "pan-y" for a card in a scrolling grid; "none" for a hero card, which owns
     // the whole gesture on both axes.
     //
@@ -644,7 +644,6 @@ function HoloCardImpl({
                 srcSet={frontSrcSet}
                 sizes={imgSizes}
                 alt={`${name} card front`}
-                onLoad={onImageLoad}
                 onError={front.onError}
                 // A vault grid is thirty cards deep. Fetching and decoding the
                 // ones below the fold up front is what starves the handful that
