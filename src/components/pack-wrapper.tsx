@@ -366,7 +366,10 @@ export function PackWrapper({
         // No overflow-hidden and no background: the shards have to leave this box,
         // and the cards behind it have to be occluded by it in 3D rather than
         // clipped by it in 2D. Both live on the inner box below.
-        "hud-glow relative aspect-[3/4] w-full max-w-xs rounded-2xl border border-primary/40",
+        // Card-shaped, not pack-shaped: the wax foil sits directly over the
+        // universal back, and a 3/4 wrapper made the sealed pack a different
+        // silhouette from the cards that come out of it.
+        "hud-glow relative aspect-[5/7] w-full max-w-xs rounded-2xl border border-primary/40",
         sealed && "cursor-grab touch-none active:cursor-grabbing",
       )}
       style={{

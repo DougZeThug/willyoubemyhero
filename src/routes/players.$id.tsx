@@ -411,7 +411,6 @@ function PlayerCardPage() {
                     backUrl={urls?.back ?? null}
                     name={name}
                     rarity={rarity}
-                    cacheKey={ep.id}
                     flipped={flipped}
                     onFlippedChange={setFlipped}
                     gyro={gyro}

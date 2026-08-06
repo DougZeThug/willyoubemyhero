@@ -237,7 +237,6 @@ function PlayersPage() {
                       backUrl={null}
                       name={s.name}
                       rarity={rarity}
-                      cacheKey={s.id}
                       intensity="subtle"
                       interactive={false}
                       onClick={() => setOpenSecret(ownedSecrets.indexOf(s))}
@@ -291,7 +290,6 @@ function PlayersPage() {
                   backUrl={null}
                   name={name}
                   rarity={rarity}
-                  cacheKey={p.id}
                   intensity="subtle"
                   className="transition-transform group-hover:scale-[1.02]"
                 />

@@ -88,6 +88,10 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(fun
         style={{
           flex: 1,
           minHeight: 0,
+          // Standard 2.5 x 3.5 card, so the exported image shows the same
+          // proportions the app does.
+          aspectRatio: "5 / 7",
+          alignSelf: "center",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

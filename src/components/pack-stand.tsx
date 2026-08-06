@@ -335,7 +335,6 @@ export function PackStand({
                   }
                   name={name}
                   rarity={rarity}
-                  cacheKey={onSecret ? (secret?.id ?? "secret") : ep!.id}
                   tilt="hero"
                   flipMs={onSecret ? SECRET_FLIP_MS : FLIP_MS}
                   faceDown={!isRevealed}

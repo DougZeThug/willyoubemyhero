@@ -178,7 +178,6 @@ function SecretSlotView({
               backUrl={universalBack}
               name={card.name}
               rarity={rarity}
-              cacheKey={card.id}
               tilt="hero"
               backContent={<SecretBackPanel card={card} rarity={rarity} />}
             />
@@ -1072,7 +1071,6 @@ function PackPage() {
                         backUrl={cards.data?.[ep.id]?.back ?? null}
                         name={name}
                         rarity={rarity}
-                        cacheKey={ep.id}
                         backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
                       />
                     </motion.div>

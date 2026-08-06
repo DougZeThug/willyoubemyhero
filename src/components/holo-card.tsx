@@ -1,15 +1,19 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { initialsOf } from "@/lib/format";
-import { cachedCardMeta, primeCardMeta, saveCardMeta } from "@/lib/card-collection";
 import { playFlip } from "@/lib/card-sfx";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { urlFromSet, srcSetFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
 import type { BorderFx, Rarity } from "@/lib/card-rarity";
 
-/** Standard trading card is 2.5in x 3.5in. Used until the real art reports its size. */
-const DEFAULT_ASPECT = 5 / 7;
+/**
+ * Standard trading card is 2.5in x 3.5in, and every card in the app is that
+ * shape — full stop. The frame used to take its ratio from whatever the art
+ * happened to be exported at, which left the vault grid with tiles of subtly
+ * different heights. Off-ratio art is cropped to the frame by `object-cover`.
+ */
+const CARD_ASPECT = 5 / 7;
 
 /**
  * How wide a card renders, for the browser's `srcSet` pick.
@@ -138,8 +142,6 @@ export type HoloCardProps = {
   backUrl: ImageUrlSet | string | null;
   name: string;
   rarity: Rarity;
-  /** Stable id used to cache the measured aspect ratio between visits. */
-  cacheKey?: string;
   /** Controlled flip state. Omit for an uncontrolled card. */
   flipped?: boolean;
   onFlippedChange?: (next: boolean) => void;
@@ -192,7 +194,6 @@ function HoloCardImpl({
   backUrl,
   name,
   rarity,
-  cacheKey,
   flipped,
   onFlippedChange,
   interactive = true,
@@ -227,12 +228,6 @@ function HoloCardImpl({
   // the art is small enough that off-screen work is pure waste.
   const eager = intensity === "full";
 
-  // Reading straight out of the in-memory cache means a revisit lays the grid out
-  // at the right size on the first render, with no async round trip and no reflow.
-  const [aspect, setAspect] = useState<number | null>(
-    () => cachedCardMeta(cacheKey)?.aspect ?? null,
-  );
-
   const imgSizes = eager ? CARD_SIZES : CARD_GRID_SIZES;
   const front = useSteppedImage(frontUrl, eager);
   const back = useSteppedImage(backUrl, eager);
@@ -253,33 +248,6 @@ function HoloCardImpl({
   const showBack = faceDown ? !isFlipped : isFlipped;
   // A generated back is just as flippable as uploaded back artwork.
   const canFlip = !!backUrl || !!backContent;
-
-  // Restore the cached aspect ratio before the image loads so the grid never reflows.
-  useEffect(() => {
-    if (!cacheKey || aspect != null) return;
-    let cancelled = false;
-    primeCardMeta().then(() => {
-      const meta = cachedCardMeta(cacheKey);
-      if (!cancelled && meta?.aspect) setAspect(meta.aspect);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // Only ever runs for a card whose ratio is still unknown; re-running it once
-    // the image has reported its own size would be pointless work.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey]);
-
-  const onImageLoad = useCallback(
-    (e: React.SyntheticEvent<HTMLImageElement>) => {
-      const img = e.currentTarget;
-      if (!img.naturalWidth || !img.naturalHeight) return;
-      const next = img.naturalWidth / img.naturalHeight;
-      setAspect(next);
-      if (cacheKey) void saveCardMeta(cacheKey, { aspect: next });
-    },
-    [cacheKey],
-  );
 
   // px/py are 0..1 across the card. Writing CSS variables directly keeps this
   // off React's render path entirely. `active` is 1 while the card is being
@@ -553,7 +521,7 @@ function HoloCardImpl({
     // 250ms, a 1100ms turn swaps faces a third of the way in and WebKit shows the
     // away side mirrored through the card.
     "--holo-flip-half": `${Math.round(flipMs / 2)}ms`,
-    aspectRatio: aspect ?? DEFAULT_ASPECT,
+    aspectRatio: CARD_ASPECT,
     // "pan-y" for a card in a scrolling grid; "none" for a hero card, which owns
     // the whole gesture on both axes.
     //
@@ -673,7 +641,6 @@ function HoloCardImpl({
                 srcSet={frontSrcSet}
                 sizes={imgSizes}
                 alt={`${name} card front`}
-                onLoad={onImageLoad}
                 onError={front.onError}
                 // A vault grid is thirty cards deep. Fetching and decoding the
                 // ones below the fold up front is what starves the handful that
