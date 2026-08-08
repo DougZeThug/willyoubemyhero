@@ -32,7 +32,13 @@ export type Roster = { id: string; name: string }[];
  * Square 44px thumbnails made every card in the set look the same at a glance,
  * which is the one job a thumbnail has in a list you are scrolling on a phone.
  */
-export function SecretArtThumb({ card, className }: { card: SecretCardAdminRow; className?: string }) {
+export function SecretArtThumb({
+  card,
+  className,
+}: {
+  card: SecretCardAdminRow;
+  className?: string;
+}) {
   return card.artUrl ? (
     <img
       src={card.artUrl}
@@ -166,7 +172,10 @@ export function SecretCardTile({
               aria-label={`Pull weight for ${card.name}`}
             />
             {savingWeight && (
-              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+              <Loader2
+                className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
+                aria-hidden
+              />
             )}
           </span>
         </label>
