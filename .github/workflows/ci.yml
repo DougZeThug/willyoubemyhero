@@ -51,11 +51,11 @@ jobs:
       # in seconds.
       - name: Check lockfile is registry-portable
         run: |
-          if grep -nE '", "https://' bun.lock; then
-            echo "::error file=bun.lock::bun.lock pins packages to absolute tarball URLs. Re-resolve against the public registry so the resolution field is \"\"."
+          if grep -nE '", "https://|pkg\.dev|sandbox-npm-cache' bun.lock; then
+            echo "::error file=bun.lock::bun.lock contains an absolute or private-mirror package resolution. Re-resolve with the public registry configured in bunfig.toml so the resolution field is \"\"."
             exit 1
           fi
-          echo "bun.lock records no absolute tarball hosts."
+          echo "bun.lock records no absolute or private-mirror package hosts."
 
       # bunfig.toml's minimumReleaseAge is a resolution-time guard; a frozen
       # install re-resolves nothing, so it cannot affect this step. The build
