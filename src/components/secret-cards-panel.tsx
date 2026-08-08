@@ -344,6 +344,8 @@ export function SecretCardsPanel() {
     try {
       const res = await deleteFn({ data: { id: card.id } });
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      // The sheet is the only place Remove lives now, so it has to close itself.
+      setEditing(null);
       toast.success(
         res.ok ? "Removed from the set" : "Retired — it stays in the vaults of whoever pulled it",
       );
