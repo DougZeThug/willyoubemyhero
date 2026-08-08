@@ -62,10 +62,16 @@ describe("preloadCard", () => {
     expect(instances[0].sizes).toBe(CARD_SIZES);
   });
 
+  // A CORS-mode fetch and a no-CORS fetch of the same signed URL are two
+  // different cache entries, so this has to match HoloCard's <img>, which sets
+  // no crossOrigin at all — the card is never drawn to a canvas, and requiring
+  // CORS can fail an otherwise valid image outright when the object and
+  // transform endpoints differ. Warming the wrong mode is a fetch nobody uses
+  // plus a fetch during the flip, which is what preloading exists to prevent.
   it("requests it the same way the card will", async () => {
     const instances = stubImage(() => Promise.resolve());
     await preloadCard(SET);
-    expect(instances[0].crossOrigin).toBe("anonymous");
+    expect(instances[0].crossOrigin).toBeNull();
   });
 
   it("takes a bare url too, for art that has no size set", async () => {
