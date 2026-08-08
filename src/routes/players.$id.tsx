@@ -10,6 +10,7 @@ import {
   IdCard,
   Link as LinkIcon,
   MoreHorizontal,
+  PackageOpen,
   QrCode,
   RotateCw,
   Share2,
@@ -18,8 +19,9 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
+import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
+import { LockedCard } from "@/components/locked-card";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { requestGyroPermission } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
@@ -59,6 +61,9 @@ import { cn } from "@/lib/utils";
  */
 const revealed = new Set<string>();
 
+/** The bezel a face-down slot wears. Its own tier's colour would announce it. */
+const LOCKED_RARITY = rarityStyle("base");
+
 export const Route = createFileRoute("/players/$id")({
   head: () => ({
     meta: [
@@ -92,6 +97,8 @@ function PlayerCardPage() {
   const { event, bundle, loading } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
+  // The event's back, never this player's own — see the note on useEventCardBack.
+  const cardBack = useEventCardBack(event?.id ?? null);
   const social = useEventSocial(event?.id ?? null);
   const awards = useEventAwards(event?.id ?? null);
   const pullCounts = useCardPullCounts(event?.id ?? null);
@@ -159,12 +166,23 @@ function PlayerCardPage() {
   const rarity = (ep && rarities.get(ep.id)) ?? rarityStyle("base");
   const stats = useMemo(() => cardStats(bundle, ep?.participant_id), [bundle, ep?.participant_id]);
 
+  // The art is the thing a pack buys, so the card stays face-down until this
+  // device has actually pulled it. Everything else on the page — the tier, the
+  // time, the rank, the trash talk — is already public on /leaderboard and stays.
+  //
+  // An unready frame counts as locked: `useMyCollection` hands out an empty
+  // collection until the server has reconciled, and locked→unlocked popping in is
+  // a reveal, while unlocked→locked is a leak.
+  const locked = !mine.ready || !ep || !collection[ep.id];
+
   // Landing on a card is an event: the tier chime, and a burst in the tier's own
   // colour for the two tiers worth celebrating. A cold page load has no user
   // gesture behind it, so the AudioContext stays suspended and this is silent —
   // which is the correct behaviour, not something to work around.
   useEffect(() => {
-    if (!ep || revealed.has(ep.id)) return;
+    // Never on a locked card. Landing on a face-down slot is the opposite of a
+    // payoff, and a chime and confetti over it would celebrate nothing.
+    if (!ep || locked || revealed.has(ep.id)) return;
     revealed.add(ep.id);
     playReveal(rarity.tier);
     if (rarity.tier !== "champion" && rarity.tier !== "podium") return;
@@ -182,7 +200,7 @@ function PlayerCardPage() {
     return () => {
       cancelled = true;
     };
-  }, [ep, rarity.tier, rarity.accent, rarity.holoA, rarity.holoB]);
+  }, [ep, locked, rarity.tier, rarity.accent, rarity.holoA, rarity.holoB]);
 
   // Rolled rather than snapped into place. Both return the target verbatim under
   // reduced motion, and null for a player with no official run.
@@ -192,13 +210,19 @@ function PlayerCardPage() {
   // Same running order as prev/next, so the strip and the chevrons agree.
   const filmstrip = useMemo(
     () =>
-      roster.map((p) => ({
-        id: p.id,
-        name: p.participant?.name ?? "—",
-        frontUrl: cards.data?.[p.id]?.front ?? null,
-        rarity: rarities.get(p.id) ?? rarityStyle("base"),
-      })),
-    [roster, cards.data, rarities],
+      roster.map((p) => {
+        // A card you have not packed is a name on the strip, not its art — and
+        // not its tier colour either. `RosterFilmstrip` already draws an
+        // initials chip for an entry with no art, so no art is all it needs.
+        const own = mine.ready && !!collection[p.id];
+        return {
+          id: p.id,
+          name: p.participant?.name ?? "—",
+          frontUrl: own ? (cards.data?.[p.id]?.front ?? null) : null,
+          rarity: own ? (rarities.get(p.id) ?? LOCKED_RARITY) : LOCKED_RARITY,
+        };
+      }),
+    [roster, cards.data, rarities, mine.ready, collection],
   );
 
   const comparePool = useMemo(
@@ -396,33 +420,51 @@ function PlayerCardPage() {
               collected={collection[ep.id] ?? null}
               leagueLine={packedByLabel(pullCounts.data?.[ep.id])}
             >
-              <ZoomPanFrame
-                onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
-                onTap={() => setFlipped((f) => !f)}
-                canNavigate={roster.length > 1}
-                prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
-                nextLabel={`Next: ${next?.participant?.name ?? ""}`}
-                position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
-                hint="Pinch to zoom · swipe for the next card"
-              >
-                {({ zoomed }) => (
-                  <HoloCard
-                    frontUrl={urls?.front ?? null}
-                    backUrl={urls?.back ?? null}
+              {/* The slab stays either way — its plate carries the serial and
+                  the collection mark, and both are still true of a card you have
+                  not pulled. No ZoomPanFrame around a locked one: there is
+                  nothing to pinch, and nothing under the swipe worth reaching. */}
+              {locked ? (
+                <div className="flex flex-col items-center gap-3">
+                  <LockedCard
+                    back={cardBack.data?.urls ?? null}
                     name={name}
-                    rarity={rarity}
-                    flipped={flipped}
-                    onFlippedChange={setFlipped}
-                    gyro={gyro}
-                    tilt="hero"
-                    // While magnified the frame owns the pointer; a card leaning
-                    // under a pan would make the thing you are reading move.
-                    interactive={!zoomed}
-                    flickToFlip={false}
-                    backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+                    rarity={LOCKED_RARITY}
                   />
-                )}
-              </ZoomPanFrame>
+                  <Link to="/players/pack" className="neon-btn !px-4 !py-2 !text-xs">
+                    <PackageOpen className="h-4 w-4" />
+                    Rip a pack to see this card
+                  </Link>
+                </div>
+              ) : (
+                <ZoomPanFrame
+                  onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
+                  onTap={() => setFlipped((f) => !f)}
+                  canNavigate={roster.length > 1}
+                  prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
+                  nextLabel={`Next: ${next?.participant?.name ?? ""}`}
+                  position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
+                  hint="Pinch to zoom · swipe for the next card"
+                >
+                  {({ zoomed }) => (
+                    <HoloCard
+                      frontUrl={urls?.front ?? null}
+                      backUrl={urls?.back ?? null}
+                      name={name}
+                      rarity={rarity}
+                      flipped={flipped}
+                      onFlippedChange={setFlipped}
+                      gyro={gyro}
+                      tilt="hero"
+                      // While magnified the frame owns the pointer; a card leaning
+                      // under a pan would make the thing you are reading move.
+                      interactive={!zoomed}
+                      flickToFlip={false}
+                      backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+                    />
+                  )}
+                </ZoomPanFrame>
+              )}
             </CardSlab>
           </div>
           <NavButton
@@ -468,16 +510,20 @@ function PlayerCardPage() {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          {/* The three that act on the card itself are dead while it is
+              face-down — there is no face to turn, export or line up against
+              another. The settings below them still apply to the card you get. */}
           <ActionButton
             onClick={() => setFlipped((f) => !f)}
             active={flipped}
+            disabled={locked}
             icon={<RotateCw className="h-3.5 w-3.5" />}
           >
             {flipped ? "Front" : urls?.back ? "Flip" : "Stats"}
           </ActionButton>
           <ActionButton
             onClick={onShare}
-            disabled={sharing}
+            disabled={locked || sharing}
             icon={<Share2 className="h-3.5 w-3.5" />}
           >
             {sharing ? "Rendering…" : "Share"}
@@ -486,7 +532,7 @@ function PlayerCardPage() {
             onClick={() => setComparing(true)}
             active={!!vs}
             icon={<GitCompareArrows className="h-3.5 w-3.5" />}
-            disabled={roster.length < 2}
+            disabled={locked || roster.length < 2}
           >
             Compare
           </ActionButton>
@@ -618,10 +664,14 @@ function PlayerCardPage() {
         }
       />
 
-      {/* Offscreen 1080x1350 composite that html-to-image rasterises. */}
-      <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
-        <ShareCard ref={shareRef} data={shareData} />
-      </div>
+      {/* Offscreen 1080x1350 composite that html-to-image rasterises. Never
+          mounted for a locked card: it is an export of the very art being
+          withheld, and Share is disabled anyway. */}
+      {!locked && (
+        <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
+          <ShareCard ref={shareRef} data={shareData} />
+        </div>
+      )}
     </div>
   );
 }

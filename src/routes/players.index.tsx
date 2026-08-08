@@ -2,8 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Users, Shuffle, PackageOpen, Layers, Award, Check, UserRoundCheck } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventCardUrls } from "@/hooks/use-photo-urls";
+import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
+import { LockedCard } from "@/components/locked-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
@@ -44,9 +45,27 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "rarity", label: "Rarity" },
 ];
 
+/**
+ * Where a card you have not packed sits in the rarity sort.
+ *
+ * Its real rank, not a sentinel, would float the locked champion to position one
+ * and name it — the sort itself becoming the leak the face-down slot exists to
+ * close. One shared rank for every locked card, so they fall back to the name
+ * tie-break and say nothing about each other either. Well clear of the real ones,
+ * which run 0..9.
+ */
+const LOCKED_RARITY_RANK = 99;
+
+/** The bezel a locked slot wears. Its own tier's colour would announce it. */
+const LOCKED_RARITY = rarityStyle("base");
+
 function PlayersPage() {
   const { event, bundle } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
+  // Hoisted once for the whole grid, and the *event's* back rather than each
+  // player's — see the note on useEventCardBack. A player's own back on their
+  // locked slot would be half the reveal, printed on the thing hiding it.
+  const cardBack = useEventCardBack(event?.id ?? null);
   const [sort, setSort] = useState<SortKey>("name");
   const [shuffleSeed, setShuffleSeed] = useState(0);
   const member = useMemberSession();
@@ -71,6 +90,13 @@ function PlayersPage() {
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
+  // Off the bundle rather than off `rows`, which now needs the collection to sort
+  // and cannot also be what the collection is asked about. The hook only ever
+  // builds a Set from this, so the order the grid happens to be in is irrelevant.
+  const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
+  const mine = useMyCollection(event?.id ?? null, rosterIds);
+  const collected = mine.collection;
+
   const rows = useMemo(() => {
     const list = [...(bundle?.participants ?? [])];
     // Seeded, so a realtime bundle update during the combine doesn't silently
@@ -86,20 +112,19 @@ function PlayersPage() {
             (a.selected_draft_position ?? Number.MAX_SAFE_INTEGER) -
             (b.selected_draft_position ?? Number.MAX_SAFE_INTEGER),
         );
-      case "rarity":
-        return list.sort(
-          (a, b) =>
-            (rarities.get(a.id)?.rank ?? 9) - (rarities.get(b.id)?.rank ?? 9) ||
-            byName(a).localeCompare(byName(b)),
-        );
+      case "rarity": {
+        // Bucketed only once the collection has settled — same hazard as the
+        // seeded shuffle above, and the grid re-sorting under a thumb the moment
+        // the server answers is exactly it. Before then every card sorts on its
+        // real rank, which is what it did before locking existed.
+        const rank = (p: (typeof list)[number]) =>
+          mine.ready && !collected[p.id] ? LOCKED_RARITY_RANK : (rarities.get(p.id)?.rank ?? 9);
+        return list.sort((a, b) => rank(a) - rank(b) || byName(a).localeCompare(byName(b)));
+      }
       default:
         return list.sort((a, b) => byName(a).localeCompare(byName(b)));
     }
-  }, [bundle, event?.id, sort, shuffleSeed, rarities]);
-
-  const rosterIds = useMemo(() => rows.map((p) => p.id), [rows]);
-  const mine = useMyCollection(event?.id ?? null, rosterIds);
-  const collected = mine.collection;
+  }, [bundle, event?.id, sort, shuffleSeed, rarities, mine.ready, collected]);
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
   const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
@@ -293,6 +318,11 @@ function PlayersPage() {
             const urls = cards.data?.[p.id];
             const rarity = rarities.get(p.id) ?? rarityStyle("base");
             const name = p.participant?.name ?? "—";
+            // An unready frame falls on the locked side: `useMyCollection` hands
+            // out an empty collection until the server has reconciled, and
+            // locked→unlocked popping in is a reveal, while unlocked→locked is a
+            // leak. Same argument as the counters at use-my-collection.ts:116.
+            const locked = !mine.ready || !collected[p.id];
             return (
               <Link
                 key={p.id}
@@ -300,14 +330,25 @@ function PlayersPage() {
                 params={{ id: p.id }}
                 className="group block focus:outline-none"
               >
-                <HoloCard
-                  frontUrl={urls?.front ?? null}
-                  backUrl={null}
-                  name={name}
-                  rarity={rarity}
-                  intensity="subtle"
-                  className="transition-transform group-hover:scale-[1.02]"
-                />
+                {/* The link survives the lock: the detail page is gated too, and
+                    it is where someone finds out what they are missing. */}
+                {locked ? (
+                  <LockedCard
+                    back={cardBack.data?.urls ?? null}
+                    name={name}
+                    rarity={LOCKED_RARITY}
+                    className="transition-transform group-hover:scale-[1.02]"
+                  />
+                ) : (
+                  <HoloCard
+                    frontUrl={urls?.front ?? null}
+                    backUrl={null}
+                    name={name}
+                    rarity={rarity}
+                    intensity="subtle"
+                    className="transition-transform group-hover:scale-[1.02]"
+                  />
+                )}
                 <div className="mt-2 text-center">
                   <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
                     {name}
@@ -315,14 +356,16 @@ function PlayersPage() {
                   {/* A tick, not a word: the tier label is the line's real
                       content, and the set only fills in a card at a time. */}
                   <div className="flex items-center justify-center gap-1">
-                    {collected[p.id] && (
+                    {!locked && (
                       <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
                     )}
                     <span
                       className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                      style={{ color: rarity.tier === "base" ? undefined : rarity.border }}
+                      style={{
+                        color: locked || rarity.tier === "base" ? undefined : rarity.border,
+                      }}
                     >
-                      {urls?.front ? rarity.label : "No card yet"}
+                      {locked ? "Not packed yet" : urls?.front ? rarity.label : "No card yet"}
                     </span>
                   </div>
                   {/* The league's number, not yours. Its own line and muted, so

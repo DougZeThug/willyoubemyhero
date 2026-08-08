@@ -154,6 +154,14 @@ test.describe("results", () => {
       await expect(page.locator("body")).toContainText(player.name);
     }
   });
+
+  test("keeps every card face-down until it has been packed", async ({ page }) => {
+    // A fresh browser context has an empty IndexedDB and no member session, so
+    // nothing is collected and the whole set starts shut. The names stay
+    // readable — the slot says which card it is hiding, just not what is on it.
+    await page.goto("/players");
+    await expect(page.getByText(/not packed yet/i)).toHaveCount(PLAYERS.length);
+  });
 });
 
 test.describe("a player's card", () => {
@@ -465,6 +473,22 @@ test.describe("opening a pack", () => {
 
     const state = (await readPackState(page))!;
     expect(state.revealed.slice().sort()).toEqual([0, 1, 2]);
+  });
+
+  test("turns the cards it deals face-up in the vault, and only those", async ({ page }) => {
+    await page.goto("/players/pack");
+    await tearPack(page);
+
+    // Reveal all rather than three swipes: this test is about what packing does
+    // to the vault, and the stand's own gestures are covered above.
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    await page.goto("/players");
+    // A pack is three distinct roster cards, so on a four-player fixture exactly
+    // one slot is still shut — which is also what stops this passing on a page
+    // that simply unlocked everything.
+    await expect(page.getByText(/not packed yet/i)).toHaveCount(PLAYERS.length - PACK_SIZE);
   });
 
   test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {
