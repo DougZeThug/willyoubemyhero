@@ -335,6 +335,41 @@ export function SecretCardsPanel() {
     lookQueue.current.set(id, run);
   }
 
+  /**
+   * One foil or border for a whole set. A single server write rather than a
+   * loop of per-card saves: filing twelve WAGs under one look is the unit an
+   * admin actually thinks in, and twelve round trips is what made them not do it.
+   */
+  function saveSetLook(
+    collection: string | null,
+    label: string,
+    look: { foil?: string; borderFx?: string },
+  ) {
+    const key = collection ?? "";
+    setSavingSetIds((prev) => new Set(prev).add(key));
+    const p = setLookFn({ data: { collection, ...look } }).then(async (r) => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(p, {
+      id: `set-look-${key}`,
+      loading: `Applying to ${label}…`,
+      success: (r) => `${label}: ${r.updated} card${r.updated === 1 ? "" : "s"} updated`,
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
+    void p
+      .catch(() => {
+        // toast.promise already surfaced it.
+      })
+      .finally(() => {
+        setSavingSetIds((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      });
+  }
+
   async function grant(card: SecretCardAdminRow) {
     const participantId = grantTarget[card.id];
     if (!participantId) {
