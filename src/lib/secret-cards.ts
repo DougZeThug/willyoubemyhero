@@ -59,6 +59,8 @@ export type SecretCardView = {
   flavour: string | null;
   foil: string;
   borderFx: string;
+  /** Set the card is filed into. Null means unsorted — see SECRET_COLLECTIONS. */
+  collection: string | null;
   artUrl: string | null;
   backUrl: string | null;
 };
