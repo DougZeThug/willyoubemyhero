@@ -152,15 +152,113 @@ const SECRET_FOILS: Record<string, Rarity> = {
     pattern: "prismatic",
     sparkle: 0.85,
   },
+  glacier: {
+    ...SECRET_RARITY,
+    // Chrome's cool cousin: still quiet, but with a hue to it, so the two are
+    // told apart by temperature rather than by chroma alone.
+    holoA: "oklch(0.92 0.07 205)",
+    holoB: "oklch(0.82 0.12 255)",
+    border: "oklch(0.88 0.09 225)",
+    accent: "oklch(0.88 0.09 225)",
+    pattern: "refractor",
+    sparkle: 0.9,
+  },
+  jade: {
+    ...SECRET_RARITY,
+    // Green into teal, where the default green goes to magenta. Same family,
+    // opposite second act — a card can be green without being *the* green.
+    holoA: "oklch(0.89 0.15 170)",
+    holoB: "oklch(0.79 0.12 235)",
+    border: "oklch(0.85 0.14 180)",
+    accent: "oklch(0.85 0.14 180)",
+    pattern: "prismatic",
+  },
+  toxic: {
+    ...SECRET_RARITY,
+    holoA: "oklch(0.92 0.19 130)",
+    holoB: "oklch(0.8 0.14 200)",
+    border: "oklch(0.89 0.18 125)",
+    accent: "oklch(0.89 0.18 125)",
+    // The hazard stripe existed for penaltyBox and nothing else could ask for
+    // it; on a secret it reads as a warning label somebody laminated.
+    pattern: "hazard",
+  },
+  bubblegum: {
+    ...SECRET_RARITY,
+    holoA: "oklch(0.9 0.13 350)",
+    holoB: "oklch(0.86 0.1 215)",
+    border: "oklch(0.87 0.12 345)",
+    accent: "oklch(0.87 0.12 345)",
+    sparkle: 0.9,
+  },
+  nebula: {
+    ...SECRET_RARITY,
+    // The widest hue sweep in the set — magenta all the way round to cyan — so
+    // the rosette bands land as separate colours instead of one blended smear.
+    holoA: "oklch(0.88 0.18 320)",
+    holoB: "oklch(0.8 0.13 195)",
+    border: "oklch(0.84 0.16 315)",
+    accent: "oklch(0.84 0.16 315)",
+    pattern: "prismatic",
+  },
+  copper: {
+    ...SECRET_RARITY,
+    // Warm into violet, never warm into warm — see ember. Deliberately duller
+    // and darker than ember at both ends: as swatches they are neighbours on the
+    // hue wheel, and at 28px on a phone only the drop in chroma tells them apart.
+    holoA: "oklch(0.81 0.1 55)",
+    holoB: "oklch(0.66 0.08 290)",
+    border: "oklch(0.77 0.09 50)",
+    accent: "oklch(0.77 0.09 50)",
+    // Matte and low sparkle: aged metal, not fresh foil.
+    pattern: "matte",
+    sparkle: 0.6,
+  },
+  midnight: {
+    ...SECRET_RARITY,
+    holoA: "oklch(0.79 0.14 265)",
+    holoB: "oklch(0.62 0.15 300)",
+    border: "oklch(0.74 0.15 275)",
+    accent: "oklch(0.74 0.15 275)",
+    pattern: "scanline",
+    sparkle: 0.7,
+  },
+  onyx: {
+    ...SECRET_RARITY,
+    // The darkest look in the set, for art that carries itself. Kept off the
+    // floor rather than taken to black: the prism edge is drawn from holoA/holoB
+    // (see .holo-prism-edge), and that ring is the one tell every secret shares
+    // regardless of foil — dimming it would cost more than the look is worth.
+    holoA: "oklch(0.75 0.02 265)",
+    holoB: "oklch(0.58 0.03 285)",
+    border: "oklch(0.68 0.02 270)",
+    accent: "oklch(0.68 0.02 270)",
+    pattern: "matte",
+    sparkle: 0.45,
+  },
 };
 
-/** Admin-facing labels. One list feeds the panel selects and the zod enums. */
+/**
+ * Admin-facing labels. One list feeds the panel pickers and the zod enums.
+ *
+ * Ordered warm → cool → dark rather than alphabetically, because the picker
+ * renders it as a strip of swatches and a strip that walks the hue wheel is
+ * scannable in a way a strip sorted by name is not.
+ */
 export const SECRET_FOIL_OPTIONS = [
   { id: "rosette", label: "Spectral Green" },
-  { id: "aurora", label: "Aurora" },
+  { id: "jade", label: "Jade" },
+  { id: "toxic", label: "Toxic" },
   { id: "ember", label: "Ember" },
+  { id: "copper", label: "Copper" },
+  { id: "bubblegum", label: "Bubblegum" },
   { id: "ultraviolet", label: "Ultraviolet" },
+  { id: "nebula", label: "Nebula" },
+  { id: "aurora", label: "Aurora" },
+  { id: "glacier", label: "Glacier" },
   { id: "chrome", label: "Liquid Chrome" },
+  { id: "midnight", label: "Midnight" },
+  { id: "onyx", label: "Onyx" },
 ] as const;
 
 export const SECRET_BORDER_FX_OPTIONS = [

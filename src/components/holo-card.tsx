@@ -5,7 +5,8 @@ import { playFlip } from "@/lib/card-sfx";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { urlFromSet, srcSetFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
-import type { BorderFx, Rarity } from "@/lib/card-rarity";
+import type { Rarity } from "@/lib/card-rarity";
+import { BORDER_FX_CLASS } from "@/lib/card-rarity";
 
 /**
  * Standard trading card is 2.5in x 3.5in, and every card in the app is that
@@ -25,18 +26,6 @@ const CARD_ASPECT = 5 / 7;
 export const CARD_SIZES = "(max-width: 640px) 90vw, 420px";
 /** Vault tiles sit two-up on a phone, so 90vw would over-fetch by a factor of four. */
 export const CARD_GRID_SIZES = "(max-width: 640px) 45vw, 220px";
-
-/**
- * A map rather than `is-${fx}` so every class name exists verbatim in source —
- * grep finds them, and a BorderFx id that gains no CSS shows up here as a
- * hole instead of silently rendering an unstyled class.
- */
-const BORDER_FX_CLASS: Record<BorderFx, string | undefined> = {
-  spin: "is-spinning",
-  pulse: "is-pulsing",
-  shimmer: "is-shimmering",
-  steady: undefined,
-};
 
 /**
  * Sizes to try, widest first. A stalled fetch used to leave a broken-image icon

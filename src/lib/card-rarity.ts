@@ -22,6 +22,22 @@ export type FoilPattern = "refractor" | "prismatic" | "scanline" | "hazard" | "m
  */
 export type BorderFx = "spin" | "pulse" | "shimmer" | "steady";
 
+/**
+ * A map rather than `is-${fx}` so every class name exists verbatim in source —
+ * grep finds them, and a BorderFx id that gains no CSS shows up here as a
+ * hole instead of silently rendering an unstyled class.
+ *
+ * Here beside the type rather than in holo-card.tsx because the admin picker
+ * renders the same ring to preview it, and the admin bundle has no other reason
+ * to pull in the whole card.
+ */
+export const BORDER_FX_CLASS: Record<BorderFx, string | undefined> = {
+  spin: "is-spinning",
+  pulse: "is-pulsing",
+  shimmer: "is-shimmering",
+  steady: undefined,
+};
+
 export type Rarity = {
   tier: RarityTier;
   label: string;

@@ -12,8 +12,8 @@ import {
   uploadSecretCardArt,
 } from "@/lib/secret-cards.functions";
 import { encodeUploadImage } from "@/lib/image-encode";
-import { SECRET_BORDER_FX_OPTIONS, SECRET_FOIL_OPTIONS, secretFoil } from "@/lib/secret-cards";
 import { AdminSection } from "@/components/admin-section";
+import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -97,6 +97,8 @@ export function SecretCardsPanel() {
   // row's finally must not re-enable the other mid-save, or a second change
   // there races the first and the older request can land last.
   const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
+  // The one row whose border previews may animate — see BorderFxPicker.animate.
+  const [lookRow, setLookRow] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editFlavour, setEditFlavour] = useState("");
 
@@ -517,55 +519,42 @@ export function SecretCardsPanel() {
                   </span>
                 </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Foil
-                    {/* At-a-glance confirmation the save landed: the dot is the
-                        chosen foil's own chrome colour. */}
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: secretFoil(card.foil).accent }}
-                      aria-hidden
+                <div
+                  className="mt-2 flex flex-col gap-2"
+                  // Which row's border previews are allowed to animate. Pointer
+                  // enter covers a mouse, focus covers a keyboard, and a tap
+                  // fires both — see the note on BorderFxPicker's `animate`.
+                  onPointerEnter={() => setLookRow(card.id)}
+                  onPointerLeave={() => setLookRow((prev) => (prev === card.id ? null : prev))}
+                  onFocusCapture={() => setLookRow(card.id)}
+                  onBlurCapture={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                      setLookRow((prev) => (prev === card.id ? null : prev));
+                    }
+                  }}
+                >
+                  <FoilPicker
+                    value={card.foil}
+                    cardName={card.name}
+                    disabled={savingLookIds.has(card.id)}
+                    onChange={(foil) => void saveLook(card.id, { foil })}
+                  />
+                  <div className="flex items-end gap-2">
+                    <BorderFxPicker
+                      value={card.borderFx}
+                      foil={card.foil}
+                      cardName={card.name}
+                      animate={lookRow === card.id}
+                      disabled={savingLookIds.has(card.id)}
+                      onChange={(borderFx) => void saveLook(card.id, { borderFx })}
                     />
-                    <select
-                      value={
-                        SECRET_FOIL_OPTIONS.some((o) => o.id === card.foil) ? card.foil : "rosette"
-                      }
-                      onChange={(e) => void saveLook(card.id, { foil: e.target.value })}
-                      disabled={savingLookIds.has(card.id)}
-                      className="h-6 rounded border border-white/15 bg-background px-1.5 text-xs normal-case tracking-normal"
-                      aria-label={`Color effect for ${card.name}`}
-                    >
-                      {SECRET_FOIL_OPTIONS.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Border
-                    <select
-                      value={
-                        SECRET_BORDER_FX_OPTIONS.some((o) => o.id === card.borderFx)
-                          ? card.borderFx
-                          : "spin"
-                      }
-                      onChange={(e) => void saveLook(card.id, { borderFx: e.target.value })}
-                      disabled={savingLookIds.has(card.id)}
-                      className="h-6 rounded border border-white/15 bg-background px-1.5 text-xs normal-case tracking-normal"
-                      aria-label={`Border animation for ${card.name}`}
-                    >
-                      {SECRET_BORDER_FX_OPTIONS.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {savingLookIds.has(card.id) && (
-                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden />
-                  )}
+                    {savingLookIds.has(card.id) && (
+                      <Loader2
+                        className="mb-1.5 h-3 w-3 animate-spin text-muted-foreground"
+                        aria-hidden
+                      />
+                    )}
+                  </div>
                 </div>
 
                 {roster.length > 0 && card.hasArt && (

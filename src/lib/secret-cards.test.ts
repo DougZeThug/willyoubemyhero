@@ -119,6 +119,16 @@ describe("secretFoil", () => {
     expect(secretFoil("rosette")).toBe(SECRET_RARITY);
   });
 
+  it.each(SECRET_FOIL_OPTIONS.filter((o) => o.id !== "rosette"))(
+    "has a treatment registered for $id, not just a label",
+    ({ id }) => {
+      // An option added to the list but not to the registry falls back silently
+      // to the default green. The distinctness check below catches it too, but
+      // only as a baffling "two foils are identical" failure — this names it.
+      expect(secretFoil(id)).not.toBe(SECRET_RARITY);
+    },
+  );
+
   it("resolves every foil an admin can pick to its own look", () => {
     const seen = new Set(FOILS.map(({ rarity }) => `${rarity.holoA}|${rarity.holoB}`));
     // Distinct gradients, or two options in the picker are secretly the same.
