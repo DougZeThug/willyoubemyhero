@@ -161,7 +161,7 @@ export function SecretCardsPanel() {
       const res = await createFn({ data: { cards: encoded } });
       const failed = res.results.filter((r) => !r.ok);
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-      setDrafts([]);
+      clearDrafts();
       if (failed.length > 0) {
         toast.error(`${failed.length} card${failed.length === 1 ? "" : "s"} failed to upload`);
       } else {
@@ -172,6 +172,21 @@ export function SecretCardsPanel() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function clearDrafts() {
+    setDrafts((prev) => {
+      prev.forEach((d) => URL.revokeObjectURL(d.previewUrl));
+      return [];
+    });
+  }
+
+  function removeDraft(key: string) {
+    setDrafts((prev) => {
+      const gone = prev.find((d) => d.key === key);
+      if (gone) URL.revokeObjectURL(gone.previewUrl);
+      return prev.filter((d) => d.key !== key);
+    });
   }
 
   async function saveEdit(id: string) {
