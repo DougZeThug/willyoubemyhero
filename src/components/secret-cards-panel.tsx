@@ -531,6 +531,30 @@ export function SecretCardsPanel() {
                   <p className="text-[10px] leading-snug text-muted-foreground">
                     One line, printed on the back. This is the whole joke — keep it short.
                   </p>
+                  <label className="flex items-center gap-2">
+                    <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Set
+                    </span>
+                    <select
+                      value={d.collection ?? ""}
+                      aria-label={`Set for ${d.file.name}`}
+                      onChange={(e) =>
+                        setDrafts((prev) =>
+                          prev.map((x, j) =>
+                            i === j ? { ...x, collection: e.target.value || null } : x,
+                          ),
+                        )
+                      }
+                      className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+                    >
+                      <option value="">Unsorted</option>
+                      {SECRET_COLLECTIONS.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
                 <button
                   onClick={() => removeDraft(d.key)}
@@ -564,40 +588,84 @@ export function SecretCardsPanel() {
         </div>
       )}
 
-      <div className="mt-3 space-y-2">
+      <div className="mt-3 space-y-3">
         {cards.length === 0 && drafts.length === 0 && (
           <p className="text-[11px] text-muted-foreground">
             No secret cards yet. Packs will just be three cards until there&apos;s at least one.
           </p>
         )}
-        {cards.map((card) => (
-          <SecretCardTile
-            key={card.id}
-            card={card}
-            claimedMembers={list.data?.claimedMembers ?? 0}
-            roster={roster}
-            busy={busy}
-            grantTarget={grantTarget[card.id] ?? ""}
-            onGrantTargetChange={(participantId) =>
-              setGrantTarget((prev) => ({ ...prev, [card.id]: participantId }))
-            }
-            granting={grantingId === card.id}
-            savingWeight={savingWeightId === card.id}
-            savingLook={savingLookIds.has(card.id)}
-            lookRow={lookRow === card.id}
-            onLookRowChange={(active) =>
-              setLookRow((prev) => (active ? card.id : prev === card.id ? null : prev))
-            }
-            onSaveWeight={(raw) => void saveWeight(card.id, raw)}
-            onSaveLook={(look) => saveLook(card.id, look)}
-            onGrant={() => void grant(card)}
-            onEdit={() => {
-              setEditing(card.id);
-              setEditName(card.name);
-              setEditFlavour(card.flavour ?? "");
-            }}
-          />
-        ))}
+        {/* One collapsible section per set. The whole point is that the list stays
+            navigable at forty cards, which it does not as one flat scroll. */}
+        {groupBySecretCollection(cards).map((group) => {
+          const key = group.id ?? "";
+          const open = !collapsed.has(key);
+          return (
+            <section key={key} className="rounded-lg border border-white/10">
+              <button
+                type="button"
+                onClick={() =>
+                  setCollapsed((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  })
+                }
+                aria-expanded={open}
+                className="flex min-h-11 w-full items-center justify-between gap-2 px-3 text-left"
+              >
+                <span className="truncate font-display text-xs font-black uppercase tracking-[0.25em] text-primary">
+                  {group.label}
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {group.items.length}
+                  </span>
+                  <ChevronDown
+                    aria-hidden
+                    className={cn(
+                      "h-4 w-4 text-primary/70 transition-transform",
+                      open && "rotate-180",
+                    )}
+                  />
+                </span>
+              </button>
+              {open && (
+                <div className="space-y-2 p-2 pt-0">
+                  {group.items.map((card) => (
+                    <SecretCardTile
+                      key={card.id}
+                      card={card}
+                      claimedMembers={list.data?.claimedMembers ?? 0}
+                      roster={roster}
+                      busy={busy}
+                      grantTarget={grantTarget[card.id] ?? ""}
+                      onGrantTargetChange={(participantId) =>
+                        setGrantTarget((prev) => ({ ...prev, [card.id]: participantId }))
+                      }
+                      granting={grantingId === card.id}
+                      savingWeight={savingWeightId === card.id}
+                      savingLook={savingLookIds.has(card.id)}
+                      lookRow={lookRow === card.id}
+                      onLookRowChange={(active) =>
+                        setLookRow((prev) => (active ? card.id : prev === card.id ? null : prev))
+                      }
+                      onSaveWeight={(raw) => void saveWeight(card.id, raw)}
+                      onSaveLook={(look) => saveLook(card.id, look)}
+                      onSaveCollection={(collection) => saveLook(card.id, { collection })}
+                      onGrant={() => void grant(card)}
+                      onEdit={() => {
+                        setEditing(card.id);
+                        setEditName(card.name);
+                        setEditFlavour(card.flavour ?? "");
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })}
       </div>
 
       {/* Naming, wording, art and removal all live here rather than as three
