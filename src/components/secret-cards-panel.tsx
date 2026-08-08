@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { EyeOff, Trash2, UploadCloud, X } from "lucide-react";
+import { ChevronDown, EyeOff, Trash2, UploadCloud, X } from "lucide-react";
 import {
   createSecretCards,
   deleteSecretCard,
@@ -14,6 +14,11 @@ import {
 import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
+import {
+  SECRET_COLLECTIONS,
+  groupBySecretCollection,
+  secretCollectionLabel,
+} from "@/lib/secret-cards";
 import {
   SecretArtThumb,
   SecretCardTile,
@@ -59,7 +64,14 @@ function nameFromFile(filename: string): string {
     .slice(0, 60);
 }
 
-type Draft = { key: string; name: string; flavour: string; file: File; previewUrl: string };
+type Draft = {
+  key: string;
+  name: string;
+  flavour: string;
+  collection: string | null;
+  file: File;
+  previewUrl: string;
+};
 
 /**
  * Authoring the secret set.
@@ -102,6 +114,12 @@ export function SecretCardsPanel() {
   const [lookRow, setLookRow] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editFlavour, setEditFlavour] = useState("");
+  // Which set new uploads are filed into. Sticky across drops, because the whole
+  // point is dumping twelve WAGs in one go.
+  const [uploadCollection, setUploadCollection] = useState<string | null>(null);
+  // Collapsed sets, by id ("" for unsorted). Everything starts open — a set the
+  // admin just filed a card into going quiet would read as the card vanishing.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
 
   // No eventId in the key, which is itself the documentation that the set is
   // league-wide — and keeps the panel from going stale when the active event
@@ -131,6 +149,7 @@ export function SecretCardsPanel() {
         key: `${file.name}-${file.size}-${next.length}`,
         name: nameFromFile(file.name),
         flavour: "",
+        collection: uploadCollection,
         file,
         // Revoked in clearDrafts / removeDraft, and after a successful save.
         previewUrl: URL.createObjectURL(file),
@@ -155,6 +174,7 @@ export function SecretCardsPanel() {
           // 11pm; the jokes get written on the train. A form that refuses to save
           // without wording guarantees seven unfinished cards.
           flavour: d.flavour.trim() || undefined,
+          collection: d.collection ?? undefined,
           dataUrl: await encodeUploadImage(d.file),
         })),
       );
