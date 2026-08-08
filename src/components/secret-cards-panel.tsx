@@ -93,10 +93,13 @@ export function SecretCardsPanel() {
   const [grantingId, setGrantingId] = useState<string | null>(null);
   const [savingWeightId, setSavingWeightId] = useState<string | null>(null);
   // A set rather than a single id like the two above: look saves fire on every
-  // select change, so two rows can genuinely be in flight at once — and one
-  // row's finally must not re-enable the other mid-save, or a second change
-  // there races the first and the older request can land last.
+  // pick, so two rows can genuinely be in flight at once and one row's finally
+  // must not clear the other's spinner.
   const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
+  // Per-card save chain — see saveLook. A ref, not state: nothing renders from
+  // it, and a queue that re-rendered the panel on every keystroke would be its
+  // own problem.
+  const lookQueue = useRef(new Map<string, Promise<void>>());
   // The one row whose border previews may animate — see BorderFxPicker.animate.
   const [lookRow, setLookRow] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -238,28 +241,51 @@ export function SecretCardsPanel() {
 
   // Unlike weight there is no blur ambiguity: picking an option *is* the intent,
   // so a look saves on change.
-  async function saveLook(id: string, look: { foil?: string; borderFx?: string }) {
+  //
+  // The strips stay enabled while that save is in flight, which is not an
+  // oversight: disabling a focused radio hands focus back to <body>, so a
+  // keyboard user would get exactly one arrow press per round-trip and then have
+  // to Tab back in. The spinner is the in-flight signal instead, and the queue
+  // below is what the `disabled` was really guarding.
+  function saveLook(id: string, look: { foil?: string; borderFx?: string }) {
     setSavingLookIds((prev) => new Set(prev).add(id));
-    const p = updateFn({ data: { id, ...look } }).then(async (r) => {
-      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-      return r;
-    });
-    toast.promise(p, {
-      loading: "Saving look…",
-      success: "Look saved",
-      error: (e) => (e instanceof Error ? e.message : "Save failed"),
-    });
-    try {
-      await p;
-    } catch {
-      // toast.promise already surfaced the error
-    } finally {
-      setSavingLookIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
+    // One chain per card. Arrow keys walk the strip and fire a save per step, so
+    // a row can genuinely have two updates outstanding — and unchained, the row
+    // settles on whichever the network delivered last rather than on the last
+    // key the admin pressed.
+    const queued = lookQueue.current.get(id) ?? Promise.resolve();
+    const run = queued
+      .then(async () => {
+        const p = updateFn({ data: { id, ...look } }).then(async (r) => {
+          await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+          return r;
+        });
+        toast.promise(p, {
+          // A stable id per card, so arrowing across thirteen foils replaces one
+          // toast rather than stacking thirteen.
+          id: `look-${id}`,
+          loading: "Saving look…",
+          success: "Look saved",
+          error: (e) => (e instanceof Error ? e.message : "Save failed"),
+        });
+        try {
+          await p;
+        } catch {
+          // toast.promise already surfaced the error, and swallowing it here is
+          // what keeps the chain alive for the keystrokes still queued behind it.
+        }
+      })
+      .finally(() => {
+        // Only the last save queued for this row clears its spinner.
+        if (lookQueue.current.get(id) !== run) return;
+        lookQueue.current.delete(id);
+        setSavingLookIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
       });
-    }
+    lookQueue.current.set(id, run);
   }
 
   async function grant(card: SecretCardAdminRow) {
@@ -536,8 +562,7 @@ export function SecretCardsPanel() {
                   <FoilPicker
                     value={card.foil}
                     cardName={card.name}
-                    disabled={savingLookIds.has(card.id)}
-                    onChange={(foil) => void saveLook(card.id, { foil })}
+                    onChange={(foil) => saveLook(card.id, { foil })}
                   />
                   <div className="flex items-end gap-2">
                     <BorderFxPicker
@@ -545,8 +570,7 @@ export function SecretCardsPanel() {
                       foil={card.foil}
                       cardName={card.name}
                       animate={lookRow === card.id}
-                      disabled={savingLookIds.has(card.id)}
-                      onChange={(borderFx) => void saveLook(card.id, { borderFx })}
+                      onChange={(borderFx) => saveLook(card.id, { borderFx })}
                     />
                     {savingLookIds.has(card.id) && (
                       <Loader2

@@ -5,6 +5,13 @@
 // until you have seen them, so choosing a look meant saving, leaving the panel,
 // pulling the card and coming back. Both controls now show what they are
 // selling — a gradient chip per foil, a real prism ring per border effect.
+//
+// Each strip is a real group of <input type="radio">, hidden behind the chip it
+// paints, rather than buttons wearing role="radio". Hand-rolled radio semantics
+// meant thirteen Tab stops and dead arrow keys, which is a worse control than
+// the select it replaced. Native inputs hand roving tabindex, arrow-key
+// selection and the "3 of 13" announcement back to the browser.
+import { useId } from "react";
 import { Check } from "lucide-react";
 import { BORDER_FX_CLASS } from "@/lib/card-rarity";
 import type { BorderFx } from "@/lib/card-rarity";
@@ -34,19 +41,70 @@ function PickerCaption({ caption, value }: { caption: string; value: string }) {
   );
 }
 
-const CHIP_BASE =
-  "relative h-7 w-7 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+/**
+ * One chip: a visually hidden radio plus the swatch that stands in for it.
+ *
+ * sr-only rather than `hidden` or opacity-0 — the input has to stay focusable
+ * and hit-testable for any of the native behaviour to survive. Every visual
+ * state therefore hangs off the input via peer-*, so the chip follows the real
+ * control instead of a second copy of its state.
+ */
+function ChipRadio({
+  group,
+  option,
+  checked,
+  onChange,
+  className,
+  style,
+  children,
+}: {
+  group: string;
+  option: { id: string; label: string };
+  checked: boolean;
+  onChange: (id: string) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
+}) {
+  return (
+    <label title={option.label} className="relative inline-flex cursor-pointer">
+      <input
+        type="radio"
+        className="peer sr-only"
+        name={group}
+        value={option.id}
+        checked={checked}
+        aria-label={option.label}
+        onChange={() => onChange(option.id)}
+      />
+      <span
+        className={cn(
+          "relative h-7 w-7 shrink-0 transition ring-offset-2 ring-offset-background",
+          "peer-checked:ring-2 peer-checked:ring-white/80",
+          "peer-focus-visible:ring-2 peer-focus-visible:ring-ring",
+          className,
+        )}
+        style={style}
+      >
+        {children}
+      </span>
+    </label>
+  );
+}
 
 export type FoilPickerProps = {
   value: string;
   onChange: (id: string) => void;
-  disabled?: boolean;
   /** Card name, so two rows' strips have distinct accessible names. */
   cardName: string;
 };
 
-export function FoilPicker({ value, onChange, disabled, cardName }: FoilPickerProps) {
+export function FoilPicker({ value, onChange, cardName }: FoilPickerProps) {
   const selected = SECRET_FOIL_OPTIONS.some((o) => o.id === value) ? value : DEFAULT_FOIL;
+  // Radios group by `name`, so two cards sharing one would behave as a single
+  // thirteen-way choice across both rows — picking Toxic on Zucchini would
+  // silently deselect Dragon's foil.
+  const group = useId();
 
   return (
     <div className="flex flex-col gap-1">
@@ -60,20 +118,13 @@ export function FoilPicker({ value, onChange, disabled, cardName }: FoilPickerPr
           const rarity = secretFoil(o.id);
           const isSelected = o.id === selected;
           return (
-            <button
+            <ChipRadio
               key={o.id}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              aria-label={o.label}
-              title={o.label}
-              disabled={disabled}
-              onClick={() => onChange(o.id)}
-              className={cn(
-                CHIP_BASE,
-                "border ring-offset-2 ring-offset-background",
-                isSelected && "ring-2 ring-white/80",
-              )}
+              group={group}
+              option={o}
+              checked={isSelected}
+              onChange={onChange}
+              className="rounded-full border"
               style={{
                 // The chip is the card's own gradient endpoints, not an
                 // approximation of them. Deliberately not the .holo-pattern-*
@@ -93,7 +144,7 @@ export function FoilPicker({ value, onChange, disabled, cardName }: FoilPickerPr
                   aria-hidden
                 />
               )}
-            </button>
+            </ChipRadio>
           );
         })}
       </div>
@@ -106,7 +157,6 @@ export type BorderFxPickerProps = {
   /** Foil id the row currently wears, so the preview rings are its colours. */
   foil: string;
   onChange: (id: string) => void;
-  disabled?: boolean;
   /**
    * Whether these previews may animate.
    *
@@ -120,16 +170,10 @@ export type BorderFxPickerProps = {
   cardName: string;
 };
 
-export function BorderFxPicker({
-  value,
-  foil,
-  onChange,
-  disabled,
-  animate,
-  cardName,
-}: BorderFxPickerProps) {
+export function BorderFxPicker({ value, foil, onChange, animate, cardName }: BorderFxPickerProps) {
   const selected = SECRET_BORDER_FX_OPTIONS.some((o) => o.id === value) ? value : DEFAULT_BORDER_FX;
   const rarity = secretFoil(foil);
+  const group = useId();
 
   return (
     <div className="flex flex-col gap-1">
@@ -142,38 +186,30 @@ export function BorderFxPicker({
         aria-label={`Border animation for ${cardName}`}
         className="flex flex-wrap items-center gap-1.5"
       >
-        {SECRET_BORDER_FX_OPTIONS.map((o) => {
-          const isSelected = o.id === selected;
-          const fxClass = BORDER_FX_CLASS[o.id as BorderFx];
-          return (
-            <button
-              key={o.id}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              aria-label={o.label}
-              title={o.label}
-              disabled={disabled}
-              onClick={() => onChange(o.id)}
-              className={cn(
-                CHIP_BASE,
-                "rounded-md bg-black/40 ring-offset-2 ring-offset-background",
-                isSelected && "ring-2 ring-white/80",
-              )}
-              style={
-                {
-                  // The same custom properties holo-card feeds the real card, so
-                  // the ring below is the effect itself rather than a mock-up of
-                  // it — and it recolours when the row's foil changes.
-                  "--holo-a": rarity.holoA,
-                  "--holo-b": rarity.holoB,
-                } as React.CSSProperties
-              }
-            >
-              <div className={cn("holo-prism-edge", animate && fxClass)} aria-hidden />
-            </button>
-          );
-        })}
+        {SECRET_BORDER_FX_OPTIONS.map((o) => (
+          <ChipRadio
+            key={o.id}
+            group={group}
+            option={o}
+            checked={o.id === selected}
+            onChange={onChange}
+            className="rounded-md bg-black/40"
+            style={
+              {
+                // The same custom properties holo-card feeds the real card, so
+                // the ring below is the effect itself rather than a mock-up of
+                // it — and it recolours when the row's foil changes.
+                "--holo-a": rarity.holoA,
+                "--holo-b": rarity.holoB,
+              } as React.CSSProperties
+            }
+          >
+            <div
+              className={cn("holo-prism-edge", animate && BORDER_FX_CLASS[o.id as BorderFx])}
+              aria-hidden
+            />
+          </ChipRadio>
+        ))}
       </div>
     </div>
   );
