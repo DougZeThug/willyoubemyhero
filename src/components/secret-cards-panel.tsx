@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { EyeOff, Gift, Loader2, Pencil, Trash2 } from "lucide-react";
+import { EyeOff, Trash2, UploadCloud, X } from "lucide-react";
 import {
   createSecretCards,
   deleteSecretCard,
@@ -14,6 +14,19 @@ import {
 import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
+import {
+  SecretArtThumb,
+  SecretCardTile,
+  type Roster,
+  type SecretCardAdminRow,
+} from "@/components/secret-card-tile";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -46,22 +59,7 @@ function nameFromFile(filename: string): string {
     .slice(0, 60);
 }
 
-type Draft = { key: string; name: string; flavour: string; file: File };
-
-type SecretCardAdminRow = {
-  id: string;
-  name: string;
-  flavour: string | null;
-  foil: string;
-  borderFx: string;
-  active: boolean;
-  weight: number;
-  hasArt: boolean;
-  artUrl: string | null;
-  ownerCount: number;
-};
-
-type Roster = { id: string; name: string }[];
+type Draft = { key: string; name: string; flavour: string; file: File; previewUrl: string };
 
 /**
  * Authoring the secret set.
@@ -134,6 +132,8 @@ export function SecretCardsPanel() {
         name: nameFromFile(file.name),
         flavour: "",
         file,
+        // Revoked in clearDrafts / removeDraft, and after a successful save.
+        previewUrl: URL.createObjectURL(file),
       });
     }
     setDrafts((prev) => [...prev, ...next]);
@@ -161,7 +161,7 @@ export function SecretCardsPanel() {
       const res = await createFn({ data: { cards: encoded } });
       const failed = res.results.filter((r) => !r.ok);
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-      setDrafts([]);
+      clearDrafts();
       if (failed.length > 0) {
         toast.error(`${failed.length} card${failed.length === 1 ? "" : "s"} failed to upload`);
       } else {
@@ -172,6 +172,21 @@ export function SecretCardsPanel() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function clearDrafts() {
+    setDrafts((prev) => {
+      prev.forEach((d) => URL.revokeObjectURL(d.previewUrl));
+      return [];
+    });
+  }
+
+  function removeDraft(key: string) {
+    setDrafts((prev) => {
+      const gone = prev.find((d) => d.key === key);
+      if (gone) URL.revokeObjectURL(gone.previewUrl);
+      return prev.filter((d) => d.key !== key);
+    });
   }
 
   async function saveEdit(id: string) {
@@ -329,6 +344,8 @@ export function SecretCardsPanel() {
     try {
       const res = await deleteFn({ data: { id: card.id } });
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      // The sheet is the only place Remove lives now, so it has to close itself.
+      setEditing(null);
       toast.success(
         res.ok ? "Removed from the set" : "Retired — it stays in the vaults of whoever pulled it",
       );
@@ -338,6 +355,8 @@ export function SecretCardsPanel() {
       setBusy(false);
     }
   }
+
+  const editingCard = cards.find((c) => c.id === editing) ?? null;
 
   return (
     // EyeOff rather than Sparkles: Sparkles already belongs to the pack.
@@ -385,13 +404,35 @@ export function SecretCardsPanel() {
           busy && "pointer-events-none opacity-60",
         )}
       >
-        <p className="font-display text-sm font-bold uppercase tracking-widest text-foreground">
-          {busy ? "Uploading…" : "Drop card art here"}
+        <UploadCloud className="mx-auto h-8 w-8 text-primary/70" aria-hidden />
+        <p className="mt-2 font-display text-sm font-bold uppercase tracking-widest text-foreground">
+          {busy ? "Uploading…" : <span className="max-sm:hidden">Drop card art here</span>}
+          {!busy && <span className="sm:hidden">Add card art</span>}
         </p>
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
           The filename becomes the card&apos;s name. PNG, JPEG or WebP, up to 8.8 MB. Portrait,
           roughly 5:7.
         </p>
+        {/* The whole box is a drop target, but on a phone there is nothing to
+            drop from — an explicit button is the affordance that reads as tappable. */}
+        <Button
+          size="sm"
+          variant="secondary"
+          type="button"
+          className="mt-3 min-h-11 sm:min-h-0"
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation();
+            inputRef.current?.click();
+          }}
+        >
+          Browse files
+        </Button>
+        {drafts.length > 0 && (
+          <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-primary">
+            {drafts.length} staged
+          </p>
+        )}
         <input
           ref={inputRef}
           type="file"
@@ -408,39 +449,67 @@ export function SecretCardsPanel() {
       {drafts.length > 0 && (
         <div className="mt-3 space-y-2">
           {drafts.map((d, i) => (
-            <div key={d.key} className="rounded-lg border border-white/10 p-2">
-              <Input
-                value={d.name}
-                placeholder="Gary the Grill"
-                maxLength={60}
-                onChange={(e) =>
-                  setDrafts((prev) =>
-                    prev.map((x, j) => (i === j ? { ...x, name: e.target.value } : x)),
-                  )
-                }
-              />
-              <Input
-                className="mt-1.5"
-                value={d.flavour}
-                placeholder="Lit at 11am. Still going at 11pm."
-                maxLength={MAX_FLAVOUR}
-                onChange={(e) =>
-                  setDrafts((prev) =>
-                    prev.map((x, j) => (i === j ? { ...x, flavour: e.target.value } : x)),
-                  )
-                }
-              />
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                One line, printed on the back. This is the whole joke — keep it short.
-              </p>
+            <div key={d.key} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3">
+                <img
+                  src={d.previewUrl}
+                  alt=""
+                  className="aspect-[5/7] w-16 shrink-0 rounded-md border border-white/10 object-cover"
+                />
+                <div className="min-w-0 space-y-1.5">
+                  <Input
+                    value={d.name}
+                    placeholder="Gary the Grill"
+                    maxLength={60}
+                    aria-label={`Name for ${d.file.name}`}
+                    onChange={(e) =>
+                      setDrafts((prev) =>
+                        prev.map((x, j) => (i === j ? { ...x, name: e.target.value } : x)),
+                      )
+                    }
+                  />
+                  <Input
+                    value={d.flavour}
+                    placeholder="Lit at 11am. Still going at 11pm."
+                    maxLength={MAX_FLAVOUR}
+                    aria-label={`Wording for ${d.file.name}`}
+                    onChange={(e) =>
+                      setDrafts((prev) =>
+                        prev.map((x, j) => (i === j ? { ...x, flavour: e.target.value } : x)),
+                      )
+                    }
+                  />
+                  <p className="text-[10px] leading-snug text-muted-foreground">
+                    One line, printed on the back. This is the whole joke — keep it short.
+                  </p>
+                </div>
+                <button
+                  onClick={() => removeDraft(d.key)}
+                  aria-label={`Remove ${d.file.name}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           ))}
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setDrafts([])} disabled={busy}>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={clearDrafts}
+              disabled={busy}
+              className="min-h-11 flex-1 sm:min-h-0 sm:flex-none"
+            >
               Cancel
             </Button>
-            <Button size="sm" onClick={saveDrafts} disabled={busy}>
-              Add to the set
+            <Button
+              size="sm"
+              onClick={() => void saveDrafts()}
+              disabled={busy}
+              className="min-h-11 flex-1 sm:min-h-0 sm:flex-none"
+            >
+              {busy ? "Uploading…" : `Add ${drafts.length} to the set`}
             </Button>
           </div>
         </div>
@@ -453,214 +522,148 @@ export function SecretCardsPanel() {
           </p>
         )}
         {cards.map((card) => (
-          <div
+          <SecretCardTile
             key={card.id}
-            className={cn(
-              "flex items-center gap-3 rounded-lg border border-white/10 p-2",
-              !card.active && "opacity-50",
-            )}
-          >
-            {card.artUrl ? (
-              <img
-                src={card.artUrl}
-                alt=""
-                className="h-11 w-11 shrink-0 rounded object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-white/5 text-[8px] uppercase text-muted-foreground">
-                No art
-              </div>
-            )}
+            card={card}
+            claimedMembers={list.data?.claimedMembers ?? 0}
+            roster={roster}
+            busy={busy}
+            grantTarget={grantTarget[card.id] ?? ""}
+            onGrantTargetChange={(participantId) =>
+              setGrantTarget((prev) => ({ ...prev, [card.id]: participantId }))
+            }
+            granting={grantingId === card.id}
+            savingWeight={savingWeightId === card.id}
+            savingLook={savingLookIds.has(card.id)}
+            lookRow={lookRow === card.id}
+            onLookRowChange={(active) =>
+              setLookRow((prev) => (active ? card.id : prev === card.id ? null : prev))
+            }
+            onSaveWeight={(raw) => void saveWeight(card.id, raw)}
+            onSaveLook={(look) => saveLook(card.id, look)}
+            onGrant={() => void grant(card)}
+            onEdit={() => {
+              setEditing(card.id);
+              setEditName(card.name);
+              setEditFlavour(card.flavour ?? "");
+            }}
+          />
+        ))}
+      </div>
 
-            {editing === card.id ? (
-              <div className="min-w-0 flex-1">
-                <Input
-                  value={editName}
-                  maxLength={60}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
-                <Input
-                  className="mt-1.5"
-                  value={editFlavour}
-                  maxLength={MAX_FLAVOUR}
-                  placeholder="Lit at 11am. Still going at 11pm."
-                  onChange={(e) => setEditFlavour(e.target.value)}
-                />
-                <div className="mt-1.5 flex justify-end gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
+      {/* Naming, wording, art and removal all live here rather than as three
+          icon taps in a scrolling row — this is the editing that needs a keyboard
+          and room, and on a phone the row never had either. */}
+      <Sheet open={!!editingCard} onOpenChange={(open) => !open && setEditing(null)}>
+        <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+          {editingCard && (
+            <>
+              <SheetHeader className="text-left">
+                <SheetTitle className="font-display uppercase tracking-wide">
+                  {editingCard.name}
+                </SheetTitle>
+                <SheetDescription>
+                  Pulled by {editingCard.ownerCount} of {list.data?.claimedMembers ?? 0}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="space-y-4 px-4 pb-6">
+                <div className="flex items-start gap-3">
+                  <SecretArtThumb card={editingCard} className="w-24" />
+                  <label className="min-w-0 flex-1">
+                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Card art
+                    </span>
+                    <span className="mt-1 flex min-h-11 cursor-pointer items-center justify-center rounded border border-white/15 px-3 text-xs font-bold uppercase tracking-widest text-primary transition-colors hover:border-primary/50">
+                      Replace art
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void replaceArt(editingCard.id, file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </span>
+                  </label>
+                </div>
+
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Name
+                  </span>
+                  <Input
+                    className="mt-1"
+                    value={editName}
+                    maxLength={60}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Wording
+                  </span>
+                  <Input
+                    className="mt-1"
+                    value={editFlavour}
+                    maxLength={MAX_FLAVOUR}
+                    placeholder="Lit at 11am. Still going at 11pm."
+                    onChange={(e) => setEditFlavour(e.target.value)}
+                  />
+                </label>
+
+                <div className="space-y-3 rounded-lg border border-white/10 p-3">
+                  <FoilPicker
+                    value={editingCard.foil}
+                    cardName={editingCard.name}
+                    onChange={(foil) => saveLook(editingCard.id, { foil })}
+                  />
+                  <BorderFxPicker
+                    value={editingCard.borderFx}
+                    foil={editingCard.foil}
+                    cardName={editingCard.name}
+                    animate
+                    onChange={(borderFx) => saveLook(editingCard.id, { borderFx })}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="min-h-11 flex-1"
+                    onClick={() => setEditing(null)}
+                  >
                     Cancel
                   </Button>
-                  <Button size="sm" onClick={() => void saveEdit(card.id)} disabled={busy}>
+                  <Button
+                    size="sm"
+                    className="min-h-11 flex-1"
+                    onClick={() => void saveEdit(editingCard.id)}
+                    disabled={busy}
+                  >
                     Save
                   </Button>
                 </div>
-              </div>
-            ) : (
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-display text-xs font-bold uppercase tracking-wide">
-                  {card.name}
-                  {!card.active && " · Retired"}
-                  {!card.hasArt && " · No art, not in packs"}
-                </div>
-                <div className="truncate text-[10px] text-muted-foreground">
-                  {card.flavour || "No wording yet"}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  Pulled by {card.ownerCount} of {list.data?.claimedMembers ?? 0}
-                </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Weight
-                    <input
-                      type="number"
-                      min={0}
-                      max={10000}
-                      step={10}
-                      defaultValue={card.weight}
-                      // Uncontrolled so typing doesn't refire the query on every
-                      // keystroke. `key` on the card wrapper isn't set, so the
-                      // default only re-seeds after a server round-trip.
-                      onBlur={(e) => {
-                        if (Number(e.target.value) !== card.weight) {
-                          void saveWeight(card.id, e.target.value);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                      }}
-                      disabled={savingWeightId === card.id}
-                      className="h-6 w-16 rounded border border-white/15 bg-background px-1.5 text-xs tabular-nums"
-                      aria-label={`Pull weight for ${card.name}`}
-                    />
-                  </label>
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    {savingWeightId === card.id && (
-                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                    )}
-                    {card.weight === 0
-                      ? "Excluded from packs"
-                      : "Higher = shows up more often (100 = baseline)"}
-                  </span>
-                </div>
-
-                <div
-                  className="mt-2 flex flex-col gap-2"
-                  // Which row's border previews are allowed to animate. Pointer
-                  // enter covers a mouse, focus covers a keyboard, and a tap
-                  // fires both — see the note on BorderFxPicker's `animate`.
-                  onPointerEnter={() => setLookRow(card.id)}
-                  onPointerLeave={() => setLookRow((prev) => (prev === card.id ? null : prev))}
-                  onFocusCapture={() => setLookRow(card.id)}
-                  onBlurCapture={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget)) {
-                      setLookRow((prev) => (prev === card.id ? null : prev));
-                    }
-                  }}
-                >
-                  <FoilPicker
-                    value={card.foil}
-                    cardName={card.name}
-                    onChange={(foil) => saveLook(card.id, { foil })}
-                  />
-                  <div className="flex items-end gap-2">
-                    <BorderFxPicker
-                      value={card.borderFx}
-                      foil={card.foil}
-                      cardName={card.name}
-                      animate={lookRow === card.id}
-                      onChange={(borderFx) => saveLook(card.id, { borderFx })}
-                    />
-                    {savingLookIds.has(card.id) && (
-                      <Loader2
-                        className="mb-1.5 h-3 w-3 animate-spin text-muted-foreground"
-                        aria-hidden
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {roster.length > 0 && card.hasArt && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <select
-                      value={grantTarget[card.id] ?? ""}
-                      onChange={(e) =>
-                        setGrantTarget((prev) => ({ ...prev, [card.id]: e.target.value }))
-                      }
-                      disabled={busy}
-                      className="h-7 min-w-0 flex-1 rounded border border-white/15 bg-background px-1.5 text-xs"
-                      aria-label={`Grant ${card.name} to`}
-                    >
-                      <option value="">Grant to…</option>
-                      {roster.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => void grant(card)}
-                      disabled={grantingId === card.id || !grantTarget[card.id]}
-                      className="h-7 px-2 text-[10px]"
-                    >
-                      {grantingId === card.id ? (
-                        <>
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden />
-                          Granting…
-                        </>
-                      ) : (
-                        <>
-                          <Gift className="mr-1 h-3 w-3" />
-                          Grant
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {editing !== card.id && (
-              <div className="flex shrink-0 items-center gap-1">
-                <label className="cursor-pointer rounded p-2 text-muted-foreground hover:text-primary">
-                  <Pencil className="h-3.5 w-3.5" />
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void replaceArt(card.id, file);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                <button
-                  onClick={() => {
-                    setEditing(card.id);
-                    setEditName(card.name);
-                    setEditFlavour(card.flavour ?? "");
-                  }}
-                  className="rounded p-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => void remove(card)}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="min-h-11 w-full text-destructive hover:text-destructive"
                   disabled={busy}
-                  className="rounded p-2 text-muted-foreground hover:text-destructive"
-                  aria-label={`Remove ${card.name}`}
+                  onClick={() => void remove(editingCard)}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Remove from the set
+                </Button>
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </AdminSection>
   );
 }
