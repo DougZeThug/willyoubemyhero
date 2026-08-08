@@ -570,7 +570,11 @@ describe("the admin catalogue", () => {
     });
     expect(res.results[0].hasArt).toBe(false);
     const [insert] = mock.callsFor("secret_cards", "insert");
-    expect(insert.payload).toEqual({ name: "Gary the Grill", flavour: null });
+    expect(insert.payload).toEqual({
+      name: "Gary the Grill",
+      flavour: null,
+      collection: null,
+    });
   });
 
   it("never stamps an event onto a catalogue row", async () => {
