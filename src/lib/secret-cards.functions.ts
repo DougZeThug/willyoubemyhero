@@ -559,10 +559,6 @@ export const updateSecretCard = createServerFn({ method: "POST" })
   });
 
 /**
- * Remove a card from the set.
- */
-
-/**
  * Apply one foil and/or border to a whole set in a single write.
  *
  * Twelve WAGs used to mean twelve taps and twelve round trips; a set is the unit
