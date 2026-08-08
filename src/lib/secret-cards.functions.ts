@@ -560,6 +560,48 @@ export const updateSecretCard = createServerFn({ method: "POST" })
 
 /**
  * Remove a card from the set.
+ */
+
+/**
+ * Apply one foil and/or border to a whole set in a single write.
+ *
+ * Twelve WAGs used to mean twelve taps and twelve round trips; a set is the unit
+ * an admin actually thinks in. `collection: null` targets the unsorted pile,
+ * which is why the filter branches on `is` rather than `eq` — Postgres never
+ * matches NULL with `=`.
+ */
+export const updateSecretCollectionLook = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        collection: cardCollection.nullable(),
+        foil: cardFoil.optional(),
+        borderFx: cardBorderFx.optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireLeagueAdmin();
+    const patch: { foil?: string; border_fx?: string } = {};
+    if (data.foil !== undefined) patch.foil = data.foil;
+    if (data.borderFx !== undefined) patch.border_fx = data.borderFx;
+    if (Object.keys(patch).length === 0) return { ok: true as const, updated: 0 };
+
+    const db = await secrets();
+    const query = db.from("secret_cards").update(patch);
+    const { data: rows, error } =
+      data.collection === null
+        ? await query.is("collection", null).select("id").returns<{ id: string }[]>()
+        : await query
+            .eq("collection", data.collection)
+            .select("id")
+            .returns<{ id: string }[]>();
+    if (error) throw error;
+    return { ok: true as const, updated: rows?.length ?? 0 };
+  });
+
+/**
+ * Remove a card from the set.
  *
  * If anyone has pulled it, it is deactivated instead of deleted — the ledger is
  * the permanent record of what somebody actually found, and the ON DELETE
