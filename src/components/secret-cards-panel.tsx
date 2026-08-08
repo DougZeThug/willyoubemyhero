@@ -123,9 +123,11 @@ export function SecretCardsPanel() {
   // Which set new uploads are filed into. Sticky across drops, because the whole
   // point is dumping twelve WAGs in one go.
   const [uploadCollection, setUploadCollection] = useState<string | null>(null);
-  // Collapsed sets, by id ("" for unsorted). Everything starts open — a set the
-  // admin just filed a card into going quiet would read as the card vanishing.
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // Collapsed sets, by id ("" for unsorted). Default to everything closed so the
+  // admin sees a tidy table of contents instead of a wall of cards.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
+    new Set(["", ...SECRET_COLLECTIONS.map((c) => c.id)]),
+  );
 
   // No eventId in the key, which is itself the documentation that the set is
   // league-wide — and keeps the panel from going stale when the active event
