@@ -732,6 +732,26 @@ export function SecretCardsPanel() {
                   />
                 </label>
 
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Set
+                  </span>
+                  {/* Saves on change like the look does, not on Save: it goes
+                      through the same per-card queue and needs no keyboard. */}
+                  <select
+                    value={editingCard.collection ?? ""}
+                    onChange={(e) => saveLook(editingCard.id, { collection: e.target.value || null })}
+                    className="mt-1 min-h-11 w-full rounded border border-white/15 bg-background px-2 text-base text-foreground"
+                  >
+                    <option value="">Unsorted</option>
+                    {SECRET_COLLECTIONS.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <div className="space-y-3 rounded-lg border border-white/10 p-3">
                   <FoilPicker
                     value={editingCard.foil}
