@@ -154,6 +154,15 @@ test.describe("results", () => {
       await expect(page.locator("body")).toContainText(player.name);
     }
   });
+
+  test("the vault keeps every card face-down until it has been packed", async ({ page }) => {
+    // The names stay — the roster is public on /leaderboard and /draft, so
+    // hiding them here would announce nothing and cost the "who am I missing"
+    // read. What is withheld is the card.
+    await page.goto("/players");
+    await expect(page.getByRole("img", { name: /alice ace — not packed yet/i })).toBeVisible();
+    expect(await page.getByText(/not packed yet/i).count()).toBe(PLAYERS.length);
+  });
 });
 
 test.describe("a player's card", () => {
@@ -465,6 +474,35 @@ test.describe("opening a pack", () => {
 
     const state = (await readPackState(page))!;
     expect(state.revealed.slice().sort()).toEqual([0, 1, 2]);
+  });
+
+  test("turns the cards it dealt face-up in the vault, and nothing else", async ({ page }) => {
+    // The loop this change exists to close: ripping a pack is now the only way
+    // a card's face reaches the vault. The fixture roster is four and a pack is
+    // three, so exactly one card must still be face-down afterwards — a gate
+    // that unlocked everything would pass a "the cards I packed are visible"
+    // assertion just as happily.
+    // Polled, not counted once: the vault renders its empty state first and
+    // fills in when the bundle query resolves, so a bare count here reads zero
+    // and passes for the wrong reason on the assertion after the pack.
+    await page.goto("/players");
+    await expect.poll(() => page.getByText(/not packed yet/i).count()).toBe(PLAYERS.length);
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+    const dealt = (await readPackState(page))!.ids;
+
+    await page.goto("/players");
+    await expect
+      .poll(() => page.getByText(/not packed yet/i).count())
+      .toBe(PLAYERS.length - PACK_SIZE);
+    for (const id of dealt) {
+      const name = PLAYERS.find((p) => p.ep === id)!.name;
+      await expect(page.getByRole("img", { name: new RegExp(`${name} — not packed yet`, "i") })) // prettier-ignore
+        .toHaveCount(0);
+    }
   });
 
   test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {

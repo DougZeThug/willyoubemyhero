@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Users, Shuffle, PackageOpen, Layers, Award, Check, UserRoundCheck } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventCardUrls } from "@/hooks/use-photo-urls";
+import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
+import { LockedCard } from "@/components/locked-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
@@ -42,6 +43,10 @@ const SORTS: { key: SortKey; label: string }[] = [
 function PlayersPage() {
   const { event, bundle } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
+  // The event's back, worn by every card nobody here has packed. Resolved once
+  // for the whole grid rather than per tile — see the note on useEventCardBack
+  // for why it is this hook and never useEventCardUrls.
+  const cardBack = useEventCardBack(event?.id ?? null);
   const [sort, setSort] = useState<SortKey>("name");
   const [shuffleSeed, setShuffleSeed] = useState(0);
   const member = useMemberSession();
@@ -66,6 +71,26 @@ function PlayersPage() {
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
+  // Straight off the bundle rather than off `rows`, which now sorts on what this
+  // hook returns. Order is nothing to it either way — it builds a Set.
+  const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
+  const mine = useMyCollection(event?.id ?? null, rosterIds);
+  const collected = mine.collection;
+
+  /**
+   * A card is face-down until this device has packed it.
+   *
+   * `!mine.ready` counts as locked, and that direction is deliberate: the hook
+   * hands out an empty collection until the server has reconciled, so the
+   * unsettled frame has to fall on the locked side. Popping a card open a beat
+   * later is a reveal; printing the whole set and then taking it away is the
+   * leak this change exists to close.
+   */
+  const isLocked = useCallback(
+    (id: string) => !mine.ready || !collected[id],
+    [mine.ready, collected],
+  );
+
   const rows = useMemo(() => {
     const list = [...(bundle?.participants ?? [])];
     // Seeded, so a realtime bundle update during the combine doesn't silently
@@ -81,20 +106,19 @@ function PlayersPage() {
             (a.selected_draft_position ?? Number.MAX_SAFE_INTEGER) -
             (b.selected_draft_position ?? Number.MAX_SAFE_INTEGER),
         );
-      case "rarity":
-        return list.sort(
-          (a, b) =>
-            (rarities.get(a.id)?.rank ?? 9) - (rarities.get(b.id)?.rank ?? 9) ||
-            byName(a).localeCompare(byName(b)),
-        );
+      case "rarity": {
+        // Cards you hold, rarest first; everything still face-down after them.
+        // Sorting a locked card on its real tier would float the champion to
+        // position one and name it, which is the reveal this sort would
+        // otherwise hand over for free.
+        const rank = (p: (typeof list)[number]) =>
+          isLocked(p.id) ? Number.MAX_SAFE_INTEGER : (rarities.get(p.id)?.rank ?? 9);
+        return list.sort((a, b) => rank(a) - rank(b) || byName(a).localeCompare(byName(b)));
+      }
       default:
         return list.sort((a, b) => byName(a).localeCompare(byName(b)));
     }
-  }, [bundle, event?.id, sort, shuffleSeed, rarities]);
-
-  const rosterIds = useMemo(() => rows.map((p) => p.id), [rows]);
-  const mine = useMyCollection(event?.id ?? null, rosterIds);
-  const collected = mine.collection;
+  }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked]);
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
   const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
@@ -276,7 +300,10 @@ function PlayersPage() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {rows.map((p) => {
             const urls = cards.data?.[p.id];
-            const rarity = rarities.get(p.id) ?? rarityStyle("base");
+            const locked = isLocked(p.id);
+            // A locked slot is never tinted: the tier's own border colour is
+            // most of the reveal, so it wears `base` until the card is packed.
+            const rarity = (!locked && rarities.get(p.id)) || rarityStyle("base");
             const name = p.participant?.name ?? "—";
             return (
               <Link
@@ -285,34 +312,47 @@ function PlayersPage() {
                 params={{ id: p.id }}
                 className="group block focus:outline-none"
               >
-                <HoloCard
-                  frontUrl={urls?.front ?? null}
-                  backUrl={null}
-                  name={name}
-                  rarity={rarity}
-                  intensity="subtle"
-                  className="transition-transform group-hover:scale-[1.02]"
-                />
+                {locked ? (
+                  <LockedCard
+                    name={name}
+                    back={cardBack.data?.urls ?? null}
+                    className="transition-transform group-hover:scale-[1.02]"
+                  />
+                ) : (
+                  <HoloCard
+                    frontUrl={urls?.front ?? null}
+                    backUrl={null}
+                    name={name}
+                    rarity={rarity}
+                    intensity="subtle"
+                    className="transition-transform group-hover:scale-[1.02]"
+                  />
+                )}
                 <div className="mt-2 text-center">
                   <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
                     {name}
                   </div>
                   {/* A tick, not a word: the tier label is the line's real
-                      content, and the set only fills in a card at a time. */}
+                      content, and the set only fills in a card at a time. The
+                      tick and the tier now always arrive together — a locked
+                      slot has neither, and says so instead. */}
                   <div className="flex items-center justify-center gap-1">
-                    {collected[p.id] && (
+                    {!locked && (
                       <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
                     )}
                     <span
                       className="text-[9px] font-bold uppercase tracking-[0.25em]"
                       style={{ color: rarity.tier === "base" ? undefined : rarity.border }}
                     >
-                      {urls?.front ? rarity.label : "No card yet"}
+                      {locked ? "Not packed yet" : urls?.front ? rarity.label : "No card yet"}
                     </span>
                   </div>
                   {/* The league's number, not yours. Its own line and muted, so
                       it never reads as one statement with the tick above it —
-                      that tick is "you have this", this is "they do". */}
+                      that tick is "you have this", this is "they do". Shown on a
+                      locked card too: how popular a card is gives away nothing
+                      about what is printed on it, and it is the only hint that
+                      the slot is worth chasing. */}
                   {packedByLabel(pullCounts.data?.[p.id]) && (
                     <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
                       {packedByLabel(pullCounts.data?.[p.id])}

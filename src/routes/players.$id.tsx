@@ -10,6 +10,7 @@ import {
   IdCard,
   Link as LinkIcon,
   MoreHorizontal,
+  PackageOpen,
   QrCode,
   RotateCw,
   Share2,
@@ -18,8 +19,9 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
+import { useEventPhotoUrls, useEventCardUrls, useEventCardBack } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
+import { LockedCard } from "@/components/locked-card";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { requestGyroPermission } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
@@ -92,6 +94,9 @@ function PlayerCardPage() {
   const { event, bundle, loading } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
+  // The event's back, for a card this device has not packed. Never the player's
+  // own — see the note on useEventCardBack.
+  const cardBack = useEventCardBack(event?.id ?? null);
   const social = useEventSocial(event?.id ?? null);
   const awards = useEventAwards(event?.id ?? null);
   const pullCounts = useCardPullCounts(event?.id ?? null);
@@ -156,6 +161,29 @@ function PlayerCardPage() {
   // Resolved before the loading guard below so the reveal and the stat hooks
   // can be plain unconditional hooks. `ep` stays null until the bundle lands.
   const ep = bundle?.participants.find((p) => p.id === id) ?? null;
+
+  /**
+   * Whether this card is still face-down for whoever is holding the phone.
+   *
+   * Hiding the card in the vault and not here would make the gate decoration —
+   * every leaderboard row, every filmstrip thumbnail and every link in the group
+   * chat comes straight to this URL. `!mine.ready` counts as locked for the same
+   * reason it does in the vault: the unsettled frame has to fall on the side that
+   * shows less.
+   */
+  const locked = useCallback(
+    (cardId: string) => !mine.ready || !collection[cardId],
+    [mine.ready, collection],
+  );
+  const isLocked = !ep || locked(ep.id);
+
+  // The tier stays, locked or not. It is derived entirely from results this app
+  // already publishes — the champion is whoever tops /leaderboard — so hiding
+  // the ribbon here while printing the time and the rank underneath it would be
+  // theatre. What a pack is worth ripping for is the *art*, and that is what
+  // this page withholds. The vault grid is the other way round: eighteen
+  // face-down cards where one is edged in gold gives away the champion at a
+  // glance and with no tap, so tiles wear `base` until they are packed.
   const rarity = (ep && rarities.get(ep.id)) ?? rarityStyle("base");
   const stats = useMemo(() => cardStats(bundle, ep?.participant_id), [bundle, ep?.participant_id]);
 
@@ -164,7 +192,10 @@ function PlayerCardPage() {
   // gesture behind it, so the AudioContext stays suspended and this is silent —
   // which is the correct behaviour, not something to work around.
   useEffect(() => {
-    if (!ep || revealed.has(ep.id)) return;
+    if (!ep || isLocked || revealed.has(ep.id)) return;
+    // Not latched while locked, so the chime and the burst are still waiting on
+    // the first visit *after* the card is packed — which is the visit they were
+    // written for. Landing on a face-down card is not a payoff.
     revealed.add(ep.id);
     playReveal(rarity.tier);
     if (rarity.tier !== "champion" && rarity.tier !== "podium") return;
@@ -182,7 +213,7 @@ function PlayerCardPage() {
     return () => {
       cancelled = true;
     };
-  }, [ep, rarity.tier, rarity.accent, rarity.holoA, rarity.holoB]);
+  }, [ep, isLocked, rarity.tier, rarity.accent, rarity.holoA, rarity.holoB]);
 
   // Rolled rather than snapped into place. Both return the target verbatim under
   // reduced motion, and null for a player with no official run.
@@ -192,13 +223,19 @@ function PlayerCardPage() {
   // Same running order as prev/next, so the strip and the chevrons agree.
   const filmstrip = useMemo(
     () =>
-      roster.map((p) => ({
-        id: p.id,
-        name: p.participant?.name ?? "—",
-        frontUrl: cards.data?.[p.id]?.front ?? null,
-        rarity: rarities.get(p.id) ?? rarityStyle("base"),
-      })),
-    [roster, cards.data, rarities],
+      roster.map((p) => {
+        // A null front puts the strip on its initials-chip branch, which is
+        // exactly the face a card nobody has packed should wear here — no new
+        // component, and the chip already carries the name.
+        const shut = locked(p.id);
+        return {
+          id: p.id,
+          name: p.participant?.name ?? "—",
+          frontUrl: shut ? null : (cards.data?.[p.id]?.front ?? null),
+          rarity: (!shut && rarities.get(p.id)) || rarityStyle("base"),
+        };
+      }),
+    [roster, cards.data, rarities, locked],
   );
 
   const comparePool = useMemo(
@@ -325,6 +362,7 @@ function PlayerCardPage() {
     label: string;
     icon: React.ReactNode;
     active?: boolean;
+    disabled?: boolean;
     onClick: () => void;
   }[] = [
     {
@@ -332,6 +370,9 @@ function PlayerCardPage() {
       label: "Tilt",
       icon: <Smartphone className="h-3.5 w-3.5" />,
       active: gyro,
+      // LockedCard has no tilt controller to hand the motion to, so the toggle
+      // would prompt for device orientation and then do nothing with it.
+      disabled: isLocked,
       onClick: () => void onToggleGyro(),
     },
     {
@@ -396,33 +437,39 @@ function PlayerCardPage() {
               collected={collection[ep.id] ?? null}
               leagueLine={packedByLabel(pullCounts.data?.[ep.id])}
             >
-              <ZoomPanFrame
-                onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
-                onTap={() => setFlipped((f) => !f)}
-                canNavigate={roster.length > 1}
-                prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
-                nextLabel={`Next: ${next?.participant?.name ?? ""}`}
-                position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
-                hint="Pinch to zoom · swipe for the next card"
-              >
-                {({ zoomed }) => (
-                  <HoloCard
-                    frontUrl={urls?.front ?? null}
-                    backUrl={urls?.back ?? null}
-                    name={name}
-                    rarity={rarity}
-                    flipped={flipped}
-                    onFlippedChange={setFlipped}
-                    gyro={gyro}
-                    tilt="hero"
-                    // While magnified the frame owns the pointer; a card leaning
-                    // under a pan would make the thing you are reading move.
-                    interactive={!zoomed}
-                    flickToFlip={false}
-                    backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
-                  />
-                )}
-              </ZoomPanFrame>
+              {isLocked ? (
+                // No ZoomPanFrame: there is nothing to pinch into, and the frame
+                // claims the whole gesture to get it.
+                <LockedCard name={name} back={cardBack.data?.urls ?? null} />
+              ) : (
+                <ZoomPanFrame
+                  onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
+                  onTap={() => setFlipped((f) => !f)}
+                  canNavigate={roster.length > 1}
+                  prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
+                  nextLabel={`Next: ${next?.participant?.name ?? ""}`}
+                  position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
+                  hint="Pinch to zoom · swipe for the next card"
+                >
+                  {({ zoomed }) => (
+                    <HoloCard
+                      frontUrl={urls?.front ?? null}
+                      backUrl={urls?.back ?? null}
+                      name={name}
+                      rarity={rarity}
+                      flipped={flipped}
+                      onFlippedChange={setFlipped}
+                      gyro={gyro}
+                      tilt="hero"
+                      // While magnified the frame owns the pointer; a card leaning
+                      // under a pan would make the thing you are reading move.
+                      interactive={!zoomed}
+                      flickToFlip={false}
+                      backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+                    />
+                  )}
+                </ZoomPanFrame>
+              )}
             </CardSlab>
           </div>
           <NavButton
@@ -467,17 +514,30 @@ function PlayerCardPage() {
           )}
         </div>
 
+        {/* The way out of a locked card, and the only thing on this page that
+            can unlock it. Sits above the actions because while the card is
+            face-down it is the action. */}
+        {isLocked && (
+          <div className="mt-4 flex justify-center">
+            <Link to="/players/pack" className="neon-btn !px-4 !py-2 !text-xs">
+              <PackageOpen className="h-4 w-4" />
+              Rip a pack to see this card
+            </Link>
+          </div>
+        )}
+
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           <ActionButton
             onClick={() => setFlipped((f) => !f)}
             active={flipped}
+            disabled={isLocked}
             icon={<RotateCw className="h-3.5 w-3.5" />}
           >
             {flipped ? "Front" : urls?.back ? "Flip" : "Stats"}
           </ActionButton>
           <ActionButton
             onClick={onShare}
-            disabled={sharing}
+            disabled={sharing || isLocked}
             icon={<Share2 className="h-3.5 w-3.5" />}
           >
             {sharing ? "Rendering…" : "Share"}
@@ -486,7 +546,7 @@ function PlayerCardPage() {
             onClick={() => setComparing(true)}
             active={!!vs}
             icon={<GitCompareArrows className="h-3.5 w-3.5" />}
-            disabled={roster.length < 2}
+            disabled={roster.length < 2 || isLocked}
           >
             Compare
           </ActionButton>
@@ -502,7 +562,13 @@ function PlayerCardPage() {
           */}
           <div className="hidden items-center gap-2 sm:flex">
             {secondary.map((a) => (
-              <ActionButton key={a.key} onClick={a.onClick} active={a.active} icon={a.icon}>
+              <ActionButton
+                key={a.key}
+                onClick={a.onClick}
+                active={a.active}
+                disabled={a.disabled}
+                icon={a.icon}
+              >
                 {a.label}
               </ActionButton>
             ))}
@@ -521,6 +587,7 @@ function PlayerCardPage() {
                 <DropdownMenuItem
                   key={a.key}
                   onSelect={a.onClick}
+                  disabled={a.disabled}
                   className="gap-2 text-[11px] font-bold uppercase tracking-[0.2em]"
                 >
                   {a.icon}
@@ -618,10 +685,15 @@ function PlayerCardPage() {
         }
       />
 
-      {/* Offscreen 1080x1350 composite that html-to-image rasterises. */}
-      <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
-        <ShareCard ref={shareRef} data={shareData} />
-      </div>
+      {/* Offscreen 1080x1350 composite that html-to-image rasterises. Not
+          mounted at all while the card is locked: Share is disabled anyway, and
+          an export path is the last place the front art should still be
+          rendered — even ten thousand pixels off screen. */}
+      {!isLocked && (
+        <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
+          <ShareCard ref={shareRef} data={shareData} />
+        </div>
+      )}
     </div>
   );
 }
