@@ -214,3 +214,72 @@ export function BorderFxPicker({ value, foil, onChange, animate, cardName }: Bor
     </div>
   );
 }
+
+/**
+ * The phone-sized version of the two strips above.
+ *
+ * Thirteen 28px chips wrap to three rows on a 360px screen, which is most of a
+ * card tile spent on one control. Below `sm` the tile shows this instead: a
+ * native picker (so the OS sheet does the scrolling) with the current option's
+ * own swatch beside it, so the colour is still on screen even though the grid
+ * of colours is not. The full strips remain, one tap away, in the edit sheet.
+ */
+export function CompactLookSelect({
+  caption,
+  value,
+  options,
+  fallback,
+  ariaLabel,
+  onChange,
+  swatch,
+}: {
+  caption: string;
+  value: string;
+  options: readonly { id: string; label: string }[];
+  fallback: string;
+  ariaLabel: string;
+  onChange: (id: string) => void;
+  swatch?: React.ReactNode;
+}) {
+  const selected = options.some((o) => o.id === value) ? value : fallback;
+  return (
+    <label className="flex min-w-0 flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{caption}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        {swatch}
+        {/* text-base below sm: anything under 16px makes iOS Safari zoom the
+            viewport on focus and never zoom back out. */}
+        <select
+          value={selected}
+          aria-label={ariaLabel}
+          onChange={(e) => onChange(e.target.value)}
+          className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+        >
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </span>
+    </label>
+  );
+}
+
+/** The foil strip's chip, on its own, as the swatch for the compact select. */
+export function FoilSwatch({ foil }: { foil: string }) {
+  const rarity = secretFoil(foil);
+  return (
+    <span
+      aria-hidden
+      className="h-7 w-7 shrink-0 rounded-full border"
+      style={{
+        backgroundImage: `linear-gradient(135deg, ${rarity.holoA}, ${rarity.holoB})`,
+        borderColor: rarity.border,
+      }}
+    />
+  );
+}
+
+export const FOIL_FALLBACK = DEFAULT_FOIL;
+export const BORDER_FX_FALLBACK = DEFAULT_BORDER_FX;
