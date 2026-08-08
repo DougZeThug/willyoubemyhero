@@ -12,4 +12,6 @@ if (matches.length === 0) {
 
 const normalized = lockfile.replace(absoluteResolution, '$1""');
 await writeFile(lockfilePath, normalized);
-console.log(`Normalized ${matches.length} absolute bun.lock\nresolution(s).`);
+console.log(
+  `Normalized ${matches.length} absolute bun.lock resolution(s).`,
+);
