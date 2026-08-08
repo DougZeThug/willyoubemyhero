@@ -1,24 +1,36 @@
-# Make bun.lock registry-portable again
+# Permanently prevent private registry URLs in bun.lock
 
-CI fails because two entries in `bun.lock` were resolved through the sandbox's private npm mirror, so their tarball host is baked into the lockfile instead of the portable empty resolution field.
+## Confirmed cause
 
-## Affected entries
+The project has no local npm registry configuration, and `bunfig.toml` does not set an install registry. As a result, dependency resolution inherits Lovable's sandbox registry; when Bun resolves or updates a package there, it writes that mirror's absolute tarball URL into `bun.lock`. The current lockfile contains two such entries, while CI only detects them after they have already been committed.
 
-- `@lovable.dev/vite-plugin-hmr-gate@1.5.0` (line 287)
-- `@lovable.dev/vite-tanstack-config@2.9.1` (line 289)
+## Changes
 
-Both point at `https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/...`.
+1. **Pin dependency resolution to the public npm registry**
+   - Add `registry = "https://registry.npmjs.org"` under `[install]` in `bunfig.toml`.
+   - Preserve the existing text-lockfile and 24-hour supply-chain settings unchanged.
+   - This project-level setting overrides the sandbox's inherited mirror during future `bun install` and `bun add` operations, preventing recurrence at the source.
 
-## Fix
+2. **Regenerate both tracked lockfiles**
+   - Re-resolve `bun.lock` with Bun 1.3.11 using the project registry setting, rather than manually replacing individual URLs.
+   - Regenerate `package-lock.json` from the same public registry so it remains synchronized with `package.json`.
+   - Do not change dependency versions or add any `minimumReleaseAgeExcludes` entries.
 
-Replace the absolute tarball URL in those two entries with `""`, leaving the version, dependency metadata and integrity hash untouched. That is exactly what a resolution against the public registry produces, and it is the shape the CI guard checks for.
+3. **Keep the CI guard as defense in depth**
+   - Retain the existing pre-install portability check so any future tooling regression fails quickly with a clear message.
+   - Expand the check to explicitly reject known private mirror hosts anywhere in `bun.lock`, while continuing to reject absolute package resolution URLs.
 
 ## Verification
 
-- `grep -nE '", "https://' bun.lock` returns nothing (the CI check).
-- `bun install --frozen-lockfile` still resolves cleanly, confirming the edit did not invalidate the lockfile.
-- Confirm no other package picked up a mirror host.
+- Confirm `bun.lock` contains no absolute tarball resolution and no `pkg.dev` host.
+- Confirm `package-lock.json` contains no sandbox/private mirror host.
+- Run `bun install --frozen-lockfile` to prove the regenerated Bun lockfile is valid.
+- Run `npm install --package-lock-only --ignore-scripts` against the public registry and confirm it produces no diff.
+- Run the same lockfile portability command used by CI.
 
-## Note
+## Files
 
-This recurs whenever a dependency is re-resolved inside the sandbox. If it keeps happening, a follow-up option is a small post-install sanitize script, but that is out of scope here.
+- `bunfig.toml`
+- `bun.lock`
+- `package-lock.json`
+- `.github/workflows/ci.yml`
