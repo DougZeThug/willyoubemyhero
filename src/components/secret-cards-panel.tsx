@@ -132,6 +132,8 @@ export function SecretCardsPanel() {
         name: nameFromFile(file.name),
         flavour: "",
         file,
+        // Revoked in clearDrafts / removeDraft, and after a successful save.
+        previewUrl: URL.createObjectURL(file),
       });
     }
     setDrafts((prev) => [...prev, ...next]);
