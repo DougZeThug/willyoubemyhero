@@ -282,7 +282,10 @@ export function SecretCardsPanel() {
   // keyboard user would get exactly one arrow press per round-trip and then have
   // to Tab back in. The spinner is the in-flight signal instead, and the queue
   // below is what the `disabled` was really guarding.
-  function saveLook(id: string, look: { foil?: string; borderFx?: string }) {
+  function saveLook(
+    id: string,
+    look: { foil?: string; borderFx?: string; collection?: string | null },
+  ) {
     setSavingLookIds((prev) => new Set(prev).add(id));
     // One chain per card. Arrow keys walk the strip and fire a save per step, so
     // a row can genuinely have two updates outstanding — and unchained, the row
@@ -299,8 +302,11 @@ export function SecretCardsPanel() {
           // A stable id per card, so arrowing across thirteen foils replaces one
           // toast rather than stacking thirteen.
           id: `look-${id}`,
-          loading: "Saving look…",
-          success: "Look saved",
+          loading: look.collection !== undefined ? "Filing card…" : "Saving look…",
+          success:
+            look.collection !== undefined
+              ? `Filed under ${secretCollectionLabel(look.collection)}`
+              : "Look saved",
           error: (e) => (e instanceof Error ? e.message : "Save failed"),
         });
         try {
