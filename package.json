@@ -4,6 +4,8 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/normalize-bun-lock.mjs",
+    "lockfile:normalize": "node scripts/normalize-bun-lock.mjs",
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
