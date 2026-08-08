@@ -459,6 +459,29 @@ export function SecretCardsPanel() {
             {drafts.length} staged
           </p>
         )}
+        {/* Filed on the way in, so a batch of twelve is one pick rather than
+            twelve. Stops the click from reaching the drop target behind it. */}
+        <label
+          className="mx-auto mt-3 flex max-w-xs items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+            Add to
+          </span>
+          <select
+            value={uploadCollection ?? ""}
+            onChange={(e) => setUploadCollection(e.target.value || null)}
+            className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+            aria-label="Set for new uploads"
+          >
+            <option value="">Unsorted</option>
+            {SECRET_COLLECTIONS.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <input
           ref={inputRef}
           type="file"
