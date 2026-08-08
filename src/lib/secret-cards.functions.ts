@@ -588,10 +588,7 @@ export const updateSecretCollectionLook = createServerFn({ method: "POST" })
     const { data: rows, error } =
       data.collection === null
         ? await query.is("collection", null).select("id").returns<{ id: string }[]>()
-        : await query
-            .eq("collection", data.collection)
-            .select("id")
-            .returns<{ id: string }[]>();
+        : await query.eq("collection", data.collection).select("id").returns<{ id: string }[]>();
     if (error) throw error;
     return { ok: true as const, updated: rows?.length ?? 0 };
   });
