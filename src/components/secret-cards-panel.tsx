@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { EyeOff, Gift, Loader2, Pencil, Trash2 } from "lucide-react";
+import { EyeOff, Trash2, UploadCloud, X } from "lucide-react";
 import {
   createSecretCards,
   deleteSecretCard,
@@ -14,6 +14,19 @@ import {
 import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
+import {
+  SecretArtThumb,
+  SecretCardTile,
+  type Roster,
+  type SecretCardAdminRow,
+} from "@/components/secret-card-tile";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -46,22 +59,7 @@ function nameFromFile(filename: string): string {
     .slice(0, 60);
 }
 
-type Draft = { key: string; name: string; flavour: string; file: File };
-
-type SecretCardAdminRow = {
-  id: string;
-  name: string;
-  flavour: string | null;
-  foil: string;
-  borderFx: string;
-  active: boolean;
-  weight: number;
-  hasArt: boolean;
-  artUrl: string | null;
-  ownerCount: number;
-};
-
-type Roster = { id: string; name: string }[];
+type Draft = { key: string; name: string; flavour: string; file: File; previewUrl: string };
 
 /**
  * Authoring the secret set.
