@@ -2,20 +2,23 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ChevronDown, EyeOff, Trash2, UploadCloud, X } from "lucide-react";
+import { ChevronDown, EyeOff, Loader2, Trash2, UploadCloud, X } from "lucide-react";
 import {
   createSecretCards,
   deleteSecretCard,
   grantSecretCard,
   listSecretCards,
   updateSecretCard,
+  updateSecretCollectionLook,
   uploadSecretCardArt,
 } from "@/lib/secret-cards.functions";
 import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
-import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
+import { BorderFxPicker, FoilPicker, FoilSwatch } from "@/components/secret-look-picker";
 import {
+  SECRET_BORDER_FX_OPTIONS,
   SECRET_COLLECTIONS,
+  SECRET_FOIL_OPTIONS,
   groupBySecretCollection,
   secretCollectionLabel,
 } from "@/lib/secret-cards";
@@ -87,6 +90,7 @@ export function SecretCardsPanel() {
   const listFn = useServerFn(listSecretCards);
   const createFn = useServerFn(createSecretCards);
   const updateFn = useServerFn(updateSecretCard);
+  const setLookFn = useServerFn(updateSecretCollectionLook);
   const uploadFn = useServerFn(uploadSecretCardArt);
   const deleteFn = useServerFn(deleteSecretCard);
   const grantFn = useServerFn(grantSecretCard);
@@ -106,6 +110,8 @@ export function SecretCardsPanel() {
   // pick, so two rows can genuinely be in flight at once and one row's finally
   // must not clear the other's spinner.
   const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
+  // Sets currently having a whole-collection look applied ("" for unsorted).
+  const [savingSetIds, setSavingSetIds] = useState<ReadonlySet<string>>(new Set());
   // Per-card save chain — see saveLook. A ref, not state: nothing renders from
   // it, and a queue that re-rendered the panel on every keystroke would be its
   // own problem.
@@ -327,6 +333,41 @@ export function SecretCardsPanel() {
         });
       });
     lookQueue.current.set(id, run);
+  }
+
+  /**
+   * One foil or border for a whole set. A single server write rather than a
+   * loop of per-card saves: filing twelve WAGs under one look is the unit an
+   * admin actually thinks in, and twelve round trips is what made them not do it.
+   */
+  function saveSetLook(
+    collection: string | null,
+    label: string,
+    look: { foil?: string; borderFx?: string },
+  ) {
+    const key = collection ?? "";
+    setSavingSetIds((prev) => new Set(prev).add(key));
+    const p = setLookFn({ data: { collection, ...look } }).then(async (r) => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(p, {
+      id: `set-look-${key}`,
+      loading: `Applying to ${label}…`,
+      success: (r) => `${label}: ${r.updated} card${r.updated === 1 ? "" : "s"} updated`,
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
+    void p
+      .catch(() => {
+        // toast.promise already surfaced it.
+      })
+      .finally(() => {
+        setSavingSetIds((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      });
   }
 
   async function grant(card: SecretCardAdminRow) {
@@ -632,6 +673,13 @@ export function SecretCardsPanel() {
               </button>
               {open && (
                 <div className="space-y-2 p-2 pt-0">
+                  <SetLookRow
+                    label={group.label}
+                    foil={sharedValue(group.items.map((c) => c.foil))}
+                    borderFx={sharedValue(group.items.map((c) => c.borderFx))}
+                    saving={savingSetIds.has(key)}
+                    onChange={(look) => saveSetLook(group.id, group.label, look)}
+                  />
                   {group.items.map((card) => (
                     <SecretCardTile
                       key={card.id}
@@ -804,5 +852,79 @@ export function SecretCardsPanel() {
         </SheetContent>
       </Sheet>
     </AdminSection>
+  );
+}
+
+/** The one value every card in a set shares, or null when they differ. */
+function sharedValue(values: readonly string[]): string | null {
+  if (values.length === 0) return null;
+  const first = values[0];
+  return values.every((v) => v === first) ? (first ?? null) : null;
+}
+
+/**
+ * Foil and border for a whole set.
+ *
+ * Native selects rather than the swatch strips: this row sits above the tiles
+ * and must not read as a card's own control. A set whose cards disagree shows
+ * "Mixed" — a real state, so it is selectable-from but never selectable-to.
+ */
+function SetLookRow({
+  label,
+  foil,
+  borderFx,
+  saving,
+  onChange,
+}: {
+  label: string;
+  foil: string | null;
+  borderFx: string | null;
+  saving: boolean;
+  onChange: (look: { foil?: string; borderFx?: string }) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded border border-white/10 bg-white/[0.03] p-2">
+      <span className="w-full text-[10px] uppercase tracking-widest text-muted-foreground">
+        Whole set
+      </span>
+      <label className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="sr-only">Foil for {label}</span>
+        {foil && <FoilSwatch foil={foil} />}
+        <select
+          value={foil ?? ""}
+          onChange={(e) => e.target.value && onChange({ foil: e.target.value })}
+          disabled={saving}
+          aria-label={`Foil for every card in ${label}`}
+          className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:h-8 sm:text-xs"
+        >
+          {!foil && <option value="">Foil · Mixed</option>}
+          {SECRET_FOIL_OPTIONS.map((o) => (
+            <option key={o.id} value={o.id}>
+              Foil · {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="sr-only">Border for {label}</span>
+        <select
+          value={borderFx ?? ""}
+          onChange={(e) => e.target.value && onChange({ borderFx: e.target.value })}
+          disabled={saving}
+          aria-label={`Border animation for every card in ${label}`}
+          className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:h-8 sm:text-xs"
+        >
+          {!borderFx && <option value="">Border · Mixed</option>}
+          {SECRET_BORDER_FX_OPTIONS.map((o) => (
+            <option key={o.id} value={o.id}>
+              Border · {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {saving && (
+        <Loader2 className="mb-3 h-3 w-3 animate-spin text-muted-foreground" aria-hidden />
+      )}
+    </div>
   );
 }
