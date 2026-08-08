@@ -11,7 +11,11 @@ import type {
   SecretPullStatusResult,
 } from "./secret-cards-db.server";
 import type { SecretCardView } from "./secret-cards";
-import { SECRET_BORDER_FX_OPTIONS, SECRET_FOIL_OPTIONS } from "./secret-cards";
+import {
+  SECRET_BORDER_FX_OPTIONS,
+  SECRET_COLLECTION_IDS,
+  SECRET_FOIL_OPTIONS,
+} from "./secret-cards";
 
 /**
  * The daily secret card: a permanent league collection nobody can browse.
@@ -103,6 +107,7 @@ function toView(row: SecretCardRow, artUrl: string | null, backUrl: string | nul
     flavour: row.flavour,
     foil: row.foil,
     borderFx: row.border_fx,
+    collection: row.collection ?? null,
     artUrl,
     backUrl,
   };
