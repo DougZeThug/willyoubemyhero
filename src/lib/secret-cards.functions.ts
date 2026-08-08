@@ -350,6 +350,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
       borderFx: row.border_fx,
       active: row.active,
       weight: row.weight,
+      collection: row.collection ?? null,
       hasArt: !!row.art_path,
       artUrl: await signPath(row.art_path, VARIANT_WIDTHS.medium),
       ownerCount: owners.get(row.id) ?? 0,
@@ -394,6 +395,9 @@ const cardBorderFx = z.enum(SECRET_BORDER_FX_OPTIONS.map((o) => o.id) as [string
 // Same cap as every other upload path: base64 expands by 4/3, so this is the
 // 8.8 MB the client-side check enforces before encoding.
 const cardArt = z.string().min(32).max(12_000_000);
+// Nullable rather than just optional: clearing a card back to unsorted is a real
+// edit, and `undefined` already means "leave it alone" in updateSecretCard.
+const cardCollection = z.enum(SECRET_COLLECTION_IDS as [string, ...string[]]);
 
 /**
  * Add cards to the set. Bulk, because the alternative is twelve rounds of pick-
@@ -412,6 +416,7 @@ export const createSecretCards = createServerFn({ method: "POST" })
             z.object({
               name: cardName,
               flavour: cardFlavour.optional(),
+              collection: cardCollection.optional(),
               dataUrl: cardArt.optional(),
             }),
           )
@@ -428,7 +433,11 @@ export const createSecretCards = createServerFn({ method: "POST" })
     for (const input of data.cards) {
       const { data: row, error } = await db
         .from("secret_cards")
-        .insert({ name: input.name, flavour: input.flavour ?? null })
+        .insert({
+          name: input.name,
+          flavour: input.flavour ?? null,
+          collection: input.collection ?? null,
+        })
         .select("id")
         .single<{ id: string }>();
       if (error || !row) {
@@ -509,6 +518,7 @@ export const updateSecretCard = createServerFn({ method: "POST" })
         weight: z.number().int().min(0).max(10_000).optional(),
         foil: cardFoil.optional(),
         borderFx: cardBorderFx.optional(),
+        collection: cardCollection.nullable().optional(),
       })
       .parse(d),
   )
@@ -524,6 +534,7 @@ export const updateSecretCard = createServerFn({ method: "POST" })
       weight?: number;
       foil?: string;
       border_fx?: string;
+      collection?: string | null;
     } = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.flavour !== undefined) patch.flavour = data.flavour;
@@ -531,6 +542,7 @@ export const updateSecretCard = createServerFn({ method: "POST" })
     if (data.weight !== undefined) patch.weight = data.weight;
     if (data.foil !== undefined) patch.foil = data.foil;
     if (data.borderFx !== undefined) patch.border_fx = data.borderFx;
+    if (data.collection !== undefined) patch.collection = data.collection;
     if (Object.keys(patch).length === 0) return { ok: true as const };
 
     // .select() after the update so a nonexistent id reports failure rather than
