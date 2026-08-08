@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { LockedCard } from "./locked-card";
-import { rarityStyle } from "@/lib/card-rarity";
+import { LockedCard, LOCKED_RARITY } from "./locked-card";
 
 const BACK = {
   thumb: "https://cdn.test/back-320.webp",
@@ -10,7 +9,7 @@ const BACK = {
 };
 
 function renderLocked(over: Partial<React.ComponentProps<typeof LockedCard>> = {}) {
-  return render(<LockedCard back={null} name="Alice Ace" rarity={rarityStyle("base")} {...over} />);
+  return render(<LockedCard back={null} name="Alice Ace" {...over} />);
 }
 
 describe("LockedCard", () => {
@@ -34,6 +33,16 @@ describe("LockedCard", () => {
     // has not been packed. Nothing about the art, the tier or the time.
     renderLocked({ back: BACK });
     expect(screen.getByRole("img", { name: "Alice Ace — not packed yet" })).toBeInTheDocument();
+  });
+
+  it("wears the neutral bezel rather than the tier it is hiding", () => {
+    // Owned by the component, not passed in: the tier is the thing being
+    // withheld, so there is no prop through which a champion's gold could reach
+    // the bezel of the card hiding one.
+    expect(LOCKED_RARITY.tier).toBe("base");
+    renderLocked({ back: BACK });
+    const slot = screen.getByRole("img", { name: /not packed yet/i });
+    expect(slot).toHaveStyle({ borderColor: LOCKED_RARITY.border });
   });
 
   it("hides the back image from the accessibility tree", () => {

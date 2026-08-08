@@ -21,7 +21,7 @@ import {
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
-import { LockedCard } from "@/components/locked-card";
+import { LockedCard, LOCKED_RARITY } from "@/components/locked-card";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { requestGyroPermission } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
@@ -60,9 +60,6 @@ import { cn } from "@/lib/utils";
  * over, and a chime on every pass turns a flourish into a machine gun.
  */
 const revealed = new Set<string>();
-
-/** The bezel a face-down slot wears. Its own tier's colour would announce it. */
-const LOCKED_RARITY = rarityStyle("base");
 
 export const Route = createFileRoute("/players/$id")({
   head: () => ({
@@ -174,6 +171,15 @@ function PlayerCardPage() {
   // collection until the server has reconciled, and locked→unlocked popping in is
   // a reveal, while unlocked→locked is a leak.
   const locked = !mine.ready || !ep || !collection[ep.id];
+
+  // The chevrons and the arrow keys move between cards without unmounting this
+  // page — which is why `go` has to reset `flipped` by hand — so a compare sheet
+  // opened on a card you hold stayed open when the next card along was one you
+  // have not packed, over a Compare chip greyed out underneath it. The surface
+  // and the affordance have to agree, so the sheet goes with the chip.
+  useEffect(() => {
+    if (locked) setComparing(false);
+  }, [locked]);
 
   // Landing on a card is an event: the tier chime, and a burst in the tier's own
   // colour for the two tiers worth celebrating. A cold page load has no user
@@ -426,11 +432,7 @@ function PlayerCardPage() {
                   nothing to pinch, and nothing under the swipe worth reaching. */}
               {locked ? (
                 <div className="flex flex-col items-center gap-3">
-                  <LockedCard
-                    back={cardBack.data?.urls ?? null}
-                    name={name}
-                    rarity={LOCKED_RARITY}
-                  />
+                  <LockedCard back={cardBack.data?.urls ?? null} name={name} />
                   <Link to="/players/pack" className="neon-btn !px-4 !py-2 !text-xs">
                     <PackageOpen className="h-4 w-4" />
                     Rip a pack to see this card

@@ -1,7 +1,19 @@
 import { PackCardBack } from "@/components/pack-card-back";
-import type { Rarity } from "@/lib/card-rarity";
+import { rarityStyle } from "@/lib/card-rarity";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
+
+/**
+ * The bezel a face-down slot wears, and the tier every other surface should
+ * dress a locked card in — the filmstrip chip on the card page, most of all.
+ *
+ * Base, always. A locked slot tinted gold would announce the tier of the card it
+ * is hiding, which is the whole thing being withheld. It lives here rather than
+ * beside each caller because it belongs to the locked slot, not to the screen
+ * drawing one: two module constants with the same name in two routes is one
+ * edit away from a vault that hides tiers and a card page that does not.
+ */
+export const LOCKED_RARITY = rarityStyle("base");
 
 /**
  * A roster card this device has never packed, face-down.
@@ -22,17 +34,11 @@ import { cn } from "@/lib/utils";
 export function LockedCard({
   back,
   name,
-  rarity,
   className,
 }: {
   /** The *event's* universal back, never the player's own — that one is the reveal. */
   back: ImageUrlSet | null;
   name: string;
-  /**
-   * Always `rarityStyle("base")` from a caller. A locked slot must not be tinted
-   * gold: the bezel colour would announce the tier of the card it is hiding.
-   */
-  rarity: Rarity;
   className?: string;
 }) {
   return (
@@ -45,7 +51,12 @@ export function LockedCard({
         "relative aspect-[5/7] w-full overflow-hidden rounded-xl border shadow-2xl",
         className,
       )}
-      style={{ borderColor: rarity.border, boxShadow: `0 0 28px -6px ${rarity.border}` }}
+      // Not a prop. The only correct value is the neutral one, so a caller cannot
+      // be handed the chance to pass the tier it is supposed to be hiding.
+      style={{
+        borderColor: LOCKED_RARITY.border,
+        boxShadow: `0 0 28px -6px ${LOCKED_RARITY.border}`,
+      }}
     >
       <PackCardBack art={back} />
     </div>

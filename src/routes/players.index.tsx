@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Users, Shuffle, PackageOpen, Layers, Award, Check, UserRoundCheck } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -56,9 +56,6 @@ const SORTS: { key: SortKey; label: string }[] = [
  */
 const LOCKED_RARITY_RANK = 99;
 
-/** The bezel a locked slot wears. Its own tier's colour would announce it. */
-const LOCKED_RARITY = rarityStyle("base");
-
 function PlayersPage() {
   const { event, bundle } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
@@ -97,6 +94,20 @@ function PlayersPage() {
   const mine = useMyCollection(event?.id ?? null, rosterIds);
   const collected = mine.collection;
 
+  /**
+   * Whether a slot renders face-down — and the only thing the rarity sort is
+   * allowed to ask, so a card always sorts as the thing it is drawn as.
+   *
+   * An unready frame is locked: `useMyCollection` hands out an empty collection
+   * until the server reconciles, and locked→unlocked popping in is a reveal
+   * while unlocked→locked is a leak. Same argument as the counters at
+   * use-my-collection.ts:116.
+   */
+  const isLocked = useCallback(
+    (id: string) => !mine.ready || !collected[id],
+    [mine.ready, collected],
+  );
+
   const rows = useMemo(() => {
     const list = [...(bundle?.participants ?? [])];
     // Seeded, so a realtime bundle update during the combine doesn't silently
@@ -113,18 +124,25 @@ function PlayersPage() {
             (b.selected_draft_position ?? Number.MAX_SAFE_INTEGER),
         );
       case "rarity": {
-        // Bucketed only once the collection has settled — same hazard as the
-        // seeded shuffle above, and the grid re-sorting under a thumb the moment
-        // the server answers is exactly it. Before then every card sorts on its
-        // real rank, which is what it did before locking existed.
+        // Straight off `isLocked`, never gated on `mine.ready` from outside it.
+        // Gating looked like it protected the settling grid and did the opposite:
+        // while the collection reconciles every card is face-down, so a gate made
+        // every card sort on its *real* rank and put the champion first under
+        // eighteen identical backs — the sort itself becoming the leak the
+        // sentinel exists to close, for as long as the round trip took.
+        //
+        // Asking the render's own question instead means an unready grid is one
+        // flat bucket in name order. It still settles once when the answer lands,
+        // and that is the honest cost: the alternative is holding the whole grid
+        // back until then, and a card you already own is not a spoiler.
         const rank = (p: (typeof list)[number]) =>
-          mine.ready && !collected[p.id] ? LOCKED_RARITY_RANK : (rarities.get(p.id)?.rank ?? 9);
+          isLocked(p.id) ? LOCKED_RARITY_RANK : (rarities.get(p.id)?.rank ?? 9);
         return list.sort((a, b) => rank(a) - rank(b) || byName(a).localeCompare(byName(b)));
       }
       default:
         return list.sort((a, b) => byName(a).localeCompare(byName(b)));
     }
-  }, [bundle, event?.id, sort, shuffleSeed, rarities, mine.ready, collected]);
+  }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked]);
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
   const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
@@ -318,11 +336,7 @@ function PlayersPage() {
             const urls = cards.data?.[p.id];
             const rarity = rarities.get(p.id) ?? rarityStyle("base");
             const name = p.participant?.name ?? "—";
-            // An unready frame falls on the locked side: `useMyCollection` hands
-            // out an empty collection until the server has reconciled, and
-            // locked→unlocked popping in is a reveal, while unlocked→locked is a
-            // leak. Same argument as the counters at use-my-collection.ts:116.
-            const locked = !mine.ready || !collected[p.id];
+            const locked = isLocked(p.id);
             return (
               <Link
                 key={p.id}
@@ -336,7 +350,6 @@ function PlayersPage() {
                   <LockedCard
                     back={cardBack.data?.urls ?? null}
                     name={name}
-                    rarity={LOCKED_RARITY}
                     className="transition-transform group-hover:scale-[1.02]"
                   />
                 ) : (

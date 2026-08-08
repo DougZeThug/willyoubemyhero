@@ -162,6 +162,64 @@ test.describe("results", () => {
     await page.goto("/players");
     await expect(page.getByText(/not packed yet/i)).toHaveCount(PLAYERS.length);
   });
+
+  /**
+   * Times reversed against the default fixture, so tier order and name order
+   * disagree. Carol owns the fastest run here and would lead a rarity sort,
+   * while alphabetically she is third — which is the whole point: on the default
+   * bundle the champion is also first alphabetically, and a sort that leaked
+   * every tier would produce the same order as one that leaked none.
+   */
+  const TIMES: Record<string, number> = {
+    "p-alice": 70_000,
+    "p-bob": 60_000,
+    "p-carol": 50_000,
+  };
+  const TIERS_AGAINST_NAMES = {
+    ...BUNDLE,
+    runs: BUNDLE.runs.map((r) => ({
+      ...r,
+      official_time_ms: TIMES[r.participant_id],
+      raw_time_ms: TIMES[r.participant_id],
+    })),
+  };
+
+  test("does not let the rarity sort name the cards it is hiding", async ({ page, server }) => {
+    server.set("getEventBundle", TIERS_AGAINST_NAMES);
+    // A member, so readiness genuinely waits on the server — and held there, so
+    // the reconciling window is wide enough to read rather than a frame to race.
+    // This is the window the leak lived in: every card is face-down, and a sort
+    // that asked for their real ranks anyway put the champion first under a grid
+    // of identical backs until the answer landed.
+    await page.addInitScript(
+      ([key, token]) => {
+        localStorage.setItem(key, token);
+        localStorage.setItem("wwbh:member-name", "Alice Ace");
+      },
+      [MEMBER_KEY, `m.p-alice.${Date.now() + 60 * 60_000}.signature`] as const,
+    );
+    server.set("getMyCardStats", { cards: [], packsOpened: 0, firstPackOn: null });
+    server.delay("getMyCardStats", 20_000);
+
+    await page.goto("/players");
+
+    // Wait for the grid before touching the sort. The buttons ship in the SSR
+    // html and the roster does not, so a click any earlier lands on an
+    // unhydrated button, does nothing, and leaves the grid in its default name
+    // order — which is the order this test asserts. It would have passed against
+    // the leak it exists to catch.
+    const slots = page.locator('[role="img"][aria-label$="not packed yet"]');
+    await expect(slots).toHaveCount(PLAYERS.length);
+    await page.getByRole("button", { name: /^rarity$/i }).click();
+
+    // Every slot is face-down, so every slot shares the sentinel rank and the
+    // name tie-break is the only thing left ordering them. Carol first would
+    // mean the grid had just announced its champion.
+    const names = await slots.evaluateAll((els) =>
+      els.map((el) => (el.getAttribute("aria-label") ?? "").split(" — ")[0]),
+    );
+    expect(names).toEqual(PLAYERS.map((p) => p.name));
+  });
 });
 
 test.describe("a player's card", () => {
@@ -489,6 +547,51 @@ test.describe("opening a pack", () => {
     // one slot is still shut — which is also what stops this passing on a page
     // that simply unlocked everything.
     await expect(page.getByText(/not packed yet/i)).toHaveCount(PLAYERS.length - PACK_SIZE);
+  });
+
+  test("takes the compare sheet with it when a card you have not packed comes up", async ({
+    page,
+  }) => {
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    // Which card the pack leaves out is whatever this identity's seed decides,
+    // so it is read off the vault rather than assumed.
+    await page.goto("/players");
+    const shut = page.locator('[role="img"][aria-label$="not packed yet"]');
+    await expect(shut).toHaveCount(PLAYERS.length - PACK_SIZE);
+    const shutName = (await shut.first().getAttribute("aria-label"))!.split(" — ")[0];
+    const tiles = await page
+      .locator('a[href^="/players/ep-"]')
+      .evaluateAll((els) =>
+        els.map((e) => [e.getAttribute("href")!, e.textContent ?? ""] as const),
+      );
+    const packed = tiles.find(([, text]) => !text.includes(shutName))![0];
+    const shutHref = tiles.find(([, text]) => text.includes(shutName))![0];
+
+    await page.goto(packed);
+    const compare = page.getByRole("button", { name: /^compare$/i });
+    await expect(compare).toBeEnabled();
+    await compare.click();
+    const sheet = page.getByText(/pick someone to compare/i);
+    await expect(sheet).toBeVisible();
+
+    // The arrow keys move between cards without unmounting the page — and they
+    // still reach it through the open sheet, which is what made this reachable:
+    // the sheet's own overlay swallows a tap on the filmstrip, but not a keypress
+    // on the window. Walk along until the card nobody packed comes up.
+    for (let i = 0; i < PLAYERS.length && new URL(page.url()).pathname !== shutHref; i++) {
+      await page.keyboard.press("ArrowRight");
+      await page.waitForTimeout(400);
+    }
+    expect(new URL(page.url()).pathname).toBe(shutHref);
+
+    // Left open, the sheet would sit there fully interactive over a card whose
+    // own Compare chip is greyed out underneath it.
+    await expect(sheet).toBeHidden();
+    await expect(compare).toBeDisabled();
   });
 
   test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {
