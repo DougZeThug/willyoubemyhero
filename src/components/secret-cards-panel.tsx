@@ -126,7 +126,7 @@ export function SecretCardsPanel() {
   // Collapsed sets, by id ("" for unsorted). Default to everything closed so the
   // admin sees a tidy table of contents instead of a wall of cards.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
-    new Set(["", ...SECRET_COLLECTIONS.map((c) => c.id)])
+    new Set(["", ...SECRET_COLLECTIONS.map((c) => c.id)]),
   );
 
   // No eventId in the key, which is itself the documentation that the set is
