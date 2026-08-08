@@ -740,7 +740,9 @@ export function SecretCardsPanel() {
                       through the same per-card queue and needs no keyboard. */}
                   <select
                     value={editingCard.collection ?? ""}
-                    onChange={(e) => saveLook(editingCard.id, { collection: e.target.value || null })}
+                    onChange={(e) =>
+                      saveLook(editingCard.id, { collection: e.target.value || null })
+                    }
                     className="mt-1 min-h-11 w-full rounded border border-white/15 bg-background px-2 text-base text-foreground"
                   >
                     <option value="">Unsorted</option>
