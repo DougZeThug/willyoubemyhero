@@ -11,7 +11,12 @@ import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
-import { secretFoil, secretsPulledLabel, SECRET_RARITY } from "@/lib/secret-cards";
+import {
+  groupBySecretCollection,
+  secretFoil,
+  secretsPulledLabel,
+  SECRET_RARITY,
+} from "@/lib/secret-cards";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -227,42 +232,52 @@ function PlayersPage() {
             >
               Secrets
             </div>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {ownedSecrets.map((s) => {
-                const rarity = secretFoil(s.foil, s.borderFx);
-                return (
-                  <div key={s.id} className="flex flex-col gap-2">
-                    <HoloCard
-                      frontUrl={s.artUrl}
-                      backUrl={null}
-                      name={s.name}
-                      rarity={rarity}
-                      intensity="subtle"
-                      interactive={false}
-                      onClick={() => setOpenSecret(ownedSecrets.indexOf(s))}
-                    />
-                    <div className="text-center">
-                      <div className="truncate font-display text-xs font-black uppercase tracking-wide">
-                        {s.name}
-                      </div>
-                      <div
-                        className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                        style={{ color: rarity.border }}
-                      >
-                        {/* Same vocabulary as card-slab.tsx, so the two halves of
-                            the collection speak the same language. */}
-                        {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
-                      </div>
-                      {packedByLabel(s.ownerCount) && (
-                        <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-                          {packedByLabel(s.ownerCount)}
+            {/* One shelf per set. Only sets this person actually owns something
+                from appear — an empty "Pets" heading would leak the shape of the
+                set they haven't pulled yet. */}
+            {groupBySecretCollection(ownedSecrets).map((group) => (
+              <div key={group.id ?? ""} className="mb-5 last:mb-0">
+                <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+                  {group.label}
+                </div>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                  {group.items.map((s) => {
+                    const rarity = secretFoil(s.foil, s.borderFx);
+                    return (
+                      <div key={s.id} className="flex flex-col gap-2">
+                        <HoloCard
+                          frontUrl={s.artUrl}
+                          backUrl={null}
+                          name={s.name}
+                          rarity={rarity}
+                          intensity="subtle"
+                          interactive={false}
+                          onClick={() => setOpenSecret(ownedSecrets.indexOf(s))}
+                        />
+                        <div className="text-center">
+                          <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+                            {s.name}
+                          </div>
+                          <div
+                            className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                            style={{ color: rarity.border }}
+                          >
+                            {/* Same vocabulary as card-slab.tsx, so the two halves of
+                                the collection speak the same language. */}
+                            {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
+                          </div>
+                          {packedByLabel(s.ownerCount) && (
+                            <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                              {packedByLabel(s.ownerCount)}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </section>
         )}
 

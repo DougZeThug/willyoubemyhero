@@ -7,7 +7,11 @@ import {
   FoilPicker,
   FoilSwatch,
 } from "@/components/secret-look-picker";
-import { SECRET_BORDER_FX_OPTIONS, SECRET_FOIL_OPTIONS } from "@/lib/secret-cards";
+import {
+  SECRET_BORDER_FX_OPTIONS,
+  SECRET_COLLECTIONS,
+  SECRET_FOIL_OPTIONS,
+} from "@/lib/secret-cards";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +21,7 @@ export type SecretCardAdminRow = {
   flavour: string | null;
   foil: string;
   borderFx: string;
+  collection: string | null;
   active: boolean;
   weight: number;
   hasArt: boolean;
@@ -82,6 +87,7 @@ export function SecretCardTile({
   onLookRowChange,
   onSaveWeight,
   onSaveLook,
+  onSaveCollection,
   onGrant,
   onEdit,
   busy,
@@ -98,6 +104,7 @@ export function SecretCardTile({
   onLookRowChange: (active: boolean) => void;
   onSaveWeight: (raw: string) => void;
   onSaveLook: (look: { foil?: string; borderFx?: string }) => void;
+  onSaveCollection: (collection: string | null) => void;
   onGrant: () => void;
   onEdit: () => void;
   busy: boolean;
@@ -233,6 +240,23 @@ export function SecretCardTile({
             ? "Excluded from packs"
             : "Higher weight = shows up more often (100 = baseline)"}
         </span>
+
+        <label className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:flex-row sm:items-center sm:gap-2">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Set</span>
+          <select
+            value={card.collection ?? ""}
+            onChange={(e) => onSaveCollection(e.target.value || null)}
+            className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:h-7 sm:min-h-0 sm:text-xs"
+            aria-label={`Set for ${card.name}`}
+          >
+            <option value="">Unsorted</option>
+            {SECRET_COLLECTIONS.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {roster.length > 0 && card.hasArt && (
           <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1">

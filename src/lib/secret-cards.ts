@@ -59,6 +59,8 @@ export type SecretCardView = {
   flavour: string | null;
   foil: string;
   borderFx: string;
+  /** Set the card is filed into. Null means unsorted — see SECRET_COLLECTIONS. */
+  collection: string | null;
   artUrl: string | null;
   backUrl: string | null;
 };
@@ -267,6 +269,67 @@ export const SECRET_BORDER_FX_OPTIONS = [
   { id: "shimmer", label: "Shimmer" },
   { id: "steady", label: "Steady" },
 ] as const;
+
+/**
+ * The sets a secret card can be filed into.
+ *
+ * Stored in `secret_cards.collection`, so ids are add-only for the same reason
+ * foil ids and award category ids are: renaming one orphans every row already
+ * carrying it. Labels are free to change; ids are not. Null means unsorted, which
+ * is what every card written before this existed is.
+ */
+export const SECRET_COLLECTIONS = [
+  { id: "wags", label: "WAGs" },
+  { id: "pets", label: "Pets" },
+  { id: "legacyPets", label: "Legacy Pets" },
+  { id: "cornhole", label: "Cornhole Collection" },
+] as const;
+
+export type SecretCollectionId = (typeof SECRET_COLLECTIONS)[number]["id"];
+
+export const SECRET_COLLECTION_IDS = SECRET_COLLECTIONS.map((c) => c.id) as readonly string[];
+
+/** What an unfiled card is grouped under. Never a set id, so it can't be stored. */
+export const UNSORTED_COLLECTION_LABEL = "Unsorted";
+
+/**
+ * Label for a stored value. An id retired from the list above still has rows
+ * pointing at it, so an unknown id renders as itself rather than disappearing.
+ */
+export function secretCollectionLabel(id: string | null | undefined): string {
+  if (!id) return UNSORTED_COLLECTION_LABEL;
+  return SECRET_COLLECTIONS.find((c) => c.id === id)?.label ?? id;
+}
+
+/**
+ * Group cards into the fixed set order, unsorted last, dropping empty groups.
+ * Shared by the admin panel and the vault so the two read in the same order.
+ */
+export function groupBySecretCollection<T extends { collection?: string | null }>(
+  items: readonly T[],
+): { id: string | null; label: string; items: T[] }[] {
+  const groups = new Map<string | null, T[]>();
+  for (const item of items) {
+    const key = item.collection ?? null;
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(item);
+    else groups.set(key, [item]);
+  }
+  const ordered: { id: string | null; label: string; items: T[] }[] = [];
+  for (const c of SECRET_COLLECTIONS) {
+    const items = groups.get(c.id);
+    if (items) {
+      ordered.push({ id: c.id, label: c.label, items });
+      groups.delete(c.id);
+    }
+  }
+  // Anything stored but not in the list (a retired id), then the unsorted pile.
+  const unsorted = groups.get(null);
+  groups.delete(null);
+  for (const [id, items] of groups) ordered.push({ id, label: secretCollectionLabel(id), items });
+  if (unsorted) ordered.push({ id: null, label: UNSORTED_COLLECTION_LABEL, items: unsorted });
+  return ordered;
+}
 
 const BORDER_FX_IDS = new Set<string>(SECRET_BORDER_FX_OPTIONS.map((o) => o.id));
 

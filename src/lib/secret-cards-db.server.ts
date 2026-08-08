@@ -30,6 +30,8 @@ export type SecretCardRow = {
   flavour: string | null;
   foil: string;
   border_fx: string;
+  /** Set the card is filed into. Null for every card authored before sets existed. */
+  collection: string | null;
   art_path: string | null;
   back_path: string | null;
   active: boolean;
