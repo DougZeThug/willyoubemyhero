@@ -9,13 +9,16 @@ import {
   grantSecretCard,
   listSecretCards,
   updateSecretCard,
+  updateSecretCollectionLook,
   uploadSecretCardArt,
 } from "@/lib/secret-cards.functions";
 import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
-import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
+import { BorderFxPicker, FoilPicker, FoilSwatch } from "@/components/secret-look-picker";
 import {
+  SECRET_BORDER_FX_OPTIONS,
   SECRET_COLLECTIONS,
+  SECRET_FOIL_OPTIONS,
   groupBySecretCollection,
   secretCollectionLabel,
 } from "@/lib/secret-cards";
@@ -87,6 +90,7 @@ export function SecretCardsPanel() {
   const listFn = useServerFn(listSecretCards);
   const createFn = useServerFn(createSecretCards);
   const updateFn = useServerFn(updateSecretCard);
+  const setLookFn = useServerFn(updateSecretCollectionLook);
   const uploadFn = useServerFn(uploadSecretCardArt);
   const deleteFn = useServerFn(deleteSecretCard);
   const grantFn = useServerFn(grantSecretCard);
@@ -106,6 +110,8 @@ export function SecretCardsPanel() {
   // pick, so two rows can genuinely be in flight at once and one row's finally
   // must not clear the other's spinner.
   const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
+  // Sets currently having a whole-collection look applied ("" for unsorted).
+  const [savingSetIds, setSavingSetIds] = useState<ReadonlySet<string>>(new Set());
   // Per-card save chain — see saveLook. A ref, not state: nothing renders from
   // it, and a queue that re-rendered the panel on every keystroke would be its
   // own problem.
