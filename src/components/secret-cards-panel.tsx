@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ChevronDown, EyeOff, Trash2, UploadCloud, X } from "lucide-react";
+import { ChevronDown, EyeOff, Loader2, Trash2, UploadCloud, X } from "lucide-react";
 import {
   createSecretCards,
   deleteSecretCard,
@@ -673,6 +673,13 @@ export function SecretCardsPanel() {
               </button>
               {open && (
                 <div className="space-y-2 p-2 pt-0">
+                  <SetLookRow
+                    label={group.label}
+                    foil={sharedValue(group.items.map((c) => c.foil))}
+                    borderFx={sharedValue(group.items.map((c) => c.borderFx))}
+                    saving={savingSetIds.has(key)}
+                    onChange={(look) => saveSetLook(group.id, group.label, look)}
+                  />
                   {group.items.map((card) => (
                     <SecretCardTile
                       key={card.id}
