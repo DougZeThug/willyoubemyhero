@@ -13,6 +13,8 @@ const EXPECTED_TABLES = [
   "award_votes",
   "awards",
   "card_comments",
+  "card_prompt_runs",
+  "card_prompt_templates",
   "card_pulls",
   "card_reactions",
   "draft_selections",
@@ -173,6 +175,8 @@ describe("migrations", () => {
     // every pull with the puller's id attached to every connected phone.
     expect(published).not.toContain("card_pulls");
     expect(published).not.toContain("pack_opens");
+    expect(published).not.toContain("card_prompt_templates");
+    expect(published).not.toContain("card_prompt_runs");
   });
 
   it("enforces one pack_opens row per person per league day, which is what makes a row count a pack count", async () => {
