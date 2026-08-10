@@ -53,6 +53,7 @@ export type CardPromptInput = {
   about?: string;
   visualMustHaves?: string;
   referencePhotoUrl?: string;
+  masterPrompt?: string;
 };
 
 function section(title: string, lines: Array<string | undefined>): string | null {
@@ -63,7 +64,7 @@ function section(title: string, lines: Array<string | undefined>): string | null
 /** Pure prompt assembly, intentionally independent from React and clipboard APIs. */
 export function buildCardPrompt(input: CardPromptInput): string {
   const parts = [
-    CARD_SERIES[input.series].prompt,
+    input.masterPrompt?.trim() || CARD_SERIES[input.series].prompt,
     section("SUBJECT INFORMATION", [
       `Series: ${CARD_SERIES[input.series].label}`,
       `Subject name: ${input.subjectName.trim()}`,

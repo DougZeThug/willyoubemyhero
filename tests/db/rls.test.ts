@@ -54,6 +54,9 @@ const SERVER_ONLY = [
   // Unlike card_pulls there is no public aggregate over this at all — a pack
   // count is shown to the person it belongs to and to nobody else.
   "public.pack_opens",
+  // Editable prompt sources and immutable authoring history are commissioner-only.
+  "public.card_prompt_templates",
+  "public.card_prompt_runs",
 ];
 
 describe("public reads", () => {

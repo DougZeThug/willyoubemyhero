@@ -1,7 +1,15 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { ClipboardCopy, ExternalLink, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AdminSection } from "@/components/admin-section";
+import {
+  CardPromptBatch,
+  CardPromptHistory,
+  CardPromptTemplateManager,
+  type PromptHistoryRow,
+} from "@/components/card-prompt-tools";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,8 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cardStats, type StatsBundle } from "@/lib/card-stats";
-import { formatTime } from "@/lib/format";
+import type { StatsBundle } from "@/lib/card-stats";
+import { formatKnownPerformanceData } from "@/lib/card-prompt-data";
+import { listCardPromptTemplates, saveCardPromptRun } from "@/lib/card-prompt.functions";
 import { urlFromSet, type ImageUrlSet } from "@/lib/media";
 import {
   CARD_SERIES,
@@ -44,30 +53,15 @@ export type CardPromptStudioProps = {
   photoUrls: Record<string, ImageUrlSet | string> | undefined;
 };
 
-export function formatKnownPerformanceData(bundle: StatsBundle, participantId: string): string {
-  const stats = cardStats(bundle, participantId);
-  if (!stats.bestRun || stats.bestRun.official_time_ms == null) {
-    return "Official run: unavailable\nRank: unavailable\nStation splits: unavailable";
-  }
-  const lines = [
-    `Rank: ${stats.rank == null ? "unavailable" : `${stats.rank} of ${stats.fieldSize}`}`,
-    `Best official time: ${formatTime(stats.bestRun.official_time_ms)}`,
-    "Ordered station segments:",
-  ];
-  for (const row of stats.ladder) {
-    const time = row.ms == null ? "unavailable" : formatTime(row.ms);
-    const delta =
-      row.deltaMs == null
-        ? "median delta unavailable"
-        : `${row.deltaMs >= 0 ? "+" : "−"}${formatTime(Math.abs(row.deltaMs))} vs field median`;
-    const best =
-      row.ms == null ? "station-best unavailable" : row.best ? "station best" : "not station best";
-    lines.push(`- ${row.label}: ${time}; ${delta}; ${best}`);
-  }
-  return lines.join("\n");
-}
-
-export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStudioProps) {
+export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: CardPromptStudioProps) {
+  const listTemplatesFn = useServerFn(listCardPromptTemplates);
+  const saveRunFn = useServerFn(saveCardPromptRun);
+  const qc = useQueryClient();
+  const templates = useQuery({
+    queryKey: ["card-prompt-templates"],
+    queryFn: () => listTemplatesFn(),
+    staleTime: 60_000,
+  });
   const [series, setSeries] = useState<CardSeriesId>("draft_combine_player");
   const [eventParticipantId, setEventParticipantId] = useState("");
   const [subjectName, setSubjectName] = useState("");
@@ -79,8 +73,12 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
     prompt: string;
     series: CardSeriesId;
     subjectName: string;
+    inputSnapshot: Record<string, unknown>;
+    eventParticipantId?: string;
+    historyId?: string;
   } | null>(null);
   const [revision, setRevision] = useState("");
+  const historySave = useRef<Promise<string | undefined> | null>(null);
 
   const playerSeries = isPlayerSeries(series);
   const selected = bundle?.participants.find(
@@ -101,9 +99,26 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
         : undefined,
     [bundle, playerSeries, selected],
   );
+  const persistedTemplate = templates.data?.templates?.find(
+    (item: { slug: string }) => item.slug === series,
+  );
+  const effectiveMasterPrompt =
+    typeof persistedTemplate?.master_prompt === "string" && persistedTemplate.master_prompt.trim()
+      ? persistedTemplate.master_prompt
+      : CARD_SERIES[series].prompt;
 
   function generate() {
     if (!canGenerate) return;
+    historySave.current = null;
+    const inputSnapshot = {
+      series,
+      eventParticipantId: selected?.id ?? null,
+      subjectName: effectiveName,
+      association,
+      colors,
+      about,
+      visualMustHaves,
+    };
     setGenerated({
       prompt: buildCardPrompt({
         series,
@@ -116,24 +131,124 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
         about,
         visualMustHaves,
         referencePhotoUrl: photoUrl,
+        masterPrompt: effectiveMasterPrompt,
       }),
       series,
       subjectName: effectiveName,
+      inputSnapshot,
+      eventParticipantId: selected?.id,
     });
   }
 
-  async function copy(text: string, success: string) {
+  function saveInitialAfterCopy(): Promise<string | undefined> {
+    if (!generated) return Promise.resolve(undefined);
+    if (generated.historyId) return Promise.resolve(generated.historyId);
+    if (historySave.current) return historySave.current;
+    historySave.current = (async () => {
+      try {
+        const row = await saveRunFn({
+          data: {
+            eventId,
+            templateId: persistedTemplate?.id ?? null,
+            templateSlug: generated.series,
+            templateName: CARD_SERIES[generated.series].label,
+            eventParticipantId: generated.eventParticipantId ?? null,
+            subjectName: generated.subjectName,
+            inputSnapshot: generated.inputSnapshot,
+            generatedPrompt: generated.prompt,
+            kind: "initial",
+          },
+        });
+        setGenerated((current) =>
+          current?.prompt === generated.prompt ? { ...current, historyId: row.id } : current,
+        );
+        await qc.invalidateQueries({ queryKey: ["card-prompt-runs", eventId] });
+        return row.id as string;
+      } catch {
+        toast.warning("Prompt copied, but history could not be saved");
+        return undefined;
+      } finally {
+        historySave.current = null;
+      }
+    })();
+    return historySave.current;
+  }
+
+  async function copyInitial() {
+    if (!generated) return;
     try {
-      await navigator.clipboard.writeText(text);
-      toast.success(success);
+      await navigator.clipboard.writeText(generated.prompt);
+      toast.success("Prompt copied");
+      void saveInitialAfterCopy();
     } catch {
       toast.error("Could not copy to clipboard");
     }
   }
 
+  async function copyRevision() {
+    if (!generated || !revision.trim()) return;
+    const prompt = buildRevisionPrompt({
+      series: generated.series,
+      subjectName: generated.subjectName,
+      changes: revision,
+    });
+    try {
+      await navigator.clipboard.writeText(prompt);
+      toast.success("Revision prompt copied");
+      try {
+        const parentId = await saveInitialAfterCopy();
+        if (!parentId) throw new Error("Original prompt history unavailable");
+        setGenerated((current) => (current ? { ...current, historyId: parentId } : current));
+        await saveRunFn({
+          data: {
+            eventId,
+            templateId: persistedTemplate?.id ?? null,
+            templateSlug: generated.series,
+            templateName: CARD_SERIES[generated.series].label,
+            eventParticipantId: generated.eventParticipantId ?? null,
+            subjectName: generated.subjectName,
+            inputSnapshot: generated.inputSnapshot,
+            generatedPrompt: prompt,
+            kind: "revision",
+            parentPromptId: parentId,
+            revisionInstruction: revision,
+          },
+        });
+        await qc.invalidateQueries({ queryKey: ["card-prompt-runs", eventId] });
+      } catch {
+        toast.warning("Revision copied, but history could not be saved");
+      }
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  }
+
+  function loadHistory(row: PromptHistoryRow) {
+    const snap = row.input_snapshot ?? {};
+    if (typeof snap.series === "string" && snap.series in CARD_SERIES)
+      setSeries(snap.series as CardSeriesId);
+    if (typeof snap.eventParticipantId === "string") setEventParticipantId(snap.eventParticipantId);
+    if (typeof snap.subjectName === "string") setSubjectName(snap.subjectName);
+    if (typeof snap.association === "string") setAssociation(snap.association);
+    if (typeof snap.colors === "string") setColors(snap.colors);
+    if (typeof snap.about === "string") setAbout(snap.about);
+    if (typeof snap.visualMustHaves === "string") setVisualMustHaves(snap.visualMustHaves);
+    setGenerated({
+      prompt: row.generated_prompt,
+      series: row.template_slug as CardSeriesId,
+      subjectName: row.subject_name,
+      inputSnapshot: snap,
+      eventParticipantId: row.event_participant_id ?? undefined,
+      historyId: row.kind === "initial" ? row.id : (row.parent_prompt_id ?? undefined),
+    });
+  }
+
   const fieldClass = "space-y-1.5";
   return (
     <AdminSection icon={<Sparkles className="h-4 w-4 shrink-0" />} title="Card Prompt Studio">
+      <div className="mb-4 flex flex-wrap gap-2">
+        <CardPromptTemplateManager templates={templates.data?.templates ?? []} />
+      </div>
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="space-y-4">
           <div className={fieldClass}>
@@ -296,7 +411,7 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
             variant="secondary"
             className="min-h-11 w-full"
             disabled={!generated}
-            onClick={() => generated && copy(generated.prompt, "Prompt copied")}
+            onClick={copyInitial}
           >
             <ClipboardCopy className="mr-2 h-4 w-4" /> Copy prompt
           </Button>
@@ -314,16 +429,7 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
             variant="secondary"
             className="min-h-11 w-full"
             disabled={!generated || !revision.trim()}
-            onClick={() =>
-              copy(
-                buildRevisionPrompt({
-                  series: generated!.series,
-                  subjectName: generated!.subjectName,
-                  changes: revision,
-                }),
-                "Revision prompt copied",
-              )
-            }
+            onClick={copyRevision}
           >
             <ClipboardCopy className="mr-2 h-4 w-4" /> Copy revision prompt
           </Button>
@@ -333,6 +439,14 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
           </p>
         </div>
       </div>
+      <CardPromptBatch
+        eventId={eventId}
+        eventName={eventName}
+        bundle={bundle}
+        photoUrls={photoUrls}
+        templates={templates.data?.templates ?? []}
+      />
+      <CardPromptHistory eventId={eventId} onLoad={loadHistory} />
     </AdminSection>
   );
 }

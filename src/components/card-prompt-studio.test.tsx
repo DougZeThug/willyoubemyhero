@@ -1,14 +1,21 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import {
-  CardPromptStudio,
-  formatKnownPerformanceData,
-  type PromptStudioBundle,
-} from "./card-prompt-studio";
+import { CardPromptStudio, type PromptStudioBundle } from "./card-prompt-studio";
+import { formatKnownPerformanceData } from "@/lib/card-prompt-data";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@tanstack/react-start", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-start")>()),
+  useServerFn: () => vi.fn().mockResolvedValue({ templates: [], runs: [], id: "history-id" }),
+}));
+
+function renderStudio(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const bundle: PromptStudioBundle = {
   participants: [
@@ -50,7 +57,7 @@ describe("CardPromptStudio", () => {
   it("generates and copies a player prompt and revision", async () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
-    render(
+    renderStudio(
       <CardPromptStudio
         eventId="event"
         eventName="Combine"
@@ -78,7 +85,7 @@ describe("CardPromptStudio", () => {
 
   it("switches to a secret series and requires subject plus association", async () => {
     const user = userEvent.setup();
-    render(
+    renderStudio(
       <CardPromptStudio
         eventId="event"
         eventName="Combine"
@@ -115,7 +122,7 @@ describe("CardPromptStudio", () => {
         },
       ],
     };
-    render(
+    renderStudio(
       <CardPromptStudio
         eventId="event"
         eventName="Combine"
@@ -145,7 +152,7 @@ describe("CardPromptStudio", () => {
         },
       ],
     };
-    render(
+    renderStudio(
       <CardPromptStudio
         eventId="event"
         eventName="Combine"

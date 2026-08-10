@@ -29,6 +29,17 @@ describe("card prompt templates", () => {
     expect(prompt).not.toContain("Nickname:");
   });
 
+  it("uses a persisted override while retaining the built-in fallback", () => {
+    const base = { series: "secret_pet" as const, subjectName: "Pickles" };
+    expect(
+      buildCardPrompt({
+        ...base,
+        masterPrompt: "A persisted custom master prompt with enough detail.",
+      }),
+    ).toMatch(/^A persisted custom master prompt/);
+    expect(buildCardPrompt(base)).toMatch(/^Create a delightfully rare/);
+  });
+
   it("produces deterministic, tightly scoped revision instructions", () => {
     const input = {
       series: "custom_secret" as const,
