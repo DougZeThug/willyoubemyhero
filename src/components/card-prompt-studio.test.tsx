@@ -99,4 +99,68 @@ describe("CardPromptStudio", () => {
       (screen.getByLabelText("Generated prompt preview") as HTMLTextAreaElement).value,
     ).toContain("Subject name: Pickles");
   });
+
+  it("falls back to a participant profile image", async () => {
+    const user = userEvent.setup();
+    const profileBundle: PromptStudioBundle = {
+      ...bundle,
+      participants: [
+        {
+          ...bundle.participants[0],
+          participant: {
+            name: "Alex",
+            nickname: "Ace",
+            profile_image_url: "https://example.test/profile.jpg",
+          },
+        },
+      ],
+    };
+    render(
+      <CardPromptStudio
+        eventId="event"
+        eventName="Combine"
+        bundle={profileBundle}
+        photoUrls={undefined}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Participant" }));
+    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    expect(screen.getByRole("img", { name: "Alex reference" })).toHaveAttribute(
+      "src",
+      "https://example.test/profile.jpg",
+    );
+  });
+
+  it("binds revision instructions to the generated subject snapshot", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    const twoPlayers: PromptStudioBundle = {
+      ...bundle,
+      participants: [
+        ...bundle.participants,
+        {
+          id: "event-participant-2",
+          participant_id: "person-2",
+          participant: { name: "Blake", nickname: null },
+        },
+      ],
+    };
+    render(
+      <CardPromptStudio
+        eventId="event"
+        eventName="Combine"
+        bundle={twoPlayers}
+        photoUrls={undefined}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Participant" }));
+    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await user.click(screen.getByRole("button", { name: "Generate prompt" }));
+    await user.click(screen.getByRole("combobox", { name: "Participant" }));
+    await user.click(screen.getByRole("option", { name: "Blake" }));
+    await user.type(screen.getByLabelText("Revision instructions"), "Change one detail.");
+    await user.click(screen.getByRole("button", { name: "Copy revision prompt" }));
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("card for Alex"));
+    expect(writeText).not.toHaveBeenLastCalledWith(expect.stringContaining("card for Blake"));
+  });
 });

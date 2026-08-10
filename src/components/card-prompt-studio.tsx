@@ -29,7 +29,11 @@ export type PromptStudioBundle = StatsBundle & {
   participants: Array<{
     id: string;
     participant_id: string;
-    participant: { name: string; nickname: string | null } | null;
+    participant: {
+      name: string;
+      nickname: string | null;
+      profile_image_url?: string | null;
+    } | null;
   }>;
 };
 
@@ -71,7 +75,11 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
   const [colors, setColors] = useState("");
   const [about, setAbout] = useState("");
   const [visualMustHaves, setVisualMustHaves] = useState("");
-  const [generated, setGenerated] = useState("");
+  const [generated, setGenerated] = useState<{
+    prompt: string;
+    series: CardSeriesId;
+    subjectName: string;
+  } | null>(null);
   const [revision, setRevision] = useState("");
 
   const playerSeries = isPlayerSeries(series);
@@ -79,7 +87,9 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
     (participant) => participant.id === eventParticipantId,
   );
   const effectiveName = playerSeries ? (selected?.participant?.name ?? "") : subjectName;
-  const photoUrl = selected ? (urlFromSet(photoUrls?.[selected.id]) ?? undefined) : undefined;
+  const photoUrl = selected
+    ? (urlFromSet(photoUrls?.[selected.id]) ?? selected.participant?.profile_image_url ?? undefined)
+    : undefined;
   const canGenerate = playerSeries
     ? !!selected?.participant?.name
     : !!subjectName.trim() && !!association.trim();
@@ -94,8 +104,8 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
 
   function generate() {
     if (!canGenerate) return;
-    setGenerated(
-      buildCardPrompt({
+    setGenerated({
+      prompt: buildCardPrompt({
         series,
         eventName,
         subjectName: effectiveName,
@@ -107,7 +117,9 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
         visualMustHaves,
         referencePhotoUrl: photoUrl,
       }),
-    );
+      series,
+      subjectName: effectiveName,
+    });
   }
 
   async function copy(text: string, success: string) {
@@ -130,7 +142,7 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
               value={series}
               onValueChange={(value: CardSeriesId) => {
                 setSeries(value);
-                setGenerated("");
+                setGenerated(null);
               }}
             >
               <SelectTrigger id="prompt-series" className="min-h-11">
@@ -273,7 +285,7 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
             <Label htmlFor="generated-prompt">Generated prompt preview</Label>
             <Textarea
               id="generated-prompt"
-              value={generated}
+              value={generated?.prompt ?? ""}
               readOnly
               className="min-h-72 font-mono text-xs"
               placeholder="Complete the required subject fields, then generate."
@@ -284,7 +296,7 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
             variant="secondary"
             className="min-h-11 w-full"
             disabled={!generated}
-            onClick={() => copy(generated, "Prompt copied")}
+            onClick={() => generated && copy(generated.prompt, "Prompt copied")}
           >
             <ClipboardCopy className="mr-2 h-4 w-4" /> Copy prompt
           </Button>
@@ -304,7 +316,11 @@ export function CardPromptStudio({ eventName, bundle, photoUrls }: CardPromptStu
             disabled={!generated || !revision.trim()}
             onClick={() =>
               copy(
-                buildRevisionPrompt({ series, subjectName: effectiveName, changes: revision }),
+                buildRevisionPrompt({
+                  series: generated!.series,
+                  subjectName: generated!.subjectName,
+                  changes: revision,
+                }),
                 "Revision prompt copied",
               )
             }
