@@ -204,8 +204,12 @@ export const getSecretStatus = createServerFn({ method: "GET" }).handler(async (
  * it. Retiring a card removes it from future pulls, never from somebody's vault.
  */
 export const getMySecrets = createServerFn({ method: "GET" }).handler(async () => {
-  const actor = requireActor();
   noStore();
+  // Mirrors getSecretStatus: a device with no identity yet (or one whose token
+  // has just expired) owns nothing — that is an empty vault, not an error. This
+  // used to throw and blank the screen on the very first paint of the vault.
+  const actor = optionalActor();
+  if (!actor) return { cards: [], pulled: 0 };
   const db = await secrets();
 
   const { data: pulls, error } = await db
