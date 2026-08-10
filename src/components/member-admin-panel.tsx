@@ -29,19 +29,12 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
 
   const claimedCount = (claims.data ?? []).filter((c) => c.claimed_at).length;
   const rosterSize = bundle?.participants.length ?? 0;
+  const unclaimedCount = Math.max(rosterSize - claimedCount, 0);
 
-  async function onGenerate() {
-    if (
-      !confirm(
-        "Issue a NEW code for every player? Any code you already handed out stops working. " +
-          "Already-claimed devices stay signed in until their token expires.",
-      )
-    ) {
-      return;
-    }
+  async function issue(scope: "all" | "unclaimed") {
     setBusy(true);
     try {
-      const res = await generateFn({ data: { eventId } });
+      const res = await generateFn({ data: { eventId, scope } });
       setIssued(res.issued);
       await qc.invalidateQueries({ queryKey: ["member-claims", eventId] });
       toast.success(`Issued ${res.issued.length} codes — copy them now`);
@@ -50,6 +43,34 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onGenerateUnclaimed() {
+    if (unclaimedCount === 0) {
+      toast.info("Everyone has claimed — nothing to issue");
+      return;
+    }
+    if (
+      !confirm(
+        `Issue a new code for the ${unclaimedCount} player${unclaimedCount === 1 ? "" : "s"} who ` +
+          "haven't claimed yet? Players who already claimed keep their current code.",
+      )
+    ) {
+      return;
+    }
+    await issue("unclaimed");
+  }
+
+  async function onReissueAll() {
+    if (
+      !confirm(
+        "Issue a NEW code for every player? Any code you already handed out stops working. " +
+          "Already-claimed devices stay signed in until their token expires.",
+      )
+    ) {
+      return;
+    }
+    await issue("all");
   }
 
   async function copyAll() {
@@ -74,10 +95,27 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
         Codes are stored hashed — the plaintext is shown here once and never again.
       </p>
 
-      <Button size="sm" onClick={onGenerate} disabled={busy} className="min-h-11 w-full sm:min-h-0">
-        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-        {busy ? "Issuing…" : issued ? "Re-issue all codes" : "Generate codes"}
-      </Button>
+      <div className="space-y-2">
+        <Button
+          size="sm"
+          onClick={onGenerateUnclaimed}
+          disabled={busy}
+          className="min-h-11 w-full sm:min-h-0"
+        >
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+          {busy ? "Issuing…" : `Issue codes for unclaimed (${unclaimedCount})`}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onReissueAll}
+          disabled={busy}
+          className="min-h-11 w-full border-warn/40 text-warn hover:bg-warn/10 sm:min-h-0"
+        >
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+          Re-issue ALL codes
+        </Button>
+      </div>
 
       {issued && (
         <div className="mt-3">
