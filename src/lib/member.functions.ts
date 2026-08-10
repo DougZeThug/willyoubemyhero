@@ -141,6 +141,9 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
       .object({
         eventId: z.string().uuid(),
         participantIds: z.array(z.string().uuid()).max(64).optional(),
+        // "unclaimed" leaves already-claimed players' codes alone, so a re-issue
+        // for stragglers doesn't invalidate codes people are already using.
+        scope: z.enum(["all", "unclaimed"]).optional(),
       })
       .parse(d),
   )
@@ -162,6 +165,15 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
         .eq("active", true)
         .order("name");
       targets = rows ?? [];
+      if (data.scope === "unclaimed") {
+        const { data: codes } = await supabaseAdmin
+          .from("member_codes")
+          .select("participant_id, claimed_at");
+        const claimed = new Set(
+          (codes ?? []).filter((c) => c.claimed_at).map((c) => c.participant_id),
+        );
+        targets = targets.filter((t) => !claimed.has(t.id));
+      }
     }
 
     const issued: { participantId: string; name: string; code: string }[] = [];
