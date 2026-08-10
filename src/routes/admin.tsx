@@ -24,6 +24,7 @@ import { encodeUploadImageVariants } from "@/lib/image-encode";
 import { CardBulkUpload } from "@/components/card-bulk-upload";
 import { UniversalCardBack } from "@/components/universal-card-back";
 import { SecretCardsPanel } from "@/components/secret-cards-panel";
+import { CardPromptStudio } from "@/components/card-prompt-studio";
 import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
 import { AdminSection } from "@/components/admin-section";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -792,6 +793,15 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
           current combine server-side to authorize. */}
       <div className="md:col-span-2">
         <SecretCardsPanel />
+      </div>
+
+      <div className="md:col-span-2">
+        <CardPromptStudio
+          eventId={eventId}
+          eventName={eventName}
+          bundle={bundle}
+          photoUrls={photos.data}
+        />
       </div>
 
       <MemberCodesPanel eventId={eventId} />
