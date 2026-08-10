@@ -13,6 +13,8 @@ const EXPECTED_TABLES = [
   "award_votes",
   "awards",
   "card_comments",
+  "card_prompt_runs",
+  "card_prompt_templates",
   "card_pulls",
   "card_reactions",
   "draft_selections",
@@ -145,6 +147,17 @@ describe("migrations", () => {
     ).toBe(true);
   });
 
+  it("indexes prompt history by event and newest first", async () => {
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'card_prompt_runs'",
+    );
+    expect(
+      rows.some(
+        (row) => row.indexdef.includes("event_id") && row.indexdef.includes("created_at DESC"),
+      ),
+    ).toBe(true);
+  });
+
   it("publishes the live tables for realtime", async () => {
     // useEventBundle subscribes to these; a table missing here means cards stop
     // upgrading themselves mid-event.
@@ -173,6 +186,8 @@ describe("migrations", () => {
     // every pull with the puller's id attached to every connected phone.
     expect(published).not.toContain("card_pulls");
     expect(published).not.toContain("pack_opens");
+    expect(published).not.toContain("card_prompt_templates");
+    expect(published).not.toContain("card_prompt_runs");
   });
 
   it("enforces one pack_opens row per person per league day, which is what makes a row count a pack count", async () => {

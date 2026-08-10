@@ -12,6 +12,7 @@ afterAll(closeDb);
 
 /** A secret card seeded through the owner, so the leak assertions have something to leak. */
 const SECRET_CARD_ID = "00000000-0000-4000-8000-00000000ce01";
+const PROMPT_RUN_ID = "00000000-0000-4000-8000-00000000ce02";
 
 /** Tables the vault, leaderboard, live view and recap all read without a session. */
 const PUBLIC_READ = [
@@ -54,6 +55,9 @@ const SERVER_ONLY = [
   // Unlike card_pulls there is no public aggregate over this at all — a pack
   // count is shown to the person it belongs to and to nobody else.
   "public.pack_opens",
+  // Editable prompt sources and immutable authoring history are commissioner-only.
+  "public.card_prompt_templates",
+  "public.card_prompt_runs",
 ];
 
 describe("public reads", () => {
@@ -151,6 +155,24 @@ describe("server-only tables", () => {
     );
     expect(await sql("SELECT count(*)::int AS n FROM public.secret_cards")).toEqual([{ n: 1 }]);
     const visible = await visibleRows("anon", "public.secret_cards");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
+  it("keeps a real prompt-history row out of anon's reach", async () => {
+    await sql(
+      `INSERT INTO public.card_prompt_runs
+         (id, template_slug, template_name_snapshot, event_id, subject_name, generated_prompt, kind)
+       VALUES ($1, 'secret_pet', 'Secret Pet', $2, 'Pickles',
+         'Create a sufficiently detailed secret pet card prompt for Pickles.', 'initial')
+       ON CONFLICT (id) DO NOTHING`,
+      [PROMPT_RUN_ID, IDS.event],
+    );
+    expect(
+      await sql("SELECT count(*)::int AS n FROM public.card_prompt_runs WHERE id = $1", [
+        PROMPT_RUN_ID,
+      ]),
+    ).toEqual([{ n: 1 }]);
+    const visible = await visibleRows("anon", "public.card_prompt_runs");
     expect(visible === null || visible === 0).toBe(true);
   });
 

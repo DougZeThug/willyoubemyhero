@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeader, setResponseHeader } from "@tanstack/react-start/server";
+import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { optionalActor, requireActor, requireAdmin } from "./require-auth.server";
+import { optionalActor, requireActor } from "./require-auth.server";
+import { requireLeagueAdmin } from "./league-admin.server";
 import { decodeImageDataUrl, forgetSignedPath, signPath } from "./media.functions";
 import { VARIANT_WIDTHS } from "./media";
 import type {
@@ -63,25 +64,6 @@ async function secrets() {
  * Requires an active event, so out of season nobody can author secrets. That is a
  * real product constraint, stated here rather than discovered in a garden.
  */
-async function requireLeagueAdmin(): Promise<string> {
-  // Header first, so an unauthenticated hit costs no database round trip and the
-  // guard really is the first thing that happens.
-  if (!getRequestHeader("x-admin-token")) throw new Error("Admin PIN required");
-  const sb = await admin();
-  const { data: event } = await sb
-    .from("events")
-    .select("id")
-    .eq("active", true)
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  // The same message as a missing token, deliberately: the failure must not
-  // distinguish "wrong PIN" from "nothing to be admin of".
-  if (!event) throw new Error("Admin PIN required");
-  await requireAdmin(event.id);
-  return event.id;
-}
-
 /**
  * These responses vary only by a request header, and a cache hit here is a
  * spoiler rather than a cosmetic bug. Latent today — Cloudflare does not cache
