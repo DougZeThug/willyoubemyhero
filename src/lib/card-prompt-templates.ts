@@ -48,6 +48,7 @@ export type CardPromptInput = {
   subjectName: string;
   nickname?: string;
   association?: string;
+  teamName?: string;
   knownData?: string;
   colors?: string;
   about?: string;
@@ -69,6 +70,7 @@ export function buildCardPrompt(input: CardPromptInput): string {
       `Series: ${CARD_SERIES[input.series].label}`,
       `Subject name: ${input.subjectName.trim()}`,
       input.nickname?.trim() ? `Nickname: ${input.nickname.trim()}` : undefined,
+      input.teamName?.trim() ? `Team name: ${input.teamName.trim()}` : undefined,
       input.association?.trim() ? `Owner / association: ${input.association.trim()}` : undefined,
     ]),
     section("KNOWN EVENT / PERFORMANCE DATA", [
