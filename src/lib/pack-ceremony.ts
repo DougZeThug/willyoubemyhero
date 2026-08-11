@@ -64,18 +64,25 @@ export const CEREMONY: readonly { readonly phase: CeremonyPhase; readonly ms: nu
   // right and simply gone before the eye caught up. The extra ~750ms goes only
   // into the phases that are visibly evolving (peel, launch, fan), plus one beat
   // on the fan hold; the dead-ish head of the sequence is left short on purpose.
-  { phase: "anticipate", ms: 150 },
-  { phase: "seam", ms: 220 },
-  { phase: "rip", ms: 260 },
-  { phase: "peel", ms: 420 },
-  { phase: "launch", ms: 480 },
-  { phase: "fan", ms: 600 },
-  { phase: "hold", ms: 320 },
+  //
+  // Lengthened again to ~4s once the light and celebration layers went in: the
+  // rays out of the mouth and the bloom on the fan are things to *look at*, and
+  // at 2.8s they were over before they registered. The extra time still goes
+  // only where something is evolving — the head of the sequence is barely
+  // touched — and `hold` is now long enough to see the fan lit rather than only
+  // long enough to see it exist.
+  { phase: "anticipate", ms: 220 },
+  { phase: "seam", ms: 320 },
+  { phase: "rip", ms: 380 },
+  { phase: "peel", ms: 620 },
+  { phase: "launch", ms: 700 },
+  { phase: "fan", ms: 820 },
+  { phase: "hold", ms: 560 },
   // Long enough for the gather to actually finish, and no longer. The deck spring
   // settles in about 260ms, and a handoff shorter than that hands PackStand a
   // deck that is still moving — which is a jump on the one frame both are on
   // screen, and the whole reason this phase has a name.
-  { phase: "handoff", ms: 300 },
+  { phase: "handoff", ms: 380 },
 ] as const;
 
 /** Total run time. Derived, so the table stays the single source of truth. */
