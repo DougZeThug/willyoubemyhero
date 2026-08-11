@@ -5,7 +5,7 @@
 // behaviour. What is worth pinning is what the flight must never do: put a card
 // on screen that answers a tap before the stand actually owns it, and strand the
 // route waiting for a landing that can never come.
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PackStand } from "./pack-stand";
 import { rarityStyle } from "@/lib/card-rarity";
@@ -16,6 +16,15 @@ const PACK = [
   { id: "ep-2", participant_id: "p-2", running_order: 2, bib_number: 2, selected_draft_position: null, participant: { name: "Bob Blitz" } }, // prettier-ignore
   { id: "ep-3", participant_id: "p-3", running_order: 3, bib_number: 3, selected_draft_position: null, participant: { name: "Carol Crush" } }, // prettier-ignore
 ];
+
+/** The daily secret, once its pull has landed. */
+const SECRET = {
+  id: "sec-1",
+  name: "Pickles",
+  artUrl: null,
+  foil: null,
+  borderFx: null,
+} as unknown as React.ComponentProps<typeof PackStand>["secret"];
 
 /** A deck that was genuinely measured — what a real browser would hand over. */
 const MEASURED: PackHandoff = {
@@ -128,6 +137,96 @@ describe("while the deck is still landing", () => {
     // reader being told about them is being told about a camera move.
     const flying = container.querySelectorAll('[aria-hidden="true"] .rounded-xl');
     expect(flying.length).toBeGreaterThanOrEqual(MEASURED.cards.length);
+  });
+});
+
+/**
+ * The fake ending.
+ *
+ * Every test here is about when it must *not* run. A twist is only a twist if the
+ * thing it interrupts was believable, and every one of these cases is a way of
+ * pretending the pack is over when it either already was or never will not be.
+ */
+describe("the fake ending", () => {
+  /** Walk from the last roster card onto the secret's slot, the way a swipe does. */
+  function stepToSecret(over: Partial<React.ComponentProps<typeof PackStand>> = {}) {
+    const view = renderStand({ cursor: PACK.length - 1, secretSlot: "sealed", ...over });
+    view.rerender(
+      <PackStand
+        {...({
+          pack: PACK,
+          bundle: null,
+          cursor: PACK.length,
+          cards: undefined,
+          rarities: new Map(),
+          revealed: [0, 1, 2],
+          universalBack: null,
+          pullCounts: undefined,
+          secretSlot: "sealed",
+          secret: SECRET,
+          secretRarity: rarityStyle("base"),
+          secretRevealed: false,
+          secretDuplicate: false,
+          secretPeeking: false,
+          peeking: false,
+          busy: false,
+          onReveal: () => {},
+          onRevealSecret: () => {},
+          onAdvance: () => {},
+          ...over,
+        } as React.ComponentProps<typeof PackStand>)}
+      />,
+    );
+    return view;
+  }
+
+  it("says the pack is finished before it admits there is another card", () => {
+    stepToSecret();
+    expect(screen.getByTestId("stand-step")).toHaveTextContent(/pack complete/i);
+    // And nothing about the fourth card is on screen yet — that line arriving
+    // early is exactly what made the old heading swap not a surprise.
+    expect(screen.queryByText(/one more card/i)).toBeNull();
+  });
+
+  it("takes it back, and lands on the fourth card", async () => {
+    vi.useFakeTimers();
+    try {
+      stepToSecret();
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByTestId("stand-step")).toHaveTextContent(/one more card/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * The case that matters most. A pull that failed, an empty set, or a guest who
+   * never claimed all fall straight through to the columns — and a fake ending
+   * followed by nothing at all is far worse than no fake ending.
+   */
+  it("does not pretend when there is no fourth card coming", () => {
+    for (const slot of ["failed", "hidden", "gated"] as const) {
+      const view = stepToSecret({ secretSlot: slot });
+      expect(screen.getByTestId("stand-step")).not.toHaveTextContent(/pack complete/i);
+      view.unmount();
+    }
+  });
+
+  it("does not pretend for somebody who pressed Reveal all", () => {
+    // They have said they want to get through this. A twist nobody chose to sit
+    // through is a delay — and the run would turn the secret over while the
+    // screen still said the pack was finished.
+    stepToSecret({ busy: true });
+    expect(screen.getByTestId("stand-step")).not.toHaveTextContent(/pack complete/i);
+  });
+
+  it("does not pretend for somebody coming back to a card they already knew about", () => {
+    // Mounted straight onto the secret's slot — a reload, not a step. Replaying
+    // the twist on arrival is a lie rather than a surprise.
+    renderStand({ cursor: PACK.length, secretSlot: "sealed", secret: SECRET });
+    expect(screen.getByTestId("stand-step")).not.toHaveTextContent(/pack complete/i);
   });
 });
 

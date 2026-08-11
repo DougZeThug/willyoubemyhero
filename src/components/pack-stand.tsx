@@ -29,6 +29,28 @@ export const FLIP_MS = 500;
  */
 export const SECRET_FLIP_MS = 1100;
 
+/**
+ * The fake ending, in milliseconds.
+ *
+ * `over` is how long the pack is allowed to look finished. Long enough to be
+ * believed and short enough that nobody has started reaching for the back
+ * gesture — at half a second the eye has read "Pack Complete" and settled, which
+ * is exactly the moment worth interrupting.
+ *
+ * `glitch` is the interruption itself: one flicker, a dot arriving, and the
+ * purple coming up from behind the card.
+ */
+const FINALE = { over: 620, glitch: 520 } as const;
+
+/**
+ * How long the secret's impact lasts.
+ *
+ * Short. A flash and a shake are punctuation, and anything long enough to watch
+ * stops being an impact and becomes an effect — the confetti afterwards is what
+ * carries the celebration.
+ */
+const SLAM_MS = 460;
+
 type StandParticipant = {
   id: string;
   participant_id: string;
@@ -245,6 +267,15 @@ export function PackStand({
   const burstFiredRef = useRef<number | null>(null);
   // Assigned during render, below, once `rarity` has been resolved.
   const rarityRef = useRef<Rarity>(rarityStyle("base"));
+  /**
+   * The secret's landing, which has to be the loudest thing in the app.
+   *
+   * The confetti was doing more work than the reveal itself, which is exactly the
+   * wrong way round: the confetti is the lap of honour and the *impact* is the
+   * event. This is the impact — a blackout, a flash and a shake, all inside the
+   * ~200ms either side of the face arriving.
+   */
+  const [slam, setSlam] = useState(false);
   useEffect(() => {
     if (reduced || !isRevealed) return;
     // Once per card. `settled` flips back and forth across a step, and the
@@ -254,15 +285,68 @@ export function PackStand({
     const t = setTimeout(() => {
       burstFiredRef.current = cursor;
       void burst(rarityRef.current, onSecret ? 1.5 : ambienceStrength(rarityRef.current.tier));
+      if (onSecret) {
+        setSlam(true);
+        setTimeout(() => setSlam(false), SLAM_MS);
+      }
     }, ms * 0.86);
     return () => clearTimeout(t);
     // `rarity` is read through a ref so a bundle arriving mid-flip cannot
     // re-schedule the burst and fire it twice.
   }, [isRevealed, onSecret, reduced, cursor]);
 
+  /**
+   * The fake ending.
+   *
+   * The best beat in the whole sequence used to be a heading swapping from
+   * "Card 3 of 3" to "One More Card". The pack is *supposed* to be over here —
+   * three cards is what it says on the wrapper — so the sequence spends a moment
+   * behaving as though it is, and then takes it back.
+   *
+   * Three states rather than a boolean, because they are three different screens:
+   * `over` is a finished pack, `glitch` is the moment it stops being one, and
+   * `arrived` is the fourth card genuinely on the stand.
+   */
+  const [finale, setFinale] = useState<"none" | "over" | "glitch" | "arrived">("none");
+  const cameFromRosterRef = useRef(false);
+
+  useEffect(() => {
+    // Only when the sequence actually walked here. Landing on the secret's slot
+    // from a reload is somebody coming back to a card they already knew about,
+    // and a fake ending replayed on arrival is a lie rather than a twist.
+    if (!onSecret) {
+      cameFromRosterRef.current = true;
+      setFinale("none");
+      return;
+    }
+    // A pull that failed, an empty set, or a guest who never claimed. All of them
+    // fall straight through to the columns, and a fake ending followed by nothing
+    // at all is far worse than no fake ending.
+    //
+    // `busy` is the automatic run. Somebody who pressed "Reveal all" has said
+    // they want to get through this, and a twist nobody chose to sit through is
+    // just a delay — it would also have the run turning the secret over while the
+    // screen still said the pack was finished.
+    if (!secretTakesTheStand(secretSlot) || !cameFromRosterRef.current || reduced || busy) {
+      setFinale("arrived");
+      return;
+    }
+
+    setFinale("over");
+    const timers = [
+      setTimeout(() => setFinale("glitch"), FINALE.over),
+      setTimeout(() => setFinale("arrived"), FINALE.over + FINALE.glitch),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [onSecret, secretSlot, reduced, busy]);
+
+  // The pack is behaving as though it is finished. Nothing about the fourth card
+  // may be on screen — not its heading, not its dot, not its glow.
+  const pretending = finale === "over" || finale === "glitch";
+
   // The card is mid-ceremony: turned over already in everything but appearance.
   const holding = onSecret ? secretPeeking : peeking;
-  const canAdvance = isRevealed && !busy && !holding;
+  const canAdvance = isRevealed && !busy && !holding && !pretending;
 
   // The step gesture. Swiping the card away is how you move on — there is no
   // Next button — so the whole stand reads the throw, not just the card.
@@ -314,13 +398,30 @@ export function PackStand({
   // The secret keeps its words — it is the one step whose heading is the event.
   // A roster card gets a position, not a title: the card is the interface, and
   // "CARD 1 OF 3" above it is a web page explaining itself.
-  const heading = onSecret ? "One More Card" : `${cursor + 1} / ${pack.length}`;
+  // While the pack is pretending to be over it says so, and says nothing about a
+  // fourth card. "One More Card" is the payoff line and must not arrive early.
+  const heading = pretending
+    ? "Pack Complete"
+    : onSecret
+      ? "One More Card"
+      : `${cursor + 1} / ${pack.length}`;
 
   return (
-    <div className="relative flex flex-col items-center gap-3">
-      {/* Everything else on the page steps back for the fourth card. */}
+    // The camera shakes when the secret lands, and the *scene* is what shakes —
+    // moving the card alone reads as the card wobbling, where moving everything
+    // reads as something having hit hard enough to jolt the room. A few pixels
+    // is plenty; past about five it stops being an impact and becomes an
+    // earthquake, on a phone somebody is holding at arm's length.
+    <motion.div
+      className="relative flex flex-col items-center gap-3"
+      animate={slam && !reduced ? { x: [0, -3, 3, -2, 0], y: [0, 2, -2, 1, 0] } : { x: 0, y: 0 }}
+      transition={{ duration: 0.18, ease: "linear" }}
+    >
+      {/* Everything else on the page steps back for the fourth card — but not
+          while the pack is still pretending to be finished. The room going dark
+          *is* the tell. */}
       <AnimatePresence>
-        {onSecret && (
+        {onSecret && !pretending && (
           <motion.div
             aria-hidden
             initial={{ opacity: 0 }}
@@ -332,6 +433,69 @@ export function PackStand({
         )}
       </AnimatePresence>
 
+      {/* The secret landing.
+          Blackout first, so the flash has something to be brighter than, then
+          white through the secret's own colour. This is the frame the whole
+          sequence has been building to and it is allowed to be the loudest thing
+          the app does. */}
+      <AnimatePresence>
+        {slam && !reduced && (
+          <motion.div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-20"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: SLAM_MS / 1000, ease: "easeOut" }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-black"
+              initial={{ opacity: 0.85 }}
+              animate={{ opacity: 0 }}
+              transition={{ duration: 0.14, ease: "easeOut" }}
+            />
+            <motion.div
+              className="absolute inset-0"
+              style={{
+                background: `radial-gradient(70% 50% at 50% 44%, oklch(1 0 0 / 92%) 0%, ${secretRarity.accent} 42%, transparent 78%)`,
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.95, 0] }}
+              transition={{ duration: 0.34, times: [0, 0.18, 1], ease: "easeOut" }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* The moment the pack stops being over.
+          One flicker of the whole scene, then the room darkening and the
+          secret's own colour leaking up from behind the card that is still
+          sitting there. Everything the fourth card wears — its heading, its dot,
+          its bezel glow — arrives after this, not before. */}
+      <AnimatePresence>
+        {finale === "glitch" && (
+          <motion.div
+            aria-hidden
+            className="pointer-events-none fixed inset-0 z-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 1, 0.35, 1] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: FINALE.glitch / 1000, times: [0, 0.08, 0.16, 1] }}
+          >
+            <div className="absolute inset-0 bg-black/70" />
+            <motion.div
+              className="absolute inset-0"
+              style={{
+                background: `radial-gradient(46% 34% at 50% 46%, ${secretRarity.accent} 0%, transparent 72%)`,
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.55 }}
+              transition={{ duration: FINALE.glitch / 1000, ease: "easeIn" }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* The room reacting to whatever is on the stand. Behind the card, never on
           it: the card already carries a bezel, a foil and an edge light, and a
           fourth glow on the same 280 pixels is how a reveal ends up busy rather
@@ -340,7 +504,9 @@ export function PackStand({
         rarity={rarity}
         secret={onSecret}
         revealed={isRevealed}
-        anticipating={holding}
+        // Silent while the pack is pretending to be over. A secret-coloured wall
+        // behind a screen that says "Pack Complete" gives the whole thing away.
+        anticipating={holding && !pretending}
       />
 
       <div
@@ -474,7 +640,7 @@ export function PackStand({
                     landing && "invisible",
                     // Only while sealed: a breathing ring on a card you are already
                     // looking at is a notification badge, not anticipation.
-                    onSecret && !isRevealed && "secret-seal",
+                    onSecret && !isRevealed && !pretending && "secret-seal",
                     onSecret && isRevealed && !settled && "secret-reveal-sweep",
                     onSecret && isRevealed && secretDuplicate && "secret-dupe-shimmer",
                     peeking && !onSecret && !reduced && "animate-pulse",
@@ -588,12 +754,19 @@ export function PackStand({
           </AnimatePresence>
         </div>
 
+        {/* The dot arrives, rather than having been there all along.
+            A fourth dot sitting under three roster cards is the sequence telling
+            you there is a fourth card before it has earned the right to — and it
+            is the reason the old "One More Card" heading was never a surprise.
+            So the total counts only what has been admitted to so far. */}
         <StepDots
-          total={pack.length + (secretSlot === "hidden" || secretSlot === "gated" ? 0 : 1)}
-          at={cursor}
-          accent={onSecret ? secretRarity.accent : "oklch(0.82 0.14 210)"}
+          total={
+            pack.length + (secretSlot === "hidden" || secretSlot === "gated" || pretending ? 0 : 1)
+          }
+          at={Math.min(cursor, pack.length - (pretending ? 1 : 0))}
+          accent={onSecret && !pretending ? secretRarity.accent : "oklch(0.82 0.14 210)"}
         />
       </div>
-    </div>
+    </motion.div>
   );
 }
