@@ -641,6 +641,36 @@ export function PackOpening({
                     opaque chrome rather than a blend mode, which is the reason it
                     survives being looked at in a garden. */}
                 {isSecret(i) && <div className="holo-prism-edge is-spinning" aria-hidden />}
+
+                {/* The light catching the face as the card reaches its fan pose.
+
+                    A card that arrives and then simply sits there is a rectangle;
+                    a card that catches the light on its way in is an object with a
+                    surface. Staggered with the fan itself so the sweep travels
+                    across the hand rather than firing on all of them at once. */}
+                <motion.div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl"
+                  style={{ mixBlendMode: "screen" }}
+                  initial={false}
+                  animate={{ opacity: hovering ? 1 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <motion.div
+                    className="absolute inset-y-[-30%] w-1/2 -skew-x-12"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, transparent, oklch(1 0 0 / 42%), transparent)",
+                    }}
+                    initial={false}
+                    animate={hovering ? { x: ["-160%", "260%"] } : { x: "-160%" }}
+                    transition={{
+                      duration: 0.85,
+                      delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
+                      ease: "easeInOut",
+                    }}
+                  />
+                </motion.div>
               </motion.div>
             ))}
         </PackWrapper>
