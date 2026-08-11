@@ -755,3 +755,33 @@ test.describe("navigation", () => {
     }
   });
 });
+
+/**
+ * The whole sequence with the production switched off.
+ *
+ * Almost everything the pack does now branches on this preference — the opening
+ * ceremony, the handoff onto the stand, the flip's light and punch, the rarity
+ * ambience, the fake ending, the secret's flash and shake. Each of those is
+ * guarded individually, which is exactly the shape of thing where one of them
+ * quietly stops being guarded and nobody notices, because nobody develops with
+ * the setting on.
+ *
+ * So this asserts the only thing that actually matters: with it on, the pack
+ * still opens, the cards still turn, and it still finishes.
+ */
+test.describe("with reduced motion", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  test("skips the production but still opens and finishes the pack", async ({ page }) => {
+    await page.goto("/players/pack");
+    await tearPack(page);
+
+    // No ceremony at all — the rip deals the pack and hands straight over, which
+    // is what this screen did before the ceremony existed.
+    await expect(sealedPack(page)).toBeHidden();
+    await expect(page.getByTestId("stand-step")).toHaveText("1 / 3");
+
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+  });
+});
