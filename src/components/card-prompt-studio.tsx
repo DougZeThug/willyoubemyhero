@@ -66,6 +66,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
   const [eventParticipantId, setEventParticipantId] = useState("");
   const [subjectName, setSubjectName] = useState("");
   const [association, setAssociation] = useState("");
+  const [teamName, setTeamName] = useState("");
   const [colors, setColors] = useState("");
   const [about, setAbout] = useState("");
   const [visualMustHaves, setVisualMustHaves] = useState("");
@@ -86,13 +87,16 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
   const selected = bundle?.participants.find(
     (participant) => participant.id === eventParticipantId,
   );
-  const effectiveName = playerSeries ? (selected?.participant?.name ?? "") : subjectName;
+  // The name field is always editable, but a player series still falls back to the
+  // roster name so an admin never has to retype it.
+  const effectiveName = subjectName.trim() || (playerSeries ? (selected?.participant?.name ?? "") : "");
+  const teamSeries = series === "cornhole_player";
   const photoUrl = selected
     ? (urlFromSet(photoUrls?.[selected.id]) ?? selected.participant?.profile_image_url ?? undefined)
     : undefined;
   const subjectReady = playerSeries
-    ? !!selected?.participant?.name
-    : !!subjectName.trim() && !!association.trim();
+    ? !!selected && !!effectiveName
+    : !!effectiveName && !!association.trim();
   // A failed request intentionally falls back to the built-in templates. A request
   // still in flight is different: generating then could permanently snapshot stale text.
   const canGenerate = subjectReady && !templates.isPending;
@@ -120,6 +124,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
       eventParticipantId: playerSeries ? (selected?.id ?? null) : null,
       subjectName: effectiveName,
       association,
+      teamName,
       colors,
       about,
       visualMustHaves,
@@ -131,6 +136,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
         subjectName: effectiveName,
         nickname: playerSeries ? (selected?.participant?.nickname ?? undefined) : undefined,
         association: playerSeries ? undefined : association,
+        teamName: teamSeries ? teamName : undefined,
         knownData,
         colors,
         about,
@@ -245,6 +251,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
     if (participantId) setEventParticipantId(participantId);
     if (typeof snap.subjectName === "string") setSubjectName(snap.subjectName);
     if (typeof snap.association === "string") setAssociation(snap.association);
+    if (typeof snap.teamName === "string") setTeamName(snap.teamName);
     if (typeof snap.colors === "string") setColors(snap.colors);
     if (typeof snap.about === "string") setAbout(snap.about);
     if (typeof snap.visualMustHaves === "string") setVisualMustHaves(snap.visualMustHaves);
