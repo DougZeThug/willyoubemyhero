@@ -133,8 +133,13 @@ export const CEREMONY_BASIS = 320;
  * days and four on a day with a secret in it, and a fan that grew with the count
  * would run off the sides of a phone on exactly the days worth watching.
  */
-const FAN_SPREAD = 104;
-const FAN_TILT = 18;
+// Widened after the fan turned out to read as a stack rather than a hand: at 104
+// across a 198px card the neighbours overlapped by three quarters and the spread
+// was invisible. 132 leaves the outer edge ~145px off centre against a 160px pack
+// half-width, so it still lands inside the pack's own column — which matters,
+// since `overflow-x: hidden` clips an escaped card rather than scrolling to it.
+const FAN_SPREAD = 132;
+const FAN_TILT = 24;
 
 /**
  * How much smaller each card is than the one in front of it, in a stack.
@@ -244,8 +249,8 @@ export function fanTransform(i: number, n: number): CardPose {
   // secret — past the edges of a phone, where `overflow-x: hidden` silently eats
   // the outer cards. Capped rather than purely divided, so two cards sit close
   // together instead of stretching to fill a width they do not need.
-  const step = n > 1 ? Math.min(58, FAN_SPREAD / (n - 1)) : 0;
-  const tilt = n > 1 ? Math.min(9, FAN_TILT / (n - 1)) : 0;
+  const step = n > 1 ? Math.min(66, FAN_SPREAD / (n - 1)) : 0;
+  const tilt = n > 1 ? Math.min(12, FAN_TILT / (n - 1)) : 0;
   return {
     x: t * step,
     // Up out of the pack, plus an arc that lifts the middle — the shape a hand of
