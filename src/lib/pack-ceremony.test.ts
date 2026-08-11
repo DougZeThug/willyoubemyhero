@@ -168,7 +168,10 @@ describe("fanTransform", () => {
       return cards[n - 1].x - cards[0].x;
     };
     expect(width(4)).toBeCloseTo(width(3));
-    expect(width(3)).toBeLessThanOrEqual(120);
+    // Ceiling, not a target: the fan has to stay inside the 320px pack column,
+    // where a card in the fan is about 159px wide. 140 keeps the outer edges
+    // clear of it with room to spare.
+    expect(width(3)).toBeLessThanOrEqual(140);
   });
 
   it("tilts across the same total angle at three cards or four", () => {
