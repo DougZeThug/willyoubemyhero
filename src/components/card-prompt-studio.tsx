@@ -66,6 +66,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
   const [eventParticipantId, setEventParticipantId] = useState("");
   const [subjectName, setSubjectName] = useState("");
   const [association, setAssociation] = useState("");
+  const [teamName, setTeamName] = useState("");
   const [colors, setColors] = useState("");
   const [about, setAbout] = useState("");
   const [visualMustHaves, setVisualMustHaves] = useState("");
@@ -86,13 +87,17 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
   const selected = bundle?.participants.find(
     (participant) => participant.id === eventParticipantId,
   );
-  const effectiveName = playerSeries ? (selected?.participant?.name ?? "") : subjectName;
+  // The name field is always editable, but a player series still falls back to the
+  // roster name so an admin never has to retype it.
+  const effectiveName =
+    subjectName.trim() || (playerSeries ? (selected?.participant?.name ?? "") : "");
+  const teamSeries = series === "cornhole_player";
   const photoUrl = selected
     ? (urlFromSet(photoUrls?.[selected.id]) ?? selected.participant?.profile_image_url ?? undefined)
     : undefined;
   const subjectReady = playerSeries
-    ? !!selected?.participant?.name
-    : !!subjectName.trim() && !!association.trim();
+    ? !!selected && !!effectiveName
+    : !!effectiveName && !!association.trim();
   // A failed request intentionally falls back to the built-in templates. A request
   // still in flight is different: generating then could permanently snapshot stale text.
   const canGenerate = subjectReady && !templates.isPending;
@@ -120,6 +125,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
       eventParticipantId: playerSeries ? (selected?.id ?? null) : null,
       subjectName: effectiveName,
       association,
+      teamName,
       colors,
       about,
       visualMustHaves,
@@ -131,6 +137,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
         subjectName: effectiveName,
         nickname: playerSeries ? (selected?.participant?.nickname ?? undefined) : undefined,
         association: playerSeries ? undefined : association,
+        teamName: teamSeries ? teamName : undefined,
         knownData,
         colors,
         about,
@@ -245,6 +252,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
     if (participantId) setEventParticipantId(participantId);
     if (typeof snap.subjectName === "string") setSubjectName(snap.subjectName);
     if (typeof snap.association === "string") setAssociation(snap.association);
+    if (typeof snap.teamName === "string") setTeamName(snap.teamName);
     if (typeof snap.colors === "string") setColors(snap.colors);
     if (typeof snap.about === "string") setAbout(snap.about);
     if (typeof snap.visualMustHaves === "string") setVisualMustHaves(snap.visualMustHaves);
@@ -290,34 +298,50 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
           </div>
 
           {playerSeries ? (
-            <div className={fieldClass}>
-              <Label htmlFor="prompt-participant">Participant</Label>
-              <Select value={eventParticipantId} onValueChange={setEventParticipantId}>
-                <SelectTrigger id="prompt-participant" className="min-h-11">
-                  <SelectValue placeholder="Choose a participant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(bundle?.participants ?? []).map((ep) => (
-                    <SelectItem key={ep.id} value={ep.id}>
-                      {ep.participant?.name ?? "Unknown"}
-                      {ep.participant?.nickname ? ` “${ep.participant.nickname}”` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selected?.participant && (
-                <p className="text-xs text-muted-foreground">
-                  Name: {selected.participant.name}
-                  {selected.participant.nickname
-                    ? ` · Nickname: ${selected.participant.nickname}`
-                    : ""}
-                </p>
-              )}
+            <div className="space-y-4">
+              <div className={fieldClass}>
+                <Label htmlFor="prompt-participant">Participant</Label>
+                <Select
+                  value={eventParticipantId}
+                  onValueChange={(value) => {
+                    setEventParticipantId(value);
+                    const next = bundle?.participants.find((ep) => ep.id === value);
+                    setSubjectName(next?.participant?.name ?? "");
+                  }}
+                >
+                  <SelectTrigger id="prompt-participant" className="min-h-11">
+                    <SelectValue placeholder="Choose a participant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(bundle?.participants ?? []).map((ep) => (
+                      <SelectItem key={ep.id} value={ep.id}>
+                        {ep.participant?.name ?? "Unknown"}
+                        {ep.participant?.nickname ? ` “${ep.participant.nickname}”` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selected?.participant?.nickname && (
+                  <p className="text-xs text-muted-foreground">
+                    Nickname: {selected.participant.nickname}
+                  </p>
+                )}
+              </div>
+              <div className={fieldClass}>
+                <Label htmlFor="prompt-subject">Name</Label>
+                <Input
+                  id="prompt-subject"
+                  className="min-h-11"
+                  value={subjectName}
+                  onChange={(e) => setSubjectName(e.target.value)}
+                  placeholder="Name on the card"
+                />
+              </div>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className={fieldClass}>
-                <Label htmlFor="prompt-subject">Subject name</Label>
+                <Label htmlFor="prompt-subject">Name</Label>
                 <Input
                   id="prompt-subject"
                   className="min-h-11"
@@ -334,6 +358,19 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
                   onChange={(e) => setAssociation(e.target.value)}
                 />
               </div>
+            </div>
+          )}
+
+          {teamSeries && (
+            <div className={fieldClass}>
+              <Label htmlFor="prompt-team">Team name</Label>
+              <Input
+                id="prompt-team"
+                className="min-h-11"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                placeholder="Cornhole team name"
+              />
             </div>
           )}
 
