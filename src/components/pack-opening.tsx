@@ -27,7 +27,7 @@ import type { ImageUrlSet } from "@/lib/media";
  * double-tap during the drag can, and skipping a ceremony somebody has not seen a
  * single frame of is worse than a dead zone nobody notices.
  */
-const SKIP_DEAD_MS = 140;
+const SKIP_DEAD_MS = 90;
 
 /** How wide a flying card is, against the pack. Roughly the printed proportion. */
 const CARD_W = 0.62;
@@ -36,13 +36,26 @@ const CARD_W = 0.62;
  * The pause the secret takes before following the roster out, in seconds.
  *
  * Long enough to read as a separate arrival and short enough that the fan still
- * lands inside the phase it has. Scaled up with the cinematic timeline: at 0.11s
- * against the longer launch it was swallowed by the roster's own stagger. The
+ * lands inside the phase it has. Sized against `launch`, so it moved with the
+ * timeline: at 0.35s it was over half of the phase it has to fit inside. The
  * stand is where the secret's real ceremony happens — a 1600ms hold, a riser and
  * a flip twice the house length — so this is only the hint that there is a fourth
  * card, not the payoff.
  */
-const SECRET_BEAT = 0.35;
+const SECRET_BEAT = 0.16;
+
+/**
+ * How far apart the cards leave, in seconds per card.
+ *
+ * Every one of these is a fraction of the phase it plays inside, which is the
+ * only thing that keeps them honest: a stagger quoted in absolute seconds silently
+ * outruns its phase the moment the timeline is retuned, and a card still waiting
+ * to start when its phase ends simply teleports to the next mark. Four cards is
+ * the most the pack ever holds, so the last one has to be moving by `3 * step`.
+ */
+const RISE_STEP = 0.06;
+const FAN_STEP = 0.065;
+const DECK_STEP = 0.04;
 
 /**
  * The pack opening: the rest of the rip, and the cards coming out of it.
@@ -158,19 +171,19 @@ export function PackOpening({
     const width = boxRef.current?.getBoundingClientRect().width ?? 0;
     if (width > 0) setScale(width / CEREMONY_BASIS);
 
-    setPhase("rip");
+    setPhase(CEREMONY[0].phase);
     for (const step of CEREMONY.slice(1)) {
       timers.current.push(setTimeout(() => setPhase(step.phase), CEREMONY_START[step.phase]));
     }
     timers.current.push(setTimeout(finish, CEREMONY_MS));
 
     // Each sound sits on the thing it is the sound of. The pack coming apart is
-    // the strip letting go; the burst is the cards actually moving, which is 620ms
-    // later — played at `peel` it was a whoosh for something still sitting inside
-    // the wrapper.
-    timers.current.push(setTimeout(playPackOpen, CEREMONY_START.peel));
+    // the strip letting go; the burst is the cards actually moving, which is a
+    // phase later — played at `peel` it was a whoosh for something still sitting
+    // inside the wrapper.
+    timers.current.push(setTimeout(playPackOpen, CEREMONY_START.rip));
     timers.current.push(setTimeout(playPackBurst, CEREMONY_START.launch));
-    timers.current.push(setTimeout(playDeckGather, CEREMONY_START.collapse));
+    timers.current.push(setTimeout(playDeckGather, CEREMONY_START.handoff));
   }
 
   // A ceremony that outlives its screen would call back into a route that has
@@ -191,7 +204,7 @@ export function PackOpening({
    * thing there is left to do here, so this is where it belongs.
    */
   useEffect(() => {
-    if (phase === "rip") skipRef.current?.focus({ preventScroll: true });
+    if (phase === CEREMONY[0].phase) skipRef.current?.focus({ preventScroll: true });
   }, [phase]);
 
   // The preference can be flipped while the ceremony is running — the whole
@@ -212,7 +225,7 @@ export function PackOpening({
   // where a single move reads as a fan that happened to start small.
   function cardTarget(at: CeremonyPhase | null): "mouth" | "rise" | "fan" | "deck" {
     if (at == null) return "mouth";
-    if (ceremonyReached("collapse", at)) return "deck";
+    if (ceremonyReached("handoff", at)) return "deck";
     if (ceremonyReached("fan", at)) return "fan";
     if (ceremonyReached("launch", at)) return "rise";
     return "mouth";
@@ -280,7 +293,7 @@ export function PackOpening({
           // freeze; this one is still travelling when the eye gets to it.
           stiffness: 160,
           damping: 21,
-          delay: i * 0.12 + (isSecret(i) ? SECRET_BEAT : 0),
+          delay: i * RISE_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
@@ -307,7 +320,7 @@ export function PackOpening({
           type: "spring",
           stiffness: 150,
           damping: 20,
-          delay: i * 0.13 + (isSecret(i) ? SECRET_BEAT : 0),
+          delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
@@ -331,7 +344,7 @@ export function PackOpening({
           type: "spring",
           stiffness: 210,
           damping: 28,
-          delay: i * 0.07,
+          delay: i * DECK_STEP,
         },
       };
     },

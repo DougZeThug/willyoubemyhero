@@ -23,8 +23,26 @@ describe("the timeline", () => {
   it("runs about as long as a rip actually takes to watch", () => {
     // Loose bounds on purpose: this is a taste range, not a contract. It exists
     // so a stray zero in the table shows up as a failing test.
-    expect(CEREMONY_MS).toBeGreaterThan(3000);
-    expect(CEREMONY_MS).toBeLessThan(6000);
+    //
+    // Halved from the old 3–6s window. The sequence is not shorter because it was
+    // trimmed — it is shorter because the two phases that held still were given
+    // something to do, and a phase that is always changing does not need as long.
+    expect(CEREMONY_MS).toBeGreaterThan(1500);
+    expect(CEREMONY_MS).toBeLessThan(3000);
+  });
+
+  /**
+   * The reason the timeline was retuned, pinned so it cannot quietly regress.
+   *
+   * The old table's failure was not its length, it was that it contained dead
+   * air: a 360ms phase where the pack simply sat open and a 560ms one where the
+   * fan hung still. Anything long enough to notice is long enough to need
+   * something happening in it.
+   */
+  it("has no phase long enough to read as a pause", () => {
+    for (const step of CEREMONY) {
+      expect(step.ms).toBeLessThanOrEqual(420);
+    }
   });
 
   it("starts each phase where the previous one ended", () => {
@@ -38,8 +56,8 @@ describe("the timeline", () => {
 });
 
 describe("ceremonyPhaseAt", () => {
-  it("opens on the rip", () => {
-    expect(ceremonyPhaseAt(0)).toBe("rip");
+  it("opens on the first phase in the table", () => {
+    expect(ceremonyPhaseAt(0)).toBe(CEREMONY[0].phase);
   });
 
   it("lands each phase on its own first millisecond", () => {
@@ -57,8 +75,8 @@ describe("ceremonyPhaseAt", () => {
   // in the pointer handler, and NaN is one bad subtraction away. Neither should
   // be able to take the ceremony somewhere it has no frame for.
   it("answers the first phase for a clock that has not started", () => {
-    expect(ceremonyPhaseAt(-1)).toBe("rip");
-    expect(ceremonyPhaseAt(Number.NaN)).toBe("rip");
+    expect(ceremonyPhaseAt(-1)).toBe(CEREMONY[0].phase);
+    expect(ceremonyPhaseAt(Number.NaN)).toBe(CEREMONY[0].phase);
   });
 
   it("never skips a phase as the clock advances", () => {
@@ -81,7 +99,7 @@ describe("ceremonyReached", () => {
   });
 
   it("is false for a phase still ahead", () => {
-    expect(ceremonyReached("collapse", "fan")).toBe(false);
+    expect(ceremonyReached("handoff", "fan")).toBe(false);
   });
 
   it("counts everything as reached once the run is over", () => {

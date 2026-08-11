@@ -13,12 +13,14 @@
 
 /** Where the ceremony is. Each one owns a slice of the timeline below. */
 export type CeremonyPhase =
+  /** The pack takes the strain: a squash, before anything comes apart. */
+  | "anticipate"
+  /** The seam lights up and builds. The tear line is under tension, not yet open. */
+  | "seam"
   /** The rip finishes travelling on its own, from wherever the finger stopped. */
   | "rip"
-  /** The strip breaks into shards and tumbles away. */
+  /** The strip breaks into shards and tumbles away, and light escapes the mouth. */
   | "peel"
-  /** The pack is open and lit, with nothing out of it yet. */
-  | "mouth"
   /** Cards rise out of the mouth, still stacked. */
   | "launch"
   /** They spread into an arc hovering in front of the viewer. */
@@ -26,7 +28,7 @@ export type CeremonyPhase =
   /** A beat where nothing moves, so the fan can actually be looked at. */
   | "hold"
   /** They square up into a deck on the stand's mark. */
-  | "collapse"
+  | "handoff"
   /** Off the end — the stand owns the screen now. */
   | "done";
 
@@ -34,26 +36,39 @@ export type CeremonyPhase =
  * The timeline.
  *
  * Tuned for a phone held at arm's length, which is the only place this is ever
- * seen. The two long phases are the ones carrying information — the strip coming
- * off, and the fan spreading — and the two short ones (`mouth`, `hold`) are
- * pauses that stop those reading as one continuous slide.
+ * seen. Every phase carries something that is *changing* — that is the rule this
+ * table is built on, and it is why it is half the length it used to be.
  *
- * The total is a shade under five seconds — the "cinematic" pacing. The earlier
- * two-second cut read as a flicker: the strip was gone before the eye found it
- * and the fan collapsed before it could be looked at. Skip is always on screen
- * for anyone who has seen it enough times.
+ * The previous table ran 4.3s and was written the other way round: it had been
+ * lengthened from two seconds because the short cut "read as a flicker". That
+ * diagnosis was right about the symptom and wrong about the cause. The problem
+ * was never that two seconds is too short to watch; it was that the sequence had
+ * two phases in it — a 360ms `mouth` and a 560ms `hold` — where nothing evolved,
+ * so the eye had nothing to follow and the whole thing read as a slideshow being
+ * clicked through. Give every phase something to do and the same two seconds is
+ * dense rather than hurried.
+ *
+ * `mouth` is gone outright: the pack being open and lit with nothing coming out
+ * of it is a held frame by definition. Its work is now the tail of `peel`, where
+ * the light escaping the tear is the thing being looked at. `hold` survives at
+ * 200ms, because the fan does need one beat to be seen as a fan — but a beat, not
+ * a pause.
+ *
+ * Skip is always on screen for anyone who has seen it enough times.
  */
 export const CEREMONY: readonly { readonly phase: CeremonyPhase; readonly ms: number }[] = [
-  { phase: "rip", ms: 500 },
-  { phase: "peel", ms: 760 },
-  { phase: "mouth", ms: 360 },
-  { phase: "launch", ms: 720 },
-  { phase: "fan", ms: 840 },
-  { phase: "hold", ms: 560 },
-  // Long enough for the gather to actually finish. The deck spring takes about
-  // 300ms to settle, and a collapse shorter than that hands PackStand a deck that
-  // is still moving — which is a jump on the one frame both are on screen.
-  { phase: "collapse", ms: 560 },
+  { phase: "anticipate", ms: 120 },
+  { phase: "seam", ms: 180 },
+  { phase: "rip", ms: 200 },
+  { phase: "peel", ms: 250 },
+  { phase: "launch", ms: 380 },
+  { phase: "fan", ms: 420 },
+  { phase: "hold", ms: 200 },
+  // Long enough for the gather to actually finish, and no longer. The deck spring
+  // settles in about 260ms, and a handoff shorter than that hands PackStand a
+  // deck that is still moving — which is a jump on the one frame both are on
+  // screen, and the whole reason this phase has a name.
+  { phase: "handoff", ms: 300 },
 ] as const;
 
 /** Total run time. Derived, so the table stays the single source of truth. */

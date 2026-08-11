@@ -117,7 +117,7 @@ describe("the daily secret in the fan", () => {
   // secret at the bottom and the first roster card on top.
   it("drops to the back of the deck once the fan gathers", async () => {
     const { container } = renderOpening({ slots: 4, secret: true });
-    await tearAndRun(container, CEREMONY_START.collapse);
+    await tearAndRun(container, CEREMONY_START.handoff);
 
     const z = [...container.querySelectorAll<HTMLElement>('[data-testid="opening-card"]')].map(
       (el) => Number(el.style.zIndex),
@@ -244,7 +244,7 @@ describe("the selector the e2e suite depends on", () => {
 
     await tearAndRun(container, 0);
     let at = 0;
-    for (const ms of [CEREMONY_START.peel, CEREMONY_START.fan, CEREMONY_START.collapse]) {
+    for (const ms of [CEREMONY_START.peel, CEREMONY_START.fan, CEREMONY_START.handoff]) {
       await act(async () => {
         vi.advanceTimersByTime(ms - at);
       });

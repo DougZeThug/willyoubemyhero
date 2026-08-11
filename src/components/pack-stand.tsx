@@ -261,7 +261,12 @@ export function PackStand({
         onClickCapture={handleSwipeClickCapture}
       >
         <div className="text-center">
+          {/* Carries a test id because the e2e suite reads it to know the stand
+              has the screen and which step it is on. It used to match the prose
+              ("Card 1 of 3") out of the whole document body, which made a copy
+              change a five-spec failure with no obvious cause. */}
           <div
+            data-testid="stand-step"
             className={cn(
               "font-display font-black uppercase",
               onSecret
