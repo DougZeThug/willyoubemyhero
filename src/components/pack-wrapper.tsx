@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Sparkles } from "lucide-react";
 import { playTearTick } from "@/lib/card-sfx";
