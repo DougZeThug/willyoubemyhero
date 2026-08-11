@@ -38,11 +38,11 @@ export function StandEntrance({
   onLanded: () => void;
 }) {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0">
+    <div aria-hidden data-testid="stand-entrance" className="pointer-events-none absolute inset-0">
       {from.cards.slice(0, STAND_DECK_MAX + 1).map((c, i) => (
         <motion.div
           key={i}
-          initial={entryTransform(c, from.w, slot)}
+          initial={entryTransform(c, slot)}
           animate={standDeckOffset(i, slot.width)}
           transition={{ type: "spring", stiffness: 180, damping: 26, delay: i * 0.04 }}
           // Only the front card reports. The others land within a couple of

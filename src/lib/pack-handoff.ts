@@ -13,8 +13,16 @@
 // rect is exact even though the card is visually cut. Modelling that chain a
 // second time, in a different component, could only ever be subtly wrong.
 
-/** Where a card is on screen, as the middle of it. */
-export type CardCentre = { cx: number; cy: number };
+/**
+ * Where a card is on screen, and how it is sitting.
+ *
+ * `w` and `rotate` are per card rather than shared, because the ceremony's deck
+ * is a stack: each card behind the front one is fractionally smaller and a degree
+ * or two off square. Handing over only the front card's size and no angle at all
+ * made every trailing card visibly resize and snap upright on the first frame of
+ * the flight — in the middle of the one transition built to have no seam in it.
+ */
+export type CardCentre = { cx: number; cy: number; w: number; rotate: number };
 
 /**
  * What the opening ceremony hands the stand: where its deck was, and how big.
@@ -26,20 +34,20 @@ export type CardCentre = { cx: number; cy: number };
  */
 export type PackHandoff = {
   /**
-   * The width of the *front* card, used for every card in the deck.
+   * The width of the *front* card, which is the only one worth measuring.
    *
    * `getBoundingClientRect` answers with the axis-aligned box of a rotated
    * element, so the card at the back of the deck — which the gather leaves a few
    * degrees off square — measures several percent wider than it actually is.
-   * Card 0 is the only one the deck lands exactly square, which is why it is the
-   * only one worth measuring.
+   * Card 0 is the only one the deck lands exactly square, so the rest take their
+   * width from it and the deck's own scale rather than from a rect.
    */
   w: number;
   cards: CardCentre[];
 };
 
 /** A flying card's starting transform, relative to where it is going. */
-export type CardEntry = { x: number; y: number; scale: number };
+export type CardEntry = { x: number; y: number; scale: number; rotate: number };
 
 /**
  * The transform that puts a card the stand is about to hold exactly where the
@@ -53,14 +61,15 @@ export type CardEntry = { x: number; y: number; scale: number };
  * transform, which is identity for the card on the stand and `standDeckOffset`
  * for the ones behind it.
  */
-export function entryTransform(from: CardCentre, fromW: number, slot: SlotRect): CardEntry {
+export function entryTransform(from: CardCentre, slot: SlotRect): CardEntry {
   return {
     x: from.cx - (slot.left + slot.width / 2),
     y: from.cy - (slot.top + slot.height / 2),
     // A slot with no layout yet would divide by zero and put the card at
     // infinity. The caller is expected to have skipped the entrance entirely in
     // that case; this is the belt to that pair of braces.
-    scale: slot.width > 0 ? fromW / slot.width : 1,
+    scale: slot.width > 0 ? from.w / slot.width : 1,
+    rotate: from.rotate,
   };
 }
 
@@ -86,7 +95,10 @@ export type SlotRect = { left: number; top: number; width: number; height: numbe
  */
 export function standDeckOffset(i: number, width: number): CardEntry {
   const step = width * 0.016;
-  return { x: i * step, y: i * step * 1.4, scale: 1 - i * 0.02 };
+  // Square at rest. The ceremony's deck sits a degree or two off, and the cards
+  // straightening as they land is the stack being tidied onto the mark — which is
+  // the motion, rather than a discontinuity, because they travel there.
+  return { x: i * step, y: i * step * 1.4, scale: 1 - i * 0.02, rotate: 0 };
 }
 
 /**

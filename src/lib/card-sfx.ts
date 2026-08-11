@@ -453,7 +453,12 @@ const CUES = {
 
 export type SfxCue = keyof typeof CUES;
 
-/** Play a named cue. A no-op when muted, under reduced motion, or on the server. */
+/**
+ * Play a named cue.
+ *
+ * Muting silences the *audio* only — the haptic still fires, deliberately; see
+ * `buzz`. Reduced motion and the server suppress both.
+ */
 export function cue(name: SfxCue) {
   CUES[name]();
 }

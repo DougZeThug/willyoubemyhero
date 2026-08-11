@@ -163,7 +163,23 @@ export function PackOpening({
     if (!front || front.width === 0 || boxes.some((b) => !b)) return null;
     return {
       w: front.width,
-      cards: boxes.map((b) => ({ cx: b!.left + b!.width / 2, cy: b!.top + b!.height / 2 })),
+      cards: boxes.map((b, i) => {
+        const t = deckTransform(i, slots);
+        return {
+          cx: b!.left + b!.width / 2,
+          cy: b!.top + b!.height / 2,
+          // Derived from card 0's measured width rather than from this card's own
+          // rect. A rotated element measures wider than it is — that is what an
+          // axis-aligned bounding box means — and every card but the front one is
+          // a degree or two off square. Card 0 lands exactly square by design, so
+          // it is the one honest measurement, and the deck's own scale carries the
+          // rest.
+          w: front.width * t.scale,
+          // The angle it is actually sitting at, jitter and all, so the stand
+          // starts each card where the ceremony left it rather than upright.
+          rotate: t.rotate + (i === 0 ? 0 : jitter[i].rotate),
+        };
+      }),
     };
   }
 

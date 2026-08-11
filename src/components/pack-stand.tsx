@@ -179,9 +179,110 @@ export function PackStand({
   onAdvance: () => void;
 }) {
   const reduced = usePrefersReducedMotion();
-  const onSecret = cursor >= pack.length;
-  const ep = onSecret ? null : pack[cursor];
-  const isRevealed = onSecret ? secretRevealed : revealed.includes(cursor);
+  /**
+   * The cursor has walked onto the secret's slot.
+   *
+   * Where the sequence *is*, which is not the same as what is on screen — see
+   * `onSecret` below. Only the fake ending reads this one.
+   */
+  const atSecret = cursor >= pack.length;
+
+  /**
+   * The fake ending.
+   *
+   * The best beat in the whole sequence used to be a heading swapping from
+   * "Card 3 of 3" to "One More Card". The pack is *supposed* to be over here —
+   * three cards is what it says on the wrapper — so the sequence spends a moment
+   * behaving as though it is, and then takes it back.
+   *
+   * Three states rather than a boolean, because they are three different screens:
+   * `over` is a finished pack, `glitch` is the moment it stops being one, and
+   * `arrived` is the fourth card genuinely on the stand.
+   */
+  const [finale, setFinale] = useState<"none" | "over" | "glitch" | "arrived">("none");
+  const cameFromRosterRef = useRef(false);
+
+  useEffect(() => {
+    // Only when the sequence actually walked here. Landing on the secret's slot
+    // from a reload is somebody coming back to a card they already knew about,
+    // and a fake ending replayed on arrival is a lie rather than a twist.
+    if (!atSecret) {
+      cameFromRosterRef.current = true;
+      setFinale("none");
+      return;
+    }
+    // A pull that failed, an empty set, or a guest who never claimed. All of them
+    // fall straight through to the columns, and a fake ending followed by nothing
+    // at all is far worse than no fake ending.
+    //
+    // `busy` is the automatic run. Somebody who pressed "Reveal all" has said
+    // they want to get through this, and a twist nobody chose to sit through is
+    // just a delay — it would also have the run turning the secret over while the
+    // screen still said the pack was finished.
+    if (!secretTakesTheStand(secretSlot) || !cameFromRosterRef.current || reduced || busy) {
+      setFinale("arrived");
+      return;
+    }
+
+    setFinale("over");
+    const timers = [
+      setTimeout(() => {
+        setFinale("glitch");
+        cue("fakeEnding");
+      }, FINALE.over),
+      setTimeout(() => setFinale("arrived"), FINALE.over + FINALE.glitch),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [atSecret, secretSlot, reduced, busy]);
+
+  // The pack is behaving as though it is finished. Nothing about the fourth card
+  // may be on screen — not its heading, not its dot, not its glow.
+  const pretending = finale === "over" || finale === "glitch";
+
+  /**
+   * How many cards are still waiting behind the one on the stand.
+   *
+   * The roster cards after this one, plus the secret when one is genuinely
+   * coming. Goes negative on the secret's own step — nothing is behind the last
+   * card — and StandDeck reads that as "draw nothing", which is exactly right and
+   * is why this is allowed to be a plain subtraction rather than a clamp.
+   */
+  /**
+   * The secret is what the screen is actually showing.
+   *
+   * False through the fake ending even though the cursor has already walked onto
+   * the secret's slot: while the pack is pretending to be finished, the card on
+   * the stand is the last roster card, exactly as it was left. That is what a
+   * finished pack looks like, and it is the only version of the pretence that
+   * holds up — showing the fourth card's back under a "Pack Complete" heading
+   * announces the fourth card, and leaves it tappable, so the reveal could be
+   * started before the twist had finished playing.
+   */
+  const onSecret = atSecret && !pretending;
+  /** Which roster card is on the stand. Clamped, because the cursor may be past it. */
+  const shownIndex = Math.min(cursor, pack.length - 1);
+  const ep = onSecret ? null : pack[shownIndex];
+  const isRevealed = onSecret ? secretRevealed : revealed.includes(shownIndex);
+  /**
+   * What is on the stand, as an identity rather than a position.
+   *
+   * The cursor moves onto the secret's slot before the screen does, so anything
+   * that must happen once per *card* — resetting the flip, firing the landing
+   * burst — has to key on this rather than on `cursor`, or it fires a second time
+   * for the roster card still being shown during the pretence.
+   */
+  const shownKey = onSecret ? "secret" : (ep?.id ?? String(shownIndex));
+
+  /**
+   * How many cards are still waiting behind the one on the stand.
+   *
+   * Counted from the card being *shown*, not from the cursor, so the pretence
+   * still has the secret stacked behind the last roster card rather than an empty
+   * mark. Goes negative on the secret's own step — nothing is behind the last
+   * card — and StandDeck reads that as "draw nothing".
+   */
+  const behind =
+    pack.length - shownIndex - 1 + (secretTakesTheStand(secretSlot) && !onSecret ? 1 : 0);
 
   // Whether the card may show its own back yet.
   //
@@ -211,6 +312,8 @@ export function PackStand({
    */
   const slotRef = useRef<HTMLDivElement>(null);
   const [entry, setEntry] = useState<{ from: PackHandoff; slot: SlotRect } | null>(null);
+  // The stand's own measured box, held separately from any handoff.
+  const [slot, setSlot] = useState<SlotRect | null>(null);
   const [landing, setLanding] = useState(false);
   // Read once, on mount. The prop is cleared by the route the moment the flight
   // lands, and re-reading it would unmount the flight halfway through itself.
@@ -222,6 +325,11 @@ export function PackStand({
     // jsdom measures everything as zero, a skip hands over nothing, and reduced
     // motion never rendered a card to measure. All three mean the stand mounts
     // the way it always did.
+    // Kept whatever happens, because the resting deck behind the card is sized
+    // from it and exists on every path — a resumed pack and a skipped ceremony
+    // hand over no geometry, and reading the slot only when there is a flight to
+    // fly left those with no stack behind the card at all.
+    if (slot && slot.width > 0) setSlot(slot);
     if (!canFly(from, slot)) {
       onEntered?.();
       return;
@@ -242,10 +350,15 @@ export function PackStand({
     onEntered?.();
   }
 
+  // Keyed on the card being shown rather than on the cursor. The cursor moves
+  // onto the secret's slot before the screen does, and resetting there would
+  // clear the last roster card's flip mid-pretence — then *not* reset again when
+  // the secret genuinely arrives, so its stats panel would swap in during the
+  // flip instead of after it.
   useEffect(() => {
     setSettled(false);
     setFlipped(false);
-  }, [cursor]);
+  }, [shownKey]);
 
   useEffect(() => {
     if (!isRevealed) return;
@@ -269,7 +382,7 @@ export function PackStand({
    * being a label on the card and rarity being something that happens to the
    * screen: a base pull should still feel like something arrived, just quietly.
    */
-  const burstFiredRef = useRef<number | null>(null);
+  const burstFiredRef = useRef<string | null>(null);
   // Assigned during render, below, once `rarity` has been resolved.
   const rarityRef = useRef<Rarity>(rarityStyle("base"));
   /**
@@ -285,10 +398,10 @@ export function PackStand({
     if (reduced || !isRevealed) return;
     // Once per card. `settled` flips back and forth across a step, and the
     // secret's own step re-runs this on a cursor that has not moved.
-    if (burstFiredRef.current === cursor) return;
+    if (burstFiredRef.current === shownKey) return;
     const ms = onSecret ? SECRET_FLIP_MS : FLIP_MS;
     const t = setTimeout(() => {
-      burstFiredRef.current = cursor;
+      burstFiredRef.current = shownKey;
       void burst(rarityRef.current, onSecret ? 1.5 : ambienceStrength(rarityRef.current.tier));
       if (onSecret) {
         setSlam(true);
@@ -304,69 +417,7 @@ export function PackStand({
     return () => clearTimeout(t);
     // `rarity` is read through a ref so a bundle arriving mid-flip cannot
     // re-schedule the burst and fire it twice.
-  }, [isRevealed, onSecret, reduced, cursor]);
-
-  /**
-   * The fake ending.
-   *
-   * The best beat in the whole sequence used to be a heading swapping from
-   * "Card 3 of 3" to "One More Card". The pack is *supposed* to be over here —
-   * three cards is what it says on the wrapper — so the sequence spends a moment
-   * behaving as though it is, and then takes it back.
-   *
-   * Three states rather than a boolean, because they are three different screens:
-   * `over` is a finished pack, `glitch` is the moment it stops being one, and
-   * `arrived` is the fourth card genuinely on the stand.
-   */
-  const [finale, setFinale] = useState<"none" | "over" | "glitch" | "arrived">("none");
-  const cameFromRosterRef = useRef(false);
-
-  useEffect(() => {
-    // Only when the sequence actually walked here. Landing on the secret's slot
-    // from a reload is somebody coming back to a card they already knew about,
-    // and a fake ending replayed on arrival is a lie rather than a twist.
-    if (!onSecret) {
-      cameFromRosterRef.current = true;
-      setFinale("none");
-      return;
-    }
-    // A pull that failed, an empty set, or a guest who never claimed. All of them
-    // fall straight through to the columns, and a fake ending followed by nothing
-    // at all is far worse than no fake ending.
-    //
-    // `busy` is the automatic run. Somebody who pressed "Reveal all" has said
-    // they want to get through this, and a twist nobody chose to sit through is
-    // just a delay — it would also have the run turning the secret over while the
-    // screen still said the pack was finished.
-    if (!secretTakesTheStand(secretSlot) || !cameFromRosterRef.current || reduced || busy) {
-      setFinale("arrived");
-      return;
-    }
-
-    setFinale("over");
-    const timers = [
-      setTimeout(() => {
-        setFinale("glitch");
-        cue("fakeEnding");
-      }, FINALE.over),
-      setTimeout(() => setFinale("arrived"), FINALE.over + FINALE.glitch),
-    ];
-    return () => timers.forEach(clearTimeout);
-  }, [onSecret, secretSlot, reduced, busy]);
-
-  // The pack is behaving as though it is finished. Nothing about the fourth card
-  // may be on screen — not its heading, not its dot, not its glow.
-  const pretending = finale === "over" || finale === "glitch";
-
-  /**
-   * How many cards are still waiting behind the one on the stand.
-   *
-   * The roster cards after this one, plus the secret when one is genuinely
-   * coming. Goes negative on the secret's own step — nothing is behind the last
-   * card — and StandDeck reads that as "draw nothing", which is exactly right and
-   * is why this is allowed to be a plain subtraction rather than a clamp.
-   */
-  const behind = pack.length - cursor - 1 + (secretTakesTheStand(secretSlot) && !onSecret ? 1 : 0);
+  }, [isRevealed, onSecret, reduced, shownKey]);
 
   // The card is mid-ceremony: turned over already in everything but appearance.
   const holding = onSecret ? secretPeeking : peeking;
@@ -428,7 +479,7 @@ export function PackStand({
     ? "Pack Complete"
     : onSecret
       ? "One More Card"
-      : `${cursor + 1} / ${pack.length}`;
+      : `${shownIndex + 1} / ${pack.length}`;
 
   return (
     // The camera shakes when the secret lands, and the *scene* is what shakes —
@@ -436,11 +487,7 @@ export function PackStand({
     // reads as something having hit hard enough to jolt the room. A few pixels
     // is plenty; past about five it stops being an impact and becomes an
     // earthquake, on a phone somebody is holding at arm's length.
-    <motion.div
-      className="relative flex flex-col items-center gap-3"
-      animate={slam && !reduced ? { x: [0, -3, 3, -2, 0], y: [0, 2, -2, 1, 0] } : { x: 0, y: 0 }}
-      transition={{ duration: 0.18, ease: "linear" }}
-    >
+    <div className="relative flex flex-col items-center gap-3">
       {/* Everything else on the page steps back for the fourth card — but not
           while the pack is still pretending to be finished. The room going dark
           *is* the tell. */}
@@ -533,7 +580,20 @@ export function PackStand({
         anticipating={holding && !pretending}
       />
 
-      <div
+      {/* The shake lives on the card column and nowhere above it.
+          Everything rendered above is `position: fixed` and has to stay fixed to
+          the *viewport* — and a transformed ancestor becomes the containing block
+          for its fixed descendants, so a shake wrapped around the whole stand
+          would confine the scrim, the flash and the ambience to this column's own
+          box. motion writes a transform even at rest, so that would be true all
+          the time rather than only while something was shaking.
+
+          Shaking the column rather than the card is still the point: the card
+          alone reads as a wobble, where the column taking the heading and the
+          dots with it reads as something having hit hard enough to jolt the room. */}
+      <motion.div
+        animate={slam && !reduced ? { x: [0, -3, 3, -2, 0], y: [0, 2, -2, 1, 0] } : { x: 0, y: 0 }}
+        transition={{ duration: 0.18, ease: "linear" }}
         // touch-pan-y is load-bearing, not styling: touch-action is read at
         // gesture start off the hit element and its ancestors (see the note in
         // holo-card.tsx), and without it a horizontal throw starting beside the
@@ -613,13 +673,11 @@ export function PackStand({
           className="relative aspect-[5/7] w-full max-w-[min(320px,calc((100svh-19rem)*5/7))]"
         >
           {/* What is left of the pack, waiting behind this card. */}
-          {!reduced && (
-            <StandDeck count={behind} art={universalBack} width={entry?.slot.width ?? 0} />
-          )}
+          {!reduced && <StandDeck count={behind} art={universalBack} width={slot?.width ?? 0} />}
 
           <AnimatePresence mode="wait">
             <motion.div
-              key={onSecret ? "secret" : (ep?.id ?? cursor)}
+              key={shownKey}
               // While the deck is landing the entrance owns every pixel of motion
               // and the card underneath simply waits. `false` rather than a
               // zeroed initial, so nothing here animates at all and there is no
@@ -659,7 +717,6 @@ export function PackStand({
                     // Only while sealed: a breathing ring on a card you are already
                     // looking at is a notification badge, not anticipation.
                     onSecret && !isRevealed && !pretending && "secret-seal",
-                    onSecret && isRevealed && !settled && "secret-reveal-sweep",
                     onSecret && isRevealed && secretDuplicate && "secret-dupe-shimmer",
                     peeking && !onSecret && !reduced && "animate-pulse",
                   )}
@@ -712,7 +769,7 @@ export function PackStand({
                         ? undefined
                         : onSecret
                           ? onRevealSecret
-                          : () => onReveal(cursor)
+                          : () => onReveal(shownIndex)
                     }
                     // A horizontal throw is the stand's own gesture now — it means
                     // "next card", read by the wrapper above — so the card must not
@@ -781,10 +838,10 @@ export function PackStand({
           total={
             pack.length + (secretSlot === "hidden" || secretSlot === "gated" || pretending ? 0 : 1)
           }
-          at={Math.min(cursor, pack.length - (pretending ? 1 : 0))}
+          at={shownIndex}
           accent={onSecret && !pretending ? secretRarity.accent : "oklch(0.82 0.14 210)"}
         />
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }

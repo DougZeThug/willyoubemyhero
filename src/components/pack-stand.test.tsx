@@ -30,9 +30,9 @@ const SECRET = {
 const MEASURED: PackHandoff = {
   w: 187,
   cards: [
-    { cx: 160, cy: 420 },
-    { cx: 164, cy: 426 },
-    { cx: 168, cy: 432 },
+    { cx: 160, cy: 420, w: 187, rotate: 0 },
+    { cx: 164, cy: 426, w: 184, rotate: 1.1 },
+    { cx: 168, cy: 432, w: 181, rotate: 2.2 },
   ],
 };
 
@@ -135,8 +135,13 @@ describe("while the deck is still landing", () => {
     const { container } = withLayout(() => renderStand({ enteringFrom: MEASURED }));
     // Three cards were handed over, so three fly. They are decoration — a screen
     // reader being told about them is being told about a camera move.
-    const flying = container.querySelectorAll('[aria-hidden="true"] .rounded-xl');
-    expect(flying.length).toBeGreaterThanOrEqual(MEASURED.cards.length);
+    // Scoped to the entrance itself. Counting every rounded card inside an
+    // aria-hidden wrapper also swept up the *resting* deck, which is a different
+    // component that is on screen at the same time — so the assertion passed
+    // whether or not anything was actually flying.
+    const flight = container.querySelector('[data-testid="stand-entrance"]')!;
+    expect(flight).not.toBeNull();
+    expect(flight.children.length).toBe(MEASURED.cards.length);
   });
 });
 
@@ -186,6 +191,30 @@ describe("the fake ending", () => {
     // And nothing about the fourth card is on screen yet — that line arriving
     // early is exactly what made the old heading swap not a surprise.
     expect(screen.queryByText(/one more card/i)).toBeNull();
+  });
+
+  /**
+   * The pretence has to be believable, and a fourth card sitting on the stand
+   * under a "Pack Complete" heading is not. Worse, it was tappable: its reveal
+   * could be started before the twist had finished playing, which spends the
+   * surprise on somebody who was simply quick with their thumb.
+   *
+   * So the card on screen during the pretence is the last roster card, exactly
+   * as it was left. That is what a finished pack actually looks like.
+   */
+  it("keeps the last roster card on the stand rather than showing the fourth", () => {
+    stepToSecret();
+    // The card the sequence just finished with, still on the stand.
+    expect(screen.getByRole("button", { name: /carol crush/i })).toBeInTheDocument();
+    // And nothing on screen that is the fourth card.
+    expect(screen.queryByRole("button", { name: /pickles/i })).toBeNull();
+  });
+
+  it("does not reveal the secret if the card is tapped mid-pretence", () => {
+    const onRevealSecret = vi.fn();
+    stepToSecret({ onRevealSecret });
+    for (const el of screen.queryAllByRole("button")) el.click();
+    expect(onRevealSecret).not.toHaveBeenCalled();
   });
 
   it("takes it back, and lands on the fourth card", async () => {

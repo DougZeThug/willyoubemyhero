@@ -22,7 +22,10 @@ export function SiteNav() {
   // to nothing is still chrome a thumb or a tab key can reach.
   const presenting = useIsPresenting();
   const reduced = usePrefersReducedMotion();
-  const step = { duration: reduced ? 0 : 0.3, ease: "easeOut" } as const;
+  // Fading *out* is part of the ceremony taking the screen. Coming back is not:
+  // `inert` lifts the moment the flag clears, so a 300ms fade-in would leave the
+  // nav tappable and focusable while it was still invisible.
+  const step = { duration: reduced || !presenting ? 0 : 0.3, ease: "easeOut" } as const;
 
   return (
     <>

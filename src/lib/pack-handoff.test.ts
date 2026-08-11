@@ -24,8 +24,8 @@ describe("entryTransform", () => {
    * the first frame of the flight.
    */
   it("puts the card exactly where the ceremony left it", () => {
-    const from = { cx: 160, cy: 420 };
-    const entry = entryTransform(from, 187, SLOT);
+    const from = { cx: 160, cy: 420, w: 187, rotate: 0 };
+    const entry = entryTransform(from, SLOT);
 
     const landedCx = SLOT.left + SLOT.width / 2 + entry.x;
     const landedCy = SLOT.top + SLOT.height / 2 + entry.y;
@@ -35,21 +35,37 @@ describe("entryTransform", () => {
   });
 
   it("asks for no movement at all when the two already coincide", () => {
-    const entry = entryTransform(centreOf(SLOT), SLOT.width, SLOT);
-    expect(entry).toEqual({ x: 0, y: 0, scale: 1 });
+    const entry = entryTransform({ ...centreOf(SLOT), w: SLOT.width, rotate: 0 }, SLOT);
+    expect(entry).toEqual({ x: 0, y: 0, scale: 1, rotate: 0 });
+  });
+
+  /**
+   * Each card keeps its own size and angle across the seam.
+   *
+   * The deck the ceremony hands over is a stack — every card behind the front one
+   * is fractionally smaller and a degree or two off square. Starting them all at
+   * the front card's size and upright made every trailing card resize and snap
+   * straight on the first frame of the supposedly seamless flight.
+   */
+  it("starts each card at its own size and angle, not the front card's", () => {
+    const back = entryTransform({ cx: 168, cy: 432, w: 176, rotate: 2.2 }, SLOT);
+    const front = entryTransform({ cx: 160, cy: 420, w: 187, rotate: 0 }, SLOT);
+    expect(back.scale).toBeLessThan(front.scale);
+    expect(back.rotate).toBe(2.2);
+    expect(front.rotate).toBe(0);
   });
 
   // The ceremony's card is ~187px against a stand slot of up to 320, so the card
   // grows as it comes toward the viewer. That is the beat; a scale above 1 here
   // would mean it shrank, which reads as being put away rather than handed over.
   it("grows the card on its way to the stand", () => {
-    expect(entryTransform({ cx: 160, cy: 420 }, 187, SLOT).scale).toBeLessThan(1);
+    expect(entryTransform({ cx: 160, cy: 420, w: 187, rotate: 0 }, SLOT).scale).toBeLessThan(1);
   });
 
   it("survives a slot that has not been laid out yet", () => {
     // The caller is meant to skip the entrance entirely in this case. If it does
     // not, a card at scale Infinity fills the screen — so this answers 1 instead.
-    const entry = entryTransform({ cx: 10, cy: 10 }, 187, { ...SLOT, width: 0 });
+    const entry = entryTransform({ cx: 10, cy: 10, w: 187, rotate: 0 }, { ...SLOT, width: 0 });
     expect(Number.isFinite(entry.scale)).toBe(true);
     expect(entry.scale).toBe(1);
   });
@@ -57,7 +73,13 @@ describe("entryTransform", () => {
 
 describe("standDeckOffset", () => {
   it("leaves the card in front exactly on the mark", () => {
-    expect(standDeckOffset(0, 280)).toEqual({ x: 0, y: 0, scale: 1 });
+    expect(standDeckOffset(0, 280)).toEqual({ x: 0, y: 0, scale: 1, rotate: 0 });
+  });
+
+  it("lands the whole stack square, whatever angle it arrived at", () => {
+    // The cards straighten as they land. That is the stack being tidied onto the
+    // mark, and it reads as motion rather than as a jump because they travel it.
+    for (let i = 0; i < 4; i++) expect(standDeckOffset(i, 280).rotate).toBe(0);
   });
 
   it("steps each card further back than the last", () => {
@@ -103,7 +125,7 @@ describe("standDeckOffset", () => {
 });
 
 describe("canFly", () => {
-  const from = { w: 187, cards: [{ cx: 160, cy: 420 }] };
+  const from = { w: 187, cards: [{ cx: 160, cy: 420, w: 187, rotate: 0 }] };
 
   it("agrees to fly when both ends have been measured", () => {
     expect(canFly(from, SLOT)).toBe(true);

@@ -269,7 +269,13 @@ export function PackWrapper({
   // makes the rip afterwards read as a release rather than as the first thing
   // that happens.
   const bracing = !sealed && !ceremonyReached("rip", phase);
-  const seaming = !sealed && ceremonyReached("seam", phase);
+  // The seam phase itself, not "seam or later". `ceremonyReached` is cumulative,
+  // which is right for `shed` and `spilled` — those are one-way doors — and wrong
+  // here: the seam is supposed to build, then be blown out by the rip it was
+  // announcing. Asked cumulatively it stayed lit at full brightness through the
+  // rip, the peel, the fan and the handoff, and the blow-out branch below was
+  // unreachable.
+  const seaming = phase === "seam";
   // The rip finishes travelling on its own once it commits. This is the whole
   // reason the ceremony exists: the threshold is 60% of the drag, so left to the
   // gesture alone the edge never crosses the last 40% of the pack and the strip

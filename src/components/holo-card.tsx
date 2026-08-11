@@ -295,6 +295,11 @@ function HoloCardImpl({
   const [armed, setArmed] = useState(false);
   const firstFaceRef = useRef(true);
   const armedRef = useRef(false);
+  // Which face was showing last time this ran. `reduced` is a dependency — the
+  // preference is a live subscription and can flip mid-session — but a change to
+  // it is not a card turning over, and without this every mounted card in the
+  // vault would light up the moment somebody switched the setting off.
+  const lastFaceRef = useRef(showBack);
 
   useLayoutEffect(() => {
     // Not on mount. A card that arrives already face-down has not turned over,
@@ -302,9 +307,12 @@ function HoloCardImpl({
     // flaring at once.
     if (firstFaceRef.current) {
       firstFaceRef.current = false;
+      lastFaceRef.current = showBack;
       return;
     }
-    if (reduced) return;
+    const turned = lastFaceRef.current !== showBack;
+    lastFaceRef.current = showBack;
+    if (reduced || !turned) return;
     if (!armedRef.current) {
       // First turn: the classes land on the next render and the animations play
       // simply by being attached.

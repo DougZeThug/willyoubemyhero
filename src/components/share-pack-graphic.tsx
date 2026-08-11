@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
 import { initialsOf } from "@/lib/format";
 import { urlFromSet } from "@/lib/media";
+import { sharePackLayout, SHARE_H, SHARE_W } from "@/lib/share-pack-layout";
 import type { ImageUrlSet } from "@/lib/media";
 
 /**
@@ -100,15 +101,19 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
 ) {
   const roster = data.cards.filter((c) => !c.secret);
   const secret = data.cards.find((c) => c.secret);
-  // Three across the width, minus the gaps, minus the page padding.
-  const rosterWidth = Math.floor((1080 - 128 - 2 * 28) / 3);
+  // Solved against the canvas rather than chosen, because the canvas is fixed and
+  // its root clips: a pack with a secret in it has two card rows to fit into one
+  // height, so the roster row has to give up the room the secret takes. Sized for
+  // three and then given a secret 34% wider underneath, this overflowed by about
+  // 170px and cut the collection counter off the bottom of the image.
+  const size = sharePackLayout(!!secret);
 
   return (
     <div
       ref={ref}
       style={{
-        width: 1080,
-        height: 1350,
+        width: SHARE_W,
+        height: SHARE_H,
         background:
           "radial-gradient(circle at 50% 18%, oklch(0.28 0.06 220) 0%, oklch(0.12 0.02 240) 55%, oklch(0.08 0.015 240) 100%)",
         color: "white",
@@ -140,7 +145,7 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
 
       <div style={{ display: "flex", justifyContent: "center", gap: 28 }}>
         {roster.map((card, i) => (
-          <Slot key={i} card={card} width={rosterWidth} />
+          <Slot key={i} card={card} width={size.roster} />
         ))}
       </div>
 
@@ -166,7 +171,7 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
             One More Card
           </div>
           {/* Bigger than the roster three, which is the whole point of it. */}
-          <Slot card={secret} width={Math.floor(rosterWidth * 1.34)} />
+          <Slot card={secret} width={size.secret} />
         </div>
       )}
 
