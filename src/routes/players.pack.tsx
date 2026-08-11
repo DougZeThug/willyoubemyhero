@@ -18,6 +18,7 @@ import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { PackOpening } from "@/components/pack-opening";
 import { PackStand } from "@/components/pack-stand";
+import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
   collectCard,
@@ -887,9 +888,16 @@ function PackPage() {
     return <div className="p-10 text-center text-sm text-muted-foreground">Loading…</div>;
   }
 
+  // The scene owns the device from the moment the rip commits until the pack is
+  // finished. Released on `complete`, which is a page again — a collection
+  // summary with links out of it wants its navigation back.
+  const presenting = stage === "opening" || stage === "revealing";
+
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
-      <div className="mx-auto max-w-4xl px-4 py-6">
+      <PresentationMode active={presenting} />
+      <PresentationStage active={presenting} />
+      <div className="relative z-10 mx-auto max-w-4xl px-4 py-6">
         {/* Folded away for the stand. A phone screen is short, and this row is 90px
             of running total above a card whose whole job is to be the biggest thing
             on it — with the bar in place the Next button falls below the fold. It
@@ -988,13 +996,10 @@ function PackPage() {
             </motion.div>
           </div>
         ) : stage === "revealing" ? (
+          // No heading. The card is the interface — a title over it is a web page
+          // telling you what the thing below it is for, and with the shell gone
+          // the only thing on screen should be the card.
           <div className="space-y-3">
-            <div className="text-center">
-              <h1 className="font-display text-lg font-black uppercase leading-none">
-                Tap to Reveal
-              </h1>
-            </div>
-
             <PackStand
               pack={pack}
               bundle={bundle}
@@ -1022,10 +1027,14 @@ function PackPage() {
                 whole sequence is building to reads as a way past it. */}
             {!onSecretStep && (
               <div className="flex justify-center pt-2">
+                {/* Kept, and kept findable by name — the e2e suite drives the
+                    whole sequence through it — but demoted to a ghost. An escape
+                    hatch competing with the card for attention is an invitation
+                    to skip the thing you came for. */}
                 <button
                   onClick={() => void revealEverything()}
                   disabled={autoRunning}
-                  className="rounded-full border border-white/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground hover:border-primary/50 hover:text-primary disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:text-muted-foreground"
+                  className="rounded-full px-3 py-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground/45 hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground/45"
                 >
                   Reveal all
                 </button>

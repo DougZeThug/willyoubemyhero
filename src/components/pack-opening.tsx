@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence, type Variants } from "motion/react";
+import { motion, type Variants } from "motion/react";
 import { PackWrapper } from "@/components/pack-wrapper";
 import { PackCardBack } from "@/components/pack-card-back";
 import { playPackOpen, playPackBurst, playDeckGather } from "@/lib/card-sfx";
@@ -339,23 +339,11 @@ export function PackOpening({
 
   return (
     <>
-      {/* Everything else on the page steps back, the same way it does for the
-          secret's step on the stand. Fixed, and a sibling of the scene rather than
-          an ancestor of it: backdrop-filter is a grouping property, and one over
-          the pack would flatten the 3D the shards and the fan are built on. */}
-      <AnimatePresence>
-        {phase != null && !reduced && (
-          <motion.div
-            aria-hidden
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.28 }}
-            className="fixed inset-0 z-0 bg-background/80 backdrop-blur-sm"
-          />
-        )}
-      </AnimatePresence>
-
+      {/* The dark room this is played in belongs to PresentationStage, mounted by
+          the route — it has to dim the app shell too, which is this component's
+          grandparent, and it must stay a sibling of the scene rather than an
+          ancestor: backdrop-filter is a grouping property, and one over the pack
+          would flatten the 3D the shards and the fan are built on. */}
       <div
         ref={boxRef}
         className="relative z-10 w-full max-w-xs [perspective:1200px] [transform-style:preserve-3d]"

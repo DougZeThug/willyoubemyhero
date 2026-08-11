@@ -57,15 +57,20 @@ function standStyle(args: {
   return style as React.CSSProperties;
 }
 
-/** Where the eye should be: which card of how many, and which are already turned. */
+/**
+ * Where the eye should be: which card of how many, and which are already turned.
+ *
+ * Deliberately faint. This is a position indicator, not a progress bar somebody
+ * is meant to be watching — the card is what they came for.
+ */
 function StepDots({ total, at, accent }: { total: number; at: number; accent: string }) {
   return (
-    <div className="flex items-center justify-center gap-1.5" aria-hidden>
+    <div className="flex items-center justify-center gap-1.5 opacity-55" aria-hidden>
       {Array.from({ length: total }, (_, i) => (
         <span
           key={i}
-          className={cn("h-1.5 rounded-full transition-all", i === at ? "w-5" : "w-1.5")}
-          style={{ background: i <= at ? accent : "oklch(1 0 0 / 20%)" }}
+          className={cn("h-1 rounded-full transition-all", i === at ? "w-4" : "w-1")}
+          style={{ background: i <= at ? accent : "oklch(1 0 0 / 18%)" }}
         />
       ))}
     </div>
@@ -218,7 +223,10 @@ export function PackStand({
   const name = onSecret ? (secret?.name ?? "Secret") : (ep?.participant?.name ?? "—");
   const showStats = isRevealed && settled;
 
-  const heading = onSecret ? "One More Card" : `Card ${cursor + 1} of ${pack.length}`;
+  // The secret keeps its words — it is the one step whose heading is the event.
+  // A roster card gets a position, not a title: the card is the interface, and
+  // "CARD 1 OF 3" above it is a web page explaining itself.
+  const heading = onSecret ? "One More Card" : `${cursor + 1} / ${pack.length}`;
 
   return (
     <div className="relative flex flex-col items-center gap-3">
@@ -254,12 +262,20 @@ export function PackStand({
       >
         <div className="text-center">
           <div
-            className="font-display text-[10px] font-black uppercase tracking-[0.3em]"
+            className={cn(
+              "font-display font-black uppercase",
+              onSecret
+                ? "text-[10px] tracking-[0.3em]"
+                : "text-[9px] tracking-[0.35em] text-muted-foreground/50",
+            )}
             style={{ color: onSecret ? secretRarity.accent : undefined }}
           >
             {heading}
           </div>
-          <p className="mt-1 h-4 text-[10px] leading-snug text-muted-foreground">
+          {/* Kept in the tree at every step — it is what a screen reader and the
+              e2e suite both read to know what the card wants — but dimmed to the
+              edge of legibility once there is a card to look at instead. */}
+          <p className="mt-1 h-4 text-[10px] leading-snug text-muted-foreground/55">
             {secretPeeking || (peeking && !onSecret)
               ? ""
               : onSecret
@@ -297,7 +313,13 @@ export function PackStand({
             // derives its height from its width via aspect-ratio, so on a short
             // phone a 300px-wide card is 420px tall and pushes the name and the
             // step dots below the fold.
-            className="w-full max-w-[min(280px,calc((100svh-21rem)*5/7))]"
+            //
+            // 19rem of chrome rather than 21: the "Tap to Reveal" heading above
+            // this is gone and the step dots below it are thinner. The header
+            // still costs its height even while it is faded out — it is `sticky`,
+            // which stays in flow — and main keeps the bottom nav's reserved
+            // padding on purpose, so this is the whole budget that was freed.
+            className="w-full max-w-[min(320px,calc((100svh-19rem)*5/7))]"
           >
             {onSecret && secretSlot === "pending" ? (
               <div className="wax-foil flex aspect-[5/7] w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
