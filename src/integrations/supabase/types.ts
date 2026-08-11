@@ -221,6 +221,123 @@ export type Database = {
           },
         ]
       }
+      card_prompt_runs: {
+        Row: {
+          created_at: string
+          event_id: string | null
+          event_participant_id: string | null
+          generated_prompt: string
+          id: string
+          input_snapshot: Json
+          kind: string
+          parent_prompt_id: string | null
+          revision_instruction: string | null
+          subject_name: string
+          template_id: string | null
+          template_name_snapshot: string
+          template_slug: string
+        }
+        Insert: {
+          created_at?: string
+          event_id?: string | null
+          event_participant_id?: string | null
+          generated_prompt: string
+          id?: string
+          input_snapshot?: Json
+          kind: string
+          parent_prompt_id?: string | null
+          revision_instruction?: string | null
+          subject_name: string
+          template_id?: string | null
+          template_name_snapshot: string
+          template_slug: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string | null
+          event_participant_id?: string | null
+          generated_prompt?: string
+          id?: string
+          input_snapshot?: Json
+          kind?: string
+          parent_prompt_id?: string | null
+          revision_instruction?: string | null
+          subject_name?: string
+          template_id?: string | null
+          template_name_snapshot?: string
+          template_slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_prompt_runs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_prompt_runs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_prompt_runs_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_prompt_runs_parent_prompt_id_fkey"
+            columns: ["parent_prompt_id"]
+            isOneToOne: false
+            referencedRelation: "card_prompt_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_prompt_runs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "card_prompt_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_prompt_templates: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          master_prompt: string
+          name: string
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          master_prompt: string
+          name: string
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          master_prompt?: string
+          name?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       card_pulls: {
         Row: {
           event_participant_id: string
