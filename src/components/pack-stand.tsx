@@ -7,6 +7,9 @@ import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { swipeDirection } from "@/lib/zoom";
 import { StandDeck, StandEntrance } from "@/components/stand-entrance";
+import { RevealAmbience } from "@/components/reveal-ambience";
+import { ambienceStrength } from "@/lib/reveal-ambience";
+import { burst } from "@/lib/card-confetti";
 import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
 import type { SecretCardView } from "@/lib/secret-cards";
 import { secretTakesTheStand, type SecretSlot } from "@/lib/pack";
@@ -228,6 +231,35 @@ export function PackStand({
     return () => clearTimeout(t);
   }, [isRevealed, onSecret, reduced]);
 
+  /**
+   * The spray of light a card throws as it lands.
+   *
+   * On the frame the face arrives, not when the reveal was requested — the card
+   * holds face-down for most of a second before the loud ones turn, and a burst
+   * fired at the start of that lands over a card that is still face-down.
+   *
+   * Every card gets one, scaled by tier. That is the difference between rarity
+   * being a label on the card and rarity being something that happens to the
+   * screen: a base pull should still feel like something arrived, just quietly.
+   */
+  const burstFiredRef = useRef<number | null>(null);
+  // Assigned during render, below, once `rarity` has been resolved.
+  const rarityRef = useRef<Rarity>(rarityStyle("base"));
+  useEffect(() => {
+    if (reduced || !isRevealed) return;
+    // Once per card. `settled` flips back and forth across a step, and the
+    // secret's own step re-runs this on a cursor that has not moved.
+    if (burstFiredRef.current === cursor) return;
+    const ms = onSecret ? SECRET_FLIP_MS : FLIP_MS;
+    const t = setTimeout(() => {
+      burstFiredRef.current = cursor;
+      void burst(rarityRef.current, onSecret ? 1.5 : ambienceStrength(rarityRef.current.tier));
+    }, ms * 0.86);
+    return () => clearTimeout(t);
+    // `rarity` is read through a ref so a bundle arriving mid-flip cannot
+    // re-schedule the burst and fire it twice.
+  }, [isRevealed, onSecret, reduced, cursor]);
+
   // The card is mid-ceremony: turned over already in everything but appearance.
   const holding = onSecret ? secretPeeking : peeking;
   const canAdvance = isRevealed && !busy && !holding;
@@ -275,6 +307,7 @@ export function PackStand({
   }, [canAdvance, onAdvance]);
 
   const rarity = onSecret ? secretRarity : (rarities.get(ep?.id ?? "") ?? rarityStyle("base"));
+  rarityRef.current = rarity;
   const name = onSecret ? (secret?.name ?? "Secret") : (ep?.participant?.name ?? "—");
   const showStats = isRevealed && settled;
 
@@ -298,6 +331,17 @@ export function PackStand({
           />
         )}
       </AnimatePresence>
+
+      {/* The room reacting to whatever is on the stand. Behind the card, never on
+          it: the card already carries a bezel, a foil and an edge light, and a
+          fourth glow on the same 280 pixels is how a reveal ends up busy rather
+          than big. */}
+      <RevealAmbience
+        rarity={rarity}
+        secret={onSecret}
+        revealed={isRevealed}
+        anticipating={holding}
+      />
 
       <div
         // touch-pan-y is load-bearing, not styling: touch-action is read at
