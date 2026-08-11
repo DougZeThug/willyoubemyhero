@@ -159,6 +159,54 @@ describe("CardPromptStudio", () => {
     ).toContain("Subject name: Pickles");
   });
 
+  it("does not carry the roster name across into a secret card", async () => {
+    const user = userEvent.setup();
+    renderStudio(
+      <CardPromptStudio
+        eventId="event"
+        eventName="Combine"
+        bundle={bundle}
+        photoUrls={undefined}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Participant" }));
+    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    expect(screen.getByLabelText("Name")).toHaveValue("Alex");
+
+    // A secret card is not about Alex. The roster name used to stay in the field
+    // across the switch, one tap of Generate away from being somebody's pet.
+    await user.click(screen.getByRole("combobox", { name: "Series" }));
+    await user.click(screen.getByRole("option", { name: "Secret Pet" }));
+    expect(screen.getByLabelText("Name")).toHaveValue("");
+
+    // Coming back is not a fresh start: the participant is still selected, so the
+    // name they came in with is still the right answer.
+    await user.click(screen.getByRole("combobox", { name: "Series" }));
+    await user.click(screen.getByRole("option", { name: "Draft Combine Player" }));
+    expect(screen.getByLabelText("Name")).toHaveValue("Alex");
+  });
+
+  it("keeps a hand-edited name when the series changes but the subject does not", async () => {
+    const user = userEvent.setup();
+    renderStudio(
+      <CardPromptStudio
+        eventId="event"
+        eventName="Combine"
+        bundle={bundle}
+        photoUrls={undefined}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Participant" }));
+    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "The Ace" } });
+
+    // Both sides of this switch are about the same player, so clearing the field
+    // here would throw away an edit the admin made on purpose.
+    await user.click(screen.getByRole("combobox", { name: "Series" }));
+    await user.click(screen.getByRole("option", { name: "Cornhole Player" }));
+    expect(screen.getByLabelText("Name")).toHaveValue("The Ace");
+  });
+
   it("does not associate standalone history with the previously selected player", async () => {
     const user = userEvent.setup();
     vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
@@ -174,9 +222,6 @@ describe("CardPromptStudio", () => {
     await user.click(screen.getByRole("option", { name: /Alex/ }));
     await user.click(screen.getByRole("combobox", { name: "Series" }));
     await user.click(screen.getByRole("option", { name: "Secret Pet" }));
-    // Set rather than type: picking a participant pre-fills the name field with
-    // the roster name, and typing would append to it and leave the subject
-    // "AlexPickles" while still passing the assertion below.
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Pickles" } });
     fireEvent.change(screen.getByLabelText("Owner / association"), { target: { value: "Maya" } });
     await user.click(screen.getByRole("button", { name: "Generate prompt" }));

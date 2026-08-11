@@ -282,6 +282,15 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
               onValueChange={(value: CardSeriesId) => {
                 setSeries(value);
                 setGenerated(null);
+                // The name is roster-derived on a player series and hand-typed on
+                // a secret one, so it cannot survive crossing between them:
+                // switching to a secret card left the last player's name sitting
+                // in the field, ready to be sent as somebody's pet. Staying on the
+                // same side keeps it, so a manual edit is not thrown away.
+                const nextPlayer = isPlayerSeries(value);
+                if (nextPlayer !== playerSeries) {
+                  setSubjectName(nextPlayer ? (selected?.participant?.name ?? "") : "");
+                }
               }}
             >
               <SelectTrigger id="prompt-series" className="min-h-11">
