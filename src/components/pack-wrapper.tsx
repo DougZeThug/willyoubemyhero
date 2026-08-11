@@ -522,15 +522,22 @@ export function PackWrapper({
         {/* Light escaping the pack.
             Clipped to the tear line itself, so it is genuinely coming out of the
             opening rather than being a bright rectangle laid over it. Screen
-            blend, because this is light rather than paint. */}
+            blend, because this is light rather than paint.
+
+            It used to be a single 250ms flash, which is the whole of the light
+            this ceremony had. A flash reads as a camera going off; light coming
+            out of a pack should swell while the shards leave and then be
+            occluded by the cards climbing through it. So it now runs the length
+            of peel-into-launch, and holds a floor of brightness until the fan
+            takes over the screen. */}
         {!reduced && (
           <motion.div
             aria-hidden
             className="pointer-events-none absolute inset-0"
             style={{ clipPath: mouthClip(edge, 0), mixBlendMode: "screen" }}
             initial={false}
-            animate={{ opacity: shed && !spilled ? [0, 1, 0] : 0 }}
-            transition={{ duration: 0.25, times: [0, 0.36, 1], ease: "easeOut" }}
+            animate={{ opacity: shed && !spilled ? [0, 1, 0.72, 0.5] : 0 }}
+            transition={{ duration: 1.1, times: [0, 0.22, 0.55, 1], ease: "easeOut" }}
           >
             <div
               className="absolute inset-x-0"
@@ -541,6 +548,45 @@ export function PackWrapper({
                   "radial-gradient(60% 100% at 50% 100%, oklch(1 0 0 / 92%) 0%, oklch(0.88 0.13 205 / 62%) 38%, transparent 72%)",
               }}
             />
+          </motion.div>
+        )}
+
+        {/* God rays out of the tear.
+
+            The mouth glow above says "it is bright in there"; these say the light
+            has somewhere to go. Beams, clipped to the same tear line so they are
+            unmistakably coming out of the opening, seeded off the pack so two
+            people opening the same one see the same shape — the same rule the
+            ragged edge follows. Screen blend and low opacity: this is haze, and
+            haze that can be individually pointed at has gone too far. */}
+        {!reduced && (
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ clipPath: mouthClip(edge, 0), mixBlendMode: "screen" }}
+            initial={false}
+            animate={{ opacity: shed && !spilled ? [0, 0.9, 0.55, 0] : 0 }}
+            transition={{ duration: 1.2, times: [0, 0.25, 0.6, 1], ease: "easeOut" }}
+          >
+            {rays.map((ray, i) => (
+              <motion.div
+                key={i}
+                className="absolute origin-bottom"
+                style={{
+                  left: `${ray.at}%`,
+                  top: `${stripPct - 46}%`,
+                  height: "46%",
+                  width: `${ray.w}%`,
+                  transform: `translateX(-50%) rotate(${ray.tilt}deg)`,
+                  background:
+                    "linear-gradient(to top, oklch(0.95 0.12 205 / 55%), transparent 82%)",
+                  filter: "blur(6px)",
+                }}
+                initial={false}
+                animate={shed && !spilled ? { scaleY: [0.3, 1, 0.86] } : { scaleY: 0.3 }}
+                transition={{ duration: 1.2, ease: "easeOut", delay: i * 0.045 }}
+              />
+            ))}
           </motion.div>
         )}
 
