@@ -16,6 +16,7 @@ import {
   type CeremonyPhase,
 } from "@/lib/pack-ceremony";
 import { SECRET_RARITY } from "@/lib/secret-cards";
+import { seededRng } from "@/lib/format";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
@@ -315,6 +316,38 @@ export function PackOpening({
   const jitter = useMemo(() => packJitter(seed, slots), [seed, slots]);
 
   /**
+   * The celebration light, as data.
+   *
+   * Motes drifting up out of the mouth while the cards climb through it. Seeded
+   * off the pack for the same reason everything else here is: a re-render
+   * mid-flight must not re-roll them underneath the animation playing over them.
+   */
+  const motes = useMemo(() => {
+    const rng = seededRng(`${seed}:motes`);
+    return Array.from({ length: 14 }, () => ({
+      at: 12 + rng() * 76,
+      size: 2 + rng() * 4,
+      rise: 90 + rng() * 130,
+      drift: (rng() * 2 - 1) * 34,
+      delay: rng() * 0.7,
+      sec: 1.1 + rng() * 0.9,
+    }));
+  }, [seed]);
+
+  /**
+   * The colour the payoff is lit in.
+   *
+   * The secret's green when there is one in the pack, the app's cyan otherwise —
+   * the same tell the bezel gives, so a big day is brighter as well as greener.
+   * It is a wash of light rather than a card face, so it gives away that there is
+   * a secret, which the fan already does, and nothing about which one.
+   */
+  const bloomHue = secret ? SECRET_RARITY.border : "oklch(0.85 0.14 205)";
+  // The payoff, from the cards clearing the mouth to the fan being looked at.
+  const celebrating = target === "fan";
+  const lifting = target === "rise" || target === "fan";
+
+  /**
    * The shadow a card at depth `i` casts, and the glow it carries.
    *
    * Derived rather than fixed. Every card sharing one shadow is the thing that
@@ -467,6 +500,64 @@ export function PackOpening({
         // gesture this is interrupting was itself a pointer drag.
         onPointerDown={phase != null ? skip : undefined}
       >
+        {/* The bloom behind the fan.
+
+            Outside PackWrapper on purpose: the wrapper clips its children to the
+            tear line while they are inside it, and a glow that is clipped to the
+            mouth is the mouth glow, which already exists one layer down. This one
+            is the room lighting up around the cards, so it has to be able to
+            spill past the pack. Screen blend and no pointer events: it is light,
+            not a surface. */}
+        {phase != null && !reduced && (
+          <>
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute -inset-16 z-0"
+              style={{
+                mixBlendMode: "screen",
+                background: `radial-gradient(50% 42% at 50% 44%, ${bloomHue}, transparent 70%)`,
+                filter: "blur(28px)",
+              }}
+              initial={false}
+              animate={{ opacity: celebrating ? [0, 0.5, 0.34] : 0 }}
+              transition={{ duration: 1.2, times: [0, 0.45, 1], ease: "easeOut" }}
+            />
+
+            {/* Motes, drifting up through the cards as they leave. They die before
+                the handoff — a stray spark still in the air while the stand takes
+                the screen reads as a leak rather than as a celebration. */}
+            <div aria-hidden className="pointer-events-none absolute inset-0 z-30 overflow-visible">
+              {motes.map((m, i) => (
+                <motion.span
+                  key={i}
+                  className="absolute rounded-full"
+                  style={{
+                    left: `${m.at}%`,
+                    top: "44%",
+                    width: m.size,
+                    height: m.size,
+                    background: bloomHue,
+                    mixBlendMode: "screen",
+                    filter: "blur(0.5px)",
+                  }}
+                  initial={false}
+                  animate={
+                    lifting
+                      ? { y: [0, -m.rise], x: [0, m.drift], opacity: [0, 0.9, 0] }
+                      : { y: 0, x: 0, opacity: 0 }
+                  }
+                  transition={{
+                    duration: m.sec,
+                    delay: m.delay,
+                    ease: "easeOut",
+                    opacity: { times: [0, 0.25, 1] },
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
         <PackWrapper
           seed={seed}
           artUrl={artUrl}
