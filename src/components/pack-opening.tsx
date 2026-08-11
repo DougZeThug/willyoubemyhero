@@ -45,7 +45,7 @@ const CARD_W = 0.62;
  * a flip twice the house length — so this is only the hint that there is a fourth
  * card, not the payoff.
  */
-const SECRET_BEAT = 0.16;
+const SECRET_BEAT = 0.22;
 
 /**
  * How far apart the cards leave, in seconds per card.
@@ -56,9 +56,13 @@ const SECRET_BEAT = 0.16;
  * to start when its phase ends simply teleports to the next mark. Four cards is
  * the most the pack ever holds, so the last one has to be moving by `3 * step`.
  */
-const RISE_STEP = 0.09;
-const FAN_STEP = 0.1;
-const DECK_STEP = 0.04;
+// Scaled with the timeline: the phases they play inside grew by roughly 40%, and
+// a stagger left where it was would have every card arriving in the first half of
+// its phase and then waiting, which is the freeze this ceremony keeps being
+// retuned to avoid.
+const RISE_STEP = 0.12;
+const FAN_STEP = 0.14;
+const DECK_STEP = 0.05;
 
 /**
  * The pack opening: the rest of the rip, and the cards coming out of it.
@@ -417,8 +421,8 @@ export function PackOpening({
           // Softer than a snap. A spring that arrives in 200ms and then waits out
           // the rest of its phase reads as a jump followed by a freeze; this one
           // is still travelling when the eye gets to it.
-          stiffness: 160 * j.stiffness,
-          damping: 21 * j.damping,
+          stiffness: 128 * j.stiffness,
+          damping: 20 * j.damping,
           delay: i * RISE_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
@@ -449,8 +453,8 @@ export function PackOpening({
         opacity: 1,
         transition: {
           type: "spring",
-          stiffness: 150 * j.stiffness,
-          damping: 20 * j.damping,
+          stiffness: 118 * j.stiffness,
+          damping: 19 * j.damping,
           delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
