@@ -16,6 +16,7 @@ import {
   type CeremonyPhase,
 } from "@/lib/pack-ceremony";
 import { SECRET_RARITY } from "@/lib/secret-cards";
+import { seededRng } from "@/lib/format";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
@@ -44,7 +45,7 @@ const CARD_W = 0.62;
  * a flip twice the house length — so this is only the hint that there is a fourth
  * card, not the payoff.
  */
-const SECRET_BEAT = 0.16;
+const SECRET_BEAT = 0.22;
 
 /**
  * How far apart the cards leave, in seconds per card.
@@ -55,9 +56,13 @@ const SECRET_BEAT = 0.16;
  * to start when its phase ends simply teleports to the next mark. Four cards is
  * the most the pack ever holds, so the last one has to be moving by `3 * step`.
  */
-const RISE_STEP = 0.09;
-const FAN_STEP = 0.1;
-const DECK_STEP = 0.04;
+// Scaled with the timeline: the phases they play inside grew by roughly 40%, and
+// a stagger left where it was would have every card arriving in the first half of
+// its phase and then waiting, which is the freeze this ceremony keeps being
+// retuned to avoid.
+const RISE_STEP = 0.12;
+const FAN_STEP = 0.14;
+const DECK_STEP = 0.05;
 
 /**
  * The pack opening: the rest of the rip, and the cards coming out of it.
@@ -315,6 +320,38 @@ export function PackOpening({
   const jitter = useMemo(() => packJitter(seed, slots), [seed, slots]);
 
   /**
+   * The celebration light, as data.
+   *
+   * Motes drifting up out of the mouth while the cards climb through it. Seeded
+   * off the pack for the same reason everything else here is: a re-render
+   * mid-flight must not re-roll them underneath the animation playing over them.
+   */
+  const motes = useMemo(() => {
+    const rng = seededRng(`${seed}:motes`);
+    return Array.from({ length: 14 }, () => ({
+      at: 12 + rng() * 76,
+      size: 2 + rng() * 4,
+      rise: 90 + rng() * 130,
+      drift: (rng() * 2 - 1) * 34,
+      delay: rng() * 0.7,
+      sec: 1.1 + rng() * 0.9,
+    }));
+  }, [seed]);
+
+  /**
+   * The colour the payoff is lit in.
+   *
+   * The secret's green when there is one in the pack, the app's cyan otherwise —
+   * the same tell the bezel gives, so a big day is brighter as well as greener.
+   * It is a wash of light rather than a card face, so it gives away that there is
+   * a secret, which the fan already does, and nothing about which one.
+   */
+  const bloomHue = secret ? SECRET_RARITY.border : "oklch(0.85 0.14 205)";
+  // The payoff, from the cards clearing the mouth to the fan being looked at.
+  const celebrating = target === "fan";
+  const lifting = target === "rise" || target === "fan";
+
+  /**
    * The shadow a card at depth `i` casts, and the glow it carries.
    *
    * Derived rather than fixed. Every card sharing one shadow is the thing that
@@ -384,8 +421,8 @@ export function PackOpening({
           // Softer than a snap. A spring that arrives in 200ms and then waits out
           // the rest of its phase reads as a jump followed by a freeze; this one
           // is still travelling when the eye gets to it.
-          stiffness: 160 * j.stiffness,
-          damping: 21 * j.damping,
+          stiffness: 128 * j.stiffness,
+          damping: 20 * j.damping,
           delay: i * RISE_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
@@ -416,8 +453,8 @@ export function PackOpening({
         opacity: 1,
         transition: {
           type: "spring",
-          stiffness: 150 * j.stiffness,
-          damping: 20 * j.damping,
+          stiffness: 118 * j.stiffness,
+          damping: 19 * j.damping,
           delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
@@ -467,6 +504,64 @@ export function PackOpening({
         // gesture this is interrupting was itself a pointer drag.
         onPointerDown={phase != null ? skip : undefined}
       >
+        {/* The bloom behind the fan.
+
+            Outside PackWrapper on purpose: the wrapper clips its children to the
+            tear line while they are inside it, and a glow that is clipped to the
+            mouth is the mouth glow, which already exists one layer down. This one
+            is the room lighting up around the cards, so it has to be able to
+            spill past the pack. Screen blend and no pointer events: it is light,
+            not a surface. */}
+        {phase != null && !reduced && (
+          <>
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute -inset-16 z-0"
+              style={{
+                mixBlendMode: "screen",
+                background: `radial-gradient(50% 42% at 50% 44%, ${bloomHue}, transparent 70%)`,
+                filter: "blur(28px)",
+              }}
+              initial={false}
+              animate={{ opacity: celebrating ? [0, 0.5, 0.34] : 0 }}
+              transition={{ duration: 1.2, times: [0, 0.45, 1], ease: "easeOut" }}
+            />
+
+            {/* Motes, drifting up through the cards as they leave. They die before
+                the handoff — a stray spark still in the air while the stand takes
+                the screen reads as a leak rather than as a celebration. */}
+            <div aria-hidden className="pointer-events-none absolute inset-0 z-30 overflow-visible">
+              {motes.map((m, i) => (
+                <motion.span
+                  key={i}
+                  className="absolute rounded-full"
+                  style={{
+                    left: `${m.at}%`,
+                    top: "44%",
+                    width: m.size,
+                    height: m.size,
+                    background: bloomHue,
+                    mixBlendMode: "screen",
+                    filter: "blur(0.5px)",
+                  }}
+                  initial={false}
+                  animate={
+                    lifting
+                      ? { y: [0, -m.rise], x: [0, m.drift], opacity: [0, 0.9, 0] }
+                      : { y: 0, x: 0, opacity: 0 }
+                  }
+                  transition={{
+                    duration: m.sec,
+                    delay: m.delay,
+                    ease: "easeOut",
+                    opacity: { times: [0, 0.25, 1] },
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
         <PackWrapper
           seed={seed}
           artUrl={artUrl}
@@ -546,6 +641,36 @@ export function PackOpening({
                     opaque chrome rather than a blend mode, which is the reason it
                     survives being looked at in a garden. */}
                 {isSecret(i) && <div className="holo-prism-edge is-spinning" aria-hidden />}
+
+                {/* The light catching the face as the card reaches its fan pose.
+
+                    A card that arrives and then simply sits there is a rectangle;
+                    a card that catches the light on its way in is an object with a
+                    surface. Staggered with the fan itself so the sweep travels
+                    across the hand rather than firing on all of them at once. */}
+                <motion.div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl"
+                  style={{ mixBlendMode: "screen" }}
+                  initial={false}
+                  animate={{ opacity: hovering ? 1 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <motion.div
+                    className="absolute inset-y-[-30%] w-1/2 -skew-x-12"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, transparent, oklch(1 0 0 / 42%), transparent)",
+                    }}
+                    initial={false}
+                    animate={hovering ? { x: ["-160%", "260%"] } : { x: "-160%" }}
+                    transition={{
+                      duration: 0.85,
+                      delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
+                      ease: "easeInOut",
+                    }}
+                  />
+                </motion.div>
               </motion.div>
             ))}
         </PackWrapper>

@@ -25,11 +25,11 @@ describe("the timeline", () => {
     // Loose bounds on purpose: this is a taste range, not a contract. It exists
     // so a stray zero in the table shows up as a failing test.
     //
-    // Halved from the old 3–6s window. The sequence is not shorter because it was
-    // trimmed — it is shorter because the two phases that held still were given
-    // something to do, and a phase that is always changing does not need as long.
-    expect(CEREMONY_MS).toBeGreaterThan(1500);
-    expect(CEREMONY_MS).toBeLessThan(3000);
+    // Widened back out once the light and celebration layers landed: there is
+    // more to look at than there was, and the window is sized for a sequence
+    // that is watched rather than one that is merely survived.
+    expect(CEREMONY_MS).toBeGreaterThan(3000);
+    expect(CEREMONY_MS).toBeLessThan(5000);
   });
 
   /**
@@ -42,12 +42,14 @@ describe("the timeline", () => {
    */
   it("has no phase long enough to read as a pause", () => {
     for (const step of CEREMONY) {
-      expect(step.ms).toBeLessThanOrEqual(600);
+      expect(step.ms).toBeLessThanOrEqual(900);
     }
     // The rule is about dead air, not length, so the one phase where nothing
-    // moves keeps the tighter ceiling: `hold` is a beat, never a pause.
+    // moves keeps the tighter ceiling. `hold` is no longer literally still — the
+    // fan breathes and the bloom peaks through it — but it is the phase closest
+    // to a pause, so it stays capped well under the ones that travel.
     const hold = CEREMONY.find((s) => s.phase === "hold");
-    expect(hold!.ms).toBeLessThanOrEqual(340);
+    expect(hold!.ms).toBeLessThanOrEqual(600);
   });
 
   it("starts each phase where the previous one ended", () => {
