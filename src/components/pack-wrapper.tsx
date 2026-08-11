@@ -262,6 +262,24 @@ export function PackWrapper({
   const edge = tearEdge(seededRng(seed), stripPct);
   const art = urlFromSet(artUrl);
 
+  /**
+   * The beams that escape the tear, as data.
+   *
+   * Seeded off the pack rather than random, so a re-render mid-ceremony cannot
+   * re-roll them underneath the animation that is playing — the same reason the
+   * tear edge and the card jitter are seeded.
+   */
+  const rays = useMemo(() => {
+    const rng = seededRng(`${seed}:rays`);
+    return Array.from({ length: 5 }, (_, i) => ({
+      // Spread across the middle of the mouth, with a little slop, so they are
+      // not a comb.
+      at: 18 + i * 16 + (rng() * 2 - 1) * 5,
+      w: 6 + rng() * 7,
+      tilt: (i - 2) * 7 + (rng() * 2 - 1) * 4,
+    }));
+  }, [seed]);
+
   const sealed = phase == null;
   // The pack takes the strain before anything comes apart. Two phases of nothing
   // *moving* would be a dead start, so this is where the anticipation lives: a
