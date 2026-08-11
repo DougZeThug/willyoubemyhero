@@ -17,6 +17,47 @@ import { BORDER_FX_CLASS } from "@/lib/card-rarity";
 const CARD_ASPECT = 5 / 7;
 
 /**
+ * How the card turns over.
+ *
+ * Slow to leave, quick through edge-on, and it settles past its mark before
+ * coming back — about 3.4° of overshoot at the end. A card that arrives exactly
+ * on 180° and stops reads as a value being interpolated; one that goes slightly
+ * too far and rocks back reads as an object with mass.
+ */
+export const FLIP_CURVE = "cubic-bezier(0.5, 0, 0.25, 1.18)";
+
+/**
+ * Where in the flip the card is edge-on, as a fraction of its duration.
+ *
+ * Not 0.5, and this is the single most breakable thing about `FLIP_CURVE`.
+ * `.holo-face` swaps which side is visible at this moment — it has to, because
+ * WebKit shows the away face mirrored through the card inside this nested
+ * preserve-3d structure — and an accelerating curve reaches 90° well before the
+ * halfway point. Left at 0.5, the swap happens with the card already a third of
+ * the way round and the wrong face is briefly visible, reversed.
+ *
+ * Solved from the curve rather than eyeballed: the value below is where the
+ * bezier's output first reaches 0.5, which is 90° of a 180° turn. Change the
+ * curve and this must be re-solved with it.
+ */
+export const FLIP_EDGE_AT = 0.384;
+
+/**
+ * Play a CSS animation again on an element that is already wearing it.
+ *
+ * Removing the animation, forcing the browser to read a layout value, then
+ * putting it back is the only reliable way: the style recalculation between the
+ * two writes is what makes the browser notice the animation went away, and
+ * without the read it coalesces both writes into no change at all.
+ */
+function restartAnimation(el: HTMLElement | null) {
+  if (!el) return;
+  el.style.animation = "none";
+  void el.offsetHeight;
+  el.style.animation = "";
+}
+
+/**
  * How wide a card renders, for the browser's `srcSet` pick.
  *
  * Exported because src/lib/preload.ts has to hand the browser the identical
@@ -235,6 +276,50 @@ function HoloCardImpl({
   const [engaged, setEngaged] = useState(false);
   const isFlipped = flipped ?? uncontrolledFlip;
   const showBack = faceDown ? !isFlipped : isFlipped;
+
+  /**
+   * This card has turned over at least once, so its light, punch and shine are
+   * armed.
+   *
+   * Driven off which face is showing rather than off the click, because the stand
+   * turns its card by changing a prop and never touches this component's own
+   * handlers — a flag set in `toggleFlip` would light up a tap in the vault and
+   * stay dark for every card in the pack.
+   *
+   * A latch rather than a per-turn flag, and never a `key`. Keying the card would
+   * remount it, which destroys the very thing being decorated: the flip is a
+   * `transition` from the previous `rotateY`, and a fresh element has no previous
+   * value to transition from — it would simply appear already turned. So the
+   * elements persist and the animations are restarted by hand below.
+   */
+  const [armed, setArmed] = useState(false);
+  const firstFaceRef = useRef(true);
+  const armedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    // Not on mount. A card that arrives already face-down has not turned over,
+    // and lighting one up as the vault scrolls past would be thirty cards
+    // flaring at once.
+    if (firstFaceRef.current) {
+      firstFaceRef.current = false;
+      return;
+    }
+    if (reduced) return;
+    if (!armedRef.current) {
+      // First turn: the classes land on the next render and the animations play
+      // simply by being attached.
+      armedRef.current = true;
+      setArmed(true);
+      return;
+    }
+    // Every turn after that. A CSS animation runs when it is added to an element
+    // and never again, so on a card that is already wearing the class the second
+    // flip would light nothing at all.
+    restartAnimation(cardRef.current);
+    restartAnimation(sceneRef.current);
+  }, [showBack, reduced]);
+
+  const turning = armed && !reduced;
   // A generated back is just as flippable as uploaded back artwork.
   const canFlip = !!backUrl || !!backContent;
 
@@ -505,11 +590,20 @@ function HoloCardImpl({
     // ...and the bloom it gains on top of that at full tilt. A base card peaks
     // near the old flat 0.38, but only while moving and only inside the band.
     "--holo-gain": reduced ? 0 : 0.4 * rarity.strength * scale,
-    // The midpoint of the flip, where the card is edge-on. holo-face lands its
-    // visibility swap there, so a slower flip has to move it — left at the default
-    // 250ms, a 1100ms turn swaps faces a third of the way in and WebKit shows the
-    // away side mirrored through the card.
-    "--holo-flip-half": `${Math.round(flipMs / 2)}ms`,
+    // Where the card is edge-on, which is where holo-face lands its visibility
+    // swap. Two things move it: the flip's own length — a 1100ms secret turning
+    // against a fixed 250ms default swaps faces a third of the way in — and the
+    // curve, which is asymmetric, so this is 38% of the duration and not half of
+    // it. See FLIP_EDGE_AT.
+    "--holo-flip-half": `${Math.round(flipMs * FLIP_EDGE_AT)}ms`,
+    // Read by the flip's own light, punch and shine keyframes in styles.css, so
+    // all three stretch with the card that is turning rather than being written
+    // for the roster's 500ms and running short on the secret's 1100ms.
+    "--holo-flip-ms": `${flipMs}ms`,
+    // The keyframes cannot reach `rarity.border` on their own.
+    "--holo-edge": rarity.border,
+    // Late enough that the card has landed and you are looking at its face.
+    "--holo-shine-delay": `${Math.round(flipMs * 0.82)}ms`,
     aspectRatio: CARD_ASPECT,
     // "pan-y" for a card in a scrolling grid; "none" for a hero card, which owns
     // the whole gesture on both axes.
@@ -562,7 +656,10 @@ function HoloCardImpl({
   return (
     <div
       ref={sceneRef}
-      className={cn("holo-scene relative w-full select-none", className)}
+      // The punch rides the scene because the two layers below both already own
+      // a transform: the tilt is written imperatively by the pointer handlers,
+      // and the flip is the rotation being punctuated.
+      className={cn("holo-scene relative w-full select-none", turning && "holo-punch", className)}
       style={styleVars}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -606,14 +703,20 @@ function HoloCardImpl({
           }}
           className={cn(
             "relative h-full w-full rounded-xl border shadow-2xl outline-none",
-            "transition-transform duration-500 ease-out [transform-style:preserve-3d]",
+            "transition-transform [transform-style:preserve-3d]",
             "focus-visible:ring-2 focus-visible:ring-primary",
             (canFlip || onClick) && "cursor-pointer",
+            turning && "holo-turning",
+            // The shine only fires on the way to the *front*. Turning a card back
+            // over to read its stats is navigation, and a specular pass on it
+            // would celebrate somebody checking a number.
+            turning && !showBack && "holo-shine",
           )}
           style={{
             borderColor: rarity.border,
             transform: `rotateY(${showBack ? 180 : 0}deg)`,
             transitionDuration: reduced ? "0ms" : `${flipMs}ms`,
+            transitionTimingFunction: FLIP_CURVE,
             boxShadow: `0 0 28px -6px ${rarity.border}`,
           }}
         >
