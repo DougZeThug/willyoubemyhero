@@ -11,6 +11,8 @@
 // of the width and never came off. What the user saw was a crease. Everything
 // below is the rest of that rip, plus the cards actually leaving the pack.
 
+import { seededRng } from "./format";
+
 /** Where the ceremony is. Each one owns a slice of the timeline below. */
 export type CeremonyPhase =
   /** The pack takes the strain: a squash, before anything comes apart. */
@@ -130,6 +132,65 @@ const FAN_SPREAD = 104;
 const FAN_TILT = 18;
 
 /**
+ * How much smaller each card is than the one in front of it, in a stack.
+ *
+ * Only ever applied to `depth`, never across the fan — a fan is a row of cards
+ * held at the same distance and they are all the same size in it. This is the
+ * difference between a stack of cards and one thick card, which the perspective
+ * alone does not carry at these depths.
+ */
+const DEPTH_SHRINK = 0.015;
+
+/**
+ * Where a card is, and how big.
+ *
+ * `scale` is here rather than left to the component because it is depth, and
+ * depth is geometry. Everything on it is deterministic and symmetric — the seeded
+ * per-card jitter that stops the fan looking machined lives in pack-opening.tsx,
+ * on top of this, precisely so that this stays checkable arithmetic.
+ */
+export type CardPose = { x: number; y: number; rotate: number; z: number; scale: number };
+
+/** How far a card may sit off the geometry's own angle, in degrees either way. */
+const JITTER_DEG = 2;
+
+/**
+ * The per-card variation that stops the fan looking machined.
+ *
+ * Deliberately *not* part of the three pose functions below, and the distinction
+ * is load-bearing. Those are symmetric, exact, and tested for both — an
+ * asymmetric fan *shape* reads as a bug. This is the untidiness laid on top: an
+ * asymmetric *card* reads as a hand somebody is holding. Folding one into the
+ * other would make the pose tests fail intermittently, which is a miserable thing
+ * to debug.
+ *
+ * Seeded off the pack for the same reason the tear edge is: a given pack always
+ * opens the same way, so two people opening the same pack side by side see the
+ * same thing, and a re-render mid-flight cannot re-roll a card's angle underneath
+ * it.
+ */
+export type CardJitter = {
+  /** Degrees off the pose's own angle. */
+  rotate: number;
+  /** Multipliers on the spring, so the cards do not arrive in lockstep. */
+  stiffness: number;
+  damping: number;
+  /** How far and how slowly this card breathes while the fan is being looked at. */
+  breath: number;
+};
+
+export function packJitter(seed: string, count: number): CardJitter[] {
+  const rng = seededRng(seed);
+  return Array.from({ length: count }, () => ({
+    rotate: (rng() * 2 - 1) * JITTER_DEG,
+    // ±10%, small enough that no card misses the end of its own phase.
+    stiffness: 1 + (rng() * 2 - 1) * 0.1,
+    damping: 1 + (rng() * 2 - 1) * 0.1,
+    breath: 0.7 + rng() * 0.6,
+  }));
+}
+
+/**
  * Where card `i` of `n` sits as it clears the mouth — out of the pack, but still
  * a stack.
  *
@@ -137,17 +198,24 @@ const FAN_TILT = 18;
  * cards that come *out* and then *open* read as a pack being emptied, where a
  * single move reads as a fan that happened to start small.
  */
-export function riseTransform(
-  i: number,
-  n: number,
-): { x: number; y: number; rotate: number; z: number } {
+export function riseTransform(i: number, n: number): CardPose {
   // Card 0 is the front of the stack, at zero offset, with the rest behind it —
   // the same order `layer()` paints them in. Counted the other way round, the card
   // drawn on top is the one furthest off the mark, which only stays invisible for
   // as long as the offsets stay small. `n` is unused and kept for symmetry with
   // the other two, which need it.
   const depth = i;
-  return { x: depth * 2, y: -104 + depth * 5, rotate: depth * 1.2, z: 60 - depth * 8 };
+  return {
+    x: depth * 2,
+    y: -104 + depth * 5,
+    rotate: depth * 1.2,
+    z: 60 - depth * 8,
+    // Card 0 is exactly its nominal size and everything behind it is smaller. The
+    // perspective already shrinks them a little for being further back; this is
+    // the rest of the separation, and without it a stack coming out of the pack
+    // reads as one thick card.
+    scale: 1 - depth * DEPTH_SHRINK,
+  };
 }
 
 /**
@@ -161,10 +229,7 @@ export function riseTransform(
  * `t` is the card's signed distance from the centre of the fan, in card slots. A
  * single card gets t = 0 and sits dead centre rather than dividing by zero.
  */
-export function fanTransform(
-  i: number,
-  n: number,
-): { x: number; y: number; rotate: number; z: number } {
+export function fanTransform(i: number, n: number): CardPose {
   const t = i - (n - 1) / 2;
   // Normalised -1..1 across the fan, for the arc. Guarded at n = 1, where every
   // card is the middle one.
@@ -185,6 +250,12 @@ export function fanTransform(
     // The outer cards sit further back, so the fan has depth rather than being a
     // flat plane that happens to be rotated.
     z: 96 - Math.abs(u) * 24,
+    // Uniform across the fan, and deliberately so. These cards are held out at
+    // the same distance from the viewer; the `z` above already renders the outer
+    // ones fractionally smaller for being further back, which is the only size
+    // difference a real hand of cards has. Anything else here would also break
+    // the mirror symmetry this function is tested for.
+    scale: 1,
   };
 }
 
@@ -199,14 +270,21 @@ export function fanTransform(
  * is indistinguishable from one card, and the deck has to still read as a pack's
  * worth at the moment the stand takes over.
  */
-export function deckTransform(
-  i: number,
-  n: number,
-): { x: number; y: number; rotate: number; z: number } {
+export function deckTransform(i: number, n: number): CardPose {
   // Card 0 lands *on* the mark, because it is the card PackStand mounts with a
   // beat later and any offset it still carries is a jump at the handoff. The rest
   // stack behind it. This used to count from the back, which put the one card
   // that had to be exact at the far end of the stagger.
   const depth = i;
-  return { x: depth * 1.6, y: -38 + depth * 4, rotate: depth * 1.1, z: depth * -5 };
+  return {
+    // Wider than the 1.6/4 this used to gather to. A deck whose cards are two
+    // pixels apart is a deck you have to be told is a deck; at four across and
+    // six down each edge is separately visible on a phone, which is the whole
+    // point of gathering into one rather than simply stopping.
+    x: depth * 4,
+    y: -38 + depth * 6,
+    rotate: depth * 1.1,
+    z: depth * -5,
+    scale: 1 - depth * DEPTH_SHRINK,
+  };
 }

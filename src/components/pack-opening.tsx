@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, type Variants } from "motion/react";
 import { PackWrapper } from "@/components/pack-wrapper";
 import { PackCardBack } from "@/components/pack-card-back";
@@ -11,6 +11,7 @@ import {
   ceremonyReached,
   deckTransform,
   fanTransform,
+  packJitter,
   riseTransform,
   type CeremonyPhase,
 } from "@/lib/pack-ceremony";
@@ -238,6 +239,24 @@ export function PackOpening({
   /** Whether slot `i` is the daily secret. Always the last one, as on the stand. */
   const isSecret = (i: number) => secret && i === slots - 1;
 
+  const jitter = useMemo(() => packJitter(seed, slots), [seed, slots]);
+
+  /**
+   * The shadow a card at depth `i` casts, and the glow it carries.
+   *
+   * Derived rather than fixed. Every card sharing one shadow is the thing that
+   * most makes a stack read as a printed picture of a stack: a card further back
+   * is further from whatever it is casting onto, so its shadow is larger, softer
+   * and fainter, and its own edge light is dimmer for being behind the one in
+   * front of it.
+   */
+  function cardShadow(i: number): string {
+    const back = Math.min(i, 3);
+    const drop = `0 ${22 + back * 4}px ${36 + back * 10}px -14px oklch(0 0 0 / ${72 - back * 12}%)`;
+    if (isSecret(i)) return `${drop}, 0 0 34px -6px ${SECRET_RARITY.border}`;
+    return `${drop}, 0 0 ${22 - back * 4}px -8px oklch(0.82 0.14 210 / ${45 - back * 9}%)`;
+  }
+
   /**
    * Paint order, as a tiebreaker for cards at equal depth.
    *
@@ -275,30 +294,32 @@ export function PackOpening({
     mouth: { x: 0, y: 66 * scale, z: -60, rotateX: 64, rotateZ: 0, scale: 0.62, opacity: 1 },
     rise: (i: number) => {
       const t = riseTransform(i, slots);
+      const j = jitter[i];
       return {
         x: t.x * scale,
         y: t.y * scale,
         z: t.z,
         rotateX: 8,
-        rotateZ: t.rotate,
-        scale: 0.78,
+        rotateZ: t.rotate + j.rotate,
+        scale: 0.78 * t.scale,
         opacity: 1,
         // The secret waits a beat behind the roster, so it leaves the pack on its
         // own rather than in the crowd. It is already last in the order; this is
         // the gap that makes that legible at speed.
         transition: {
           type: "spring",
-          // Softer than the old snap. A spring that arrives in 200ms and then
-          // waits out the rest of a 720ms phase reads as a jump followed by a
-          // freeze; this one is still travelling when the eye gets to it.
-          stiffness: 160,
-          damping: 21,
+          // Softer than a snap. A spring that arrives in 200ms and then waits out
+          // the rest of its phase reads as a jump followed by a freeze; this one
+          // is still travelling when the eye gets to it.
+          stiffness: 160 * j.stiffness,
+          damping: 21 * j.damping,
           delay: i * RISE_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
     fan: (i: number) => {
       const t = fanTransform(i, slots);
+      const j = jitter[i];
       return {
         x: t.x * scale,
         y: t.y * scale,
@@ -308,38 +329,47 @@ export function PackOpening({
         // outright — so `layer()` alone left the secret sharing the *back* of the
         // fan with the far roster card, which is the opposite of the point.
         z: isSecret(i) ? t.z + 60 : t.z,
-        rotateX: -10,
-        rotateZ: t.rotate,
+        // Each card leans its own way out of the plane, not just around it. A fan
+        // where every card shares one rotateX is four cutouts on one sheet of
+        // glass; a couple of degrees of disagreement is what makes them separate
+        // objects.
+        rotateX: -10 + j.rotate * 0.9,
+        rotateZ: t.rotate + j.rotate,
         // Same nominal size as the rest. Being 60 closer to the camera already
         // renders it about 6% bigger, and stacking an explicit scale on top of
         // that took it to 14% — large enough to read as a different card rather
         // than a nearer one, and wide enough to crowd the edge of a phone.
-        scale: 0.8,
+        scale: 0.8 * t.scale,
         opacity: 1,
         transition: {
           type: "spring",
-          stiffness: 150,
-          damping: 20,
+          stiffness: 150 * j.stiffness,
+          damping: 20 * j.damping,
           delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
     deck: (i: number) => {
       const t = deckTransform(i, slots);
+      const j = jitter[i];
+      // Card 0 keeps the geometry's own angle exactly. It is the card the stand
+      // takes over, and two degrees of charm on it is two degrees of jump at the
+      // handoff — the one place in this sequence where being tidy matters more
+      // than looking handled.
+      const wonk = i === 0 ? 0 : j.rotate;
       return {
         x: t.x * scale,
         y: t.y * scale,
         z: t.z,
         rotateX: 0,
-        rotateZ: t.rotate,
-        scale: 0.94,
+        rotateZ: t.rotate + wonk,
+        scale: 0.94 * t.scale,
         opacity: 1,
         // Card 0 goes first and unstaggered. It is the one the stand mounts over,
         // so it is the one that has to be *settled* when the handoff comes — under
-        // the old reverse stagger it started last, 90ms into a phase 560ms long,
-        // and was still travelling when PackStand took the screen. Paint order is
-        // `layer()`'s job, not the stagger's, so nothing is lost by leading with
-        // it.
+        // the old reverse stagger it started last and was still travelling when
+        // PackStand took the screen. Paint order is `layer()`'s job, not the
+        // stagger's, so nothing is lost by leading with it.
         transition: {
           type: "spring",
           stiffness: 210,
@@ -398,22 +428,34 @@ export function PackOpening({
                   // vault, so it is recognisable before it is readable. Always
                   // the default green, never the card's own foil: the sealed
                   // slot must not leak which look is inside before the reveal.
-                  boxShadow: isSecret(i)
-                    ? `0 24px 40px -14px oklch(0 0 0 / 76%), 0 0 34px -6px ${SECRET_RARITY.border}`
-                    : "0 22px 36px -14px oklch(0 0 0 / 72%), 0 0 22px -8px oklch(0.82 0.14 210 / 45%)",
+                  boxShadow: cardShadow(i),
                   borderColor: isSecret(i) ? SECRET_RARITY.border : undefined,
                 }}
                 className={cn("rounded-xl border", !isSecret(i) && "border-primary/30")}
               >
                 {/* Nested, so the breath composes with the fan transform rather
-                    than overwriting it. */}
+                    than overwriting it.
+
+                    Each card breathes by its own amount and on its own clock. A
+                    shared amplitude made the whole fan rise and fall as one
+                    object, which reads as a panel being animated rather than as
+                    four cards being held. */}
                 <motion.div
                   className="h-full w-full"
                   animate={
-                    hovering ? { y: [0, -5, 0], rotateY: [-2.5, 2.5, -2.5] } : { y: 0, rotateY: 0 }
+                    hovering
+                      ? {
+                          y: [0, -5 * jitter[i].breath, 0],
+                          rotateY: [
+                            -2.5 * jitter[i].breath,
+                            2.5 * jitter[i].breath,
+                            -2.5 * jitter[i].breath,
+                          ],
+                        }
+                      : { y: 0, rotateY: 0 }
                   }
                   transition={{
-                    duration: 2.4,
+                    duration: 2.4 * jitter[i].breath,
                     repeat: Infinity,
                     ease: "easeInOut",
                     delay: i * 0.3,
