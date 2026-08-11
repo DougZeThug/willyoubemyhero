@@ -664,9 +664,10 @@ function PackPage() {
       // Not a tier: SECRET_RARITY carries tier "base" so it satisfies the type,
       // and nothing may branch on that. The chime is named explicitly.
       playReveal(secretDuplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
-      if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-        navigator.vibrate?.([10, 60, 10, 60, 26]);
-      }
+      // The secret's haptic belongs to the *landing*, not to the request, so the
+      // stand fires it — see the `secretImpact` cue. A long pattern started here
+      // would still be buzzing a second later when the card actually arrives,
+      // which is the one frame it is supposed to be marking.
       // A duplicate gets the shimmer, never a second burst — a wink, not a parade.
       if (!secretDuplicate) await celebrateSecret(secretRarity);
     } finally {

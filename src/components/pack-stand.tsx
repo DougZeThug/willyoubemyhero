@@ -10,6 +10,7 @@ import { StandDeck, StandEntrance } from "@/components/stand-entrance";
 import { RevealAmbience } from "@/components/reveal-ambience";
 import { ambienceStrength } from "@/lib/reveal-ambience";
 import { burst } from "@/lib/card-confetti";
+import { cue } from "@/lib/card-sfx";
 import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
 import type { SecretCardView } from "@/lib/secret-cards";
 import { secretTakesTheStand, type SecretSlot } from "@/lib/pack";
@@ -234,6 +235,10 @@ export function PackStand({
 
   function land() {
     setLanding(false);
+    // The only sound in the sequence that happens to the *stand* rather than to
+    // the pack, which is what makes it read as "the ceremony is over and this
+    // card is yours to turn".
+    cue("cardLand");
     onEntered?.();
   }
 
@@ -287,7 +292,13 @@ export function PackStand({
       void burst(rarityRef.current, onSecret ? 1.5 : ambienceStrength(rarityRef.current.tier));
       if (onSecret) {
         setSlam(true);
+        // Picture, sound and haptic inside the same frame. That coincidence is
+        // the whole effect — separate them by much more than a frame or two and
+        // it stops landing as one impact and becomes three things happening.
+        cue("secretImpact");
         setTimeout(() => setSlam(false), SLAM_MS);
+      } else {
+        cue("cardFace");
       }
     }, ms * 0.86);
     return () => clearTimeout(t);
@@ -334,7 +345,10 @@ export function PackStand({
 
     setFinale("over");
     const timers = [
-      setTimeout(() => setFinale("glitch"), FINALE.over),
+      setTimeout(() => {
+        setFinale("glitch");
+        cue("fakeEnding");
+      }, FINALE.over),
       setTimeout(() => setFinale("arrived"), FINALE.over + FINALE.glitch),
     ];
     return () => timers.forEach(clearTimeout);

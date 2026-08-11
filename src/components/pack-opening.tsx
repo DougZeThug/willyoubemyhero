@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, type Variants } from "motion/react";
 import { PackWrapper } from "@/components/pack-wrapper";
 import { PackCardBack } from "@/components/pack-card-back";
-import { playPackOpen, playPackBurst, playDeckGather } from "@/lib/card-sfx";
+import { cue } from "@/lib/card-sfx";
 import {
   CEREMONY,
   CEREMONY_MS,
@@ -227,13 +227,20 @@ export function PackOpening({
     // — truthy, but not the deliberate `true` this reads as.
     timers.current.push(setTimeout(() => finish(true), CEREMONY_MS));
 
-    // Each sound sits on the thing it is the sound of. The pack coming apart is
-    // the strip letting go; the burst is the cards actually moving, which is a
+    // Each sound sits on the thing it is the sound of, and every one of them is
+    // named for that thing rather than for how it is made. The pack coming apart
+    // is the strip letting go; the burst is the cards actually moving, which is a
     // phase later — played at `peel` it was a whoosh for something still sitting
     // inside the wrapper.
-    timers.current.push(setTimeout(playPackOpen, CEREMONY_START.rip));
-    timers.current.push(setTimeout(playPackBurst, CEREMONY_START.launch));
-    timers.current.push(setTimeout(playDeckGather, CEREMONY_START.handoff));
+    //
+    // The first two are new, and they are why the opening no longer starts in
+    // silence: the pack is handled, then the seam is heard tightening, before
+    // anything is heard tearing.
+    cue("packHandle");
+    timers.current.push(setTimeout(() => cue("seamTension"), CEREMONY_START.seam));
+    timers.current.push(setTimeout(() => cue("packOpen"), CEREMONY_START.rip));
+    timers.current.push(setTimeout(() => cue("packBurst"), CEREMONY_START.launch));
+    timers.current.push(setTimeout(() => cue("deckGather"), CEREMONY_START.handoff));
   }
 
   // A ceremony that outlives its screen would call back into a route that has
