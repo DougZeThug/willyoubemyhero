@@ -42,8 +42,12 @@ describe("the timeline", () => {
    */
   it("has no phase long enough to read as a pause", () => {
     for (const step of CEREMONY) {
-      expect(step.ms).toBeLessThanOrEqual(420);
+      expect(step.ms).toBeLessThanOrEqual(600);
     }
+    // The rule is about dead air, not length, so the one phase where nothing
+    // moves keeps the tighter ceiling: `hold` is a beat, never a pause.
+    const hold = CEREMONY.find((s) => s.phase === "hold");
+    expect(hold!.ms).toBeLessThanOrEqual(340);
   });
 
   it("starts each phase where the previous one ended", () => {
