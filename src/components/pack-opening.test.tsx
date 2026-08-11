@@ -175,6 +175,24 @@ describe("the ceremony, continued", () => {
     });
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * The trap this exists for: `setTimeout(finish, CEREMONY_MS)` hands the
+   * callback its own timer id as the first argument. Passed bare, `finish` would
+   * be called with a number — truthy, so the handoff would appear to work, but by
+   * accident rather than by the deliberate `true` the code reads as. Wrapping it
+   * is the fix; this is the test that the wrapping is still there.
+   *
+   * jsdom measures every element as zero, so what actually arrives here is null —
+   * which is the other half of the contract: no measurement, no flight, and the
+   * stand mounts the way it always did.
+   */
+  it("hands the stand the deck it measured, or nothing it cannot", async () => {
+    const { container, onDone } = renderOpening();
+    await tearAndRun(container, CEREMONY_MS + 10);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onDone.mock.calls[0][0]).toBeNull();
+  });
 });
 
 describe("skipping", () => {
@@ -186,6 +204,23 @@ describe("skipping", () => {
       screen.getByRole("button", { name: /skip/i }).click();
     });
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A skip is a cut, and hands over no geometry.
+   *
+   * The rects are perfectly valid mid-flight and flying them to the stand would
+   * look good — but it would make skipping cost another 300ms, which is the one
+   * thing somebody pressing Skip has said they do not want.
+   */
+  it("gives the stand nothing to catch, so it does not spend time landing", async () => {
+    const { container, onDone } = renderOpening();
+    await tearAndRun(container, 400);
+
+    await act(async () => {
+      screen.getByRole("button", { name: /skip/i }).click();
+    });
+    expect(onDone.mock.calls[0][0]).toBeNull();
   });
 
   // A rip commits mid-drag with a finger still down. Skipping a ceremony nobody

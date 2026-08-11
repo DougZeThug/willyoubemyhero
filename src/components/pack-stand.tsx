@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { HoloCard } from "@/components/holo-card";
 import { SealedBack } from "@/components/pack-card-back";
@@ -6,8 +6,10 @@ import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { swipeDirection } from "@/lib/zoom";
+import { StandDeck, StandEntrance } from "@/components/stand-entrance";
+import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
 import type { SecretCardView } from "@/lib/secret-cards";
-import type { SecretSlot } from "@/lib/pack";
+import { secretTakesTheStand, type SecretSlot } from "@/lib/pack";
 import { packedByLabel } from "@/lib/card-pulls";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
@@ -102,6 +104,8 @@ export function PackStand({
   peeking,
   busy,
   fromPack = false,
+  enteringFrom,
+  onEntered,
   onReveal,
   onRevealSecret,
   onAdvance,
@@ -133,6 +137,17 @@ export function PackStand({
    * the sequence is stepping again and the slide is correct.
    */
   fromPack?: boolean;
+  /**
+   * Where the ceremony left its deck, in viewport pixels.
+   *
+   * The stand catches it rather than fading a card in beside it. Answers a
+   * different question from `fromPack`: this is *geometry*, that is "a ceremony
+   * ran". A skip has the second without the first, and must still suppress the
+   * slide-in-from-the-right that a step uses.
+   */
+  enteringFrom?: PackHandoff | null;
+  /** The flight has landed; the stand owns the card outright. */
+  onEntered?: () => void;
   onReveal: (i: number) => void;
   onRevealSecret: () => void;
   onAdvance: () => void;
@@ -156,6 +171,46 @@ export function PackStand({
   useEffect(() => {
     firstMountRef.current = false;
   }, []);
+
+  /**
+   * Catching the deck the ceremony threw.
+   *
+   * Measured in a *layout* effect, not a passive one. What this sets is what
+   * gives the flying cards their `initial`, and `initial` is read once, on mount
+   * — set from a passive effect it would arrive a painted frame late, which is
+   * one frame with no card on screen at all, at exactly the moment this whole
+   * thing exists to make seamless. Setting state inside a layout effect
+   * re-renders synchronously before the browser paints, so the empty commit is
+   * never seen. Same precedent as holo-card.tsx measuring its own scene.
+   */
+  const slotRef = useRef<HTMLDivElement>(null);
+  const [entry, setEntry] = useState<{ from: PackHandoff; slot: SlotRect } | null>(null);
+  const [landing, setLanding] = useState(false);
+  // Read once, on mount. The prop is cleared by the route the moment the flight
+  // lands, and re-reading it would unmount the flight halfway through itself.
+  const enteringRef = useRef(enteringFrom);
+
+  useLayoutEffect(() => {
+    const from = enteringRef.current;
+    const slot = slotRef.current?.getBoundingClientRect() ?? null;
+    // jsdom measures everything as zero, a skip hands over nothing, and reduced
+    // motion never rendered a card to measure. All three mean the stand mounts
+    // the way it always did.
+    if (!canFly(from, slot)) {
+      onEntered?.();
+      return;
+    }
+    setEntry({ from: from!, slot: slot! });
+    setLanding(true);
+    // Mount-only, deliberately: `onEntered` is re-created every render by the
+    // route, and listing it would re-run this and restart the flight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function land() {
+    setLanding(false);
+    onEntered?.();
+  }
 
   useEffect(() => {
     setSettled(false);
@@ -303,106 +358,154 @@ export function PackStand({
           )}
         </div>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={onSecret ? "secret" : (ep?.id ?? cursor)}
-            initial={
-              gathered
-                ? { opacity: 0, x: 0, scale: reduced ? 1 : 0.94 }
-                : { opacity: 0, x: reduced ? 0 : 64, scale: 0.94 }
-            }
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: reduced ? 0 : -64, scale: 0.94 }}
-            transition={{ type: "spring", stiffness: 240, damping: 26 }}
-            // Sized off the viewport's *height*, not just its width. HoloCard
-            // derives its height from its width via aspect-ratio, so on a short
-            // phone a 300px-wide card is 420px tall and pushes the name and the
-            // step dots below the fold.
-            //
-            // 19rem of chrome rather than 21: the "Tap to Reveal" heading above
-            // this is gone and the step dots below it are thinner. The header
-            // still costs its height even while it is faded out — it is `sticky`,
-            // which stays in flow — and main keeps the bottom nav's reserved
-            // padding on purpose, so this is the whole budget that was freed.
-            className="w-full max-w-[min(320px,calc((100svh-19rem)*5/7))]"
-          >
-            {onSecret && secretSlot === "pending" ? (
-              <div className="wax-foil flex aspect-[5/7] w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
-            ) : onSecret && !secret ? null : (
-              <motion.div
-                // The layout id is what carries this card into its column when the
-                // sequence ends. On a wrapper, never on HoloCard itself, whose
-                // subtree is preserve-3d and projects badly.
-                layoutId={`pack-card-${onSecret ? "secret" : ep!.id}`}
-                animate={secretPeeking && !reduced ? { scale: 1.06 } : { scale: 1 }}
-                transition={{ duration: 0.9 }}
-                className={cn(
-                  "relative rounded-xl",
-                  // Only while sealed: a breathing ring on a card you are already
-                  // looking at is a notification badge, not anticipation.
-                  onSecret && !isRevealed && "secret-seal",
-                  onSecret && isRevealed && !settled && "secret-reveal-sweep",
-                  onSecret && isRevealed && secretDuplicate && "secret-dupe-shimmer",
-                  peeking && !onSecret && !reduced && "animate-pulse",
-                )}
-                style={standStyle({ peeking, onSecret, isRevealed, rarity, secretRarity })}
-              >
-                <HoloCard
-                  // Mounted while the card is still face-down, so the art is
-                  // decoded before the turn rather than during it. The front face
-                  // is backface-hidden and explicitly `invisible` until the flip
-                  // passes edge-on, so nothing shows through early.
-                  frontUrl={onSecret ? (secret?.artUrl ?? null) : (cards?.[ep!.id]?.front ?? null)}
-                  backUrl={
-                    showStats
-                      ? onSecret
-                        ? universalBack
-                        : (cards?.[ep!.id]?.back ?? null)
-                      : universalBack
-                  }
-                  name={name}
-                  rarity={rarity}
-                  tilt="hero"
-                  flipMs={onSecret ? SECRET_FLIP_MS : FLIP_MS}
-                  faceDown={!isRevealed}
-                  flipped={isRevealed ? flipped : false}
-                  onFlippedChange={isRevealed ? setFlipped : undefined}
-                  backContent={
-                    showStats ? (
-                      onSecret && secret ? (
-                        <SecretBackPanel card={secret} rarity={secretRarity} />
+        {/* The slot, not the card.
+            It carries the size, so it has one on the commit *before* there is a
+            card in it — an entrance measured against a zero-height box starts
+            nowhere — and so the deck behind can sit still while the card in front
+            of it is stepped through.
+
+            Sized off the viewport's *height*, not just its width. HoloCard
+            derives its height from its width via aspect-ratio, so on a short
+            phone a 300px-wide card is 420px tall and pushes the name and the step
+            dots below the fold.
+
+            19rem of chrome rather than 21: the "Tap to Reveal" heading above this
+            is gone and the step dots below it are thinner. The header still costs
+            its height even while it is faded out — it is `sticky`, which stays in
+            flow — and main keeps the bottom nav's reserved padding on purpose, so
+            this is the whole budget that was freed. */}
+        <div
+          ref={slotRef}
+          className="relative aspect-[5/7] w-full max-w-[min(320px,calc((100svh-19rem)*5/7))]"
+        >
+          {/* What is left of the pack, waiting behind this card. */}
+          {!reduced && (
+            <StandDeck
+              count={
+                pack.length - cursor - 1 + (secretTakesTheStand(secretSlot) && !onSecret ? 1 : 0)
+              }
+              art={universalBack}
+              width={entry?.slot.width ?? 0}
+            />
+          )}
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={onSecret ? "secret" : (ep?.id ?? cursor)}
+              // While the deck is landing the entrance owns every pixel of motion
+              // and the card underneath simply waits. `false` rather than a
+              // zeroed initial, so nothing here animates at all and there is no
+              // second transition to fight the flight.
+              initial={
+                landing
+                  ? false
+                  : gathered
+                    ? { opacity: 0, x: 0, scale: reduced ? 1 : 0.94 }
+                    : { opacity: 0, x: reduced ? 0 : 64, scale: 0.94 }
+              }
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: reduced ? 0 : -64, scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 240, damping: 26 }}
+              className="absolute inset-0"
+            >
+              {onSecret && secretSlot === "pending" ? (
+                <div className="wax-foil flex h-full w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
+              ) : onSecret && !secret ? null : (
+                <motion.div
+                  // The layout id is what carries this card into its column when the
+                  // sequence ends. On a wrapper, never on HoloCard itself, whose
+                  // subtree is preserve-3d and projects badly.
+                  layoutId={`pack-card-${onSecret ? "secret" : ep!.id}`}
+                  animate={secretPeeking && !reduced ? { scale: 1.06 } : { scale: 1 }}
+                  transition={{ duration: 0.9 }}
+                  className={cn(
+                    "relative rounded-xl",
+                    // Mounted from the first frame so the front art decodes while
+                    // the deck is still in the air, and held behind `invisible`
+                    // rather than unmounted so the flip is warm the instant it
+                    // lands. `visibility: hidden` is not only paint: the card is
+                    // out of the accessibility tree, out of the tab order and not
+                    // hit-tested, so neither a thumb nor Playwright can reach a
+                    // card that is still travelling.
+                    landing && "invisible",
+                    // Only while sealed: a breathing ring on a card you are already
+                    // looking at is a notification badge, not anticipation.
+                    onSecret && !isRevealed && "secret-seal",
+                    onSecret && isRevealed && !settled && "secret-reveal-sweep",
+                    onSecret && isRevealed && secretDuplicate && "secret-dupe-shimmer",
+                    peeking && !onSecret && !reduced && "animate-pulse",
+                  )}
+                  style={standStyle({ peeking, onSecret, isRevealed, rarity, secretRarity })}
+                >
+                  <HoloCard
+                    // Mounted while the card is still face-down, so the art is
+                    // decoded before the turn rather than during it. The front face
+                    // is backface-hidden and explicitly `invisible` until the flip
+                    // passes edge-on, so nothing shows through early.
+                    frontUrl={
+                      onSecret ? (secret?.artUrl ?? null) : (cards?.[ep!.id]?.front ?? null)
+                    }
+                    backUrl={
+                      showStats
+                        ? onSecret
+                          ? universalBack
+                          : (cards?.[ep!.id]?.back ?? null)
+                        : universalBack
+                    }
+                    name={name}
+                    rarity={rarity}
+                    tilt="hero"
+                    flipMs={onSecret ? SECRET_FLIP_MS : FLIP_MS}
+                    faceDown={!isRevealed}
+                    flipped={isRevealed ? flipped : false}
+                    onFlippedChange={isRevealed ? setFlipped : undefined}
+                    backContent={
+                      showStats ? (
+                        onSecret && secret ? (
+                          <SecretBackPanel card={secret} rarity={secretRarity} />
+                        ) : (
+                          <CardBackPanel ep={ep!} bundle={bundle} rarity={rarity} />
+                        )
                       ) : (
-                        <CardBackPanel ep={ep!} bundle={bundle} rarity={rarity} />
+                        <SealedBack />
                       )
-                    ) : (
-                      <SealedBack />
-                    )
-                  }
-                  // A card still face-down owns its tap: turning it has to run the
-                  // ceremony, not just rotate quietly. Handing the tap back once
-                  // revealed is what re-arms HoloCard's own flip, so examining the
-                  // back needs no code here.
-                  //
-                  // Dropped during the hold and while the automatic run owns the
-                  // sequence. A card holds face-down for 900ms (1600ms for the
-                  // secret) before it turns, and every tap in that window used to
-                  // start another ceremony over the same card.
-                  onClick={
-                    isRevealed || holding || busy
-                      ? undefined
-                      : onSecret
-                        ? onRevealSecret
-                        : () => onReveal(cursor)
-                  }
-                  // A horizontal throw is the stand's own gesture now — it means
-                  // "next card", read by the wrapper above — so the card must not
-                  // also answer to it. Same split as the player detail page.
-                  flickToFlip={false}
-                />
-              </motion.div>
-            )}
-          </motion.div>
-        </AnimatePresence>
+                    }
+                    // A card still face-down owns its tap: turning it has to run the
+                    // ceremony, not just rotate quietly. Handing the tap back once
+                    // revealed is what re-arms HoloCard's own flip, so examining the
+                    // back needs no code here.
+                    //
+                    // Dropped during the hold and while the automatic run owns the
+                    // sequence. A card holds face-down for 900ms (1600ms for the
+                    // secret) before it turns, and every tap in that window used to
+                    // start another ceremony over the same card.
+                    onClick={
+                      isRevealed || holding || busy
+                        ? undefined
+                        : onSecret
+                          ? onRevealSecret
+                          : () => onReveal(cursor)
+                    }
+                    // A horizontal throw is the stand's own gesture now — it means
+                    // "next card", read by the wrapper above — so the card must not
+                    // also answer to it. Same split as the player detail page.
+                    flickToFlip={false}
+                  />
+                </motion.div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* The deck arriving, over the top of the card it is becoming. */}
+          {entry && landing && (
+            <StandEntrance
+              from={entry.from}
+              slot={entry.slot}
+              art={universalBack}
+              onLanded={land}
+            />
+          )}
+        </div>
 
         {/* Reserved height, so turning a card never shunts the dots below it. */}
         <div className="flex min-h-12 flex-col items-center justify-start gap-0.5 text-center">

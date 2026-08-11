@@ -40,6 +40,7 @@ import {
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { usePackIdentity } from "@/lib/device-id";
 import { dealPack, packSeed, packStage, resumeCursor, type SecretSlot } from "@/lib/pack";
+import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
@@ -264,6 +265,19 @@ function PackPage() {
    * — it is read on the render *after* the ceremony ends.
    */
   const ceremonyRanRef = useRef(false);
+  /**
+   * Where the ceremony left its deck, for the stand to pick up.
+   *
+   * Not a stage. `packStage` still steps straight from "opening" to "revealing";
+   * by the time this is set the stand genuinely owns the screen and is simply
+   * still arriving. Null for all but a few hundred milliseconds a day, and null
+   * outright for a skip or under reduced motion.
+   *
+   * Held apart from `ceremonyRanRef` on purpose: this is *geometry*, that is
+   * "a ceremony ran, so do not slide in from the right". A skip has the second
+   * without the first.
+   */
+  const [entering, setEntering] = useState<PackHandoff | null>(null);
   // Which card is on the stand. Advanced only by the user: revealing a card does
   // not move it on, because a card you have not looked at yet is not a card you
   // are finished with.
@@ -541,8 +555,9 @@ function PackPage() {
     return true;
   }, [dealtIds, nextPack, reduced, actor, status.data?.available]);
 
-  const closeCeremony = useCallback(() => {
+  const closeCeremony = useCallback((from: PackHandoff | null) => {
     openingRef.current = false;
+    setEntering(from);
     setOpening(false);
   }, []);
 
@@ -803,6 +818,14 @@ function PackPage() {
   const stage = packStage({ torn, opening, packSize: pack.length, cursor, secretSlot });
   const onSecretStep = cursor >= pack.length;
 
+  // Insurance. `entering` is normally cleared by the stand landing, but a stand
+  // that never mounts — an empty pack, or the day tick re-sealing underneath —
+  // would otherwise leave a deck of card backs pinned over a screen that has
+  // moved on.
+  useEffect(() => {
+    if (stage !== "revealing" && entering) setEntering(null);
+  }, [stage, entering]);
+
   /**
    * Wait for a pull that is still in the air.
    *
@@ -1018,6 +1041,8 @@ function PackPage() {
               peeking={peeking}
               busy={autoRunning}
               fromPack={ceremonyRanRef.current}
+              enteringFrom={entering}
+              onEntered={() => setEntering(null)}
               onReveal={(i) => void revealAt(i)}
               onRevealSecret={() => void revealSecret()}
               onAdvance={() => setCursor((c) => c + 1)}
@@ -1033,7 +1058,10 @@ function PackPage() {
                     to skip the thing you came for. */}
                 <button
                   onClick={() => void revealEverything()}
-                  disabled={autoRunning}
+                  // Also off while the deck is still landing: for those few
+                  // hundred milliseconds the real card is invisible behind the
+                  // flight, and this would turn a card nobody can see.
+                  disabled={autoRunning || entering != null}
                   className="rounded-full px-3 py-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground/45 hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground/45"
                 >
                   Reveal all

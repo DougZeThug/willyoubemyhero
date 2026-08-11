@@ -16,6 +16,7 @@ import {
   type CeremonyPhase,
 } from "@/lib/pack-ceremony";
 import { SECRET_RARITY } from "@/lib/secret-cards";
+import type { PackHandoff } from "@/lib/pack-handoff";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media";
@@ -108,8 +109,15 @@ export function PackOpening({
    * play to an empty stage and then latch this component shut for good.
    */
   onTear: () => boolean;
-  /** The ceremony is over, by clock or by tap. */
-  onDone: () => void;
+  /**
+   * The ceremony is over, by clock or by tap.
+   *
+   * `from` is where the deck actually was when it let go, so the stand can pick
+   * the cards up rather than fade a different card in at a different size. Null
+   * when there is nothing to pick up: a skip, reduced motion, or a browser that
+   * measures everything as zero.
+   */
+  onDone: (from: PackHandoff | null) => void;
 }) {
   const reduced = usePrefersReducedMotion();
   const [phase, setPhase] = useState<CeremonyPhase | null>(null);
@@ -130,18 +138,56 @@ export function PackOpening({
   const boxRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
   const [scale, setScale] = useState(1);
+  // The flying cards themselves, so the deck can be measured as it is handed on.
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  function finish() {
+  /**
+   * Where the deck actually is, in viewport pixels, at the moment it lets go.
+   *
+   * Measured rather than derived from `deckTransform`. These cards sit inside a
+   * clipped, flattened subtree, under a rotated pack, under two perspectives, at
+   * a scale taken off a measured pack width — the browser has already done that
+   * sum, and redoing it in the component that catches them could only ever be
+   * subtly wrong. `clip-path` clips paint and not boxes, so the rect is exact
+   * even while the card is visually cut by the mouth.
+   *
+   * The width comes from card 0 for every card: `getBoundingClientRect` answers
+   * with the axis-aligned box of a *rotated* element, and card 0 is the only one
+   * the deck deliberately leaves square.
+   */
+  function readDeck(): PackHandoff | null {
+    const boxes = cardRefs.current.slice(0, slots).map((el) => el?.getBoundingClientRect());
+    const front = boxes[0];
+    // No cards at all (skipped, or reduced motion), or a browser that measures
+    // everything as zero. Both mean there is nothing to hand over.
+    if (!front || front.width === 0 || boxes.some((b) => !b)) return null;
+    return {
+      w: front.width,
+      cards: boxes.map((b) => ({ cx: b!.left + b!.width / 2, cy: b!.top + b!.height / 2 })),
+    };
+  }
+
+  /**
+   * End the ceremony.
+   *
+   * `hand` is whether the stand should catch the deck. It is false for a skip —
+   * the rects are perfectly valid mid-flight and flying them would look good, but
+   * skip is a cut, and making it cost another 300ms defeats the point of it.
+   */
+  function finish(hand: boolean) {
     if (doneRef.current) return;
     doneRef.current = true;
+    // Measured before the timers are dropped and before anything unmounts; after
+    // `onDone` this component is gone and there is nothing left to read.
+    const from = hand ? readDeck() : null;
     timers.current.forEach(clearTimeout);
     timers.current = [];
-    onDoneRef.current();
+    onDoneRef.current(from);
   }
 
   function skip() {
     if (performance.now() - startedAt.current < SKIP_DEAD_MS) return;
-    finish();
+    finish(false);
   }
 
   /**
@@ -164,7 +210,7 @@ export function PackOpening({
     startedAt.current = performance.now();
 
     if (reduced) {
-      finish();
+      finish(false);
       return;
     }
 
@@ -176,7 +222,10 @@ export function PackOpening({
     for (const step of CEREMONY.slice(1)) {
       timers.current.push(setTimeout(() => setPhase(step.phase), CEREMONY_START[step.phase]));
     }
-    timers.current.push(setTimeout(finish, CEREMONY_MS));
+    // Wrapped, not passed bare: setTimeout hands the callback its timer id as
+    // the first argument, so `setTimeout(finish, ...)` would call finish(<id>)
+    // — truthy, but not the deliberate `true` this reads as.
+    timers.current.push(setTimeout(() => finish(true), CEREMONY_MS));
 
     // Each sound sits on the thing it is the sound of. The pack coming apart is
     // the strip letting go; the burst is the cards actually moving, which is a
@@ -215,7 +264,8 @@ export function PackOpening({
     // `finish` is re-created every render and is idempotent by way of doneRef, so
     // it is deliberately not a dependency — listing it would re-run this on every
     // render instead of on the preference actually changing.
-    if (reduced && begunRef.current) finish();
+    if (reduced && begunRef.current) finish(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced]);
 
   // Which target the cards are animating toward. Four, not seven: the phases are
@@ -407,6 +457,9 @@ export function PackOpening({
             Array.from({ length: slots }, (_, i) => (
               <motion.div
                 key={i}
+                ref={(el) => {
+                  cardRefs.current[i] = el;
+                }}
                 data-testid="opening-card"
                 custom={i}
                 variants={CARD}
