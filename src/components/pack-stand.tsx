@@ -358,6 +358,16 @@ export function PackStand({
   // may be on screen — not its heading, not its dot, not its glow.
   const pretending = finale === "over" || finale === "glitch";
 
+  /**
+   * How many cards are still waiting behind the one on the stand.
+   *
+   * The roster cards after this one, plus the secret when one is genuinely
+   * coming. Goes negative on the secret's own step — nothing is behind the last
+   * card — and StandDeck reads that as "draw nothing", which is exactly right and
+   * is why this is allowed to be a plain subtraction rather than a clamp.
+   */
+  const behind = pack.length - cursor - 1 + (secretTakesTheStand(secretSlot) && !onSecret ? 1 : 0);
+
   // The card is mid-ceremony: turned over already in everything but appearance.
   const holding = onSecret ? secretPeeking : peeking;
   const canAdvance = isRevealed && !busy && !holding && !pretending;
@@ -604,13 +614,7 @@ export function PackStand({
         >
           {/* What is left of the pack, waiting behind this card. */}
           {!reduced && (
-            <StandDeck
-              count={
-                pack.length - cursor - 1 + (secretTakesTheStand(secretSlot) && !onSecret ? 1 : 0)
-              }
-              art={universalBack}
-              width={entry?.slot.width ?? 0}
-            />
+            <StandDeck count={behind} art={universalBack} width={entry?.slot.width ?? 0} />
           )}
 
           <AnimatePresence mode="wait">
