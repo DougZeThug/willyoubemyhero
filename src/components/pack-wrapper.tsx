@@ -122,11 +122,15 @@ const SHARDS = [
 const SHARD_FLIGHT = [
   // `sec`, not ms — motion's own unit for a duration, and mixing the two here is
   // a thousandfold mistake that looks like a frozen animation.
-  // Sized to the `peel` phase, which is 760ms on the cinematic timeline. Shards
-  // that finished in 600ms left a third of the phase with an empty sky in it.
-  { x: -74, y: -196, rz: -34, rx: 52, sec: 0.98 },
-  { x: 24, y: -238, rz: 22, rx: 38, sec: 1.06 },
-  { x: 98, y: -176, rz: 48, rx: 64, sec: 0.9 },
+  //
+  // Sized against `peel` plus the phase after it: the shards are allowed to still
+  // be tumbling once the cards have started to rise, because foil coming off a
+  // pack does not politely finish before the contents move. What they must not do
+  // is outlive the fan — a shard still in the air behind a spread hand of cards
+  // reads as a stray element rather than as debris.
+  { x: -74, y: -196, rz: -34, rx: 52, sec: 0.44 },
+  { x: 24, y: -238, rz: 22, rx: 38, sec: 0.48 },
+  { x: 98, y: -176, rz: 48, rx: 64, sec: 0.4 },
 ] as const;
 
 /**
@@ -259,6 +263,19 @@ export function PackWrapper({
   const art = urlFromSet(artUrl);
 
   const sealed = phase == null;
+  // The pack takes the strain before anything comes apart. Two phases of nothing
+  // *moving* would be a dead start, so this is where the anticipation lives: a
+  // squash, then a seam that lights up under tension. It is also the beat that
+  // makes the rip afterwards read as a release rather than as the first thing
+  // that happens.
+  const bracing = !sealed && !ceremonyReached("rip", phase);
+  // The seam phase itself, not "seam or later". `ceremonyReached` is cumulative,
+  // which is right for `shed` and `spilled` — those are one-way doors — and wrong
+  // here: the seam is supposed to build, then be blown out by the rip it was
+  // announcing. Asked cumulatively it stayed lit at full brightness through the
+  // rip, the peel, the fan and the handoff, and the blow-out branch below was
+  // unreachable.
+  const seaming = phase === "seam";
   // The rip finishes travelling on its own once it commits. This is the whole
   // reason the ceremony exists: the threshold is 60% of the drag, so left to the
   // gesture alone the edge never crosses the last 40% of the pack and the strip
@@ -268,7 +285,11 @@ export function PackWrapper({
   // the beat the cards stop rising and start spreading — by then they are clear
   // of the pack and the clip has nothing left to hide.
   const spilled = !sealed && ceremonyReached("fan", phase);
-  const travel = sealed ? progress : 1;
+  // The rip holds exactly where the finger left it until `rip` starts. Without
+  // this the strip completes its travel during the two anticipation phases, so
+  // the pack braces and tears in the same breath and the anticipation is spent on
+  // something already over.
+  const travel = sealed || bracing ? progress : 1;
 
   function end(e: React.PointerEvent<HTMLDivElement>) {
     if (dragRef.current?.id === e.pointerId && e.currentTarget.hasPointerCapture?.(e.pointerId)) {
@@ -375,10 +396,21 @@ export function PackWrapper({
       style={{
         // An explicit 3D-positioned box, so the shards inside it inherit the scene
         // camera rather than tumbling flat.
-        transform: `translateZ(0px) rotateX(${!sealed && !reduced ? -4 : 0}deg)`,
+        //
+        // The squash is the anticipation: a pack braced against the pull, wider
+        // and shorter for a moment, before it lets go. Origin at the bottom so it
+        // reads as being pressed down onto the table rather than shrinking in
+        // place. Tiny on purpose — 3% is under the threshold at which it reads as
+        // a wobble and well over the one at which the eye notices something
+        // happened.
+        transform: [
+          "translateZ(0px)",
+          `rotateX(${!sealed && !reduced ? -4 : 0}deg)`,
+          bracing && !reduced ? "scale(1.02, 0.97)" : "scale(1, 1)",
+        ].join(" "),
         transformOrigin: "50% 100%",
         transformStyle: "preserve-3d",
-        transition: "transform 300ms cubic-bezier(0.22, 1, 0.36, 1)",
+        transition: `transform ${bracing ? 120 : 300}ms cubic-bezier(0.22, 1, 0.36, 1)`,
       }}
     >
       {/* Everything that belongs *inside* the pack. Clipped and rounded here so
@@ -408,8 +440,23 @@ export function PackWrapper({
         <motion.div
           aria-hidden
           className="absolute inset-0"
-          style={{ clipPath: bodyClip(edge) }}
-          animate={shed && !reduced ? { y: 6, scale: 0.99 } : { y: 0, scale: 1 }}
+          style={{
+            clipPath: bodyClip(edge),
+            // Bowing needs somewhere to bow from. Hinged at the bottom, where the
+            // pack is still held, so the torn top edge is the end that opens
+            // toward the viewer.
+            transformOrigin: "50% 100%",
+            transformStyle: "preserve-3d",
+          }}
+          animate={
+            shed && !reduced
+              ? // The front face bends outward as the strip leaves it. A wrapper
+                // that stayed perfectly flat while its top came off read as two
+                // pieces sliding apart; this is the one detail that makes the pack
+                // read as having been under tension.
+                { y: 6, scale: 0.99, rotateX: 6 }
+              : { y: 0, scale: 1, rotateX: 0 }
+          }
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         >
           <PackFace art={art} size={packSize} year={year} />
@@ -441,22 +488,61 @@ export function PackWrapper({
           transition={{ duration: 0.22, ease: "easeOut" }}
         />
 
-        {/* One pass of light along the torn edge, so the eye is told where the
-            pack came apart before anything comes out of it. */}
+        {/* The seam, under tension.
+
+            This used to be a single pass of light fired once the strip had already
+            gone — a label on a rip that had happened. It is worth far more as the
+            thing that happens *first*: the tear line lights up and thickens while
+            the pack is still sealed, so the eye is looking at exactly the right
+            twenty pixels when they come apart. */}
         <motion.div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 h-px -translate-y-1/2"
+          className="pointer-events-none absolute inset-x-0 -translate-y-1/2"
           style={{
             top: `${stripPct}%`,
             background:
-              "linear-gradient(90deg, transparent, oklch(0.82 0.14 210 / 80%), transparent)",
+              "linear-gradient(90deg, transparent, oklch(0.92 0.16 205 / 95%), transparent)",
           }}
           initial={false}
           animate={
-            shed && !reduced ? { opacity: [0, 1, 0.4], scaleX: [0.2, 1, 1] } : { opacity: 0 }
+            reduced
+              ? { opacity: 0 }
+              : seaming
+                ? // Built, not flashed. It grows out from the middle of the seam
+                  // and brightens, and it is still there when the strip lets go.
+                  { opacity: [0, 0.9], scaleX: [0.25, 1], height: [1, 3] }
+                : bracing
+                  ? { opacity: 0, scaleX: 0.25, height: 1 }
+                  : // Blown out by the rip it was announcing.
+                    { opacity: [0.9, 0], scaleX: 1, height: 2 }
           }
-          transition={{ duration: 0.34, ease: "easeOut" }}
+          transition={{ duration: seaming ? 0.18 : 0.24, ease: "easeOut" }}
         />
+
+        {/* Light escaping the pack.
+            Clipped to the tear line itself, so it is genuinely coming out of the
+            opening rather than being a bright rectangle laid over it. Screen
+            blend, because this is light rather than paint. */}
+        {!reduced && (
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ clipPath: mouthClip(edge, 0), mixBlendMode: "screen" }}
+            initial={false}
+            animate={{ opacity: shed && !spilled ? [0, 1, 0] : 0 }}
+            transition={{ duration: 0.25, times: [0, 0.36, 1], ease: "easeOut" }}
+          >
+            <div
+              className="absolute inset-x-0"
+              style={{
+                top: `${stripPct - 14}%`,
+                height: "42%",
+                background:
+                  "radial-gradient(60% 100% at 50% 100%, oklch(1 0 0 / 92%) 0%, oklch(0.88 0.13 205 / 62%) 38%, transparent 72%)",
+              }}
+            />
+          </motion.div>
+        )}
 
         {/* The torn strip, while a finger is still on it.
 
@@ -519,11 +605,20 @@ export function PackWrapper({
           className="pointer-events-none absolute inset-0"
           style={{ clipPath: stripClip(edge), transformOrigin: "right center" }}
           initial={{ rotate: -committedAt.current * 8, y: -committedAt.current * 14 }}
-          animate={{ rotate: -8, y: -14 }}
+          // Held exactly where the finger left it through the anticipation, then
+          // released. The strip is the thing under tension during `seam`, so it
+          // must not be quietly finishing its own rip while the seam is still
+          // announcing one.
+          animate={
+            bracing
+              ? { rotate: -committedAt.current * 8, y: -committedAt.current * 14 }
+              : { rotate: -8, y: -14 }
+          }
           // Plainer than the house easeOutQuint used everywhere else here, and
-          // measured rather than guessed: quint is 91% travelled by 60ms of a
-          // 300ms phase, which to an eye is the jump this exists to remove.
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          // measured rather than guessed: quint is 91% travelled by 60ms, which to
+          // an eye is the jump this exists to remove. Sized to `rip`, so the strip
+          // is still travelling when the shards take over from it.
+          transition={{ duration: 0.2, ease: "easeOut" }}
         >
           <PackFace art={art} size={packSize} year={year} />
         </motion.div>

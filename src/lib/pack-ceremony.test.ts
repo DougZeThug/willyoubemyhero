@@ -11,6 +11,7 @@ import {
   ceremonyReached,
   deckTransform,
   fanTransform,
+  packJitter,
   riseTransform,
   type CeremonyPhase,
 } from "./pack-ceremony";
@@ -23,8 +24,26 @@ describe("the timeline", () => {
   it("runs about as long as a rip actually takes to watch", () => {
     // Loose bounds on purpose: this is a taste range, not a contract. It exists
     // so a stray zero in the table shows up as a failing test.
-    expect(CEREMONY_MS).toBeGreaterThan(3000);
-    expect(CEREMONY_MS).toBeLessThan(6000);
+    //
+    // Halved from the old 3–6s window. The sequence is not shorter because it was
+    // trimmed — it is shorter because the two phases that held still were given
+    // something to do, and a phase that is always changing does not need as long.
+    expect(CEREMONY_MS).toBeGreaterThan(1500);
+    expect(CEREMONY_MS).toBeLessThan(3000);
+  });
+
+  /**
+   * The reason the timeline was retuned, pinned so it cannot quietly regress.
+   *
+   * The old table's failure was not its length, it was that it contained dead
+   * air: a 360ms phase where the pack simply sat open and a 560ms one where the
+   * fan hung still. Anything long enough to notice is long enough to need
+   * something happening in it.
+   */
+  it("has no phase long enough to read as a pause", () => {
+    for (const step of CEREMONY) {
+      expect(step.ms).toBeLessThanOrEqual(420);
+    }
   });
 
   it("starts each phase where the previous one ended", () => {
@@ -38,8 +57,8 @@ describe("the timeline", () => {
 });
 
 describe("ceremonyPhaseAt", () => {
-  it("opens on the rip", () => {
-    expect(ceremonyPhaseAt(0)).toBe("rip");
+  it("opens on the first phase in the table", () => {
+    expect(ceremonyPhaseAt(0)).toBe(CEREMONY[0].phase);
   });
 
   it("lands each phase on its own first millisecond", () => {
@@ -57,8 +76,8 @@ describe("ceremonyPhaseAt", () => {
   // in the pointer handler, and NaN is one bad subtraction away. Neither should
   // be able to take the ceremony somewhere it has no frame for.
   it("answers the first phase for a clock that has not started", () => {
-    expect(ceremonyPhaseAt(-1)).toBe("rip");
-    expect(ceremonyPhaseAt(Number.NaN)).toBe("rip");
+    expect(ceremonyPhaseAt(-1)).toBe(CEREMONY[0].phase);
+    expect(ceremonyPhaseAt(Number.NaN)).toBe(CEREMONY[0].phase);
   });
 
   it("never skips a phase as the clock advances", () => {
@@ -81,7 +100,7 @@ describe("ceremonyReached", () => {
   });
 
   it("is false for a phase still ahead", () => {
-    expect(ceremonyReached("collapse", "fan")).toBe(false);
+    expect(ceremonyReached("handoff", "fan")).toBe(false);
   });
 
   it("counts everything as reached once the run is over", () => {
@@ -165,6 +184,109 @@ describe("fanTransform", () => {
   it("does not stretch a two-card fan to the full width", () => {
     const two = xs(2);
     expect(two[1].x - two[0].x).toBeLessThan(xs(3)[2].x - xs(3)[0].x);
+  });
+});
+
+/**
+ * Depth, which is the difference between a stack of cards and one thick card.
+ *
+ * The scales here are small — 1.5% a card — and that is deliberate: the
+ * perspective is already doing most of the work, and this is only the part of the
+ * separation perspective cannot carry at these distances.
+ */
+describe("depth", () => {
+  it("shrinks each card behind the one in front of it, in both stacks", () => {
+    for (const pose of [riseTransform, deckTransform]) {
+      const cards = Array.from({ length: 4 }, (_, i) => pose(i, 4));
+      expect(cards[0].scale).toBe(1);
+      for (let i = 1; i < cards.length; i++) {
+        expect(cards[i].scale).toBeLessThan(cards[i - 1].scale);
+      }
+      // Small enough that the back of a four-card pack is still recognisably the
+      // same size of object as the front of it.
+      expect(cards[3].scale).toBeGreaterThan(0.94);
+    }
+  });
+
+  it("holds every card in the fan at one size", () => {
+    // A fan is cards held out at the same distance, so they are the same size in
+    // it. The `z` arc already renders the outer ones fractionally smaller, which
+    // is the only size difference a real hand of cards has — and a per-card scale
+    // here would break the mirror symmetry below.
+    for (const card of Array.from({ length: 4 }, (_, i) => fanTransform(i, 4))) {
+      expect(card.scale).toBe(1);
+    }
+  });
+
+  it("separates the deck far enough to count its edges", () => {
+    // Two pixels apart is a deck you have to be told is a deck. This is the
+    // assertion that stops the gather being tidied back into a single card.
+    const cards = Array.from({ length: 3 }, (_, i) => deckTransform(i, 3));
+    for (let i = 1; i < cards.length; i++) {
+      expect(Math.abs(cards[i].x - cards[i - 1].x)).toBeGreaterThanOrEqual(3);
+      expect(Math.abs(cards[i].y - cards[i - 1].y)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  /**
+   * The guard on where the untidiness lives.
+   *
+   * Cards are given a seeded per-card wonk so the fan does not look machined, and
+   * it belongs in pack-opening.tsx, layered on top of this. If it ever moves in
+   * here the symmetry tests above and below start failing intermittently, which
+   * is a miserable thing to debug — so this states the rule outright.
+   */
+  it("is a pure function of the slot, with nothing random in it", () => {
+    for (const pose of [riseTransform, fanTransform, deckTransform]) {
+      for (let i = 0; i < 4; i++) {
+        expect(pose(i, 4)).toEqual(pose(i, 4));
+      }
+    }
+  });
+});
+
+/**
+ * The untidiness, which is the difference between a hand of cards and a diagram.
+ *
+ * Seeded rather than random, so two people opening the same pack side by side see
+ * the same thing — the same property the ragged tear edge has, and worth the same
+ * care: a re-render mid-flight must not re-roll a card's angle underneath it.
+ */
+describe("packJitter", () => {
+  it("gives the same pack the same wonk every time", () => {
+    expect(packJitter("seed-a", 4)).toEqual(packJitter("seed-a", 4));
+  });
+
+  it("gives two different packs different wonk", () => {
+    expect(packJitter("seed-a", 4)).not.toEqual(packJitter("seed-b", 4));
+  });
+
+  it("gives each card in a pack its own, rather than one for all of them", () => {
+    const [a, b, c] = packJitter("seed-a", 3);
+    expect(a.rotate).not.toBeCloseTo(b.rotate);
+    expect(b.rotate).not.toBeCloseTo(c.rotate);
+  });
+
+  it("stays inside the range where it reads as handled rather than broken", () => {
+    for (const j of packJitter("seed-a", 4)) {
+      expect(Math.abs(j.rotate)).toBeLessThanOrEqual(2);
+      // The spring multipliers have to keep every card arriving inside its own
+      // phase. A card still travelling when its phase ends teleports to the next
+      // mark, which is the one failure mode worse than no variation at all.
+      expect(j.stiffness).toBeGreaterThan(0.85);
+      expect(j.stiffness).toBeLessThan(1.15);
+      expect(j.damping).toBeGreaterThan(0.85);
+      expect(j.damping).toBeLessThan(1.15);
+      expect(j.breath).toBeGreaterThan(0.5);
+      expect(j.breath).toBeLessThan(1.5);
+    }
+  });
+
+  it("answers for however many cards the pack is holding", () => {
+    expect(packJitter("seed-a", 3)).toHaveLength(3);
+    expect(packJitter("seed-a", 4)).toHaveLength(4);
+    // A pack that has not been dealt yet asks for none, and must not throw.
+    expect(packJitter("seed-a", 0)).toEqual([]);
   });
 });
 

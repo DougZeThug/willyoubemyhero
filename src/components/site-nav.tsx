@@ -1,5 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { Radio, Trophy, ListOrdered, ClipboardList, Settings, Users } from "lucide-react";
+import { useIsPresenting } from "@/hooks/use-presentation";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -13,10 +16,26 @@ const links = [
 
 export function SiteNav() {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  // A screen playing something cinematic gets the whole device. Faded and inert
+  // rather than unmounted: unmounting the header reflows every page under it, and
+  // the flag flips mid-ceremony. `inert` is the load-bearing half — chrome dimmed
+  // to nothing is still chrome a thumb or a tab key can reach.
+  const presenting = useIsPresenting();
+  const reduced = usePrefersReducedMotion();
+  // Fading *out* is part of the ceremony taking the screen. Coming back is not:
+  // `inert` lifts the moment the flag clears, so a 300ms fade-in would leave the
+  // nav tappable and focusable while it was still invisible.
+  const step = { duration: reduced || !presenting ? 0 : 0.3, ease: "easeOut" } as const;
+
   return (
     <>
       {/* Top brand bar — centered wordmark, no logo tile */}
-      <header className="sticky top-0 z-30 border-b border-primary/10 bg-background/85 backdrop-blur">
+      <motion.header
+        inert={presenting}
+        animate={{ opacity: presenting ? 0 : 1 }}
+        transition={step}
+        className="sticky top-0 z-30 border-b border-primary/10 bg-background/85 backdrop-blur"
+      >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5">
           <div className="w-8 md:w-16" aria-hidden />
           <Link to="/players" className="flex flex-col items-center leading-none">
@@ -48,10 +67,15 @@ export function SiteNav() {
           </nav>
           <div className="w-8 md:hidden" aria-hidden />
         </div>
-      </header>
+      </motion.header>
 
       {/* Mobile bottom nav — thin icons, cyan underline glow when active */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/15 bg-background/95 backdrop-blur md:hidden">
+      <motion.nav
+        inert={presenting}
+        animate={{ opacity: presenting ? 0 : 1 }}
+        transition={step}
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/15 bg-background/95 backdrop-blur md:hidden"
+      >
         <ul className="mx-auto grid max-w-md grid-cols-6">
           {links.map((l) => {
             const Icon = l.icon;
@@ -85,7 +109,7 @@ export function SiteNav() {
           })}
         </ul>
         <div className="h-[env(safe-area-inset-bottom)]" />
-      </nav>
+      </motion.nav>
     </>
   );
 }

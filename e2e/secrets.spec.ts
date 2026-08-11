@@ -236,7 +236,10 @@ test.describe("the daily secret", () => {
     await page.goto("/players/pack");
     await tearPack(page);
     await expect(page.getByText(/one more card/i)).toBeHidden();
-    await expect(page.getByText(/pack complete|tap to reveal/i).first()).toBeVisible();
+    // The pack still opens and still reaches the stand — an empty secret set is
+    // nothing to say, not a broken screen. Read off the stand's own test id
+    // rather than its heading, which is faint presentation copy by design.
+    await expect(page.getByTestId("stand-step")).toBeVisible();
   });
 });
 

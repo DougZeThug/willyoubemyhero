@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteNav } from "@/components/site-nav";
+import { PresentationProvider } from "@/components/presentation-mode";
 import { hydrateCardSfxMuted } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
@@ -152,12 +153,20 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen flex flex-col">
-        <SiteNav />
-        <main className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
-          <Outlet />
-        </main>
-      </div>
+      <PresentationProvider>
+        <div className="flex min-h-screen flex-col">
+          <SiteNav />
+          {/* The bottom nav's reserved space stays reserved while presenting.
+              Releasing it is a reflow of the whole page on the exact frame the
+              ceremony wants to be the only thing moving — the same trade the
+              pack route already makes for its own header row. The nav above it
+              is gone from sight and from the tab order either way, which is the
+              part that matters. */}
+          <main className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+            <Outlet />
+          </main>
+        </div>
+      </PresentationProvider>
       <Toaster position="top-center" richColors closeButton theme="dark" />
     </QueryClientProvider>
   );

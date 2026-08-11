@@ -274,6 +274,107 @@
   }
 }
 
+/*
+ * The turn, as light rather than as geometry.
+ *
+ * All of this rides on `--holo-flip-ms`, written by holo-card.tsx from its own
+ * `flipMs`, because a roster card turns in 500ms and the daily secret takes
+ * 1100ms — a fixed duration here would leave the secret's edge light finishing
+ * less than halfway through its own flip.
+ *
+ * box-shadow rather than filter: drop-shadow, deliberately. `filter` is a
+ * grouping property and an element carrying one is flattened out of its 3D
+ * context, which on this card means the flip stops being a rotation in space and
+ * becomes a squash. box-shadow has no such effect, and an animation beats the
+ * inline style the component writes for the resting state.
+ */
+.holo-turning {
+  animation: holo-flip-light var(--holo-flip-ms, 500ms) cubic-bezier(0.5, 0, 0.25, 1.18) 1 both;
+}
+
+@keyframes holo-flip-light {
+  0% {
+    box-shadow: 0 0 28px -6px var(--holo-edge);
+  }
+  /* Edge-on to the camera. The card is a bright line here — it is catching the
+     light along its edge — and its cast shadow is at its shortest and hardest,
+     because the card is presenting almost no area to throw one. */
+  38% {
+    box-shadow:
+      0 0 46px -2px var(--holo-edge),
+      0 6px 10px -8px oklch(0 0 0 / 85%);
+  }
+  /* Coming down onto its face. The shadow spreads and softens again. */
+  72% {
+    box-shadow:
+      0 0 34px -6px var(--holo-edge),
+      0 18px 30px -12px oklch(0 0 0 / 60%);
+  }
+  100% {
+    box-shadow: 0 0 28px -6px var(--holo-edge);
+  }
+}
+
+/*
+ * The punch on landing.
+ *
+ * On the scene rather than on the card, because both layers below it already own
+ * a transform — the tilt is written imperatively from the pointer handlers and
+ * the flip is the rotation being animated — and a third transform on either would
+ * fight the thing it is meant to be punctuating.
+ *
+ * Under 2%. It is a weight cue, not a zoom: at 5% it reads as the card lurching
+ * toward the camera, and the whole trick is that you feel it rather than see it.
+ */
+.holo-punch {
+  animation: holo-flip-punch var(--holo-flip-ms, 500ms) ease-out 1 both;
+}
+
+@keyframes holo-flip-punch {
+  0%,
+  62% {
+    transform: scale(1);
+  }
+  /* Just after the face has come round, so the punch lands *on* the card
+     arriving rather than while it is still edge-on. */
+  78% {
+    transform: scale(1.018);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/*
+ * One pass of light across a card that has just landed.
+ *
+ * Generalised from the secret's own sweep, which is the same effect at a
+ * different speed — every card gets this now, because a specular pass is most of
+ * what makes printed foil read as foil rather than as a picture of it. Delayed
+ * past the flip so it sweeps a card you can actually see the face of.
+ */
+.holo-shine::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 3;
+  mix-blend-mode: screen;
+  background: linear-gradient(108deg, transparent 42%, oklch(1 0 0 / 55%) 50%, transparent 58%);
+  background-size: 300% 300%;
+  animation: secret-reveal-glide 420ms cubic-bezier(0.33, 0.9, 0.3, 1) var(--holo-shine-delay, 0ms)
+    1 both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-turning,
+  .holo-punch,
+  .holo-shine::after {
+    animation: none;
+  }
+}
+
 @utility holo-face {
   position: absolute;
   inset: 0;
@@ -776,21 +877,10 @@
   }
 }
 
-/* One slow pass of light across the secret as it turns over. Timed to the 1100ms
-   flip, so the sweep crosses the card while the card is crossing edge-on. */
-.secret-reveal-sweep::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 2;
-  mix-blend-mode: screen;
-  background: linear-gradient(108deg, transparent 40%, oklch(1 0 0 / 68%) 50%, transparent 60%);
-  background-size: 300% 300%;
-  animation: secret-reveal-glide 1100ms cubic-bezier(0.33, 0.9, 0.3, 1) 1 both;
-}
-
+/* The sweep the secret used to get on its own. `.holo-shine` gives every card one
+   now, scaled to its own flip length, so a second pass here only made the
+   secret's landing glint twice. The keyframes stay — they are what holo-shine
+   runs. */
 @keyframes secret-reveal-glide {
   from {
     background-position: 140% 50%;
@@ -816,10 +906,6 @@
     box-shadow:
       inset 0 0 0 3px var(--seal-edge),
       0 0 24px -4px var(--seal-edge);
-  }
-  .secret-reveal-sweep::after {
-    animation: none;
-    opacity: 0;
   }
 }
 

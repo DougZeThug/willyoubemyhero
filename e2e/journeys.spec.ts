@@ -298,6 +298,15 @@ test.describe("opening a pack", () => {
   const standCard = (page: import("@playwright/test").Page) =>
     page.locator('[role="button"][aria-pressed]').first();
 
+  /**
+   * Which step the stand is on, and therefore that the stand has the screen.
+   *
+   * Read off a test id rather than matched out of the page's prose: this line is
+   * deliberately faint presentation copy and has been reworded once already,
+   * which silently broke five specs at once.
+   */
+  const standStep = (page: import("@playwright/test").Page) => page.getByTestId("stand-step");
+
   /** The line that says the card on the stand is revealed and swiping steps on. */
   const swipeHint = (page: import("@playwright/test").Page) =>
     page.getByText(/swipe for the next card/i);
@@ -423,7 +432,7 @@ test.describe("opening a pack", () => {
     // its own.
     await page.clock.runFor(SKIP_AFTER_MS);
     await skip.click();
-    await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
+    await expect(standStep(page)).toHaveText("1 / 3");
 
     // What makes this a test of *skipping*: the page's clock has only advanced
     // SKIP_AFTER_MS of the ceremony's CEREMONY_MS, so its own handover timer
@@ -434,7 +443,7 @@ test.describe("opening a pack", () => {
   test("gets to the stand on its own if the ceremony is left to finish", async ({ page }) => {
     await page.goto("/players/pack");
     await tearPack(page);
-    await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
+    await expect(standStep(page)).toHaveText("1 / 3");
     // And the card it hands over is face-down, so the flip is still to come.
     await expect(page.getByText(/tap the card to turn it/i)).toBeVisible();
   });
@@ -444,7 +453,7 @@ test.describe("opening a pack", () => {
     await tearPack(page);
 
     // Turn the first card over and stop there, the way you would to read it.
-    await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
+    await expect(standStep(page)).toHaveText("1 / 3");
     await standCard(page).click();
     await expect(swipeHint(page)).toBeVisible();
 
@@ -453,7 +462,7 @@ test.describe("opening a pack", () => {
     // `revealed` alone cannot tell "looking at a card I just turned" from
     // "finished with it", so resuming from it dropped you on card 2 and card 1
     // was simply gone. The stored cursor is what distinguishes them.
-    await expect(page.getByText(/card 1 of 3/i)).toBeVisible();
+    await expect(standStep(page)).toHaveText("1 / 3");
     await expect(swipeHint(page)).toBeVisible();
   });
 
@@ -463,12 +472,12 @@ test.describe("opening a pack", () => {
 
     // Walk to the last card, which is the one that holds before it turns.
     for (const n of [1, 2]) {
-      await expect(page.getByText(new RegExp(`card ${n} of 3`, "i"))).toBeVisible();
+      await expect(standStep(page)).toHaveText(`${n} / 3`);
       await standCard(page).click();
       await expect(swipeHint(page)).toBeVisible();
       await swipeNext(page);
     }
-    await expect(page.getByText(/card 3 of 3/i)).toBeVisible();
+    await expect(standStep(page)).toHaveText("3 / 3");
 
     // It stays face-down and tappable for the whole 900ms hold. Every tap in
     // that window used to start another ceremony over the same card.
@@ -502,8 +511,9 @@ test.describe("opening a pack", () => {
       const seen = new Set<string>();
       (window as unknown as { __faceDown: Set<string> }).__faceDown = seen;
       const sample = () => {
+        const step = document.querySelector('[data-testid="stand-step"]')?.textContent ?? "";
+        const at = step.match(/(\d)\s*\/\s*3/);
         const text = document.body.textContent ?? "";
-        const at = text.match(/Card (\d) of 3/i);
         if (at && /tap the card to turn it/i.test(text)) seen.add(at[1]);
       };
       sample();
@@ -743,5 +753,38 @@ test.describe("navigation", () => {
         await page.goto("/");
       }
     }
+  });
+});
+
+/**
+ * The whole sequence with the production switched off.
+ *
+ * Almost everything the pack does now branches on this preference — the opening
+ * ceremony, the handoff onto the stand, the flip's light and punch, the rarity
+ * ambience, the fake ending, the secret's flash and shake. Each of those is
+ * guarded individually, which is exactly the shape of thing where one of them
+ * quietly stops being guarded and nobody notices, because nobody develops with
+ * the setting on.
+ *
+ * So this asserts the only thing that actually matters: with it on, the pack
+ * still opens, the cards still turn, and it still finishes.
+ */
+test.describe("with reduced motion", () => {
+  test("skips the production but still opens and finishes the pack", async ({ page }) => {
+    // emulateMedia rather than `test.use({ reducedMotion })`: the suite's `test`
+    // is an extended fixture whose option type does not carry Playwright's own
+    // page options, so the declarative form does not typecheck even though it
+    // runs. Set before the first navigation, which is what the app reads.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/players/pack");
+    await tearPack(page);
+
+    // No ceremony at all — the rip deals the pack and hands straight over, which
+    // is what this screen did before the ceremony existed.
+    await expect(sealedPack(page)).toBeHidden();
+    await expect(page.getByTestId("stand-step")).toHaveText("1 / 3");
+
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
   });
 });

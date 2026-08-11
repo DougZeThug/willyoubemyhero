@@ -141,20 +141,159 @@ function noiseBurst(durationSec: number, fromHz: number, toHz: number, gain: num
   source.stop(start + durationSec);
 }
 
+/**
+ * A tone with a body, for the hits that need weight rather than texture.
+ *
+ * Everything above this point is filtered noise, which is right for foil and card
+ * stock — those are broadband sounds. An impact is not: it is a pitch that drops,
+ * and the drop is what the ear reads as mass. Sine rather than triangle at the
+ * bottom of the range, because a triangle's harmonics turn to buzz on a phone
+ * speaker at these frequencies.
+ */
+function thud(fromHz: number, toHz: number, durationSec: number, gain: number) {
+  const ac = audio();
+  if (!ac) return;
+  const osc = ac.createOscillator();
+  osc.type = "sine";
+  const start = ac.currentTime;
+  osc.frequency.setValueAtTime(fromHz, start);
+  osc.frequency.exponentialRampToValueAtTime(toHz, start + durationSec);
+
+  const amp = ac.createGain();
+  amp.gain.setValueAtTime(gain, start);
+  amp.gain.exponentialRampToValueAtTime(0.0001, start + durationSec);
+
+  osc.connect(amp).connect(ac.destination);
+  osc.start(start);
+  osc.stop(start + durationSec + 0.02);
+}
+
+/**
+ * Buzz the phone, if it has one and the user has not asked for less motion.
+ *
+ * Every haptic in this file goes through here, because the guards are easy to
+ * forget and a phone that vibrates for somebody who asked it not to is a far
+ * worse bug than a missing tick.
+ *
+ * Deliberately *not* gated on `muted`. That toggle is the sound one, and the
+ * commonest reason to reach for it here is standing in a garden next to someone
+ * else's phone — which is a reason to silence the chimes and no reason at all to
+ * stop the handset tapping back.
+ */
+function buzz(pattern: number | number[]) {
+  if (typeof navigator === "undefined" || prefersReducedMotion()) return;
+  navigator.vibrate?.(pattern);
+}
+
 /** Card flip: a fast upward noise sweep plus a light haptic tick. */
 export function playFlip() {
   noiseBurst(0.12, 800, 4000, 0.09);
-  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
-    navigator.vibrate?.([8]);
-  }
+  buzz([8]);
+}
+
+/**
+ * The pack being handled, before anything happens to it.
+ *
+ * Very quiet, and the only sound in this file that is not the consequence of a
+ * gesture. It plays under the anticipation squash — the pack taking the strain —
+ * so the sequence opens with something rather than with silence.
+ */
+function playPackHandle() {
+  noiseBurst(0.18, 1800, 600, 0.035);
+  buzz([6]);
+}
+
+/**
+ * The seam under tension.
+ *
+ * Rises where every other burst in this file falls, and stops rather than
+ * resolving — it is the intake of breath before the rip, and a sound that
+ * finished would release the tension it exists to build.
+ */
+function playSeamTension(durationSec = 0.18) {
+  const ac = audio();
+  if (!ac) return;
+  const osc = ac.createOscillator();
+  osc.type = "sawtooth";
+  const start = ac.currentTime;
+  osc.frequency.setValueAtTime(220, start);
+  osc.frequency.exponentialRampToValueAtTime(660, start + durationSec);
+
+  const filter = ac.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 1400;
+
+  const amp = ac.createGain();
+  amp.gain.setValueAtTime(0.0001, start);
+  amp.gain.exponentialRampToValueAtTime(0.05, start + durationSec * 0.9);
+  amp.gain.exponentialRampToValueAtTime(0.0001, start + durationSec);
+
+  osc.connect(filter).connect(amp).connect(ac.destination);
+  osc.start(start);
+  osc.stop(start + durationSec + 0.02);
+}
+
+/**
+ * A card arriving on the stand — the deck being caught.
+ *
+ * Low and short. This is the only sound in the sequence that happens to the
+ * *stand* rather than to the pack, so it is the one that says the ceremony is
+ * over and the card is now yours to turn.
+ */
+function playCardLand() {
+  thud(180, 70, 0.16, 0.09);
+  noiseBurst(0.06, 2200, 700, 0.04);
+  buzz([10]);
+}
+
+/**
+ * The face of a card hitting front-on.
+ *
+ * Crisp rather than heavy: the weight was spent on `playCardLand`, and this is
+ * the snap of card stock landing flat. It sits directly under the chime, so it
+ * has to be short enough not to smear the triad's first note.
+ */
+function playCardFace() {
+  noiseBurst(0.05, 5200, 1600, 0.06);
+  thud(140, 90, 0.09, 0.05);
+  buzz([14]);
+}
+
+/**
+ * The pack turning out not to be over.
+ *
+ * Detuned on purpose — two sines a semitone and a bit apart, which beat against
+ * each other rather than making a chord. Every other tone in this file is
+ * consonant; this is the one that is meant to sound wrong, because it is the
+ * moment the screen stops telling the truth.
+ */
+function playFakeEnding() {
+  thud(110, 55, 0.5, 0.085);
+  thud(116.5, 58, 0.5, 0.06);
+  // Two pulses rather than one. A single buzz reads as a notification; a pair
+  // reads as something knocking.
+  buzz([18, 90, 26]);
+}
+
+/**
+ * The secret landing. The loudest thing the app does, and deliberately so.
+ *
+ * Roughly twice the gain of anything else here, over a longer fall, with a noise
+ * transient on top so it has an edge as well as a body. It fires on the exact
+ * frame the card slams face-forward — the flash, the shake and this are one
+ * event, and anything that separates them by more than a frame or two stops the
+ * whole thing landing as an impact.
+ */
+function playSecretImpact() {
+  thud(210, 42, 0.7, 0.2);
+  noiseBurst(0.12, 6000, 900, 0.11);
+  buzz([30, 40, 60]);
 }
 
 /** Foil wrapper tearing open — longer, rougher, downward. */
 export function playTear() {
   noiseBurst(0.42, 5200, 700, 0.13);
-  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
-    navigator.vibrate?.([12, 30, 18]);
-  }
+  buzz([12, 30, 18]);
 }
 
 /**
@@ -164,12 +303,10 @@ export function playTear() {
  * long downward body — foil letting go — under a short bright crackle, which is
  * the fibre. `playTear` is the gesture; this is the consequence of it.
  */
-export function playPackOpen() {
+function playPackOpen() {
   noiseBurst(0.5, 3800, 240, 0.14);
   noiseBurst(0.09, 7000, 3000, 0.06);
-  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
-    navigator.vibrate?.([20, 40, 30]);
-  }
+  buzz([20, 40, 30]);
 }
 
 /**
@@ -180,7 +317,7 @@ export function playPackOpen() {
  * avoid. Upward, which nothing else in this file does: every other burst falls,
  * so a rising one reads as the only thing coming toward you.
  */
-export function playPackBurst() {
+function playPackBurst() {
   noiseBurst(0.38, 420, 2800, 0.075);
 }
 
@@ -194,11 +331,9 @@ export function playPackBurst() {
  * into exactly the one smear this exists to avoid — and timers started here would
  * outlive the caller's own cleanup.
  */
-export function playDeckGather() {
+function playDeckGather() {
   for (let i = 0; i < 3; i++) noiseBurst(0.06, 2600, 900, 0.05, i * 0.045);
-  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
-    navigator.vibrate?.([6, 30, 6]);
-  }
+  buzz([6, 30, 6]);
 }
 
 /**
@@ -209,9 +344,7 @@ export function playDeckGather() {
  */
 export function playTearTick() {
   noiseBurst(0.05, 6000, 2400, 0.05);
-  if (typeof navigator !== "undefined" && !prefersReducedMotion()) {
-    navigator.vibrate?.([4]);
-  }
+  buzz([4]);
 }
 
 // Triads chosen so better pulls sound brighter and more resolved.
@@ -280,4 +413,52 @@ export function playReveal(tier: string) {
     osc.start(start);
     osc.stop(start + 0.95);
   });
+}
+
+/**
+ * Every sound the pack sequence makes, by the name of the thing it is the sound
+ * of.
+ *
+ * Two reasons this exists rather than the sequence calling the synths directly.
+ *
+ * The call sites read as direction — `cue("secretImpact")` beside the frame the
+ * card slams — instead of as a list of oscillator functions, which matters
+ * because the whole grammar is about a sound landing in the same ~30ms window as
+ * a picture and a buzz. And every one of these is synthesised today because no
+ * audio files ship with this app: nothing to host, nothing to wait on, works
+ * offline, and the mute and reduced-motion guards are already inside. If sampled
+ * versions are ever worth it, they get swapped in here and nothing that calls a
+ * cue has to change.
+ */
+const CUES = {
+  /** The pack being picked up, under the anticipation squash. */
+  packHandle: playPackHandle,
+  /** The tear line under tension, before it parts. */
+  seamTension: playSeamTension,
+  /** The wrapper coming apart. */
+  packOpen: playPackOpen,
+  /** The cards leaving the pack, all of them, once. */
+  packBurst: playPackBurst,
+  /** The fan squaring up into a deck. */
+  deckGather: playDeckGather,
+  /** The deck arriving on the stand. */
+  cardLand: playCardLand,
+  /** A card's face hitting front-on. */
+  cardFace: playCardFace,
+  /** The pack turning out not to be over. */
+  fakeEnding: playFakeEnding,
+  /** The secret landing. */
+  secretImpact: playSecretImpact,
+} as const;
+
+export type SfxCue = keyof typeof CUES;
+
+/**
+ * Play a named cue.
+ *
+ * Muting silences the *audio* only — the haptic still fires, deliberately; see
+ * `buzz`. Reduced motion and the server suppress both.
+ */
+export function cue(name: SfxCue) {
+  CUES[name]();
 }

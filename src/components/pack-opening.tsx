@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence, type Variants } from "motion/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, type Variants } from "motion/react";
 import { PackWrapper } from "@/components/pack-wrapper";
 import { PackCardBack } from "@/components/pack-card-back";
-import { playPackOpen, playPackBurst, playDeckGather } from "@/lib/card-sfx";
+import { cue } from "@/lib/card-sfx";
 import {
   CEREMONY,
   CEREMONY_MS,
@@ -11,10 +11,12 @@ import {
   ceremonyReached,
   deckTransform,
   fanTransform,
+  packJitter,
   riseTransform,
   type CeremonyPhase,
 } from "@/lib/pack-ceremony";
 import { SECRET_RARITY } from "@/lib/secret-cards";
+import type { PackHandoff } from "@/lib/pack-handoff";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media";
@@ -27,7 +29,7 @@ import type { ImageUrlSet } from "@/lib/media";
  * double-tap during the drag can, and skipping a ceremony somebody has not seen a
  * single frame of is worse than a dead zone nobody notices.
  */
-const SKIP_DEAD_MS = 140;
+const SKIP_DEAD_MS = 90;
 
 /** How wide a flying card is, against the pack. Roughly the printed proportion. */
 const CARD_W = 0.62;
@@ -36,13 +38,26 @@ const CARD_W = 0.62;
  * The pause the secret takes before following the roster out, in seconds.
  *
  * Long enough to read as a separate arrival and short enough that the fan still
- * lands inside the phase it has. Scaled up with the cinematic timeline: at 0.11s
- * against the longer launch it was swallowed by the roster's own stagger. The
+ * lands inside the phase it has. Sized against `launch`, so it moved with the
+ * timeline: at 0.35s it was over half of the phase it has to fit inside. The
  * stand is where the secret's real ceremony happens — a 1600ms hold, a riser and
  * a flip twice the house length — so this is only the hint that there is a fourth
  * card, not the payoff.
  */
-const SECRET_BEAT = 0.35;
+const SECRET_BEAT = 0.16;
+
+/**
+ * How far apart the cards leave, in seconds per card.
+ *
+ * Every one of these is a fraction of the phase it plays inside, which is the
+ * only thing that keeps them honest: a stagger quoted in absolute seconds silently
+ * outruns its phase the moment the timeline is retuned, and a card still waiting
+ * to start when its phase ends simply teleports to the next mark. Four cards is
+ * the most the pack ever holds, so the last one has to be moving by `3 * step`.
+ */
+const RISE_STEP = 0.06;
+const FAN_STEP = 0.065;
+const DECK_STEP = 0.04;
 
 /**
  * The pack opening: the rest of the rip, and the cards coming out of it.
@@ -94,8 +109,15 @@ export function PackOpening({
    * play to an empty stage and then latch this component shut for good.
    */
   onTear: () => boolean;
-  /** The ceremony is over, by clock or by tap. */
-  onDone: () => void;
+  /**
+   * The ceremony is over, by clock or by tap.
+   *
+   * `from` is where the deck actually was when it let go, so the stand can pick
+   * the cards up rather than fade a different card in at a different size. Null
+   * when there is nothing to pick up: a skip, reduced motion, or a browser that
+   * measures everything as zero.
+   */
+  onDone: (from: PackHandoff | null) => void;
 }) {
   const reduced = usePrefersReducedMotion();
   const [phase, setPhase] = useState<CeremonyPhase | null>(null);
@@ -116,18 +138,72 @@ export function PackOpening({
   const boxRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
   const [scale, setScale] = useState(1);
+  // The flying cards themselves, so the deck can be measured as it is handed on.
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  function finish() {
+  /**
+   * Where the deck actually is, in viewport pixels, at the moment it lets go.
+   *
+   * Measured rather than derived from `deckTransform`. These cards sit inside a
+   * clipped, flattened subtree, under a rotated pack, under two perspectives, at
+   * a scale taken off a measured pack width — the browser has already done that
+   * sum, and redoing it in the component that catches them could only ever be
+   * subtly wrong. `clip-path` clips paint and not boxes, so the rect is exact
+   * even while the card is visually cut by the mouth.
+   *
+   * The width comes from card 0 for every card: `getBoundingClientRect` answers
+   * with the axis-aligned box of a *rotated* element, and card 0 is the only one
+   * the deck deliberately leaves square.
+   */
+  function readDeck(): PackHandoff | null {
+    const boxes = cardRefs.current.slice(0, slots).map((el) => el?.getBoundingClientRect());
+    const front = boxes[0];
+    // No cards at all (skipped, or reduced motion), or a browser that measures
+    // everything as zero. Both mean there is nothing to hand over.
+    if (!front || front.width === 0 || boxes.some((b) => !b)) return null;
+    return {
+      w: front.width,
+      cards: boxes.map((b, i) => {
+        const t = deckTransform(i, slots);
+        return {
+          cx: b!.left + b!.width / 2,
+          cy: b!.top + b!.height / 2,
+          // Derived from card 0's measured width rather than from this card's own
+          // rect. A rotated element measures wider than it is — that is what an
+          // axis-aligned bounding box means — and every card but the front one is
+          // a degree or two off square. Card 0 lands exactly square by design, so
+          // it is the one honest measurement, and the deck's own scale carries the
+          // rest.
+          w: front.width * t.scale,
+          // The angle it is actually sitting at, jitter and all, so the stand
+          // starts each card where the ceremony left it rather than upright.
+          rotate: t.rotate + (i === 0 ? 0 : jitter[i].rotate),
+        };
+      }),
+    };
+  }
+
+  /**
+   * End the ceremony.
+   *
+   * `hand` is whether the stand should catch the deck. It is false for a skip —
+   * the rects are perfectly valid mid-flight and flying them would look good, but
+   * skip is a cut, and making it cost another 300ms defeats the point of it.
+   */
+  function finish(hand: boolean) {
     if (doneRef.current) return;
     doneRef.current = true;
+    // Measured before the timers are dropped and before anything unmounts; after
+    // `onDone` this component is gone and there is nothing left to read.
+    const from = hand ? readDeck() : null;
     timers.current.forEach(clearTimeout);
     timers.current = [];
-    onDoneRef.current();
+    onDoneRef.current(from);
   }
 
   function skip() {
     if (performance.now() - startedAt.current < SKIP_DEAD_MS) return;
-    finish();
+    finish(false);
   }
 
   /**
@@ -150,7 +226,7 @@ export function PackOpening({
     startedAt.current = performance.now();
 
     if (reduced) {
-      finish();
+      finish(false);
       return;
     }
 
@@ -158,19 +234,29 @@ export function PackOpening({
     const width = boxRef.current?.getBoundingClientRect().width ?? 0;
     if (width > 0) setScale(width / CEREMONY_BASIS);
 
-    setPhase("rip");
+    setPhase(CEREMONY[0].phase);
     for (const step of CEREMONY.slice(1)) {
       timers.current.push(setTimeout(() => setPhase(step.phase), CEREMONY_START[step.phase]));
     }
-    timers.current.push(setTimeout(finish, CEREMONY_MS));
+    // Wrapped, not passed bare: setTimeout hands the callback its timer id as
+    // the first argument, so `setTimeout(finish, ...)` would call finish(<id>)
+    // — truthy, but not the deliberate `true` this reads as.
+    timers.current.push(setTimeout(() => finish(true), CEREMONY_MS));
 
-    // Each sound sits on the thing it is the sound of. The pack coming apart is
-    // the strip letting go; the burst is the cards actually moving, which is 620ms
-    // later — played at `peel` it was a whoosh for something still sitting inside
-    // the wrapper.
-    timers.current.push(setTimeout(playPackOpen, CEREMONY_START.peel));
-    timers.current.push(setTimeout(playPackBurst, CEREMONY_START.launch));
-    timers.current.push(setTimeout(playDeckGather, CEREMONY_START.collapse));
+    // Each sound sits on the thing it is the sound of, and every one of them is
+    // named for that thing rather than for how it is made. The pack coming apart
+    // is the strip letting go; the burst is the cards actually moving, which is a
+    // phase later — played at `peel` it was a whoosh for something still sitting
+    // inside the wrapper.
+    //
+    // The first two are new, and they are why the opening no longer starts in
+    // silence: the pack is handled, then the seam is heard tightening, before
+    // anything is heard tearing.
+    cue("packHandle");
+    timers.current.push(setTimeout(() => cue("seamTension"), CEREMONY_START.seam));
+    timers.current.push(setTimeout(() => cue("packOpen"), CEREMONY_START.rip));
+    timers.current.push(setTimeout(() => cue("packBurst"), CEREMONY_START.launch));
+    timers.current.push(setTimeout(() => cue("deckGather"), CEREMONY_START.handoff));
   }
 
   // A ceremony that outlives its screen would call back into a route that has
@@ -191,7 +277,7 @@ export function PackOpening({
    * thing there is left to do here, so this is where it belongs.
    */
   useEffect(() => {
-    if (phase === "rip") skipRef.current?.focus({ preventScroll: true });
+    if (phase === CEREMONY[0].phase) skipRef.current?.focus({ preventScroll: true });
   }, [phase]);
 
   // The preference can be flipped while the ceremony is running — the whole
@@ -201,7 +287,8 @@ export function PackOpening({
     // `finish` is re-created every render and is idempotent by way of doneRef, so
     // it is deliberately not a dependency — listing it would re-run this on every
     // render instead of on the preference actually changing.
-    if (reduced && begunRef.current) finish();
+    if (reduced && begunRef.current) finish(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced]);
 
   // Which target the cards are animating toward. Four, not seven: the phases are
@@ -212,7 +299,7 @@ export function PackOpening({
   // where a single move reads as a fan that happened to start small.
   function cardTarget(at: CeremonyPhase | null): "mouth" | "rise" | "fan" | "deck" {
     if (at == null) return "mouth";
-    if (ceremonyReached("collapse", at)) return "deck";
+    if (ceremonyReached("handoff", at)) return "deck";
     if (ceremonyReached("fan", at)) return "fan";
     if (ceremonyReached("launch", at)) return "rise";
     return "mouth";
@@ -224,6 +311,24 @@ export function PackOpening({
 
   /** Whether slot `i` is the daily secret. Always the last one, as on the stand. */
   const isSecret = (i: number) => secret && i === slots - 1;
+
+  const jitter = useMemo(() => packJitter(seed, slots), [seed, slots]);
+
+  /**
+   * The shadow a card at depth `i` casts, and the glow it carries.
+   *
+   * Derived rather than fixed. Every card sharing one shadow is the thing that
+   * most makes a stack read as a printed picture of a stack: a card further back
+   * is further from whatever it is casting onto, so its shadow is larger, softer
+   * and fainter, and its own edge light is dimmer for being behind the one in
+   * front of it.
+   */
+  function cardShadow(i: number): string {
+    const back = Math.min(i, 3);
+    const drop = `0 ${22 + back * 4}px ${36 + back * 10}px -14px oklch(0 0 0 / ${72 - back * 12}%)`;
+    if (isSecret(i)) return `${drop}, 0 0 34px -6px ${SECRET_RARITY.border}`;
+    return `${drop}, 0 0 ${22 - back * 4}px -8px oklch(0.82 0.14 210 / ${45 - back * 9}%)`;
+  }
 
   /**
    * Paint order, as a tiebreaker for cards at equal depth.
@@ -262,30 +367,32 @@ export function PackOpening({
     mouth: { x: 0, y: 66 * scale, z: -60, rotateX: 64, rotateZ: 0, scale: 0.62, opacity: 1 },
     rise: (i: number) => {
       const t = riseTransform(i, slots);
+      const j = jitter[i];
       return {
         x: t.x * scale,
         y: t.y * scale,
         z: t.z,
         rotateX: 8,
-        rotateZ: t.rotate,
-        scale: 0.78,
+        rotateZ: t.rotate + j.rotate,
+        scale: 0.78 * t.scale,
         opacity: 1,
         // The secret waits a beat behind the roster, so it leaves the pack on its
         // own rather than in the crowd. It is already last in the order; this is
         // the gap that makes that legible at speed.
         transition: {
           type: "spring",
-          // Softer than the old snap. A spring that arrives in 200ms and then
-          // waits out the rest of a 720ms phase reads as a jump followed by a
-          // freeze; this one is still travelling when the eye gets to it.
-          stiffness: 160,
-          damping: 21,
-          delay: i * 0.12 + (isSecret(i) ? SECRET_BEAT : 0),
+          // Softer than a snap. A spring that arrives in 200ms and then waits out
+          // the rest of its phase reads as a jump followed by a freeze; this one
+          // is still travelling when the eye gets to it.
+          stiffness: 160 * j.stiffness,
+          damping: 21 * j.damping,
+          delay: i * RISE_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
     fan: (i: number) => {
       const t = fanTransform(i, slots);
+      const j = jitter[i];
       return {
         x: t.x * scale,
         y: t.y * scale,
@@ -295,43 +402,52 @@ export function PackOpening({
         // outright — so `layer()` alone left the secret sharing the *back* of the
         // fan with the far roster card, which is the opposite of the point.
         z: isSecret(i) ? t.z + 60 : t.z,
-        rotateX: -10,
-        rotateZ: t.rotate,
+        // Each card leans its own way out of the plane, not just around it. A fan
+        // where every card shares one rotateX is four cutouts on one sheet of
+        // glass; a couple of degrees of disagreement is what makes them separate
+        // objects.
+        rotateX: -10 + j.rotate * 0.9,
+        rotateZ: t.rotate + j.rotate,
         // Same nominal size as the rest. Being 60 closer to the camera already
         // renders it about 6% bigger, and stacking an explicit scale on top of
         // that took it to 14% — large enough to read as a different card rather
         // than a nearer one, and wide enough to crowd the edge of a phone.
-        scale: 0.8,
+        scale: 0.8 * t.scale,
         opacity: 1,
         transition: {
           type: "spring",
-          stiffness: 150,
-          damping: 20,
-          delay: i * 0.13 + (isSecret(i) ? SECRET_BEAT : 0),
+          stiffness: 150 * j.stiffness,
+          damping: 20 * j.damping,
+          delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
         },
       };
     },
     deck: (i: number) => {
       const t = deckTransform(i, slots);
+      const j = jitter[i];
+      // Card 0 keeps the geometry's own angle exactly. It is the card the stand
+      // takes over, and two degrees of charm on it is two degrees of jump at the
+      // handoff — the one place in this sequence where being tidy matters more
+      // than looking handled.
+      const wonk = i === 0 ? 0 : j.rotate;
       return {
         x: t.x * scale,
         y: t.y * scale,
         z: t.z,
         rotateX: 0,
-        rotateZ: t.rotate,
-        scale: 0.94,
+        rotateZ: t.rotate + wonk,
+        scale: 0.94 * t.scale,
         opacity: 1,
         // Card 0 goes first and unstaggered. It is the one the stand mounts over,
         // so it is the one that has to be *settled* when the handoff comes — under
-        // the old reverse stagger it started last, 90ms into a phase 560ms long,
-        // and was still travelling when PackStand took the screen. Paint order is
-        // `layer()`'s job, not the stagger's, so nothing is lost by leading with
-        // it.
+        // the old reverse stagger it started last and was still travelling when
+        // PackStand took the screen. Paint order is `layer()`'s job, not the
+        // stagger's, so nothing is lost by leading with it.
         transition: {
           type: "spring",
           stiffness: 210,
           damping: 28,
-          delay: i * 0.07,
+          delay: i * DECK_STEP,
         },
       };
     },
@@ -339,23 +455,11 @@ export function PackOpening({
 
   return (
     <>
-      {/* Everything else on the page steps back, the same way it does for the
-          secret's step on the stand. Fixed, and a sibling of the scene rather than
-          an ancestor of it: backdrop-filter is a grouping property, and one over
-          the pack would flatten the 3D the shards and the fan are built on. */}
-      <AnimatePresence>
-        {phase != null && !reduced && (
-          <motion.div
-            aria-hidden
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.28 }}
-            className="fixed inset-0 z-0 bg-background/80 backdrop-blur-sm"
-          />
-        )}
-      </AnimatePresence>
-
+      {/* The dark room this is played in belongs to PresentationStage, mounted by
+          the route — it has to dim the app shell too, which is this component's
+          grandparent, and it must stay a sibling of the scene rather than an
+          ancestor: backdrop-filter is a grouping property, and one over the pack
+          would flatten the 3D the shards and the fan are built on. */}
       <div
         ref={boxRef}
         className="relative z-10 w-full max-w-xs [perspective:1200px] [transform-style:preserve-3d]"
@@ -376,6 +480,9 @@ export function PackOpening({
             Array.from({ length: slots }, (_, i) => (
               <motion.div
                 key={i}
+                ref={(el) => {
+                  cardRefs.current[i] = el;
+                }}
                 data-testid="opening-card"
                 custom={i}
                 variants={CARD}
@@ -397,22 +504,34 @@ export function PackOpening({
                   // vault, so it is recognisable before it is readable. Always
                   // the default green, never the card's own foil: the sealed
                   // slot must not leak which look is inside before the reveal.
-                  boxShadow: isSecret(i)
-                    ? `0 24px 40px -14px oklch(0 0 0 / 76%), 0 0 34px -6px ${SECRET_RARITY.border}`
-                    : "0 22px 36px -14px oklch(0 0 0 / 72%), 0 0 22px -8px oklch(0.82 0.14 210 / 45%)",
+                  boxShadow: cardShadow(i),
                   borderColor: isSecret(i) ? SECRET_RARITY.border : undefined,
                 }}
                 className={cn("rounded-xl border", !isSecret(i) && "border-primary/30")}
               >
                 {/* Nested, so the breath composes with the fan transform rather
-                    than overwriting it. */}
+                    than overwriting it.
+
+                    Each card breathes by its own amount and on its own clock. A
+                    shared amplitude made the whole fan rise and fall as one
+                    object, which reads as a panel being animated rather than as
+                    four cards being held. */}
                 <motion.div
                   className="h-full w-full"
                   animate={
-                    hovering ? { y: [0, -5, 0], rotateY: [-2.5, 2.5, -2.5] } : { y: 0, rotateY: 0 }
+                    hovering
+                      ? {
+                          y: [0, -5 * jitter[i].breath, 0],
+                          rotateY: [
+                            -2.5 * jitter[i].breath,
+                            2.5 * jitter[i].breath,
+                            -2.5 * jitter[i].breath,
+                          ],
+                        }
+                      : { y: 0, rotateY: 0 }
                   }
                   transition={{
-                    duration: 2.4,
+                    duration: 2.4 * jitter[i].breath,
                     repeat: Infinity,
                     ease: "easeInOut",
                     delay: i * 0.3,
