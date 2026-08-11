@@ -89,7 +89,8 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
   );
   // The name field is always editable, but a player series still falls back to the
   // roster name so an admin never has to retype it.
-  const effectiveName = subjectName.trim() || (playerSeries ? (selected?.participant?.name ?? "") : "");
+  const effectiveName =
+    subjectName.trim() || (playerSeries ? (selected?.participant?.name ?? "") : "");
   const teamSeries = series === "cornhole_player";
   const photoUrl = selected
     ? (urlFromSet(photoUrls?.[selected.id]) ?? selected.participant?.profile_image_url ?? undefined)
@@ -299,32 +300,32 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
           {playerSeries ? (
             <div className="space-y-4">
               <div className={fieldClass}>
-              <Label htmlFor="prompt-participant">Participant</Label>
-              <Select
-                value={eventParticipantId}
-                onValueChange={(value) => {
-                  setEventParticipantId(value);
-                  const next = bundle?.participants.find((ep) => ep.id === value);
-                  setSubjectName(next?.participant?.name ?? "");
-                }}
-              >
-                <SelectTrigger id="prompt-participant" className="min-h-11">
-                  <SelectValue placeholder="Choose a participant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(bundle?.participants ?? []).map((ep) => (
-                    <SelectItem key={ep.id} value={ep.id}>
-                      {ep.participant?.name ?? "Unknown"}
-                      {ep.participant?.nickname ? ` “${ep.participant.nickname}”` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selected?.participant?.nickname && (
-                <p className="text-xs text-muted-foreground">
-                  Nickname: {selected.participant.nickname}
-                </p>
-              )}
+                <Label htmlFor="prompt-participant">Participant</Label>
+                <Select
+                  value={eventParticipantId}
+                  onValueChange={(value) => {
+                    setEventParticipantId(value);
+                    const next = bundle?.participants.find((ep) => ep.id === value);
+                    setSubjectName(next?.participant?.name ?? "");
+                  }}
+                >
+                  <SelectTrigger id="prompt-participant" className="min-h-11">
+                    <SelectValue placeholder="Choose a participant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(bundle?.participants ?? []).map((ep) => (
+                      <SelectItem key={ep.id} value={ep.id}>
+                        {ep.participant?.name ?? "Unknown"}
+                        {ep.participant?.nickname ? ` “${ep.participant.nickname}”` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selected?.participant?.nickname && (
+                  <p className="text-xs text-muted-foreground">
+                    Nickname: {selected.participant.nickname}
+                  </p>
+                )}
               </div>
               <div className={fieldClass}>
                 <Label htmlFor="prompt-subject">Name</Label>
