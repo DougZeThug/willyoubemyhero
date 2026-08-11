@@ -770,9 +770,12 @@ test.describe("navigation", () => {
  * still opens, the cards still turn, and it still finishes.
  */
 test.describe("with reduced motion", () => {
-  test.use({ reducedMotion: "reduce" });
-
   test("skips the production but still opens and finishes the pack", async ({ page }) => {
+    // emulateMedia rather than `test.use({ reducedMotion })`: the suite's `test`
+    // is an extended fixture whose option type does not carry Playwright's own
+    // page options, so the declarative form does not typecheck even though it
+    // runs. Set before the first navigation, which is what the app reads.
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/players/pack");
     await tearPack(page);
 

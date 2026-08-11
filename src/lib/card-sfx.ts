@@ -198,7 +198,7 @@ export function playFlip() {
  * gesture. It plays under the anticipation squash — the pack taking the strain —
  * so the sequence opens with something rather than with silence.
  */
-export function playPackHandle() {
+function playPackHandle() {
   noiseBurst(0.18, 1800, 600, 0.035);
   buzz([6]);
 }
@@ -210,7 +210,7 @@ export function playPackHandle() {
  * resolving — it is the intake of breath before the rip, and a sound that
  * finished would release the tension it exists to build.
  */
-export function playSeamTension(durationSec = 0.18) {
+function playSeamTension(durationSec = 0.18) {
   const ac = audio();
   if (!ac) return;
   const osc = ac.createOscillator();
@@ -240,7 +240,7 @@ export function playSeamTension(durationSec = 0.18) {
  * *stand* rather than to the pack, so it is the one that says the ceremony is
  * over and the card is now yours to turn.
  */
-export function playCardLand() {
+function playCardLand() {
   thud(180, 70, 0.16, 0.09);
   noiseBurst(0.06, 2200, 700, 0.04);
   buzz([10]);
@@ -253,7 +253,7 @@ export function playCardLand() {
  * the snap of card stock landing flat. It sits directly under the chime, so it
  * has to be short enough not to smear the triad's first note.
  */
-export function playCardFace() {
+function playCardFace() {
   noiseBurst(0.05, 5200, 1600, 0.06);
   thud(140, 90, 0.09, 0.05);
   buzz([14]);
@@ -267,7 +267,7 @@ export function playCardFace() {
  * consonant; this is the one that is meant to sound wrong, because it is the
  * moment the screen stops telling the truth.
  */
-export function playFakeEnding() {
+function playFakeEnding() {
   thud(110, 55, 0.5, 0.085);
   thud(116.5, 58, 0.5, 0.06);
   // Two pulses rather than one. A single buzz reads as a notification; a pair
@@ -284,7 +284,7 @@ export function playFakeEnding() {
  * event, and anything that separates them by more than a frame or two stops the
  * whole thing landing as an impact.
  */
-export function playSecretImpact() {
+function playSecretImpact() {
   thud(210, 42, 0.7, 0.2);
   noiseBurst(0.12, 6000, 900, 0.11);
   buzz([30, 40, 60]);
@@ -303,7 +303,7 @@ export function playTear() {
  * long downward body — foil letting go — under a short bright crackle, which is
  * the fibre. `playTear` is the gesture; this is the consequence of it.
  */
-export function playPackOpen() {
+function playPackOpen() {
   noiseBurst(0.5, 3800, 240, 0.14);
   noiseBurst(0.09, 7000, 3000, 0.06);
   buzz([20, 40, 30]);
@@ -317,7 +317,7 @@ export function playPackOpen() {
  * avoid. Upward, which nothing else in this file does: every other burst falls,
  * so a rising one reads as the only thing coming toward you.
  */
-export function playPackBurst() {
+function playPackBurst() {
   noiseBurst(0.38, 420, 2800, 0.075);
 }
 
@@ -331,7 +331,7 @@ export function playPackBurst() {
  * into exactly the one smear this exists to avoid — and timers started here would
  * outlive the caller's own cleanup.
  */
-export function playDeckGather() {
+function playDeckGather() {
   for (let i = 0; i < 3; i++) noiseBurst(0.06, 2600, 900, 0.05, i * 0.045);
   buzz([6, 30, 6]);
 }
