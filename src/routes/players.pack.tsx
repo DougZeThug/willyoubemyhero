@@ -19,6 +19,7 @@ import { SecretBackPanel } from "@/components/secret-back-panel";
 import { PackOpening } from "@/components/pack-opening";
 import { PackStand } from "@/components/pack-stand";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
+import { PackSummary } from "@/components/pack-summary";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
   collectCard,
@@ -99,116 +100,6 @@ function todayKey(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-/**
- * The fourth slot, as it appears in the finished pack.
- *
- * Appended below the three, never a replaced slot: `nextPack` swaps its *last*
- * entry for a card the user has not collected, and that swap is the only
- * mechanism by which the thirteen-card set ever completes. It also keeps
- * PackState.ids at exactly three roster ids, which is what the e2e suite asserts.
- *
- * The ceremony itself now belongs to PackStand — by the time the columns render,
- * this card has already been turned over. What is left here is the card at rest,
- * plus the two states that never reach the stand at all: a guest who has not
- * claimed, and a pull that could not complete.
- */
-function SecretSlotView({
-  slot,
-  card,
-  rarity,
-  duplicate,
-  pulledCount,
-  universalBack,
-  onRetry,
-}: {
-  slot: SecretSlot;
-  card: SecretCardView | null;
-  rarity: Rarity;
-  duplicate: boolean;
-  pulledCount: number;
-  /** The event's universal deck back. Secrets share it with every other card. */
-  universalBack: ImageUrlSet | null;
-  onRetry: () => void;
-}) {
-  if (slot === "hidden") return null;
-
-  return (
-    // Wider than a board card, which is now ~173px on a phone. The fourth slot
-    // has to stay visibly the biggest thing here or it stops reading as the
-    // thing nobody else on the roster has.
-    <div className="mx-auto flex w-full max-w-[240px] flex-col items-center gap-2 pt-2">
-      <div className="text-center">
-        <h2
-          className="font-display text-sm font-black uppercase tracking-[0.2em]"
-          style={{ color: rarity.accent }}
-        >
-          One More Card
-        </h2>
-      </div>
-
-      {slot === "failed" ? (
-        <button
-          onClick={onRetry}
-          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
-        >
-          <span className="font-display text-xs font-black uppercase tracking-[0.2em]">
-            No signal
-          </span>
-          {/* Never a toast: a toast announces a fourth card to whoever is
-              glancing at the phone over your shoulder. */}
-          <span className="text-[10px] leading-snug text-muted-foreground">
-            Tap to try again — you haven&apos;t used today&apos;s.
-          </span>
-        </button>
-      ) : slot === "pending" ? (
-        <div className="wax-foil flex aspect-[5/7] w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
-      ) : card ? (
-        <>
-          {/* w-full is load-bearing: the column above centres its items, which
-              makes a flex child shrink to its content, and HoloCard sizes itself
-              from its width via aspect-ratio — so without this the card collapses
-              to nothing and the slot renders as a sliver. */}
-          <motion.div
-            layoutId="pack-card-secret"
-            transition={{ type: "spring", stiffness: 260, damping: 28 }}
-            className={cn("relative w-full rounded-xl", duplicate && "secret-dupe-shimmer")}
-          >
-            <HoloCard
-              frontUrl={card.artUrl}
-              backUrl={universalBack}
-              name={card.name}
-              rarity={rarity}
-              tilt="hero"
-              backContent={<SecretBackPanel card={card} rarity={rarity} />}
-            />
-          </motion.div>
-          <div className="text-center">
-            <div className="truncate font-display text-xs font-black uppercase tracking-wide">
-              {card.name}
-            </div>
-            {duplicate ? (
-              <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-                Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing off.
-              </div>
-            ) : (
-              <div
-                className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                style={{ color: rarity.border }}
-              >
-                {/* Taught once, on the first secret anyone ever pulls. Without it
-                    the empty vault shelf afterwards reads as a bug. */}
-                {pulledCount <= 1
-                  ? "Secret · Not on the roster. Nobody knows how many there are."
-                  : "Secret · Yours for good, even on a new phone."}
-              </div>
-            )}
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
 }
 
 function PackPage() {
@@ -921,12 +812,15 @@ function PackPage() {
       <PresentationMode active={presenting} />
       <PresentationStage active={presenting} />
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-6">
-        {/* Folded away for the stand. A phone screen is short, and this row is 90px
-            of running total above a card whose whole job is to be the biggest thing
-            on it — with the bar in place the Next button falls below the fold. It
-            comes back with the finished pack, which is where a collection counter
-            belongs anyway. */}
-        {stage !== "revealing" && (
+        {/* Only while the pack is still sealed. A phone screen is short, and this
+            row is 90px of running total above a card whose whole job is to be the
+            biggest thing on it.
+
+            It used to come back with the finished pack, which is where a
+            collection counter belongs — but the summary owns that now, and owns
+            the way back to the vault with it. Two counters carrying the same test
+            id on one screen is also a trap the e2e suite would walk into. */}
+        {(stage === "sealed" || stage === "opening") && (
           // For the opening it fades out and goes inert rather than unmounting.
           //
           // Gone from the screen and gone from the tab order, which is the part
@@ -1070,117 +964,30 @@ function PackPage() {
             )}
           </div>
         ) : (
-          <div className="space-y-5">
-            <div className="text-center">
-              <h1 className="font-display text-2xl font-black uppercase leading-none">
-                Pack Complete
-              </h1>
-            </div>
-
-            {/* One row of three, deliberately small. The fourth slot below is the
-                payoff and has to be reachable without a long scroll on a phone,
-                so the roster trio reads as the supporting row rather than
-                competing with it for height. */}
-            <div className="mx-auto grid max-w-sm grid-cols-3 items-start gap-2 sm:max-w-lg sm:gap-3">
-              {pack.map((ep, i) => {
-                const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
-                const isRevealed = revealed.includes(i);
-                const name = ep.participant?.name ?? "—";
-                return (
-                  <div key={ep.id} className="flex flex-col gap-1">
-                    {/* The card owns its own button semantics — wrapping it in
-                        another button would nest interactive elements.
-                        The layout id is shared with the stand, so the card flies
-                        from where it was examined into its column rather than
-                        appearing there. */}
-                    <motion.div
-                      layoutId={`pack-card-${ep.id}`}
-                      transition={{
-                        type: "spring",
-                        stiffness: 260,
-                        damping: 28,
-                        delay: i * 0.06,
-                      }}
-                      className="rounded-xl"
-                    >
-                      <HoloCard
-                        frontUrl={cards.data?.[ep.id]?.front ?? null}
-                        backUrl={cards.data?.[ep.id]?.back ?? null}
-                        name={name}
-                        rarity={rarity}
-                        backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
-                      />
-                    </motion.div>
-                    <AnimatePresence>
-                      {isRevealed && (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="text-center"
-                        >
-                          {/* Two lines at most: at three-up the column is narrow,
-                              and the grid's items-start absorbs uneven rows. */}
-                          <Link
-                            to="/players/$id"
-                            params={{ id: ep.id }}
-                            className="block line-clamp-2 font-display text-[11px] font-black uppercase leading-tight tracking-wide hover:text-primary sm:text-sm"
-                          >
-                            {name}
-                          </Link>
-                          {/* accent, not border: base and dnf set border to a
-                              near-transparent white so their bezel vanishes,
-                              which left this label all but unreadable. Same
-                              reason CardBackPanel does it. */}
-                          <div
-                            className="text-[9px] font-bold uppercase tracking-[0.2em] sm:text-[10px]"
-                            style={{ color: rarity.accent }}
-                          >
-                            {rarity.label}
-                          </div>
-                          {/* Muted and on its own line: the tier above is what
-                              this card is, this is how many people have one. */}
-                          {packedByLabel(pullCounts.data?.[ep.id]) && (
-                            <div className="text-[8px] font-bold uppercase leading-tight tracking-[0.15em] text-muted-foreground sm:text-[9px]">
-                              {packedByLabel(pullCounts.data?.[ep.id])}
-                            </div>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-            </div>
-
-            <SecretSlotView
-              slot={secretSlot}
-              card={secret}
-              rarity={secretRarity}
-              duplicate={secretDuplicate}
-              pulledCount={status.data?.pulled ?? 0}
-              universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
-              onRetry={() => {
-                pullFiredRef.current = false;
-                setSecretFailed(false);
-                // Flipping this back off re-runs the pull effect, whose latch was
-                // just cleared.
-                setSecretPulling(false);
-              }}
-            />
-
-            <div className="flex flex-wrap justify-center gap-2 pt-2">
-              <Link to="/players" className="neon-btn !px-4 !py-2 !text-xs">
-                <PackageOpen className="h-4 w-4" />
-                Back to the vault
-              </Link>
-            </div>
-
-            <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-              {secretSlot === "open"
-                ? "That's today's pack, secret and all — come back tomorrow"
-                : "That's today's pack — come back tomorrow"}
-            </p>
-          </div>
+          <PackSummary
+            pack={pack}
+            bundle={bundle}
+            cards={cards.data}
+            rarities={rarities}
+            revealed={revealed}
+            pullCounts={pullCounts.data}
+            universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
+            secretSlot={secretSlot}
+            secret={secret}
+            secretRarity={secretRarity}
+            secretDuplicate={secretDuplicate}
+            secretPulled={status.data?.pulled ?? 0}
+            collected={collectedCount}
+            total={total}
+            eventYear={event?.year ?? null}
+            onRetrySecret={() => {
+              pullFiredRef.current = false;
+              setSecretFailed(false);
+              // Flipping this back off re-runs the pull effect, whose latch was
+              // just cleared.
+              setSecretPulling(false);
+            }}
+          />
         )}
       </div>
     </div>
