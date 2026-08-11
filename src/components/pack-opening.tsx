@@ -55,8 +55,8 @@ const SECRET_BEAT = 0.16;
  * to start when its phase ends simply teleports to the next mark. Four cards is
  * the most the pack ever holds, so the last one has to be moving by `3 * step`.
  */
-const RISE_STEP = 0.06;
-const FAN_STEP = 0.065;
+const RISE_STEP = 0.09;
+const FAN_STEP = 0.1;
 const DECK_STEP = 0.04;
 
 /**
