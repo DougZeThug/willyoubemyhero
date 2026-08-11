@@ -59,13 +59,18 @@ export type CeremonyPhase =
  * Skip is always on screen for anyone who has seen it enough times.
  */
 export const CEREMONY: readonly { readonly phase: CeremonyPhase; readonly ms: number }[] = [
-  { phase: "anticipate", ms: 120 },
-  { phase: "seam", ms: 180 },
-  { phase: "rip", ms: 200 },
-  { phase: "peel", ms: 250 },
-  { phase: "launch", ms: 380 },
-  { phase: "fan", ms: 420 },
-  { phase: "hold", ms: 200 },
+  // Retuned once more after watching it on a phone: at 2.05s the rip, the shards
+  // and the fan all happened, and none of them registered — the sequence was
+  // right and simply gone before the eye caught up. The extra ~750ms goes only
+  // into the phases that are visibly evolving (peel, launch, fan), plus one beat
+  // on the fan hold; the dead-ish head of the sequence is left short on purpose.
+  { phase: "anticipate", ms: 150 },
+  { phase: "seam", ms: 220 },
+  { phase: "rip", ms: 260 },
+  { phase: "peel", ms: 420 },
+  { phase: "launch", ms: 480 },
+  { phase: "fan", ms: 600 },
+  { phase: "hold", ms: 320 },
   // Long enough for the gather to actually finish, and no longer. The deck spring
   // settles in about 260ms, and a handoff shorter than that hands PackStand a
   // deck that is still moving — which is a jump on the one frame both are on
