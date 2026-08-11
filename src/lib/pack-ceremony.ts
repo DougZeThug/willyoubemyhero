@@ -59,13 +59,18 @@ export type CeremonyPhase =
  * Skip is always on screen for anyone who has seen it enough times.
  */
 export const CEREMONY: readonly { readonly phase: CeremonyPhase; readonly ms: number }[] = [
-  { phase: "anticipate", ms: 120 },
-  { phase: "seam", ms: 180 },
-  { phase: "rip", ms: 200 },
-  { phase: "peel", ms: 250 },
-  { phase: "launch", ms: 380 },
-  { phase: "fan", ms: 420 },
-  { phase: "hold", ms: 200 },
+  // Retuned once more after watching it on a phone: at 2.05s the rip, the shards
+  // and the fan all happened, and none of them registered — the sequence was
+  // right and simply gone before the eye caught up. The extra ~750ms goes only
+  // into the phases that are visibly evolving (peel, launch, fan), plus one beat
+  // on the fan hold; the dead-ish head of the sequence is left short on purpose.
+  { phase: "anticipate", ms: 150 },
+  { phase: "seam", ms: 220 },
+  { phase: "rip", ms: 260 },
+  { phase: "peel", ms: 420 },
+  { phase: "launch", ms: 480 },
+  { phase: "fan", ms: 600 },
+  { phase: "hold", ms: 320 },
   // Long enough for the gather to actually finish, and no longer. The deck spring
   // settles in about 260ms, and a handoff shorter than that hands PackStand a
   // deck that is still moving — which is a jump on the one frame both are on
@@ -128,8 +133,13 @@ export const CEREMONY_BASIS = 320;
  * days and four on a day with a secret in it, and a fan that grew with the count
  * would run off the sides of a phone on exactly the days worth watching.
  */
-const FAN_SPREAD = 104;
-const FAN_TILT = 18;
+// Widened after the fan turned out to read as a stack rather than a hand: at 104
+// across a 198px card the neighbours overlapped by three quarters and the spread
+// was invisible. 132 leaves the outer edge ~145px off centre against a 160px pack
+// half-width, so it still lands inside the pack's own column — which matters,
+// since `overflow-x: hidden` clips an escaped card rather than scrolling to it.
+const FAN_SPREAD = 132;
+const FAN_TILT = 24;
 
 /**
  * How much smaller each card is than the one in front of it, in a stack.
@@ -239,8 +249,8 @@ export function fanTransform(i: number, n: number): CardPose {
   // secret — past the edges of a phone, where `overflow-x: hidden` silently eats
   // the outer cards. Capped rather than purely divided, so two cards sit close
   // together instead of stretching to fill a width they do not need.
-  const step = n > 1 ? Math.min(58, FAN_SPREAD / (n - 1)) : 0;
-  const tilt = n > 1 ? Math.min(9, FAN_TILT / (n - 1)) : 0;
+  const step = n > 1 ? Math.min(66, FAN_SPREAD / (n - 1)) : 0;
+  const tilt = n > 1 ? Math.min(12, FAN_TILT / (n - 1)) : 0;
   return {
     x: t * step,
     // Up out of the pack, plus an arc that lifts the middle — the shape a hand of
