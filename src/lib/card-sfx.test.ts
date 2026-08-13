@@ -7,19 +7,13 @@
 // preferences mean what they say.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cue, playEditionShine, playFlip, setCardSfxMuted } from "./card-sfx";
+import { cue, playFlip, setCardSfxMuted, SFX_CUES } from "./card-sfx";
 import { setMatchMedia } from "@/test/setup";
 
-const CUES = [
-  "packHandle",
-  "seamTension",
-  "packOpen",
-  "packBurst",
-  "deckGather",
-  "cardLand",
-  "cardFace",
-  "fakeEnding",
-  "secretImpact",
-] as const;
+// Read off the registry rather than hand-listed. The hand-listed version stopped
+// covering the whole table the first time a cue was added, and the guards below
+// are worth nothing if they only cover the cues somebody remembered.
+const CUES = SFX_CUES;
 
 let vibrate: ReturnType<typeof vi.fn>;
 

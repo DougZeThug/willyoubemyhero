@@ -311,6 +311,32 @@ function playPackOpen() {
 }
 
 /**
+ * The tear travelling, from wherever the finger stopped to the far edge.
+ *
+ * The rip is a *progression* now rather than an event, and a single burst over
+ * it is a photograph of a thing that takes four hundred milliseconds. So this is
+ * six overlapping crinkles across that window, brightening and shortening as
+ * they go: foil tears louder and thinner as the remaining material narrows, and
+ * the last two are close enough together to run into each other, which is what
+ * the ear reads as the tear letting go.
+ *
+ * All six are queued on the AudioContext clock in one call rather than chained
+ * through timers — same reason `playDeckGather` is: 60ms apart is well inside
+ * the window a throttled tab coalesces timers into, and a coalesced rip is one
+ * flat smack.
+ *
+ * The haptic is the same shape: light taps that tighten up toward the break.
+ */
+function playTearRip() {
+  const steps = 6;
+  for (let i = 0; i < steps; i++) {
+    const u = i / (steps - 1);
+    noiseBurst(0.14 - u * 0.05, 2600 + u * 3600, 700 + u * 900, 0.04 + u * 0.05, u * 0.3);
+  }
+  buzz([5, 55, 6, 45, 8, 35, 12]);
+}
+
+/**
  * The cards leaving the pack.
  *
  * One sweep for all of them, not one each. Three staggered whooshes inside 200ms
@@ -483,6 +509,8 @@ const CUES = {
   packHandle: playPackHandle,
   /** The tear line under tension, before it parts. */
   seamTension: playSeamTension,
+  /** The rip travelling across the pack, for as long as it takes. */
+  tearRip: playTearRip,
   /** The wrapper coming apart. */
   packOpen: playPackOpen,
   /** The cards leaving the pack, all of them, once. */
@@ -500,6 +528,17 @@ const CUES = {
 } as const;
 
 export type SfxCue = keyof typeof CUES;
+
+/**
+ * Every cue there is.
+ *
+ * Exported so the guards in card-sfx.test.ts can be exhaustive rather than
+ * hand-listed. The hand-listed version silently stopped covering the whole table
+ * the first time a cue was added, which is the one way this file can regress
+ * without anybody noticing: a cue that throws takes the ceremony's timer chain
+ * down with it.
+ */
+export const SFX_CUES = Object.keys(CUES) as SfxCue[];
 
 /**
  * Play a named cue.
