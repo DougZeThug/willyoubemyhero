@@ -9,7 +9,7 @@ import { SharePack, type SharePackCard } from "@/components/share-pack-graphic";
 import { exportCardPng } from "@/lib/share-card";
 import { packedByLabel } from "@/lib/card-pulls";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { editionLabel, editionStyle, type Edition } from "@/lib/card-edition";
+import { cardBadge, type Edition } from "@/lib/card-edition";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretSlot } from "@/lib/pack";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
