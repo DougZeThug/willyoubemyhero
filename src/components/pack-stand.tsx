@@ -954,25 +954,31 @@ export function PackStand({
                   </div>
                 ) : (
                   <>
-                    <div
-                      className="text-[10px] font-bold uppercase tracking-[0.2em]"
-                      style={{ color: rarity.accent }}
-                    >
-                      {rarity.label}
-                    </div>
-                    {/* Its own line, never folded into the tier's. "Gold" is
-                        already podium's label, so a gold-finish podium card would
-                        otherwise read "Gold · Gold" — and the two are different
-                        kinds of fact anyway. Absent entirely on a standard
-                        finish, which is seven pulls in ten. */}
-                    {editionLabel(edition) && (
-                      <div
-                        className="text-[10px] font-bold uppercase tracking-[0.2em]"
-                        style={{ color: editionStyle(edition).accent }}
-                      >
-                        {editionLabel(edition)}
-                      </div>
-                    )}
+                    {/* A special finish takes this line in its own metal and the
+                        tier drops to the muted one beneath — see cardBadge.
+                        Nothing extra on a standard finish, which is seven pulls
+                        in ten. */}
+                    {(() => {
+                      const badge = cardBadge(
+                        { label: rarity.label, reason: "", accent: rarity.accent },
+                        edition,
+                      );
+                      return (
+                        <>
+                          <div
+                            className="text-[10px] font-bold uppercase tracking-[0.2em]"
+                            style={{ color: badge.color }}
+                          >
+                            {badge.headline}
+                          </div>
+                          {badge.isEdition && (
+                            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                              {badge.sub}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                     {packedByLabel(pullCounts?.[ep!.id]) && (
                       <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
                         {packedByLabel(pullCounts?.[ep!.id])}
