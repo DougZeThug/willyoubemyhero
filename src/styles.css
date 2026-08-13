@@ -795,7 +795,14 @@
   box-shadow: inset 0 0 0 1px var(--edn-spec, oklch(0.99 0.05 92));
 }
 
+/* Wider, and that is the differentiator rather than the hue.
+   Rendered side by side, platinum and silver read almost identically at 3px:
+   the ring samples only the perimeter, where the near-white specular band
+   dominates and swamps the difference between two pale metals. Thickness
+   survives that, survives a vault thumbnail, and survives colour blindness —
+   none of which is true of pushing the palette further apart. */
 .card-edition-platinum {
+  padding: 5px;
   box-shadow: inset 0 0 0 1px var(--edn-spec, oklch(0.99 0.01 210));
   background-size: 260% 260%;
 }

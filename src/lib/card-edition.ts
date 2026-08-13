@@ -136,7 +136,12 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
   platinum: {
     label: "Platinum Parallel",
     metalA: "oklch(0.94 0.02 205)",
-    metalB: "oklch(0.76 0.05 255)",
+    // A cool violet foot rather than another neutral. Rendered side by side,
+    // the first attempt at platinum read as a slightly brighter silver — which
+    // is a bad trade for the rarest thing in the app, and worse in the vault
+    // grid, where the sheen is gated off and the frame is most of what is left
+    // to tell them apart. Chroma, not lightness, is what separates them.
+    metalB: "oklch(0.72 0.11 278)",
     specular: "oklch(0.99 0.01 210)",
     accent: "oklch(0.93 0.03 210)",
     // Large enough that a platinum on the dimmest tier still clears the second
