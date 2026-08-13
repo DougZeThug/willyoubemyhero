@@ -6,7 +6,7 @@ import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { LOCKED_EDITION, LockedCard } from "@/components/locked-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
-import { editionLabel, editionRank, editionStyle, toEdition } from "@/lib/card-edition";
+import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
@@ -349,6 +349,10 @@ function PlayersPage() {
             const rarity = rarities.get(p.id) ?? rarityStyle("base");
             const name = p.participant?.name ?? "—";
             const locked = isLocked(p.id);
+            const tileBadge = cardBadge(
+              { label: rarity.label, reason: "", accent: rarity.accent },
+              locked ? "standard" : toEdition(collected[p.id]?.edition),
+            );
             return (
               <Link
                 key={p.id}
@@ -378,8 +382,10 @@ function PlayersPage() {
                   <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
                     {name}
                   </div>
-                  {/* A tick, not a word: the tier label is the line's real
-                      content, and the set only fills in a card at a time. */}
+                  {/* A tick, not a word: the label is the line's real content,
+                      and the set only fills in a card at a time. On a special
+                      finish that label is the metal, in its own colour, with the
+                      tier demoted to the muted line under it — see cardBadge. */}
                   <div className="flex items-center justify-center gap-1">
                     {!locked && (
                       <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
@@ -387,22 +393,26 @@ function PlayersPage() {
                     <span
                       className="text-[9px] font-bold uppercase tracking-[0.25em]"
                       style={{
-                        color: locked || rarity.tier === "base" ? undefined : rarity.border,
+                        color: locked
+                          ? undefined
+                          : !urls?.front
+                            ? undefined
+                            : tileBadge.isEdition
+                              ? tileBadge.color
+                              : rarity.tier === "base"
+                                ? undefined
+                                : rarity.border,
                       }}
                     >
-                      {locked ? "Not packed yet" : urls?.front ? rarity.label : "No card yet"}
+                      {locked ? "Not packed yet" : urls?.front ? tileBadge.headline : "No card yet"}
                     </span>
                   </div>
-                  {/* Only on a card you hold, and never on a locked one — the
-                      finish is the one thing about a card that cannot be guessed
-                      from anywhere else in the app. Its own line rather than
-                      beside the tier: "Gold" is already podium's label. */}
-                  {!locked && editionLabel(collected[p.id]?.edition) && (
-                    <div
-                      className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                      style={{ color: editionStyle(toEdition(collected[p.id]?.edition)).accent }}
-                    >
-                      {editionLabel(collected[p.id]?.edition)}
+                  {/* The demoted tier, only on a card you hold with a special
+                      finish — never on a locked one, where the finish is the one
+                      thing about a card that cannot be guessed. */}
+                  {!locked && urls?.front && tileBadge.isEdition && (
+                    <div className="text-[8px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                      {tileBadge.sub}
                     </div>
                   )}
                   {/* The league's number, not yours. Its own line and muted, so

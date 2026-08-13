@@ -119,7 +119,7 @@ function CollectionMark({ collected }: { collected: CollectedCard | null }) {
     <span className="flex shrink-0 items-baseline gap-1.5">
       <span
         className="font-display text-[10px] font-black uppercase tracking-[0.2em]"
-        style={{ color: "var(--tier)" }}
+        style={{ color: finish ? "var(--edn)" : "var(--tier)" }}
       >
         {collected.count > 1 ? `Pulled ×${collected.count}` : "Collected"}
       </span>

@@ -178,12 +178,12 @@ describe("the edition frame", () => {
     card({ edition: "platinum", rarity: rarityStyle("podium") });
     // Both axes, never merged — "Gold" is podium's tier label, so a gold-finish
     // podium card has to read as two separate facts.
-    expect(screen.getByText(/Gold card, Platinum Parallel/)).toBeInTheDocument();
+    expect(screen.getByText(/Gold card, Platinum/)).toBeInTheDocument();
   });
 
   it("says nothing extra for a standard finish", () => {
     card({ rarity: rarityStyle("base") });
     expect(screen.getByText(/Base card/)).toBeInTheDocument();
-    expect(screen.queryByText(/Parallel/)).toBeNull();
+    expect(screen.queryByText(/Platinum|Bronze|Silver/)).toBeNull();
   });
 });

@@ -24,6 +24,7 @@ import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/u
 import { HoloCard } from "@/components/holo-card";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
 import {
+  cardBadge,
   editionCelebrates,
   editionLabel,
   editionOddsLabel,
@@ -321,22 +322,29 @@ function PlayerCardPage() {
   );
   const myAwards = ep.participant_id ? (awards.byParticipant.get(ep.participant_id) ?? []) : [];
 
+  const shareBadge = cardBadge(
+    { label: rarity.label, reason: "", accent: rarity.accent },
+    locked ? "standard" : edition,
+  );
+
   const shareData: ShareCardData = {
     eventName: event?.name ?? "Draft Combine",
     eventYear: event?.year ?? null,
     name,
     fantasyTeam: ep.participant?.fantasy_team_name ?? null,
     quote: ep.participant?.trash_talk_quote ?? null,
-    rarityLabel: rarity.label,
-    // accent rather than border, so the exported PNG carries the tier's colour.
-    // base and dnf set border to a near-transparent white, which rasterised as
-    // an invisible rule on the share card.
-    rarityColor: rarity.accent,
-    // Only on a card you hold: sharing a locked slot's finish would leak the one
-    // thing about it that cannot be guessed. Null on standard, so seven shares
-    // in ten look exactly as they did.
-    editionLabel: locked ? null : editionLabel(edition),
-    editionColor: locked || edition === "standard" ? null : editionStyle(edition).accent,
+    // Same rule as the ribbon: a special finish is the headline, the tier drops
+    // to the second badge. accent rather than border, so the exported PNG carries
+    // a visible colour — base and dnf set border to a near-transparent white,
+    // which rasterised as an invisible rule.
+    //
+    // Never on a locked card: sharing a locked slot's finish would leak the one
+    // thing about it that cannot be guessed.
+    rarityLabel: shareBadge.headline,
+    rarityColor: shareBadge.color,
+    editionLabel: shareBadge.isEdition ? rarity.label : null,
+    editionColor: shareBadge.isEdition ? rarity.accent : null,
+    frameColor: shareBadge.isEdition ? editionStyle(edition).accent : null,
     cardUrl: urls?.front ?? null,
     photoUrl,
     runningOrder: ep.running_order,
@@ -446,13 +454,11 @@ function PlayerCardPage() {
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Vault
           </Link>
-          <TierRibbon rarity={rarity} />
-          {/* A separate pill, never folded into the one beside it: "Gold" is
-              podium's tier label, so a gold-finish podium card would read
-              "Gold · Gold" — and the two are different kinds of fact anyway.
-              Absent on a locked card, where the finish is unknown and would be
-              the biggest spoiler on the page. */}
-          {!locked && <EditionRibbon edition={edition} />}
+          {/* One pill. A special finish takes the headline in its own metal and
+              pushes the tier to the line beneath — see cardBadge. A locked card
+              never shows a finish: it is unknown, and would be the biggest
+              spoiler on the page. */}
+          <CardRibbon rarity={rarity} edition={locked ? "standard" : edition} />
         </div>
 
         {/*
@@ -765,62 +771,44 @@ function NavButton({
  * card that has none of the screen left.
  */
 /**
- * The finish, beside the tier and never merged into it.
+ * The one badge in the page header.
  *
- * Renders nothing at all on a standard finish, which is seven pulls in ten — a
- * pill reading "Standard" on most of the roster makes the other three quieter,
- * which is the opposite of the point. Prints the odds underneath rather than a
- * reason blurb: the tier's second line explains what somebody did, and this one
- * has to say the opposite — that nobody did anything, it was luck.
+ * A standard finish reads exactly as it always did — tier word, reason under it,
+ * in the tier colour. A special finish takes the headline in its own metal and
+ * demotes the tier to the line beneath, and swaps the card glyph for sparkles,
+ * because the finish is luck rather than something somebody did on the course.
  */
-function EditionRibbon({ edition }: { edition: Edition }) {
-  const label = editionLabel(edition);
-  if (!label) return null;
-  return (
-    <div
-      className="flex min-w-0 items-center gap-2 rounded-full border py-1 pl-2.5 pr-3 sm:py-1.5 sm:pl-3 sm:pr-3.5"
-      style={{
-        borderColor: "color-mix(in oklab, var(--edn) 45%, transparent)",
-        background: "color-mix(in oklab, var(--edn) 10%, transparent)",
-        boxShadow: "0 0 24px -8px var(--edn)",
-      }}
-    >
-      <Sparkles className="h-4 w-4 shrink-0" style={{ color: "var(--edn)" }} />
-      <div className="min-w-0 leading-tight">
-        <div
-          className="font-display truncate text-[11px] font-black uppercase tracking-[0.25em]"
-          style={{ color: "var(--edn)" }}
-        >
-          {label}
-        </div>
-        <div className="hidden truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground sm:block">
-          {editionOddsLabel(edition) ?? ""}
-        </div>
-      </div>
-    </div>
+function CardRibbon({ rarity, edition }: { rarity: Rarity; edition: Edition }) {
+  const badge = cardBadge(
+    { label: rarity.label, reason: TIER_REASON[rarity.tier] ?? "", accent: rarity.accent },
+    edition,
   );
-}
-
-function TierRibbon({ rarity }: { rarity: Rarity }) {
+  // The tier and the finish keep separate custom properties on purpose — two
+  // axes, never merged — so the ribbon picks whichever one it is wearing.
+  const c = badge.isEdition ? "var(--edn)" : "var(--tier)";
   return (
     <div
       className="flex min-w-0 items-center gap-2 rounded-full border py-1 pl-2.5 pr-3 sm:py-1.5 sm:pl-3 sm:pr-3.5"
       style={{
-        borderColor: "color-mix(in oklab, var(--tier) 45%, transparent)",
-        background: "color-mix(in oklab, var(--tier) 10%, transparent)",
-        boxShadow: "0 0 24px -8px var(--tier)",
+        borderColor: `color-mix(in oklab, ${c} 45%, transparent)`,
+        background: `color-mix(in oklab, ${c} 10%, transparent)`,
+        boxShadow: `0 0 24px -8px ${c}`,
       }}
     >
-      <IdCard className="h-4 w-4 shrink-0" style={{ color: "var(--tier)" }} />
+      {badge.isEdition ? (
+        <Sparkles className="h-4 w-4 shrink-0" style={{ color: c }} />
+      ) : (
+        <IdCard className="h-4 w-4 shrink-0" style={{ color: c }} />
+      )}
       <div className="min-w-0 leading-tight">
         <div
           className="font-display truncate text-[11px] font-black uppercase tracking-[0.25em]"
-          style={{ color: "var(--tier)" }}
+          style={{ color: c }}
         >
-          {rarity.label}
+          {badge.headline}
         </div>
         <div className="hidden truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground sm:block">
-          {TIER_REASON[rarity.tier] ?? ""}
+          {badge.isEdition ? `${badge.sub} · ${editionOddsLabel(edition) ?? ""}` : badge.sub}
         </div>
       </div>
     </div>

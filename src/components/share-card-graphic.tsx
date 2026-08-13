@@ -19,9 +19,15 @@ export type ShareCardData = {
   quote?: string | null;
   rarityLabel: string;
   rarityColor: string;
-  /** Null on a standard finish, which prints no second badge and no inner frame. */
+  /**
+   * The demoted line. On a special finish the headline above is the metal, so
+   * this carries the tier word — null on a standard finish, where the tier is
+   * already the headline and a second badge would just repeat it.
+   */
   editionLabel?: string | null;
   editionColor?: string | null;
+  /** The metal of the finish, for the inner frame. Null on a standard finish. */
+  frameColor?: string | null;
   cardUrl?: ImageUrlSet | string | null;
   photoUrl?: ImageUrlSet | string | null;
   runningOrder: number;
@@ -125,7 +131,9 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(fun
           // The finish's metal, printed inside the tier's frame exactly as the
           // card wears it — an inset shadow rather than a second element,
           // because html-to-image is happier with one box than with two.
-          boxShadow: data.editionColor ? `inset 0 0 0 8px ${data.editionColor}` : undefined,
+          boxShadow: data.frameColor
+            ? `inset 0 0 0 12px ${data.frameColor}, 0 0 60px -20px ${data.frameColor}`
+            : undefined,
           background: "rgba(15,23,42,0.55)",
           overflow: "hidden",
           position: "relative",

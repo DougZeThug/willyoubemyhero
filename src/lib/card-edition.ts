@@ -65,10 +65,10 @@ const BP_TOTAL = 10_000;
 export type EditionStyle = {
   edition: Edition;
   /**
-   * Never bare "Gold": `podium.label` is already "Gold", and a gold-finish podium
-   * card would otherwise read "Gold · Gold". "Parallel" is the hobby's own word
-   * for exactly this — same card, different print — and reads correctly beside
-   * any tier label.
+   * Just the metal. It used to carry "Parallel" so it could sit beside a tier
+   * label without a gold-finish podium card reading "Gold · Gold" — the two are
+   * no longer side by side. A finish now *takes* the headline (see `cardBadge`)
+   * and the tier drops to the line underneath, so the collision cannot happen.
    */
   label: string;
   /** Metal gradient endpoints, fed straight into CSS custom properties. */
@@ -111,14 +111,14 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     metalA: "oklch(0.7 0.1 55)",
     metalB: "oklch(0.48 0.07 42)",
     specular: "oklch(0.88 0.07 62)",
-    label: "Bronze Parallel",
+    label: "Bronze",
     accent: "oklch(0.72 0.1 55)",
     // Darker and far less chromatic than penaltyBox's amber, which is the only
     // thing keeping the two apart at a glance.
     lift: 0.05,
   },
   silver: {
-    label: "Silver Parallel",
+    label: "Silver",
     metalA: "oklch(0.88 0.012 250)",
     metalB: "oklch(0.64 0.015 255)",
     specular: "oklch(0.98 0.004 250)",
@@ -126,7 +126,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     lift: 0.12,
   },
   gold: {
-    label: "Gold Parallel",
+    label: "Gold",
     metalA: "oklch(0.84 0.14 82)",
     metalB: "oklch(0.62 0.11 68)",
     specular: "oklch(0.99 0.05 92)",
@@ -134,7 +134,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     lift: 0.26,
   },
   platinum: {
-    label: "Platinum Parallel",
+    label: "Platinum",
     metalA: "oklch(0.94 0.02 205)",
     // A cool violet foot rather than another neutral. Rendered side by side,
     // the first attempt at platinum read as a slightly brighter silver — which
@@ -278,6 +278,35 @@ export function editionLabel(edition: string | null | undefined): string | null 
 export function editionOddsLabel(edition: string | null | undefined): string | null {
   if (!isEdition(edition) || edition === "standard") return null;
   return `${WEIGHT_BP[edition] / 100}% pull`;
+}
+
+/**
+ * What the badge on a card says, and in which colour.
+ *
+ * One helper rather than the same conditional in seven render sites, because
+ * the rule is a judgement call and the sites would drift: a special finish is
+ * the rarest fact about *your copy*, so it takes the headline in its own metal
+ * and the tier — which is true of every copy of that card — drops to the muted
+ * line beneath. A standard finish is 70% of pulls and shows nothing extra, so
+ * the tier keeps the headline exactly as it always did.
+ */
+export function cardBadge(
+  tier: { label: string; reason: string; accent: string },
+  edition: string | null | undefined,
+): { headline: string; color: string; sub: string; isEdition: boolean } {
+  const finish = editionLabel(edition);
+  if (!finish) {
+    return { headline: tier.label, color: tier.accent, sub: tier.reason, isEdition: false };
+  }
+  return {
+    headline: finish,
+    color: editionStyle(toEdition(edition)).accent,
+    // Separator rather than two lines: the compact sites (vault tile, pack
+    // stand) only have room for one, and a single string keeps every site
+    // printing the same words in the same order.
+    sub: tier.reason ? `${tier.label} · ${tier.reason}` : tier.label,
+    isEdition: true,
+  };
 }
 
 /**

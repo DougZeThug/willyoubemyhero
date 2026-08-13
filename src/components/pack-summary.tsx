@@ -9,7 +9,7 @@ import { SharePack, type SharePackCard } from "@/components/share-pack-graphic";
 import { exportCardPng } from "@/lib/share-card";
 import { packedByLabel } from "@/lib/card-pulls";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { editionLabel, editionStyle, type Edition } from "@/lib/card-edition";
+import { cardBadge, type Edition } from "@/lib/card-edition";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretSlot } from "@/lib/pack";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
@@ -186,25 +186,35 @@ export function PackSummary({
                   >
                     {name}
                   </Link>
-                  {/* accent, not border: base and dnf set border to a
-                      near-transparent white so their bezel vanishes, which left
-                      this label all but unreadable. */}
-                  <div
-                    className="text-[9px] font-bold uppercase tracking-[0.2em] sm:text-[10px]"
-                    style={{ color: rarity.accent }}
-                  >
-                    {rarity.label}
-                  </div>
-                  {/* Its own line, for the reason the stand's is: "Gold" is
-                      already podium's tier label. */}
-                  {editionLabel(edition) && (
-                    <div
-                      className="text-[9px] font-bold uppercase tracking-[0.2em] sm:text-[10px]"
-                      style={{ color: editionStyle(edition).accent }}
-                    >
-                      {editionLabel(edition)}
-                    </div>
-                  )}
+                  {/* A special finish leads in its own metal and pushes the tier
+                      to the muted line under it — see cardBadge. accent, not
+                      border: base and dnf set border to a near-transparent white
+                      so their bezel vanishes, which left this unreadable. */}
+                  {(() => {
+                    const badge = cardBadge(
+                      {
+                        label: rarity.label,
+                        reason: "",
+                        accent: rarity.accent,
+                      },
+                      edition,
+                    );
+                    return (
+                      <>
+                        <div
+                          className="text-[9px] font-bold uppercase tracking-[0.2em] sm:text-[10px]"
+                          style={{ color: badge.color }}
+                        >
+                          {badge.headline}
+                        </div>
+                        {badge.isEdition && (
+                          <div className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground sm:text-[9px]">
+                            {badge.sub}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   {packedByLabel(pullCounts?.[ep.id]) && (
                     <div className="text-[8px] font-bold uppercase leading-tight tracking-[0.15em] text-muted-foreground sm:text-[9px]">
                       {packedByLabel(pullCounts?.[ep.id])}
