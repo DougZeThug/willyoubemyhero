@@ -16,6 +16,8 @@ export type RecordedCall = {
   op: Op;
   /** Rows handed to insert/update/upsert. */
   payload?: unknown;
+  /** The column list handed to `.select("a, b")`, when it was given one. */
+  columns?: string;
   /** Second argument to insert/upsert/select — e.g. `{ onConflict: "client_key" }`. */
   options?: unknown;
   /** Every chained refinement, in call order: eq, in, order, limit, select, … */
@@ -88,6 +90,11 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
           call.op = op;
           opLocked = true;
           if (op === "select") {
+            // The column list, kept because a handler that maps a field it never
+            // asked for is a bug no mocked response can show: `resolve` returns
+            // whatever the test declared regardless of what was selected, so the
+            // round trip passes and only the real database disagrees.
+            if (typeof payload === "string") call.columns = payload;
             if (options !== undefined) call.options = options;
           } else {
             call.payload = payload;

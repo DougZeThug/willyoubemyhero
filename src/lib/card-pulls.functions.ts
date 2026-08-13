@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { EDITION_IDS } from "./card-edition";
 import { optionalMember, requireMember } from "./require-auth.server";
 import type { CardPullRow, PackOpenRow } from "./secret-cards-db.server";
 import type { CardPullCounts, MyCardStats } from "./card-pulls";
@@ -91,6 +92,17 @@ export const getCardPullCounts = createServerFn({ method: "GET" })
  * moment it was dealt — neither of which the server knows. Guessing at either
  * would silently drop genuine packs on a timezone edge, which is a worse failure
  * than the one it prevents for a thirteen-person party.
+ *
+ * THE EDITION IS CLIENT-ASSERTED, and it weakens the argument above in one
+ * specific way. The card ids are a *membership* claim — the ceiling is a phantom
+ * pack — but an edition is a *value*, and it is exactly the value a public
+ * aggregate would read. So the rule that keeps the ceiling where the paragraph
+ * above leaves it: an edition must never enter getCardPullCounts, or any other
+ * number a second person can see, without being re-derived server-side first.
+ * Everything needed to re-derive it is here except the device's local date —
+ * card-edition.ts is pure client-safe TS, the participant comes from the verified
+ * token, and the event is resolved below — so this is a deliberate v1 choice
+ * rather than a dead end.
  */
 export const recordCardPulls = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -99,7 +111,20 @@ export const recordCardPulls = createServerFn({ method: "POST" })
         // A pack is three cards. The ceiling is loose enough to survive PACK_SIZE
         // changing and tight enough that nobody can post the roster as one pack.
         eventParticipantIds: z.array(z.string().uuid()).min(1).max(16),
+        // Optional so a phone still holding a bundle from before editions keeps
+        // recording its packs; the RPC defaults those rows to standard.
+        editions: z.array(z.enum(EDITION_IDS)).max(16).optional(),
       })
+      // The contract is positional — the RPC zips these two arrays — so a length
+      // mismatch would not fail, it would quietly file each finish against the
+      // wrong card. Rejected rather than truncated for that reason.
+      .refine(
+        (v) => v.editions === undefined || v.editions.length === v.eventParticipantIds.length,
+        {
+          message: "editions must line up one-to-one with eventParticipantIds",
+          path: ["editions"],
+        },
+      )
       .parse(d),
   )
   .handler(async ({ data }) => {
@@ -110,6 +135,10 @@ export const recordCardPulls = createServerFn({ method: "POST" })
     const { data: n, error } = await secrets.rpc("record_card_pulls", {
       _participant_id: me,
       _event_participant_ids: data.eventParticipantIds,
+      // Null rather than an empty array when absent: unnest() pads a NULL against
+      // the ids and every row falls to standard, while an empty array would zip
+      // to nothing and drop the pack.
+      _editions: data.editions ?? null,
     });
     if (error) throw new Error(error.message);
     const recorded = (n as number | null) ?? 0;
@@ -199,10 +228,12 @@ export const getMyCardStats = createServerFn({ method: "GET" })
 
     const { data: rows, error } = await secrets
       .from("card_pulls")
-      .select("event_participant_id, pull_count, first_pulled_at")
+      .select("event_participant_id, pull_count, edition, first_pulled_at")
       .eq("participant_id", me)
       .in("event_participant_id", ids)
-      .returns<Pick<CardPullRow, "event_participant_id" | "pull_count" | "first_pulled_at">[]>();
+      .returns<
+        Pick<CardPullRow, "event_participant_id" | "pull_count" | "edition" | "first_pulled_at">[]
+      >();
     if (error) throw error;
 
     return {
@@ -210,6 +241,10 @@ export const getMyCardStats = createServerFn({ method: "GET" })
       cards: (rows ?? []).map((r) => ({
         eventParticipantId: r.event_participant_id,
         pullCount: r.pull_count,
+        // Passed through unvalidated: the column has no CHECK, and card-edition.ts
+        // renders anything it does not recognise as standard rather than throwing
+        // on the way out of a read.
+        edition: r.edition,
         firstPulledAt: r.first_pulled_at,
       })),
     };

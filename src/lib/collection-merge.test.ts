@@ -11,8 +11,13 @@ function card(id: string, pulledAt = AFTER, count = 1, tier = "base"): Collected
   return { eventParticipantId: id, pulledAt, count, tier };
 }
 
-function served(id: string, pullCount = 1, firstPulledAt = "2026-07-31T18:16:03.777Z"): MyCard {
-  return { eventParticipantId: id, pullCount, firstPulledAt };
+function served(
+  id: string,
+  pullCount = 1,
+  firstPulledAt = "2026-07-31T18:16:03.777Z",
+  edition = "standard",
+): MyCard {
+  return { eventParticipantId: id, pullCount, edition, firstPulledAt };
 }
 
 const roster = (n: number) => Array.from({ length: n }, (_, i) => `ep-${i}`);
