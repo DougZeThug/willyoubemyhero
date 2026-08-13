@@ -207,11 +207,6 @@ export function PackSummary({
                         >
                           {badge.headline}
                         </div>
-                        {badge.isEdition && (
-                          <div className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground sm:text-[9px]">
-                            {badge.sub}
-                          </div>
-                        )}
                       </>
                     );
                   })()}
