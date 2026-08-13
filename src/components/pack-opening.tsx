@@ -259,7 +259,13 @@ export function PackOpening({
     // anything is heard tearing.
     cue("packHandle");
     timers.current.push(setTimeout(() => cue("seamTension"), CEREMONY_START.seam));
-    timers.current.push(setTimeout(() => cue("packOpen"), CEREMONY_START.rip));
+    // `tearRip` on the front starting to travel, `packOpen` on it arriving. They
+    // are one gesture and the rip is the part with a length: the first is six
+    // crinkles queued across the phase, the second is the foil letting go at the
+    // end of it. Both start here — `packOpen` schedules its own tail — so a
+    // throttled tab cannot coalesce them into one smack.
+    timers.current.push(setTimeout(() => cue("tearRip"), CEREMONY_START.rip));
+    timers.current.push(setTimeout(() => cue("packOpen"), CEREMONY_START.peel));
     timers.current.push(setTimeout(() => cue("packBurst"), CEREMONY_START.launch));
     timers.current.push(setTimeout(() => cue("deckGather"), CEREMONY_START.handoff));
   }

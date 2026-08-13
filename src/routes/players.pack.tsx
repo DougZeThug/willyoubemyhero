@@ -94,6 +94,21 @@ const AUTO_STEP_MS = 420;
  * transform already face-up and there is no flip to see.
  */
 const AUTO_MOUNT_MS = 300;
+/**
+ * How long the automatic run will wait for the stand to produce the secret.
+ *
+ * Stepping onto the secret's slot is not a swap: the stand clears the last
+ * roster card off the stage and holds a bare beat before the secret arrives.
+ * That handover ends on an animation callback, not on a clock — see
+ * `STAND_BEAT` in src/lib/stand-phase.ts — so the run waits for the stand to
+ * say it has happened rather than guessing a delay against it.
+ *
+ * This is only the ceiling on that wait, and it is sized past the stand's own
+ * deadlock breaker so the two cannot disagree: if the stand ever needs its full
+ * fallback, the run is still here when the card lands. A run that gave up first
+ * would finish having never shown the card the whole sequence is built around.
+ */
+const SECRET_STAGE_TIMEOUT_MS = 4_000;
 
 /** Local date key so the pack rolls over at midnight in the user's own timezone. */
 function todayKey(): string {
@@ -735,6 +750,25 @@ function PackPage() {
   }
 
   /**
+   * Wait for the stand to actually have the secret on it.
+   *
+   * Set by PackStand when its phase machine finishes the handover. Read rather
+   * than assumed, because the handover ends when the outgoing card reports
+   * having unmounted — an animation callback, with a long fallback behind it for
+   * a backgrounded tab. A fixed delay guessed against that is a race, and losing
+   * it means the run turns a card that is not on screen and then steps past it,
+   * finishing without ever having shown the fourth card.
+   */
+  const secretStagedRef = useRef(false);
+  async function stagedSecret(): Promise<boolean> {
+    const deadline = Date.now() + SECRET_STAGE_TIMEOUT_MS;
+    while (!secretStagedRef.current && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    return secretStagedRef.current;
+  }
+
+  /**
    * Turn every card, in order, without waiting for a tap between them.
    *
    * Kept sequential: the chimes are tuned to land one after another, and firing
@@ -758,11 +792,20 @@ function PackPage() {
         await revealAt(i);
         await new Promise((r) => setTimeout(r, AUTO_STEP_MS));
       }
+      // Cleared before the step, not after: the stand answers this the moment
+      // its handover finishes, which can be sooner than the next line runs.
+      secretStagedRef.current = false;
       setCursor(pack.length);
       // A pull that was still in flight when the button was pressed has had
       // three cards' worth of time to land by now. Reading the closure's stale
       // `secret` left the run stranded on a sealed card the user then had to tap.
       if (!(await settledSecret())) return;
+      // And the stand has to have finished handing the stage over. It clears the
+      // last roster card off first and holds a beat with nothing on the mark, so
+      // the card this is about to turn does not exist yet.
+      if (!(await stagedSecret())) return;
+      // The same beat every other card gets: arrive face-down and paint before
+      // the flip, or there is no flip to see.
       await new Promise((r) => setTimeout(r, AUTO_MOUNT_MS));
       await revealSecret();
       await new Promise((r) => setTimeout(r, AUTO_STEP_MS));
@@ -938,6 +981,9 @@ function PackPage() {
               fromPack={ceremonyRanRef.current}
               enteringFrom={entering}
               onEntered={() => setEntering(null)}
+              onSecretStaged={() => {
+                secretStagedRef.current = true;
+              }}
               onReveal={(i) => void revealAt(i)}
               onRevealSecret={() => void revealSecret()}
               onAdvance={() => setCursor((c) => c + 1)}
