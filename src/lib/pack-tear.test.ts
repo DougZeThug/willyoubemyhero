@@ -10,6 +10,8 @@ import {
   bodyClipAt,
   coreClipAt,
   mouthClip,
+  ripWaypoints,
+  RIP_TIMES,
   seamOpen,
   seamY,
   segmentClipAt,
@@ -107,6 +109,60 @@ describe("the tear front", () => {
   it("has a shoulder rather than a step, so the front is not a corner", () => {
     const partial = edge.map((p) => seamOpen(p.x, 0.5)).filter((o) => o > 0 && o < 1);
     expect(partial.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the rip finishing on its own", () => {
+  /**
+   * The one that matters. A fast swipe crosses the 60% commit threshold inside a
+   * single pointermove and `tearProgress` clamps at 1, so the rip can commit
+   * anywhere up to the far edge. An earlier version quoted its middle waypoints
+   * as absolute positions, so committing past one of them sent the tear
+   * *backwards* — the wrapper visibly rejoined and the pieces settled again
+   * before it reopened.
+   */
+  it("never travels backwards, from any commit point", () => {
+    for (let start = 0; start <= 1.0001; start += 0.02) {
+      const points = ripWaypoints(start);
+      for (let i = 1; i < points.length; i++) {
+        expect(points[i]).toBeGreaterThanOrEqual(points[i - 1]);
+      }
+    }
+  });
+
+  it("starts where the finger left off and finishes at the far edge", () => {
+    for (const start of [0, 0.35, 0.6, 0.75, 0.94, 1]) {
+      const points = ripWaypoints(start);
+      expect(points[0]).toBeCloseTo(start, 10);
+      expect(points[points.length - 1]).toBe(1);
+    }
+  });
+
+  /**
+   * The shaping, stated as the thing it is for rather than as a curve. Material
+   * under tension resists and then goes, so the opening stretch has to be the
+   * slowest of them by a margin somebody can see — a rip that travels evenly is
+   * a wipe. What happens after the fast stretch is not pinned: the tail easing
+   * off as the tear completes is fine, and is what the current numbers do.
+   */
+  it("resists before it runs, rather than travelling evenly", () => {
+    const points = ripWaypoints(0);
+    const rates = points
+      .slice(1)
+      .map((p, i) => (p - points[i]) / (RIP_TIMES[i + 1] - RIP_TIMES[i]));
+    expect(Math.min(...rates)).toBe(rates[0]);
+    expect(Math.max(...rates)).toBeGreaterThan(rates[0] * 1.5);
+  });
+
+  it("has one time for every waypoint, or motion silently drops some", () => {
+    expect(RIP_TIMES.length).toBe(ripWaypoints(0).length);
+    expect(RIP_TIMES[0]).toBe(0);
+    expect(RIP_TIMES[RIP_TIMES.length - 1]).toBe(1);
+  });
+
+  it("survives a commit the gesture should not have been able to make", () => {
+    expect(ripWaypoints(1)).toEqual([1, 1, 1, 1]);
+    expect(ripWaypoints(-0.5)[0]).toBe(0);
   });
 });
 

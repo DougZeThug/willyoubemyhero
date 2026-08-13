@@ -13,6 +13,8 @@ import {
   segmentLift,
   segmentPose,
   SEGMENT_FLIGHT,
+  ripWaypoints,
+  RIP_TIMES,
   tearEdge,
   TEAR_SEGMENTS,
   type TearPoint,
@@ -411,17 +413,15 @@ export function PackWrapper({
    * finishing its own rip while the seam is still announcing one. Then released,
    * across `rip`, and only then.
    *
-   * The keyframes are the shaping: a third of the remaining travel in the first
-   * 45% of the time, then it goes. Material under tension does not tear at a
-   * constant rate — it resists, then runs — and a plain ease is the difference
-   * between a rip and a wipe.
+   * The shaping lives in `ripWaypoints`, where it can be checked: it has to be
+   * non-decreasing from any commit point, and a fast swipe can commit anywhere
+   * up to the far edge.
    */
   useEffect(() => {
     if (!ripping || reduced) return;
-    const start = committedAt.current;
-    const controls = animate(front, [start, start + (1 - start) * 0.35, 0.74, 1], {
+    const controls = animate(front, ripWaypoints(committedAt.current), {
       duration: CEREMONY.find((s) => s.phase === "rip")!.ms / 1000,
-      times: [0, 0.45, 0.74, 1],
+      times: [...RIP_TIMES],
       ease: "linear",
     });
     return () => controls.stop();

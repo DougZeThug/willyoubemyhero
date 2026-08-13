@@ -139,6 +139,7 @@ export function PackStand({
   fromPack = false,
   enteringFrom,
   onEntered,
+  onSecretStaged,
   onReveal,
   onRevealSecret,
   onAdvance,
@@ -181,6 +182,17 @@ export function PackStand({
   enteringFrom?: PackHandoff | null;
   /** The flight has landed; the stand owns the card outright. */
   onEntered?: () => void;
+  /**
+   * The secret is on the stand and may be turned.
+   *
+   * Fired when the phase machine finishes the handover — the last roster card
+   * genuinely unmounted, the bare beat spent. The automatic run needs this
+   * because the handover ends on an animation callback rather than on a clock,
+   * so any fixed delay guessed against it is a race the run can lose silently:
+   * it would turn a card that is not there yet and finish without ever showing
+   * the one it exists to show.
+   */
+  onSecretStaged?: () => void;
   onReveal: (i: number) => void;
   onRevealSecret: () => void;
   onAdvance: () => void;
@@ -266,6 +278,15 @@ export function PackStand({
   // The sound of the pack turning out not to be over, on the frame it does.
   useEffect(() => {
     if (phase === "glitch") cue("fakeEnding");
+  }, [phase]);
+
+  // Told once per arrival, on the phase and nothing else. Held through a ref
+  // because the route re-creates the callback every render, and depending on it
+  // would announce the same arrival again on every one of them.
+  const stagedRef = useRef(onSecretStaged);
+  stagedRef.current = onSecretStaged;
+  useEffect(() => {
+    if (phase === "secret") stagedRef.current?.();
   }, [phase]);
 
   /** Which card, if any, the stage is showing. Null is bare, on purpose. */

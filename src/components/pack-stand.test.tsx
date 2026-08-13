@@ -314,6 +314,36 @@ describe("the fake ending", () => {
     });
   });
 
+  /**
+   * The signal the automatic run waits on.
+   *
+   * "Reveal all" has to turn the secret over, and it cannot know when the stand
+   * has finished handing the stage across — that ends on an animation callback,
+   * with a long fallback behind it for a backgrounded tab. Guessing a delay
+   * against it is a race the run loses by finishing without ever showing the
+   * card, so the stand says so instead. Once per arrival, and not before the
+   * card is actually there.
+   */
+  it("tells the route when the fourth card is on the stand, and not before", async () => {
+    const onSecretStaged = vi.fn();
+    stepToSecret({ onSecretStaged });
+    expect(onSecretStaged).not.toHaveBeenCalled();
+
+    await watchTheTwist(() => {
+      // Never announced while a roster card still owns the stage.
+      if (screen.queryByRole("button", { name: /carol crush/i })) {
+        expect(onSecretStaged).not.toHaveBeenCalled();
+      }
+    });
+
+    expect(onSecretStaged).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: /pickles/i })).toBeInTheDocument();
+
+    // And not again on every render that follows it.
+    for (let i = 0; i < 5; i++) await tick(120);
+    expect(onSecretStaged).toHaveBeenCalledTimes(1);
+  });
+
   /** The deliberate beat: for a moment there is no card on the stand at all. */
   it("clears the stage completely before the fourth card arrives", async () => {
     stepToSecret();

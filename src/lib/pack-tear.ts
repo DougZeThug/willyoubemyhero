@@ -158,6 +158,30 @@ export function mouthClip(points: TearPoint[], open: number): string {
 }
 
 /**
+ * The waypoints the front travels through once the rip commits.
+ *
+ * Shaping, not easing: a third of the remaining travel in the first 45% of the
+ * time, then it goes. Material under tension does not tear at a constant rate —
+ * it resists, then runs — and a plain curve is the difference between a rip and
+ * a wipe.
+ *
+ * Every waypoint is a fraction of what is *left* rather than an absolute
+ * position, and that is load-bearing rather than tidy. A fast swipe crosses the
+ * 60% commit threshold inside a single pointermove and can commit anywhere up
+ * to 100%, so a fixed waypoint behind where the finger got would send the tear
+ * backwards: the wrapper visibly rejoins and the pieces settle again before it
+ * reopens. Quoted off `start`, this is non-decreasing for every commit point.
+ */
+export function ripWaypoints(start: number): number[] {
+  const from = clamp01(start);
+  const left = 1 - from;
+  return [from, from + left * 0.35, from + left * 0.74, 1];
+}
+
+/** Where those waypoints fall across the phase, as fractions of its length. */
+export const RIP_TIMES = [0, 0.45, 0.74, 1] as const;
+
+/**
  * Where the strip breaks, as point indices into the edge.
  *
  * Four pieces rather than three, because four is the fewest that gives the strip
