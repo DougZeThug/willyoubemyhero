@@ -407,14 +407,6 @@ function PlayersPage() {
                       {locked ? "Not packed yet" : urls?.front ? tileBadge.headline : "No card yet"}
                     </span>
                   </div>
-                  {/* The demoted tier, only on a card you hold with a special
-                      finish — never on a locked one, where the finish is the one
-                      thing about a card that cannot be guessed. */}
-                  {!locked && urls?.front && tileBadge.isEdition && (
-                    <div className="text-[8px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-                      {tileBadge.sub}
-                    </div>
-                  )}
                   {/* The league's number, not yours. Its own line and muted, so
                       it never reads as one statement with the tick above it —
                       that tick is "you have this", this is "they do". */}
