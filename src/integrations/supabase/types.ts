@@ -340,6 +340,7 @@ export type Database = {
       }
       card_pulls: {
         Row: {
+          edition: string
           event_participant_id: string
           first_pulled_at: string
           last_pulled_at: string
@@ -347,6 +348,7 @@ export type Database = {
           pull_count: number
         }
         Insert: {
+          edition?: string
           event_participant_id: string
           first_pulled_at?: string
           last_pulled_at?: string
@@ -354,6 +356,7 @@ export type Database = {
           pull_count?: number
         }
         Update: {
+          edition?: string
           event_participant_id?: string
           first_pulled_at?: string
           last_pulled_at?: string
@@ -1328,6 +1331,7 @@ export type Database = {
       }
     }
     Functions: {
+      card_edition_rank: { Args: { _edition: string }; Returns: number }
       cast_award_vote: {
         Args: {
           _category: string
@@ -1358,7 +1362,11 @@ export type Database = {
         Returns: Json
       }
       record_card_pulls: {
-        Args: { _event_participant_ids: string[]; _participant_id: string }
+        Args: {
+          _editions?: string[]
+          _event_participant_ids: string[]
+          _participant_id: string
+        }
         Returns: number
       }
       record_pack_open: {
