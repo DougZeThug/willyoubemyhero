@@ -4,6 +4,7 @@
 // so every test takes a fresh module against a fresh fake-indexeddb rather than
 // leaking state into the next one.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { openDB } from "idb";
 
 async function freshModule() {
   vi.resetModules();
@@ -65,6 +66,56 @@ describe("collection", () => {
     const second = (await mod.loadCollection())[CARD_A];
     expect(second.tier).toBe("base");
     expect(second.pulledAt).toBe(first.pulledAt);
+  });
+
+  it("defaults a pull with no finish named to standard", async () => {
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "base");
+    expect((await mod.loadCollection())[CARD_A].edition).toBe("standard");
+  });
+
+  it("records the finish the pull came out as", async () => {
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "base", "gold");
+    expect((await mod.loadCollection())[CARD_A].edition).toBe("gold");
+  });
+
+  it("upgrades the finish on a better duplicate", async () => {
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "base", "bronze");
+    await mod.collectCard(CARD_A, "base", "platinum");
+    expect((await mod.loadCollection())[CARD_A].edition).toBe("platinum");
+  });
+
+  it("does not downgrade the finish on a worse duplicate", async () => {
+    // The deliberate asymmetry with `tier` directly above: a tier is a fact about
+    // a moment and must not be rewritten, while a finish is a thing you own and a
+    // worse duplicate is a duplicate, not a demotion. Both rules are right; do not
+    // "fix" one to match the other.
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "base", "platinum");
+    await mod.collectCard(CARD_A, "base", "standard");
+    expect((await mod.loadCollection())[CARD_A].edition).toBe("platinum");
+  });
+
+  it("upgrades a row stored before finishes existed", async () => {
+    // No IndexedDB version bump backs this field, so the migration path is simply
+    // that an old row loads with it undefined and the next pull fills it in.
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "base");
+    // The name and version spelled out rather than imported, the same way
+    // e2e/journeys.spec.ts opens this database — and a reminder that opening it
+    // below a stored version raises VersionError, which is why the field is
+    // optional instead of versioned.
+    const db = await openDB("wwbh-cards", 2);
+    const legacy = await db.get("collected", CARD_A);
+    delete (legacy as Record<string, unknown>).edition;
+    await db.put("collected", legacy, CARD_A);
+    db.close();
+
+    expect((await mod.loadCollection())[CARD_A].edition).toBeUndefined();
+    await mod.collectCard(CARD_A, "base", "silver");
+    expect((await mod.loadCollection())[CARD_A].edition).toBe("silver");
   });
 
   it("tracks cards independently", async () => {

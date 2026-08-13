@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { LockedCard, LOCKED_RARITY } from "./locked-card";
+import { LockedCard, LOCKED_EDITION, LOCKED_RARITY } from "./locked-card";
 
 const BACK = {
   thumb: "https://cdn.test/back-320.webp",
@@ -43,6 +43,19 @@ describe("LockedCard", () => {
     renderLocked({ back: BACK });
     const slot = screen.getByRole("img", { name: /not packed yet/i });
     expect(slot).toHaveStyle({ borderColor: LOCKED_RARITY.border });
+  });
+
+  it("wears no finish either, and has no prop to be given one", () => {
+    // Stronger than the tier case above: a tier can at least be reasoned about
+    // from the leaderboard, so leaking one spoils a card. A finish is pure luck
+    // and knowable from nowhere else, so a platinum frame on a slot would give
+    // away the best thing about a pull before the pack is even torn.
+    // There is no edition prop on LockedCard to override — that half is the
+    // compiler's job, and this constant is what the *other* surfaces dressing a
+    // locked card have to reach for instead.
+    expect(LOCKED_EDITION).toBe("standard");
+    const { container } = renderLocked({ back: BACK });
+    expect(container.querySelector('[class*="card-edition"]')).toBeNull();
   });
 
   it("hides the back image from the accessibility tree", () => {

@@ -5,6 +5,7 @@
 // client state in the app. Card data has no business forcing a version upgrade on it.
 
 import { openDB, type IDBPDatabase } from "idb";
+import { bestEdition, type Edition } from "./card-edition";
 
 // The name, the version and the store names below are read directly by
 // e2e/journeys.spec.ts, which opens this database itself to assert what a pack
@@ -83,6 +84,21 @@ export type CollectedCard = {
   count: number;
   /** Tier at the time of the first pull, for the collection view. */
   tier: string;
+  /**
+   * Best finish ever pulled of this card. The deliberate opposite rule to `tier`
+   * above, and the asymmetry is the point: a tier is a fact about a moment and
+   * rewriting it would rewrite history, while an edition is a thing you own and a
+   * better one replaces a worse one. The server applies the identical rule in
+   * record_card_pulls.
+   *
+   * OPTIONAL, AND THAT IS WHAT AVOIDS A VERSION BUMP. A row written before
+   * editions loads with this undefined, bestEdition reads that as standard, and
+   * the first upgrade pull fills it in — so a new field on a plain object in a
+   * keyed store needs no schema change. See the note on the version above:
+   * bumping it without touching e2e/journeys.spec.ts turns five assertions into a
+   * confusing null.
+   */
+  edition?: string;
 };
 
 function isBrowser() {
@@ -129,14 +145,24 @@ export async function loadCollection(): Promise<Record<string, CollectedCard>> {
  * on sight, which made the whole vault a one-tap collect-everything path and
  * left `count` meaning "times seen" rather than "times pulled".
  */
-export async function collectCard(eventParticipantId: string, tier: string): Promise<void> {
+export async function collectCard(
+  eventParticipantId: string,
+  tier: string,
+  edition: Edition = "standard",
+): Promise<void> {
   if (!isBrowser()) return;
   try {
     const db = await getDb();
     const existing = (await db.get(COLLECTED, eventParticipantId)) as CollectedCard | undefined;
     const next: CollectedCard = existing
-      ? { ...existing, count: existing.count + 1 }
-      : { eventParticipantId, pulledAt: Date.now(), count: 1, tier };
+      ? {
+          ...existing,
+          count: existing.count + 1,
+          // Upgraded, never downgraded — unlike `tier` and `pulledAt`, which the
+          // spread deliberately keeps from the first pull.
+          edition: bestEdition(existing.edition, edition),
+        }
+      : { eventParticipantId, pulledAt: Date.now(), count: 1, tier, edition };
     await db.put(COLLECTED, next, eventParticipantId);
   } catch {
     /* a device with IndexedDB blocked simply doesn't collect */

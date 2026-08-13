@@ -29,6 +29,13 @@ export type MyCard = {
   eventParticipantId: string;
   /** How many times you have pulled it. 2+ means duplicates. */
   pullCount: number;
+  /**
+   * Best finish you have ever pulled of this card. Unlike `tier` above, this one
+   * IS stored server-side — a tier is derived from the combine and can be
+   * recomputed from the bundle any time, while a finish is a fact about one pull
+   * that exists nowhere else once the device forgets it.
+   */
+  edition: string;
   /** ISO timestamp of your first pull. */
   firstPulledAt: string;
 };

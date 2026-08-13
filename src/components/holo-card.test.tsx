@@ -98,3 +98,92 @@ describe("the card", () => {
     expect(screen.getByRole("button")).toBeInTheDocument();
   });
 });
+
+describe("the edition frame", () => {
+  const card = (props: Partial<React.ComponentProps<typeof HoloCard>> = {}) =>
+    render(
+      <HoloCard
+        frontUrl={null}
+        backUrl={null}
+        name="Alice Ace"
+        rarity={rarityStyle("base")}
+        {...props}
+      />,
+    );
+
+  it("mounts nothing at all for a standard finish", () => {
+    // 70% of pulls. A frame here would be the ambient look of the app rather
+    // than a signal.
+    const { container } = card();
+    expect(container.querySelector(".card-edition")).toBeNull();
+  });
+
+  it("mounts one frame, wearing the finish's own class", () => {
+    const { container } = card({ edition: "platinum" });
+    const frames = container.querySelectorAll(".card-edition");
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toHaveClass("card-edition-platinum");
+  });
+
+  it("gives a generated back its own frame", () => {
+    // The trap this test exists for. Both faces are in the DOM at once, so each
+    // needs exactly one frame — but `Overlays` covers the front and an *uploaded*
+    // back, while a generated back re-renders a hand-picked subset. Left out of
+    // that subset the frame vanishes the moment the card turns over, and only on
+    // cards whose back art was never uploaded.
+    const { container } = card({ edition: "gold", backContent: <div />, flipped: true });
+    const faces = container.querySelectorAll(".holo-face");
+    expect(faces).toHaveLength(2);
+    for (const face of faces) {
+      expect(face.querySelectorAll(".card-edition")).toHaveLength(1);
+    }
+  });
+
+  it("gives an uploaded back exactly one frame, not two", () => {
+    // The mirror, and the reason the frame is a named variable rather than
+    // inlined into `Overlays` — prismEdge was moved out for exactly this: an
+    // uploaded back renders `Overlays` itself, so an inlined copy would stack.
+    const { container } = card({ edition: "gold", backUrl: "/back.png", flipped: true });
+    for (const face of container.querySelectorAll(".holo-face")) {
+      expect(face.querySelectorAll(".card-edition")).toHaveLength(1);
+    }
+  });
+
+  it("animates a platinum only at hero size", () => {
+    // A vault grid of thirty permanently animating compositor layers is the cost
+    // .holo-idle is gated to avoid, and the frame has to be gated the same way.
+    const { container: hero } = card({ edition: "platinum", tilt: "hero" });
+    expect(hero.querySelector(".card-edition")).toHaveClass("is-sheening");
+
+    const { container: calm } = card({ edition: "platinum", tilt: "calm" });
+    expect(calm.querySelector(".card-edition")).not.toHaveClass("is-sheening");
+  });
+
+  it("leaves the quieter finishes unanimated even at hero size", () => {
+    const { container } = card({ edition: "gold", tilt: "hero" });
+    expect(container.querySelector(".card-edition")?.className).not.toContain("is-sheening");
+  });
+
+  it("writes the metal variables without touching the tier's", () => {
+    // Two axes, two variable namespaces. Sharing one is how a finish would start
+    // quietly overwriting a tier's foil.
+    const { container } = card({ edition: "gold", rarity: rarityStyle("champion") });
+    const scene = container.querySelector<HTMLElement>(".holo-scene")!;
+    expect(scene.style.getPropertyValue("--edn-a")).toBeTruthy();
+    expect(scene.style.getPropertyValue("--edn-spec")).toBeTruthy();
+    expect(scene.style.getPropertyValue("--holo-a")).toBe(rarityStyle("champion").holoA);
+  });
+
+  it("names the finish to a screen reader, alongside the tier", () => {
+    card({ edition: "platinum", rarity: rarityStyle("podium") });
+    // Both axes, never merged — "Gold" is podium's tier label, so a gold-finish
+    // podium card has to read as two separate facts.
+    expect(screen.getByText(/Gold card, Platinum Parallel/)).toBeInTheDocument();
+  });
+
+  it("says nothing extra for a standard finish", () => {
+    card({ rarity: rarityStyle("base") });
+    expect(screen.getByText(/Base card/)).toBeInTheDocument();
+    expect(screen.queryByText(/Parallel/)).toBeNull();
+  });
+});

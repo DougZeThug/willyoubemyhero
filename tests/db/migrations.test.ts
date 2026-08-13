@@ -94,6 +94,33 @@ describe("migrations", () => {
     expect(rows.map((r) => r.proname)).toEqual(["record_card_pulls", "record_pack_open"]);
   });
 
+  it("leaves exactly one record_card_pulls, with the editions argument", async () => {
+    // CREATE OR REPLACE cannot change an argument list, so 20260813120000 has to
+    // DROP the two-arg version first. Forget that and Postgres keeps both as
+    // overloads — the old one still carrying its own grants, and a two-arg call
+    // now ambiguous. The list above would catch the duplicate; this says which
+    // signature is supposed to survive, and why there is only one.
+    const rows = await sql<{ args: string }>(`
+      SELECT pg_get_function_identity_arguments(p.oid) AS args
+        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND proname = 'record_card_pulls'
+    `);
+    expect(rows.map((r) => r.args)).toEqual([
+      "_participant_id uuid, _event_participant_ids uuid[], _editions text[]",
+    ]);
+  });
+
+  it("gives every card_pulls row a finish, defaulting to standard", async () => {
+    // NOT NULL with a default is what backfills rows written before editions
+    // existed, rather than leaving a null the TS fallback would have to cover.
+    const [row] = await sql<{ is_nullable: string; column_default: string | null }>(`
+      SELECT is_nullable, column_default FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'card_pulls' AND column_name = 'edition'
+    `);
+    expect(row.is_nullable).toBe("NO");
+    expect(row.column_default).toContain("standard");
+  });
+
   it("exposes events through a public view", async () => {
     const rows = await sql<{ viewname: string }>(
       "SELECT viewname FROM pg_views WHERE schemaname = 'public'",

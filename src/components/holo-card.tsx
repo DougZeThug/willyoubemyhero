@@ -7,6 +7,8 @@ import { urlFromSet, srcSetFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
 import type { Rarity } from "@/lib/card-rarity";
 import { BORDER_FX_CLASS } from "@/lib/card-rarity";
+import { EDITION_ANIM_CLASS, EDITION_CLASS, editionLabel, editionStyle } from "@/lib/card-edition";
+import type { Edition } from "@/lib/card-edition";
 
 /**
  * Standard trading card is 2.5in x 3.5in, and every card in the app is that
@@ -172,6 +174,15 @@ export type HoloCardProps = {
   backUrl: ImageUrlSet | string | null;
   name: string;
   rarity: Rarity;
+  /**
+   * The finish on this copy. Its own prop rather than a field on `rarity`
+   * because the two are different kinds of fact — a tier is earned and is the
+   * same on every phone, a finish is rolled and belongs to one person's copy —
+   * and because a card nobody has pulled has a tier but no finish at all.
+   *
+   * Defaults to "standard", which renders no frame.
+   */
+  edition?: Edition;
   /** Controlled flip state. Omit for an uncontrolled card. */
   flipped?: boolean;
   onFlippedChange?: (next: boolean) => void;
@@ -224,6 +235,7 @@ function HoloCardImpl({
   backUrl,
   name,
   rarity,
+  edition = "standard",
   flipped,
   onFlippedChange,
   interactive = true,
@@ -589,6 +601,8 @@ function HoloCardImpl({
   // overlay reads far heavier at small sizes, and nobody tilts a thumbnail.
   const scale = intensity === "subtle" ? 0.5 : 1;
 
+  const edn = editionStyle(edition);
+
   const styleVars = {
     "--holo-a": rarity.holoA,
     "--holo-b": rarity.holoB,
@@ -610,6 +624,12 @@ function HoloCardImpl({
     "--holo-flip-ms": `${flipMs}ms`,
     // The keyframes cannot reach `rarity.border` on their own.
     "--holo-edge": rarity.border,
+    // The edition's own three, kept clear of the --holo-* set on purpose: the
+    // tier and the finish are separate axes, and a shared variable is how they
+    // would quietly start overwriting each other.
+    "--edn-a": edn.metalA,
+    "--edn-b": edn.metalB,
+    "--edn-spec": edn.specular,
     // Late enough that the card has landed and you are looking at its face.
     "--holo-shine-delay": `${Math.round(flipMs * 0.82)}ms`,
     aspectRatio: CARD_ASPECT,
@@ -651,6 +671,26 @@ function HoloCardImpl({
     />
   ) : null;
 
+  // Named for exactly the reason `prismEdge` above is, and it has to be listed
+  // in both places that one is: `Overlays` covers the front and an uploaded
+  // back, while a *generated* back re-renders a hand-picked subset below. Left
+  // out of that subset the frame would simply vanish when a card with a
+  // generated back is turned over.
+  //
+  // The animation class is added only at hero size — see the note on
+  // EDITION_ANIM_CLASS, and the identical gate on `idle` above.
+  const editionFrame =
+    edition === "standard" ? null : (
+      <div
+        className={cn(
+          "card-edition",
+          EDITION_CLASS[edition],
+          tilt === "hero" && !reduced && EDITION_ANIM_CLASS[edition],
+        )}
+        aria-hidden
+      />
+    );
+
   const Overlays = (
     <>
       <div className={cn("holo-foil", `holo-pattern-${rarity.pattern}`)} aria-hidden />
@@ -658,6 +698,7 @@ function HoloCardImpl({
       {engaged && <div className="holo-glare" aria-hidden />}
       {engaged && rarity.sparkle > 0 && <div className="holo-sparkle" aria-hidden />}
       {prismEdge}
+      {editionFrame}
     </>
   );
 
@@ -725,11 +766,20 @@ function HoloCardImpl({
             transform: `rotateY(${showBack ? 180 : 0}deg)`,
             transitionDuration: reduced ? "0ms" : `${flipMs}ms`,
             transitionTimingFunction: FLIP_CURVE,
-            boxShadow: `0 0 28px -6px ${rarity.border}`,
+            // Additive, so the finish lifts the card's bloom without taking the
+            // tier's glow away from it. Both axes get to be visible at once.
+            boxShadow: [
+              `0 0 28px -6px ${rarity.border}`,
+              edn.lift > 0 ? `0 0 ${Math.round(20 + edn.lift * 34)}px -8px ${edn.accent}` : null,
+            ]
+              .filter(Boolean)
+              .join(", "),
           }}
         >
           <span id={titleId} className="sr-only">
-            {name} — {rarity.label} card{canFlip ? ", press to flip" : ""}
+            {name} — {rarity.label} card
+            {editionLabel(edition) ? `, ${editionLabel(edition)}` : ""}
+            {canFlip ? ", press to flip" : ""}
           </span>
 
           {/* Front. `invisible` rather than backface-visibility alone — see the
@@ -794,6 +844,7 @@ function HoloCardImpl({
                 <>
                   {engaged && <div className="holo-glare" aria-hidden />}
                   {prismEdge}
+                  {editionFrame}
                 </>
               )}
             </div>

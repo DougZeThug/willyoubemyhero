@@ -139,7 +139,62 @@ describe("recordCardPulls", () => {
     expect(mock.client.rpc).toHaveBeenCalledWith("record_card_pulls", {
       _participant_id: ME,
       _event_participant_ids: [CARD_A, CARD_B],
+      _editions: null,
     });
+  });
+
+  it("passes the finishes positionally, lined up with the cards", async () => {
+    // The RPC zips the two arrays, so the order here IS the mapping. An exact
+    // assertion rather than a shape one: a reordering would still match a
+    // toMatchObject and would file every finish against the wrong card.
+    withDb({ "rpc.record_card_pulls": { data: 2 } });
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    await callServerFn(recordCardPulls, {
+      data: { eventParticipantIds: [CARD_A, CARD_B], editions: ["platinum", "standard"] },
+      headers: asMe(),
+    });
+    expect(mock.client.rpc).toHaveBeenCalledWith("record_card_pulls", {
+      _participant_id: ME,
+      _event_participant_ids: [CARD_A, CARD_B],
+      _editions: ["platinum", "standard"],
+    });
+  });
+
+  it("sends null, not an empty array, when the caller names no finishes", async () => {
+    // unnest() pads a NULL against the ids and every row falls to standard. An
+    // empty array would zip to nothing and drop the whole pack.
+    withDb({ "rpc.record_card_pulls": { data: 1 } });
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    await callServerFn(recordCardPulls, {
+      data: { eventParticipantIds: [CARD_A] },
+      headers: asMe(),
+    });
+    const call = mock.client.rpc.mock.calls.find((c) => c[0] === "record_card_pulls");
+    expect(call?.[1]).toMatchObject({ _editions: null });
+  });
+
+  it("refuses finishes that do not line up one-to-one with the cards", async () => {
+    // A mismatch would not fail in Postgres, it would silently misattribute —
+    // unnest pads the short side with NULL — so it has to be caught here.
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    await expect(
+      callServerFn(recordCardPulls, {
+        data: { eventParticipantIds: [CARD_A, CARD_B], editions: ["gold"] },
+        headers: asMe(),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("refuses a finish outside the ladder", async () => {
+    // The column has no CHECK, so this validator is the only thing stopping a
+    // member inventing a rung and rendering a badge nobody else can pull.
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    await expect(
+      callServerFn(recordCardPulls, {
+        data: { eventParticipantIds: [CARD_A], editions: ["legendary"] },
+        headers: asMe(),
+      }),
+    ).rejects.toThrow();
   });
 
   it("goes through the RPC rather than inserting rows itself", async () => {
@@ -247,8 +302,18 @@ describe("getMyCardStats", () => {
       "pack_opens.select": twoPacks,
       "card_pulls.select": {
         data: [
-          { event_participant_id: CARD_A, pull_count: 3, first_pulled_at: "2026-07-29T10:00:00Z" },
-          { event_participant_id: CARD_B, pull_count: 1, first_pulled_at: "2026-07-31T10:00:00Z" },
+          {
+            event_participant_id: CARD_A,
+            pull_count: 3,
+            edition: "platinum",
+            first_pulled_at: "2026-07-29T10:00:00Z",
+          },
+          {
+            event_participant_id: CARD_B,
+            pull_count: 1,
+            edition: "standard",
+            first_pulled_at: "2026-07-31T10:00:00Z",
+          },
         ],
       },
     });
@@ -257,7 +322,7 @@ describe("getMyCardStats", () => {
       packsOpened: number;
       firstPackOn: string | null;
       lastPackOn: string | null;
-      cards: { eventParticipantId: string; pullCount: number }[];
+      cards: { eventParticipantId: string; pullCount: number; edition: string }[];
     }>(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
 
     expect(res.packsOpened).toBe(2);
@@ -267,8 +332,25 @@ describe("getMyCardStats", () => {
     expect(res.cards[0]).toEqual({
       eventParticipantId: CARD_A,
       pullCount: 3,
+      edition: "platinum",
       firstPulledAt: "2026-07-29T10:00:00Z",
     });
+    expect(res.cards[1].edition).toBe("standard");
+  });
+
+  it("asks the database for the finish, not just the count", async () => {
+    // The column is the only record of a finish once the device forgets it, so a
+    // select that drops it would silently reset everyone's collection to standard
+    // the first time a merge ran.
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "pack_opens.select": { data: [] },
+      "card_pulls.select": { data: [] },
+    });
+    const { getMyCardStats } = await import("./card-pulls.functions");
+    await callServerFn(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
+    const [pulls] = mock.callsFor("card_pulls", "select");
+    expect(pulls.columns).toContain("edition");
   });
 
   it("reads the rows of the token holder and nobody else", async () => {

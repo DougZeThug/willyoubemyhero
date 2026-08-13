@@ -4,8 +4,9 @@ import { Users, Shuffle, PackageOpen, Layers, Award, Check, UserRoundCheck } fro
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
-import { LockedCard } from "@/components/locked-card";
+import { LOCKED_EDITION, LockedCard } from "@/components/locked-card";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import { editionLabel, editionRank, editionStyle, toEdition } from "@/lib/card-edition";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
@@ -137,12 +138,23 @@ function PlayersPage() {
         // back until then, and a card you already own is not a spoiler.
         const rank = (p: (typeof list)[number]) =>
           isLocked(p.id) ? LOCKED_RARITY_RANK : (rarities.get(p.id)?.rank ?? 9);
-        return list.sort((a, b) => rank(a) - rank(b) || byName(a).localeCompare(byName(b)));
+        // The finish breaks ties *inside* a tier and never above it: a platinum
+        // DNF must not outrank a base champion. The tier is what somebody did on
+        // the course; the finish is only how lucky the copy is.
+        //
+        // Nothing leaks. A locked card sorts as standard alongside the sentinel
+        // rank above, and you only know the finish of cards you already hold.
+        const finish = (p: (typeof list)[number]) =>
+          isLocked(p.id) ? editionRank(LOCKED_EDITION) : editionRank(collected[p.id]?.edition);
+        return list.sort(
+          (a, b) =>
+            rank(a) - rank(b) || finish(a) - finish(b) || byName(a).localeCompare(byName(b)),
+        );
       }
       default:
         return list.sort((a, b) => byName(a).localeCompare(byName(b)));
     }
-  }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked]);
+  }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked, collected]);
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
   const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
@@ -381,6 +393,18 @@ function PlayersPage() {
                       {locked ? "Not packed yet" : urls?.front ? rarity.label : "No card yet"}
                     </span>
                   </div>
+                  {/* Only on a card you hold, and never on a locked one — the
+                      finish is the one thing about a card that cannot be guessed
+                      from anywhere else in the app. Its own line rather than
+                      beside the tier: "Gold" is already podium's label. */}
+                  {!locked && editionLabel(collected[p.id]?.edition) && (
+                    <div
+                      className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                      style={{ color: editionStyle(toEdition(collected[p.id]?.edition)).accent }}
+                    >
+                      {editionLabel(collected[p.id]?.edition)}
+                    </div>
+                  )}
                   {/* The league's number, not yours. Its own line and muted, so
                       it never reads as one statement with the tick above it —
                       that tick is "you have this", this is "they do". */}

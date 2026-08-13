@@ -52,3 +52,43 @@ describe("ambienceStrength", () => {
     expect(SECRET_GLOW).toBe(ambienceStrength("champion"));
   });
 });
+
+describe("what a finish adds to the room", () => {
+  const TIERS = ["champion", "podium", "stationKing", "penaltyBox", "base", "dnf"] as const;
+
+  it("changes nothing for a standard finish, or for a caller that names none", () => {
+    // The default parameter is what keeps every pre-edition call site honest.
+    for (const tier of TIERS) {
+      expect(ambienceStrength(tier, "standard")).toBe(ambienceStrength(tier));
+    }
+  });
+
+  it("lifts a quiet tier by the same amount as a loud one", () => {
+    // Added, not scaled: the two axes are independent, so a rare finish is worth
+    // the same on a DNF as on a champion.
+    const onDnf = ambienceStrength("dnf", "gold") - ambienceStrength("dnf");
+    const onStationKing = ambienceStrength("stationKing", "gold") - ambienceStrength("stationKing");
+    expect(onDnf).toBeCloseTo(onStationKing, 10);
+  });
+
+  it("puts a platinum base card into the room whatever the tier did", () => {
+    // The payoff of the whole ladder, and the number platinum's lift is set to
+    // clear: 0.6 is where the wash grows its second core.
+    expect(ambienceStrength("base", "platinum")).toBeGreaterThan(0.6);
+    expect(ambienceStrength("dnf", "platinum")).toBeGreaterThan(ambienceStrength("base"));
+  });
+
+  it("never goes past the top of the scale", () => {
+    for (const tier of TIERS) {
+      expect(ambienceStrength(tier, "platinum")).toBeLessThanOrEqual(1);
+    }
+    expect(ambienceStrength("champion", "platinum")).toBe(1);
+  });
+
+  it("orders the finishes the way the ladder does", () => {
+    const lifts = (["standard", "bronze", "silver", "gold", "platinum"] as const).map((e) =>
+      ambienceStrength("base", e),
+    );
+    expect(lifts).toEqual([...lifts].sort((a, b) => a - b));
+  });
+});

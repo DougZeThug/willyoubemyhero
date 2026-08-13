@@ -11,8 +11,13 @@ function card(id: string, pulledAt = AFTER, count = 1, tier = "base"): Collected
   return { eventParticipantId: id, pulledAt, count, tier };
 }
 
-function served(id: string, pullCount = 1, firstPulledAt = "2026-07-31T18:16:03.777Z"): MyCard {
-  return { eventParticipantId: id, pullCount, firstPulledAt };
+function served(
+  id: string,
+  pullCount = 1,
+  firstPulledAt = "2026-07-31T18:16:03.777Z",
+  edition = "standard",
+): MyCard {
+  return { eventParticipantId: id, pullCount, edition, firstPulledAt };
 }
 
 const roster = (n: number) => Array.from({ length: n }, (_, i) => `ep-${i}`);
@@ -142,5 +147,59 @@ describe("mergeCollection, for a guest", () => {
 
   it("handles an empty store without inventing work", () => {
     expect(mergeCollection({}, null, new Set(roster(3)))).toEqual({ collection: {}, stale: [] });
+  });
+});
+
+describe("mergeCollection, reconciling a finish", () => {
+  const withEdition = (id: string, edition: string): CollectedCard => ({
+    ...card(id),
+    edition,
+  });
+
+  it("adopts the server's finish for a card this device knows nothing about", () => {
+    const { collection } = mergeCollection(
+      {},
+      [served("ep-0", 1, "2026-07-31T18:16:03.777Z", "gold")],
+      new Set(["ep-0"]),
+    );
+    expect(collection["ep-0"].edition).toBe("gold");
+  });
+
+  it("keeps a local finish the server has not caught up to", () => {
+    // A guest pulls a platinum, then claims. The server row is created by the
+    // claim and starts at standard; taking it outright would erase the pull.
+    const { collection } = mergeCollection(
+      { "ep-0": withEdition("ep-0", "platinum") },
+      [served("ep-0", 1, "2026-07-31T18:16:03.777Z", "standard")],
+      new Set(["ep-0"]),
+    );
+    expect(collection["ep-0"].edition).toBe("platinum");
+  });
+
+  it("takes the server's finish when it is the better of the two", () => {
+    // The other direction: pulled on a second phone, so this device has never
+    // seen the good copy.
+    const { collection } = mergeCollection(
+      { "ep-0": withEdition("ep-0", "bronze") },
+      [served("ep-0", 1, "2026-07-31T18:16:03.777Z", "gold")],
+      new Set(["ep-0"]),
+    );
+    expect(collection["ep-0"].edition).toBe("gold");
+  });
+
+  it("falls back to standard when neither side has one", () => {
+    const { collection } = mergeCollection(
+      { "ep-0": card("ep-0") },
+      [served("ep-0")],
+      new Set(["ep-0"]),
+    );
+    expect(collection["ep-0"].edition).toBe("standard");
+  });
+
+  it("leaves a guest's finishes alone, having nothing to reconcile against", () => {
+    // server === null is "not a claimed member", not "you own nothing".
+    const local = { "ep-0": withEdition("ep-0", "platinum") };
+    const { collection } = mergeCollection(local, null, new Set(["ep-0"]));
+    expect(collection["ep-0"].edition).toBe("platinum");
   });
 });

@@ -4,6 +4,7 @@
 // the player page fired the tier's own colours, so the same champion celebrated
 // in two different palettes depending on which screen you were looking at.
 import type { Rarity } from "./card-rarity";
+import { editionStyle, type Edition } from "./card-edition";
 import { oklchToHex } from "./color";
 
 function reducedMotion() {
@@ -65,15 +66,24 @@ export async function burst(rarity: Rarity, strength = 1) {
   });
 }
 
-/** The burst a champion or podium pull earns. */
-export async function celebrate(rarity: Rarity) {
+/**
+ * The burst a champion or podium pull earns — or a good enough finish on any
+ * tier at all.
+ *
+ * The edition's metal joins the palette rather than replacing it, and buys a few
+ * more particles: a platinum base card should land harder than a plain one
+ * without pretending its owner won the race. Both axes in one burst, which is
+ * the same rule the card's own frame follows.
+ */
+export async function celebrate(rarity: Rarity, edition: Edition = "standard") {
   if (reducedMotion()) return;
   const confetti = await cannon();
+  const edn = editionStyle(edition);
   confetti({
-    particleCount: 90,
+    particleCount: Math.round(90 * (1 + edn.lift * 0.5)),
     spread: 75,
     origin: { y: 0.55 },
-    colors: palette(rarity, ["#ffffff"]),
+    colors: palette(rarity, edn.lift > 0 ? [edn.accent, "#ffffff"] : ["#ffffff"]),
   });
 }
 

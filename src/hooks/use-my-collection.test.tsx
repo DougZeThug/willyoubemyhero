@@ -109,7 +109,7 @@ describe("useMyCollection, revealing a card", () => {
     const { result } = await mount();
     await waitFor(() => expect(result.current.ready).toBe(true));
 
-    act(() => result.current.markCollected("ep-5", "champion", 1));
+    act(() => result.current.markCollected("ep-5", "champion", "standard", 1));
     expect(result.current.collection["ep-5"]).toMatchObject({ count: 1, tier: "champion" });
 
     // Nothing is deleted *after* the reveal. The stale row this device already
@@ -117,7 +117,7 @@ describe("useMyCollection, revealing a card", () => {
     // collect-on-sight artefact, and the pack screen's own `collectCard` writes
     // the genuine pull back.
     const deletedAfter = forgetCards.mock.calls.length;
-    act(() => result.current.markCollected("ep-6", "base", 1));
+    act(() => result.current.markCollected("ep-6", "base", "standard", 1));
     expect(forgetCards.mock.calls.length).toBe(deletedAfter);
   });
 
@@ -128,7 +128,7 @@ describe("useMyCollection, revealing a card", () => {
     const { result, client } = await mount();
     await waitFor(() => expect(result.current.ready).toBe(true));
 
-    act(() => result.current.markCollected("ep-5", "base", 1));
+    act(() => result.current.markCollected("ep-5", "base", "standard", 1));
     expect(result.current.collection["ep-5"].count).toBe(1);
 
     // The tear told the server about this card before it was turned over, so the
@@ -148,7 +148,7 @@ describe("useMyCollection, revealing a card", () => {
 
     // Three because the pack was dealt against a collection holding two, not
     // because the caller asked for "one more than whatever you have now".
-    act(() => result.current.markCollected("ep-0", "base", 3));
+    act(() => result.current.markCollected("ep-0", "base", "standard", 3));
     expect(result.current.collection["ep-0"].count).toBe(3);
   });
 
@@ -163,7 +163,7 @@ describe("useMyCollection, revealing a card", () => {
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(result.current.collection["ep-0"].count).toBe(3);
 
-    act(() => result.current.markCollected("ep-0", "base", 3));
+    act(() => result.current.markCollected("ep-0", "base", "standard", 3));
     expect(result.current.collection["ep-0"].count).toBe(3);
   });
 
@@ -172,8 +172,51 @@ describe("useMyCollection, revealing a card", () => {
     const { result } = await mount();
     await waitFor(() => expect(result.current.ready).toBe(true));
 
-    act(() => result.current.markCollected("ep-5", "base", 1));
-    act(() => result.current.markCollected("ep-5", "base", 1));
+    act(() => result.current.markCollected("ep-5", "base", "standard", 1));
+    act(() => result.current.markCollected("ep-5", "base", "standard", 1));
     expect(result.current.collection["ep-5"].count).toBe(1);
+  });
+
+  it("shows the finish a card was revealed in", async () => {
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.markCollected("ep-5", "base", "platinum", 1));
+    expect(result.current.collection["ep-5"].edition).toBe("platinum");
+  });
+
+  it("keeps the better finish when one card is marked twice", async () => {
+    // Unlike `tier` beside it, which keeps the first. Two reveals of one card in
+    // a session should leave the better copy showing.
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.markCollected("ep-5", "base", "bronze", 1));
+    act(() => result.current.markCollected("ep-5", "base", "gold", 1));
+    expect(result.current.collection["ep-5"].edition).toBe("gold");
+
+    act(() => result.current.markCollected("ep-5", "base", "standard", 1));
+    expect(result.current.collection["ep-5"].edition).toBe("gold");
+  });
+
+  it("does not let a reveal downgrade what the server already vouches for", async () => {
+    getMyCardStats.mockResolvedValue({
+      ...serverHas(["ep-0"]),
+      cards: [
+        {
+          eventParticipantId: "ep-0",
+          pullCount: 1,
+          edition: "platinum",
+          firstPulledAt: "2026-07-31T18:16:03.777Z",
+        },
+      ],
+    });
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.markCollected("ep-0", "base", "standard", 2));
+    expect(result.current.collection["ep-0"].edition).toBe("platinum");
   });
 });

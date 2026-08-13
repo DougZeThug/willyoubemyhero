@@ -19,6 +19,9 @@ export type ShareCardData = {
   quote?: string | null;
   rarityLabel: string;
   rarityColor: string;
+  /** Null on a standard finish, which prints no second badge and no inner frame. */
+  editionLabel?: string | null;
+  editionColor?: string | null;
   cardUrl?: ImageUrlSet | string | null;
   photoUrl?: ImageUrlSet | string | null;
   runningOrder: number;
@@ -84,6 +87,28 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(fun
         </div>
       </div>
 
+      {/* Second badge rather than a combined one, the same rule the app's own
+          ribbons follow: "Gold" is podium's tier label. Its own row so a long
+          tier label and a long finish label cannot collide at 1080 wide. */}
+      {data.editionLabel && (
+        <div
+          style={{
+            alignSelf: "flex-end",
+            border: `2px solid ${data.editionColor ?? data.rarityColor}`,
+            color: data.editionColor ?? data.rarityColor,
+            borderRadius: 999,
+            padding: "8px 20px",
+            fontSize: 20,
+            fontWeight: 900,
+            textTransform: "uppercase",
+            letterSpacing: "0.25em",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {data.editionLabel}
+        </div>
+      )}
+
       <div
         style={{
           flex: 1,
@@ -97,6 +122,10 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(fun
           justifyContent: "center",
           borderRadius: 28,
           border: `3px solid ${data.rarityColor}`,
+          // The finish's metal, printed inside the tier's frame exactly as the
+          // card wears it — an inset shadow rather than a second element,
+          // because html-to-image is happier with one box than with two.
+          boxShadow: data.editionColor ? `inset 0 0 0 8px ${data.editionColor}` : undefined,
           background: "rgba(15,23,42,0.55)",
           overflow: "hidden",
           position: "relative",

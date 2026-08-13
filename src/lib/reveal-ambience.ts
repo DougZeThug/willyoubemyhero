@@ -1,4 +1,5 @@
 import type { RarityTier } from "./card-rarity";
+import { editionStyle, type Edition } from "./card-edition";
 
 /**
  * How loud the room gets for a tier.
@@ -35,7 +36,15 @@ export const SECRET_GLOW = 1;
  * Exported so the particle burst and the wash agree. Two scales would drift, and
  * a champion whose wall lit up while its burst stayed at base strength is exactly
  * the kind of mismatch nobody can name but everybody notices.
+ *
+ * The finish adds to it rather than scaling it, and for the same reason GLOW is
+ * not `rank`: the two axes are independent, so a rare finish should lift a quiet
+ * tier by the same amount it lifts a loud one. Platinum's 0.5 is set so that even
+ * the dimmest tier it can land on clears the threshold where the wash grows its
+ * second core — a 0.5% pull has to land in the room whatever the card is.
+ *
+ * The default keeps every existing caller compiling and unchanged.
  */
-export function ambienceStrength(tier: RarityTier): number {
-  return GLOW[tier];
+export function ambienceStrength(tier: RarityTier, edition: Edition = "standard"): number {
+  return Math.min(1, GLOW[tier] + editionStyle(edition).lift);
 }

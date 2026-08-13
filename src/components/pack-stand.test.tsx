@@ -394,3 +394,62 @@ describe("landing with nothing to catch", () => {
     expect(onEntered).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("the finish on the stand", () => {
+  /**
+   * The printed chip only, excluding HoloCard's own sr-only title.
+   *
+   * That title names the tier on a face-down card too, and always has — the
+   * stand mounts the real rarity before the turn so the art is decoded in time.
+   * Extending it to the finish keeps the two axes consistent rather than giving
+   * the edition a rule the tier does not follow; what is asserted here is the
+   * visible badge, which is the thing the ceremony is actually withholding.
+   */
+  const chips = (pattern: RegExp) =>
+    screen.queryAllByText(pattern).filter((el) => !el.closest(".sr-only"));
+
+  it("prints no badge before the card is turned over", () => {
+    // The whole reason a pack is worth opening. A badge on a face-down card
+    // spends the reveal before it happens.
+    renderStand({ editions: { "ep-1": "platinum" } });
+    expect(chips(/Platinum Parallel/i)).toHaveLength(0);
+  });
+
+  it("names the finish once the card is revealed", () => {
+    renderStand({ editions: { "ep-1": "platinum" }, revealed: [0] });
+    expect(chips(/Platinum Parallel/i)).toHaveLength(1);
+  });
+
+  it("says nothing at all for a standard finish", () => {
+    renderStand({ editions: { "ep-1": "standard" }, revealed: [0] });
+    expect(chips(/Parallel/i)).toHaveLength(0);
+  });
+
+  it("reads the finish for the card actually on the stand", () => {
+    // Keyed by card id, not by cursor position — the pity swap means slot order
+    // and card identity are not the same thing.
+    renderStand({ cursor: 1, revealed: [1], editions: { "ep-1": "platinum", "ep-2": "bronze" } });
+    expect(chips(/Bronze Parallel/i)).toHaveLength(1);
+    expect(chips(/Platinum Parallel/i)).toHaveLength(0);
+  });
+
+  it("renders standard cards for a caller that passes no finishes at all", () => {
+    renderStand({ revealed: [0] });
+    expect(chips(/Parallel/i)).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /alice ace/i })).toBeInTheDocument();
+  });
+
+  it("never puts a finish on the secret", () => {
+    // The reciprocal of the rule that no earned tier wears the prism ring: a
+    // secret carries the ring and never an edition frame.
+    const { container } = renderStand({
+      cursor: 3,
+      secretSlot: "sealed",
+      secret: SECRET,
+      secretRevealed: true,
+      editions: { "sec-1": "platinum", "ep-1": "platinum" },
+    });
+    expect(chips(/Parallel/i)).toHaveLength(0);
+    expect(container.querySelector(".card-edition")).toBeNull();
+  });
+});

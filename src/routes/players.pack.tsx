@@ -29,7 +29,7 @@ import {
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
+import { playEditionShine, playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
 import { pullSecretCard } from "@/lib/secret-cards.functions";
 import {
@@ -41,6 +41,7 @@ import {
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { usePackIdentity } from "@/lib/device-id";
 import { dealPack, packSeed, packStage, resumeCursor, type SecretSlot } from "@/lib/pack";
+import { editionCelebrates, editionSeed, rollEdition, type Edition } from "@/lib/card-edition";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
@@ -420,6 +421,36 @@ function PackPage() {
     return dealtIds.map((id) => all.find((p) => p.id === id)).filter((p) => p != null);
   }, [bundle, dealtIds, nextPack]);
 
+  // The finish on each card in the pack, by card id.
+  //
+  // Nothing about this is stored. It is a pure function of the pack seed and the
+  // card id, so a resumed pack re-derives the identical finishes — unlike the
+  // dealt ids, which have to be stored because the last slot depends on what was
+  // uncollected at the moment the pack was opened.
+  //
+  // Keyed off the ids rather than off `pack`, and that is load-bearing rather
+  // than tidy: `pack` resolves ids against the bundle, so on a cold load of an
+  // already-torn pack it is empty until the bundle arrives. The recording effect
+  // below fires as soon as the member is known and latches, so an editions map
+  // that waited for the bundle would have recorded a pack of standards.
+  //
+  // Waits for the EVENT and not merely for a seed. `packSeed` substitutes
+  // "no-event" until the bundle query answers, and the identity behind the other
+  // two thirds comes out of localStorage — so on a cold load there is a real
+  // window where the seed is fully formed, entirely wrong, and *truthy*, which a
+  // presence check would sail straight past. Rolling there would show one set of
+  // finishes, record them, latch, and then re-roll to a different set the moment
+  // the event landed. Nothing is lost by waiting: `pack` resolves its ids against
+  // the same bundle, so the stand renders nothing at all during that window.
+  const editions = useMemo(() => {
+    const out: Record<string, Edition> = {};
+    if (!seed || !event?.id) return out;
+    for (const id of dealtIds ?? nextPack.map((p) => p.id)) {
+      out[id] = rollEdition(editionSeed(seed, id));
+    }
+    return out;
+  }, [dealtIds, nextPack, seed, event?.id]);
+
   const torn = dealtIds != null;
   const reduced = usePrefersReducedMotion();
 
@@ -475,6 +506,7 @@ function PackPage() {
     const ep = pack[i];
     if (!ep) return;
     const rarity = rarities.get(ep.id) ?? rarityStyle("base");
+    const edition = editions[ep.id] ?? "standard";
     const isHit = i === pack.length - 1;
 
     revealingRef.current = true;
@@ -489,11 +521,15 @@ function PackPage() {
       revealedRef.current = [...revealedRef.current, i];
       setRevealed(revealedRef.current);
       playReveal(rarity.tier);
+      // A second cue over the chime, not a chime of its own — the tier and the
+      // finish are separate facts and the ear should hear them that way. Silent
+      // below gold.
+      playEditionShine(edition);
       // A migrated pack turns cards that were already pulled. Writing here would
       // charge somebody a second pull for a ceremony they were given, not asked
       // for. See replayedRef.
       if (!replayedRef.current.has(i)) {
-        void collectCard(ep.id, rarity.tier);
+        void collectCard(ep.id, rarity.tier, edition);
         // Optimistic, and held apart from the reconciled collection: a card the
         // server has not vouched for is exactly what the merge would prune, so
         // without this it would light up as you flipped it and then vanish.
@@ -510,11 +546,14 @@ function PackPage() {
         // local store only reaches this hook on mount, so they are still owed it.
         const held = packBaseline?.[ep.id]?.count ?? 0;
         const counted = resumedRef.current && !!me?.participantId;
-        mine.markCollected(ep.id, rarity.tier, counted ? Math.max(held, 1) : held + 1);
+        mine.markCollected(ep.id, rarity.tier, edition, counted ? Math.max(held, 1) : held + 1);
       }
 
-      if (rarity.tier === "champion" || rarity.tier === "podium") {
-        await celebrate(rarity);
+      // The finish can carry a card the tier never would: a 0.5% platinum on a
+      // base card is the whole point of the ladder, and it stops the garden the
+      // same way a podium does.
+      if (rarity.tier === "champion" || rarity.tier === "podium" || editionCelebrates(edition)) {
+        await celebrate(rarity, edition);
       }
     } finally {
       revealingRef.current = false;
@@ -600,7 +639,12 @@ function PackPage() {
   const recordedForRef = useRef<string | null>(null);
   useEffect(() => {
     const pid = me?.participantId;
-    if (!torn || !dealtIds?.length || !pid) return;
+    // The event gates this alongside the rest, not just the seed. A seed built
+    // before the bundle answers carries "no-event" and rolls a different set of
+    // finishes — and the latch below would make that set permanent for the day
+    // while the screen went on to show the corrected one. Waiting costs nothing:
+    // the effect re-runs when the event lands.
+    if (!torn || !dealtIds?.length || !pid || !seed || !event?.id) return;
     if (recordedForRef.current === pid) return;
     recordedForRef.current = pid;
 
@@ -620,7 +664,11 @@ function PackPage() {
         // pack reaches here before the event query has answered, so passing it
         // from the client stamped a null and the latch above stopped it ever
         // being retried.
-        await record({ data: { eventParticipantIds: ids } });
+        // Positional: the RPC zips the two arrays, so this map must stay keyed
+        // off `ids` in its own order and never be built independently.
+        await record({
+          data: { eventParticipantIds: ids, editions: ids.map((id) => editions[id] ?? "standard") },
+        });
         await Promise.all([
           qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
           qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) }),
@@ -629,7 +677,7 @@ function PackPage() {
         /* a count nobody asked for is not worth an error nobody can act on */
       }
     })();
-  }, [torn, dealtIds, me?.participantId, record, qc, event?.id]);
+  }, [torn, dealtIds, me?.participantId, record, qc, event?.id, seed, editions]);
 
   // A phone changing hands mid-party is a real thing in this league. Re-arm the
   // latch when the member changes so the next person gets their own card.
@@ -967,6 +1015,7 @@ function PackPage() {
               cursor={cursor}
               cards={cards.data}
               rarities={rarities}
+              editions={editions}
               revealed={revealed}
               universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
               pullCounts={pullCounts.data}
@@ -1016,6 +1065,7 @@ function PackPage() {
             bundle={bundle}
             cards={cards.data}
             rarities={rarities}
+            editions={editions}
             revealed={revealed}
             pullCounts={pullCounts.data}
             universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}

@@ -6,7 +6,7 @@
 // the three situations where making a noise would be a bug, and that the two
 // preferences mean what they say.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cue, playFlip, setCardSfxMuted, SFX_CUES } from "./card-sfx";
+import { cue, playEditionShine, playFlip, setCardSfxMuted, SFX_CUES } from "./card-sfx";
 import { setMatchMedia } from "@/test/setup";
 
 // Read off the registry rather than hand-listed. The hand-listed version stopped
@@ -86,5 +86,24 @@ describe("the mute toggle", () => {
     setCardSfxMuted(true);
     playFlip();
     expect(vibrate).toHaveBeenCalled();
+  });
+});
+
+describe("the edition shine", () => {
+  /**
+   * Same reasoning as the cue tests above: the synthesis is not testable here and
+   * the tuning is not worth pinning. What is worth pinning is that the reveal's
+   * second cue can never be the thing that takes the ceremony's timer chain down
+   * — it fires from the same tick as playReveal, on every card in every pack.
+   */
+  it("is a safe no-op with no Web Audio, on every rung and on nonsense", () => {
+    for (const edition of ["standard", "bronze", "silver", "gold", "platinum", "legendary", ""]) {
+      expect(() => playEditionShine(edition)).not.toThrow();
+    }
+  });
+
+  it("is silent when the user has muted the app", () => {
+    setCardSfxMuted(true);
+    expect(() => playEditionShine("platinum")).not.toThrow();
   });
 });

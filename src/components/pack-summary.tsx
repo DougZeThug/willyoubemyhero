@@ -9,6 +9,7 @@ import { SharePack, type SharePackCard } from "@/components/share-pack-graphic";
 import { exportCardPng } from "@/lib/share-card";
 import { packedByLabel } from "@/lib/card-pulls";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
+import { editionLabel, editionStyle, type Edition } from "@/lib/card-edition";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretSlot } from "@/lib/pack";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
@@ -43,6 +44,7 @@ export function PackSummary({
   bundle,
   cards,
   rarities,
+  editions = {},
   revealed,
   pullCounts,
   universalBack,
@@ -60,6 +62,8 @@ export function PackSummary({
   bundle: StatsBundle | null | undefined;
   cards: Record<string, CardUrls> | undefined;
   rarities: Map<string, Rarity>;
+  /** Finishes by card id. Empty by default, so every card reads as standard. */
+  editions?: Record<string, Edition>;
   revealed: number[];
   pullCounts: Record<string, number> | undefined;
   universalBack: ImageUrlSet | null;
@@ -143,6 +147,7 @@ export function PackSummary({
       <div className="mx-auto grid max-w-sm grid-cols-3 items-start gap-2 sm:max-w-lg sm:gap-3">
         {pack.map((ep, i) => {
           const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
+          const edition = editions[ep.id] ?? "standard";
           const name = ep.participant?.name ?? "—";
           return (
             <div key={ep.id} className="flex flex-col gap-1">
@@ -160,7 +165,10 @@ export function PackSummary({
                   backUrl={cards?.[ep.id]?.back ?? null}
                   name={name}
                   rarity={rarity}
-                  backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+                  edition={edition}
+                  backContent={
+                    <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} edition={edition} />
+                  }
                 />
               </motion.div>
               {revealed.includes(i) && (
@@ -187,6 +195,16 @@ export function PackSummary({
                   >
                     {rarity.label}
                   </div>
+                  {/* Its own line, for the reason the stand's is: "Gold" is
+                      already podium's tier label. */}
+                  {editionLabel(edition) && (
+                    <div
+                      className="text-[9px] font-bold uppercase tracking-[0.2em] sm:text-[10px]"
+                      style={{ color: editionStyle(edition).accent }}
+                    >
+                      {editionLabel(edition)}
+                    </div>
+                  )}
                   {packedByLabel(pullCounts?.[ep.id]) && (
                     <div className="text-[8px] font-bold uppercase leading-tight tracking-[0.15em] text-muted-foreground sm:text-[9px]">
                       {packedByLabel(pullCounts?.[ep.id])}

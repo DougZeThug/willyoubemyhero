@@ -18,12 +18,37 @@ async function cardIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-async function record(participantId: string, ids: string[]): Promise<number> {
+async function record(
+  participantId: string,
+  ids: string[],
+  editions: (string | null)[] | null = null,
+): Promise<number> {
+  const [row] = await sql<{ record_card_pulls: number }>(
+    "SELECT public.record_card_pulls($1, $2, $3)",
+    [participantId, ids, editions],
+  );
+  return row.record_card_pulls;
+}
+
+/**
+ * The two-argument call, which the DEFAULT NULL on `_editions` is there to keep
+ * resolving. A phone holding a cached bundle from before editions still posts
+ * this shape mid-rollout.
+ */
+async function recordLegacy(participantId: string, ids: string[]): Promise<number> {
   const [row] = await sql<{ record_card_pulls: number }>(
     "SELECT public.record_card_pulls($1, $2)",
     [participantId, ids],
   );
   return row.record_card_pulls;
+}
+
+async function editionOf(eventParticipantId: string): Promise<string> {
+  const [row] = await sql<{ edition: string }>(
+    "SELECT edition FROM public.card_pulls WHERE event_participant_id = $1",
+    [eventParticipantId],
+  );
+  return row.edition;
 }
 
 /** How many distinct people have packed each card — a plain row count, by design. */
@@ -41,12 +66,31 @@ const rowCount = async () =>
 describe("record_card_pulls", () => {
   it("is unreachable with the publishable key", async () => {
     // Without the REVOKE, anyone holding the key that ships to every browser can
-    // credit themselves the whole roster.
+    // credit themselves the whole roster, now in any finish they like.
+    //
+    // The three-arg signature, deliberately. isDenied swallows every error alike,
+    // so pointing this at a signature that no longer exists would keep passing
+    // while guarding nothing — which is exactly what happened to the two-arg call
+    // when 20260813120000 dropped it. The positive control below is the other
+    // half: it separates "denied because revoked" from "denied because gone".
     for (const role of ["anon", "authenticated"] as const) {
-      expect(await isDenied(role, "SELECT public.record_card_pulls($1, $2)", [IDS.alice, []])).toBe(
-        true,
-      );
+      expect(
+        await isDenied(role, "SELECT public.record_card_pulls($1, $2, $3)", [IDS.alice, [], null]),
+      ).toBe(true);
     }
+  });
+
+  it("is reachable by service_role, which is what makes the revoke meaningful", async () => {
+    // The positive control. `record` runs as the owning superuser, so a signature
+    // that vanished would surface here as a thrown error rather than as a test
+    // that quietly stopped testing anything.
+    expect(await record(IDS.alice, [])).toBe(0);
+  });
+
+  it("still resolves the two-argument call, for a client that predates editions", async () => {
+    const ids = await cardIds();
+    expect(await recordLegacy(IDS.alice, [ids[0]])).toBe(1);
+    expect(await editionOf(ids[0])).toBe("standard");
   });
 
   it("records one row per card in the pack", async () => {
@@ -164,5 +208,133 @@ describe("record_card_pulls", () => {
         ids[0],
       ]),
     ).rejects.toThrow();
+  });
+});
+
+describe("card_edition_rank", () => {
+  it("orders the ladder rarest first", async () => {
+    const [row] = await sql<Record<string, number>>(
+      `SELECT public.card_edition_rank('platinum') AS platinum,
+              public.card_edition_rank('gold')     AS gold,
+              public.card_edition_rank('silver')   AS silver,
+              public.card_edition_rank('bronze')   AS bronze,
+              public.card_edition_rank('standard') AS standard,
+              public.card_edition_rank('legendary') AS unknown,
+              public.card_edition_rank(NULL)        AS missing`,
+    );
+    expect(row.platinum).toBeLessThan(row.gold);
+    expect(row.gold).toBeLessThan(row.silver);
+    expect(row.silver).toBeLessThan(row.bronze);
+    expect(row.bronze).toBeLessThan(row.standard);
+    // Last, so a real finish can still displace a corrupt stored value.
+    expect(row.unknown).toBeGreaterThan(row.standard);
+    expect(row.missing).toBeGreaterThan(row.standard);
+  });
+});
+
+describe("record_card_pulls editions", () => {
+  it("defaults to standard when no finishes are sent", async () => {
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]]);
+    expect(await editionOf(ids[0])).toBe("standard");
+  });
+
+  it("stores the finish it was handed, positionally", async () => {
+    const ids = await cardIds();
+    await record(IDS.alice, ids, ["gold", "standard", "platinum"]);
+    expect(await editionOf(ids[0])).toBe("gold");
+    expect(await editionOf(ids[1])).toBe("standard");
+    expect(await editionOf(ids[2])).toBe("platinum");
+  });
+
+  it("upgrades a card you already hold, without adding a row", async () => {
+    // The whole point of keeping the primary key: the count a card shows is
+    // unmoved by an upgrade, because an upgrade is not a new owner.
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]], ["bronze"]);
+    await record(IDS.alice, [ids[0]], ["platinum"]);
+    expect(await editionOf(ids[0])).toBe("platinum");
+    expect(await rowCount()).toBe(1);
+    expect((await counts())[ids[0]]).toBe(1);
+  });
+
+  it("does not demote a card you already hold", async () => {
+    // A worse finish of a card you own is a duplicate, not a downgrade.
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]], ["platinum"]);
+    await record(IDS.alice, [ids[0]], ["standard"]);
+    expect(await editionOf(ids[0])).toBe("platinum");
+  });
+
+  it("leaves an equal finish alone", async () => {
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]], ["silver"]);
+    await record(IDS.alice, [ids[0]], ["silver"]);
+    expect(await editionOf(ids[0])).toBe("silver");
+    expect(await rowCount()).toBe(1);
+  });
+
+  it("does not bump pull_count when an upgrade lands the same day", async () => {
+    // An upgrade is still a replay as far as the day rule is concerned.
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]], ["bronze"]);
+    await record(IDS.alice, [ids[0]], ["gold"]);
+    const [row] = await sql<{ pull_count: number }>(
+      "SELECT pull_count FROM public.card_pulls WHERE event_participant_id = $1",
+      [ids[0]],
+    );
+    expect(row.pull_count).toBe(1);
+    expect(await editionOf(ids[0])).toBe("gold");
+  });
+
+  it("keeps the better finish when one call carries the same card twice", async () => {
+    // DISTINCT ON, not DISTINCT: two rows for one card differ now, so the plain
+    // DISTINCT this used to carry would no longer collapse them — and ON CONFLICT
+    // cannot touch the same row twice in one INSERT, so it would raise.
+    const ids = await cardIds();
+    expect(await record(IDS.alice, [ids[0], ids[0]], ["bronze", "platinum"])).toBe(1);
+    expect(await editionOf(ids[0])).toBe("platinum");
+    expect(await rowCount()).toBe(1);
+  });
+
+  it("pads a short array with standard rather than dropping the cards", async () => {
+    const ids = await cardIds();
+    expect(await record(IDS.alice, ids, ["gold"])).toBe(3);
+    expect(await editionOf(ids[0])).toBe("gold");
+    expect(await editionOf(ids[1])).toBe("standard");
+    expect(await editionOf(ids[2])).toBe("standard");
+  });
+
+  it("treats a NULL inside the array as standard", async () => {
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0], ids[1]], [null, "silver"]);
+    expect(await editionOf(ids[0])).toBe("standard");
+    expect(await editionOf(ids[1])).toBe("silver");
+  });
+
+  it("stores an unrecognised finish without raising, and lets a real one beat it", async () => {
+    // No CHECK on the column, so a value the TS vocabulary does not know can land.
+    // card-edition.ts renders it as standard, and rank 99 means it never blocks an
+    // upgrade.
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]], ["legendary"]);
+    expect(await editionOf(ids[0])).toBe("legendary");
+    await record(IDS.alice, [ids[0]], ["bronze"]);
+    expect(await editionOf(ids[0])).toBe("bronze");
+  });
+
+  it("keeps two people's finishes of one card apart", async () => {
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]], ["platinum"]);
+    await record(IDS.bob, [ids[0]], ["standard"]);
+    const rows = await sql<{ participant_id: string; edition: string }>(
+      "SELECT participant_id, edition FROM public.card_pulls WHERE event_participant_id = $1",
+      [ids[0]],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.participant_id === IDS.alice)?.edition).toBe("platinum");
+    expect(rows.find((r) => r.participant_id === IDS.bob)?.edition).toBe("standard");
+    // Two owners, and the public count still says two.
+    expect((await counts())[ids[0]]).toBe(2);
   });
 });

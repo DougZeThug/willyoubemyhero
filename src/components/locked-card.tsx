@@ -1,5 +1,6 @@
 import { PackCardBack } from "@/components/pack-card-back";
 import { rarityStyle } from "@/lib/card-rarity";
+import type { Edition } from "@/lib/card-edition";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,20 @@ import { cn } from "@/lib/utils";
  * edit away from a vault that hides tiers and a card page that does not.
  */
 export const LOCKED_RARITY = rarityStyle("base");
+
+/**
+ * And the finish, for the same reason and with a stronger one behind it.
+ *
+ * A tier can at least be reasoned about from the leaderboard, so a leaked one
+ * only spoils a card. A finish is pure luck and unknowable from anywhere else, so
+ * a locked slot wearing a platinum frame would give away the single most
+ * interesting thing about a pull before the pack that contains it is even torn.
+ *
+ * `LockedCard` takes no edition prop at all — the withholding is structural
+ * rather than a default somebody can override — and this constant exists for the
+ * *other* surfaces that dress a locked card, the filmstrip chip most of all.
+ */
+export const LOCKED_EDITION: Edition = "standard";
 
 /**
  * A roster card this device has never packed, face-down.

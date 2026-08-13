@@ -5,6 +5,7 @@ import { SealedBack } from "@/components/pack-card-back";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
+import { editionLabel, editionStyle, type Edition } from "@/lib/card-edition";
 import { swipeDirection } from "@/lib/zoom";
 import { StandDeck, StandEntrance } from "@/components/stand-entrance";
 import { RevealAmbience } from "@/components/reveal-ambience";
@@ -125,6 +126,7 @@ export function PackStand({
   cursor,
   cards,
   rarities,
+  editions = {},
   revealed,
   universalBack,
   pullCounts,
@@ -149,6 +151,15 @@ export function PackStand({
   cursor: number;
   cards: Record<string, CardUrls> | undefined;
   rarities: Map<string, Rarity>;
+  /**
+   * The finish on each card in the pack, by event_participant id. Defaults to an
+   * empty map so a caller that has none — and every existing test — keeps
+   * rendering standard cards.
+   *
+   * Never consulted on the secret's step: a secret carries the prism ring and no
+   * edition frame, the reciprocal of the rule that no earned tier wears the ring.
+   */
+  editions?: Record<string, Edition>;
   revealed: number[];
   universalBack: ImageUrlSet | null;
   pullCounts: Record<string, number> | undefined;
@@ -445,6 +456,9 @@ export function PackStand({
   const burstFiredRef = useRef<string | null>(null);
   // Assigned during render, below, once `rarity` has been resolved.
   const rarityRef = useRef<Rarity>(rarityStyle("base"));
+  // Alongside rarityRef and for the same reason: the burst fires from a timeout
+  // that outlives the render it was scheduled in.
+  const editionRef = useRef<Edition>("standard");
   /**
    * The secret's landing, which has to be the loudest thing in the app.
    *
@@ -462,7 +476,10 @@ export function PackStand({
     const ms = onSecret ? SECRET_FLIP_MS : FLIP_MS;
     const t = setTimeout(() => {
       burstFiredRef.current = shownKey;
-      void burst(rarityRef.current, onSecret ? 1.5 : ambienceStrength(rarityRef.current.tier));
+      void burst(
+        rarityRef.current,
+        onSecret ? 1.5 : ambienceStrength(rarityRef.current.tier, editionRef.current),
+      );
       if (onSecret) {
         setSlam(true);
         // Picture, sound and haptic inside the same frame. That coincidence is
@@ -526,6 +543,10 @@ export function PackStand({
   }, [canAdvance, onAdvance]);
 
   const rarity = onSecret ? secretRarity : (rarities.get(ep?.id ?? "") ?? rarityStyle("base"));
+  // Standard on the secret's step, always: a secret wears the prism ring and
+  // never an edition frame.
+  const edition = onSecret ? "standard" : (editions[ep?.id ?? ""] ?? "standard");
+  editionRef.current = edition;
   rarityRef.current = rarity;
   const name = onSecret ? (secret?.name ?? "Secret") : (ep?.participant?.name ?? "—");
   const showStats = isRevealed && settled;
@@ -838,6 +859,7 @@ export function PackStand({
                     style={standStyle({ peeking, onSecret, isRevealed, rarity, secretRarity })}
                   >
                     <HoloCard
+                      edition={edition}
                       // Mounted while the card is still face-down, so the art is
                       // decoded before the turn rather than during it. The front face
                       // is backface-hidden and explicitly `invisible` until the flip
@@ -864,7 +886,12 @@ export function PackStand({
                           onSecret && secret ? (
                             <SecretBackPanel card={secret} rarity={secretRarity} />
                           ) : (
-                            <CardBackPanel ep={ep!} bundle={bundle} rarity={rarity} />
+                            <CardBackPanel
+                              ep={ep!}
+                              bundle={bundle}
+                              rarity={rarity}
+                              edition={edition}
+                            />
                           )
                         ) : (
                           <SealedBack />
@@ -933,6 +960,19 @@ export function PackStand({
                     >
                       {rarity.label}
                     </div>
+                    {/* Its own line, never folded into the tier's. "Gold" is
+                        already podium's label, so a gold-finish podium card would
+                        otherwise read "Gold · Gold" — and the two are different
+                        kinds of fact anyway. Absent entirely on a standard
+                        finish, which is seven pulls in ten. */}
+                    {editionLabel(edition) && (
+                      <div
+                        className="text-[10px] font-bold uppercase tracking-[0.2em]"
+                        style={{ color: editionStyle(edition).accent }}
+                      >
+                        {editionLabel(edition)}
+                      </div>
+                    )}
                     {packedByLabel(pullCounts?.[ep!.id]) && (
                       <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
                         {packedByLabel(pullCounts?.[ep!.id])}

@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { getMyCardStats } from "@/lib/card-pulls.functions";
 import { dupeCount, type MyCardStats } from "@/lib/card-pulls";
 import { forgetCards, loadCollection, type CollectedCard } from "@/lib/card-collection";
+import { bestEdition, type Edition } from "@/lib/card-edition";
 import { mergeCollection } from "@/lib/collection-merge";
 import { useMemberSession } from "@/lib/member-token";
 
@@ -39,7 +40,12 @@ export type MyCollection = {
    * about the pack, and if that round trip lands before the card is turned over
    * then the number this hook holds already includes the very pull being marked.
    */
-  markCollected: (eventParticipantId: string, tier: string, count: number) => void;
+  markCollected: (
+    eventParticipantId: string,
+    tier: string,
+    edition: Edition,
+    count: number,
+  ) => void;
 };
 
 /**
@@ -73,9 +79,9 @@ export function useMyCollection(
   // too late and it is counted twice on top of the server's own row. A floor is
   // monotonic, so it can be held until the server's number catches up to it and
   // dropped then, and neither mistake is possible in between.
-  const [bumps, setBumps] = useState<Record<string, { count: number; tier: string; at: number }>>(
-    {},
-  );
+  const [bumps, setBumps] = useState<
+    Record<string, { count: number; tier: string; edition: Edition; at: number }>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -141,8 +147,20 @@ export function useMyCollection(
     for (const [id, bump] of Object.entries(bumps)) {
       const existing = out[id];
       out[id] = existing
-        ? { ...existing, count: Math.max(existing.count, bump.count) }
-        : { eventParticipantId: id, pulledAt: bump.at, count: bump.count, tier: bump.tier };
+        ? {
+            ...existing,
+            count: Math.max(existing.count, bump.count),
+            // Same floor logic the count uses: the finish only rises, so a reveal
+            // cannot show a worse copy than the server already vouches for.
+            edition: bestEdition(existing.edition, bump.edition),
+          }
+        : {
+            eventParticipantId: id,
+            pulledAt: bump.at,
+            count: bump.count,
+            tier: bump.tier,
+            edition: bump.edition,
+          };
     }
     return out;
   }, [merged.collection, bumps]);
@@ -159,21 +177,27 @@ export function useMyCollection(
     void forgetCards(fresh);
   }, [merged.stale, bumps]);
 
-  const markCollected = useCallback((eventParticipantId: string, tier: string, count: number) => {
-    setBumps((prev) => {
-      // Never lowered, so marking the same card twice is a no-op rather than a
-      // card that blinks backwards.
-      const floor = Math.max(prev[eventParticipantId]?.count ?? 0, count);
-      return {
-        ...prev,
-        [eventParticipantId]: {
-          count: floor,
-          tier: prev[eventParticipantId]?.tier ?? tier,
-          at: prev[eventParticipantId]?.at ?? Date.now(),
-        },
-      };
-    });
-  }, []);
+  const markCollected = useCallback(
+    (eventParticipantId: string, tier: string, edition: Edition, count: number) => {
+      setBumps((prev) => {
+        // Never lowered, so marking the same card twice is a no-op rather than a
+        // card that blinks backwards.
+        const floor = Math.max(prev[eventParticipantId]?.count ?? 0, count);
+        return {
+          ...prev,
+          [eventParticipantId]: {
+            count: floor,
+            tier: prev[eventParticipantId]?.tier ?? tier,
+            // Best rather than first, unlike `tier` beside it: two reveals of one
+            // card in a session should leave the better finish showing.
+            edition: bestEdition(prev[eventParticipantId]?.edition, edition),
+            at: prev[eventParticipantId]?.at ?? Date.now(),
+          },
+        };
+      });
+    },
+    [],
+  );
 
   const collectedCount = useMemo(
     () => rosterIds.filter((id) => collection[id]).length,
