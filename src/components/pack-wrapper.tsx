@@ -5,6 +5,14 @@ import { playTearTick } from "@/lib/card-sfx";
 import { seededRng } from "@/lib/format";
 import { TEAR, tearProgress } from "@/lib/pack";
 import { ceremonyReached, type CeremonyPhase } from "@/lib/pack-ceremony";
+import {
+  bodyClipAt,
+  coreClipAt,
+  mouthClip,
+  segmentClipAt,
+  stripClipAt,
+  tearEdge,
+} from "@/lib/pack-tear";
 import { urlFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
@@ -13,99 +21,7 @@ import { cn } from "@/lib/utils";
 /** How often a crinkle fires across the rip, as a fraction of the travel. */
 const TICK_EVERY = 0.12;
 
-type TearPoint = { x: number; y: number };
-
-/**
- * The ragged line the wrapper separates along.
- *
- * Seeded, so a given pack always tears the same way — the same property the old
- * vertical wipe had, and worth keeping: two people opening the same pack side by
- * side should see the same rip.
- *
- * 27 steps rather than 16, and two octaves of jitter rather than one. A single
- * amplitude at low resolution reads as a zigzag; the coarse wander gives the rip
- * its shape and the fine one gives it fibre. 27 also divides into clean thirds at
- * 0/9/18/27, which is where the strip breaks apart — see SHARDS.
- */
-function tearEdge(rng: () => number, stripPct: number): TearPoint[] {
-  const steps = 27;
-  const points: TearPoint[] = [];
-  for (let i = 0; i <= steps; i++) {
-    points.push({
-      x: (i / steps) * 100,
-      // Kept off the very top edge, or a deep jitter clips the strip away to
-      // nothing at that column and the tear reads as a hole rather than a rip.
-      y: Math.max(1.5, stripPct + (rng() - 0.5) * 4.5 + (rng() - 0.5) * 1.6),
-    });
-  }
-  return points;
-}
-
-const fmt = (p: TearPoint) => `${p.x.toFixed(1)}% ${p.y.toFixed(1)}%`;
-
-/** Everything above the tear line — the piece that peels away. */
-function stripClip(points: TearPoint[]): string {
-  return `polygon(0% 0%, 100% 0%, ${[...points].reverse().map(fmt).join(", ")})`;
-}
-
-/** Everything below it — the pack, which never moves. */
-function bodyClip(points: TearPoint[]): string {
-  return `polygon(${points.map(fmt).join(", ")}, 100% 100%, 0% 100%)`;
-}
-
-/**
- * The exposed fibre along the rip.
- *
- * A thin band that follows the tear line, drawn between the body and the strip so
- * it is only visible once the strip has moved off it. Torn card stock shows a
- * bright core where the printed surface has parted, and it is the one detail that
- * separates "torn" from "cut" — without it the ragged polygon still reads as a
- * very carefully cut edge.
- */
-function coreClip(points: TearPoint[]): string {
-  const under = points.map((p) => ({ x: p.x, y: p.y + 1.4 }));
-  return `polygon(${points.map(fmt).join(", ")}, ${[...under].reverse().map(fmt).join(", ")})`;
-}
-
-/**
- * The opening, as a clip for whatever is coming out of it.
- *
- * The same ragged line the pack tore along, so a card on its way out is cut by
- * the tear itself rather than by a tidy horizontal edge. `open` slides that line
- * down and off the bottom, which is what lets the cards finish emerging without
- * the clip popping off in one frame.
- *
- * The vertex count is constant across every value of `open` — that is the whole
- * reason this is one function rather than two clip strings, because motion can
- * only interpolate two polygons that agree on how many corners they have.
- *
- * Left and right run well past the pack so the fan can spread outside it once the
- * clip is open; only the top edge is ever doing any work.
- */
-function mouthClip(points: TearPoint[], open: number): string {
-  const drop = open * 150;
-  const at = (p: TearPoint) => `${p.x.toFixed(1)}% ${(p.y + drop).toFixed(1)}%`;
-  const line = [...points].reverse().map(at);
-  const right = `150% ${(points[points.length - 1].y + drop).toFixed(1)}%`;
-  const left = `-50% ${(points[0].y + drop).toFixed(1)}%`;
-  return `polygon(-50% -120%, 150% -120%, ${right}, ${line.join(", ")}, ${left})`;
-}
-
-/**
- * One shard of the strip: the slice of the tear line between two columns.
- *
- * Adjacent shards share their boundary vertices, so while they are still together
- * there is no seam to see — they separate only because they animate apart, which
- * is what makes the break look like a break rather than a reveal of three pieces
- * that were always there.
- */
-function shardClip(points: TearPoint[], from: number, to: number): string {
-  const span = points.slice(from, to + 1);
-  const a = span[0].x;
-  const b = span[span.length - 1].x;
-  return `polygon(${a.toFixed(1)}% 0%, ${b.toFixed(1)}% 0%, ${[...span].reverse().map(fmt).join(", ")})`;
-}
-
+/** Where the strip breaks apart, while the departure still runs on thirds. */
 const SHARDS = [
   [0, 9],
   [9, 18],
@@ -259,7 +175,7 @@ export function PackWrapper({
   const reduced = usePrefersReducedMotion();
 
   const stripPct = TEAR.stripH * 100;
-  const edge = tearEdge(seededRng(seed), stripPct);
+  const edge = tearEdge(seed, stripPct);
   const art = urlFromSet(artUrl);
 
   /**
@@ -325,7 +241,7 @@ export function PackWrapper({
   // shape a real wrapper takes when you rip it left to right.
   const lift = reduced ? 0 : travel;
   const stripStyle: React.CSSProperties = {
-    clipPath: stripClip(edge),
+    clipPath: stripClipAt(edge, 1),
     transformOrigin: "right center",
     transform: `rotate(${(-lift * 8).toFixed(2)}deg) translateY(${(-lift * 14).toFixed(1)}px)`,
     opacity: reduced ? 1 - travel : 1,
@@ -459,7 +375,7 @@ export function PackWrapper({
           aria-hidden
           className="absolute inset-0"
           style={{
-            clipPath: bodyClip(edge),
+            clipPath: bodyClipAt(edge, 1),
             // Bowing needs somewhere to bow from. Hinged at the bottom, where the
             // pack is still held, so the torn top edge is the end that opens
             // toward the viewer.
@@ -484,7 +400,7 @@ export function PackWrapper({
         <motion.div
           aria-hidden
           className="absolute inset-0"
-          style={{ clipPath: coreClip(edge), background: "oklch(0.95 0.02 240)" }}
+          style={{ clipPath: coreClipAt(edge, 1), background: "oklch(0.95 0.02 240)" }}
           initial={false}
           animate={{ opacity: sealed ? Math.min(travel * 0.5, 0.35) : 0.7 }}
           transition={{ duration: 0.3 }}
@@ -667,7 +583,7 @@ export function PackWrapper({
         <motion.div
           aria-hidden
           className="pointer-events-none absolute inset-0"
-          style={{ clipPath: stripClip(edge), transformOrigin: "right center" }}
+          style={{ clipPath: stripClipAt(edge, 1), transformOrigin: "right center" }}
           initial={{ rotate: -committedAt.current * 8, y: -committedAt.current * 14 }}
           // Held exactly where the finger left it through the anticipation, then
           // released. The strip is the thing under tension during `seam`, so it
@@ -721,7 +637,7 @@ export function PackWrapper({
               aria-hidden
               className="pointer-events-none absolute inset-0"
               style={{
-                clipPath: shardClip(edge, from, to),
+                clipPath: segmentClipAt(edge, 1, from, to),
                 transformOrigin: "center",
                 filter: "drop-shadow(0 8px 12px oklch(0 0 0 / 55%))",
                 willChange: "transform, opacity",
