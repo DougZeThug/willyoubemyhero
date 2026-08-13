@@ -495,7 +495,9 @@ function PackPage() {
         // local store only reaches this hook on mount, so they are still owed it.
         const held = packBaseline?.[ep.id]?.count ?? 0;
         const counted = resumedRef.current && !!me?.participantId;
-        mine.markCollected(ep.id, rarity.tier, counted ? Math.max(held, 1) : held + 1);
+        // "standard" until this screen rolls a finish of its own — the collection
+        // can hold one now, but nothing is dealing them yet.
+        mine.markCollected(ep.id, rarity.tier, "standard", counted ? Math.max(held, 1) : held + 1);
       }
 
       if (rarity.tier === "champion" || rarity.tier === "podium") {

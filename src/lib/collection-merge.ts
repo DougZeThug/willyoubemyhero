@@ -27,6 +27,7 @@
 // confidently deleted card.
 
 import type { CollectedCard } from "./card-collection";
+import { bestEdition } from "./card-edition";
 import type { MyCard } from "./card-pulls";
 
 export type MergeResult = {
@@ -67,6 +68,13 @@ export function mergeCollection(
       pulledAt: Date.parse(card.firstPulledAt) || prior?.pulledAt || Date.now(),
       count: card.pullCount,
       tier: prior?.tier ?? "base",
+      // The better of the two, not the server's outright. The server row is
+      // authoritative for a claimed member — that is this file's whole thesis —
+      // but collect-on-sight, the write this module exists to undo, never wrote
+      // an edition at all, so a local finish can only have come from a real pull.
+      // Taking the better is monotone and cannot demote anyone; taking the
+      // server's alone would erase a guest-era platinum the moment they claimed.
+      edition: bestEdition(card.edition, prior?.edition),
     };
   }
 
