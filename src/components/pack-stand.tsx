@@ -15,7 +15,7 @@ import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
 import type { SecretCardView } from "@/lib/secret-cards";
 import { secretTakesTheStand, type SecretSlot } from "@/lib/pack";
 import {
-  secretOwnsStage as phaseOwnsStage,
+  secretOwnsStage,
   stageCard,
   standPhaseNext,
   standPhaseTimer,
@@ -203,17 +203,27 @@ export function PackStand({
    * both lagged the cursor by a commit and replayed the fake ending every time
    * the slot moved — putting the last roster card back on screen over the
    * secret. Neither is expressible now.
+   *
+   * Mounting straight onto the secret's slot is a reload rather than a step:
+   * somebody coming back to a card they already knew about. They get the secret
+   * outright — no pretence, and no bare stage to sit through for a handover that
+   * never happened, because there is no roster card here to clear.
    */
-  // Mounting straight onto the secret's slot is a reload, not a step: somebody
-  // coming back to a card they already knew about. They get the secret outright
-  // — no pretence, and no bare stage to sit through for a handover that never
-  // happened, because there is no roster card here to clear.
   const [phase, setPhase] = useState<StandPhase>(() => (atSecret ? "secret" : "roster"));
-  const cameFromRosterRef = useRef(false);
   const send = (ev: StandEvent) => setPhase((at) => standPhaseNext(at, ev));
 
   /**
-   * Reconciled during render, not from an effect.
+   * Whether this run actually walked to the secret's slot.
+   *
+   * Only a run that did has earned the twist. Written on every render with a
+   * roster card on the stand rather than only on the step off one, so a stand
+   * that mounts on a roster card and is stepped forward once still counts.
+   */
+  const cameFromRosterRef = useRef(false);
+  if (!atSecret) cameFromRosterRef.current = true;
+
+  /**
+   * The phase, reconciled during render rather than from an effect.
    *
    * `atSecret` is computed in render, so a phase derived from it in a passive
    * effect is a commit behind — and for that commit the old value said the
@@ -222,13 +232,6 @@ export function PackStand({
    * render is React's own answer to this, and the first commit with `atSecret`
    * true already carries the right phase.
    */
-  //
-  // Only a run that actually walked here has earned the twist, and this is what
-  // records that it did. Set on every render with a roster card on the stand
-  // rather than only on the step off one, so a stand that mounts on a roster
-  // card and is stepped forward once still counts as having walked.
-  if (!atSecret) cameFromRosterRef.current = true;
-
   const lastAtSecret = useRef(atSecret);
   if (lastAtSecret.current !== atSecret) {
     lastAtSecret.current = atSecret;
@@ -271,7 +274,7 @@ export function PackStand({
   // about the fourth card may be on screen — not its heading, not its dot, not
   // its glow. Wider than the old `pretending`, which stopped at the glitch and
   // so let the whole secret presentation light up over a card still exiting.
-  const pretending = atSecret && !phaseOwnsStage(phase);
+  const pretending = atSecret && !secretOwnsStage(phase);
 
   /**
    * The secret is what the screen is actually showing.
@@ -284,7 +287,7 @@ export function PackStand({
    * cleared there is no card at all, which is the point: nothing the secret
    * wears may come up until the roster card has genuinely unmounted.
    */
-  const onSecret = phaseOwnsStage(phase);
+  const onSecret = secretOwnsStage(phase);
   /** Which roster card is on the stand. Clamped, because the cursor may be past it. */
   const shownIndex = Math.min(cursor, pack.length - 1);
   const ep = onStage === "roster" ? pack[shownIndex] : null;
