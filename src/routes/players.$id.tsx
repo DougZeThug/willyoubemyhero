@@ -342,8 +342,9 @@ function PlayerCardPage() {
     // thing about it that cannot be guessed.
     rarityLabel: shareBadge.headline,
     rarityColor: shareBadge.color,
-    editionLabel: shareBadge.isEdition ? rarity.label : null,
-    editionColor: shareBadge.isEdition ? rarity.accent : null,
+    // No second badge: the metal is the whole caption now.
+    editionLabel: null,
+    editionColor: null,
     frameColor: shareBadge.isEdition ? editionStyle(edition).accent : null,
     cardUrl: urls?.front ?? null,
     photoUrl,
@@ -807,8 +808,10 @@ function CardRibbon({ rarity, edition }: { rarity: Rarity; edition: Edition }) {
         >
           {badge.headline}
         </div>
+        {/* On a finish this is the pull rate and nothing else — the tier is not
+            repeated under its own metal. */}
         <div className="hidden truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground sm:block">
-          {badge.isEdition ? `${badge.sub} · ${editionOddsLabel(edition) ?? ""}` : badge.sub}
+          {badge.isEdition ? (editionOddsLabel(edition) ?? "") : badge.sub}
         </div>
       </div>
     </div>
