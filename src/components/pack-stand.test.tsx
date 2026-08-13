@@ -11,6 +11,16 @@ import { PackStand } from "./pack-stand";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { PackHandoff } from "@/lib/pack-handoff";
 
+// jsdom has no canvas, and canvas-confetti walks straight into a null 2d
+// context and throws. It is lazily imported, so it only actually runs once a
+// test yields long enough for the dynamic import to settle — which the phase
+// walk below does. Nothing here is a test of the confetti.
+vi.mock("@/lib/card-confetti", () => ({
+  burst: vi.fn(async () => {}),
+  celebrate: vi.fn(async () => {}),
+  celebrateSecret: vi.fn(async () => {}),
+}));
+
 const PACK = [
   { id: "ep-1", participant_id: "p-1", running_order: 1, bib_number: 1, selected_draft_position: null, participant: { name: "Alice Ace" } }, // prettier-ignore
   { id: "ep-2", participant_id: "p-2", running_order: 2, bib_number: 2, selected_draft_position: null, participant: { name: "Bob Blitz" } }, // prettier-ignore
@@ -153,35 +163,62 @@ describe("while the deck is still landing", () => {
  * pretending the pack is over when it either already was or never will not be.
  */
 describe("the fake ending", () => {
+  /** The stand parked on the secret's slot, with the roster already turned. */
+  function standProps(over: Partial<React.ComponentProps<typeof PackStand>> = {}) {
+    return {
+      pack: PACK,
+      bundle: null,
+      cursor: PACK.length,
+      cards: undefined,
+      rarities: new Map(),
+      revealed: [0, 1, 2],
+      universalBack: null,
+      pullCounts: undefined,
+      secretSlot: "sealed",
+      secret: SECRET,
+      secretRarity: rarityStyle("base"),
+      secretRevealed: false,
+      secretDuplicate: false,
+      secretPeeking: false,
+      peeking: false,
+      busy: false,
+      onReveal: () => {},
+      onRevealSecret: () => {},
+      onAdvance: () => {},
+      ...over,
+    } as React.ComponentProps<typeof PackStand>;
+  }
+
+  /**
+   * Real timers, deliberately, for everything that watches the twist play.
+   *
+   * `clearing` ends when the card actually unmounts, which means motion has to
+   * run — and motion drives itself off requestAnimationFrame. Faking that works
+   * exactly once per file: cycling `useFakeTimers`/`useRealTimers` leaves the
+   * frame loop holding a handle from a clock that no longer exists, so every
+   * test after the first sees animations that never tick and a stand stuck
+   * mid-handover. The twist is about a second and a half; waiting it out is far
+   * cheaper than the false failures.
+   */
+  const tick = (ms: number) =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+
+  /** The whole twist, sampled as it goes. `see` runs on every frame sampled. */
+  async function watchTheTwist(see?: () => void, everyMs = 20, budgetMs = 6000) {
+    for (let waited = 0; waited < budgetMs; waited += everyMs) {
+      see?.();
+      if (screen.getByTestId("stand-step").textContent?.match(/one more card/i)) return;
+      await tick(everyMs);
+    }
+    throw new Error("the twist never reached the fourth card");
+  }
+
   /** Walk from the last roster card onto the secret's slot, the way a swipe does. */
   function stepToSecret(over: Partial<React.ComponentProps<typeof PackStand>> = {}) {
     const view = renderStand({ cursor: PACK.length - 1, secretSlot: "sealed", ...over });
-    view.rerender(
-      <PackStand
-        {...({
-          pack: PACK,
-          bundle: null,
-          cursor: PACK.length,
-          cards: undefined,
-          rarities: new Map(),
-          revealed: [0, 1, 2],
-          universalBack: null,
-          pullCounts: undefined,
-          secretSlot: "sealed",
-          secret: SECRET,
-          secretRarity: rarityStyle("base"),
-          secretRevealed: false,
-          secretDuplicate: false,
-          secretPeeking: false,
-          peeking: false,
-          busy: false,
-          onReveal: () => {},
-          onRevealSecret: () => {},
-          onAdvance: () => {},
-          ...over,
-        } as React.ComponentProps<typeof PackStand>)}
-      />,
-    );
+    view.rerender(<PackStand {...standProps(over)} />);
     return view;
   }
 
@@ -218,16 +255,75 @@ describe("the fake ending", () => {
   });
 
   it("takes it back, and lands on the fourth card", async () => {
-    vi.useFakeTimers();
-    try {
-      stepToSecret();
-      await act(async () => {
-        vi.advanceTimersByTime(2000);
-      });
-      expect(screen.getByTestId("stand-step")).toHaveTextContent(/one more card/i);
-    } finally {
-      vi.useRealTimers();
-    }
+    stepToSecret();
+    await watchTheTwist();
+    expect(screen.getByTestId("stand-step")).toHaveTextContent(/one more card/i);
+    expect(screen.getByRole("button", { name: /pickles/i })).toBeInTheDocument();
+  });
+
+  /**
+   * The bug this whole machine was written for.
+   *
+   * `secretSlot` moves under the stand while the cursor is parked on the
+   * secret's slot, and revealing the card is one of the moves: "sealed" becomes
+   * "open". The effect this replaced had `secretSlot` in its dependency list and
+   * no latch on it, so that re-ran the fake ending from the top — dropping the
+   * secret and putting the last roster card back on screen over it for another
+   * second and a half.
+   *
+   * Driven by hand rather than through "Reveal all" on purpose: the automatic
+   * run sets `busy`, which skipped the pretence outright and is exactly why the
+   * e2e suite never caught this.
+   */
+  it("does not replay the fake ending when the secret's slot changes under it", async () => {
+    const view = stepToSecret();
+    await watchTheTwist();
+
+    // The card is turned over. `secretSlot` moves "sealed" to "open" for it, and
+    // nothing about that is a fresh arrival.
+    view.rerender(<PackStand {...standProps({ secretSlot: "open", secretRevealed: true })} />);
+    expect(screen.getByTestId("stand-step")).toHaveTextContent(/one more card/i);
+    expect(screen.queryByRole("button", { name: /carol crush/i })).toBeNull();
+
+    // And it stays that way rather than sliding back into the pretence a beat
+    // later, which is exactly what the old effect did.
+    for (let i = 0; i < 10; i++) await tick(120);
+    expect(screen.getByTestId("stand-step")).toHaveTextContent(/one more card/i);
+    expect(screen.queryByRole("button", { name: /carol crush/i })).toBeNull();
+  });
+
+  /**
+   * The overlap itself, sampled rather than argued about.
+   *
+   * `stand-phase.test.ts` proves the machine cannot express the state; this
+   * proves the component is actually wired to it. Sampled every 20ms, which is
+   * finer than any frame the handover has, so an exit that outlived its own
+   * phase — what the old arrangement had — could not slip between two samples.
+   */
+  it("never has the last roster card on screen alongside the fourth", async () => {
+    stepToSecret();
+    await watchTheTwist(() => {
+      const carol = screen.queryByRole("button", { name: /carol crush/i });
+      const pickles = screen.queryByRole("button", { name: /pickles/i });
+      expect(Boolean(carol && pickles)).toBe(false);
+      // "One More Card" is the payoff line, and it belongs to a card. It must
+      // never be on screen over the one before it.
+      if (screen.getByTestId("stand-step").textContent?.match(/one more card/i)) {
+        expect(carol).toBeNull();
+      }
+    });
+  });
+
+  /** The deliberate beat: for a moment there is no card on the stand at all. */
+  it("clears the stage completely before the fourth card arrives", async () => {
+    stepToSecret();
+    let bareFrames = 0;
+    await watchTheTwist(() => {
+      if (screen.queryAllByRole("button", { name: /carol crush|pickles/i }).length === 0) {
+        bareFrames++;
+      }
+    });
+    expect(bareFrames).toBeGreaterThan(0);
   });
 
   /**

@@ -94,6 +94,17 @@ const AUTO_STEP_MS = 420;
  * transform already face-up and there is no flip to see.
  */
 const AUTO_MOUNT_MS = 300;
+/**
+ * The same beat, for the fourth card, which has further to come.
+ *
+ * Stepping onto the secret's slot is not a swap: the stand clears the last
+ * roster card off the stage and holds a bare beat before the secret arrives —
+ * see `STAND_BEAT` in src/lib/stand-phase.ts. The automatic run skips the fake
+ * ending but not the handover, so it has to wait for the card it is about to
+ * turn to exist. Sized against that handover with room to spare; being early
+ * here starts the secret's hold over an empty mark.
+ */
+const SECRET_MOUNT_MS = 700;
 
 /** Local date key so the pack rolls over at midnight in the user's own timezone. */
 function todayKey(): string {
@@ -763,7 +774,7 @@ function PackPage() {
       // three cards' worth of time to land by now. Reading the closure's stale
       // `secret` left the run stranded on a sealed card the user then had to tap.
       if (!(await settledSecret())) return;
-      await new Promise((r) => setTimeout(r, AUTO_MOUNT_MS));
+      await new Promise((r) => setTimeout(r, SECRET_MOUNT_MS));
       await revealSecret();
       await new Promise((r) => setTimeout(r, AUTO_STEP_MS));
       setCursor(pack.length + 1);
