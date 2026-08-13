@@ -412,30 +412,30 @@ describe("the finish on the stand", () => {
     // The whole reason a pack is worth opening. A badge on a face-down card
     // spends the reveal before it happens.
     renderStand({ editions: { "ep-1": "platinum" } });
-    expect(chips(/Platinum Parallel/i)).toHaveLength(0);
+    expect(chips(/^Platinum$/i)).toHaveLength(0);
   });
 
   it("names the finish once the card is revealed", () => {
     renderStand({ editions: { "ep-1": "platinum" }, revealed: [0] });
-    expect(chips(/Platinum Parallel/i)).toHaveLength(1);
+    expect(chips(/^Platinum$/i)).toHaveLength(1);
   });
 
   it("says nothing at all for a standard finish", () => {
     renderStand({ editions: { "ep-1": "standard" }, revealed: [0] });
-    expect(chips(/Parallel/i)).toHaveLength(0);
+    expect(chips(/^(Platinum|Gold|Silver|Bronze)$/i)).toHaveLength(0);
   });
 
   it("reads the finish for the card actually on the stand", () => {
     // Keyed by card id, not by cursor position — the pity swap means slot order
     // and card identity are not the same thing.
     renderStand({ cursor: 1, revealed: [1], editions: { "ep-1": "platinum", "ep-2": "bronze" } });
-    expect(chips(/Bronze Parallel/i)).toHaveLength(1);
-    expect(chips(/Platinum Parallel/i)).toHaveLength(0);
+    expect(chips(/^Bronze$/i)).toHaveLength(1);
+    expect(chips(/^Platinum$/i)).toHaveLength(0);
   });
 
   it("renders standard cards for a caller that passes no finishes at all", () => {
     renderStand({ revealed: [0] });
-    expect(chips(/Parallel/i)).toHaveLength(0);
+    expect(chips(/^(Platinum|Gold|Silver|Bronze)$/i)).toHaveLength(0);
     expect(screen.getByRole("button", { name: /alice ace/i })).toBeInTheDocument();
   });
 
@@ -449,7 +449,7 @@ describe("the finish on the stand", () => {
       secretRevealed: true,
       editions: { "sec-1": "platinum", "ep-1": "platinum" },
     });
-    expect(chips(/Parallel/i)).toHaveLength(0);
+    expect(chips(/^(Platinum|Gold|Silver|Bronze)$/i)).toHaveLength(0);
     expect(container.querySelector(".card-edition")).toBeNull();
   });
 });
