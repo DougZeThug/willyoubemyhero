@@ -327,7 +327,6 @@ export function PackWrapper({
   const packRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: number; x: number } | null>(null);
   const tickRef = useRef(0);
-  const [dragging, setDragging] = useState(false);
   const reduced = usePrefersReducedMotion();
 
   /**
@@ -439,7 +438,6 @@ export function PackWrapper({
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     dragRef.current = null;
-    setDragging(false);
     // Short of the threshold the foil springs shut. Losing the progress is the
     // point: a rip you did not finish is a pack you did not open. Animated rather
     // than snapped, because the wrapper is elastic now and elastic things recoil.
@@ -490,7 +488,6 @@ export function PackWrapper({
               e.currentTarget.setPointerCapture(e.pointerId);
               dragRef.current = { id: e.pointerId, x: e.clientX };
               tickRef.current = 0;
-              setDragging(true);
             }
           : undefined
       }
@@ -517,7 +514,6 @@ export function PackWrapper({
 
               if (p >= TEAR.threshold) {
                 dragRef.current = null;
-                setDragging(false);
                 // Where the ceremony has to carry the tear on from.
                 committedAt.current = p;
                 // The capture used to be released by the pointerup landing on

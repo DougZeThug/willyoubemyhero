@@ -241,6 +241,84 @@ test.describe("the daily secret", () => {
     // rather than its heading, which is faint presentation copy by design.
     await expect(page.getByTestId("stand-step")).toBeVisible();
   });
+
+  /**
+   * The handover from the third card to the fourth, driven by a thumb.
+   *
+   * By hand rather than through "Reveal all", and that is the whole point of the
+   * test. The automatic run sets `busy`, which skips the fake ending outright —
+   * so the sequence this covers is the one no spec here ever exercised, and the
+   * one where the last roster card used to end up on screen over the secret.
+   */
+  test("clears the third card off the stand before the fourth arrives", async ({
+    page,
+    server,
+  }) => {
+    await asMember(page);
+    withSecret(server);
+    const statusAnswered = page.waitForResponse(
+      (r) => r.url().includes("/_serverFn/") && serverFnName(r.url()).includes("getSecretStatus"),
+    );
+    await page.goto("/players/pack");
+    await statusAnswered;
+    await page.waitForTimeout(100);
+    await tearPack(page);
+
+    const card = page.locator('[role="button"][aria-pressed]').first();
+    const step = page.getByTestId("stand-step");
+    await expect(step).toHaveText("1 / 3");
+
+    /** Throw the card away leftward, the way the stand's own gesture reads. */
+    async function swipeNext() {
+      const box = (await card.boundingBox())!;
+      const y = box.y + box.height / 2;
+      await page.mouse.move(box.x + box.width * 0.85, y);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width * 0.15, y, { steps: 4 });
+      await page.mouse.up();
+    }
+
+    // Walk the roster by hand, turning each card and throwing it away.
+    for (let n = 1; n <= 3; n++) {
+      await expect(step).toHaveText(`${n} / 3`);
+      await card.click();
+      await expect(page.getByText(/swipe/i).first()).toBeVisible({ timeout: 15_000 });
+      const name = await card.getAttribute("aria-labelledby");
+      const third = n === 3 ? await page.locator(`#${name}`).innerText() : null;
+      await swipeNext();
+      if (!third) continue;
+
+      // The handover, sampled. Two things must hold on every frame of it: the
+      // payoff line is never on screen over the card before it, and there is a
+      // beat where the stand is genuinely empty rather than one card swapping
+      // for another.
+      let sawBareStage = false;
+      for (let i = 0; i < 100; i++) {
+        const heading = (await step.innerText()).trim();
+        const onStage = await page.locator('[role="button"][aria-pressed]').count();
+        const thirdStillUp = await page.getByText(third, { exact: true }).count();
+        if (/one more card/i.test(heading)) {
+          expect(thirdStillUp, "the payoff line arrived over the third card").toBe(0);
+          break;
+        }
+        if (onStage === 0) sawBareStage = true;
+        await page.waitForTimeout(40);
+      }
+      expect(sawBareStage, "the stand never emptied between the third card and the fourth").toBe(
+        true,
+      );
+    }
+
+    await expect(step).toHaveText(/one more card/i);
+
+    // And revealing it does not put the roster card back. `secretSlot` moves
+    // "sealed" to "open" here, which is exactly what used to re-run the fake
+    // ending from the top.
+    await card.click();
+    await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(2_000);
+    await expect(step).toHaveText(/one more card/i);
+  });
 });
 
 test.describe("the vault's secret shelf", () => {
