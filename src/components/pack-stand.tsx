@@ -49,15 +49,17 @@ export const SECRET_FLIP_MS = 1100;
 const SLAM_MS = 460;
 
 /**
- * How long the last roster card takes to leave, on its way to the secret.
+ * How long a card takes to leave the stand.
  *
- * Authored rather than emergent, because the sequence waits on it: `clearing`
- * ends when this exit reports in, so its length has to be a number rather than
- * whatever a spring happens to settle at. Long enough to read as the card being
- * taken off the stand, short enough that the bare beat after it is still the
+ * Authored rather than emergent, because two different things wait on it.
+ * `AnimatePresence mode="wait"` will not mount the next card until this exit
+ * finishes, and the secret's handover in `stand-phase.ts` ends on the same
+ * signal — so its length has to be a number somebody chose rather than whatever
+ * a spring happens to settle at. Long enough to read as the card being taken off
+ * the stand, short enough that the bare beat before the secret is still the
  * pause somebody notices.
  */
-const HANDOVER_EXIT_MS = 260;
+const EXIT_MS = 260;
 
 type StandParticipant = {
   id: string;
@@ -787,26 +789,27 @@ export function PackStand({
                       : { opacity: 0, x: reduced ? 0 : 64, scale: 0.94 }
                 }
                 animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: reduced ? 0 : -64, scale: 0.94 }}
-                // A tween on the handover, a spring everywhere else — and the
-                // difference is load-bearing rather than taste.
+                // A card arrives on a spring and leaves on a tween, and the
+                // asymmetry is load-bearing rather than taste.
                 //
-                // The phase machine waits on this exit finishing, so how long it
-                // takes has to be a number somebody chose. A spring's settle is
-                // emergent: ~400ms for these constants, but not a figure you can
-                // write down, and anything watching for it is guessing. The step
-                // between two roster cards is watching for nothing, so it keeps the
-                // spring it has always had.
+                // `mode="wait"` will not mount the next card until this exit
+                // reports finished, so the exit is the one animation on the stand
+                // whose *completion* something depends on. A spring's settle is
+                // emergent — around 400ms for these constants, but not a figure
+                // anybody wrote down, and one that can be left hanging: a stuck
+                // spring here strands the sequence with the previous card on
+                // screen under the next card's step number, and no way forward.
+                // That was reproducible about two runs in three.
                 //
-                // The exiting element carries the props from its last render, and
-                // by then the cursor is already on the secret's slot — which is
-                // exactly what `atSecret` is, and why it can select the transition
-                // the exit will use.
-                transition={
-                  atSecret
-                    ? { duration: reduced ? 0 : HANDOVER_EXIT_MS / 1000, ease: [0.4, 0, 1, 1] }
-                    : { type: "spring", stiffness: 240, damping: 26 }
-                }
+                // So the exit is bounded. The entrance keeps its spring, because
+                // nothing waits on that.
+                exit={{
+                  opacity: 0,
+                  x: reduced ? 0 : -64,
+                  scale: 0.94,
+                  transition: { duration: reduced ? 0 : EXIT_MS / 1000, ease: [0.4, 0, 1, 1] },
+                }}
+                transition={{ type: "spring", stiffness: 240, damping: 26 }}
                 className="absolute inset-0"
               >
                 {onSecret && secretSlot === "pending" ? (
