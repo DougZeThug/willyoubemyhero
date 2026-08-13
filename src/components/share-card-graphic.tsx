@@ -131,7 +131,9 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(fun
           // The finish's metal, printed inside the tier's frame exactly as the
           // card wears it — an inset shadow rather than a second element,
           // because html-to-image is happier with one box than with two.
-          boxShadow: data.editionColor ? `inset 0 0 0 8px ${data.editionColor}` : undefined,
+          boxShadow: data.frameColor
+            ? `inset 0 0 0 12px ${data.frameColor}, 0 0 60px -20px ${data.frameColor}`
+            : undefined,
           background: "rgba(15,23,42,0.55)",
           overflow: "hidden",
           position: "relative",
