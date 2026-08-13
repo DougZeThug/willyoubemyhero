@@ -5,7 +5,7 @@ import { SealedBack } from "@/components/pack-card-back";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { editionLabel, editionStyle, type Edition } from "@/lib/card-edition";
+import { cardBadge, type Edition } from "@/lib/card-edition";
 import { swipeDirection } from "@/lib/zoom";
 import { StandDeck, StandEntrance } from "@/components/stand-entrance";
 import { RevealAmbience } from "@/components/reveal-ambience";
