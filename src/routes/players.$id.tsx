@@ -24,6 +24,7 @@ import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/u
 import { HoloCard } from "@/components/holo-card";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
 import {
+  cardBadge,
   editionCelebrates,
   editionLabel,
   editionOddsLabel,
