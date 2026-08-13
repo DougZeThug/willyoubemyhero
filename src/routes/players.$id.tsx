@@ -446,13 +446,11 @@ function PlayerCardPage() {
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Vault
           </Link>
-          <TierRibbon rarity={rarity} />
-          {/* A separate pill, never folded into the one beside it: "Gold" is
-              podium's tier label, so a gold-finish podium card would read
-              "Gold · Gold" — and the two are different kinds of fact anyway.
-              Absent on a locked card, where the finish is unknown and would be
-              the biggest spoiler on the page. */}
-          {!locked && <EditionRibbon edition={edition} />}
+          {/* One pill. A special finish takes the headline in its own metal and
+              pushes the tier to the line beneath — see cardBadge. A locked card
+              never shows a finish: it is unknown, and would be the biggest
+              spoiler on the page. */}
+          <CardRibbon rarity={rarity} edition={locked ? "standard" : edition} />
         </div>
 
         {/*
