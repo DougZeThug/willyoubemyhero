@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { RUNS_PUBLIC_COLUMNS } from "./runs-columns";
 
 function publicClient() {
   const url = process.env.SUPABASE_URL!;
@@ -79,7 +80,10 @@ export const getEventBundle = createServerFn({ method: "GET" })
         "runs",
         sb
           .from("runs")
-          .select("*")
+          // Named columns, not "*": anon's SELECT on runs is column-scoped, so a
+          // star expands to notes/client_key too and PostgREST refuses the whole
+          // read. These are exactly the columns granted to anon.
+          .select(RUNS_PUBLIC_COLUMNS)
           .eq("event_id", data.eventId)
           .order("created_at", { ascending: true }),
       ),
@@ -122,7 +126,7 @@ export const getAllTimeRecords = createServerFn({ method: "GET" }).handler(async
   const { data: runs } = await sb
     .from("runs")
     .select(
-      "*, participant:participants(name, nickname, fantasy_team_name), event:events!inner(name, year)",
+      `${RUNS_PUBLIC_COLUMNS}, participant:participants(name, nickname, fantasy_team_name), event:events!inner(name, year)`,
     )
     .eq("is_official", true)
     .order("official_time_ms", { ascending: true })
