@@ -374,6 +374,10 @@ function PlayersPage() {
                     backUrl={null}
                     name={name}
                     rarity={rarity}
+                    // The finish belongs to your copy, so it comes from the
+                    // collection, not the roster row. Same expression the label
+                    // above uses — the two must never disagree.
+                    edition={toEdition(collected[p.id]?.edition)}
                     intensity="subtle"
                     className="transition-transform group-hover:scale-[1.02]"
                   />
