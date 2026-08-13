@@ -779,48 +779,24 @@
   transition: opacity 260ms ease-out;
 }
 
-/* Each rung is thicker and better lit than the one below it, so the ladder is
-   legible from across a garden without reading a word of the label. Bronze is
-   the floor: the ramp plus a faint bloom, nothing more, because at 18% it is
-   common enough that a flourish would become the ambient look of the app. */
-.card-edition-bronze {
-  background-size: 100% 100%;
-  box-shadow: 0 0 18px -10px var(--edn-b, oklch(0.6 0.09 55));
-}
-
-/* Silver earns the first hairline and a step in width. */
-.card-edition-silver {
-  padding: 5px;
-  background-size: 100% 100%;
-  box-shadow:
-    inset 0 0 0 1px var(--edn-spec, oklch(0.98 0.004 250)),
-    0 0 24px -10px var(--edn-a, oklch(0.88 0.012 250));
-}
-
-/* An inner hairline, so the frame reads as two pieces of metal rather than one
-   band. Cheap, static, and the first thing that separates gold from silver at
-   arm's length. */
-.card-edition-gold {
+/* One treatment for all four metals, modelled on the gold card: the same clear
+   ring width, the same single bright hairline against the art, the same bloom.
+   The ladder used to be spelled out in thickness, which made bronze look like a
+   thin mistake next to gold; the colour is the tell and the word underneath says
+   the rest. Platinum keeps the sheen below as its one extra. */
+.card-edition-bronze,
+.card-edition-silver,
+.card-edition-gold,
+.card-edition-platinum {
   padding: 6px;
+  background-size: 100% 100%;
   box-shadow:
     inset 0 0 0 1.5px var(--edn-spec, oklch(0.99 0.05 92)),
     0 0 34px -12px var(--edn-a, oklch(0.9 0.15 92));
 }
 
-/* Wider, and that is the differentiator rather than the hue.
-   Rendered side by side, platinum and silver read almost identically at 3px:
-   the ring samples only the perimeter, where the near-white specular band
-   dominates and swamps the difference between two pale metals. Thickness
-   survives that, survives a vault thumbnail, and survives colour blindness —
-   none of which is true of pushing the palette further apart. */
 .card-edition-platinum {
-  padding: 8px;
-  /* A double hairline — one against the art, one against the bezel — so the
-     top rung is unmistakably a different object rather than a wider silver. */
-  box-shadow:
-    inset 0 0 0 2px var(--edn-spec, oklch(0.99 0.01 210)),
-    inset 0 0 0 4px oklch(0 0 0 / 45%),
-    0 0 48px -12px var(--edn-a, oklch(0.95 0.02 210));
+  /* Only the sheen needs the oversized gradient to travel across. */
   background-size: 260% 260%;
 }
 
