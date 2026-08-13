@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { formatTime } from "@/lib/format";
 import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
-import { editionLabel, editionOddsLabel, editionStyle, type Edition } from "@/lib/card-edition";
+import { cardBadge, editionOddsLabel, type Edition } from "@/lib/card-edition";
 import { cardStats, type StatsBundle } from "@/lib/card-stats";
 
 /**
@@ -43,43 +43,53 @@ export function CardBackPanel({
 
   const quote = ep.participant?.trash_talk_quote;
   const worst = Math.max(1, ...ladder.map((r) => r.ms ?? 0));
+  const badge = cardBadge(
+    { label: rarity.label, reason: TIER_REASON[rarity.tier] ?? "", accent: rarity.accent },
+    edition,
+  );
 
   return (
     <div className="flex h-full w-full flex-col gap-2 bg-[oklch(0.13_0.02_240)] p-3 text-left">
+      {/* The headline row. On a special finish that is the metal, printed with
+          the odds that produced it: TIER_REASON says what somebody did, and this
+          has to say the opposite — that nobody did anything and the card came up
+          this way. Quoting the rate is what makes it read as luck rather than as
+          a second grade.
+
+          accent, not border: `base` and `dnf` set border to a near-transparent
+          white so their bezel vanishes, which rendered this label invisible. */}
       <div
-        className="flex items-center justify-between rounded border px-2 py-1"
-        style={{ borderColor: rarity.border }}
+        className="flex items-center justify-between rounded px-2 py-1"
+        style={{
+          border: badge.isEdition ? `2px solid ${badge.color}` : `1px solid ${rarity.border}`,
+          boxShadow: badge.isEdition ? `0 0 22px -10px ${badge.color}` : undefined,
+        }}
       >
         <span
           className="font-display text-[10px] font-black uppercase tracking-[0.25em]"
-          // accent, not border: `base` and `dnf` set border to a near-transparent
-          // white so their bezel vanishes, which rendered this label invisible.
-          style={{ color: rarity.accent }}
+          style={{ color: badge.color }}
         >
-          {rarity.label}
+          {badge.headline}
         </span>
         <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-          {TIER_REASON[rarity.tier] ?? ""}
+          {badge.isEdition ? (editionOddsLabel(edition) ?? "") : badge.sub}
         </span>
       </div>
 
-      {/* The finish gets its own row, printed with the odds that produced it.
-          TIER_REASON above says what somebody did; this has to say the opposite
-          — that nobody did anything and the card came up this way. Quoting the
-          rate is what makes it read as luck rather than as a second grade. */}
-      {editionLabel(edition) && (
+      {/* The demoted tier, only when the finish took the headline above. */}
+      {badge.isEdition && (
         <div
           className="flex items-center justify-between rounded border px-2 py-1"
-          style={{ borderColor: editionStyle(edition).accent }}
+          style={{ borderColor: rarity.border }}
         >
           <span
             className="font-display text-[10px] font-black uppercase tracking-[0.25em]"
-            style={{ color: editionStyle(edition).accent }}
+            style={{ color: rarity.accent }}
           >
-            {editionLabel(edition)}
+            {rarity.label}
           </span>
           <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            {editionOddsLabel(edition) ?? ""}
+            {TIER_REASON[rarity.tier] ?? ""}
           </span>
         </div>
       )}
