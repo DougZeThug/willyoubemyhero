@@ -3,6 +3,19 @@
 Paste the whole of this file to Lovable. It is one prompt: the rules first, then
 the SQL to apply, then four queries that prove it landed correctly.
 
+> **This file describes the schema as of migration `20260802120000`, and is
+> superseded in one place.** `record_card_pulls` below is the two-argument version.
+> `20260813120000_card_pull_editions.sql` drops it and recreates it as
+> `(uuid, uuid[], text[])`, because an edition now rides along with each card and
+> `CREATE OR REPLACE` cannot change an argument list.
+>
+> So do not re-paste section 2 against a project that already has the editions
+> migration: the `CREATE OR REPLACE` here would put the two-argument function back
+> as an _overload_ beside the three-argument one, each with its own grants, and a
+> two-argument call would then be ambiguous. `tests/db/migrations.test.ts` asserts
+> exactly one `record_card_pulls` exists, and would catch it — but only after the
+> fact. This file is still correct for a project that has none of these tables yet.
+
 ---
 
 ## 1. Read this first — what must NOT change
