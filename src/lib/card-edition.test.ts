@@ -183,12 +183,12 @@ describe("editionStyle", () => {
     expect(editionStyle("standard").lift).toBe(0);
   });
 
-  it("never labels an edition bare 'Gold', which is podium's tier label", () => {
-    // A gold-finish podium card would otherwise read "Gold · Gold".
-    for (const edition of EDITION_ORDER) {
-      expect(editionStyle(edition).label).not.toBe("Gold");
-    }
-    expect(editionStyle("gold").label).toBe("Gold Parallel");
+  it("labels a finish with the bare metal", () => {
+    // "Parallel" is gone everywhere: the finish is the headline now, in its own
+    // metal colour, and the tier drops to the line beneath it — so the two can
+    // never collide on one line and the qualifier bought nothing.
+    expect(editionStyle("gold").label).toBe("Gold");
+    expect(editionStyle("platinum").label).toBe("Platinum");
   });
 });
 
@@ -275,8 +275,8 @@ describe("labels", () => {
   });
 
   it("names every finish that earns a badge", () => {
-    expect(editionLabel("bronze")).toBe("Bronze Parallel");
-    expect(editionLabel("platinum")).toBe("Platinum Parallel");
+    expect(editionLabel("bronze")).toBe("Bronze");
+    expect(editionLabel("platinum")).toBe("Platinum");
   });
 
   it("quotes the odds the roll actually used", () => {
