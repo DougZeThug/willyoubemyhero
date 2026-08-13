@@ -328,16 +328,18 @@ function PlayerCardPage() {
     name,
     fantasyTeam: ep.participant?.fantasy_team_name ?? null,
     quote: ep.participant?.trash_talk_quote ?? null,
-    rarityLabel: rarity.label,
-    // accent rather than border, so the exported PNG carries the tier's colour.
-    // base and dnf set border to a near-transparent white, which rasterised as
-    // an invisible rule on the share card.
-    rarityColor: rarity.accent,
-    // Only on a card you hold: sharing a locked slot's finish would leak the one
-    // thing about it that cannot be guessed. Null on standard, so seven shares
-    // in ten look exactly as they did.
-    editionLabel: locked ? null : editionLabel(edition),
-    editionColor: locked || edition === "standard" ? null : editionStyle(edition).accent,
+    // Same rule as the ribbon: a special finish is the headline, the tier drops
+    // to the second badge. accent rather than border, so the exported PNG carries
+    // a visible colour — base and dnf set border to a near-transparent white,
+    // which rasterised as an invisible rule.
+    //
+    // Never on a locked card: sharing a locked slot's finish would leak the one
+    // thing about it that cannot be guessed.
+    rarityLabel: shareBadge.headline,
+    rarityColor: shareBadge.color,
+    editionLabel: shareBadge.isEdition ? rarity.label : null,
+    editionColor: shareBadge.isEdition ? rarity.accent : null,
+    frameColor: shareBadge.isEdition ? editionStyle(edition).accent : null,
     cardUrl: urls?.front ?? null,
     photoUrl,
     runningOrder: ep.running_order,
