@@ -19,9 +19,15 @@ export type ShareCardData = {
   quote?: string | null;
   rarityLabel: string;
   rarityColor: string;
-  /** Null on a standard finish, which prints no second badge and no inner frame. */
+  /**
+   * The demoted line. On a special finish the headline above is the metal, so
+   * this carries the tier word — null on a standard finish, where the tier is
+   * already the headline and a second badge would just repeat it.
+   */
   editionLabel?: string | null;
   editionColor?: string | null;
+  /** The metal of the finish, for the inner frame. Null on a standard finish. */
+  frameColor?: string | null;
   cardUrl?: ImageUrlSet | string | null;
   photoUrl?: ImageUrlSet | string | null;
   runningOrder: number;
