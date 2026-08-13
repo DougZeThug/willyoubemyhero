@@ -281,6 +281,35 @@ export function editionOddsLabel(edition: string | null | undefined): string | n
 }
 
 /**
+ * What the badge on a card says, and in which colour.
+ *
+ * One helper rather than the same conditional in seven render sites, because
+ * the rule is a judgement call and the sites would drift: a special finish is
+ * the rarest fact about *your copy*, so it takes the headline in its own metal
+ * and the tier — which is true of every copy of that card — drops to the muted
+ * line beneath. A standard finish is 70% of pulls and shows nothing extra, so
+ * the tier keeps the headline exactly as it always did.
+ */
+export function cardBadge(
+  tier: { label: string; reason: string; accent: string },
+  edition: string | null | undefined,
+): { headline: string; color: string; sub: string; isEdition: boolean } {
+  const finish = editionLabel(edition);
+  if (!finish) {
+    return { headline: tier.label, color: tier.accent, sub: tier.reason, isEdition: false };
+  }
+  return {
+    headline: finish,
+    color: editionStyle(toEdition(edition)).accent,
+    // Separator rather than two lines: the compact sites (vault tile, pack
+    // stand) only have room for one, and a single string keeps every site
+    // printing the same words in the same order.
+    sub: tier.reason ? `${tier.label} · ${tier.reason}` : tier.label,
+    isEdition: true,
+  };
+}
+
+/**
  * Whether the finish alone earns the confetti cannon, whatever the tier did.
  *
  * The point of the ladder: a base card can stop the garden if the roll was good
