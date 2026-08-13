@@ -21,6 +21,26 @@ function publicClient() {
   });
 }
 
+/**
+ * The columns the public is allowed to read, named rather than starred.
+ *
+ * These three tables are granted to `anon` a column at a time — private notes,
+ * internal actor labels and the client idempotency keys are not among them — and
+ * a column-level grant is incompatible with `select("*")`, because `*` asks for
+ * every column and Postgres refuses the lot if one of them is not granted.
+ *
+ * That incompatibility is the whole reason the narrow grants were quietly
+ * replaced by table-wide ones in 20260811224354, handing anon back the private
+ * columns to make the bundle load again. Naming the columns here is what lets
+ * the grants go back to being narrow, so the two stay in step: **if you add a
+ * column to one of these lists, add it to the matching GRANT as well.**
+ */
+const PUBLIC_RUN_COLUMNS =
+  "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, is_official, created_at, updated_at";
+const PUBLIC_PENALTY_COLUMNS = "id, run_id, station_id, penalty_ms, reason, created_at";
+const PUBLIC_DRAFT_COLUMNS =
+  "id, event_id, participant_id, selection_order, draft_position, selected_at";
+
 export const getActiveEvent = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
   const { data: event, error } = await sb
@@ -79,7 +99,7 @@ export const getEventBundle = createServerFn({ method: "GET" })
         "runs",
         sb
           .from("runs")
-          .select("*")
+          .select(PUBLIC_RUN_COLUMNS)
           .eq("event_id", data.eventId)
           .order("created_at", { ascending: true }),
       ),
@@ -89,13 +109,16 @@ export const getEventBundle = createServerFn({ method: "GET" })
       ),
       safe(
         "penalties",
-        sb.from("penalties").select("*, run:runs!inner(event_id)").eq("run.event_id", data.eventId),
+        sb
+          .from("penalties")
+          .select(`${PUBLIC_PENALTY_COLUMNS}, run:runs!inner(event_id)`)
+          .eq("run.event_id", data.eventId),
       ),
       safe(
         "draft_selections",
         sb
           .from("draft_selections")
-          .select("*")
+          .select(PUBLIC_DRAFT_COLUMNS)
           .eq("event_id", data.eventId)
           .order("selection_order", { ascending: true }),
       ),
@@ -122,7 +145,7 @@ export const getAllTimeRecords = createServerFn({ method: "GET" }).handler(async
   const { data: runs } = await sb
     .from("runs")
     .select(
-      "*, participant:participants(name, nickname, fantasy_team_name), event:events!inner(name, year)",
+      `${PUBLIC_RUN_COLUMNS}, participant:participants(name, nickname, fantasy_team_name), event:events!inner(name, year)`,
     )
     .eq("is_official", true)
     .order("official_time_ms", { ascending: true })
