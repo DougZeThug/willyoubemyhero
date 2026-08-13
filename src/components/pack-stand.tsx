@@ -971,11 +971,6 @@ export function PackStand({
                           >
                             {badge.headline}
                           </div>
-                          {badge.isEdition && (
-                            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                              {badge.sub}
-                            </div>
-                          )}
                         </>
                       );
                     })()}

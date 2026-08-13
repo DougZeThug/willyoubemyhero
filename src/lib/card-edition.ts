@@ -286,9 +286,10 @@ export function editionOddsLabel(edition: string | null | undefined): string | n
  * One helper rather than the same conditional in seven render sites, because
  * the rule is a judgement call and the sites would drift: a special finish is
  * the rarest fact about *your copy*, so it takes the headline in its own metal
- * and the tier — which is true of every copy of that card — drops to the muted
- * line beneath. A standard finish is 70% of pulls and shows nothing extra, so
- * the tier keeps the headline exactly as it always did.
+ * and it is the ONLY word printed — the tier is true of every copy of that card
+ * and repeating it under the metal just made a two-line caption say one thing
+ * twice. A standard finish is 70% of pulls and shows nothing extra, so the tier
+ * keeps the headline exactly as it always did.
  */
 export function cardBadge(
   tier: { label: string; reason: string; accent: string },
@@ -301,10 +302,10 @@ export function cardBadge(
   return {
     headline: finish,
     color: editionStyle(toEdition(edition)).accent,
-    // Separator rather than two lines: the compact sites (vault tile, pack
-    // stand) only have room for one, and a single string keeps every site
-    // printing the same words in the same order.
-    sub: tier.reason ? `${tier.label} · ${tier.reason}` : tier.label,
+    // Empty on purpose, so every render site drops the demoted tier at once.
+    // The card back substitutes the pull odds here, which is the one fact about
+    // a finish that is worth a second line.
+    sub: "",
     isEdition: true,
   };
 }
