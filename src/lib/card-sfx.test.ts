@@ -6,8 +6,7 @@
 // the three situations where making a noise would be a bug, and that the two
 // preferences mean what they say.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cue, playEditionShine, playFlip, setCardSfxMuted } from "./card-sfx";
-import { cue, playFlip, setCardSfxMuted, SFX_CUES } from "./card-sfx";
+import { cue, playEditionShine, playFlip, setCardSfxMuted, SFX_CUES } from "./card-sfx";
 import { setMatchMedia } from "@/test/setup";
 
 // Read off the registry rather than hand-listed. The hand-listed version stopped

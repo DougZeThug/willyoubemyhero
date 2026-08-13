@@ -543,11 +543,11 @@ export function PackStand({
   }, [canAdvance, onAdvance]);
 
   const rarity = onSecret ? secretRarity : (rarities.get(ep?.id ?? "") ?? rarityStyle("base"));
-  rarityRef.current = rarity;
   // Standard on the secret's step, always: a secret wears the prism ring and
   // never an edition frame.
   const edition = onSecret ? "standard" : (editions[ep?.id ?? ""] ?? "standard");
   editionRef.current = edition;
+  rarityRef.current = rarity;
   const name = onSecret ? (secret?.name ?? "Secret") : (ep?.participant?.name ?? "—");
   const showStats = isRevealed && settled;
 
@@ -783,87 +783,6 @@ export function PackStand({
             <StandDeck count={behind} art={universalBack} width={slot?.width ?? 0} />
           )}
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={shownKey}
-              // While the deck is landing the entrance owns every pixel of motion
-              // and the card underneath simply waits. `false` rather than a
-              // zeroed initial, so nothing here animates at all and there is no
-              // second transition to fight the flight.
-              initial={
-                landing
-                  ? false
-                  : gathered
-                    ? { opacity: 0, x: 0, scale: reduced ? 1 : 0.94 }
-                    : { opacity: 0, x: reduced ? 0 : 64, scale: 0.94 }
-              }
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: reduced ? 0 : -64, scale: 0.94 }}
-              transition={{ type: "spring", stiffness: 240, damping: 26 }}
-              className="absolute inset-0"
-            >
-              {onSecret && secretSlot === "pending" ? (
-                <div className="wax-foil flex h-full w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
-              ) : onSecret && !secret ? null : (
-                <motion.div
-                  // The layout id is what carries this card into its column when the
-                  // sequence ends. On a wrapper, never on HoloCard itself, whose
-                  // subtree is preserve-3d and projects badly.
-                  layoutId={`pack-card-${onSecret ? "secret" : ep!.id}`}
-                  animate={secretPeeking && !reduced ? { scale: 1.06 } : { scale: 1 }}
-                  transition={{ duration: 0.9 }}
-                  className={cn(
-                    "relative rounded-xl",
-                    // Mounted from the first frame so the front art decodes while
-                    // the deck is still in the air, and held behind `invisible`
-                    // rather than unmounted so the flip is warm the instant it
-                    // lands. `visibility: hidden` is not only paint: the card is
-                    // out of the accessibility tree, out of the tab order and not
-                    // hit-tested, so neither a thumb nor Playwright can reach a
-                    // card that is still travelling.
-                    landing && "invisible",
-                    // Only while sealed: a breathing ring on a card you are already
-                    // looking at is a notification badge, not anticipation.
-                    onSecret && !isRevealed && !pretending && "secret-seal",
-                    onSecret && isRevealed && secretDuplicate && "secret-dupe-shimmer",
-                    peeking && !onSecret && !reduced && "animate-pulse",
-                  )}
-                  style={standStyle({ peeking, onSecret, isRevealed, rarity, secretRarity })}
-                >
-                  <HoloCard
-                    // Mounted while the card is still face-down, so the art is
-                    // decoded before the turn rather than during it. The front face
-                    // is backface-hidden and explicitly `invisible` until the flip
-                    // passes edge-on, so nothing shows through early.
-                    frontUrl={
-                      onSecret ? (secret?.artUrl ?? null) : (cards?.[ep!.id]?.front ?? null)
-                    }
-                    backUrl={
-                      showStats
-                        ? onSecret
-                          ? universalBack
-                          : (cards?.[ep!.id]?.back ?? null)
-                        : universalBack
-                    }
-                    name={name}
-                    edition={edition}
-                    rarity={rarity}
-                    tilt="hero"
-                    flipMs={onSecret ? SECRET_FLIP_MS : FLIP_MS}
-                    faceDown={!isRevealed}
-                    flipped={isRevealed ? flipped : false}
-                    onFlippedChange={isRevealed ? setFlipped : undefined}
-                    backContent={
-                      showStats ? (
-                        onSecret && secret ? (
-                          <SecretBackPanel card={secret} rarity={secretRarity} />
-                        ) : (
-                          <CardBackPanel
-                            ep={ep!}
-                            bundle={bundle}
-                            rarity={rarity}
-                            edition={edition}
-                          />
           {/* `mode="wait"` serialises the two mounts, and `onExitComplete` is
               what the phase machine waits on: the roster card is genuinely
               unmounted before `empty` begins, and the secret cannot arrive until
@@ -940,6 +859,7 @@ export function PackStand({
                     style={standStyle({ peeking, onSecret, isRevealed, rarity, secretRarity })}
                   >
                     <HoloCard
+                      edition={edition}
                       // Mounted while the card is still face-down, so the art is
                       // decoded before the turn rather than during it. The front face
                       // is backface-hidden and explicitly `invisible` until the flip
@@ -966,7 +886,12 @@ export function PackStand({
                           onSecret && secret ? (
                             <SecretBackPanel card={secret} rarity={secretRarity} />
                           ) : (
-                            <CardBackPanel ep={ep!} bundle={bundle} rarity={rarity} />
+                            <CardBackPanel
+                              ep={ep!}
+                              bundle={bundle}
+                              rarity={rarity}
+                              edition={edition}
+                            />
                           )
                         ) : (
                           <SealedBack />
