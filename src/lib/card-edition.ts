@@ -65,10 +65,10 @@ const BP_TOTAL = 10_000;
 export type EditionStyle = {
   edition: Edition;
   /**
-   * Never bare "Gold": `podium.label` is already "Gold", and a gold-finish podium
-   * card would otherwise read "Gold · Gold". "Parallel" is the hobby's own word
-   * for exactly this — same card, different print — and reads correctly beside
-   * any tier label.
+   * Just the metal. It used to carry "Parallel" so it could sit beside a tier
+   * label without a gold-finish podium card reading "Gold · Gold" — the two are
+   * no longer side by side. A finish now *takes* the headline (see `cardBadge`)
+   * and the tier drops to the line underneath, so the collision cannot happen.
    */
   label: string;
   /** Metal gradient endpoints, fed straight into CSS custom properties. */
@@ -111,14 +111,14 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     metalA: "oklch(0.7 0.1 55)",
     metalB: "oklch(0.48 0.07 42)",
     specular: "oklch(0.88 0.07 62)",
-    label: "Bronze Parallel",
+    label: "Bronze",
     accent: "oklch(0.72 0.1 55)",
     // Darker and far less chromatic than penaltyBox's amber, which is the only
     // thing keeping the two apart at a glance.
     lift: 0.05,
   },
   silver: {
-    label: "Silver Parallel",
+    label: "Silver",
     metalA: "oklch(0.88 0.012 250)",
     metalB: "oklch(0.64 0.015 255)",
     specular: "oklch(0.98 0.004 250)",
@@ -126,7 +126,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     lift: 0.12,
   },
   gold: {
-    label: "Gold Parallel",
+    label: "Gold",
     metalA: "oklch(0.84 0.14 82)",
     metalB: "oklch(0.62 0.11 68)",
     specular: "oklch(0.99 0.05 92)",
@@ -134,7 +134,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     lift: 0.26,
   },
   platinum: {
-    label: "Platinum Parallel",
+    label: "Platinum",
     metalA: "oklch(0.94 0.02 205)",
     // A cool violet foot rather than another neutral. Rendered side by side,
     // the first attempt at platinum read as a slightly brighter silver — which
