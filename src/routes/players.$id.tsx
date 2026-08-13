@@ -763,62 +763,44 @@ function NavButton({
  * card that has none of the screen left.
  */
 /**
- * The finish, beside the tier and never merged into it.
+ * The one badge in the page header.
  *
- * Renders nothing at all on a standard finish, which is seven pulls in ten — a
- * pill reading "Standard" on most of the roster makes the other three quieter,
- * which is the opposite of the point. Prints the odds underneath rather than a
- * reason blurb: the tier's second line explains what somebody did, and this one
- * has to say the opposite — that nobody did anything, it was luck.
+ * A standard finish reads exactly as it always did — tier word, reason under it,
+ * in the tier colour. A special finish takes the headline in its own metal and
+ * demotes the tier to the line beneath, and swaps the card glyph for sparkles,
+ * because the finish is luck rather than something somebody did on the course.
  */
-function EditionRibbon({ edition }: { edition: Edition }) {
-  const label = editionLabel(edition);
-  if (!label) return null;
-  return (
-    <div
-      className="flex min-w-0 items-center gap-2 rounded-full border py-1 pl-2.5 pr-3 sm:py-1.5 sm:pl-3 sm:pr-3.5"
-      style={{
-        borderColor: "color-mix(in oklab, var(--edn) 45%, transparent)",
-        background: "color-mix(in oklab, var(--edn) 10%, transparent)",
-        boxShadow: "0 0 24px -8px var(--edn)",
-      }}
-    >
-      <Sparkles className="h-4 w-4 shrink-0" style={{ color: "var(--edn)" }} />
-      <div className="min-w-0 leading-tight">
-        <div
-          className="font-display truncate text-[11px] font-black uppercase tracking-[0.25em]"
-          style={{ color: "var(--edn)" }}
-        >
-          {label}
-        </div>
-        <div className="hidden truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground sm:block">
-          {editionOddsLabel(edition) ?? ""}
-        </div>
-      </div>
-    </div>
+function CardRibbon({ rarity, edition }: { rarity: Rarity; edition: Edition }) {
+  const badge = cardBadge(
+    { label: rarity.label, reason: TIER_REASON[rarity.tier] ?? "", accent: rarity.accent },
+    edition,
   );
-}
-
-function TierRibbon({ rarity }: { rarity: Rarity }) {
+  // The tier and the finish keep separate custom properties on purpose — two
+  // axes, never merged — so the ribbon picks whichever one it is wearing.
+  const c = badge.isEdition ? "var(--edn)" : "var(--tier)";
   return (
     <div
       className="flex min-w-0 items-center gap-2 rounded-full border py-1 pl-2.5 pr-3 sm:py-1.5 sm:pl-3 sm:pr-3.5"
       style={{
-        borderColor: "color-mix(in oklab, var(--tier) 45%, transparent)",
-        background: "color-mix(in oklab, var(--tier) 10%, transparent)",
-        boxShadow: "0 0 24px -8px var(--tier)",
+        borderColor: `color-mix(in oklab, ${c} 45%, transparent)`,
+        background: `color-mix(in oklab, ${c} 10%, transparent)`,
+        boxShadow: `0 0 24px -8px ${c}`,
       }}
     >
-      <IdCard className="h-4 w-4 shrink-0" style={{ color: "var(--tier)" }} />
+      {badge.isEdition ? (
+        <Sparkles className="h-4 w-4 shrink-0" style={{ color: c }} />
+      ) : (
+        <IdCard className="h-4 w-4 shrink-0" style={{ color: c }} />
+      )}
       <div className="min-w-0 leading-tight">
         <div
           className="font-display truncate text-[11px] font-black uppercase tracking-[0.25em]"
-          style={{ color: "var(--tier)" }}
+          style={{ color: c }}
         >
-          {rarity.label}
+          {badge.headline}
         </div>
         <div className="hidden truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground sm:block">
-          {TIER_REASON[rarity.tier] ?? ""}
+          {badge.isEdition ? `${badge.sub} · ${editionOddsLabel(edition) ?? ""}` : badge.sub}
         </div>
       </div>
     </div>
