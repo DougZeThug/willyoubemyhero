@@ -322,6 +322,11 @@ function PlayerCardPage() {
   );
   const myAwards = ep.participant_id ? (awards.byParticipant.get(ep.participant_id) ?? []) : [];
 
+  const shareBadge = cardBadge(
+    { label: rarity.label, reason: "", accent: rarity.accent },
+    locked ? "standard" : edition,
+  );
+
   const shareData: ShareCardData = {
     eventName: event?.name ?? "Draft Combine",
     eventYear: event?.year ?? null,
