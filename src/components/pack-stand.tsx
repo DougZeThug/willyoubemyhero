@@ -771,7 +771,12 @@ export function PackStand({
                         onSecret && secret ? (
                           <SecretBackPanel card={secret} rarity={secretRarity} />
                         ) : (
-                          <CardBackPanel ep={ep!} bundle={bundle} rarity={rarity} />
+                          <CardBackPanel
+                            ep={ep!}
+                            bundle={bundle}
+                            rarity={rarity}
+                            edition={edition}
+                          />
                         )
                       ) : (
                         <SealedBack />

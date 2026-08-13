@@ -1008,6 +1008,7 @@ function PackPage() {
             bundle={bundle}
             cards={cards.data}
             rarities={rarities}
+            editions={editions}
             revealed={revealed}
             pullCounts={pullCounts.data}
             universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}

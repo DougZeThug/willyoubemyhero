@@ -15,13 +15,23 @@ import {
   RotateCw,
   Share2,
   Smartphone,
+  Sparkles,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
-import { LockedCard, LOCKED_RARITY } from "@/components/locked-card";
+import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
+import {
+  editionCelebrates,
+  editionLabel,
+  editionOddsLabel,
+  editionRank,
+  editionStyle,
+  toEdition,
+  type Edition,
+} from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { requestGyroPermission } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
@@ -48,7 +58,7 @@ import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle, TIER_REASON, type Rarity } from "@/lib/card-rarity";
 import { cardStats } from "@/lib/card-stats";
-import { playReveal, useCardSfx } from "@/lib/card-sfx";
+import { playEditionShine, playReveal, useCardSfx } from "@/lib/card-sfx";
 import { exportCardPng } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -150,9 +160,17 @@ function PlayerCardPage() {
   // Rarest card you hold. `rank` runs rarest-first, so the lowest wins.
   const bestPull = useMemo(() => {
     let best: Rarity | null = null;
+    let bestFinish = editionRank(undefined);
     for (const cardId of Object.keys(collection)) {
       const r = rarities.get(cardId);
-      if (r && (!best || r.rank < best.rank)) best = r;
+      if (!r) continue;
+      // Tier first, finish only to break a tie inside it — the same ordering the
+      // vault sorts by, and for the same reason.
+      const finish = editionRank(collection[cardId]?.edition);
+      if (!best || r.rank < best.rank || (r.rank === best.rank && finish < bestFinish)) {
+        best = r;
+        bestFinish = finish;
+      }
     }
     return best;
   }, [collection, rarities]);
@@ -161,6 +179,9 @@ function PlayerCardPage() {
   // can be plain unconditional hooks. `ep` stays null until the bundle lands.
   const ep = bundle?.participants.find((p) => p.id === id) ?? null;
   const rarity = (ep && rarities.get(ep.id)) ?? rarityStyle("base");
+  // Off the collection, because a finish belongs to your copy and not to the
+  // player. A card you do not hold has none at all — see LOCKED_EDITION.
+  const edition = ep ? toEdition(collection[ep.id]?.edition) : "standard";
   const stats = useMemo(() => cardStats(bundle, ep?.participant_id), [bundle, ep?.participant_id]);
 
   // The art is the thing a pack buys, so the card stays face-down until this
@@ -191,7 +212,11 @@ function PlayerCardPage() {
     if (!ep || locked || revealed.has(ep.id)) return;
     revealed.add(ep.id);
     playReveal(rarity.tier);
-    if (rarity.tier !== "champion" && rarity.tier !== "podium") return;
+    playEditionShine(edition);
+    // The finish can carry a card the tier never would — same gate as the pack
+    // stand, so landing on a platinum base card is an event on both screens.
+    if (rarity.tier !== "champion" && rarity.tier !== "podium" && !editionCelebrates(edition))
+      return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     let cancelled = false;
     void import("canvas-confetti").then(({ default: confetti }) => {
@@ -200,13 +225,19 @@ function PlayerCardPage() {
         particleCount: 90,
         spread: 75,
         origin: { y: 0.4 },
-        colors: [rarity.accent, rarity.holoA, rarity.holoB, "#ffffff"],
+        colors: [
+          rarity.accent,
+          rarity.holoA,
+          rarity.holoB,
+          ...(editionCelebrates(edition) ? [editionStyle(edition).accent] : []),
+          "#ffffff",
+        ],
       });
     });
     return () => {
       cancelled = true;
     };
-  }, [ep, locked, rarity.tier, rarity.accent, rarity.holoA, rarity.holoB]);
+  }, [ep, locked, edition, rarity.tier, rarity.accent, rarity.holoA, rarity.holoB]);
 
   // Rolled rather than snapped into place. Both return the target verbatim under
   // reduced motion, and null for a player with no official run.
@@ -226,6 +257,10 @@ function PlayerCardPage() {
           name: p.participant?.name ?? "—",
           frontUrl: own ? (cards.data?.[p.id]?.front ?? null) : null,
           rarity: own ? (rarities.get(p.id) ?? LOCKED_RARITY) : LOCKED_RARITY,
+          // Same withholding as the rarity beside it, and a stronger case for
+          // it: a tier can be reasoned about from the leaderboard, a finish
+          // cannot be known from anywhere but the pack that produced it.
+          edition: own ? toEdition(collection[p.id]?.edition) : LOCKED_EDITION,
         };
       }),
     [roster, cards.data, rarities, mine.ready, collection],
@@ -297,6 +332,11 @@ function PlayerCardPage() {
     // base and dnf set border to a near-transparent white, which rasterised as
     // an invisible rule on the share card.
     rarityColor: rarity.accent,
+    // Only on a card you hold: sharing a locked slot's finish would leak the one
+    // thing about it that cannot be guessed. Null on standard, so seven shares
+    // in ten look exactly as they did.
+    editionLabel: locked ? null : editionLabel(edition),
+    editionColor: locked || edition === "standard" ? null : editionStyle(edition).accent,
     cardUrl: urls?.front ?? null,
     photoUrl,
     runningOrder: ep.running_order,
@@ -384,7 +424,9 @@ function PlayerCardPage() {
     // taking a prop, so one variable retints the whole page.
     <div
       className="circuit-bg relative min-h-[calc(100dvh-8rem)]"
-      style={{ "--tier": rarity.accent } as React.CSSProperties}
+      style={
+        { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
+      }
     >
       {/* Tier wash over circuit-bg's own hard-coded cyan bloom. Sits behind the
           content, so a champion's page glows gold and a DNF's barely glows. */}
@@ -405,6 +447,12 @@ function PlayerCardPage() {
             <ArrowLeft className="h-3.5 w-3.5" /> Vault
           </Link>
           <TierRibbon rarity={rarity} />
+          {/* A separate pill, never folded into the one beside it: "Gold" is
+              podium's tier label, so a gold-finish podium card would read
+              "Gold · Gold" — and the two are different kinds of fact anyway.
+              Absent on a locked card, where the finish is unknown and would be
+              the biggest spoiler on the page. */}
+          {!locked && <EditionRibbon edition={edition} />}
         </div>
 
         {/*
@@ -454,6 +502,7 @@ function PlayerCardPage() {
                       backUrl={urls?.back ?? null}
                       name={name}
                       rarity={rarity}
+                      edition={edition}
                       flipped={flipped}
                       onFlippedChange={setFlipped}
                       gyro={gyro}
@@ -462,7 +511,9 @@ function PlayerCardPage() {
                       // under a pan would make the thing you are reading move.
                       interactive={!zoomed}
                       flickToFlip={false}
-                      backContent={<CardBackPanel ep={ep} bundle={bundle} rarity={rarity} />}
+                      backContent={
+                        <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} edition={edition} />
+                      }
                     />
                   )}
                 </ZoomPanFrame>
@@ -713,6 +764,43 @@ function NavButton({
  * shrinks to the label and the reason would be a third line of chrome above a
  * card that has none of the screen left.
  */
+/**
+ * The finish, beside the tier and never merged into it.
+ *
+ * Renders nothing at all on a standard finish, which is seven pulls in ten — a
+ * pill reading "Standard" on most of the roster makes the other three quieter,
+ * which is the opposite of the point. Prints the odds underneath rather than a
+ * reason blurb: the tier's second line explains what somebody did, and this one
+ * has to say the opposite — that nobody did anything, it was luck.
+ */
+function EditionRibbon({ edition }: { edition: Edition }) {
+  const label = editionLabel(edition);
+  if (!label) return null;
+  return (
+    <div
+      className="flex min-w-0 items-center gap-2 rounded-full border py-1 pl-2.5 pr-3 sm:py-1.5 sm:pl-3 sm:pr-3.5"
+      style={{
+        borderColor: "color-mix(in oklab, var(--edn) 45%, transparent)",
+        background: "color-mix(in oklab, var(--edn) 10%, transparent)",
+        boxShadow: "0 0 24px -8px var(--edn)",
+      }}
+    >
+      <Sparkles className="h-4 w-4 shrink-0" style={{ color: "var(--edn)" }} />
+      <div className="min-w-0 leading-tight">
+        <div
+          className="font-display truncate text-[11px] font-black uppercase tracking-[0.25em]"
+          style={{ color: "var(--edn)" }}
+        >
+          {label}
+        </div>
+        <div className="hidden truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground sm:block">
+          {editionOddsLabel(edition) ?? ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TierRibbon({ rarity }: { rarity: Rarity }) {
   return (
     <div

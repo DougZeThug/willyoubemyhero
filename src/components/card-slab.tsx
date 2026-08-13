@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { CollectedCard } from "@/lib/card-collection";
+import { editionLabel } from "@/lib/card-edition";
 
 /**
  * The acrylic case a graded card ships in.
@@ -109,12 +110,27 @@ function slabTitle(eventName: string, eventYear: number | null): string {
  */
 function CollectionMark({ collected }: { collected: CollectedCard | null }) {
   if (!collected) return null;
+  // The plate is where a grading company prints the parallel, and it is already
+  // the one line on the slab that is about *your copy* rather than about the
+  // player — so the finish belongs here and nowhere else on this component.
+  // Wears --edn rather than --tier: two axes, two colours, never merged.
+  const finish = editionLabel(collected.edition);
   return (
-    <span
-      className="font-display shrink-0 text-[10px] font-black uppercase tracking-[0.2em]"
-      style={{ color: "var(--tier)" }}
-    >
-      {collected.count > 1 ? `Pulled ×${collected.count}` : "Collected"}
+    <span className="flex shrink-0 items-baseline gap-1.5">
+      <span
+        className="font-display text-[10px] font-black uppercase tracking-[0.2em]"
+        style={{ color: "var(--tier)" }}
+      >
+        {collected.count > 1 ? `Pulled ×${collected.count}` : "Collected"}
+      </span>
+      {finish && (
+        <span
+          className="font-display text-[10px] font-black uppercase tracking-[0.2em]"
+          style={{ color: "var(--edn)" }}
+        >
+          {finish}
+        </span>
+      )}
     </span>
   );
 }

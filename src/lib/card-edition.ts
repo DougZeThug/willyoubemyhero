@@ -187,6 +187,18 @@ export function editionStyle(edition: Edition): EditionStyle {
 }
 
 /**
+ * Narrow a stored string to the ladder, falling back to standard.
+ *
+ * Every finish that reaches a render site has come out of IndexedDB or Postgres
+ * as a bare `string`, and neither constrains it. Named rather than left to each
+ * caller so the fallback is one decision rather than a dozen, and so nobody
+ * reaches for `as Edition`.
+ */
+export function toEdition(value: string | null | undefined): Edition {
+  return isEdition(value) ? value : "standard";
+}
+
+/**
  * Best-to-worst, 0 is platinum. Mirrors Rarity.rank, and derived from
  * EDITION_ORDER rather than stored beside the palette so the ladder cannot be
  * ordered one way for sorting and another way for the roll.

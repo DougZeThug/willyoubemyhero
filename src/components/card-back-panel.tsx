@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { formatTime } from "@/lib/format";
 import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
+import { editionLabel, editionOddsLabel, editionStyle, type Edition } from "@/lib/card-edition";
 import { cardStats, type StatsBundle } from "@/lib/card-stats";
 
 /**
@@ -27,10 +28,13 @@ export function CardBackPanel({
   ep,
   bundle,
   rarity,
+  edition = "standard",
 }: {
   ep: BackParticipant;
   bundle: StatsBundle | null | undefined;
   rarity: Rarity;
+  /** Standard prints no finish row at all. */
+  edition?: Edition;
 }) {
   const { bestRun, ladder } = useMemo(
     () => cardStats(bundle, ep.participant_id),
@@ -58,6 +62,27 @@ export function CardBackPanel({
           {TIER_REASON[rarity.tier] ?? ""}
         </span>
       </div>
+
+      {/* The finish gets its own row, printed with the odds that produced it.
+          TIER_REASON above says what somebody did; this has to say the opposite
+          — that nobody did anything and the card came up this way. Quoting the
+          rate is what makes it read as luck rather than as a second grade. */}
+      {editionLabel(edition) && (
+        <div
+          className="flex items-center justify-between rounded border px-2 py-1"
+          style={{ borderColor: editionStyle(edition).accent }}
+        >
+          <span
+            className="font-display text-[10px] font-black uppercase tracking-[0.25em]"
+            style={{ color: editionStyle(edition).accent }}
+          >
+            {editionLabel(edition)}
+          </span>
+          <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            {editionOddsLabel(edition) ?? ""}
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-1.5">
         <Vital label="Bib" value={ep.bib_number != null ? `${ep.bib_number}` : "—"} />
