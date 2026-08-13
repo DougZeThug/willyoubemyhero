@@ -6,6 +6,7 @@
 // or if Web Audio is unavailable.
 
 import { useCallback, useEffect, useState } from "react";
+import { editionCelebrates } from "./card-edition";
 
 const MUTE_KEY = "wwbh:sfx-muted";
 
@@ -413,6 +414,53 @@ export function playReveal(tier: string) {
     osc.start(start);
     osc.stop(start + 0.95);
   });
+}
+
+/**
+ * A rising two-note shine, laid over the tier's chime on a rare finish.
+ *
+ * A second cue rather than thirty chimes. The tier and the finish are separate
+ * facts and the ear should hear them that way, and a 6x5 chime matrix would need
+ * thirty triads that all had to stay distinguishable from each other — which they
+ * would not.
+ *
+ * Deliberately a gliss and not a chord: CHIMES.secret is the one entry that
+ * stacks fifths and octaves with no third, and that unresolved ring is the
+ * secret's signature. A stacked shine here would encroach on it. Two notes
+ * sliding upward is a different gesture entirely.
+ *
+ * Silent below gold. Bronze and silver are 18% and 8% of pulls, and a sound on
+ * one pull in four stops being a reward and becomes the noise the app makes.
+ */
+export function playEditionShine(edition: string) {
+  // The same predicate the confetti gate uses, rather than a second list of
+  // which finishes are a big deal — two would drift, and a card that threw
+  // confetti in silence is exactly how you would notice, far too late.
+  if (!editionCelebrates(edition)) return;
+  const ac = audio();
+  if (!ac) return;
+  // Platinum climbs further and rings a little longer. Both sit above the
+  // chime's own register so they read as a highlight over it, not a third voice
+  // inside it.
+  const top = edition === "platinum" ? 2637.02 : 1975.53; // E7 / B6
+  const dur = edition === "platinum" ? 0.7 : 0.45;
+
+  const osc = ac.createOscillator();
+  osc.type = "sine";
+  const start = ac.currentTime + 0.12;
+  osc.frequency.setValueAtTime(1318.51, start); // E6
+  osc.frequency.exponentialRampToValueAtTime(top, start + dur);
+
+  const amp = ac.createGain();
+  amp.gain.setValueAtTime(0.0001, start);
+  // Under the chime's 0.12 peak on purpose: this decorates the reveal, it does
+  // not announce it.
+  amp.gain.exponentialRampToValueAtTime(0.05, start + dur * 0.35);
+  amp.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+
+  osc.connect(amp).connect(ac.destination);
+  osc.start(start);
+  osc.stop(start + dur + 0.05);
 }
 
 /**
