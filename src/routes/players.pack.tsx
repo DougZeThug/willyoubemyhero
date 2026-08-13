@@ -418,14 +418,23 @@ function PackPage() {
   // already-torn pack it is empty until the bundle arrives. The recording effect
   // below fires as soon as the member is known and latches, so an editions map
   // that waited for the bundle would have recorded a pack of standards.
+  //
+  // Waits for the EVENT and not merely for a seed. `packSeed` substitutes
+  // "no-event" until the bundle query answers, and the identity behind the other
+  // two thirds comes out of localStorage — so on a cold load there is a real
+  // window where the seed is fully formed, entirely wrong, and *truthy*, which a
+  // presence check would sail straight past. Rolling there would show one set of
+  // finishes, record them, latch, and then re-roll to a different set the moment
+  // the event landed. Nothing is lost by waiting: `pack` resolves its ids against
+  // the same bundle, so the stand renders nothing at all during that window.
   const editions = useMemo(() => {
     const out: Record<string, Edition> = {};
-    if (!seed) return out;
+    if (!seed || !event?.id) return out;
     for (const id of dealtIds ?? nextPack.map((p) => p.id)) {
       out[id] = rollEdition(editionSeed(seed, id));
     }
     return out;
-  }, [dealtIds, nextPack, seed]);
+  }, [dealtIds, nextPack, seed, event?.id]);
 
   const torn = dealtIds != null;
   const reduced = usePrefersReducedMotion();
@@ -615,10 +624,12 @@ function PackPage() {
   const recordedForRef = useRef<string | null>(null);
   useEffect(() => {
     const pid = me?.participantId;
-    // `seed` gates this alongside the rest: without it there are no finishes to
-    // send, and the latch below would make that permanent for the day. It is
-    // null only for the render or two while the device id is read back.
-    if (!torn || !dealtIds?.length || !pid || !seed) return;
+    // The event gates this alongside the rest, not just the seed. A seed built
+    // before the bundle answers carries "no-event" and rolls a different set of
+    // finishes — and the latch below would make that set permanent for the day
+    // while the screen went on to show the corrected one. Waiting costs nothing:
+    // the effect re-runs when the event lands.
+    if (!torn || !dealtIds?.length || !pid || !seed || !event?.id) return;
     if (recordedForRef.current === pid) return;
     recordedForRef.current = pid;
 

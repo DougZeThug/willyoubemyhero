@@ -135,6 +135,27 @@ describe("editionSeed", () => {
   it("keeps the pack seed intact inside it, so the two cannot drift apart", () => {
     expect(editionSeed(SEED, "card-1")).toBe(`${SEED}:edition:card-1`);
   });
+
+  it("rolls something different before the event is known, which is why callers wait for it", () => {
+    // The hazard this documents, and the reason players.pack.tsx gates the roll
+    // on `event?.id` rather than merely on the seed being present: packSeed
+    // substitutes "no-event" until the bundle query answers, while the identity
+    // behind the other two thirds comes straight out of localStorage. So there is
+    // a real window where the seed is fully formed, entirely wrong, and TRUTHY —
+    // which a presence check sails past. Rolling there and recording it would
+    // store finishes the screen then re-rolls away from.
+    const provisional = packSeed(null, DAY, "m:alice");
+    const real = packSeed(EVENT, DAY, "m:alice");
+    expect(provisional).not.toBe(real);
+    // Truthy, which is the whole trap.
+    expect(provisional).toBeTruthy();
+
+    const before = Array.from({ length: 80 }, (_, i) =>
+      rollEdition(editionSeed(provisional, `ep-${i}`)),
+    );
+    const after = Array.from({ length: 80 }, (_, i) => rollEdition(editionSeed(real, `ep-${i}`)));
+    expect(before).not.toEqual(after);
+  });
 });
 
 describe("editionStyle", () => {
