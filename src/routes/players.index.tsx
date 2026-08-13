@@ -349,6 +349,10 @@ function PlayersPage() {
             const rarity = rarities.get(p.id) ?? rarityStyle("base");
             const name = p.participant?.name ?? "—";
             const locked = isLocked(p.id);
+            const tileBadge = cardBadge(
+              { label: rarity.label, reason: "", accent: rarity.accent },
+              locked ? "standard" : toEdition(collected[p.id]?.edition),
+            );
             return (
               <Link
                 key={p.id}
