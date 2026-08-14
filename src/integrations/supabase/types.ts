@@ -1033,6 +1033,7 @@ export type Database = {
           participant_id: string | null
           pulled_on: string
           secret_card_id: string
+          tier: string
         }
         Insert: {
           created_at?: string
@@ -1044,6 +1045,7 @@ export type Database = {
           participant_id?: string | null
           pulled_on: string
           secret_card_id: string
+          tier?: string
         }
         Update: {
           created_at?: string
@@ -1055,6 +1057,7 @@ export type Database = {
           participant_id?: string | null
           pulled_on?: string
           secret_card_id?: string
+          tier?: string
         }
         Relationships: [
           {
@@ -1378,10 +1381,12 @@ export type Database = {
         Returns: number
       }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
+      roll_secret_tier: { Args: never; Returns: string }
       secret_pull_status: {
         Args: { _guest_id: string; _participant_id: string }
         Returns: Json
       }
+      secret_tier_rank: { Args: { _tier: string }; Returns: number }
     }
     Enums: {
       [_ in never]: never
