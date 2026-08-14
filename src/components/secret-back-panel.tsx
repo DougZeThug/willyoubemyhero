@@ -1,4 +1,5 @@
 import { SECRET_REASON, type OwnedSecret, type SecretCardView } from "@/lib/secret-cards";
+import { secretTierLabel, secretTierOddsLabel, secretTierStyle } from "@/lib/secret-rarity";
 import type { Rarity } from "@/lib/card-rarity";
 
 /**
@@ -85,9 +86,13 @@ export function SecretBackPanel({
 
       <div className="relative flex items-center justify-between border-t border-white/10 pt-1.5">
         <span
-          className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}
+          className={`font-bold uppercase tracking-[0.2em] ${large ? "text-[10px]" : "text-[8px]"}`}
+          style={{ color: secretTierStyle(card.tier).accent }}
         >
-          Secret
+          {/* The level of this copy and the rate that produced it — the one fact
+              about a secret worth a second line on the back, exactly as the pull
+              odds are for a metal finish. */}
+          {secretTierLabel(card.tier)} · {secretTierOddsLabel(card.tier)}
         </span>
         {pulledOn && (
           <span
