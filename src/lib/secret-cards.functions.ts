@@ -223,22 +223,29 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
 
   const { data: pulls, error } = await db
     .from("secret_card_pulls")
-    .select("secret_card_id, pulled_on, is_duplicate")
+    .select("secret_card_id, pulled_on, is_duplicate, tier")
     .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
     .order("pulled_on", { ascending: false })
-    .returns<Pick<SecretPullRow, "secret_card_id" | "pulled_on" | "is_duplicate">[]>();
+    .returns<Pick<SecretPullRow, "secret_card_id" | "pulled_on" | "is_duplicate" | "tier">[]>();
   if (error) throw error;
 
   // Ownership comes from the non-duplicate rows; duplicates only bump the count.
-  const owned = new Map<string, { firstPulledOn: string; count: number }>();
+  const owned = new Map<string, { firstPulledOn: string; count: number; tier: string }>();
   for (const p of pulls ?? []) {
     const seen = owned.get(p.secret_card_id);
     if (seen) {
       seen.count += 1;
       // Ordered newest first, so every later row is older than the one held.
       seen.firstPulledOn = p.pulled_on;
+      // Best wins across every copy, so a duplicate that rolled better shows the
+      // better level even if the owning row has not been upgraded yet.
+      seen.tier = bestSecretTier(seen.tier, p.tier);
     } else {
-      owned.set(p.secret_card_id, { firstPulledOn: p.pulled_on, count: 1 });
+      owned.set(p.secret_card_id, {
+        firstPulledOn: p.pulled_on,
+        count: 1,
+        tier: toSecretTier(p.tier),
+      });
     }
   }
   if (owned.size === 0) return { cards: [], pulled: 0 };
@@ -269,7 +276,7 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
 
   const cards = await Promise.all(
     (rows ?? []).map(async (row) => ({
-      ...(await signCard(row)),
+      ...(await signCard(row, owned.get(row.id)!.tier)),
       firstPulledOn: owned.get(row.id)!.firstPulledOn,
       count: owned.get(row.id)!.count,
       // How many people have found this one. A count of 1 means you are the only
