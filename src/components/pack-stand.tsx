@@ -14,6 +14,7 @@ import { burst } from "@/lib/card-confetti";
 import { cue } from "@/lib/card-sfx";
 import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
 import type { SecretCardView } from "@/lib/secret-cards";
+import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { secretTakesTheStand, type SecretSlot } from "@/lib/pack";
 import {
   secretOwnsStage,
