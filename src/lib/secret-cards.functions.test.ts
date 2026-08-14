@@ -284,9 +284,15 @@ describe("getSecretStatus", () => {
 });
 
 describe("getMySecrets", () => {
-  it("requires an identity of some kind", async () => {
+  it("tells a visitor with no identity at all it owns nothing, rather than throwing at them", async () => {
+    // This used to throw, which blanked the vault on its very first paint —
+    // before a guest session exists, or once a member's token has expired.
+    // Owning nothing is an empty vault, not an error.
     const { getMySecrets } = await import("./secret-cards.functions");
-    await expect(callServerFn(getMySecrets)).rejects.toThrow("Claim your player first");
+    const res = await callServerFn(getMySecrets);
+    expect(res).toEqual({ cards: [], pulled: 0 });
+    // Nothing to read: no identity means the ledger is never queried at all.
+    expect(mock.callsFor("secret_card_pulls", "select")).toHaveLength(0);
   });
 
   it("reads the ledger for the token holder", async () => {
