@@ -19,6 +19,7 @@ import {
   secretsPulledLabel,
   SECRET_RARITY,
 } from "@/lib/secret-cards";
+import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
