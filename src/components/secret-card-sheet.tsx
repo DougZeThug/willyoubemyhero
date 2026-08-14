@@ -4,6 +4,7 @@ import { HoloCard } from "@/components/holo-card";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { secretFoil, type OwnedSecret } from "@/lib/secret-cards";
+import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { stepIndex } from "@/lib/zoom";
 import { packedByLabel } from "@/lib/card-pulls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
@@ -104,6 +105,16 @@ export function SecretCardSheet({
                 &ldquo;{card.flavour}&rdquo;
               </p>
             )}
+
+            {/* The level of THIS copy, in its own colour, with the rate that
+                produced it. The foil above it is the card's look and says
+                nothing about how lucky the pull was. */}
+            <p
+              className="text-center font-display text-sm font-black uppercase tracking-[0.3em]"
+              style={{ color: secretTierStyle(card.tier).accent }}
+            >
+              {secretTierCaption(card.tier)}
+            </p>
 
             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.25em] text-muted-foreground">
               <span>Pulled {card.firstPulledOn}</span>

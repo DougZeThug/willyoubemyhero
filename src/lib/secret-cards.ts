@@ -63,6 +63,12 @@ export type SecretCardView = {
   collection: string | null;
   artUrl: string | null;
   backUrl: string | null;
+  /**
+   * How good THIS copy is — see secret-rarity.ts. On SecretCardView rather than
+   * OwnedSecret because the fourth slot renders the level the moment the card
+   * turns, before it is anything you own.
+   */
+  tier: string;
 };
 
 export type OwnedSecret = SecretCardView & {

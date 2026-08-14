@@ -17,6 +17,7 @@ import {
   SECRET_COLLECTION_IDS,
   SECRET_FOIL_OPTIONS,
 } from "./secret-cards";
+import { bestSecretTier, toSecretTier } from "./secret-rarity";
 
 /**
  * The daily secret card: a permanent league collection nobody can browse.
@@ -82,7 +83,12 @@ function artPath(cardId: string, ext: string) {
   return `secrets/${cardId}/art-${Date.now()}.${ext}`;
 }
 
-function toView(row: SecretCardRow, artUrl: string | null, backUrl: string | null): SecretCardView {
+function toView(
+  row: SecretCardRow,
+  artUrl: string | null,
+  backUrl: string | null,
+  tier: string,
+): SecretCardView {
   return {
     id: row.id,
     name: row.name,
@@ -92,17 +98,20 @@ function toView(row: SecretCardRow, artUrl: string | null, backUrl: string | nul
     collection: row.collection ?? null,
     artUrl,
     backUrl,
+    // The level belongs to the copy, never to the card row — two people can hold
+    // the same secret at two different levels, which is the whole point.
+    tier: toSecretTier(tier),
   };
 }
 
-async function signCard(row: SecretCardRow) {
+async function signCard(row: SecretCardRow, tier: string) {
   // Originals are multi-megabyte PNGs; the renderer hands back a WebP a fraction
   // of the size at the biggest width the card is ever shown at.
   const [artUrl, backUrl] = await Promise.all([
     signPath(row.art_path, VARIANT_WIDTHS.large),
     signPath(row.back_path, VARIANT_WIDTHS.large),
   ]);
-  return toView(row, artUrl, backUrl);
+  return toView(row, artUrl, backUrl, tier);
 }
 
 // ------- Member-facing -------
@@ -158,7 +167,7 @@ export const pullSecretCard = createServerFn({ method: "POST" }).handler(async (
     day: pull.day,
     duplicate: pull.duplicate,
     fresh: pull.fresh,
-    card: await signCard(card),
+    card: await signCard(card, pull.tier),
   };
 });
 
@@ -214,22 +223,29 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
 
   const { data: pulls, error } = await db
     .from("secret_card_pulls")
-    .select("secret_card_id, pulled_on, is_duplicate")
+    .select("secret_card_id, pulled_on, is_duplicate, tier")
     .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
     .order("pulled_on", { ascending: false })
-    .returns<Pick<SecretPullRow, "secret_card_id" | "pulled_on" | "is_duplicate">[]>();
+    .returns<Pick<SecretPullRow, "secret_card_id" | "pulled_on" | "is_duplicate" | "tier">[]>();
   if (error) throw error;
 
   // Ownership comes from the non-duplicate rows; duplicates only bump the count.
-  const owned = new Map<string, { firstPulledOn: string; count: number }>();
+  const owned = new Map<string, { firstPulledOn: string; count: number; tier: string }>();
   for (const p of pulls ?? []) {
     const seen = owned.get(p.secret_card_id);
     if (seen) {
       seen.count += 1;
       // Ordered newest first, so every later row is older than the one held.
       seen.firstPulledOn = p.pulled_on;
+      // Best wins across every copy, so a duplicate that rolled better shows the
+      // better level even if the owning row has not been upgraded yet.
+      seen.tier = bestSecretTier(seen.tier, p.tier);
     } else {
-      owned.set(p.secret_card_id, { firstPulledOn: p.pulled_on, count: 1 });
+      owned.set(p.secret_card_id, {
+        firstPulledOn: p.pulled_on,
+        count: 1,
+        tier: toSecretTier(p.tier),
+      });
     }
   }
   if (owned.size === 0) return { cards: [], pulled: 0 };
@@ -260,7 +276,7 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
 
   const cards = await Promise.all(
     (rows ?? []).map(async (row) => ({
-      ...(await signCard(row)),
+      ...(await signCard(row, owned.get(row.id)!.tier)),
       firstPulledOn: owned.get(row.id)!.firstPulledOn,
       count: owned.get(row.id)!.count,
       // How many people have found this one. A count of 1 means you are the only

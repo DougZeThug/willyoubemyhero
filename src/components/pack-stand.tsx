@@ -14,6 +14,7 @@ import { burst } from "@/lib/card-confetti";
 import { cue } from "@/lib/card-sfx";
 import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
 import type { SecretCardView } from "@/lib/secret-cards";
+import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { secretTakesTheStand, type SecretSlot } from "@/lib/pack";
 import {
   secretOwnsStage,
@@ -946,11 +947,13 @@ export function PackStand({
                 {onSecret ? (
                   <div
                     className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                    style={{ color: secretDuplicate ? undefined : secretRarity.border }}
+                    style={{
+                      color: secretDuplicate ? undefined : secretTierStyle(secret?.tier).accent,
+                    }}
                   >
                     {secretDuplicate
                       ? "Already yours — this one's just showing off"
-                      : "Secret · Not on the roster"}
+                      : secretTierCaption(secret?.tier)}
                   </div>
                 ) : (
                   <>

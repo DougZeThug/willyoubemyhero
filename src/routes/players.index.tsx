@@ -19,6 +19,7 @@ import {
   secretsPulledLabel,
   SECRET_RARITY,
 } from "@/lib/secret-cards";
+import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -312,6 +313,15 @@ function PlayersPage() {
                         <div className="text-center">
                           <div className="truncate font-display text-xs font-black uppercase tracking-wide">
                             {s.name}
+                          </div>
+                          {/* The level of your copy leads, in its own colour —
+                              the same hierarchy a special finish takes on a
+                              roster tile. */}
+                          <div
+                            className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                            style={{ color: secretTierStyle(s.tier).accent }}
+                          >
+                            {secretTierCaption(s.tier)}
                           </div>
                           <div
                             className="text-[9px] font-bold uppercase tracking-[0.25em]"

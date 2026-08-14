@@ -49,6 +49,11 @@ export type SecretPullRow = {
   event_id: string | null;
   is_duplicate: boolean;
   granted: boolean;
+  /**
+   * Level of this copy. Unconstrained text — the ids live in secret-rarity.ts,
+   * which falls back to `common` for anything it does not recognise.
+   */
+  tier: string;
   created_at: string;
 };
 
@@ -58,6 +63,7 @@ export type PullSecretCardResult = {
   cardId: string;
   day: string;
   duplicate: boolean;
+  tier: string;
   fresh: boolean;
 } | null;
 
