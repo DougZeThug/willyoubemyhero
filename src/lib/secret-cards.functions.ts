@@ -17,6 +17,7 @@ import {
   SECRET_COLLECTION_IDS,
   SECRET_FOIL_OPTIONS,
 } from "./secret-cards";
+import { bestSecretTier, toSecretTier } from "./secret-rarity";
 
 /**
  * The daily secret card: a permanent league collection nobody can browse.
