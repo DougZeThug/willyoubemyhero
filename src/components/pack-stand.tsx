@@ -948,9 +948,7 @@ export function PackStand({
                   <div
                     className="text-[9px] font-bold uppercase tracking-[0.25em]"
                     style={{
-                      color: secretDuplicate
-                        ? undefined
-                        : secretTierStyle(secret?.tier).accent,
+                      color: secretDuplicate ? undefined : secretTierStyle(secret?.tier).accent,
                     }}
                   >
                     {secretDuplicate
