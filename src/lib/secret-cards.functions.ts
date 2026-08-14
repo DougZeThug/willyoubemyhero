@@ -82,7 +82,12 @@ function artPath(cardId: string, ext: string) {
   return `secrets/${cardId}/art-${Date.now()}.${ext}`;
 }
 
-function toView(row: SecretCardRow, artUrl: string | null, backUrl: string | null): SecretCardView {
+function toView(
+  row: SecretCardRow,
+  artUrl: string | null,
+  backUrl: string | null,
+  tier: string,
+): SecretCardView {
   return {
     id: row.id,
     name: row.name,
@@ -92,17 +97,20 @@ function toView(row: SecretCardRow, artUrl: string | null, backUrl: string | nul
     collection: row.collection ?? null,
     artUrl,
     backUrl,
+    // The level belongs to the copy, never to the card row — two people can hold
+    // the same secret at two different levels, which is the whole point.
+    tier: toSecretTier(tier),
   };
 }
 
-async function signCard(row: SecretCardRow) {
+async function signCard(row: SecretCardRow, tier: string) {
   // Originals are multi-megabyte PNGs; the renderer hands back a WebP a fraction
   // of the size at the biggest width the card is ever shown at.
   const [artUrl, backUrl] = await Promise.all([
     signPath(row.art_path, VARIANT_WIDTHS.large),
     signPath(row.back_path, VARIANT_WIDTHS.large),
   ]);
-  return toView(row, artUrl, backUrl);
+  return toView(row, artUrl, backUrl, tier);
 }
 
 // ------- Member-facing -------
@@ -158,7 +166,7 @@ export const pullSecretCard = createServerFn({ method: "POST" }).handler(async (
     day: pull.day,
     duplicate: pull.duplicate,
     fresh: pull.fresh,
-    card: await signCard(card),
+    card: await signCard(card, pull.tier),
   };
 });
 
