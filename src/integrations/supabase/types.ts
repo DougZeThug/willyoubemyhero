@@ -221,6 +221,51 @@ export type Database = {
           },
         ]
       }
+      card_copies: {
+        Row: {
+          acquired_on: string | null
+          created_at: string
+          edition: string
+          event_participant_id: string
+          id: string
+          participant_id: string
+          source: string
+        }
+        Insert: {
+          acquired_on?: string | null
+          created_at?: string
+          edition?: string
+          event_participant_id: string
+          id?: string
+          participant_id: string
+          source?: string
+        }
+        Update: {
+          acquired_on?: string | null
+          created_at?: string
+          edition?: string
+          event_participant_id?: string
+          id?: string
+          participant_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_copies_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_copies_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_prompt_runs: {
         Row: {
           created_at: string
@@ -1381,6 +1426,10 @@ export type Database = {
         Returns: number
       }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
+      resync_card_pull: {
+        Args: { _event_participant_id: string; _participant_id: string }
+        Returns: undefined
+      }
       roll_secret_tier: { Args: never; Returns: string }
       secret_pull_status: {
         Args: { _guest_id: string; _participant_id: string }
