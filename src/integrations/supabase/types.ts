@@ -1318,6 +1318,183 @@ export type Database = {
           },
         ]
       }
+      trade_offer_items: {
+        Row: {
+          card_copy_id: string | null
+          giver_side: string
+          id: string
+          kind: string
+          offer_id: string
+          secret_pull_id: string | null
+        }
+        Insert: {
+          card_copy_id?: string | null
+          giver_side: string
+          id?: string
+          kind: string
+          offer_id: string
+          secret_pull_id?: string | null
+        }
+        Update: {
+          card_copy_id?: string | null
+          giver_side?: string
+          id?: string
+          kind?: string
+          offer_id?: string
+          secret_pull_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_offer_items_card_copy_id_fkey"
+            columns: ["card_copy_id"]
+            isOneToOne: false
+            referencedRelation: "card_copies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_offer_items_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "trade_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_offer_items_secret_pull_id_fkey"
+            columns: ["secret_pull_id"]
+            isOneToOne: false
+            referencedRelation: "secret_card_pulls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trade_offers: {
+        Row: {
+          created_at: string
+          event_id: string | null
+          id: string
+          proposer_id: string
+          recipient_id: string
+          resolved_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          proposer_id: string
+          recipient_id: string
+          resolved_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          proposer_id?: string
+          recipient_id?: string
+          resolved_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_offers_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_offers_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_offers_proposer_id_fkey"
+            columns: ["proposer_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_offers_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trades: {
+        Row: {
+          event_id: string | null
+          executed_at: string
+          id: string
+          offer_id: string | null
+          proposer_gave: Json
+          proposer_id: string
+          recipient_gave: Json
+          recipient_id: string
+        }
+        Insert: {
+          event_id?: string | null
+          executed_at?: string
+          id?: string
+          offer_id?: string | null
+          proposer_gave?: Json
+          proposer_id: string
+          recipient_gave?: Json
+          recipient_id: string
+        }
+        Update: {
+          event_id?: string | null
+          executed_at?: string
+          id?: string
+          offer_id?: string | null
+          proposer_gave?: Json
+          proposer_id?: string
+          recipient_gave?: Json
+          recipient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trades_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "trade_offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_proposer_id_fkey"
+            columns: ["proposer_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       events_public: {
@@ -1379,6 +1556,10 @@ export type Database = {
       }
     }
     Functions: {
+      accept_trade_offer: {
+        Args: { _offer_id: string; _recipient_id: string }
+        Returns: Json
+      }
       card_edition_rank: { Args: { _edition: string }; Returns: number }
       cast_award_vote: {
         Args: {
@@ -1396,6 +1577,16 @@ export type Database = {
       close_award_voting: {
         Args: { _categories: Json; _event_id: string }
         Returns: number
+      }
+      create_trade_offer: {
+        Args: {
+          _event_id: string
+          _give: Json
+          _proposer_id: string
+          _recipient_id: string
+          _want: Json
+        }
+        Returns: Json
       }
       grant_secret_card: {
         Args: {
@@ -1430,12 +1621,27 @@ export type Database = {
         Args: { _event_participant_id: string; _participant_id: string }
         Returns: undefined
       }
+      resync_secret_ownership: {
+        Args: { _participant_id: string; _secret_card_id: string }
+        Returns: undefined
+      }
       roll_secret_tier: { Args: never; Returns: string }
       secret_pull_status: {
         Args: { _guest_id: string; _participant_id: string }
         Returns: Json
       }
       secret_tier_rank: { Args: { _tier: string }; Returns: number }
+      trade_has_both_sides: { Args: { _offer_id: string }; Returns: boolean }
+      trade_item_is_spare: {
+        Args: {
+          _card_copy_id: string
+          _giver_id: string
+          _kind: string
+          _secret_pull_id: string
+        }
+        Returns: boolean
+      }
+      trade_leaves_a_copy: { Args: { _offer_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
