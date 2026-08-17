@@ -14,6 +14,7 @@
 //     rather than a deadlock or two winners.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, IDS, newClient, seedEvent, sql } from "./helpers";
+import { leagueDay, LEAGUE_TIME_ZONE } from "@/lib/trades";
 
 afterAll(closeDb);
 beforeEach(seedEvent);
@@ -24,7 +25,9 @@ const OTHER_DAY = "2026-01-02";
 
 type OfferResult = { ok: boolean; offerId: string };
 type AcceptResult = { ok: boolean; reason?: string; tradeId?: string };
-type Item = { kind: "roster"; eventParticipantId: string } | { kind: "secret"; secretPullId: string };
+type Item =
+  | { kind: "roster"; eventParticipantId: string }
+  | { kind: "secret"; secretPullId: string };
 
 const roster = (eventParticipantId: string): Item => ({ kind: "roster", eventParticipantId });
 const secret = (secretPullId: string): Item => ({ kind: "secret", secretPullId });
@@ -155,6 +158,25 @@ async function twoSpares() {
   return { aliceCard, bobCard };
 }
 
+describe("the league day, in two languages", () => {
+  it("pins leagueDay() to the zone trade_item_is_spare decides today with", async () => {
+    // `America/New_York` is written into the function body in SQL and into
+    // LEAGUE_TIME_ZONE in TS, and the spares LISTING uses the TS one to hide a
+    // copy the RPC would refuse. Drift between them shows up as a card you can
+    // see, tap, and not trade. Same shape as the tests pinning card-edition.ts
+    // and secret-rarity.ts to their SQL ladders.
+    const [row] = await sql<{ zone: string; today: string }>(`
+      SELECT (SELECT cfg FROM unnest(p.proconfig) AS cfg
+               WHERE cfg LIKE 'TimeZone=%' OR cfg LIKE 'timezone=%') AS zone,
+             (now() AT TIME ZONE 'America/New_York')::date::text AS today
+        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = 'trade_item_is_spare'
+    `);
+    expect(row.zone).toBe(`TimeZone=${LEAGUE_TIME_ZONE}`);
+    expect(leagueDay()).toBe(row.today);
+  });
+});
+
 describe("create_trade_offer", () => {
   it("writes the offer and both sides of the table in one call", async () => {
     const { aliceCard, bobCard } = await twoSpares();
@@ -277,9 +299,9 @@ describe("create_trade_offer", () => {
       granted: false,
       day: today,
     });
-    await expect(createOffer(IDS.alice, IDS.bob, [secret(todays)], [roster(bobCard)])).rejects.toThrow(
-      /spare/i,
-    );
+    await expect(
+      createOffer(IDS.alice, IDS.bob, [secret(todays)], [roster(bobCard)]),
+    ).rejects.toThrow(/spare/i);
   });
 
   it("lets the same copy trade once the day has passed", async () => {
@@ -324,7 +346,9 @@ describe("create_trade_offer", () => {
     // The offer row is inserted before the spare check raises, so this is really
     // asserting that the raise rolls the whole function back.
     expect(await sql("SELECT count(*)::int AS n FROM public.trade_offers")).toEqual([{ n: 0 }]);
-    expect(await sql("SELECT count(*)::int AS n FROM public.trade_offer_items")).toEqual([{ n: 0 }]);
+    expect(await sql("SELECT count(*)::int AS n FROM public.trade_offer_items")).toEqual([
+      { n: 0 },
+    ]);
   });
 });
 
@@ -432,12 +456,7 @@ describe("accept_trade_offer — roster cards", () => {
       await giveRoster(IDS.alice, id, 2);
       await giveRoster(IDS.bob, id, 2);
     }
-    const { offerId } = await createOffer(
-      IDS.alice,
-      IDS.bob,
-      ids.map(roster),
-      [roster(ids[0])],
-    );
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, ids.map(roster), [roster(ids[0])]);
     expect((await accept(offerId, IDS.bob)).ok).toBe(true);
 
     for (const id of ids) expect(await pullCount(IDS.alice, id)).toBe(id === ids[0] ? 2 : 1);
@@ -698,9 +717,9 @@ describe("accept_trade_offer — lifecycle", () => {
   });
 
   it("raises on an offer that does not exist", async () => {
-    await expect(
-      accept("00000000-0000-4000-8000-00000000dead", IDS.bob),
-    ).rejects.toThrow(/not found/i);
+    await expect(accept("00000000-0000-4000-8000-00000000dead", IDS.bob)).rejects.toThrow(
+      /not found/i,
+    );
   });
 });
 

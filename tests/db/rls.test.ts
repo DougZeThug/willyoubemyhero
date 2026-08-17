@@ -258,7 +258,9 @@ describe("server-only tables", () => {
       [OFFER_ID],
     );
     expect(await sql("SELECT count(*)::int AS n FROM public.trade_offers")).toEqual([{ n: 1 }]);
-    expect(await sql("SELECT count(*)::int AS n FROM public.trade_offer_items")).toEqual([{ n: 1 }]);
+    expect(await sql("SELECT count(*)::int AS n FROM public.trade_offer_items")).toEqual([
+      { n: 1 },
+    ]);
 
     for (const role of ["anon", "authenticated"] as const) {
       for (const table of ["public.trade_offers", "public.trade_offer_items"]) {
