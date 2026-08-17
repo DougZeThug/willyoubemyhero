@@ -22,6 +22,10 @@ const PG_CANDIDATES = [
   "/usr/lib/postgresql/16/bin",
   "/usr/lib/postgresql/15/bin",
   "/usr/local/bin",
+  // Nix-style images (the Lovable sandbox among them) put the postgres
+  // binaries straight on PATH rather than in a versioned directory.
+  "/usr/bin",
+  "/bin",
 ];
 
 export const DB_NAME = "wwbh_test";

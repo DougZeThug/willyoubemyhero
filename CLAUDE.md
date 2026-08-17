@@ -35,6 +35,11 @@ Confirm with the user before adding anything to `minimumReleaseAgeExcludes`.
 Prettier runs through `eslint-plugin-prettier`, so a formatting slip fails
 `bun run lint`, not just `format`. Run `format` then `lint`.
 
+`test:db` finds `initdb` on PATH-style layouts (`/bin`, `/usr/bin`) and the
+usual Debian ones (`/usr/lib/postgresql/<v>/bin`). If yours lives somewhere
+else, point `PG_BIN_DIR` at the directory holding `initdb`. The first run is
+slow — it does an `initdb`, then applies bootstrap.sql and every migration.
+
 `bun run preview` does not work: the nitro build targets Cloudflare and writes
 `.output/`, while `vite preview` looks for `dist/server/server.js`. Use
 `bun run dev` to exercise a running app locally.
