@@ -284,9 +284,13 @@ describe("getSecretStatus", () => {
 });
 
 describe("getMySecrets", () => {
-  it("requires an identity of some kind", async () => {
+  // Deliberately NOT an error. A device with no token yet — or one whose token has
+  // just expired — owns nothing, and throwing at it blanked the vault on its very
+  // first paint, before the member token had been attached. Same posture
+  // getSecretStatus takes. Do not "fix" this back to a rejection.
+  it("gives an unidentified device an empty vault, not an error", async () => {
     const { getMySecrets } = await import("./secret-cards.functions");
-    await expect(callServerFn(getMySecrets)).rejects.toThrow("Claim your player first");
+    await expect(callServerFn(getMySecrets)).resolves.toEqual({ cards: [], pulled: 0 });
   });
 
   it("reads the ledger for the token holder", async () => {
