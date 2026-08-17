@@ -14,6 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_identities: {
+        Row: {
+          created_at: string
+          guest_id: string | null
+          participant_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          guest_id?: string | null
+          participant_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          guest_id?: string | null
+          participant_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_identities_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -1595,6 +1627,10 @@ export type Database = {
           _secret_card_id: string
         }
         Returns: Json
+      }
+      merge_guest_pulls: {
+        Args: { _from_guest: string; _into_guest: string }
+        Returns: number
       }
       pull_secret_card: {
         Args: { _event_id: string; _guest_id: string; _participant_id: string }

@@ -14,6 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteNav } from "@/components/site-nav";
 import { PresentationProvider } from "@/components/presentation-mode";
+import { AccountBridge } from "@/components/account-bridge";
 import { hydrateCardSfxMuted } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
@@ -153,6 +154,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <AccountBridge />
       <PresentationProvider>
         <div className="flex min-h-screen flex-col">
           <SiteNav />

@@ -1,8 +1,28 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { Radio, Trophy, ListOrdered, ClipboardList, Settings, Users } from "lucide-react";
+import {
+  Radio,
+  Trophy,
+  ListOrdered,
+  ClipboardList,
+  Settings,
+  Users,
+  UserRound,
+  LogIn,
+} from "lucide-react";
+import { toast } from "sonner";
 import { useIsPresenting } from "@/hooks/use-presentation";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+import { signOutAccount, useAuthUser } from "@/hooks/use-account";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -65,7 +85,7 @@ export function SiteNav() {
               );
             })}
           </nav>
-          <div className="w-8 md:hidden" aria-hidden />
+          <AccountMenu />
         </div>
       </motion.header>
 
@@ -111,5 +131,66 @@ export function SiteNav() {
         <div className="h-[env(safe-area-inset-bottom)]" />
       </motion.nav>
     </>
+  );
+}
+
+/**
+ * Session-driven sign-in affordance.
+ *
+ * Rendered from the auth session rather than as a static "Sign in" link: a header
+ * that still says "Sign in" after a successful sign-in reads as a broken login.
+ */
+function AccountMenu() {
+  const { user } = useAuthUser();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  if (!user) {
+    return (
+      <Link
+        to="/auth"
+        aria-label="Sign in"
+        className="flex w-8 items-center justify-center text-muted-foreground transition-colors hover:text-primary md:w-16 md:justify-end"
+      >
+        <LogIn className="h-5 w-5" strokeWidth={1.75} />
+      </Link>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Account"
+        className="flex w-8 items-center justify-center text-primary transition-opacity hover:opacity-80 md:w-16 md:justify-end"
+      >
+        <UserRound className="h-5 w-5" strokeWidth={1.75} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
+          {user.email ?? "Signed in"}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => void navigate({ to: "/auth" })}>Account</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void navigate({ to: "/claim" })}>
+          Player code
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={() => {
+            void (async () => {
+              // Cancel before the sign-out so in-flight queries don't land as errors,
+              // and clear so Back cannot restore a shell hydrated from this account.
+              await queryClient.cancelQueries();
+              queryClient.clear();
+              await signOutAccount();
+              toast.success("Signed out");
+              void navigate({ to: "/auth", replace: true });
+            })();
+          }}
+        >
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
