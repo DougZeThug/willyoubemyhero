@@ -124,11 +124,48 @@ describe("getTradeSpares", () => {
     expect(mock.eqValue(secrets, "participant_id")).toBe(THEM);
   });
 
-  it("only ever looks at duplicate secret copies", async () => {
-    withDb({ "event_participants.select": { data: [] } });
-    await spares(ME, asMe());
+  it("offers every copy, not just duplicates, and flags the last one", async () => {
+    // THIS USED TO FILTER ON is_duplicate. A secret you own one of is still yours
+    // to give; `lastCopy` is what makes that visible rather than surprising.
+    withDb({
+      "event_participants.select": { data: [] },
+      "secret_card_pulls.select": {
+        data: [
+          // The only copy of this card — tradeable, and flagged.
+          { id: PULL_ID, secret_card_id: SECRET_ID, tier: "mythic", granted: true, pulled_on: "2026-01-02" }, // prettier-ignore
+          // Two of this one, so neither is anybody's last.
+          { id: "p2", secret_card_id: "s2", tier: "rare", granted: true, pulled_on: "2026-01-02" }, // prettier-ignore
+          { id: "p3", secret_card_id: "s2", tier: "common", granted: true, pulled_on: "2026-01-02" }, // prettier-ignore
+        ],
+      },
+      "secret_cards.select": { data: [] },
+    });
+    const res = await spares(ME, asMe());
     const [call] = mock.callsFor("secret_card_pulls", "select");
-    expect(mock.eqValue(call, "is_duplicate")).toBe(true);
+    expect(mock.eqValue(call, "is_duplicate")).toBeUndefined();
+    expect(res.secrets.map((s) => [s.pullId, s.lastCopy])).toEqual([
+      [PULL_ID, true],
+      ["p2", false],
+      ["p3", false],
+    ]);
+  });
+
+  it("does not call a copy the last one when today's pull is also held", async () => {
+    // Counted over every row held, not just the stakeable ones: today's pull is
+    // hidden from the picker but she still owns it, so the older copy is not her
+    // last.
+    withDb({
+      "event_participants.select": { data: [] },
+      "secret_card_pulls.select": {
+        data: [
+          { id: PULL_ID, secret_card_id: SECRET_ID, tier: "rare", granted: false, pulled_on: "2026-01-02" }, // prettier-ignore
+          { id: "p2", secret_card_id: SECRET_ID, tier: "common", granted: false, pulled_on: leagueDay() }, // prettier-ignore
+        ],
+      },
+      "secret_cards.select": { data: [] },
+    });
+    const res = await spares(ME, asMe());
+    expect(res.secrets.map((s) => [s.pullId, s.lastCopy])).toEqual([[PULL_ID, false]]);
   });
 
   it("hides today's own pull, which is that member's spent daily slot", async () => {
@@ -166,6 +203,7 @@ describe("getTradeSpares", () => {
         name: "Gary the Grill",
         artUrl: "https://signed/spare-day",
         tier: "rare",
+        lastCopy: true,
       },
     ]);
   });
@@ -438,9 +476,14 @@ describe("getMyTradeOffers", () => {
           { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "secret", card_copy_id: null, secret_pull_id: PULL_ID }, // prettier-ignore
         ],
       },
-      "secret_card_pulls.select": {
-        data: [{ id: PULL_ID, secret_card_id: SECRET_ID, tier: "mythic" }],
-      },
+      // Two calls in order: the staked rows, then every row for those cards so the
+      // owner's copy count — and so `lastCopy` — can be worked out.
+      "secret_card_pulls.select": [
+        {
+          data: [{ id: PULL_ID, participant_id: THEM, secret_card_id: SECRET_ID, tier: "mythic" }],
+        },
+        { data: [{ participant_id: THEM, secret_card_id: SECRET_ID }] },
+      ],
       "secret_cards.select": {
         data: [{ id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/offer-face/art.webp" }],
       },
@@ -454,6 +497,8 @@ describe("getMyTradeOffers", () => {
         name: "Gary the Grill",
         artUrl: "https://signed/offer-face",
         tier: "mythic",
+        // The proposer holds exactly one — they are offering their only Gary.
+        lastCopy: true,
       },
     ]);
   });

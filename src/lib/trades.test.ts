@@ -42,7 +42,14 @@ describe("tradeItemsLabel", () => {
   it("says the same thing about a hydrated offer side", () => {
     const items: TradeItemView[] = [
       { kind: "roster", copyId: "c1", eventParticipantId: "ep-1", edition: "platinum" },
-      { kind: "secret", pullId: "p1", name: "Gary the Grill", artUrl: null, tier: "epic" },
+      {
+        kind: "secret",
+        pullId: "p1",
+        name: "Gary the Grill",
+        artUrl: null,
+        tier: "epic",
+        lastCopy: true,
+      },
     ];
     expect(tradeItemsLabel(items)).toBe("1 card + a secret");
   });

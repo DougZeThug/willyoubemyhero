@@ -94,14 +94,16 @@ describe("migrations", () => {
       JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public'
         AND proname IN ('accept_trade_offer', 'create_trade_offer', 'trade_item_is_spare',
-                        'resync_card_pull')
+                        'trade_leaves_a_copy', 'resync_card_pull', 'resync_secret_ownership')
       ORDER BY proname
     `);
     expect(rows.map((r) => r.proname)).toEqual([
       "accept_trade_offer",
       "create_trade_offer",
       "resync_card_pull",
+      "resync_secret_ownership",
       "trade_item_is_spare",
+      "trade_leaves_a_copy",
     ]);
   });
 

@@ -143,7 +143,9 @@ test.describe("trading post", () => {
         { copyId: MY_COPY, eventParticipantId: ME.ep, edition: "platinum" },
         { copyId: THEIR_COPY, eventParticipantId: ME.ep, edition: "standard" },
       ],
-      secrets: [{ pullId: PULL_ID, name: "Gary The Grill", artUrl: null, tier: "epic" }],
+      secrets: [
+        { pullId: PULL_ID, name: "Gary The Grill", artUrl: null, tier: "epic", lastCopy: true },
+      ],
     });
     server.set("createTradeOffer", { ok: true, offerId: OFFER_ID });
 
@@ -214,6 +216,43 @@ test.describe("trading post", () => {
     // reading "Standard" on 70% of copies is noise.
     await expect(page.getByText("Platinum").first()).toBeVisible();
     await expect(page.getByText("Standard")).toHaveCount(0);
+  });
+
+  test("marks a secret you only own one of", async ({ page, server }) => {
+    // Any secret copy is tradeable now, single or not, so this marker is the only
+    // thing between somebody and giving away their only mythic.
+    await signIn(page);
+    server.set("getClaimRoster", [
+      { id: ME.pid, name: ME.name, nickname: null, hasCode: true, claimed: true },
+      { id: THEM.pid, name: THEM.name, nickname: null, hasCode: true, claimed: true },
+    ]);
+    server.set("getTradeSpares", {
+      participantId: ME.pid,
+      roster: [],
+      secrets: [
+        { pullId: PULL_ID, name: "Gary The Grill", artUrl: null, tier: "mythic", lastCopy: true },
+        { pullId: "p2", name: "The Dog", artUrl: null, tier: "rare", lastCopy: false },
+      ],
+    });
+
+    await page.goto("/players/trade");
+    await page.getByRole("button", { name: THEM.name }).click();
+
+    // Asserted by containment rather than accessible name: the tile is a button
+    // wrapping a card image and three lines of caption, and how those concatenate
+    // into one name is not something worth pinning a test to.
+    const gary = page
+      .getByRole("button")
+      .filter({ hasText: /gary the grill/i })
+      .first();
+    await expect(gary).toContainText(/last copy/i);
+
+    const dog = page
+      .getByRole("button")
+      .filter({ hasText: /the dog/i })
+      .first();
+    await expect(dog).toBeVisible();
+    await expect(dog).not.toContainText(/last copy/i);
   });
 
   test("names no secret card in the public feed", async ({ page, server }) => {

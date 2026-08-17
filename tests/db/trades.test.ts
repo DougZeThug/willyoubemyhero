@@ -298,13 +298,14 @@ describe("create_trade_offer", () => {
     ).rejects.toThrow(/spare/i);
   });
 
-  it("refuses a secret copy that is not a duplicate", async () => {
+  it("accepts a secret copy you only own one of", async () => {
+    // THIS USED TO BE REFUSED. A secret you hold one of is yours to give: unlike a
+    // roster card there is no public count riding on you keeping one.
     const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
-    const owned = await giveSecret(IDS.alice, card, { duplicate: false });
-    await expect(
-      createOffer(IDS.alice, IDS.bob, [secret(owned)], [copy(bobCopies[0])]),
-    ).rejects.toThrow(/spare/i);
+    const only = await giveSecret(IDS.alice, card, { duplicate: false });
+    const res = await createOffer(IDS.alice, IDS.bob, [secret(only)], [copy(bobCopies[0])]);
+    expect(res.ok).toBe(true);
   });
 
   it("refuses a secret copy belonging to somebody else", async () => {
@@ -739,6 +740,96 @@ describe("accept_trade_offer — secret cards", () => {
       [IDS.bob, OTHER_DAY],
     );
     expect(row.n).toBe(2);
+  });
+
+  it("leaves the giver holding none of a card they only had one of", async () => {
+    const { bobCopies } = await twoSpares();
+    const card = await addCard("Gary the Grill");
+    const only = await giveSecret(IDS.alice, card, { duplicate: false, tier: "mythic" });
+
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(only)], [copy(bobCopies[0])]);
+    expect((await accept(offerId, IDS.bob)).ok).toBe(true);
+
+    const [mine] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1 AND secret_card_id = $2", // prettier-ignore
+      [IDS.alice, card],
+    );
+    expect(mine.n).toBe(0);
+
+    // And it is the receiver's outright, at the tier it was rolled at.
+    const moved = await secretRow(only);
+    expect(moved.participant_id).toBe(IDS.bob);
+    expect(moved.is_duplicate).toBe(false);
+    expect(moved.tier).toBe("mythic");
+  });
+
+  it("promotes a remaining duplicate when the owning row is the one traded", async () => {
+    // The reason this needed more than a relaxed condition. `is_duplicate = false`
+    // is the "you own this" marker that four different counts read; hand it over
+    // while keeping duplicates and the giver becomes an owner of nothing who still
+    // has rows — visible in the vault, absent from every count, and eligible to be
+    // dealt the same card again as new.
+    const { bobCopies } = await twoSpares();
+    const card = await addCard("Gary the Grill");
+    const owning = await giveSecret(IDS.alice, card, { duplicate: false, tier: "common" });
+    await giveSecret(IDS.alice, card, { duplicate: true, tier: "rare" });
+    await giveSecret(IDS.alice, card, { duplicate: true, tier: "legendary" });
+
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [secret(owning)],
+      [copy(bobCopies[0])],
+    );
+    expect((await accept(offerId, IDS.bob)).ok).toBe(true);
+
+    const rows = await sql<{ tier: string; is_duplicate: boolean }>(
+      `SELECT tier, is_duplicate FROM public.secret_card_pulls
+        WHERE participant_id = $1 AND secret_card_id = $2 ORDER BY is_duplicate`,
+      [IDS.alice, card],
+    );
+    // Exactly one owning row, and it is the best of what she kept — best-wins, the
+    // same rule every other copy question in this app answers with.
+    expect(rows.filter((r) => !r.is_duplicate)).toEqual([
+      { tier: "legendary", is_duplicate: false },
+    ]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it("does not promote anything when the giver kept their owning row", async () => {
+    const { bobCopies } = await twoSpares();
+    const card = await addCard("Gary the Grill");
+    await giveSecret(IDS.alice, card, { duplicate: false, tier: "common" });
+    const dupe = await giveSecret(IDS.alice, card, { duplicate: true, tier: "mythic" });
+
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(dupe)], [copy(bobCopies[0])]);
+    await accept(offerId, IDS.bob);
+
+    // Still exactly one owning row, and still the one she had — a promotion here
+    // would breach secret_card_pulls_owned_once.
+    const rows = await sql<{ tier: string; is_duplicate: boolean }>(
+      "SELECT tier, is_duplicate FROM public.secret_card_pulls WHERE participant_id = $1 AND secret_card_id = $2", // prettier-ignore
+      [IDS.alice, card],
+    );
+    expect(rows).toEqual([{ tier: "common", is_duplicate: false }]);
+  });
+
+  it("still refuses today's own pull, even as somebody's only copy", async () => {
+    // The relaxation must not reopen the daily-pull bypass: trading away today's
+    // row would clear the evidence that the slot was spent.
+    const { bobCopies } = await twoSpares();
+    const card = await addCard("Gary the Grill");
+    const [{ today }] = await sql<{ today: string }>(
+      "SELECT (now() AT TIME ZONE 'America/New_York')::date::text AS today",
+    );
+    const todays = await giveSecret(IDS.alice, card, {
+      duplicate: false,
+      granted: false,
+      day: today,
+    });
+    await expect(
+      createOffer(IDS.alice, IDS.bob, [secret(todays)], [copy(bobCopies[0])]),
+    ).rejects.toThrow(/spare/i);
   });
 
   it("does not give the giver their daily pull back", async () => {

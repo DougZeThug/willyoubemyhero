@@ -108,6 +108,8 @@ const sideSchema = z.array(itemSchema).min(1).max(4);
  */
 async function hydrateSecrets(
   rows: Pick<SecretPullRow, "id" | "secret_card_id" | "tier">[],
+  /** Pull ids whose owner holds no other copy of that card. */
+  lastCopyIds: ReadonlySet<string> = new Set(),
 ): Promise<Map<string, SecretSpare>> {
   const out = new Map<string, SecretSpare>();
   if (rows.length === 0) return out;
@@ -131,6 +133,7 @@ async function hydrateSecrets(
         // thumb rather than large: these are tiles in a picker, not the reveal.
         artUrl: await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb),
         tier: toSecretTier(row.tier),
+        lastCopy: lastCopyIds.has(row.id),
       });
     }),
   );
@@ -188,11 +191,14 @@ export const getTradeSpares = createServerFn({ method: "GET" })
             .in("event_participant_id", ids)
             .returns<Pick<CardCopyRow, "id" | "event_participant_id" | "edition">[]>()
         : { data: [], error: null },
+      // EVERY copy, duplicate or not. A secret you own one of is still yours to
+      // give — unlike a roster card there is no public count riding on you keeping
+      // one. Which means this query is also where `lastCopy` is worked out, so the
+      // tile can say so before somebody hands away their only mythic.
       trades
         .from("secret_card_pulls")
         .select("id, secret_card_id, tier, granted, pulled_on")
         .eq("participant_id", data.participantId)
-        .eq("is_duplicate", true)
         .returns<
           Pick<SecretPullRow, "id" | "secret_card_id" | "tier" | "granted" | "pulled_on">[]
         >(),
@@ -201,8 +207,19 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     if (dupeError) throw dupeError;
 
     const today = leagueDay();
-    const stakeable = (dupes ?? []).filter((r) => r.granted || r.pulled_on !== today);
-    const secrets = await hydrateSecrets(stakeable);
+    const held = dupes ?? [];
+    const stakeable = held.filter((r) => r.granted || r.pulled_on !== today);
+
+    // Counted over EVERY row they hold, not just the stakeable ones: somebody with
+    // today's pull plus one older copy can trade the older one and is not down to
+    // their last, so calling it a last copy would be a lie.
+    const perCard = new Map<string, number>();
+    for (const r of held) perCard.set(r.secret_card_id, (perCard.get(r.secret_card_id) ?? 0) + 1);
+    const lastCopyIds = new Set(
+      held.filter((r) => perCard.get(r.secret_card_id) === 1).map((r) => r.id),
+    );
+
+    const secrets = await hydrateSecrets(stakeable, lastCopyIds);
 
     // Every copy of a card they hold two or more of. All of them, not "the ones
     // beyond the first": the giver picks which copy to keep, so listing only the
@@ -251,10 +268,36 @@ async function toOfferViews(
   if (secretRows.length) {
     const { data: pulls } = await sb
       .from("secret_card_pulls")
-      .select("id, secret_card_id, tier")
+      .select("id, participant_id, secret_card_id, tier")
       .in("id", secretRows)
-      .returns<Pick<SecretPullRow, "id" | "secret_card_id" | "tier">[]>();
-    hydrated = await hydrateSecrets(pulls ?? []);
+      .returns<Pick<SecretPullRow, "id" | "participant_id" | "secret_card_id" | "tier">[]>();
+    const staked = pulls ?? [];
+
+    // How many copies each staked row's OWNER holds of that card, so an offer can
+    // say "this is their last one" the same way the picker does. Scoped to the
+    // cards already on the table — it tells the two parties nothing they cannot
+    // already see in each other's spares list.
+    let owned: Pick<SecretPullRow, "participant_id" | "secret_card_id">[] = [];
+    if (staked.length) {
+      const { data } = await sb
+        .from("secret_card_pulls")
+        .select("participant_id, secret_card_id")
+        .in("secret_card_id", [...new Set(staked.map((r) => r.secret_card_id))])
+        .returns<Pick<SecretPullRow, "participant_id" | "secret_card_id">[]>();
+      owned = data ?? [];
+    }
+    const perOwnerCard = new Map<string, number>();
+    for (const r of owned) {
+      const key = `${r.participant_id}:${r.secret_card_id}`;
+      perOwnerCard.set(key, (perOwnerCard.get(key) ?? 0) + 1);
+    }
+    const lastCopyIds = new Set(
+      staked
+        .filter((r) => perOwnerCard.get(`${r.participant_id}:${r.secret_card_id}`) === 1)
+        .map((r) => r.id),
+    );
+
+    hydrated = await hydrateSecrets(staked, lastCopyIds);
   }
   if (copyRows.length) {
     // Which card the copy is of, and the finish on it. Read off the copy rather

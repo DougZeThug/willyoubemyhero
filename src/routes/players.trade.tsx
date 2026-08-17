@@ -413,7 +413,8 @@ function Header() {
       </Link>
       <h1 className="mt-2 font-display text-3xl font-black uppercase leading-none">Trading Post</h1>
       <p className="mt-2 text-xs text-muted-foreground">
-        Spares only — you always keep one of everything. Editions do not travel.
+        Player cards: spares only, you always keep one. Secrets: anything you hold, even your last
+        copy. The finish travels with the card.
       </p>
     </div>
   );
@@ -453,27 +454,37 @@ function SparePicker({
           a.eventParticipantId.localeCompare(b.eventParticipantId) ||
           editionRank(a.edition) - editionRank(b.edition),
       )
-      .map((r) => ({
-        key: `c:${r.copyId}`,
+      // Annotated rather than cast. An `as TradeItemView` here silently dropped
+      // `lastCopy` off the secret tiles below and the marker simply never
+      // rendered — the compiler had the answer and the cast threw it away.
+      .map(
+        (r): Staged => ({
+          key: `c:${r.copyId}`,
+          item: {
+            kind: "roster",
+            copyId: r.copyId,
+            eventParticipantId: r.eventParticipantId,
+            edition: r.edition,
+          },
+          payload: { kind: "roster", cardCopyId: r.copyId },
+        }),
+      ),
+    // Every secret they hold, single copies included — and `lastCopy` carries
+    // through so the tile can say which ones they cannot get back.
+    ...(spares?.secrets ?? []).map(
+      (s): Staged => ({
+        key: `s:${s.pullId}`,
         item: {
-          kind: "roster",
-          copyId: r.copyId,
-          eventParticipantId: r.eventParticipantId,
-          edition: r.edition,
-        } as TradeItemView,
-        payload: { kind: "roster", cardCopyId: r.copyId },
-      })),
-    ...(spares?.secrets ?? []).map((s) => ({
-      key: `s:${s.pullId}`,
-      item: {
-        kind: "secret",
-        pullId: s.pullId,
-        name: s.name,
-        artUrl: s.artUrl,
-        tier: s.tier,
-      } as TradeItemView,
-      payload: { kind: "secret", secretPullId: s.pullId },
-    })),
+          kind: "secret",
+          pullId: s.pullId,
+          name: s.name,
+          artUrl: s.artUrl,
+          tier: s.tier,
+          lastCopy: s.lastCopy,
+        },
+        payload: { kind: "secret", secretPullId: s.pullId },
+      }),
+    ),
   ];
 
   return (

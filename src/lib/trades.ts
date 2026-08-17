@@ -40,7 +40,15 @@ export function isTradeOfferStatus(value: string): value is TradeOfferStatus {
  */
 export type TradeItemView =
   | { kind: "roster"; copyId: string; eventParticipantId: string; edition: Edition }
-  | { kind: "secret"; pullId: string; name: string; artUrl: string | null; tier: SecretTier };
+  | {
+      kind: "secret";
+      pullId: string;
+      name: string;
+      artUrl: string | null;
+      tier: SecretTier;
+      /** True when its owner holds no other copy of that card. */
+      lastCopy: boolean;
+    };
 
 export type TradeOfferView = {
   id: string;
@@ -68,15 +76,21 @@ export type RosterSpare = {
 };
 
 /**
- * A spare secret copy. Deliberately no `secretCardId`: staking one needs the
+ * A tradeable secret copy. Deliberately no `secretCardId`: staking one needs the
  * ledger row's id and nothing else, and the card is already described by the
  * name and art beside it.
+ *
+ * Any copy is tradeable, duplicate or not — a secret you own one of is still
+ * yours to give. `lastCopy` is what makes that visible rather than surprising:
+ * true when its owner holds no other copy, so the tile can say so before somebody
+ * hands away the only mythic they have.
  */
 export type SecretSpare = {
   pullId: string;
   name: string;
   artUrl: string | null;
   tier: SecretTier;
+  lastCopy: boolean;
 };
 
 export type TradeSpares = {

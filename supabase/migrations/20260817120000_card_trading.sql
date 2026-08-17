@@ -196,10 +196,13 @@ AS $$
                WHERE others.participant_id = _giver_id
                  AND others.event_participant_id = mine.event_participant_id) >= 2)
     WHEN 'secret' THEN EXISTS (
+      -- ANY copy, not just a duplicate. A secret you own one of is yours to give:
+      -- unlike a roster card there is no public count riding on you keeping one,
+      -- so the only thing that has to survive is your OWN record staying coherent,
+      -- and resync_secret_ownership below is what does that.
       SELECT 1 FROM public.secret_card_pulls
        WHERE id = _secret_pull_id
          AND participant_id = _giver_id
-         AND is_duplicate
          -- TODAY'S OWN PULL IS NOT A SPARE YET, and this line is a security rule
          -- rather than a product one. A member's un-granted row for the current
          -- league day IS their spent daily slot — pull_secret_card looks for
@@ -251,6 +254,64 @@ $$;
 
 REVOKE ALL ON FUNCTION public.trade_leaves_a_copy(uuid) FROM anon, authenticated, PUBLIC;
 GRANT EXECUTE ON FUNCTION public.trade_leaves_a_copy(uuid) TO service_role;
+
+-- ============ WHO OWNS A SECRET, AFTER ONE HAS MOVED ============
+-- The direct analogue of resync_card_pull, and it exists for the same reason:
+-- something derived has to be recomputed once a trade moves the row it was
+-- derived from.
+--
+-- `is_duplicate = false` is not just a flag on a pull, it is the marker for "this
+-- person owns this card", and FOUR things read it: secret_pull_status's `pulled`
+-- count, pull_secret_card's first pass (which cards can still be found fresh),
+-- getMySecrets' ownerCount, and the commissioner's catalogue. While only
+-- duplicates could be traded, the giver always kept their ownership row and those
+-- four could never disagree with the vault. Now that any copy can go, somebody can
+-- hand over the ownership row and keep duplicates — leaving a member whose vault
+-- still shows the card (getMySecrets lists any row) while every count says they do
+-- not own it, and to whom pull_secret_card would happily deal it again as new.
+--
+-- So: if they still hold copies but none of them owns the card, promote one.
+CREATE OR REPLACE FUNCTION public.resync_secret_ownership(
+  _participant_id uuid,
+  _secret_card_id uuid
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE _promote uuid;
+BEGIN
+  IF _participant_id IS NULL OR _secret_card_id IS NULL THEN RETURN; END IF;
+
+  -- Already have an owning row, or nothing left at all: either way, nothing to do.
+  IF EXISTS (
+    SELECT 1 FROM public.secret_card_pulls
+     WHERE participant_id = _participant_id
+       AND secret_card_id = _secret_card_id
+       AND NOT is_duplicate
+  ) THEN RETURN; END IF;
+
+  -- Best tier first, then the oldest — best-wins is the rule bestSecretTier and
+  -- pull_secret_card already apply to every other copy question, and taking the
+  -- oldest keeps the `firstPulledOn` the vault shows honest.
+  SELECT id INTO _promote
+    FROM public.secret_card_pulls
+   WHERE participant_id = _participant_id
+     AND secret_card_id = _secret_card_id
+   ORDER BY public.secret_tier_rank(tier) ASC, pulled_on ASC
+   LIMIT 1;
+
+  IF _promote IS NULL THEN RETURN; END IF;
+
+  -- secret_card_pulls_owned_once is satisfied by construction: the guard above
+  -- proved there is no other non-duplicate row for this pair.
+  UPDATE public.secret_card_pulls SET is_duplicate = false WHERE id = _promote;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.resync_secret_ownership(uuid, uuid)
+  FROM anon, authenticated, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.resync_secret_ownership(uuid, uuid) TO service_role;
 
 -- ============ COMPOSING AN OFFER ============
 -- An RPC rather than two supabase-js calls because the offer and its items span
@@ -507,6 +568,12 @@ BEGIN
              is_duplicate   = _dupe,
              granted        = true
        WHERE id = _item.secret_pull_id;
+
+      -- The giver may have just handed over the row that said they own this card.
+      -- If they still hold copies, one of them takes over; if they held only the
+      -- one, they own none of it now, which is exactly what trading it away means.
+      -- The receiver needs no equivalent — `_dupe` above already decided their side.
+      PERFORM public.resync_secret_ownership(_item.giver_id, _card);
     END IF;
   END LOOP;
 

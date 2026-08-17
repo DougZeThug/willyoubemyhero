@@ -67,6 +67,14 @@ export function TradeItemTile({ item, lookup, onClick, selected }: TradeItemTile
             {tier.label}
           </div>
         )}
+        {/* Any secret copy is tradeable now, single or not, so this is the only
+            thing standing between somebody and giving away their only mythic.
+            A marker rather than a dialog: visible, not in the way. */}
+        {item.kind === "secret" && item.lastCopy && (
+          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-warn">
+            ⚠ last copy
+          </div>
+        )}
         {/* Null for a standard finish — 70% of copies — so the metal only shows
             up where it means something. Same rule editionLabel applies everywhere. */}
         {finish && (
