@@ -6,6 +6,7 @@ const ROUTES = [
   { path: "/live", title: /Live/i },
   { path: "/leaderboard", title: /Leaderboard/i },
   { path: "/players", title: /Vault|Players/i },
+  { path: "/players/trade", title: /Trading Post/i },
   { path: "/awards", title: /Awards/i },
   { path: "/claim", title: /Claim/i },
 ];

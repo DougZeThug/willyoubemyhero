@@ -151,6 +151,18 @@ export const DEFAULT_RESPONSES: Responses = {
   // has to know this feature exists.
   getCardPullCounts: {},
   recordCardPulls: { ok: true, recorded: 0 },
+  // Trading. Empty by default for the same reason: /players/trade renders its
+  // "nobody wants your cards yet" state and the vault's Trade pill leads
+  // somewhere harmless. None of these three keys is a substring of another or of
+  // any key above — check that again before adding a fourth.
+  //
+  // The mutating handlers (createTradeOffer, acceptTradeOffer, decline/cancel)
+  // are deliberately NOT defaulted: nothing reaches them unless a test means to,
+  // and e2e/trades.spec.ts stubs each one where it exercises it, so the stub
+  // reads next to the assertion it feeds.
+  getMyTradeOffers: { inbox: [], outbox: [], recent: [] },
+  getTradeSpares: { participantId: null, roster: [], secrets: [] },
+  getTradeFeed: [],
 };
 
 /** A secret card as pullSecretCard returns it, for tests that want the fourth slot. */

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Users, Shuffle, PackageOpen, Layers, Award, Check, UserRoundCheck } from "lucide-react";
+import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck } from "lucide-react"; // prettier-ignore
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -219,6 +219,16 @@ function PlayersPage() {
               >
                 <Award className="h-3.5 w-3.5" />
                 Awards
+              </Link>
+              {/* Shown to everyone, including guests: the screen behind it
+                  explains that trading needs a claimed player, which is a better
+                  answer than a button that is not there. */}
+              <Link
+                to="/players/trade"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+                Trade
               </Link>
               {/* The daily loop's alarm clock. Nothing else brings anyone back on
                   a random Tuesday. Leaks nothing: a guest, and a member who has
