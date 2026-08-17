@@ -150,7 +150,7 @@ describe("CardPromptStudio", () => {
     expect(screen.queryByRole("combobox", { name: "Participant" })).not.toBeInTheDocument();
     const generate = screen.getByRole("button", { name: "Generate prompt" });
     expect(generate).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Subject name"), { target: { value: "Pickles" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Pickles" } });
     fireEvent.change(screen.getByLabelText("Owner / association"), { target: { value: "Maya" } });
     await waitFor(() => expect(generate).toBeEnabled());
     await user.click(generate);
@@ -174,7 +174,7 @@ describe("CardPromptStudio", () => {
     await user.click(screen.getByRole("option", { name: /Alex/ }));
     await user.click(screen.getByRole("combobox", { name: "Series" }));
     await user.click(screen.getByRole("option", { name: "Secret Pet" }));
-    await user.type(screen.getByLabelText("Subject name"), "Pickles");
+    await user.type(screen.getByLabelText("Name"), "Pickles");
     await user.type(screen.getByLabelText("Owner / association"), "Maya");
     await user.click(screen.getByRole("button", { name: "Generate prompt" }));
     await user.click(screen.getByRole("button", { name: "Copy prompt" }));
