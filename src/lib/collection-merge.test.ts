@@ -165,15 +165,24 @@ describe("mergeCollection, reconciling a finish", () => {
     expect(collection["ep-0"].edition).toBe("gold");
   });
 
-  it("keeps a local finish the server has not caught up to", () => {
-    // A guest pulls a platinum, then claims. The server row is created by the
-    // claim and starts at standard; taking it outright would erase the pull.
+  it("takes the server's finish even when the local one is better", () => {
+    // THIS USED TO ASSERT THE OPPOSITE, and trading is why it flipped.
+    //
+    // `card_pulls.edition` is derived from the copies you hold, so trading your
+    // only platinum away lowers it — correctly. Taking the better of the two would
+    // pin that platinum on the giver's own device forever: a card they no longer
+    // own, in a finish that now belongs to somebody else.
+    //
+    // The cost, stated honestly: a pull this device recorded locally but never
+    // managed to report is now demoted rather than preserved. That is the same
+    // bargain `count` has always made a line above — it takes the server's number
+    // outright — and having the two disagree was the real inconsistency.
     const { collection } = mergeCollection(
       { "ep-0": withEdition("ep-0", "platinum") },
       [served("ep-0", 1, "2026-07-31T18:16:03.777Z", "standard")],
       new Set(["ep-0"]),
     );
-    expect(collection["ep-0"].edition).toBe("platinum");
+    expect(collection["ep-0"].edition).toBe("standard");
   });
 
   it("takes the server's finish when it is the better of the two", () => {

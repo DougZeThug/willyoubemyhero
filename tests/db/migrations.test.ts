@@ -13,6 +13,7 @@ const EXPECTED_TABLES = [
   "award_votes",
   "awards",
   "card_comments",
+  "card_copies",
   "card_prompt_runs",
   "card_prompt_templates",
   "card_pulls",
@@ -32,6 +33,9 @@ const EXPECTED_TABLES = [
   "secret_cards",
   "splits",
   "stations",
+  "trade_offer_items",
+  "trade_offers",
+  "trades",
 ];
 
 describe("migrations", () => {
@@ -82,6 +86,44 @@ describe("migrations", () => {
       ORDER BY proname
     `);
     expect(rows.map((r) => r.proname)).toEqual(["pull_secret_card", "secret_pull_status"]);
+  });
+
+  it("creates the trading RPCs the app calls", async () => {
+    const rows = await sql<{ proname: string }>(`
+      SELECT proname FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND proname IN ('accept_trade_offer', 'create_trade_offer', 'trade_item_is_spare',
+                        'trade_leaves_a_copy', 'trade_has_both_sides',
+                        'resync_card_pull', 'resync_secret_ownership')
+      ORDER BY proname
+    `);
+    expect(rows.map((r) => r.proname)).toEqual([
+      "accept_trade_offer",
+      "create_trade_offer",
+      "resync_card_pull",
+      "resync_secret_ownership",
+      "trade_has_both_sides",
+      "trade_item_is_spare",
+      "trade_leaves_a_copy",
+    ]);
+  });
+
+  it("enforces one pulled copy per person per card per league day", async () => {
+    // The rule that stops a replayed pack minting copies. An index rather than a
+    // timestamp comparison, the same shape secret_card_pulls has always used.
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'card_copies'",
+    );
+    expect(
+      rows.some(
+        (r) =>
+          r.indexdef.includes("UNIQUE") &&
+          r.indexdef.includes("participant_id") &&
+          r.indexdef.includes("event_participant_id") &&
+          r.indexdef.includes("acquired_on"),
+      ),
+    ).toBe(true);
   });
 
   it("creates the two RPCs the pack calls when it is torn", async () => {
@@ -195,6 +237,11 @@ describe("migrations", () => {
     for (const table of ["runs", "splits", "penalties", "event_participants", "draft_selections"]) {
       expect(published).toContain(table);
     }
+    // A completed trade is the app's only live signal that anything traded at
+    // all: both parties' vaults refetch off this insert, and the feed updates on
+    // everyone else's phone. Unpublished, the feature works but never moves until
+    // somebody reloads.
+    expect(published).toContain("trades");
   });
 
   it("keeps the secret tables out of realtime", async () => {
@@ -215,6 +262,15 @@ describe("migrations", () => {
     expect(published).not.toContain("pack_opens");
     expect(published).not.toContain("card_prompt_templates");
     expect(published).not.toContain("card_prompt_runs");
+    // Same rationale again, and the reason `trades` above is a separate table
+    // rather than a status on the offer: an offer names cards its two parties
+    // hold, so publishing either of these broadcasts private collection data —
+    // and a pending offer — to every phone in the garden.
+    expect(published).not.toContain("trade_offers");
+    expect(published).not.toContain("trade_offer_items");
+    // Everything the card_pulls line above says, per copy and with the finish on
+    // each — strictly the worse leak of the two.
+    expect(published).not.toContain("card_copies");
   });
 
   it("enforces one pack_opens row per person per league day, which is what makes a row count a pack count", async () => {
