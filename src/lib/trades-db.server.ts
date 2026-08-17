@@ -38,9 +38,26 @@ export type TradeOfferItemRow = {
   /** Who is GIVING this one up, resolved against the offer's two participants. */
   giver_side: "proposer" | "recipient";
   kind: "roster" | "secret";
-  event_participant_id: string | null;
-  /** A specific COPY: secret ownership is per-row, so a trade names the ledger row. */
+  /** Both sides name a specific COPY, which is what makes a finish tradeable. */
+  card_copy_id: string | null;
   secret_pull_id: string | null;
+};
+
+/**
+ * One copy of a roster card. `card_pulls.pull_count` and `.edition` are derived
+ * from these rows by `resync_card_pull`, so this is the grain that actually moves
+ * in a trade.
+ */
+export type CardCopyRow = {
+  id: string;
+  participant_id: string;
+  event_participant_id: string;
+  /** Unconstrained text, exactly like card_pulls.edition — ids live in card-edition.ts. */
+  edition: string;
+  /** The league day this copy was pulled on. Null once it has been traded. */
+  acquired_on: string | null;
+  source: "pull" | "trade" | "backfill";
+  created_at: string;
 };
 
 export type TradeRow = {

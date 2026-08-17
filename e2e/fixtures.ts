@@ -161,6 +161,8 @@ export const DEFAULT_RESPONSES: Responses = {
   // and e2e/trades.spec.ts stubs each one where it exercises it, so the stub
   // reads next to the assertion it feeds.
   getMyTradeOffers: { inbox: [], outbox: [], recent: [] },
+  // `roster` is one entry per COPY — {copyId, eventParticipantId, edition} — since
+  // a trade moves a specific copy and its finish. Empty here either way.
   getTradeSpares: { participantId: null, roster: [], secrets: [] },
   getTradeFeed: [],
 };

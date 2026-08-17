@@ -14,6 +14,8 @@ const THEM = PLAYERS[1]; // Bob Blitz
 
 const OFFER_ID = "00000000-0000-4000-8000-000000000021";
 const PULL_ID = "00000000-0000-4000-8000-000000000031";
+const MY_COPY = "00000000-0000-4000-8000-000000000051";
+const THEIR_COPY = "00000000-0000-4000-8000-000000000052";
 
 /** A member token this suite's stubs never verify — the server is mocked out. */
 const memberToken = (pid: string) => `m.${pid}.${Date.now() + 60 * 60_000}.signature`;
@@ -36,8 +38,14 @@ const INBOX_OFFER = {
   recipientId: ME.pid,
   createdAt: "2026-08-17T10:00:00Z",
   resolvedAt: null,
-  proposerGives: [{ kind: "roster", eventParticipantId: THEM.ep }],
-  recipientGives: [{ kind: "roster", eventParticipantId: ME.ep }],
+  // A specific copy each way, with the finish on it — which is what a trade
+  // actually moves now.
+  proposerGives: [
+    { kind: "roster", copyId: THEIR_COPY, eventParticipantId: THEM.ep, edition: "gold" },
+  ],
+  recipientGives: [
+    { kind: "roster", copyId: MY_COPY, eventParticipantId: ME.ep, edition: "standard" },
+  ],
 };
 
 test.describe("trading post", () => {
@@ -127,9 +135,14 @@ test.describe("trading post", () => {
       { id: PLAYERS[2].pid, name: PLAYERS[2].name, nickname: null, hasCode: false, claimed: false },
     ]);
     // One stub answers for both panels — the handler is the same one either way.
+    // Two copies of one card, in different finishes: the thing per-copy trading
+    // exists for, and the reason the picker shows two tiles rather than a count.
     server.set("getTradeSpares", {
       participantId: ME.pid,
-      roster: [{ eventParticipantId: ME.ep, spareCount: 2 }],
+      roster: [
+        { copyId: MY_COPY, eventParticipantId: ME.ep, edition: "platinum" },
+        { copyId: THEIR_COPY, eventParticipantId: ME.ep, edition: "standard" },
+      ],
       secrets: [{ pullId: PULL_ID, name: "Gary The Grill", artUrl: null, tier: "epic" }],
     });
     server.set("createTradeOffer", { ok: true, offerId: OFFER_ID });
@@ -167,10 +180,40 @@ test.describe("trading post", () => {
     await expect(page.getByText(new RegExp(`offer sent to ${THEM.name}`, "i"))).toBeVisible();
     expect(posted).toHaveLength(1);
     // The counterparty is the one id a payload legitimately carries; both sides
-    // go over as the discriminated shape the RPC validates.
+    // go over as the discriminated shape the RPC validates. A roster item names a
+    // COPY, so the finish is decided by which tile was tapped rather than left to
+    // the server to guess.
     expect(posted[0]).toContain(THEM.pid);
+    expect(posted[0]).toContain("cardCopyId");
     expect(posted[0]).toContain("secretPullId");
     expect(posted[0]).toContain(PULL_ID);
+  });
+
+  test("shows each copy of a card separately, by its finish", async ({ page, server }) => {
+    // Two Alices, one platinum and one standard. Before card_copies these were a
+    // single tile with a spare count, and whichever one you traded arrived
+    // standard — so the picker could not have offered this choice at all.
+    await signIn(page);
+    server.set("getClaimRoster", [
+      { id: ME.pid, name: ME.name, nickname: null, hasCode: true, claimed: true },
+      { id: THEM.pid, name: THEM.name, nickname: null, hasCode: true, claimed: true },
+    ]);
+    server.set("getTradeSpares", {
+      participantId: ME.pid,
+      roster: [
+        { copyId: MY_COPY, eventParticipantId: ME.ep, edition: "platinum" },
+        { copyId: THEIR_COPY, eventParticipantId: ME.ep, edition: "standard" },
+      ],
+      secrets: [],
+    });
+
+    await page.goto("/players/trade");
+    await page.getByRole("button", { name: THEM.name }).click();
+
+    // The rarest finish leads, and only the special one is labelled — a chip
+    // reading "Standard" on 70% of copies is noise.
+    await expect(page.getByText("Platinum").first()).toBeVisible();
+    await expect(page.getByText("Standard")).toHaveCount(0);
   });
 
   test("names no secret card in the public feed", async ({ page, server }) => {

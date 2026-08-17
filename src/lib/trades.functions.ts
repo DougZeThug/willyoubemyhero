@@ -5,6 +5,7 @@ import { requireMember } from "./require-auth.server";
 import { signPath } from "./media.functions";
 import { VARIANT_WIDTHS } from "./media";
 import { toSecretTier } from "./secret-rarity";
+import { toEdition } from "./card-edition";
 import { leagueDay } from "./trades";
 import type {
   SecretSpare,
@@ -13,9 +14,10 @@ import type {
   TradeOfferView,
   TradeSpares,
 } from "./trades";
-import type { CardPullRow, SecretCardRow, SecretPullRow } from "./secret-cards-db.server";
+import type { SecretCardRow, SecretPullRow } from "./secret-cards-db.server";
 import type {
   AcceptTradeOfferResult,
+  CardCopyRow,
   CreateTradeOfferResult,
   TradeOfferItemRow,
   TradeOfferRow,
@@ -36,7 +38,10 @@ import type {
  * feature makes to the privacy rules around collections: `getTradeSpares` will
  * tell a member what somebody else has spare. You cannot compose an offer
  * blind. It is narrowed to spares (never the whole collection), it is
- * member-guarded (never anon), it carries no editions, and it is `no-store`.
+ * member-guarded (never anon), and it is `no-store`. Since per-copy trading it
+ * also carries the FINISH on each copy, which it deliberately did not before —
+ * see the note on the query itself for why that is now unavoidable, and why it
+ * still never reaches the public record.
  *
  * It does NOT breach the invariant at the top of secret-cards.functions.ts —
  * no handler here accepts a secret CARD id. `createTradeOffer` takes ledger-row
@@ -82,7 +87,10 @@ async function activeEventId(): Promise<string | null> {
 }
 
 const itemSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("roster"), eventParticipantId: z.string().uuid() }),
+  // A COPY, not a card. Which of your three Alices you are handing over is the
+  // whole point of card_copies — naming the card leaves it undecidable, and every
+  // traded card arriving `standard` was the symptom.
+  z.object({ kind: z.literal("roster"), cardCopyId: z.string().uuid() }),
   z.object({ kind: z.literal("secret"), secretPullId: z.string().uuid() }),
 ]);
 
@@ -133,10 +141,11 @@ async function hydrateSecrets(
  * What one member has spare, for composing an offer against.
  *
  * Works for yourself and for a counterparty — see the exception documented at the
- * top of this file. `pull_count >= 2` and `is_duplicate` are the same two rules
- * `trade_item_is_spare` applies inside the RPC, and today's un-granted secret pull
- * is filtered out here for the same reason it is refused there: it is that
- * member's spent daily slot, and trading it away would hand them a second pull.
+ * top of this file. "Two or more copies of the card" and `is_duplicate` are the
+ * same two rules `trade_item_is_spare` applies inside the RPC, and today's
+ * un-granted secret pull is filtered out here for the same reason it is refused
+ * there: it is that member's spent daily slot, and trading it away would hand them
+ * a second pull.
  */
 export const getTradeSpares = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ participantId: z.string().uuid() }).parse(d))
@@ -159,19 +168,25 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     const ids = (eps ?? []).map((r) => r.id);
 
     const trades = await db();
-    const [{ data: pulls, error }, { data: dupes, error: dupeError }] = await Promise.all([
+    const [{ data: allCopies, error }, { data: dupes, error: dupeError }] = await Promise.all([
       ids.length
         ? trades
-            .from("card_pulls")
-            // NO EDITION. The column is client-asserted (see the long comment in
-            // card-pulls.functions.ts), and this response is read by somebody who
-            // is not its owner — which is exactly the "number a second person can
-            // see" that comment says an edition must never enter unverified.
-            .select("event_participant_id, pull_count")
+            .from("card_copies")
+            // THE EDITION IS IN THIS RESPONSE, and that is a deliberate widening
+            // rather than an oversight. It is still a client-asserted value
+            // (card-pulls.functions.ts:96-105) being read by somebody who is not
+            // its owner — but you cannot choose which copy to hand over, or judge
+            // which one you are being offered, without seeing the finish on it.
+            // The exposure is inherent to per-copy trading. What closes it
+            // properly is re-deriving the edition server-side when a pack is
+            // recorded, which is a separate change.
+            //
+            // It stays out of the PUBLIC record either way: see the summary
+            // builder in accept_trade_offer.
+            .select("id, event_participant_id, edition")
             .eq("participant_id", data.participantId)
             .in("event_participant_id", ids)
-            .gte("pull_count", 2)
-            .returns<Pick<CardPullRow, "event_participant_id" | "pull_count">[]>()
+            .returns<Pick<CardCopyRow, "id" | "event_participant_id" | "edition">[]>()
         : { data: [], error: null },
       trades
         .from("secret_card_pulls")
@@ -189,13 +204,30 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     const stakeable = (dupes ?? []).filter((r) => r.granted || r.pulled_on !== today);
     const secrets = await hydrateSecrets(stakeable);
 
+    // Every copy of a card they hold two or more of. All of them, not "the ones
+    // beyond the first": the giver picks which copy to keep, so listing only the
+    // worst would quietly take that choice away. The rule that they keep ONE is
+    // enforced across the whole offer by trade_leaves_a_copy, not by this list.
+    const byCard = new Map<
+      string,
+      Pick<CardCopyRow, "id" | "event_participant_id" | "edition">[]
+    >();
+    for (const row of allCopies ?? []) {
+      const list = byCard.get(row.event_participant_id) ?? [];
+      list.push(row);
+      byCard.set(row.event_participant_id, list);
+    }
+
     return {
       participantId: data.participantId,
-      roster: (pulls ?? []).map((r) => ({
-        eventParticipantId: r.event_participant_id,
-        // Copies beyond the one they keep, which is what is actually on offer.
-        spareCount: r.pull_count - 1,
-      })),
+      roster: [...byCard.values()]
+        .filter((list) => list.length >= 2)
+        .flat()
+        .map((r) => ({
+          copyId: r.id,
+          eventParticipantId: r.event_participant_id,
+          edition: toEdition(r.edition),
+        })),
       secrets: stakeable.map((r) => secrets.get(r.id)!).filter(Boolean),
     };
   });
@@ -208,10 +240,15 @@ async function toOfferViews(
   const secretRows = items
     .filter((i) => i.kind === "secret" && i.secret_pull_id)
     .map((i) => i.secret_pull_id!);
+  const copyRows = items
+    .filter((i) => i.kind === "roster" && i.card_copy_id)
+    .map((i) => i.card_copy_id!);
 
   let hydrated = new Map<string, SecretSpare>();
+  let byCopy = new Map<string, Pick<CardCopyRow, "id" | "event_participant_id" | "edition">>();
+  const sb = await db();
+
   if (secretRows.length) {
-    const sb = await db();
     const { data: pulls } = await sb
       .from("secret_card_pulls")
       .select("id, secret_card_id, tier")
@@ -219,11 +256,28 @@ async function toOfferViews(
       .returns<Pick<SecretPullRow, "id" | "secret_card_id" | "tier">[]>();
     hydrated = await hydrateSecrets(pulls ?? []);
   }
+  if (copyRows.length) {
+    // Which card the copy is of, and the finish on it. Read off the copy rather
+    // than stored on the item, so it cannot drift from the row that will actually
+    // move — the same reason accept_trade_offer resolves it this way.
+    const { data: rows } = await sb
+      .from("card_copies")
+      .select("id, event_participant_id, edition")
+      .in("id", copyRows)
+      .returns<Pick<CardCopyRow, "id" | "event_participant_id" | "edition">[]>();
+    byCopy = new Map((rows ?? []).map((r) => [r.id, r]));
+  }
 
   function view(item: TradeOfferItemRow): TradeItemView | null {
     if (item.kind === "roster") {
-      return item.event_participant_id
-        ? { kind: "roster", eventParticipantId: item.event_participant_id }
+      const copy = item.card_copy_id ? byCopy.get(item.card_copy_id) : undefined;
+      return copy
+        ? {
+            kind: "roster",
+            copyId: copy.id,
+            eventParticipantId: copy.event_participant_id,
+            edition: toEdition(copy.edition),
+          }
         : null;
     }
     const secret = item.secret_pull_id ? hydrated.get(item.secret_pull_id) : undefined;
@@ -299,7 +353,7 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
 
     const { data: items, error: itemError } = await sb
       .from("trade_offer_items")
-      .select("id, offer_id, giver_side, kind, event_participant_id, secret_pull_id")
+      .select("id, offer_id, giver_side, kind, card_copy_id, secret_pull_id")
       .in(
         "offer_id",
         wanted.map((o) => o.id),

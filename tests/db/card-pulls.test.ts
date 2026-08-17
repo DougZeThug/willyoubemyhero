@@ -43,6 +43,21 @@ async function recordLegacy(participantId: string, ids: string[]): Promise<numbe
   return row.record_card_pulls;
 }
 
+/**
+ * Pretend the last pack was `days` ago.
+ *
+ * TWO columns, because the once-a-day rule moved. `card_pulls.last_pulled_at` is
+ * the "when did we last hear about this" stamp and nothing more; the rule itself
+ * is now the partial unique index on `card_copies.acquired_on`
+ * (20260817115000_card_copies.sql), the same shape secret_card_pulls has always
+ * used. Rewinding only the stamp — which is all this needed before copies
+ * existed — leaves the copy dated today and mints nothing.
+ */
+async function rewindDay(days = 1) {
+  await sql("UPDATE public.card_pulls SET last_pulled_at = last_pulled_at - make_interval(days => $1)", [days]); // prettier-ignore
+  await sql("UPDATE public.card_copies SET acquired_on = acquired_on - $1::int WHERE source = 'pull'", [days]); // prettier-ignore
+}
+
 async function editionOf(eventParticipantId: string): Promise<string> {
   const [row] = await sql<{ edition: string }>(
     "SELECT edition FROM public.card_pulls WHERE event_participant_id = $1",
@@ -110,7 +125,7 @@ describe("record_card_pulls", () => {
   it("bumps the invisible pull_count on a later day, leaving the visible number alone", async () => {
     const ids = await cardIds();
     await record(IDS.alice, [ids[0]]);
-    await sql("UPDATE public.card_pulls SET last_pulled_at = last_pulled_at - interval '1 day'");
+    await rewindDay(1);
     await record(IDS.alice, [ids[0]]);
     const [row] = await sql<{ pull_count: number }>(
       "SELECT pull_count FROM public.card_pulls WHERE event_participant_id = $1",
@@ -136,7 +151,7 @@ describe("record_card_pulls", () => {
   it("still moves last_pulled_at on a replay, which is what makes the day check work", async () => {
     const ids = await cardIds();
     await record(IDS.alice, [ids[0]]);
-    await sql("UPDATE public.card_pulls SET last_pulled_at = last_pulled_at - interval '2 days'");
+    await rewindDay(2);
     await record(IDS.alice, [ids[0]]);
     const [row] = await sql<{ today: boolean }>(
       `SELECT (last_pulled_at AT TIME ZONE 'America/New_York')::date = current_date AS today

@@ -27,7 +27,6 @@
 // confidently deleted card.
 
 import type { CollectedCard } from "./card-collection";
-import { bestEdition } from "./card-edition";
 import type { MyCard } from "./card-pulls";
 
 export type MergeResult = {
@@ -68,13 +67,23 @@ export function mergeCollection(
       pulledAt: Date.parse(card.firstPulledAt) || prior?.pulledAt || Date.now(),
       count: card.pullCount,
       tier: prior?.tier ?? "base",
-      // The better of the two, not the server's outright. The server row is
-      // authoritative for a claimed member — that is this file's whole thesis —
-      // but collect-on-sight, the write this module exists to undo, never wrote
-      // an edition at all, so a local finish can only have come from a real pull.
-      // Taking the better is monotone and cannot demote anyone; taking the
-      // server's alone would erase a guest-era platinum the moment they claimed.
-      edition: bestEdition(card.edition, prior?.edition),
+      // THE SERVER'S OUTRIGHT, and this used to take the better of the two.
+      //
+      // That was correct while a finish could only ever rise: `record_card_pulls`
+      // applies best-wins, so the server's number could lag the device's but never
+      // legitimately fall below it, and taking the better protected a genuine pull
+      // the server had somehow missed.
+      //
+      // Trading broke that premise. `card_pulls.edition` is derived from the
+      // copies you hold (`resync_card_pull`), so handing your only platinum to
+      // somebody else lowers it — honestly. Taking the better would pin the
+      // platinum on the giver's own device forever, showing them a card they no
+      // longer own in a finish that is now somebody else's.
+      //
+      // The guest-era case the old rule protected is already covered without it:
+      // a card the server does not vouch for is not demoted, it is pruned as
+      // `stale` below.
+      edition: card.edition,
     };
   }
 

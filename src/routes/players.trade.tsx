@@ -24,6 +24,7 @@ import {
 } from "@/hooks/use-trades";
 import { tradeSummaryLabel, type TradeItemView, type TradeSpares } from "@/lib/trades";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import { editionRank } from "@/lib/card-edition";
 import { burst } from "@/lib/card-confetti";
 import {
   TradeItemTile,
@@ -443,11 +444,25 @@ function SparePicker({
   onToggle: (staged: Staged) => void;
 }) {
   const items: Staged[] = [
-    ...(spares?.roster ?? []).map((r) => ({
-      key: `r:${r.eventParticipantId}`,
-      item: { kind: "roster", eventParticipantId: r.eventParticipantId } as TradeItemView,
-      payload: { kind: "roster", eventParticipantId: r.eventParticipantId },
-    })),
+    // One tile per COPY, so "my gold Alice" and "my standard Alice" are separately
+    // pickable. Sorted by card then by finish, rarest first, so the copies of one
+    // card sit together and the best of them leads.
+    ...[...(spares?.roster ?? [])]
+      .sort(
+        (a, b) =>
+          a.eventParticipantId.localeCompare(b.eventParticipantId) ||
+          editionRank(a.edition) - editionRank(b.edition),
+      )
+      .map((r) => ({
+        key: `c:${r.copyId}`,
+        item: {
+          kind: "roster",
+          copyId: r.copyId,
+          eventParticipantId: r.eventParticipantId,
+          edition: r.edition,
+        } as TradeItemView,
+        payload: { kind: "roster", cardCopyId: r.copyId },
+      })),
     ...(spares?.secrets ?? []).map((s) => ({
       key: `s:${s.pullId}`,
       item: {

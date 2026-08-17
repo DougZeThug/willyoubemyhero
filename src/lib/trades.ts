@@ -1,5 +1,6 @@
 // The Trading Post's client-safe half: view types and the labels rendered from
 // them. No imports from anything *.server.ts, so this is safe in the bundle.
+import type { Edition } from "./card-edition";
 import type { SecretTier } from "./secret-rarity";
 
 /**
@@ -38,7 +39,7 @@ export function isTradeOfferStatus(value: string): value is TradeOfferStatus {
  * being reachable only through an offer you are party to.
  */
 export type TradeItemView =
-  | { kind: "roster"; eventParticipantId: string }
+  | { kind: "roster"; copyId: string; eventParticipantId: string; edition: Edition }
   | { kind: "secret"; pullId: string; name: string; artUrl: string | null; tier: SecretTier };
 
 export type TradeOfferView = {
@@ -52,8 +53,19 @@ export type TradeOfferView = {
   recipientGives: TradeItemView[];
 };
 
-/** A spare roster card. `spareCount` is copies beyond the one you keep. */
-export type RosterSpare = { eventParticipantId: string; spareCount: number };
+/**
+ * One tradeable COPY of a roster card.
+ *
+ * A copy rather than a count, because which one you hand over is now a choice —
+ * "my gold Alice" and "my standard Alice" are different things to offer. Every
+ * copy of a card you hold two or more of is listed; the rule that you must keep
+ * one is enforced across the whole offer, in `trade_leaves_a_copy`.
+ */
+export type RosterSpare = {
+  copyId: string;
+  eventParticipantId: string;
+  edition: Edition;
+};
 
 /**
  * A spare secret copy. Deliberately no `secretCardId`: staking one needs the
@@ -116,7 +128,7 @@ export function tradeItemsLabel(items: readonly TradeItemView[]): string {
       i.kind === "roster"
         ? ({ kind: "roster", eventParticipantId: i.eventParticipantId } as const)
         : ({ kind: "secret" } as const),
-    ),
+    ) satisfies TradeSummaryItem[],
   );
 }
 

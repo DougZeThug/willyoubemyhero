@@ -1,16 +1,19 @@
 // The trading RPCs, against real Postgres.
 //
-// Three properties live here and nowhere else, and each one is invisible to a
+// Four properties live here and nowhere else, and each one is invisible to a
 // mocked test because each one is a fact about Postgres rather than about our
 // code:
 //
-//  1. Re-parenting a secret pull does not trip `secret_card_pulls_one_per_day`.
-//     That index is UNIQUE (participant_id, pulled_on) WHERE NOT granted, so the
-//     accept only survives because it sets granted = true — and it only fails on
-//     days both people pulled, which is most of them.
-//  2. The giver's card_pulls row survives every roster transfer, so the row count
+//  1. A traded roster copy carries its FINISH. That is the whole reason
+//     card_copies exists — before it there was only a person-level "best finish
+//     ever pulled", so every traded card arrived standard.
+//  2. Re-parenting a secret pull does not trip `secret_card_pulls_one_per_day`,
+//     and re-parenting a card copy does not trip `card_copies_one_pull_per_day`.
+//     Both indexes are partial on a "did this come from a pack" flag, and the
+//     accept only survives because it clears that flag on the row it moves.
+//  3. The giver's card_pulls row survives every roster transfer, so the row count
 //     per card — the public "Packed by N" number — cannot move because of a trade.
-//  3. Two accepts racing over one spare produce one winner and one voided offer,
+//  4. Two accepts racing over one spare produce one winner and one voided offer,
 //     rather than a deadlock or two winners.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, IDS, newClient, seedEvent, sql } from "./helpers";
@@ -25,11 +28,10 @@ const OTHER_DAY = "2026-01-02";
 
 type OfferResult = { ok: boolean; offerId: string };
 type AcceptResult = { ok: boolean; reason?: string; tradeId?: string };
-type Item =
-  | { kind: "roster"; eventParticipantId: string }
-  | { kind: "secret"; secretPullId: string };
+type Item = { kind: "roster"; cardCopyId: string } | { kind: "secret"; secretPullId: string };
 
-const roster = (eventParticipantId: string): Item => ({ kind: "roster", eventParticipantId });
+/** A roster item names a COPY now, exactly as a secret item names a ledger row. */
+const copy = (cardCopyId: string): Item => ({ kind: "roster", cardCopyId });
 const secret = (secretPullId: string): Item => ({ kind: "secret", secretPullId });
 
 async function cardIds(): Promise<string[]> {
@@ -57,16 +59,34 @@ async function claim(participantId: string) {
   );
 }
 
-/** `count` copies of one roster card. 2 is the smallest number that makes a spare. */
-async function giveRoster(participantId: string, ep: string, count = 2, edition = "standard") {
-  await sql(
-    `INSERT INTO public.card_pulls (participant_id, event_participant_id, pull_count, edition)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (participant_id, event_participant_id)
-       DO UPDATE SET pull_count = EXCLUDED.pull_count, edition = EXCLUDED.edition`,
-    [participantId, ep, count, edition],
-  );
+/**
+ * One copy per entry, in order, then derive the card_pulls row from them.
+ *
+ * `source = 'backfill'` so `acquired_on` stays null and these never meet
+ * card_copies_one_pull_per_day — seeding several copies of one card for one person
+ * is the normal case here and would otherwise collide.
+ */
+async function giveCopies(
+  participantId: string,
+  ep: string,
+  editions: string[],
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const edition of editions) {
+    const [row] = await sql<{ id: string }>(
+      `INSERT INTO public.card_copies (participant_id, event_participant_id, edition, source)
+       VALUES ($1, $2, $3, 'backfill') RETURNING id`,
+      [participantId, ep, edition],
+    );
+    ids.push(row.id);
+  }
+  await sql("SELECT public.resync_card_pull($1, $2)", [participantId, ep]);
+  return ids;
 }
+
+/** Two copies, the smallest holding that makes one of them a spare. */
+const giveRoster = (pid: string, ep: string, count = 2, edition = "standard") =>
+  giveCopies(pid, ep, [edition, ...Array(Math.max(0, count - 1)).fill("standard")]);
 
 /**
  * One secret ledger row.
@@ -127,6 +147,26 @@ async function pullCount(participantId: string, ep: string): Promise<number | nu
   return rows[0]?.pull_count ?? null;
 }
 
+/** The derived "best finish you hold" — what the vault renders. */
+async function bestFinish(participantId: string, ep: string): Promise<string | null> {
+  const rows = await sql<{ edition: string }>(
+    "SELECT edition FROM public.card_pulls WHERE participant_id = $1 AND event_participant_id = $2",
+    [participantId, ep],
+  );
+  return rows[0]?.edition ?? null;
+}
+
+async function copyRow(id: string) {
+  const [row] = await sql<{
+    participant_id: string;
+    event_participant_id: string;
+    edition: string;
+    acquired_on: string | null;
+    source: string;
+  }>("SELECT * FROM public.card_copies WHERE id = $1", [id]);
+  return row;
+}
+
 async function secretRow(id: string) {
   const [row] = await sql<{
     participant_id: string | null;
@@ -148,14 +188,14 @@ async function offerStatus(offerId: string): Promise<string> {
   return row.status;
 }
 
-/** Alice and Bob, both claimed, each holding a spare of a different roster card. */
+/** Alice and Bob, both claimed, each holding two copies of a different roster card. */
 async function twoSpares() {
   const [aliceCard, bobCard] = await cardIds();
   await claim(IDS.alice);
   await claim(IDS.bob);
-  await giveRoster(IDS.alice, aliceCard, 2);
-  await giveRoster(IDS.bob, bobCard, 2);
-  return { aliceCard, bobCard };
+  const aliceCopies = await giveRoster(IDS.alice, aliceCard, 2);
+  const bobCopies = await giveRoster(IDS.bob, bobCard, 2);
+  return { aliceCard, bobCard, aliceCopies, bobCopies };
 }
 
 describe("the league day, in two languages", () => {
@@ -179,26 +219,26 @@ describe("the league day, in two languages", () => {
 
 describe("create_trade_offer", () => {
   it("writes the offer and both sides of the table in one call", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
-    const res = await createOffer(IDS.alice, IDS.bob, [roster(aliceCard)], [roster(bobCard)]);
+    const { aliceCopies, bobCopies } = await twoSpares();
+    const res = await createOffer(IDS.alice, IDS.bob, [copy(aliceCopies[0])], [copy(bobCopies[0])]);
 
     expect(res.ok).toBe(true);
     expect(await offerStatus(res.offerId)).toBe("pending");
 
-    const items = await sql<{ giver_side: string; kind: string; event_participant_id: string }>(
-      "SELECT giver_side, kind, event_participant_id FROM public.trade_offer_items WHERE offer_id = $1 ORDER BY giver_side",
+    const items = await sql<{ giver_side: string; kind: string; card_copy_id: string }>(
+      "SELECT giver_side, kind, card_copy_id FROM public.trade_offer_items WHERE offer_id = $1 ORDER BY giver_side",
       [res.offerId],
     );
     expect(items).toEqual([
-      { giver_side: "proposer", kind: "roster", event_participant_id: aliceCard },
-      { giver_side: "recipient", kind: "roster", event_participant_id: bobCard },
+      { giver_side: "proposer", kind: "roster", card_copy_id: aliceCopies[0] },
+      { giver_side: "recipient", kind: "roster", card_copy_id: bobCopies[0] },
     ]);
   });
 
   it("refuses a trade with yourself", async () => {
-    const { aliceCard } = await twoSpares();
+    const { aliceCopies } = await twoSpares();
     await expect(
-      createOffer(IDS.alice, IDS.alice, [roster(aliceCard)], [roster(aliceCard)]),
+      createOffer(IDS.alice, IDS.alice, [copy(aliceCopies[0])], [copy(aliceCopies[1])]),
     ).rejects.toThrow(/yourself/i);
   });
 
@@ -208,16 +248,16 @@ describe("create_trade_offer", () => {
     // decline it.
     const [aliceCard, , carolCard] = await cardIds();
     await claim(IDS.alice);
-    await giveRoster(IDS.alice, aliceCard, 2);
-    await giveRoster(IDS.carol, carolCard, 2);
+    const aliceCopies = await giveRoster(IDS.alice, aliceCard, 2);
+    const carolCopies = await giveRoster(IDS.carol, carolCard, 2);
     await expect(
-      createOffer(IDS.alice, IDS.carol, [roster(aliceCard)], [roster(carolCard)]),
+      createOffer(IDS.alice, IDS.carol, [copy(aliceCopies[0])], [copy(carolCopies[0])]),
     ).rejects.toThrow(/claimed/i);
   });
 
   it("refuses an empty side", async () => {
-    const { aliceCard } = await twoSpares();
-    await expect(createOffer(IDS.alice, IDS.bob, [roster(aliceCard)], [])).rejects.toThrow(
+    const { aliceCopies } = await twoSpares();
+    await expect(createOffer(IDS.alice, IDS.bob, [copy(aliceCopies[0])], [])).rejects.toThrow(
       /one to four/i,
     );
   });
@@ -226,60 +266,54 @@ describe("create_trade_offer", () => {
     const ids = await cardIds();
     await claim(IDS.alice);
     await claim(IDS.bob);
-    for (const id of ids) await giveRoster(IDS.alice, id, 2);
-    await giveRoster(IDS.bob, ids[0], 2);
-    // Five items, built from three real cards plus repeats — the length check
-    // runs before anything looks at what the items name.
-    const five = [...ids, ...ids.slice(0, 2)].map(roster);
-    await expect(createOffer(IDS.alice, IDS.bob, five, [roster(ids[0])])).rejects.toThrow(
+    const mine: string[] = [];
+    for (const id of ids) mine.push(...(await giveRoster(IDS.alice, id, 2)));
+    const theirs = await giveRoster(IDS.bob, ids[0], 2);
+    // Five items — the length check runs before anything looks at what they name.
+    const five = [...mine.slice(0, 5)].map(copy);
+    await expect(createOffer(IDS.alice, IDS.bob, five, [copy(theirs[0])])).rejects.toThrow(
       /one to four/i,
     );
   });
 
-  it("refuses a roster card the giver holds only one copy of", async () => {
-    const { bobCard } = await twoSpares();
+  it("refuses a copy of a card the giver holds only one of", async () => {
+    const { bobCopies } = await twoSpares();
     const [aliceCard] = await cardIds();
-    // The whole spares rule: one copy is the copy you keep.
-    await giveRoster(IDS.alice, aliceCard, 1);
+    // The whole spares rule: one copy is the copy you keep. Wipe Alice back down
+    // to a single copy and it stops being tradeable.
+    await sql("DELETE FROM public.card_copies WHERE participant_id = $1", [IDS.alice]);
+    const only = await giveCopies(IDS.alice, aliceCard, ["platinum"]);
     await expect(
-      createOffer(IDS.alice, IDS.bob, [roster(aliceCard)], [roster(bobCard)]),
+      createOffer(IDS.alice, IDS.bob, [copy(only[0])], [copy(bobCopies[0])]),
     ).rejects.toThrow(/spare/i);
   });
 
-  it("refuses a roster card the giver has never packed at all", async () => {
-    const { bobCard } = await twoSpares();
-    const [, , carolCard] = await cardIds();
+  it("refuses to stake a copy out of somebody else's collection", async () => {
+    const { aliceCopies, bobCopies } = await twoSpares();
+    // Alice naming one of Bob's copies on HER side of the table. The giver of each
+    // item is resolved from the side it sits on, so this is Alice claiming to hold
+    // a copy that is in Bob's collection.
     await expect(
-      createOffer(IDS.alice, IDS.bob, [roster(carolCard)], [roster(bobCard)]),
-    ).rejects.toThrow(/spare/i);
-  });
-
-  it("refuses to stake a card out of somebody else's collection", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
-    // Alice naming Bob's spare on HER side of the table. The giver of each item
-    // is resolved from the side it sits on, so this is Alice claiming to hold a
-    // card that is in Bob's collection.
-    await expect(
-      createOffer(IDS.alice, IDS.bob, [roster(bobCard)], [roster(aliceCard)]),
+      createOffer(IDS.alice, IDS.bob, [copy(bobCopies[0])], [copy(aliceCopies[0])]),
     ).rejects.toThrow(/spare/i);
   });
 
   it("refuses a secret copy that is not a duplicate", async () => {
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     const owned = await giveSecret(IDS.alice, card, { duplicate: false });
     await expect(
-      createOffer(IDS.alice, IDS.bob, [secret(owned)], [roster(bobCard)]),
+      createOffer(IDS.alice, IDS.bob, [secret(owned)], [copy(bobCopies[0])]),
     ).rejects.toThrow(/spare/i);
   });
 
   it("refuses a secret copy belonging to somebody else", async () => {
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.bob, card, { duplicate: false });
     const bobsDupe = await giveSecret(IDS.bob, card, { duplicate: true });
     await expect(
-      createOffer(IDS.alice, IDS.bob, [secret(bobsDupe)], [roster(bobCard)]),
+      createOffer(IDS.alice, IDS.bob, [secret(bobsDupe)], [copy(bobCopies[0])]),
     ).rejects.toThrow(/spare/i);
   });
 
@@ -288,7 +322,7 @@ describe("create_trade_offer", () => {
     // have pulled today by looking for `pulled_on = today AND NOT granted`, and
     // the accept sets granted = true on the row it moves. Trading today's
     // duplicate away would delete the evidence and hand the giver a second pull.
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
     const [{ today }] = await sql<{ today: string }>(
@@ -300,14 +334,14 @@ describe("create_trade_offer", () => {
       day: today,
     });
     await expect(
-      createOffer(IDS.alice, IDS.bob, [secret(todays)], [roster(bobCard)]),
+      createOffer(IDS.alice, IDS.bob, [secret(todays)], [copy(bobCopies[0])]),
     ).rejects.toThrow(/spare/i);
   });
 
-  it("lets the same copy trade once the day has passed", async () => {
+  it("lets the same secret copy trade once the day has passed", async () => {
     // The other half of the rule above: yesterday's duplicate is an ordinary
     // spare, so the restriction costs a day rather than the feature.
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
     const yesterdays = await giveSecret(IDS.alice, card, {
@@ -315,33 +349,109 @@ describe("create_trade_offer", () => {
       granted: false,
       day: OTHER_DAY,
     });
-    const res = await createOffer(IDS.alice, IDS.bob, [secret(yesterdays)], [roster(bobCard)]);
+    const res = await createOffer(IDS.alice, IDS.bob, [secret(yesterdays)], [copy(bobCopies[0])]);
     expect(res.ok).toBe(true);
   });
 
-  it("refuses to stake the same roster card twice in one offer", async () => {
-    // The unique index rather than a check: the accept decrements once per item,
-    // so two items naming one card would spend two copies against a single spare.
-    const { aliceCard, bobCard } = await twoSpares();
+  it("refuses to stake the same copy twice in one offer", async () => {
+    const { aliceCopies, bobCopies } = await twoSpares();
     await expect(
-      createOffer(IDS.alice, IDS.bob, [roster(aliceCard), roster(aliceCard)], [roster(bobCard)]),
+      createOffer(
+        IDS.alice,
+        IDS.bob,
+        [copy(aliceCopies[0]), copy(aliceCopies[0])],
+        [copy(bobCopies[0])],
+      ),
     ).rejects.toThrow();
   });
 
+  it("allows two different copies of the same card in one offer", async () => {
+    // The reciprocal, and the reason the index is on the copy rather than the
+    // card: trading two of your three Alices is a real thing to want.
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const mine = await giveCopies(IDS.alice, aliceCard, ["gold", "bronze", "standard"]);
+    const theirs = await giveRoster(IDS.bob, bobCard, 2);
+    const res = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(mine[0]), copy(mine[1])],
+      [copy(theirs[0])],
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("refuses an offer that would empty a card out", async () => {
+    // The per-item spare check cannot catch this: each copy passes on its own,
+    // because both see the count as it stands before anything has moved. Staking
+    // both copies of a two-copy holding would take the giver to zero, delete their
+    // card_pulls row, and drop the public "Packed by N" count for that card.
+    const { aliceCopies, bobCopies } = await twoSpares();
+    await expect(
+      createOffer(
+        IDS.alice,
+        IDS.bob,
+        [copy(aliceCopies[0]), copy(aliceCopies[1])],
+        [copy(bobCopies[0])],
+      ),
+    ).rejects.toThrow(/keep a copy/i);
+  });
+
+  it("allows two of three, which is the same rule one card up", async () => {
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const mine = await giveCopies(IDS.alice, aliceCard, ["gold", "bronze", "standard"]);
+    const theirs = await giveRoster(IDS.bob, bobCard, 2);
+    const res = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(mine[0]), copy(mine[1])],
+      [copy(theirs[0])],
+    );
+    expect(res.ok).toBe(true);
+    expect((await accept(res.offerId, IDS.bob)).ok).toBe(true);
+    expect(await pullCount(IDS.alice, aliceCard)).toBe(1);
+    expect(await pullCount(IDS.bob, aliceCard)).toBe(2);
+  });
+
+  it("voids at accept time when the giver's spare copies have gone", async () => {
+    // Same rule, re-checked under the lock: the offer was legal when composed and
+    // is not any more.
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const mine = await giveCopies(IDS.alice, aliceCard, ["gold", "bronze", "standard"]);
+    const theirs = await giveRoster(IDS.bob, bobCard, 2);
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(mine[0]), copy(mine[1])],
+      [copy(theirs[0])],
+    );
+    await sql("DELETE FROM public.card_copies WHERE id = $1", [mine[2]]);
+    await sql("SELECT public.resync_card_pull($1, $2)", [IDS.alice, aliceCard]);
+
+    expect(await accept(offerId, IDS.bob)).toEqual({ ok: false, reason: "voided" });
+    expect(await pullCount(IDS.alice, aliceCard)).toBe(2);
+  });
+
   it("refuses an item that names neither kind of card", async () => {
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const junk = [{ kind: "roster" }] as unknown as Item[];
-    await expect(createOffer(IDS.alice, IDS.bob, junk, [roster(bobCard)])).rejects.toThrow(
+    await expect(createOffer(IDS.alice, IDS.bob, junk, [copy(bobCopies[0])])).rejects.toThrow(
       /must name/i,
     );
   });
 
   it("leaves nothing behind when it refuses", async () => {
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const [aliceCard] = await cardIds();
-    await giveRoster(IDS.alice, aliceCard, 1);
+    await sql("DELETE FROM public.card_copies WHERE participant_id = $1", [IDS.alice]);
+    const only = await giveCopies(IDS.alice, aliceCard, ["standard"]);
     await expect(
-      createOffer(IDS.alice, IDS.bob, [roster(aliceCard)], [roster(bobCard)]),
+      createOffer(IDS.alice, IDS.bob, [copy(only[0])], [copy(bobCopies[0])]),
     ).rejects.toThrow();
     // The offer row is inserted before the spare check raises, so this is really
     // asserting that the raise rolls the whole function back.
@@ -354,12 +464,12 @@ describe("create_trade_offer", () => {
 
 describe("accept_trade_offer — roster cards", () => {
   it("moves a copy without ever deleting the giver's row", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
+    const { aliceCard, bobCard, aliceCopies, bobCopies } = await twoSpares();
     const { offerId } = await createOffer(
       IDS.alice,
       IDS.bob,
-      [roster(aliceCard)],
-      [roster(bobCard)],
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
     );
 
     const res = await accept(offerId, IDS.bob);
@@ -375,7 +485,7 @@ describe("accept_trade_offer — roster cards", () => {
   });
 
   it("leaves the public packed-by count exactly where it was", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
+    const { aliceCard, bobCard, aliceCopies, bobCopies } = await twoSpares();
     const packedBy = async (ep: string) => {
       const [row] = await sql<{ n: number }>(
         "SELECT count(*)::int AS n FROM public.card_pulls WHERE event_participant_id = $1",
@@ -390,8 +500,8 @@ describe("accept_trade_offer — roster cards", () => {
     const { offerId } = await createOffer(
       IDS.alice,
       IDS.bob,
-      [roster(aliceCard)],
-      [roster(bobCard)],
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
     );
     await accept(offerId, IDS.bob);
 
@@ -399,80 +509,125 @@ describe("accept_trade_offer — roster cards", () => {
     expect(await packedBy(bobCard)).toBe(2);
   });
 
-  it("hands the receiver a standard finish rather than the giver's", async () => {
-    // EDITIONS DO NOT TRANSFER. There is no per-copy edition to move, and the
-    // column is client-asserted — transferring it would launder an unverified
-    // value into a second member's row.
-    const { aliceCard, bobCard } = await twoSpares();
-    await giveRoster(IDS.alice, aliceCard, 2, "platinum");
+  it("hands over the finish that was on the copy", async () => {
+    // THE POINT OF THE WHOLE card_copies TABLE. Before it there was no per-copy
+    // finish to move, so a traded platinum arrived standard.
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const mine = await giveCopies(IDS.alice, aliceCard, ["platinum", "standard"]);
+    const theirs = await giveRoster(IDS.bob, bobCard, 2);
 
-    const { offerId } = await createOffer(
-      IDS.alice,
-      IDS.bob,
-      [roster(aliceCard)],
-      [roster(bobCard)],
-    );
-    await accept(offerId, IDS.bob);
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [copy(mine[0])], [copy(theirs[0])]);
+    expect((await accept(offerId, IDS.bob)).ok).toBe(true);
 
-    const [row] = await sql<{ edition: string }>(
-      "SELECT edition FROM public.card_pulls WHERE participant_id = $1 AND event_participant_id = $2",
-      [IDS.bob, aliceCard],
-    );
-    expect(row.edition).toBe("standard");
-    // And the giver keeps theirs — a trade is not a downgrade either.
-    const [mine] = await sql<{ edition: string }>(
-      "SELECT edition FROM public.card_pulls WHERE participant_id = $1 AND event_participant_id = $2",
-      [IDS.alice, aliceCard],
-    );
-    expect(mine.edition).toBe("platinum");
+    expect((await copyRow(mine[0])).edition).toBe("platinum");
+    expect((await copyRow(mine[0])).participant_id).toBe(IDS.bob);
+    expect(await bestFinish(IDS.bob, aliceCard)).toBe("platinum");
   });
 
-  it("bumps a receiver who already holds the card and leaves their finish alone", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
-    // Bob already holds one of Alice's card, in a better finish than a traded
-    // copy would ever arrive in.
-    await giveRoster(IDS.bob, aliceCard, 1, "gold");
+  it("demotes the giver to the best finish they still hold", async () => {
+    // The one place in the app where card_pulls.edition moves DOWNWARDS. You gave
+    // the platinum away; standard is the honest answer.
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const mine = await giveCopies(IDS.alice, aliceCard, ["platinum", "standard"]);
+    const theirs = await giveRoster(IDS.bob, bobCard, 2);
+    expect(await bestFinish(IDS.alice, aliceCard)).toBe("platinum");
 
-    const { offerId } = await createOffer(
-      IDS.alice,
-      IDS.bob,
-      [roster(aliceCard)],
-      [roster(bobCard)],
-    );
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [copy(mine[0])], [copy(theirs[0])]);
     await accept(offerId, IDS.bob);
 
-    const [row] = await sql<{ pull_count: number; edition: string }>(
-      "SELECT pull_count, edition FROM public.card_pulls WHERE participant_id = $1 AND event_participant_id = $2",
-      [IDS.bob, aliceCard],
-    );
-    expect(row).toEqual({ pull_count: 2, edition: "gold" });
+    expect(await bestFinish(IDS.alice, aliceCard)).toBe("standard");
   });
 
-  it("moves up to four cards a side in one swap", async () => {
+  it("lets you trade your best copy and keep a worse one", async () => {
+    // Choosing WHICH copy to keep is the point of per-copy. The spare rule only
+    // asks that you keep one, not that you keep the good one.
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const mine = await giveCopies(IDS.alice, aliceCard, ["gold", "bronze"]);
+    const theirs = await giveRoster(IDS.bob, bobCard, 2);
+
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [copy(mine[0])], [copy(theirs[0])]);
+    expect((await accept(offerId, IDS.bob)).ok).toBe(true);
+    expect(await bestFinish(IDS.alice, aliceCard)).toBe("bronze");
+    expect(await bestFinish(IDS.bob, aliceCard)).toBe("gold");
+  });
+
+  it("does not lower a receiver who already holds something better", async () => {
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const mine = await giveCopies(IDS.alice, aliceCard, ["standard", "standard"]);
+    await giveCopies(IDS.bob, aliceCard, ["gold"]);
+    const theirs = await giveRoster(IDS.bob, bobCard, 2);
+
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [copy(mine[0])], [copy(theirs[0])]);
+    await accept(offerId, IDS.bob);
+
+    // Best across the copies they now hold: gold beats the standard that arrived.
+    expect(await bestFinish(IDS.bob, aliceCard)).toBe("gold");
+    expect(await pullCount(IDS.bob, aliceCard)).toBe(2);
+  });
+
+  it("clears the copy's pull day, so it cannot collide with the receiver's own", async () => {
+    // The roster twin of `granted = true` on a secret. Both people pulled this
+    // card today; without clearing acquired_on the re-parent trips
+    // card_copies_one_pull_per_day and the whole accept aborts.
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const theirs = await giveRoster(IDS.bob, bobCard, 2);
+
+    // Two real pulls of the same card, on the same league day, one each.
+    await sql("SELECT public.record_card_pulls($1, $2::uuid[], $3::text[])", [IDS.alice, [aliceCard], ["gold"]]); // prettier-ignore
+    await sql("SELECT public.record_card_pulls($1, $2::uuid[], $3::text[])", [IDS.bob, [aliceCard], ["standard"]]); // prettier-ignore
+    // A second copy for Alice so she has a spare at all.
+    const spare = await giveCopies(IDS.alice, aliceCard, ["silver"]);
+
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [copy(spare[0])], [copy(theirs[0])]);
+    expect((await accept(offerId, IDS.bob)).ok).toBe(true);
+
+    const moved = await copyRow(spare[0]);
+    expect(moved.participant_id).toBe(IDS.bob);
+    expect(moved.acquired_on).toBeNull();
+    expect(moved.source).toBe("trade");
+    expect(await pullCount(IDS.bob, aliceCard)).toBe(2);
+  });
+
+  it("moves several cards a side in one swap", async () => {
     const ids = await cardIds();
     await claim(IDS.alice);
     await claim(IDS.bob);
-    for (const id of ids) {
-      await giveRoster(IDS.alice, id, 2);
-      await giveRoster(IDS.bob, id, 2);
-    }
-    const { offerId } = await createOffer(IDS.alice, IDS.bob, ids.map(roster), [roster(ids[0])]);
+    const mine: string[] = [];
+    for (const id of ids) mine.push((await giveRoster(IDS.alice, id, 2))[0]);
+    const theirs = await giveRoster(IDS.bob, ids[0], 2);
+
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, mine.map(copy), [copy(theirs[0])]);
     expect((await accept(offerId, IDS.bob)).ok).toBe(true);
 
     for (const id of ids) expect(await pullCount(IDS.alice, id)).toBe(id === ids[0] ? 2 : 1);
     expect(await pullCount(IDS.bob, ids[0])).toBe(2);
-    expect(await pullCount(IDS.bob, ids[1])).toBe(3);
+    expect(await pullCount(IDS.bob, ids[1])).toBe(1);
   });
 });
 
 describe("accept_trade_offer — secret cards", () => {
   it("re-parents the copy and marks it granted", async () => {
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
     const spare = await giveSecret(IDS.alice, card, { duplicate: true, tier: "epic" });
 
-    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(spare)], [roster(bobCard)]);
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [secret(spare)],
+      [copy(bobCopies[0])],
+    );
     expect((await accept(offerId, IDS.bob)).ok).toBe(true);
 
     const row = await secretRow(spare);
@@ -481,7 +636,7 @@ describe("accept_trade_offer — secret cards", () => {
     // Bob owned none of this card, so the copy he received IS his ownership row.
     expect(row.is_duplicate).toBe(false);
     // The tier travels: unlike an edition it is server-rolled, so it is a fact
-    // about this copy rather than a claim about it.
+    // about this copy rather than a claim.
     expect(row.tier).toBe("epic");
 
     // And Alice still owns hers — she gave away the duplicate, not the card.
@@ -494,13 +649,18 @@ describe("accept_trade_offer — secret cards", () => {
   });
 
   it("arrives as a duplicate when the receiver already owns that card", async () => {
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
     const spare = await giveSecret(IDS.alice, card, { duplicate: true });
     await giveSecret(IDS.bob, card, { duplicate: false });
 
-    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(spare)], [roster(bobCard)]);
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [secret(spare)],
+      [copy(bobCopies[0])],
+    );
     await accept(offerId, IDS.bob);
 
     expect((await secretRow(spare)).is_duplicate).toBe(true);
@@ -515,7 +675,7 @@ describe("accept_trade_offer — secret cards", () => {
   });
 
   it("turns two copies of one secret into one ownership row and one duplicate", async () => {
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
     const a = await giveSecret(IDS.alice, card, { duplicate: true });
@@ -525,7 +685,7 @@ describe("accept_trade_offer — secret cards", () => {
       IDS.alice,
       IDS.bob,
       [secret(a), secret(b)],
-      [roster(bobCard)],
+      [copy(bobCopies[0])],
     );
     expect((await accept(offerId, IDS.bob)).ok).toBe(true);
 
@@ -547,7 +707,7 @@ describe("accept_trade_offer — secret cards", () => {
     // Bob's own pull share a day, so re-parenting without setting granted = true
     // violates it and the whole accept aborts — on every day both of them pulled,
     // which in a league where everyone pulls daily is nearly every day.
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     const other = await addCard("The Dog");
 
@@ -560,13 +720,17 @@ describe("accept_trade_offer — secret cards", () => {
     // Bob's own daily pull, same league day, also un-granted.
     await giveSecret(IDS.bob, other, { duplicate: false, granted: false, day: OTHER_DAY });
 
-    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(spare)], [roster(bobCard)]);
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [secret(spare)],
+      [copy(bobCopies[0])],
+    );
     expect((await accept(offerId, IDS.bob)).ok).toBe(true);
 
     const moved = await secretRow(spare);
     expect(moved.participant_id).toBe(IDS.bob);
     expect(moved.granted).toBe(true);
-    expect(moved.pulled_on.toString()).toContain("2026");
 
     // Bob now holds two rows on the same day, which only granted = true permits.
     const [row] = await sql<{ n: number }>(
@@ -582,7 +746,7 @@ describe("accept_trade_offer — secret cards", () => {
     // granted, it no longer counts as Alice's spent slot for that day — which is
     // exactly why trade_item_is_spare refuses TODAY's copy. Yesterday's is fine:
     // she cannot retroactively pull again for a day that has passed.
-    const { bobCard } = await twoSpares();
+    const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
     const spare = await giveSecret(IDS.alice, card, {
@@ -591,7 +755,12 @@ describe("accept_trade_offer — secret cards", () => {
       day: OTHER_DAY,
     });
 
-    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(spare)], [roster(bobCard)]);
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [secret(spare)],
+      [copy(bobCopies[0])],
+    );
     await accept(offerId, IDS.bob);
 
     const [row] = await sql<{ n: number }>(
@@ -606,18 +775,17 @@ describe("accept_trade_offer — secret cards", () => {
 
 describe("accept_trade_offer — lifecycle", () => {
   it("voids rather than raising when a staked card has already moved", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
+    const { aliceCard, bobCard, aliceCopies, bobCopies } = await twoSpares();
     const { offerId } = await createOffer(
       IDS.alice,
       IDS.bob,
-      [roster(aliceCard)],
-      [roster(bobCard)],
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
     );
-    // Alice's spare evaporates between composing and accepting.
-    await sql(
-      "UPDATE public.card_pulls SET pull_count = 1 WHERE participant_id = $1 AND event_participant_id = $2",
-      [IDS.alice, aliceCard],
-    );
+    // Alice's spare evaporates between composing and accepting: her second copy
+    // goes, so the one on the table is now the only copy she holds.
+    await sql("DELETE FROM public.card_copies WHERE id = $1", [aliceCopies[1]]);
+    await sql("SELECT public.resync_card_pull($1, $2)", [IDS.alice, aliceCard]);
 
     const res = await accept(offerId, IDS.bob);
     expect(res).toEqual({ ok: false, reason: "voided" });
@@ -634,12 +802,12 @@ describe("accept_trade_offer — lifecycle", () => {
   });
 
   it("refuses somebody accepting an offer that is not theirs", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
+    const { aliceCopies, bobCopies } = await twoSpares();
     const { offerId } = await createOffer(
       IDS.alice,
       IDS.bob,
-      [roster(aliceCard)],
-      [roster(bobCard)],
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
     );
     // Including the proposer: composing an offer is not accepting it.
     await expect(accept(offerId, IDS.alice)).rejects.toThrow(/not your offer/i);
@@ -648,12 +816,12 @@ describe("accept_trade_offer — lifecycle", () => {
   });
 
   it("answers a second accept softly rather than trading twice", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
+    const { aliceCard, aliceCopies, bobCopies } = await twoSpares();
     const { offerId } = await createOffer(
       IDS.alice,
       IDS.bob,
-      [roster(aliceCard)],
-      [roster(bobCard)],
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
     );
     expect((await accept(offerId, IDS.bob)).ok).toBe(true);
 
@@ -664,16 +832,23 @@ describe("accept_trade_offer — lifecycle", () => {
     expect(await sql("SELECT count(*)::int AS n FROM public.trades")).toEqual([{ n: 1 }]);
   });
 
-  it("records the trade publicly, naming no secret card", async () => {
+  it("records the trade publicly, naming no secret card and no finish", async () => {
     // The leak this table would otherwise be: `trades` is anon-readable AND
-    // published to realtime, so a secret_card_id in these summaries hands the
-    // catalogue to every phone in the garden.
-    const { bobCard } = await twoSpares();
+    // published to realtime. A secret_card_id hands the catalogue to every phone
+    // in the garden; an edition publishes a client-asserted value league-wide.
+    const { bobCard, bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
     const spare = await giveSecret(IDS.alice, card, { duplicate: true });
+    // Make the recipient's staked copy a conspicuous finish, so a leak would show.
+    await sql("UPDATE public.card_copies SET edition = 'platinum' WHERE id = $1", [bobCopies[0]]);
 
-    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(spare)], [roster(bobCard)]);
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [secret(spare)],
+      [copy(bobCopies[0])],
+    );
     const res = await accept(offerId, IDS.bob);
 
     const [row] = await sql<{
@@ -689,23 +864,25 @@ describe("accept_trade_offer — lifecycle", () => {
     expect(row.recipient_id).toBe(IDS.bob);
     expect(row.event_id).toBe(IDS.event);
     expect(row.proposer_gave).toEqual([{ kind: "secret" }]);
+    // The CARD, resolved from the copy — and nothing about the copy itself.
     expect(row.recipient_gave).toEqual([{ kind: "roster", eventParticipantId: bobCard }]);
 
-    // Belt and braces against the summary growing a field later: neither the
-    // card's id nor the ledger row's may appear anywhere in the jsonb.
     const blob = JSON.stringify(row.proposer_gave) + JSON.stringify(row.recipient_gave);
     expect(blob).not.toContain(card);
     expect(blob).not.toContain(spare);
     expect(blob).not.toContain("secret_card_id");
+    expect(blob).not.toContain("platinum");
+    expect(blob).not.toContain("edition");
+    expect(blob).not.toContain(bobCopies[0]);
   });
 
   it("marks the offer accepted and stamps when", async () => {
-    const { aliceCard, bobCard } = await twoSpares();
+    const { aliceCopies, bobCopies } = await twoSpares();
     const { offerId } = await createOffer(
       IDS.alice,
       IDS.bob,
-      [roster(aliceCard)],
-      [roster(bobCard)],
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
     );
     await accept(offerId, IDS.bob);
     const [row] = await sql<{ status: string; resolved_at: string | null }>(
@@ -730,12 +907,22 @@ describe("two accepts racing over one spare", () => {
     // "proposer then recipient" would take the same two participant rows in
     // opposite orders in the two transactions, which is a deadlock.
     //
-    // Both offers stake the same two spares, so only one can win on the merits
+    // Both offers stake the same two copies, so only one can win on the merits
     // too — the loser re-validates under the lock and voids itself.
-    const { aliceCard, bobCard } = await twoSpares();
+    const { aliceCard, bobCard, aliceCopies, bobCopies } = await twoSpares();
 
-    const first = await createOffer(IDS.alice, IDS.bob, [roster(aliceCard)], [roster(bobCard)]);
-    const second = await createOffer(IDS.bob, IDS.alice, [roster(bobCard)], [roster(aliceCard)]);
+    const first = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
+    );
+    const second = await createOffer(
+      IDS.bob,
+      IDS.alice,
+      [copy(bobCopies[0])],
+      [copy(aliceCopies[0])],
+    );
 
     const c1 = await newClient();
     const c2 = await newClient();
@@ -759,7 +946,7 @@ describe("two accepts racing over one spare", () => {
       await c2.end();
     }
 
-    // Exactly one trade happened, and the spares were spent once.
+    // Exactly one trade happened, and the copies were spent once.
     expect(await sql("SELECT count(*)::int AS n FROM public.trades")).toEqual([{ n: 1 }]);
     expect(await pullCount(IDS.alice, aliceCard)).toBe(1);
     expect(await pullCount(IDS.bob, bobCard)).toBe(1);

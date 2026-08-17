@@ -1,10 +1,10 @@
 // The Trading Post's handlers.
 //
-// Two things are worth testing here rather than against Postgres, because
-// Postgres cannot see them: that the actor is always the token holder and never
-// the payload, and that a spares response — which one member reads about
-// ANOTHER — carries no edition. Everything about what the RPCs then do with
-// their arguments lives in tests/db/trades.test.ts.
+// One thing is worth testing here rather than against Postgres, because Postgres
+// cannot see it: the actor is always the token holder and never the payload.
+// Everything about what the RPCs then do with their arguments — including that a
+// finish travels with a traded copy and never reaches the public record — lives
+// in tests/db/trades.test.ts.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
 import { callServerFn, memberHeaders } from "@/test/server-fn";
@@ -28,6 +28,9 @@ const CARD_B = "00000000-0000-4000-8000-000000000012";
 const OFFER_ID = "00000000-0000-4000-8000-000000000021";
 const PULL_ID = "00000000-0000-4000-8000-000000000031";
 const SECRET_ID = "00000000-0000-4000-8000-000000000041";
+const COPY_1 = "00000000-0000-4000-8000-000000000051";
+const COPY_2 = "00000000-0000-4000-8000-000000000052";
+const COPY_3 = "00000000-0000-4000-8000-000000000053";
 
 const ACTIVE_EVENT = { "events.select": { data: { id: EVENT_ID } } };
 
@@ -42,7 +45,7 @@ beforeEach(() => {
   withDb();
 });
 
-const roster = (eventParticipantId: string) => ({ kind: "roster" as const, eventParticipantId });
+const copy = (cardCopyId: string) => ({ kind: "roster" as const, cardCopyId });
 const secret = (secretPullId: string) => ({ kind: "secret" as const, secretPullId });
 
 describe("getTradeSpares", () => {
@@ -55,41 +58,59 @@ describe("getTradeSpares", () => {
     await expect(spares(THEM)).rejects.toThrow("Claim your player first");
   });
 
-  it("reports copies beyond the one you keep", async () => {
+  it("lists every copy of a card you hold more than one of", async () => {
+    // A copy, not a count: which one you hand over is the choice per-copy trading
+    // exists to give you, so listing only "the ones beyond the first" would take
+    // it away again.
     withDb({
       "event_participants.select": { data: [{ id: CARD_A }, { id: CARD_B }] },
-      "card_pulls.select": {
+      "card_copies.select": {
         data: [
-          { event_participant_id: CARD_A, pull_count: 2 },
-          { event_participant_id: CARD_B, pull_count: 5 },
+          { id: COPY_1, event_participant_id: CARD_A, edition: "platinum" },
+          { id: COPY_2, event_participant_id: CARD_A, edition: "standard" },
+          // Only one of CARD_B: not a spare, so it must not appear at all.
+          { id: COPY_3, event_participant_id: CARD_B, edition: "gold" },
         ],
       },
     });
     const res = await spares(ME, asMe());
     expect(res.roster).toEqual([
-      { eventParticipantId: CARD_A, spareCount: 1 },
-      { eventParticipantId: CARD_B, spareCount: 4 },
+      { copyId: COPY_1, eventParticipantId: CARD_A, edition: "platinum" },
+      { copyId: COPY_2, eventParticipantId: CARD_A, edition: "standard" },
     ]);
   });
 
-  it("never asks for an edition, let alone returns one", async () => {
-    // A spares response is read by somebody who is not its owner, and the edition
-    // column is client-asserted — card-pulls.functions.ts says in as many words
-    // that it must not enter a number a second person can see without being
-    // re-derived first. Asserting on the column list rather than the response,
-    // because the mock returns whatever the test declared regardless of what was
-    // selected: a handler that started mapping `edition` would pass otherwise.
+  it("carries the finish on each copy, which it deliberately did not before", async () => {
+    // A widening, recorded here on purpose. The edition is client-asserted and
+    // this response is read by somebody who is not its owner — but you cannot
+    // choose which copy to give, or judge which one you are offered, without it.
+    // What must still never carry a finish is the PUBLIC record; that is asserted
+    // in tests/db/trades.test.ts against the real jsonb.
     withDb({
       "event_participants.select": { data: [{ id: CARD_A }] },
-      "card_pulls.select": {
-        data: [{ event_participant_id: CARD_A, pull_count: 3, edition: "platinum" }],
+      "card_copies.select": {
+        data: [
+          { id: COPY_1, event_participant_id: CARD_A, edition: "platinum" },
+          { id: COPY_2, event_participant_id: CARD_A, edition: "bronze" },
+        ],
       },
     });
     const res = await spares(THEM, asMe());
-    const [call] = mock.callsFor("card_pulls", "select");
-    expect(call.columns).not.toContain("edition");
-    expect(JSON.stringify(res)).not.toContain("platinum");
-    expect(JSON.stringify(res)).not.toContain("edition");
+    expect(res.roster.map((r) => r.edition)).toEqual(["platinum", "bronze"]);
+  });
+
+  it("falls an unrecognised finish back to standard rather than passing it through", async () => {
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "card_copies.select": {
+        data: [
+          { id: COPY_1, event_participant_id: CARD_A, edition: "legendary" },
+          { id: COPY_2, event_participant_id: CARD_A, edition: "gold" },
+        ],
+      },
+    });
+    const res = await spares(ME, asMe());
+    expect(res.roster[0].edition).toBe("standard");
   });
 
   it("asks about the participant in the payload, not the one holding the token", async () => {
@@ -97,8 +118,8 @@ describe("getTradeSpares", () => {
     // compose an offer without seeing what the other person has spare.
     withDb({ "event_participants.select": { data: [{ id: CARD_A }] } });
     await spares(THEM, asMe());
-    const [pulls] = mock.callsFor("card_pulls", "select");
-    expect(mock.eqValue(pulls, "participant_id")).toBe(THEM);
+    const [copies] = mock.callsFor("card_copies", "select");
+    expect(mock.eqValue(copies, "participant_id")).toBe(THEM);
     const [secrets] = mock.callsFor("secret_card_pulls", "select");
     expect(mock.eqValue(secrets, "participant_id")).toBe(THEM);
   });
@@ -180,7 +201,7 @@ describe("createTradeOffer", () => {
     return callServerFn(createTradeOffer, { data, headers });
   }
 
-  const valid = { recipientId: THEM, give: [roster(CARD_A)], want: [roster(CARD_B)] };
+  const valid = { recipientId: THEM, give: [copy(COPY_1)], want: [copy(COPY_2)] };
 
   it("refuses a caller with no member token", async () => {
     await expect(propose(valid)).rejects.toThrow("Claim your player first");
@@ -210,13 +231,13 @@ describe("createTradeOffer", () => {
 
   it("passes both sides through untouched", async () => {
     withDb({ "rpc.create_trade_offer": { data: { ok: true, offerId: OFFER_ID } } });
-    await propose({ recipientId: THEM, give: [secret(PULL_ID)], want: [roster(CARD_B)] }, asMe());
+    await propose({ recipientId: THEM, give: [secret(PULL_ID)], want: [copy(COPY_2)] }, asMe());
     expect(mock.client.rpc).toHaveBeenCalledWith("create_trade_offer", {
       _proposer_id: ME,
       _recipient_id: THEM,
       _event_id: EVENT_ID,
       _give: [{ kind: "secret", secretPullId: PULL_ID }],
-      _want: [{ kind: "roster", eventParticipantId: CARD_B }],
+      _want: [{ kind: "roster", cardCopyId: COPY_2 }],
     });
   });
 
@@ -226,7 +247,7 @@ describe("createTradeOffer", () => {
   });
 
   it("rejects a fifth card on a side", async () => {
-    const five = [CARD_A, CARD_B, CARD_A, CARD_B, CARD_A].map(roster);
+    const five = [COPY_1, COPY_2, COPY_1, COPY_2, COPY_1].map(copy);
     await expect(propose({ ...valid, give: five }, asMe())).rejects.toThrow();
     expect(mock.client.rpc).not.toHaveBeenCalled();
   });
@@ -238,7 +259,7 @@ describe("createTradeOffer", () => {
       propose({ ...valid, give: [{ kind: "roster", secretPullId: PULL_ID }] }, asMe()),
     ).rejects.toThrow();
     await expect(
-      propose({ ...valid, give: [{ kind: "wat", id: CARD_A }] }, asMe()),
+      propose({ ...valid, give: [{ kind: "wat", id: COPY_1 }] }, asMe()),
     ).rejects.toThrow();
   });
 
@@ -374,8 +395,16 @@ describe("getMyTradeOffers", () => {
       "trade_offers.select": [{ data: [pendingOut] }, { data: [pendingIn, settled] }],
       "trade_offer_items.select": {
         data: [
-          { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "roster", event_participant_id: CARD_A, secret_pull_id: null }, // prettier-ignore
-          { id: "i2", offer_id: OFFER_ID, giver_side: "recipient", kind: "roster", event_participant_id: CARD_B, secret_pull_id: null }, // prettier-ignore
+          { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "roster", card_copy_id: COPY_1, secret_pull_id: null }, // prettier-ignore
+          { id: "i2", offer_id: OFFER_ID, giver_side: "recipient", kind: "roster", card_copy_id: COPY_2, secret_pull_id: null }, // prettier-ignore
+        ],
+      },
+      // Which card each staked copy is of, and its finish — read off the copy
+      // rather than off the item, so it cannot drift from the row that will move.
+      "card_copies.select": {
+        data: [
+          { id: COPY_1, event_participant_id: CARD_A, edition: "gold" },
+          { id: COPY_2, event_participant_id: CARD_B, edition: "standard" },
         ],
       },
     });
@@ -383,8 +412,12 @@ describe("getMyTradeOffers", () => {
     expect(res.inbox.map((o) => o.id)).toEqual([OFFER_ID]);
     expect(res.outbox.map((o) => o.id)).toEqual(["o2"]);
     expect(res.recent.map((o) => o.id)).toEqual(["o3"]);
-    expect(res.inbox[0].proposerGives).toEqual([{ kind: "roster", eventParticipantId: CARD_A }]);
-    expect(res.inbox[0].recipientGives).toEqual([{ kind: "roster", eventParticipantId: CARD_B }]);
+    expect(res.inbox[0].proposerGives).toEqual([
+      { kind: "roster", copyId: COPY_1, eventParticipantId: CARD_A, edition: "gold" },
+    ]);
+    expect(res.inbox[0].recipientGives).toEqual([
+      { kind: "roster", copyId: COPY_2, eventParticipantId: CARD_B, edition: "standard" },
+    ]);
   });
 
   it("scopes both queries to the token holder", async () => {
@@ -402,7 +435,7 @@ describe("getMyTradeOffers", () => {
       "trade_offers.select": [{ data: [] }, { data: [pendingIn] }],
       "trade_offer_items.select": {
         data: [
-          { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "secret", event_participant_id: null, secret_pull_id: PULL_ID }, // prettier-ignore
+          { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "secret", card_copy_id: null, secret_pull_id: PULL_ID }, // prettier-ignore
         ],
       },
       "secret_card_pulls.select": {
@@ -430,7 +463,7 @@ describe("getMyTradeOffers", () => {
       "trade_offers.select": [{ data: [] }, { data: [pendingIn] }],
       "trade_offer_items.select": {
         data: [
-          { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "secret", event_participant_id: null, secret_pull_id: PULL_ID }, // prettier-ignore
+          { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "secret", card_copy_id: null, secret_pull_id: PULL_ID }, // prettier-ignore
         ],
       },
       "secret_card_pulls.select": { data: [] },

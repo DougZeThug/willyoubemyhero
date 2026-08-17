@@ -13,6 +13,7 @@ const EXPECTED_TABLES = [
   "award_votes",
   "awards",
   "card_comments",
+  "card_copies",
   "card_prompt_runs",
   "card_prompt_templates",
   "card_pulls",
@@ -92,14 +93,33 @@ describe("migrations", () => {
       SELECT proname FROM pg_proc p
       JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public'
-        AND proname IN ('accept_trade_offer', 'create_trade_offer', 'trade_item_is_spare')
+        AND proname IN ('accept_trade_offer', 'create_trade_offer', 'trade_item_is_spare',
+                        'resync_card_pull')
       ORDER BY proname
     `);
     expect(rows.map((r) => r.proname)).toEqual([
       "accept_trade_offer",
       "create_trade_offer",
+      "resync_card_pull",
       "trade_item_is_spare",
     ]);
+  });
+
+  it("enforces one pulled copy per person per card per league day", async () => {
+    // The rule that stops a replayed pack minting copies. An index rather than a
+    // timestamp comparison, the same shape secret_card_pulls has always used.
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'card_copies'",
+    );
+    expect(
+      rows.some(
+        (r) =>
+          r.indexdef.includes("UNIQUE") &&
+          r.indexdef.includes("participant_id") &&
+          r.indexdef.includes("event_participant_id") &&
+          r.indexdef.includes("acquired_on"),
+      ),
+    ).toBe(true);
   });
 
   it("creates the two RPCs the pack calls when it is torn", async () => {
@@ -244,6 +264,9 @@ describe("migrations", () => {
     // and a pending offer — to every phone in the garden.
     expect(published).not.toContain("trade_offers");
     expect(published).not.toContain("trade_offer_items");
+    // Everything the card_pulls line above says, per copy and with the finish on
+    // each — strictly the worse leak of the two.
+    expect(published).not.toContain("card_copies");
   });
 
   it("enforces one pack_opens row per person per league day, which is what makes a row count a pack count", async () => {

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
+import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
 import type { ImageUrlSet } from "@/lib/media";
 import { SECRET_RARITY } from "@/lib/secret-cards";
 import { secretTierStyle } from "@/lib/secret-rarity";
@@ -37,6 +38,10 @@ export function TradeItemTile({ item, lookup, onClick, selected }: TradeItemTile
   const tier = item.kind === "secret" ? secretTierStyle(item.tier) : null;
   const name = item.kind === "roster" ? (roster?.name ?? "—") : item.name;
 
+  // The finish on THIS copy, which is the thing a trade now actually moves — so
+  // the tile has to show it or there is no way to tell two of your Alices apart.
+  const finish = item.kind === "roster" ? editionLabel(item.edition) : null;
+
   const body = (
     <>
       <HoloCard
@@ -44,6 +49,7 @@ export function TradeItemTile({ item, lookup, onClick, selected }: TradeItemTile
         backUrl={null}
         name={name}
         rarity={item.kind === "roster" ? (roster?.rarity ?? rarityStyle("base")) : SECRET_RARITY}
+        edition={item.kind === "roster" ? item.edition : undefined}
         // Subtle throughout: these are thumbnails in a list, and a full-strength
         // foil on eight of them at once is noise rather than shine.
         intensity="subtle"
@@ -59,6 +65,16 @@ export function TradeItemTile({ item, lookup, onClick, selected }: TradeItemTile
             style={{ color: tier.accent }}
           >
             {tier.label}
+          </div>
+        )}
+        {/* Null for a standard finish — 70% of copies — so the metal only shows
+            up where it means something. Same rule editionLabel applies everywhere. */}
+        {finish && (
+          <div
+            className="text-[9px] font-bold uppercase tracking-[0.2em]"
+            style={{ color: editionStyle(toEdition(item.kind === "roster" ? item.edition : null)).accent }} // prettier-ignore
+          >
+            {finish}
           </div>
         )}
       </div>
@@ -102,9 +118,9 @@ function Side({
         <p className="text-[11px] text-muted-foreground">Nothing left on this side.</p>
       ) : (
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {items.map((item, i) => (
+          {items.map((item) => (
             <TradeItemTile
-              key={item.kind === "secret" ? item.pullId : `${item.eventParticipantId}-${i}`}
+              key={item.kind === "secret" ? item.pullId : item.copyId}
               item={item}
               lookup={lookup}
             />

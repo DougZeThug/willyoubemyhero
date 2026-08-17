@@ -66,18 +66,21 @@ CREATE TABLE IF NOT EXISTS public.trade_offer_items (
   -- offer it hangs off.
   giver_side text NOT NULL,
   kind       text NOT NULL,
-  event_participant_id uuid REFERENCES public.event_participants(id) ON DELETE CASCADE,
-  -- A specific COPY, not a card: secret ownership is per-row (surrogate id,
-  -- is_duplicate), so a trade names the exact ledger row being handed over.
-  secret_pull_id       uuid REFERENCES public.secret_card_pulls(id) ON DELETE CASCADE,
+  -- BOTH SIDES NAME A SPECIFIC COPY, not a card. Secret ownership was always
+  -- per-row, and card_copies (20260817115000) gives roster cards the same grain —
+  -- which is what makes a finish tradeable at all. Naming the card instead would
+  -- leave "which of my three Alices am I giving you" undecidable, and every
+  -- traded card arriving standard is exactly the bug that had.
+  card_copy_id   uuid REFERENCES public.card_copies(id) ON DELETE CASCADE,
+  secret_pull_id uuid REFERENCES public.secret_card_pulls(id) ON DELETE CASCADE,
   CONSTRAINT trade_offer_items_side_ck CHECK (giver_side IN ('proposer', 'recipient')),
   CONSTRAINT trade_offer_items_kind_ck CHECK (kind IN ('roster', 'secret')),
   -- Exactly one target, and it has to be the one the kind names. Same shape as
   -- secret_card_pulls_identity_ck, which says the same thing about member-or-guest.
   CONSTRAINT trade_offer_items_identity_ck CHECK (
-    (kind = 'roster' AND event_participant_id IS NOT NULL AND secret_pull_id IS NULL)
+    (kind = 'roster' AND card_copy_id IS NOT NULL AND secret_pull_id IS NULL)
     OR
-    (kind = 'secret' AND secret_pull_id IS NOT NULL AND event_participant_id IS NULL)
+    (kind = 'secret' AND secret_pull_id IS NOT NULL AND card_copy_id IS NULL)
   )
 );
 
@@ -87,18 +90,14 @@ COMMENT ON TABLE public.trade_offer_items IS
 CREATE INDEX IF NOT EXISTS trade_offer_items_offer_idx
   ON public.trade_offer_items (offer_id);
 
--- The same card cannot be staked twice in one offer. For roster cards that is the
--- real rule rather than tidiness: the accept decrements pull_count once per item,
--- so two items naming one card would spend two copies against a single spare
--- check and could drive the count to zero.
+-- The same COPY cannot be staked twice in one offer. No giver_side in either
+-- index: a copy has exactly one owner, so naming it twice is a contradiction
+-- whichever sides claim it. Two different copies of the same card are still fine —
+-- that is two rows, and trading two of your three Alices is a real thing to want.
 CREATE UNIQUE INDEX IF NOT EXISTS trade_offer_items_roster_once
-  ON public.trade_offer_items (offer_id, giver_side, event_participant_id)
+  ON public.trade_offer_items (offer_id, card_copy_id)
   WHERE kind = 'roster';
 
--- No giver_side here: a secret pull row has exactly one owner, so naming it twice
--- in one offer is a contradiction whichever sides claim it. Two DIFFERENT copies
--- of the same secret card are still fine — that is two rows, and it is a real
--- thing somebody might want to trade.
 CREATE UNIQUE INDEX IF NOT EXISTS trade_offer_items_secret_once
   ON public.trade_offer_items (offer_id, secret_pull_id)
   WHERE kind = 'secret';
@@ -165,10 +164,10 @@ END $$;
 -- accepted. Two copies of this rule would drift, and the accept-time copy is the
 -- one that actually protects the database.
 CREATE OR REPLACE FUNCTION public.trade_item_is_spare(
-  _giver_id             uuid,
-  _kind                 text,
-  _event_participant_id uuid,
-  _secret_pull_id       uuid
+  _giver_id       uuid,
+  _kind           text,
+  _card_copy_id   uuid,
+  _secret_pull_id uuid
 ) RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -180,13 +179,22 @@ SET timezone = 'America/New_York'
 AS $$
   SELECT CASE _kind
     WHEN 'roster' THEN EXISTS (
-      -- >= 2 is what makes the decrement legal under card_pulls_count_positive:
-      -- the giver's row survives at 1, so the public "Packed by N" row count for
-      -- this card is unchanged by the trade.
-      SELECT 1 FROM public.card_pulls
-       WHERE participant_id = _giver_id
-         AND event_participant_id = _event_participant_id
-         AND pull_count >= 2)
+      -- The copy is the giver's, AND they hold a second one of the same card.
+      --
+      -- The >= 2 half is what makes the transfer legal under
+      -- card_pulls_count_positive: the giver keeps at least one copy, so
+      -- resync_card_pull never takes their row to zero and the public "Packed by
+      -- N" count for this card cannot move because of a trade.
+      --
+      -- WHICH copy is now the giver's choice, including their best one. That is
+      -- the point of per-copy: you always keep one of everything, and you decide
+      -- which one you keep.
+      SELECT 1 FROM public.card_copies mine
+       WHERE mine.id = _card_copy_id
+         AND mine.participant_id = _giver_id
+         AND (SELECT count(*) FROM public.card_copies others
+               WHERE others.participant_id = _giver_id
+                 AND others.event_participant_id = mine.event_participant_id) >= 2)
     WHEN 'secret' THEN EXISTS (
       SELECT 1 FROM public.secret_card_pulls
        WHERE id = _secret_pull_id
@@ -207,6 +215,42 @@ $$;
 REVOKE ALL ON FUNCTION public.trade_item_is_spare(uuid, text, uuid, uuid)
   FROM anon, authenticated, PUBLIC;
 GRANT EXECUTE ON FUNCTION public.trade_item_is_spare(uuid, text, uuid, uuid) TO service_role;
+
+-- ============ AND STILL A COPY LEFT, ACROSS THE WHOLE OFFER ============
+-- trade_item_is_spare answers "is this ONE copy tradeable", which is necessary and
+-- NOT sufficient: two copies of the same card can now be staked in one offer (that
+-- is the point of keying the item on a copy), and against a holding of exactly two
+-- they would each pass a per-item check that only ever sees the count before
+-- anything moved. Both would then transfer, resync_card_pull would find zero
+-- copies, and the giver's card_pulls row — which IS the public "Packed by N"
+-- count — would be deleted by a trade.
+--
+-- So the rule is stated once more at the level it actually holds at: per giver,
+-- per card, you may stake strictly fewer copies than you hold.
+CREATE OR REPLACE FUNCTION public.trade_leaves_a_copy(_offer_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT NOT EXISTS (
+    WITH staked AS (
+      SELECT cc.participant_id AS pid, cc.event_participant_id AS ep, count(*) AS n
+        FROM public.trade_offer_items i
+        JOIN public.card_copies cc ON cc.id = i.card_copy_id
+       WHERE i.offer_id = _offer_id AND i.kind = 'roster'
+       GROUP BY cc.participant_id, cc.event_participant_id
+    )
+    SELECT 1 FROM staked s
+     WHERE s.n >= (SELECT count(*) FROM public.card_copies o
+                    WHERE o.participant_id = s.pid
+                      AND o.event_participant_id = s.ep)
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.trade_leaves_a_copy(uuid) FROM anon, authenticated, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.trade_leaves_a_copy(uuid) TO service_role;
 
 -- ============ COMPOSING AN OFFER ============
 -- An RPC rather than two supabase-js calls because the offer and its items span
@@ -264,10 +308,10 @@ BEGIN
       SELECT jsonb_array_elements(_want)
     ) AS e
      WHERE NOT (
-       (e.v->>'kind' = 'roster' AND e.v->>'eventParticipantId' IS NOT NULL)
+       (e.v->>'kind' = 'roster' AND e.v->>'cardCopyId' IS NOT NULL)
        OR (e.v->>'kind' = 'secret' AND e.v->>'secretPullId' IS NOT NULL))
   ) THEN
-    RAISE EXCEPTION 'Every card in a trade must name a roster card or a secret copy';
+    RAISE EXCEPTION 'Every card in a trade must name a card copy or a secret copy';
   END IF;
 
   INSERT INTO public.trade_offers (event_id, proposer_id, recipient_id)
@@ -275,9 +319,9 @@ BEGIN
   RETURNING id INTO _offer_id;
 
   INSERT INTO public.trade_offer_items
-    (offer_id, giver_side, kind, event_participant_id, secret_pull_id)
+    (offer_id, giver_side, kind, card_copy_id, secret_pull_id)
   SELECT _offer_id, s.side, e.v->>'kind',
-         CASE WHEN e.v->>'kind' = 'roster' THEN (e.v->>'eventParticipantId')::uuid END,
+         CASE WHEN e.v->>'kind' = 'roster' THEN (e.v->>'cardCopyId')::uuid END,
          CASE WHEN e.v->>'kind' = 'secret' THEN (e.v->>'secretPullId')::uuid END
     FROM (VALUES ('proposer', _give), ('recipient', _want)) AS s(side, items)
     CROSS JOIN LATERAL jsonb_array_elements(s.items) AS e(v);
@@ -290,9 +334,15 @@ BEGIN
      WHERE i.offer_id = _offer_id
        AND NOT public.trade_item_is_spare(
              CASE i.giver_side WHEN 'proposer' THEN _proposer_id ELSE _recipient_id END,
-             i.kind, i.event_participant_id, i.secret_pull_id)
+             i.kind, i.card_copy_id, i.secret_pull_id)
   ) THEN
     RAISE EXCEPTION 'Every card in a trade has to be a spare its owner still holds';
+  END IF;
+
+  -- And, across the whole offer, nobody empties a card out. See the comment on
+  -- trade_leaves_a_copy: the per-item check above cannot see this one.
+  IF NOT public.trade_leaves_a_copy(_offer_id) THEN
+    RAISE EXCEPTION 'You have to keep a copy of every card you trade';
   END IF;
 
   RETURN jsonb_build_object('ok', true, 'offerId', _offer_id);
@@ -355,16 +405,11 @@ BEGIN
   -- Lock every staked row before re-reading it, so the re-validation below and
   -- the transfers after it see the same world.
   PERFORM 1
-     FROM public.card_pulls cp
+     FROM public.card_copies cc
      JOIN public.trade_offer_items i
-       ON i.kind = 'roster'
-      AND i.event_participant_id = cp.event_participant_id
-      AND cp.participant_id = CASE i.giver_side
-                                WHEN 'proposer' THEN _offer.proposer_id
-                                ELSE _offer.recipient_id
-                              END
+       ON i.kind = 'roster' AND i.card_copy_id = cc.id
     WHERE i.offer_id = _offer_id
-      FOR UPDATE OF cp;
+      FOR UPDATE OF cc;
 
   PERFORM 1
      FROM public.secret_card_pulls sp
@@ -381,8 +426,8 @@ BEGIN
      WHERE i.offer_id = _offer_id
        AND NOT public.trade_item_is_spare(
              CASE i.giver_side WHEN 'proposer' THEN _offer.proposer_id ELSE _offer.recipient_id END,
-             i.kind, i.event_participant_id, i.secret_pull_id)
-  ) THEN
+             i.kind, i.card_copy_id, i.secret_pull_id)
+  ) OR NOT public.trade_leaves_a_copy(_offer_id) THEN
     UPDATE public.trade_offers
        SET status = 'voided', resolved_at = now()
      WHERE id = _offer_id;
@@ -394,43 +439,44 @@ BEGIN
   -- second a duplicate, rather than that depending on scan order.
   FOR _item IN
     SELECT i.kind,
-           i.event_participant_id,
+           i.card_copy_id,
            i.secret_pull_id,
+           -- Which card the copy is OF, read off the copy rather than stored on
+           -- the item: one source of truth, and it cannot drift from the row the
+           -- transfer below actually moves. LEFT, because a secret item has no copy.
+           cc.event_participant_id,
            CASE i.giver_side WHEN 'proposer' THEN _offer.proposer_id
                              ELSE _offer.recipient_id END AS giver_id,
            CASE i.giver_side WHEN 'proposer' THEN _offer.recipient_id
                              ELSE _offer.proposer_id END AS receiver_id
       FROM public.trade_offer_items i
+      LEFT JOIN public.card_copies cc ON cc.id = i.card_copy_id
      WHERE i.offer_id = _offer_id
      ORDER BY i.id
   LOOP
     IF _item.kind = 'roster' THEN
-      -- The giver's row is decremented, never deleted. It was >= 2, so it lands
-      -- at >= 1 and card_pulls_count_positive holds — and the row surviving is
-      -- what keeps the public "Packed by N" count honest across a trade.
-      UPDATE public.card_pulls
-         SET pull_count = pull_count - 1
-       WHERE participant_id = _item.giver_id
-         AND event_participant_id = _item.event_participant_id;
-
-      -- EDITIONS DO NOT TRANSFER, and this is deliberate. There is no per-copy
-      -- edition to move — card_pulls.edition is the best finish that person has
-      -- ever pulled — and the value is client-asserted (see the long comment in
-      -- src/lib/card-pulls.functions.ts). Transferring it would launder an
-      -- unverified number into a second member's row. A traded card arrives
-      -- standard, and a receiver who already holds a better finish keeps it: the
-      -- conflict clause below touches pull_count and nothing else.
+      -- THE FINISH TRAVELS, because the copy does. Re-parenting one card_copies
+      -- row moves the actual thing that was rolled, rather than copying a
+      -- person-level "best" from one row to another — which is why this used to
+      -- hand over a standard card however good the copy was.
       --
-      -- KNOWN AND ACCEPTED: a fresh insert defaults last_pulled_at to now(), and
-      -- record_card_pulls skips its pull_count bump for a card already counted
-      -- today. So packing this same card later the same day will not bump the
-      -- count. That is a private stat, off by one, for one day.
-      INSERT INTO public.card_pulls AS cp
-        (participant_id, event_participant_id, pull_count, edition)
-      VALUES (_item.receiver_id, _item.event_participant_id, 1, 'standard')
-      ON CONFLICT (participant_id, event_participant_id) DO UPDATE
-        SET pull_count = cp.pull_count + 1,
-            last_pulled_at = now();
+      -- acquired_on is cleared for the same reason accept sets granted = true on
+      -- a secret: the receiver may have pulled this very card today, and a traded
+      -- copy carrying that date would collide on card_copies_one_pull_per_day and
+      -- abort the whole accept. It is also true on its own terms — a card that
+      -- arrived in a trade was not that person's pull for that day.
+      UPDATE public.card_copies
+         SET participant_id = _item.receiver_id,
+             source         = 'trade',
+             acquired_on    = NULL
+       WHERE id = _item.card_copy_id;
+
+      -- Both sides recomputed from the copies they now hold. The giver's best
+      -- finish can FALL here — trade away your only platinum and standard is the
+      -- honest answer — which is the one place in the app where that column moves
+      -- downwards, and why mergeCollection stopped taking the better of the two.
+      PERFORM public.resync_card_pull(_item.giver_id, _item.event_participant_id);
+      PERFORM public.resync_card_pull(_item.receiver_id, _item.event_participant_id);
     ELSE
       SELECT sp.secret_card_id INTO _card
         FROM public.secret_card_pulls sp WHERE sp.id = _item.secret_pull_id;
@@ -464,32 +510,46 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- THE PUBLIC RECORD. Roster items keep their event_participant_id — that is a
-  -- public card anyone can already browse. Secret items collapse to their kind and
-  -- nothing else, because this jsonb lands in an anon-readable, realtime-published
-  -- table and a secret_card_id here would leak the catalogue to every phone in the
-  -- garden. Built here and nowhere else, so there is one place to get it right.
+  -- THE PUBLIC RECORD. Roster items name the CARD — public data anyone can already
+  -- browse — resolved from the copy that just moved. Secret items collapse to their
+  -- kind and nothing else, because this jsonb lands in an anon-readable,
+  -- realtime-published table and a secret_card_id here would leak the catalogue to
+  -- every phone in the garden. Built here and nowhere else.
+  --
+  -- AND NO EDITION, deliberately, even though one now genuinely travels with the
+  -- copy. A finish is client-asserted (see the long comment in
+  -- src/lib/card-pulls.functions.ts), and this table is the most public surface in
+  -- the app — putting one here is precisely the "number a second person can see"
+  -- that comment says it must never become without being re-derived server-side.
+  -- The two people in the trade see the finish; the league sees a card moved.
+  --
+  -- The join is INNER for roster items on purpose: an item whose copy has since
+  -- been deleted is dropped from the summary rather than recorded as a null card.
   SELECT
     coalesce(jsonb_agg(
       CASE i.kind
         WHEN 'roster' THEN jsonb_build_object('kind', 'roster',
-                                              'eventParticipantId', i.event_participant_id)
+                                              'eventParticipantId', cc.event_participant_id)
         ELSE jsonb_build_object('kind', 'secret')
       END ORDER BY i.kind, i.id), '[]'::jsonb)
     INTO _proposer_gave
     FROM public.trade_offer_items i
-   WHERE i.offer_id = _offer_id AND i.giver_side = 'proposer';
+    LEFT JOIN public.card_copies cc ON cc.id = i.card_copy_id
+   WHERE i.offer_id = _offer_id AND i.giver_side = 'proposer'
+     AND (i.kind = 'secret' OR cc.id IS NOT NULL);
 
   SELECT
     coalesce(jsonb_agg(
       CASE i.kind
         WHEN 'roster' THEN jsonb_build_object('kind', 'roster',
-                                              'eventParticipantId', i.event_participant_id)
+                                              'eventParticipantId', cc.event_participant_id)
         ELSE jsonb_build_object('kind', 'secret')
       END ORDER BY i.kind, i.id), '[]'::jsonb)
     INTO _recipient_gave
     FROM public.trade_offer_items i
-   WHERE i.offer_id = _offer_id AND i.giver_side = 'recipient';
+    LEFT JOIN public.card_copies cc ON cc.id = i.card_copy_id
+   WHERE i.offer_id = _offer_id AND i.giver_side = 'recipient'
+     AND (i.kind = 'secret' OR cc.id IS NOT NULL);
 
   UPDATE public.trade_offers
      SET status = 'accepted', resolved_at = now()

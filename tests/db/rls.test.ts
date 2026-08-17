@@ -15,6 +15,7 @@ const SECRET_CARD_ID = "00000000-0000-4000-8000-00000000ce01";
 const PROMPT_RUN_ID = "00000000-0000-4000-8000-00000000ce02";
 const OFFER_ID = "00000000-0000-4000-8000-00000000ce03";
 const TRADE_ID = "00000000-0000-4000-8000-00000000ce04";
+const COPY_ID = "00000000-0000-4000-8000-00000000ce05";
 
 /** Tables the vault, leaderboard, live view and recap all read without a session. */
 const PUBLIC_READ = [
@@ -57,6 +58,9 @@ const SERVER_ONLY = [
   // The aggregate ("7 people have this card") is public and served by a server
   // function. These rows are not: they say who has never packed whom.
   "public.card_pulls",
+  // Strictly worse than card_pulls: the same private collection, one row per copy,
+  // with the finish on each.
+  "public.card_copies",
   // Unlike card_pulls there is no public aggregate over this at all — a pack
   // count is shown to the person it belongs to and to nobody else.
   "public.pack_opens",
@@ -231,6 +235,20 @@ describe("server-only tables", () => {
     expect(visible === null || visible === 0).toBe(true);
   });
 
+  it("keeps the finish on each of somebody's copies out of anon's reach", async () => {
+    // card_copies is what made a finish tradeable, and it is the most detailed
+    // private record in the app: one row per copy, with the roll on each.
+    await sql(
+      `INSERT INTO public.card_copies (participant_id, event_participant_id, edition, source)
+       SELECT $1, id, 'platinum', 'backfill' FROM public.event_participants LIMIT 1`,
+      [IDS.bob],
+    );
+    const [{ n }] = await sql<{ n: number }>("SELECT count(*)::int AS n FROM public.card_copies");
+    expect(n).toBeGreaterThan(0);
+    const visible = await visibleRows("anon", "public.card_copies");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
   it("keeps how many packs somebody has opened out of anon's reach", async () => {
     await sql(
       `INSERT INTO public.pack_opens (participant_id, opened_on)
@@ -252,10 +270,16 @@ describe("server-only tables", () => {
       [OFFER_ID, IDS.event, IDS.alice, IDS.bob],
     );
     await sql(
-      `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, event_participant_id)
-       SELECT $1, 'proposer', 'roster', id FROM public.event_participants ORDER BY running_order LIMIT 1
-       ON CONFLICT DO NOTHING`,
-      [OFFER_ID],
+      `INSERT INTO public.card_copies (id, participant_id, event_participant_id, edition, source)
+       SELECT $1, $2, id, 'platinum', 'backfill'
+         FROM public.event_participants ORDER BY running_order LIMIT 1
+       ON CONFLICT (id) DO NOTHING`,
+      [COPY_ID, IDS.alice],
+    );
+    await sql(
+      `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, card_copy_id)
+       VALUES ($1, 'proposer', 'roster', $2) ON CONFLICT DO NOTHING`,
+      [OFFER_ID, COPY_ID],
     );
     expect(await sql("SELECT count(*)::int AS n FROM public.trade_offers")).toEqual([{ n: 1 }]);
     expect(await sql("SELECT count(*)::int AS n FROM public.trade_offer_items")).toEqual([
@@ -321,7 +345,9 @@ describe("anon has no write grant anywhere", () => {
     // is a trade announced in the feed that never happened.
     ["announce a trade that never happened", `INSERT INTO public.trades (event_id, proposer_id, recipient_id) VALUES ($1, $2, $3)`, [IDS.event, IDS.alice, IDS.bob]], // prettier-ignore
     ["plant an offer in somebody's inbox", `INSERT INTO public.trade_offers (event_id, proposer_id, recipient_id) VALUES ($1, $2, $3)`, [IDS.event, IDS.alice, IDS.bob]], // prettier-ignore
-    ["stake a card on an offer", `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, event_participant_id) SELECT $1, 'proposer', 'roster', id FROM public.event_participants LIMIT 1`, [OFFER_ID]], // prettier-ignore
+    ["stake a card on an offer", `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, card_copy_id) VALUES ($1, 'proposer', 'roster', $2)`, [OFFER_ID, COPY_ID]], // prettier-ignore
+    ["mint itself a platinum copy", `INSERT INTO public.card_copies (participant_id, event_participant_id, edition) SELECT $1, id, 'platinum' FROM public.event_participants LIMIT 1`, [IDS.alice]], // prettier-ignore
+    ["upgrade the finish on a copy", `UPDATE public.card_copies SET edition = 'platinum'`, []], // prettier-ignore
     // The whole swap runs inside accept_trade_offer as service_role. Reaching the
     // status column directly would take both people's cards out of the loop.
     ["accept somebody else's offer", `UPDATE public.trade_offers SET status = 'accepted'`, []], // prettier-ignore
