@@ -13,6 +13,8 @@ afterAll(closeDb);
 /** A secret card seeded through the owner, so the leak assertions have something to leak. */
 const SECRET_CARD_ID = "00000000-0000-4000-8000-00000000ce01";
 const PROMPT_RUN_ID = "00000000-0000-4000-8000-00000000ce02";
+const OFFER_ID = "00000000-0000-4000-8000-00000000ce03";
+const TRADE_ID = "00000000-0000-4000-8000-00000000ce04";
 
 /** Tables the vault, leaderboard, live view and recap all read without a session. */
 const PUBLIC_READ = [
@@ -28,6 +30,9 @@ const PUBLIC_READ = [
   "public.card_reactions",
   "public.card_comments",
   "public.event_archive_snapshots",
+  // Completed trades are an announcement — the feed is the point. Public-safe by
+  // construction rather than by filtering: see the redaction test below.
+  "public.trades",
 ];
 
 /** Server-only tables. Each one leaks something specific if it becomes readable. */
@@ -58,6 +63,11 @@ const SERVER_ONLY = [
   // Editable prompt sources and immutable authoring history are commissioner-only.
   "public.card_prompt_templates",
   "public.card_prompt_runs",
+  // A pending offer is between two people, and it names cards they hold — the
+  // same private collection data card_pulls is locked down to protect. Only the
+  // completed trade is public, and only in its redacted form.
+  "public.trade_offers",
+  "public.trade_offer_items",
 ];
 
 describe("public reads", () => {
@@ -96,6 +106,21 @@ describe("public reads", () => {
     const columns = rows.map((r) => r.column_name);
     expect(columns).not.toContain("pin_hash");
     expect(columns).not.toContain("pin_salt");
+  });
+
+  it("lets anon read a completed trade, which is what makes the feed a feed", async () => {
+    // The positive control for `trades` being in PUBLIC_READ above: that list is
+    // checked with `visibleRows(...) !== null`, which an empty table satisfies
+    // without proving a single row would come back.
+    await sql(
+      `INSERT INTO public.trades
+         (id, event_id, proposer_id, recipient_id, proposer_gave, recipient_gave)
+       VALUES ($1, $2, $3, $4, '[{"kind":"secret"}]'::jsonb, '[{"kind":"secret"}]'::jsonb)
+       ON CONFLICT (id) DO NOTHING`,
+      [TRADE_ID, IDS.event, IDS.alice, IDS.bob],
+    );
+    const rows = await asRole<{ id: string }>("anon", "SELECT id FROM public.trades");
+    expect(rows.map((r) => r.id)).toEqual([TRADE_ID]);
   });
 
   it("hides the private columns on runs while keeping the times readable", async () => {
@@ -217,6 +242,32 @@ describe("server-only tables", () => {
     expect(visible === null || visible === 0).toBe(true);
   });
 
+  it("keeps a pending offer, and the cards staked on it, between the two people in it", async () => {
+    // Seeded through the owner, so there is genuinely something to leak — the
+    // `visible === null || visible === 0` idiom passes vacuously against an empty
+    // table, and an empty table is what these two would otherwise be asserting on.
+    await sql(
+      `INSERT INTO public.trade_offers (id, event_id, proposer_id, recipient_id)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+      [OFFER_ID, IDS.event, IDS.alice, IDS.bob],
+    );
+    await sql(
+      `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, event_participant_id)
+       SELECT $1, 'proposer', 'roster', id FROM public.event_participants ORDER BY running_order LIMIT 1
+       ON CONFLICT DO NOTHING`,
+      [OFFER_ID],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.trade_offers")).toEqual([{ n: 1 }]);
+    expect(await sql("SELECT count(*)::int AS n FROM public.trade_offer_items")).toEqual([{ n: 1 }]);
+
+    for (const role of ["anon", "authenticated"] as const) {
+      for (const table of ["public.trade_offers", "public.trade_offer_items"]) {
+        const visible = await visibleRows(role, table);
+        expect(visible === null || visible === 0).toBe(true);
+      }
+    }
+  });
+
   it("keeps a cast ballot secret before the reveal", async () => {
     await sql(
       `INSERT INTO public.award_votes (event_id, category, voter_participant_id, target_participant_id)
@@ -263,6 +314,15 @@ describe("anon has no write grant anywhere", () => {
     // so that key would collide on the primary key and `isDenied` — which counts
     // any error as a denial — would pass without ever reaching the grant.
     ["inflate its own pack count", `INSERT INTO public.pack_opens (participant_id, opened_on) VALUES ($1, current_date - 30)`, [IDS.bob]], // prettier-ignore
+    // `trades` is the one trading table anon can SELECT, which makes it the one
+    // that needs saying out loud that the grant is read-only: a forged row here
+    // is a trade announced in the feed that never happened.
+    ["announce a trade that never happened", `INSERT INTO public.trades (event_id, proposer_id, recipient_id) VALUES ($1, $2, $3)`, [IDS.event, IDS.alice, IDS.bob]], // prettier-ignore
+    ["plant an offer in somebody's inbox", `INSERT INTO public.trade_offers (event_id, proposer_id, recipient_id) VALUES ($1, $2, $3)`, [IDS.event, IDS.alice, IDS.bob]], // prettier-ignore
+    ["stake a card on an offer", `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, event_participant_id) SELECT $1, 'proposer', 'roster', id FROM public.event_participants LIMIT 1`, [OFFER_ID]], // prettier-ignore
+    // The whole swap runs inside accept_trade_offer as service_role. Reaching the
+    // status column directly would take both people's cards out of the loop.
+    ["accept somebody else's offer", `UPDATE public.trade_offers SET status = 'accepted'`, []], // prettier-ignore
   ];
 
   it.each(WRITES)("anon cannot %s", async (_label, statement, params) => {
