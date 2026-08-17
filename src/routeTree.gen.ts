@@ -9,60 +9,26 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AdminRouteImport } from './routes/admin'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
-import { Route as AwardsRouteImport } from './routes/awards'
-import { Route as ClaimRouteImport } from './routes/claim'
-import { Route as DraftRouteImport } from './routes/draft'
-import { Route as LeaderboardRouteImport } from './routes/leaderboard'
-import { Route as LiveRouteImport } from './routes/live'
-import { Route as OrderRouteImport } from './routes/order'
 import { Route as TvRouteImport } from './routes/tv'
+import { Route as OrderRouteImport } from './routes/order'
+import { Route as LiveRouteImport } from './routes/live'
+import { Route as LeaderboardRouteImport } from './routes/leaderboard'
+import { Route as DraftRouteImport } from './routes/draft'
+import { Route as ClaimRouteImport } from './routes/claim'
+import { Route as AwardsRouteImport } from './routes/awards'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlayersIndexRouteImport } from './routes/players.index'
-import { Route as PlayersIdRouteImport } from './routes/players.$id'
-import { Route as PlayersPackRouteImport } from './routes/players.pack'
-import { Route as PlayersTradeRouteImport } from './routes/players.trade'
 import { Route as RecapSlugRouteImport } from './routes/recap.$slug'
+import { Route as PlayersTradeRouteImport } from './routes/players.trade'
+import { Route as PlayersPackRouteImport } from './routes/players.pack'
+import { Route as PlayersIdRouteImport } from './routes/players.$id'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalyticsRoute = AnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AwardsRoute = AwardsRouteImport.update({
-  id: '/awards',
-  path: '/awards',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClaimRoute = ClaimRouteImport.update({
-  id: '/claim',
-  path: '/claim',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DraftRoute = DraftRouteImport.update({
-  id: '/draft',
-  path: '/draft',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LeaderboardRoute = LeaderboardRouteImport.update({
-  id: '/leaderboard',
-  path: '/leaderboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LiveRoute = LiveRouteImport.update({
-  id: '/live',
-  path: '/live',
+const TvRoute = TvRouteImport.update({
+  id: '/tv',
+  path: '/tv',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrderRoute = OrderRouteImport.update({
@@ -70,9 +36,49 @@ const OrderRoute = OrderRouteImport.update({
   path: '/order',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TvRoute = TvRouteImport.update({
-  id: '/tv',
-  path: '/tv',
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeaderboardRoute = LeaderboardRouteImport.update({
+  id: '/leaderboard',
+  path: '/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DraftRoute = DraftRouteImport.update({
+  id: '/draft',
+  path: '/draft',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClaimRoute = ClaimRouteImport.update({
+  id: '/claim',
+  path: '/claim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AwardsRoute = AwardsRouteImport.update({
+  id: '/awards',
+  path: '/awards',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlayersIndexRoute = PlayersIndexRouteImport.update({
@@ -80,14 +86,9 @@ const PlayersIndexRoute = PlayersIndexRouteImport.update({
   path: '/players/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PlayersIdRoute = PlayersIdRouteImport.update({
-  id: '/players/$id',
-  path: '/players/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlayersPackRoute = PlayersPackRouteImport.update({
-  id: '/players/pack',
-  path: '/players/pack',
+const RecapSlugRoute = RecapSlugRouteImport.update({
+  id: '/recap/$slug',
+  path: '/recap/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlayersTradeRoute = PlayersTradeRouteImport.update({
@@ -95,9 +96,14 @@ const PlayersTradeRoute = PlayersTradeRouteImport.update({
   path: '/players/trade',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RecapSlugRoute = RecapSlugRouteImport.update({
-  id: '/recap/$slug',
-  path: '/recap/$slug',
+const PlayersPackRoute = PlayersPackRouteImport.update({
+  id: '/players/pack',
+  path: '/players/pack',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlayersIdRoute = PlayersIdRouteImport.update({
+  id: '/players/$id',
+  path: '/players/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
+  '/auth': typeof AuthRoute
   '/awards': typeof AwardsRoute
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
+  '/auth': typeof AuthRoute
   '/awards': typeof AwardsRoute
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/analytics': typeof AnalyticsRoute
+  '/auth': typeof AuthRoute
   '/awards': typeof AwardsRoute
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/analytics'
+    | '/auth'
     | '/awards'
     | '/claim'
     | '/draft'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/analytics'
+    | '/auth'
     | '/awards'
     | '/claim'
     | '/draft'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/analytics'
+    | '/auth'
     | '/awards'
     | '/claim'
     | '/draft'
@@ -211,6 +223,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  AuthRoute: typeof AuthRoute
   AwardsRoute: typeof AwardsRoute
   ClaimRoute: typeof ClaimRoute
   DraftRoute: typeof DraftRoute
@@ -227,60 +240,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analytics': {
-      id: '/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AnalyticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/awards': {
-      id: '/awards'
-      path: '/awards'
-      fullPath: '/awards'
-      preLoaderRoute: typeof AwardsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/claim': {
-      id: '/claim'
-      path: '/claim'
-      fullPath: '/claim'
-      preLoaderRoute: typeof ClaimRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/draft': {
-      id: '/draft'
-      path: '/draft'
-      fullPath: '/draft'
-      preLoaderRoute: typeof DraftRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/leaderboard': {
-      id: '/leaderboard'
-      path: '/leaderboard'
-      fullPath: '/leaderboard'
-      preLoaderRoute: typeof LeaderboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/live': {
-      id: '/live'
-      path: '/live'
-      fullPath: '/live'
-      preLoaderRoute: typeof LiveRouteImport
+    '/tv': {
+      id: '/tv'
+      path: '/tv'
+      fullPath: '/tv'
+      preLoaderRoute: typeof TvRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/order': {
@@ -290,11 +254,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrderRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/tv': {
-      id: '/tv'
-      path: '/tv'
-      fullPath: '/tv'
-      preLoaderRoute: typeof TvRouteImport
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leaderboard': {
+      id: '/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/leaderboard'
+      preLoaderRoute: typeof LeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/draft': {
+      id: '/draft'
+      path: '/draft'
+      fullPath: '/draft'
+      preLoaderRoute: typeof DraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/claim': {
+      id: '/claim'
+      path: '/claim'
+      fullPath: '/claim'
+      preLoaderRoute: typeof ClaimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/awards': {
+      id: '/awards'
+      path: '/awards'
+      fullPath: '/awards'
+      preLoaderRoute: typeof AwardsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/players/': {
@@ -304,18 +324,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/players/$id': {
-      id: '/players/$id'
-      path: '/players/$id'
-      fullPath: '/players/$id'
-      preLoaderRoute: typeof PlayersIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/players/pack': {
-      id: '/players/pack'
-      path: '/players/pack'
-      fullPath: '/players/pack'
-      preLoaderRoute: typeof PlayersPackRouteImport
+    '/recap/$slug': {
+      id: '/recap/$slug'
+      path: '/recap/$slug'
+      fullPath: '/recap/$slug'
+      preLoaderRoute: typeof RecapSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/players/trade': {
@@ -325,11 +338,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayersTradeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/recap/$slug': {
-      id: '/recap/$slug'
-      path: '/recap/$slug'
-      fullPath: '/recap/$slug'
-      preLoaderRoute: typeof RecapSlugRouteImport
+    '/players/pack': {
+      id: '/players/pack'
+      path: '/players/pack'
+      fullPath: '/players/pack'
+      preLoaderRoute: typeof PlayersPackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/players/$id': {
+      id: '/players/$id'
+      path: '/players/$id'
+      fullPath: '/players/$id'
+      preLoaderRoute: typeof PlayersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -339,6 +359,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AnalyticsRoute: AnalyticsRoute,
+  AuthRoute: AuthRoute,
   AwardsRoute: AwardsRoute,
   ClaimRoute: ClaimRoute,
   DraftRoute: DraftRoute,

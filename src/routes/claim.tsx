@@ -5,6 +5,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { BadgeCheck, LogOut, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { claimPlayer, getClaimRoster } from "@/lib/member.functions";
+import { linkClaimedPlayer } from "@/lib/account.functions";
+import { useAuthUser } from "@/hooks/use-account";
 import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member-token";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,8 @@ function ClaimPage() {
   const session = useMemberSession();
   const rosterFn = useServerFn(getClaimRoster);
   const claimFn = useServerFn(claimPlayer);
+  const linkFn = useServerFn(linkClaimedPlayer);
+  const { user } = useAuthUser();
 
   const roster = useQuery({
     queryKey: ["claim-roster"],
@@ -59,6 +63,16 @@ function ClaimPage() {
         return;
       }
       setMemberToken(res.token, res.name);
+      // Signed in? Then the player follows the account, not the handset. Awaited
+      // so the next screen's reads already see the bound identity, swallowed
+      // because a claim that worked is worth more than a link that didn't.
+      if (user) {
+        try {
+          await linkFn({ data: undefined });
+        } catch {
+          /* the claim stands; signing in again re-runs the adoption */
+        }
+      }
       toast.success(`Welcome, ${res.name}`);
       navigate({ to: "/players" });
     } catch (err) {
