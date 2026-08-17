@@ -255,6 +255,37 @@ $$;
 REVOKE ALL ON FUNCTION public.trade_leaves_a_copy(uuid) FROM anon, authenticated, PUBLIC;
 GRANT EXECUTE ON FUNCTION public.trade_leaves_a_copy(uuid) TO service_role;
 
+-- ============ AND STILL TWO SIDES ============
+-- An item can vanish from under a pending offer without anybody touching the
+-- offer. `trade_offer_items` cascades from `card_copies` and `secret_card_pulls`,
+-- which cascade in turn from `event_participants` and `participants` — so a
+-- commissioner calling removeParticipantFromEvent on a rostered player quietly
+-- empties every pending offer staking one of their cards.
+--
+-- That matters because the re-validation in accept_trade_offer iterates the
+-- items that REMAIN, and an empty set passes it vacuously. Without this check the
+-- recipient could accept an offer whose other half no longer exists, hand over
+-- their side, and receive nothing — a swap silently turned into a gift.
+--
+-- create_trade_offer already refuses an empty side; this is the same rule
+-- re-asserted at accept time, which is the only place it can be enforced against
+-- a world that moved in between.
+CREATE OR REPLACE FUNCTION public.trade_has_both_sides(_offer_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.trade_offer_items
+                  WHERE offer_id = _offer_id AND giver_side = 'proposer')
+     AND EXISTS (SELECT 1 FROM public.trade_offer_items
+                  WHERE offer_id = _offer_id AND giver_side = 'recipient');
+$$;
+
+REVOKE ALL ON FUNCTION public.trade_has_both_sides(uuid) FROM anon, authenticated, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.trade_has_both_sides(uuid) TO service_role;
+
 -- ============ WHO OWNS A SECRET, AFTER ONE HAS MOVED ============
 -- The direct analogue of resync_card_pull, and it exists for the same reason:
 -- something derived has to be recomputed once a trade moves the row it was
@@ -488,7 +519,8 @@ BEGIN
        AND NOT public.trade_item_is_spare(
              CASE i.giver_side WHEN 'proposer' THEN _offer.proposer_id ELSE _offer.recipient_id END,
              i.kind, i.card_copy_id, i.secret_pull_id)
-  ) OR NOT public.trade_leaves_a_copy(_offer_id) THEN
+  ) OR NOT public.trade_leaves_a_copy(_offer_id)
+    OR NOT public.trade_has_both_sides(_offer_id) THEN
     UPDATE public.trade_offers
        SET status = 'voided', resolved_at = now()
      WHERE id = _offer_id;

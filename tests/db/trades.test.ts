@@ -892,6 +892,37 @@ describe("accept_trade_offer — lifecycle", () => {
     expect(await sql("SELECT count(*)::int AS n FROM public.trades")).toEqual([{ n: 0 }]);
   });
 
+  it("voids rather than turning a swap into a gift when one side is deleted out", async () => {
+    // An item can vanish from under a pending offer with nobody touching the
+    // offer: trade_offer_items cascades from card_copies, which cascades from
+    // event_participants — so removeParticipantFromEvent on a rostered player
+    // empties that side. The per-item re-validation iterates what REMAINS and an
+    // empty set passes it vacuously, so without trade_has_both_sides the
+    // recipient could accept, hand over their card, and receive nothing.
+    const { bobCard, aliceCopies, bobCopies } = await twoSpares();
+    const [aliceCard] = await cardIds();
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
+    );
+
+    // The real chain, not a hand-deleted item: drop the roster entry.
+    await sql("DELETE FROM public.event_participants WHERE id = $1", [aliceCard]);
+    const [{ n }] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.trade_offer_items WHERE offer_id = $1 AND giver_side = 'proposer'", // prettier-ignore
+      [offerId],
+    );
+    expect(n).toBe(0);
+
+    expect(await accept(offerId, IDS.bob)).toEqual({ ok: false, reason: "voided" });
+    expect(await offerStatus(offerId)).toBe("voided");
+    // Bob kept both of his: nothing moved, and no trade was announced.
+    expect(await pullCount(IDS.bob, bobCard)).toBe(2);
+    expect(await sql("SELECT count(*)::int AS n FROM public.trades")).toEqual([{ n: 0 }]);
+  });
+
   it("refuses somebody accepting an offer that is not theirs", async () => {
     const { aliceCopies, bobCopies } = await twoSpares();
     const { offerId } = await createOffer(

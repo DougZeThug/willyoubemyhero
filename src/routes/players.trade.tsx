@@ -22,6 +22,9 @@ import {
   useTradeOffers,
   useTradeSpares,
 } from "@/hooks/use-trades";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { myCardStatsKey } from "@/hooks/use-my-collection";
+import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { tradeSummaryLabel, type TradeItemView, type TradeSpares } from "@/lib/trades";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { editionRank } from "@/lib/card-edition";
@@ -121,6 +124,17 @@ function TradePage() {
       qc.invalidateQueries({ queryKey: tradeSparesKey(myId) }),
       qc.invalidateQueries({ queryKey: tradeSparesKey(theirId) }),
       qc.invalidateQueries({ queryKey: tradeFeedKey(event?.id) }),
+      // The collection caches too, rather than leaving them to the realtime
+      // handler in useTradeFeed. That handler is what updates everybody ELSE, and
+      // it is the wrong thing to depend on for the person who just pressed
+      // accept: the channel may still be subscribing when they arrive from the
+      // vault and act immediately, and realtime may be unavailable entirely.
+      // Their own answer is already in hand here. `my-card-stats` holds for 60s
+      // and `my-secrets` for five minutes, so getting this wrong shows somebody
+      // their pre-trade collection for minutes after the trade landed.
+      qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
+      qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, myId) }),
+      qc.invalidateQueries({ queryKey: mySecretsKey(myId ? `m:${myId}` : null) }),
     ]);
   }
 
