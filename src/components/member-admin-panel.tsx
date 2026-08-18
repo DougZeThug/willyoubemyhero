@@ -110,17 +110,6 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     }
   }
 
-  async function copyAllUnused() {
-    if (!issued) return;
-    const text = issued.map((i) => `${i.name}: ${i.code}`).join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard");
-    } catch {
-      toast.error("Clipboard blocked — select and copy manually");
-    }
-  }
-
   return (
     <AdminSection
       icon={<KeyRound className="h-4 w-4 shrink-0" />}
