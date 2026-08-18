@@ -15,7 +15,7 @@ const forgetCards = vi.fn();
 const useMemberSession = vi.fn();
 // Adoption uploads the phone's cards on claim; every test here is about what
 // happens after that has had its go, so it resolves immediately and empty.
-const adoptCollection = vi.fn(async () => ({ ok: true as const, adopted: 0 }));
+const adoptCollection = vi.fn(async (..._args: unknown[]) => ({ ok: true as const, adopted: 0 }));
 
 vi.mock("@/lib/card-pulls.functions", () => ({
   getMyCardStats: (...args: unknown[]) => getMyCardStats(...args),

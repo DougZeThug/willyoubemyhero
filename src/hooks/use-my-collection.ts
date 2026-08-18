@@ -263,12 +263,12 @@ export function useMyCollection(
     // Never delete a local row while an adoption is in flight, or before one has
     // been attempted for this member. This is the guard that turns "the server
     // has not been told yet" into "wait", rather than "forget it".
-    if (adopting || (participantId && adoptedForRef.current !== participantId)) return;
+    if (adopting || (participantId && adoptedFor !== participantId)) return;
     const fresh = merged.stale.filter((id) => !forgottenRef.current.has(id) && !bumps[id]);
     if (fresh.length === 0) return;
     for (const id of fresh) forgottenRef.current.add(id);
     void forgetCards(fresh);
-  }, [merged.stale, bumps, adopting, participantId]);
+  }, [merged.stale, bumps, adopting, participantId, adoptedFor]);
 
   const markCollected = useCallback(
     (eventParticipantId: string, tier: string, edition: Edition, count: number) => {
