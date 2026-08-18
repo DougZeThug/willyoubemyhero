@@ -129,10 +129,24 @@ test.describe("trading post", () => {
     await signIn(page);
     server.set("getClaimRoster", [
       { id: ME.pid, name: ME.name, nickname: null, hasCode: true, claimed: true, reachable: true },
-      { id: THEM.pid, name: THEM.name, nickname: null, hasCode: true, claimed: true, reachable: true },
+      {
+        id: THEM.pid,
+        name: THEM.name,
+        nickname: null,
+        hasCode: true,
+        claimed: true,
+        reachable: true,
+      },
       // Unclaimed, so it must not appear as a counterparty: an offer to somebody
       // with no device to answer on would sit pending forever.
-      { id: PLAYERS[2].pid, name: PLAYERS[2].name, nickname: null, hasCode: false, claimed: false, reachable: false },
+      {
+        id: PLAYERS[2].pid,
+        name: PLAYERS[2].name,
+        nickname: null,
+        hasCode: false,
+        claimed: false,
+        reachable: false,
+      },
     ]);
     // One stub answers for both panels — the handler is the same one either way.
     // Two copies of one card, in different finishes: the thing per-copy trading
@@ -198,7 +212,14 @@ test.describe("trading post", () => {
     await signIn(page);
     server.set("getClaimRoster", [
       { id: ME.pid, name: ME.name, nickname: null, hasCode: true, claimed: true, reachable: true },
-      { id: THEM.pid, name: THEM.name, nickname: null, hasCode: true, claimed: true, reachable: true },
+      {
+        id: THEM.pid,
+        name: THEM.name,
+        nickname: null,
+        hasCode: true,
+        claimed: true,
+        reachable: true,
+      },
     ]);
     server.set("getTradeSpares", {
       participantId: ME.pid,
@@ -224,7 +245,14 @@ test.describe("trading post", () => {
     await signIn(page);
     server.set("getClaimRoster", [
       { id: ME.pid, name: ME.name, nickname: null, hasCode: true, claimed: true, reachable: true },
-      { id: THEM.pid, name: THEM.name, nickname: null, hasCode: true, claimed: true, reachable: true },
+      {
+        id: THEM.pid,
+        name: THEM.name,
+        nickname: null,
+        hasCode: true,
+        claimed: true,
+        reachable: true,
+      },
     ]);
     server.set("getTradeSpares", {
       participantId: ME.pid,
