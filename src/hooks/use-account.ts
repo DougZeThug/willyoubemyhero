@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
 import { setMemberToken, clearMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
+import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
 
 /** The Supabase user this browser is signed in as, or null. */
 export function useAuthUser(): { user: User | null; loading: boolean } {
@@ -52,10 +53,19 @@ export function useAccountSync(user: User | null) {
 
     void (async () => {
       try {
+        // Snapshotted before the token changes, for the same reason as the claim
+        // page: once this device is a member, its unrecognised local cards are
+        // pruned, and a guest's base cards exist nowhere else.
+        const held = await snapshotLocalCollection();
         const res = await syncAccountSession({ data: undefined });
         if (res.kind === "member") {
           clearGuestToken();
           setMemberToken(res.token, res.name ?? "Player");
+          try {
+            await adoptLocalCollection(held);
+          } catch {
+            /* signed in without the upload: the cards can be granted back */
+          }
         } else {
           clearMemberToken();
           setGuestToken(res.token);
