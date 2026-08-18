@@ -128,27 +128,35 @@ export function useMyCollection(
   const adoptFn = useServerFn(adoptCollection);
   const [adopting, setAdopting] = useState(false);
   // Keyed by participant, so signing in as somebody else on a shared handset
-  // gets its own single attempt rather than inheriting the previous one's.
-  const adoptedForRef = useRef<string | null>(null);
+  // gets its own single attempt rather than inheriting the previous one's. State
+  // rather than a ref because the merge below reads it: latching has to re-run it.
+  const [adoptedFor, setAdoptedFor] = useState<string | null>(null);
+  // The ids just uploaded. The refetch that would confirm them is in flight, so
+  // these are held out of the prune until an answer arrives that includes them —
+  // otherwise the merge disowns the very rows adoption just rescued.
+  const [adoptedIds, setAdoptedIds] = useState<readonly string[]>([]);
 
   useEffect(() => {
     if (!participantId || !localLoaded || !stats.isSuccess) return;
-    if (adoptedForRef.current === participantId) return;
+    if (adoptedFor === participantId) return;
 
     const served = new Set((stats.data?.cards ?? []).map((c) => c.eventParticipantId));
     const orphans = Object.values(local).filter(
       (c) => roster.has(c.eventParticipantId) && !served.has(c.eventParticipantId),
     );
     // Nothing to rescue is still an answer: latch it so the pruning gate opens.
-    adoptedForRef.current = participantId;
-    if (orphans.length === 0) return;
+    if (orphans.length === 0) {
+      setAdoptedFor(participantId);
+      return;
+    }
 
     setAdopting(true);
     void (async () => {
+      const ids = orphans.map((c) => c.eventParticipantId).slice(0, 64);
       try {
         await adoptFn({
           data: {
-            eventParticipantIds: orphans.map((c) => c.eventParticipantId).slice(0, 64),
+            eventParticipantIds: ids,
             editions: orphans
               .slice(0, 64)
               .map((c) =>
@@ -158,17 +166,31 @@ export function useMyCollection(
               ),
           },
         });
-        // The server now vouches for them, so the merge keeps them rather than
-        // disowning them.
-        await stats.refetch();
+        // The server now vouches for them. The refetch is deliberately not
+        // awaited — a query that never settles must not hold the collection
+        // hostage — so `adoptedIds` carries them until it lands.
+        setAdoptedIds(ids);
+        void stats.refetch();
       } catch {
         // A failed adoption must not cost anybody a card: the gate below keeps
         // the local rows exactly where they are, and the next load tries again.
+        setAdoptedIds(ids);
       } finally {
+        setAdoptedFor(participantId);
         setAdopting(false);
       }
     })();
-  }, [participantId, localLoaded, stats.isSuccess, stats.data, local, roster, adoptFn, stats]);
+  }, [
+    participantId,
+    localLoaded,
+    adoptedFor,
+    stats.isSuccess,
+    stats.data,
+    local,
+    roster,
+    adoptFn,
+    stats,
+  ]);
 
   const merged = useMemo(() => {
     // Empty rather than `local` until the server has answered. The local store is
@@ -180,13 +202,19 @@ export function useMyCollection(
     // An adoption in flight — or one not attempted yet for this member — means
     // the server's answer is knowably incomplete, so nothing is adjudicated
     // against it. The local rows stand until the upload has had its go.
-    if (participantId && (adopting || adoptedForRef.current !== participantId)) {
+    if (participantId && (adopting || adoptedFor !== participantId)) {
       return { collection: local, stale: [] as string[] };
     }
+    // Adopted-but-unconfirmed cards are held out of the roster the prune is
+    // scoped to, which leaves their local rows standing instead of deleting them.
+    const served = new Set((stats.data?.cards ?? []).map((c) => c.eventParticipantId));
+    const scope = adoptedIds.some((id) => !served.has(id))
+      ? new Set([...roster].filter((id) => served.has(id) || !adoptedIds.includes(id)))
+      : roster;
     // A failed query leaves the local store exactly as it is: with no answer from
     // the server there is nothing to disown a row with, so nothing is disowned.
-    return mergeCollection(local, stats.data?.cards ?? null, roster);
-  }, [settled, local, stats.data, roster, participantId, adopting]);
+    return mergeCollection(local, stats.data?.cards ?? null, scope);
+  }, [settled, local, stats.data, roster, participantId, adopting, adoptedFor, adoptedIds]);
 
   // Drop a floor once the server's own row has reached it. Not on "a response
   // arrived" — a refetch already in flight when the card was revealed knows
