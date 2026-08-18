@@ -26,21 +26,28 @@ function randomSalt(): string {
 /** Roster for the claim picker: names plus whether each has been claimed yet. */
 export const getClaimRoster = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const [{ data: participants }, { data: codes }] = await Promise.all([
+  const [{ data: participants }, { data: codes }, { data: accounts }] = await Promise.all([
     supabaseAdmin
       .from("participants")
       .select("id, name, nickname")
       .eq("active", true)
       .order("name"),
     supabaseAdmin.from("member_codes").select("participant_id, claimed_at"),
+    // Signing into an account is the other way a player gets a device that can
+    // answer — and a better one, since it follows them between phones. /claim
+    // still cares only about the paper code; trading cares about reachability.
+    supabaseAdmin.from("account_identities").select("participant_id"),
   ]);
   const claimed = new Map((codes ?? []).map((c) => [c.participant_id, c.claimed_at]));
+  const linked = new Set((accounts ?? []).map((a) => a.participant_id).filter(Boolean));
   return (participants ?? []).map((p) => ({
     id: p.id,
     name: p.name,
     nickname: p.nickname,
     hasCode: claimed.has(p.id),
     claimed: !!claimed.get(p.id),
+    /** Somebody an offer can actually reach: claimed a code, or signed in. */
+    reachable: !!claimed.get(p.id) || linked.has(p.id),
   }));
 });
 
