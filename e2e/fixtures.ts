@@ -120,6 +120,7 @@ export const DEFAULT_RESPONSES: Responses = {
     nickname: null,
     hasCode: true,
     claimed: false,
+    reachable: false,
   })),
   getMyAwardVotes: [],
   // A guest identity is minted on the pack screen so an unclaimed visitor can own
