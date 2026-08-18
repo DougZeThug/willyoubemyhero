@@ -15,6 +15,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
 const SALT = "salt-1234";
 const PIN = "8675";
+const USER_ID = "11111111-1111-4111-8111-111111111111";
 
 function withDb(responses: SupabaseResponses) {
   mock = createSupabaseMock(responses);
