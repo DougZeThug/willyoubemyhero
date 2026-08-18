@@ -314,7 +314,7 @@ function TradePage() {
             <div className="mb-3 flex flex-wrap gap-1.5">
               {counterparties.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Nobody else has claimed their player yet.
+                  Nobody else has claimed their player or signed in yet.
                 </p>
               ) : (
                 counterparties.map((p) => (
