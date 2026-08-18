@@ -232,9 +232,46 @@ describe("getClaimRoster", () => {
     });
     const { getClaimRoster } = await import("./member.functions");
     expect(await callServerFn(getClaimRoster)).toEqual([
-      { id: PARTICIPANT_ID, name: "Doug", nickname: "Dougie", hasCode: true, claimed: true },
+      {
+        id: PARTICIPANT_ID,
+        name: "Doug",
+        nickname: "Dougie",
+        hasCode: true,
+        claimed: true,
+        reachable: true,
+      },
       // A code was issued but never redeemed.
-      { id: OTHER_ID, name: "Alice", nickname: null, hasCode: true, claimed: false },
+      {
+        id: OTHER_ID,
+        name: "Alice",
+        nickname: null,
+        hasCode: true,
+        claimed: false,
+        reachable: false,
+      },
+    ]);
+  });
+
+  it("counts a signed-in account as reachable even with no claimed code", async () => {
+    // Doug's case in production: an account linked to his player, but the paper
+    // code never redeemed. Trading has to reach him — create_trade_offer applies
+    // the same OR server-side.
+    withDb({
+      "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug", nickname: null }] },
+      "member_codes.select": { data: [{ participant_id: PARTICIPANT_ID, claimed_at: null }] },
+      "account_identities.select": { data: [{ participant_id: PARTICIPANT_ID }] },
+    });
+    const { getClaimRoster } = await import("./member.functions");
+    expect(await callServerFn(getClaimRoster)).toEqual([
+      {
+        id: PARTICIPANT_ID,
+        name: "Doug",
+        nickname: null,
+        hasCode: true,
+        // Unchanged: /claim still means the paper code alone.
+        claimed: false,
+        reachable: true,
+      },
     ]);
   });
 
@@ -245,7 +282,14 @@ describe("getClaimRoster", () => {
     });
     const { getClaimRoster } = await import("./member.functions");
     expect(await callServerFn(getClaimRoster)).toEqual([
-      { id: PARTICIPANT_ID, name: "Doug", nickname: null, hasCode: false, claimed: false },
+      {
+        id: PARTICIPANT_ID,
+        name: "Doug",
+        nickname: null,
+        hasCode: false,
+        claimed: false,
+        reachable: false,
+      },
     ]);
   });
 
