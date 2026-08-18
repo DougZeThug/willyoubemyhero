@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { hashPin, signAdminToken, timingSafeEq } from "./session.server";
 
 export const verifyEventPin = createServerFn({ method: "POST" })
@@ -21,5 +22,37 @@ export const verifyEventPin = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "bad_pin" as const };
     }
     const { token, expiresAt } = signAdminToken(secret.event_id);
+    return { ok: true as const, token, expiresAt };
+  });
+
+/**
+ * Unlock the console for an account that is on the admin list, so a signed-in
+ * commissioner never has to type the PIN.
+ *
+ * The identity comes from the verified bearer (`requireSupabaseAuth`), never
+ * from the payload, and the result is an ordinary admin token — `requireAdmin`
+ * is untouched, so every write is guarded exactly as before.
+ */
+export const startAdminSessionFromAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: admin } = await supabaseAdmin
+      .from("admin_accounts")
+      .select("user_id")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (!admin) return { ok: false as const, reason: "not_admin" as const };
+
+    const { data: event } = await supabaseAdmin
+      .from("events")
+      .select("id")
+      .eq("active", true)
+      .order("year", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!event) return { ok: false as const, reason: "event_not_found" as const };
+
+    const { token, expiresAt } = signAdminToken(event.id);
     return { ok: true as const, token, expiresAt };
   });

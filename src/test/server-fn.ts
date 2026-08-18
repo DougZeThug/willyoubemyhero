@@ -58,6 +58,8 @@ export type CallOptions = {
   data?: unknown;
   /** Request headers — `x-admin-token` / `x-member-token` drive the auth guards. */
   headers?: Record<string, string>;
+  /** Context a middleware would have supplied in production (e.g. `{ userId }`). */
+  context?: Record<string, unknown>;
 };
 
 /**
@@ -70,10 +72,13 @@ type AnyServerFn = (...args: never[]) => unknown;
 
 export function callServerFn<T = unknown>(
   fn: AnyServerFn,
-  { data, headers = {} }: CallOptions = {},
+  { data, headers = {}, context }: CallOptions = {},
 ): Promise<T> {
-  const invoke = fn as unknown as (opts: { data?: unknown }) => Promise<T>;
-  return withRequestHeaders(headers, () => invoke({ data }));
+  const invoke = fn as unknown as (opts: {
+    data?: unknown;
+    context?: Record<string, unknown>;
+  }) => Promise<T>;
+  return withRequestHeaders(headers, () => invoke({ data, context }));
 }
 
 /** Header bag for a request carrying an admin token. */
