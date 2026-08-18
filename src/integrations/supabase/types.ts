@@ -1688,24 +1688,15 @@ export type Database = {
         }
         Returns: number
       }
-      record_pack_open:
-        | {
-            Args: {
-              _card_count?: number
-              _event_id?: string
-              _participant_id: string
-            }
-            Returns: number
-          }
-        | {
-            Args: {
-              _card_count?: number
-              _event_id?: string
-              _guest_id?: string
-              _participant_id: string
-            }
-            Returns: number
-          }
+      record_pack_open: {
+        Args: {
+          _card_count?: number
+          _event_id?: string
+          _guest_id?: string
+          _participant_id: string
+        }
+        Returns: number
+      }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
       resync_card_pull: {
         Args: { _event_participant_id: string; _participant_id: string }
