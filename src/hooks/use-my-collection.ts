@@ -177,10 +177,16 @@ export function useMyCollection(
     // as the query takes, which is the bug with a shorter fuse rather than a fix.
     // `ready` gates the counters; this gates everything else that reads a card.
     if (!settled) return { collection: {}, stale: [] as string[] };
+    // An adoption in flight — or one not attempted yet for this member — means
+    // the server's answer is knowably incomplete, so nothing is adjudicated
+    // against it. The local rows stand until the upload has had its go.
+    if (participantId && (adopting || adoptedForRef.current !== participantId)) {
+      return { collection: local, stale: [] as string[] };
+    }
     // A failed query leaves the local store exactly as it is: with no answer from
     // the server there is nothing to disown a row with, so nothing is disowned.
     return mergeCollection(local, stats.data?.cards ?? null, roster);
-  }, [settled, local, stats.data, roster]);
+  }, [settled, local, stats.data, roster, participantId, adopting]);
 
   // Drop a floor once the server's own row has reached it. Not on "a response
   // arrived" — a refetch already in flight when the card was revealed knows
