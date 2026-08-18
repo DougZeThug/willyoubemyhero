@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { EDITION_IDS } from "./card-edition";
-import { optionalMember, requireMember } from "./require-auth.server";
+import { optionalGuest, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
 import type { CardPullRow, PackOpenRow } from "./secret-cards-db.server";
 import type { CardPullCounts, MyCardStats } from "./card-pulls";
 
@@ -129,9 +129,35 @@ export const recordCardPulls = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const me = optionalMember();
-    if (!me) return { ok: true as const, recorded: 0, packsOpened: 0 };
-
     const secrets = await db();
+    const sbEvent = await admin();
+    const { data: activeEvent } = await sbEvent
+      .from("events")
+      .select("id")
+      .eq("active", true)
+      .order("year", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // A guest gets no card rows — card_copies is keyed on a participant — but the
+    // pack itself is now recorded against their guest id, so the count survives
+    // the claim that moves it (claim_guest_packs).
+    if (!me) {
+      const guest = optionalGuest();
+      if (!guest) return { ok: true as const, recorded: 0, packsOpened: 0 };
+      const { data: guestPacks } = await secrets.rpc("record_pack_open", {
+        _participant_id: null,
+        _event_id: activeEvent?.id ?? null,
+        _card_count: data.eventParticipantIds.length,
+        _guest_id: guest,
+      });
+      return {
+        ok: true as const,
+        recorded: 0,
+        packsOpened: (guestPacks as number | null) ?? 0,
+      };
+    }
+
     const { data: n, error } = await secrets.rpc("record_card_pulls", {
       _participant_id: me,
       _event_participant_ids: data.eventParticipantIds,
@@ -143,20 +169,6 @@ export const recordCardPulls = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     const recorded = (n as number | null) ?? 0;
 
-    // Resolved here rather than taken from the caller, the way pullSecretCard
-    // does it. It used to be a payload field, which made it both spoofable and
-    // racy: the pack screen sends this the moment the wrapper comes off, and on a
-    // resumed pack that can be before the event query has answered — so the stamp
-    // was null and the participant latch stopped it ever being retried.
-    const sb = await admin();
-    const { data: event } = await sb
-      .from("events")
-      .select("id")
-      .eq("active", true)
-      .order("year", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
     // The pack open is keyed on the league day, so this is idempotent however many
     // times a reveal re-fires it. Its own errors are swallowed: the cards are
     // already recorded by this point and a counter must not fail a pack.
@@ -166,8 +178,9 @@ export const recordCardPulls = createServerFn({ method: "POST" })
     // that never corresponded to real cards.
     const { data: packs } = await secrets.rpc("record_pack_open", {
       _participant_id: me,
-      _event_id: event?.id ?? null,
+      _event_id: activeEvent?.id ?? null,
       _card_count: recorded,
+      _guest_id: null,
     });
 
     return {
@@ -175,6 +188,87 @@ export const recordCardPulls = createServerFn({ method: "POST" })
       recorded,
       packsOpened: (packs as number | null) ?? 0,
     };
+  });
+
+/**
+ * File the cards this phone already holds against the person who just claimed.
+ *
+ * The gap this closes: a guest's pack tear records nothing at all server-side,
+ * so a collection built before claiming lived only in IndexedDB — and the moment
+ * a code was redeemed, `mergeCollection` treated `card_pulls` as the truth and
+ * `forgetCards` deleted every local row the server could not vouch for. Which was
+ * all of them.
+ *
+ * ONE COPY PER CARD THEY DO NOT ALREADY HOLD, enforced in the RPC rather than
+ * here. A local row says "I hold this card", not how many copies of it exist, so
+ * trusting a count would mint duplicates. That also makes this idempotent: a
+ * second claim on the same handset adopts nothing, which is why the client can
+ * call it on every claim without bookkeeping.
+ *
+ * Same client-asserted ceiling as `recordCardPulls` above — a member can name
+ * roster ids by hand — and the same rule keeps it there: an adopted copy's
+ * finish must never reach a number a second person can see without being
+ * re-derived. Copies land with `source = 'adopt'` and no `acquired_on`, so they
+ * are distinguishable from pulls forever and never touch the once-a-day index.
+ */
+export const adoptCollection = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        // A whole roster's worth, since this is a collection rather than a pack.
+        eventParticipantIds: z.array(z.string().uuid()).min(1).max(64),
+        editions: z.array(z.enum(EDITION_IDS)).max(64).optional(),
+      })
+      .refine(
+        (v) => v.editions === undefined || v.editions.length === v.eventParticipantIds.length,
+        {
+          message: "editions must line up one-to-one with eventParticipantIds",
+          path: ["editions"],
+        },
+      )
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    const secrets = await db();
+    const { data: n, error } = await secrets.rpc("adopt_card_copies", {
+      _participant_id: me,
+      _event_participant_ids: data.eventParticipantIds,
+      _editions: data.editions ?? null,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true as const, adopted: (n as number | null) ?? 0 };
+  });
+
+/**
+ * Commissioner hands a player a card.
+ *
+ * The repair tool for a collection that was lost before adoption existed, so it
+ * is deliberately unconditional — the card may well be one they already hold.
+ * The copy is filed as `grant`, which keeps it out of the once-a-day pull index
+ * and honest in the ledger about where it came from.
+ */
+export const grantCard = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: z.string().uuid(),
+        participantId: z.string().uuid(),
+        eventParticipantId: z.string().uuid(),
+        edition: z.enum(EDITION_IDS).optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const secrets = await db();
+    const { data: n, error } = await secrets.rpc("grant_card_copy", {
+      _participant_id: data.participantId,
+      _event_participant_id: data.eventParticipantId,
+      _edition: data.edition ?? "standard",
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true as const, copies: (n as number | null) ?? 0 };
   });
 
 /**
