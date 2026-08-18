@@ -255,6 +255,28 @@ describe("create_trade_offer", () => {
     ).rejects.toThrow(/claimed/i);
   });
 
+  it("allows an offer to somebody who signed in but never redeemed a code", async () => {
+    // An account follows a person between phones, so it is at least as good a
+    // proof of reachability as a paper code — and this was the real-world bug:
+    // a league member with an account and no claim could not be traded with.
+    const [aliceCard, , carolCard] = await cardIds();
+    await claim(IDS.alice);
+    await sql(
+      `INSERT INTO public.account_identities (user_id, participant_id)
+       VALUES (gen_random_uuid(), $1)`,
+      [IDS.carol],
+    );
+    const aliceCopies = await giveRoster(IDS.alice, aliceCard, 2);
+    const carolCopies = await giveRoster(IDS.carol, carolCard, 2);
+    const res = await createOffer(
+      IDS.alice,
+      IDS.carol,
+      [copy(aliceCopies[0])],
+      [copy(carolCopies[0])],
+    );
+    expect(res.ok).toBe(true);
+  });
+
   it("refuses an empty side", async () => {
     const { aliceCopies } = await twoSpares();
     await expect(createOffer(IDS.alice, IDS.bob, [copy(aliceCopies[0])], [])).rejects.toThrow(
