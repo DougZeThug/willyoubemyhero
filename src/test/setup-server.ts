@@ -28,9 +28,12 @@ function testCreateServerFn() {
     },
     handler:
       (fn: (ctx: { data: unknown; context: Record<string, unknown> }) => unknown) =>
-      async (opts?: { data?: unknown }) => {
+      async (opts?: { data?: unknown; context?: Record<string, unknown> }) => {
         const data = validator ? validator(opts?.data) : opts?.data;
-        return fn({ data, context: {} });
+        // Middleware does not run here, so a test that exercises a
+        // middleware-provided context (e.g. requireSupabaseAuth's userId)
+        // supplies it via callServerFn's `context` option.
+        return fn({ data, context: opts?.context ?? {} });
       },
   };
 
