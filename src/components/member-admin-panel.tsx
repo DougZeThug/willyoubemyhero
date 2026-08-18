@@ -173,20 +173,36 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
         <ul className="mt-3 max-h-[50vh] space-y-0.5 overflow-auto pr-1 sm:max-h-40">
           {(bundle?.participants ?? []).map((p) => {
             const claim = claims.data?.find((c) => c.participant_id === p.participant_id);
+            const fresh = singles[p.participant_id];
             return (
               <li
                 key={p.id}
                 className="flex items-center justify-between gap-2 rounded px-1 py-0.5 text-xs"
               >
                 <span className="truncate uppercase">{p.participant?.name}</span>
-                <span
-                  className={
-                    claim?.claimed_at
-                      ? "shrink-0 text-[10px] uppercase tracking-widest text-primary"
-                      : "shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground"
-                  }
-                >
-                  {claim?.claimed_at ? "claimed" : claim ? "code issued" : "no code"}
+                <span className="flex shrink-0 items-center gap-2">
+                  {fresh ? (
+                    <code className="font-mono font-bold tracking-[0.2em] text-warn">{fresh}</code>
+                  ) : (
+                    <span
+                      className={
+                        claim?.claimed_at
+                          ? "text-[10px] uppercase tracking-widest text-primary"
+                          : "text-[10px] uppercase tracking-widest text-muted-foreground"
+                      }
+                    >
+                      {claim?.claimed_at ? "claimed" : claim ? "code issued" : "no code"}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => issueOne(p.participant_id, p.participant?.name ?? "this player")}
+                    className="inline-flex min-h-8 items-center gap-1 px-1.5 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    {fresh ? "Again" : "Issue"}
+                  </button>
                 </span>
               </li>
             );
