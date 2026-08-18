@@ -114,7 +114,9 @@ function AdminPage() {
   }
 
   if (!isAdmin && (authLoading || !accountChecked)) {
-    return <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Checking access…</div>;
+    return (
+      <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Checking access…</div>
+    );
   }
 
   return isAdmin ? (

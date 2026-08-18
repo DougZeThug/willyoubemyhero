@@ -124,3 +124,44 @@ describe("verifyEventPin", () => {
     });
   });
 });
+
+describe("startAdminSessionFromAccount", () => {
+  async function start(context: Record<string, unknown>) {
+    const { startAdminSessionFromAccount } = await import("./admin.functions");
+    return callServerFn(startAdminSessionFromAccount, { context });
+  }
+
+  it("mints an admin token for an account on the admin list", async () => {
+    withDb({
+      "admin_accounts.select": { data: { user_id: USER_ID }, error: null },
+      "events.select": { data: { id: EVENT_ID }, error: null },
+    });
+    const res = (await start({ userId: USER_ID })) as { ok: true; token: string };
+    expect(res.ok).toBe(true);
+    expect(verifyAdminToken(res.token)?.eventId).toBe(EVENT_ID);
+  });
+
+  it("looks the admin row up by the verified user id, never a payload", async () => {
+    withDb({
+      "admin_accounts.select": { data: { user_id: USER_ID }, error: null },
+      "events.select": { data: { id: EVENT_ID }, error: null },
+    });
+    await start({ userId: USER_ID });
+    const [call] = mock.callsFor("admin_accounts", "select");
+    expect(mock.eqValue(call, "user_id")).toBe(USER_ID);
+  });
+
+  it("refuses an account that is not on the list", async () => {
+    withDb({ "admin_accounts.select": { data: null, error: null } });
+    expect(await start({ userId: USER_ID })).toEqual({ ok: false, reason: "not_admin" });
+    expect(mock.callsFor("events", "select")).toHaveLength(0);
+  });
+
+  it("refuses when there is no active event to unlock", async () => {
+    withDb({
+      "admin_accounts.select": { data: { user_id: USER_ID }, error: null },
+      "events.select": { data: null, error: null },
+    });
+    expect(await start({ userId: USER_ID })).toEqual({ ok: false, reason: "event_not_found" });
+  });
+});
