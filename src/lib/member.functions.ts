@@ -114,6 +114,14 @@ export const claimPlayer = createServerFn({ method: "POST" })
           _participant_id: data.participantId,
           _guest_id: guestId,
         });
+        // The packs they tore as a guest are theirs too. Roster cards cannot come
+        // across here — they were never stored server-side for a guest — so the
+        // device uploads those itself through `adoptCollection` once it holds a
+        // member token.
+        await secretsDb().rpc("claim_guest_packs", {
+          _participant_id: data.participantId,
+          _guest_id: guestId,
+        });
       } catch {
         /* the claim itself stands; the cards can be reconciled by pulling again */
       }

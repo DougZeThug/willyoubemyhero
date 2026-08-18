@@ -68,6 +68,8 @@ describe("recordCardPulls", () => {
       _participant_id: ME,
       _event_id: EVENT_ID,
       _card_count: 2,
+      // A member's pack is theirs; the guest slot is what carries a pre-claim tear.
+      _guest_id: null,
     });
     expect(res.packsOpened).toBe(4);
   });

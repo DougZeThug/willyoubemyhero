@@ -8,6 +8,7 @@ import { claimPlayer, getClaimRoster } from "@/lib/member.functions";
 import { linkClaimedPlayer } from "@/lib/account.functions";
 import { useAuthUser } from "@/hooks/use-account";
 import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member-token";
+import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +57,9 @@ function ClaimPage() {
     if (!selected || !code.trim() || busy) return;
     setBusy(true);
     try {
+      // Read the cards on this handset BEFORE it becomes a member: the collection
+      // hook starts pruning against the server the instant the token lands.
+      const held = await snapshotLocalCollection();
       const res = await claimFn({ data: { participantId: selected, code: code.trim() } });
       if (!res.ok) {
         toast.error("That code doesn't match");
@@ -63,6 +67,14 @@ function ClaimPage() {
         return;
       }
       setMemberToken(res.token, res.name);
+      // The cards packed as a guest come with them. Awaited so /players already
+      // shows them, swallowed because a claim that worked outranks an upload
+      // that didn't — the commissioner can hand a card back either way.
+      try {
+        await adoptLocalCollection(held);
+      } catch {
+        /* the claim stands; the cards can be granted or re-packed */
+      }
       // Signed in? Then the player follows the account, not the handset. Awaited
       // so the next screen's reads already see the bound identity, swallowed
       // because a claim that worked is worth more than a link that didn't.
