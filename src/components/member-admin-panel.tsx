@@ -19,6 +19,9 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
   const claimsFn = useServerFn(listMemberClaims);
   const { bundle } = useEventBundle();
   const [issued, setIssued] = useState<Issued[] | null>(null);
+  // Codes issued for a single player stay pinned next to their row, so the
+  // commissioner can re-issue for one straggler without losing the roster view.
+  const [singles, setSingles] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   const claims = useQuery({
@@ -74,6 +77,40 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
   }
 
   async function copyAll() {
+    if (!issued) return;
+    const text = issued.map((i) => `${i.name}: ${i.code}`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard");
+    } catch {
+      toast.error("Clipboard blocked — select and copy manually");
+    }
+  }
+
+  async function issueOne(participantId: string, name: string) {
+    if (
+      !confirm(
+        `Issue a NEW code for ${name}? Only their code changes — everyone else keeps theirs.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await generateFn({ data: { eventId, participantIds: [participantId] } });
+      const code = res.issued[0]?.code;
+      if (!code) throw new Error("No code returned");
+      setSingles((s) => ({ ...s, [participantId]: code }));
+      await qc.invalidateQueries({ queryKey: ["member-claims", eventId] });
+      toast.success(`New code for ${name} — copy it now`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not generate code");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyAllUnused() {
     if (!issued) return;
     const text = issued.map((i) => `${i.name}: ${i.code}`).join("\n");
     try {
