@@ -80,8 +80,9 @@ function TradePage() {
   const cancelFn = useServerFn(cancelTradeOffer);
   const proposeFn = useServerFn(createTradeOffer);
 
-  // The same list /claim reads. `claimed` is the only thing that matters here:
-  // create_trade_offer refuses an offer to somebody with no device to answer on.
+  // The same list /claim reads, but a different column of it: `reachable`, which
+  // is "claimed a code OR signed into an account". create_trade_offer applies the
+  // same test, so the picker and the server agree about who can be offered to.
   const rosterFn = useServerFn(getClaimRoster);
   const roster = useQuery({
     queryKey: ["claim-roster"],
@@ -112,9 +113,9 @@ function TradePage() {
     };
   }, [bundle, cards.data, rarities]);
 
-  /** Everyone who has claimed their player and is not you — the only valid counterparties. */
+  /** Everyone reachable on a device and not you — the only valid counterparties. */
   const counterparties = useMemo(
-    () => (roster.data ?? []).filter((p) => p.claimed && p.id !== myId),
+    () => (roster.data ?? []).filter((p) => p.reachable && p.id !== myId),
     [roster.data, myId],
   );
 
