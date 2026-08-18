@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { adoptCollection, getMyCardStats } from "@/lib/card-pulls.functions";
+import { getMyCardStats } from "@/lib/card-pulls.functions";
 import { dupeCount, type MyCardStats } from "@/lib/card-pulls";
 import { forgetCards, loadCollection, type CollectedCard } from "@/lib/card-collection";
-import { bestEdition, EDITION_IDS, type Edition } from "@/lib/card-edition";
+import { bestEdition, type Edition } from "@/lib/card-edition";
 import { mergeCollection } from "@/lib/collection-merge";
 import { useMemberSession } from "@/lib/member-token";
 
@@ -115,83 +115,6 @@ export function useMyCollection(
 
   const roster = useMemo(() => new Set(rosterIds), [rosterIds]);
 
-  // ---- ADOPTION ----
-  // Cards this phone holds that the league has no record of. For a guest that is
-  // every card they have ever packed: a guest's tear writes no card rows at all,
-  // so the collection exists only here. The moment they claim, the merge below
-  // would disown exactly those rows and forgetCards would delete them — which is
-  // how a real player lost his base cards on redeeming his code.
-  //
-  // So before anything is pruned, they are filed against the name that just
-  // claimed. The server keeps one copy per card and ignores cards already held,
-  // so running this on every claim is safe and doing it twice changes nothing.
-  const adoptFn = useServerFn(adoptCollection);
-  const [adopting, setAdopting] = useState(false);
-  // Keyed by participant, so signing in as somebody else on a shared handset
-  // gets its own single attempt rather than inheriting the previous one's. State
-  // rather than a ref because the merge below reads it: latching has to re-run it.
-  const [adoptedFor, setAdoptedFor] = useState<string | null>(null);
-  // The ids just uploaded. The refetch that would confirm them is in flight, so
-  // these are held out of the prune until an answer arrives that includes them —
-  // otherwise the merge disowns the very rows adoption just rescued.
-  const [adoptedIds, setAdoptedIds] = useState<readonly string[]>([]);
-
-  useEffect(() => {
-    if (!participantId || !localLoaded || !stats.isSuccess) return;
-    if (adoptedFor === participantId) return;
-
-    const served = new Set((stats.data?.cards ?? []).map((c) => c.eventParticipantId));
-    const orphans = Object.values(local).filter(
-      (c) => roster.has(c.eventParticipantId) && !served.has(c.eventParticipantId),
-    );
-    // Nothing to rescue is still an answer: latch it so the pruning gate opens.
-    if (orphans.length === 0) {
-      setAdoptedFor(participantId);
-      return;
-    }
-
-    setAdopting(true);
-    void (async () => {
-      const ids = orphans.map((c) => c.eventParticipantId).slice(0, 64);
-      try {
-        await adoptFn({
-          data: {
-            eventParticipantIds: ids,
-            editions: orphans
-              .slice(0, 64)
-              .map((c) =>
-                (EDITION_IDS as readonly string[]).includes(c.edition ?? "")
-                  ? (c.edition as Edition)
-                  : "standard",
-              ),
-          },
-        });
-        // The server now vouches for them. The refetch is deliberately not
-        // awaited — a query that never settles must not hold the collection
-        // hostage — so `adoptedIds` carries them until it lands.
-        setAdoptedIds(ids);
-        void stats.refetch();
-      } catch {
-        // A failed adoption must not cost anybody a card: the gate below keeps
-        // the local rows exactly where they are, and the next load tries again.
-        setAdoptedIds(ids);
-      } finally {
-        setAdoptedFor(participantId);
-        setAdopting(false);
-      }
-    })();
-  }, [
-    participantId,
-    localLoaded,
-    adoptedFor,
-    stats.isSuccess,
-    stats.data,
-    local,
-    roster,
-    adoptFn,
-    stats,
-  ]);
-
   const merged = useMemo(() => {
     // Empty rather than `local` until the server has answered. The local store is
     // the thing this hook exists to distrust — handing it out here would put the
@@ -199,22 +122,10 @@ export function useMyCollection(
     // as the query takes, which is the bug with a shorter fuse rather than a fix.
     // `ready` gates the counters; this gates everything else that reads a card.
     if (!settled) return { collection: {}, stale: [] as string[] };
-    // An adoption in flight — or one not attempted yet for this member — means
-    // the server's answer is knowably incomplete, so nothing is adjudicated
-    // against it. The local rows stand until the upload has had its go.
-    if (participantId && (adopting || adoptedFor !== participantId)) {
-      return { collection: local, stale: [] as string[] };
-    }
-    // Adopted-but-unconfirmed cards are held out of the roster the prune is
-    // scoped to, which leaves their local rows standing instead of deleting them.
-    const served = new Set((stats.data?.cards ?? []).map((c) => c.eventParticipantId));
-    const scope = adoptedIds.some((id) => !served.has(id))
-      ? new Set([...roster].filter((id) => served.has(id) || !adoptedIds.includes(id)))
-      : roster;
     // A failed query leaves the local store exactly as it is: with no answer from
     // the server there is nothing to disown a row with, so nothing is disowned.
-    return mergeCollection(local, stats.data?.cards ?? null, scope);
-  }, [settled, local, stats.data, roster, participantId, adopting, adoptedFor, adoptedIds]);
+    return mergeCollection(local, stats.data?.cards ?? null, roster);
+  }, [settled, local, stats.data, roster]);
 
   // Drop a floor once the server's own row has reached it. Not on "a response
   // arrived" — a refetch already in flight when the card was revealed knows
@@ -260,15 +171,11 @@ export function useMyCollection(
   // list, which used to re-fire the whole delete for everything still on it.
   const forgottenRef = useRef(new Set<string>());
   useEffect(() => {
-    // Never delete a local row while an adoption is in flight, or before one has
-    // been attempted for this member. This is the guard that turns "the server
-    // has not been told yet" into "wait", rather than "forget it".
-    if (adopting || (participantId && adoptedFor !== participantId)) return;
     const fresh = merged.stale.filter((id) => !forgottenRef.current.has(id) && !bumps[id]);
     if (fresh.length === 0) return;
     for (const id of fresh) forgottenRef.current.add(id);
     void forgetCards(fresh);
-  }, [merged.stale, bumps, adopting, participantId, adoptedFor]);
+  }, [merged.stale, bumps]);
 
   const markCollected = useCallback(
     (eventParticipantId: string, tier: string, edition: Edition, count: number) => {
