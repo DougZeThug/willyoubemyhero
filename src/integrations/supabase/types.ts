@@ -859,22 +859,25 @@ export type Database = {
           card_count: number
           created_at: string
           event_id: string | null
+          guest_id: string | null
           opened_on: string
-          participant_id: string
+          participant_id: string | null
         }
         Insert: {
           card_count?: number
           created_at?: string
           event_id?: string | null
+          guest_id?: string | null
           opened_on: string
-          participant_id: string
+          participant_id?: string | null
         }
         Update: {
           card_count?: number
           created_at?: string
           event_id?: string | null
+          guest_id?: string | null
           opened_on?: string
-          participant_id?: string
+          participant_id?: string | null
         }
         Relationships: [
           {
@@ -1613,6 +1616,14 @@ export type Database = {
         Args: { _offer_id: string; _recipient_id: string }
         Returns: Json
       }
+      adopt_card_copies: {
+        Args: {
+          _editions?: string[]
+          _event_participant_ids: string[]
+          _participant_id: string
+        }
+        Returns: number
+      }
       card_edition_rank: { Args: { _edition: string }; Returns: number }
       cast_award_vote: {
         Args: {
@@ -1622,6 +1633,10 @@ export type Database = {
           _voter_participant_id: string
         }
         Returns: undefined
+      }
+      claim_guest_packs: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: number
       }
       claim_guest_secrets: {
         Args: { _guest_id: string; _participant_id: string }
@@ -1640,6 +1655,14 @@ export type Database = {
           _want: Json
         }
         Returns: Json
+      }
+      grant_card_copy: {
+        Args: {
+          _edition?: string
+          _event_participant_id: string
+          _participant_id: string
+        }
+        Returns: number
       }
       grant_secret_card: {
         Args: {
@@ -1665,14 +1688,24 @@ export type Database = {
         }
         Returns: number
       }
-      record_pack_open: {
-        Args: {
-          _card_count?: number
-          _event_id?: string
-          _participant_id: string
-        }
-        Returns: number
-      }
+      record_pack_open:
+        | {
+            Args: {
+              _card_count?: number
+              _event_id?: string
+              _participant_id: string
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              _card_count?: number
+              _event_id?: string
+              _guest_id?: string
+              _participant_id: string
+            }
+            Returns: number
+          }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
       resync_card_pull: {
         Args: { _event_participant_id: string; _participant_id: string }
