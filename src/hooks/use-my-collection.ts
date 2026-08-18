@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getMyCardStats } from "@/lib/card-pulls.functions";
+import { adoptCollection, getMyCardStats } from "@/lib/card-pulls.functions";
 import { dupeCount, type MyCardStats } from "@/lib/card-pulls";
 import { forgetCards, loadCollection, type CollectedCard } from "@/lib/card-collection";
-import { bestEdition, type Edition } from "@/lib/card-edition";
+import { bestEdition, EDITION_IDS, type Edition } from "@/lib/card-edition";
 import { mergeCollection } from "@/lib/collection-merge";
 import { useMemberSession } from "@/lib/member-token";
 
@@ -115,6 +115,61 @@ export function useMyCollection(
 
   const roster = useMemo(() => new Set(rosterIds), [rosterIds]);
 
+  // ---- ADOPTION ----
+  // Cards this phone holds that the league has no record of. For a guest that is
+  // every card they have ever packed: a guest's tear writes no card rows at all,
+  // so the collection exists only here. The moment they claim, the merge below
+  // would disown exactly those rows and forgetCards would delete them — which is
+  // how a real player lost his base cards on redeeming his code.
+  //
+  // So before anything is pruned, they are filed against the name that just
+  // claimed. The server keeps one copy per card and ignores cards already held,
+  // so running this on every claim is safe and doing it twice changes nothing.
+  const adoptFn = useServerFn(adoptCollection);
+  const [adopting, setAdopting] = useState(false);
+  // Keyed by participant, so signing in as somebody else on a shared handset
+  // gets its own single attempt rather than inheriting the previous one's.
+  const adoptedForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!participantId || !localLoaded || !stats.isSuccess) return;
+    if (adoptedForRef.current === participantId) return;
+
+    const served = new Set((stats.data?.cards ?? []).map((c) => c.eventParticipantId));
+    const orphans = Object.values(local).filter(
+      (c) => roster.has(c.eventParticipantId) && !served.has(c.eventParticipantId),
+    );
+    // Nothing to rescue is still an answer: latch it so the pruning gate opens.
+    adoptedForRef.current = participantId;
+    if (orphans.length === 0) return;
+
+    setAdopting(true);
+    void (async () => {
+      try {
+        await adoptFn({
+          data: {
+            eventParticipantIds: orphans.map((c) => c.eventParticipantId).slice(0, 64),
+            editions: orphans
+              .slice(0, 64)
+              .map((c) =>
+                (EDITION_IDS as readonly string[]).includes(c.edition ?? "")
+                  ? (c.edition as Edition)
+                  : "standard",
+              ),
+          },
+        });
+        // The server now vouches for them, so the merge keeps them rather than
+        // disowning them.
+        await stats.refetch();
+      } catch {
+        // A failed adoption must not cost anybody a card: the gate below keeps
+        // the local rows exactly where they are, and the next load tries again.
+      } finally {
+        setAdopting(false);
+      }
+    })();
+  }, [participantId, localLoaded, stats.isSuccess, stats.data, local, roster, adoptFn, stats]);
+
   const merged = useMemo(() => {
     // Empty rather than `local` until the server has answered. The local store is
     // the thing this hook exists to distrust — handing it out here would put the
@@ -171,11 +226,15 @@ export function useMyCollection(
   // list, which used to re-fire the whole delete for everything still on it.
   const forgottenRef = useRef(new Set<string>());
   useEffect(() => {
+    // Never delete a local row while an adoption is in flight, or before one has
+    // been attempted for this member. This is the guard that turns "the server
+    // has not been told yet" into "wait", rather than "forget it".
+    if (adopting || (participantId && adoptedForRef.current !== participantId)) return;
     const fresh = merged.stale.filter((id) => !forgottenRef.current.has(id) && !bumps[id]);
     if (fresh.length === 0) return;
     for (const id of fresh) forgottenRef.current.add(id);
     void forgetCards(fresh);
-  }, [merged.stale, bumps]);
+  }, [merged.stale, bumps, adopting, participantId]);
 
   const markCollected = useCallback(
     (eventParticipantId: string, tier: string, edition: Edition, count: number) => {
