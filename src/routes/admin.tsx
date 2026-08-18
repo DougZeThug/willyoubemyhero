@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { verifyEventPin } from "@/lib/admin.functions";
+import { verifyEventPin, startAdminSessionFromAccount } from "@/lib/admin.functions";
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
+import { useAuthUser } from "@/hooks/use-account";
 import { saveCompletedRun, setParticipantStatus } from "@/lib/admin-write.functions";
 import {
   upsertParticipant,
@@ -79,9 +80,41 @@ function AdminPage() {
   const { event } = useEventBundle();
   const admin = useAdminSession();
   const isAdmin = !!event?.id && admin?.eventId === event.id;
+  // Accounts on the admin list skip the PIN entirely; the PIN stays as the
+  // fallback for anyone signed out or not on the list.
+  const { user, loading: authLoading } = useAuthUser();
+  const [accountChecked, setAccountChecked] = useState(false);
+  const triedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isAdmin || authLoading) return;
+    if (!user) {
+      setAccountChecked(true);
+      return;
+    }
+    if (triedFor.current === user.id) return;
+    triedFor.current = user.id;
+    void (async () => {
+      try {
+        const res = await startAdminSessionFromAccount({ data: undefined });
+        if (res.ok) {
+          setAdminToken(res.token);
+          toast.success("Admin unlocked via your account");
+        }
+      } catch {
+        /* fall through to the PIN gate */
+      } finally {
+        setAccountChecked(true);
+      }
+    })();
+  }, [isAdmin, user, authLoading]);
 
   if (!event || !event.id) {
     return <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Loading…</div>;
+  }
+
+  if (!isAdmin && (authLoading || !accountChecked)) {
+    return <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Checking access…</div>;
   }
 
   return isAdmin ? (
