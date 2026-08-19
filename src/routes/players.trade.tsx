@@ -466,7 +466,9 @@ function SparePicker({
     // to bury them. Every secret they hold, single copies included — `lastCopy`
     // carries through so the tile can say which ones they cannot get back.
     ...[...(spares?.secrets ?? [])]
-      .sort((a, b) => secretTierRank(a.tier) - secretTierRank(b.tier) || a.name.localeCompare(b.name)) // prettier-ignore
+      .sort(
+        (a, b) => secretTierRank(a.tier) - secretTierRank(b.tier) || a.name.localeCompare(b.name),
+      ) // prettier-ignore
       .map(
         (s): Staged => ({
           key: `s:${s.pullId}`,
