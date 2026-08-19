@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck, ArrowUpDown } from "lucide-react"; // prettier-ignore
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -30,6 +32,7 @@ import {
   useVaultLayout,
 } from "@/lib/vault-layout";
 import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
+import { getSecretCollections } from "@/lib/secret-cards.functions";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -84,6 +87,14 @@ function PlayersPage() {
   // where a card is actually at stake; the vault only ever reads.
   const actor = useSecretActor();
   const secrets = useMySecrets(actor);
+  // The sets, purely for their names and their order — this says nothing about
+  // what is inside one, so the vault's silence about unpulled cards holds.
+  const collectionsFn = useServerFn(getSecretCollections);
+  const collections = useQuery({
+    queryKey: ["secret-collections"],
+    queryFn: () => collectionsFn(),
+    staleTime: 30 * 60_000,
+  });
   const secretStatus = useSecretStatus(actor);
   const pullCounts = useCardPullCounts(event?.id ?? null);
   // An index rather than the card itself: the sheet swipes between secrets, so it
@@ -227,8 +238,11 @@ function PlayersPage() {
   // pinned upstairs drops out here by exactly the same rule.
   const secretGroups = useMemo(
     () =>
-      groupBySecretCollection(ownedSecrets.filter((s) => !pinnedIds.has(secretFavouriteId(s.id)))),
-    [ownedSecrets, pinnedIds],
+      groupBySecretCollection(
+        ownedSecrets.filter((s) => !pinnedIds.has(secretFavouriteId(s.id))),
+        collections.data?.collections,
+      ),
+    [ownedSecrets, pinnedIds, collections.data],
   );
 
   const sections = useMemo(
