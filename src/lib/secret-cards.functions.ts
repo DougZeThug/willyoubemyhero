@@ -558,6 +558,7 @@ export const createSecretCards = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
+    await assertCollections(data.cards.map((c) => c.collection));
     const db = await secrets();
 
     const results = [];
@@ -655,6 +656,7 @@ export const updateSecretCard = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
+    await assertCollections([data.collection]);
     const db = await secrets();
     // Built as a literal rather than spread from `data`: supabase-js rejects an
     // index-signature object in .update(), and a spread would let a caller set id.
@@ -709,6 +711,7 @@ export const updateSecretCollectionLook = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
+    await assertCollections([data.collection]);
     const patch: { foil?: string; border_fx?: string } = {};
     if (data.foil !== undefined) patch.foil = data.foil;
     if (data.borderFx !== undefined) patch.border_fx = data.borderFx;
