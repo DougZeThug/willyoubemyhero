@@ -273,6 +273,22 @@ describe("groupBySecretCollection", () => {
     expect(groups.map((g) => g.label)).toEqual(["Cornhole Collection"]);
   });
 
+  it("files an empty-string collection with the unsorted pile, not beside it", () => {
+    // secret_cards.collection is unconstrained text, so a row can hold "" as well
+    // as NULL. Split, they became two shelves both labelled Unsorted — and the
+    // vault derives a section id from the group, so the two collided on one id
+    // and the second pile's cards disappeared off the page entirely.
+    const groups = groupBySecretCollection([
+      card("", "Blank"),
+      card(null, "Unfiled"),
+      card("cornhole", "The Board"),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual(["Cornhole Collection", UNSORTED_COLLECTION_LABEL]);
+    const unsorted = groups.find((g) => g.label === UNSORTED_COLLECTION_LABEL)!;
+    expect(unsorted.id).toBeNull();
+    expect(unsorted.items.map((c) => c.name)).toEqual(["Blank", "Unfiled"]);
+  });
+
   it("keeps a retired id visible, ahead of the unsorted pile", () => {
     // Ids are add-only, but a set dropped from the list still has rows pointing
     // at it. Those cards render under their own id rather than vanishing.

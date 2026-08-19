@@ -31,6 +31,11 @@ export const FAVOURITES_SECTION = "favourites";
  * A secret set's section id. Prefixed so it can never collide with `roster`, and
  * the unsorted pile gets the empty suffix rather than a word — `null` is not a
  * collection id and must not start looking like one.
+ *
+ * `null` and `""` deliberately land on the same id. They are the same pile:
+ * groupBySecretCollection folds an empty-string collection into the unsorted
+ * one, because the column is unconstrained text and "" has never meant anything
+ * different from NULL. That fold is what keeps this from being a collision.
  */
 export function secretSectionId(collection: string | null): string {
   return `secret:${collection ?? ""}`;

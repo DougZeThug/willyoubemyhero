@@ -325,7 +325,13 @@ export function groupBySecretCollection<T extends { collection?: string | null }
 ): { id: string | null; label: string; items: T[] }[] {
   const groups = new Map<string | null, T[]>();
   for (const item of items) {
-    const key = item.collection ?? null;
+    // `||`, not `??`: the column is unconstrained text, so a row can hold "" as
+    // well as NULL, and both mean the same thing — secretCollectionLabel has
+    // always rendered them both as Unsorted. Left as separate keys they became
+    // two identically-labelled shelves, and once the vault derived a section id
+    // from the group they collided on one id and the second pile's cards
+    // vanished off the page.
+    const key = item.collection || null;
     const bucket = groups.get(key);
     if (bucket) bucket.push(item);
     else groups.set(key, [item]);
