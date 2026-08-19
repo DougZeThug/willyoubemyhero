@@ -2,13 +2,26 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ChevronDown, EyeOff, Loader2, Trash2, UploadCloud, X } from "lucide-react";
 import {
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff,
+  Loader2,
+  Plus,
+  Trash2,
+  UploadCloud,
+  X,
+} from "lucide-react";
+import {
+  createSecretCollection,
   createSecretCards,
   deleteSecretCard,
+  deleteSecretCollection,
   grantSecretCard,
   listSecretCards,
   updateSecretCard,
+  updateSecretCollection,
   updateSecretCollectionLook,
   uploadSecretCardArt,
 } from "@/lib/secret-cards.functions";
@@ -17,8 +30,8 @@ import { AdminSection } from "@/components/admin-section";
 import { BorderFxPicker, FoilPicker, FoilSwatch } from "@/components/secret-look-picker";
 import {
   SECRET_BORDER_FX_OPTIONS,
-  SECRET_COLLECTIONS,
   SECRET_FOIL_OPTIONS,
+  type SecretCollection,
   groupBySecretCollection,
   secretCollectionLabel,
 } from "@/lib/secret-cards";
@@ -91,6 +104,9 @@ export function SecretCardsPanel() {
   const createFn = useServerFn(createSecretCards);
   const updateFn = useServerFn(updateSecretCard);
   const setLookFn = useServerFn(updateSecretCollectionLook);
+  const createSetFn = useServerFn(createSecretCollection);
+  const updateSetFn = useServerFn(updateSecretCollection);
+  const deleteSetFn = useServerFn(deleteSecretCollection);
   const uploadFn = useServerFn(uploadSecretCardArt);
   const deleteFn = useServerFn(deleteSecretCard);
   const grantFn = useServerFn(grantSecretCard);
@@ -123,11 +139,14 @@ export function SecretCardsPanel() {
   // Which set new uploads are filed into. Sticky across drops, because the whole
   // point is dumping twelve WAGs in one go.
   const [uploadCollection, setUploadCollection] = useState<string | null>(null);
-  // Collapsed sets, by id ("" for unsorted). Default to everything closed so the
-  // admin sees a tidy table of contents instead of a wall of cards.
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
-    new Set(["", ...SECRET_COLLECTIONS.map((c) => c.id)]),
-  );
+  // Expanded sets, by id ("" for unsorted). Tracked as "what is open" rather than
+  // "what is closed" so a set created after this mounted is closed like the rest
+  // instead of springing open because nobody had listed it as collapsed.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  // Sets management: the name being typed, and the row being renamed.
+  const [newSetName, setNewSetName] = useState("");
+  const [manageSets, setManageSets] = useState(false);
+  const [setBusyId, setSetBusyId] = useState<string | null>(null);
 
   // No eventId in the key, which is itself the documentation that the set is
   // league-wide — and keeps the panel from going stale when the active event
@@ -141,6 +160,69 @@ export function SecretCardsPanel() {
 
   const cards = (list.data?.cards ?? []) as SecretCardAdminRow[];
   const roster: Roster = list.data?.participants ?? [];
+  // Every set the admin has authored, in their order. Hidden ones still order
+  // and label the cards already filed under them; they just stop being an option.
+  const allSets = list.data?.collections ?? [];
+  const sets: SecretCollection[] = allSets.map((c) => ({ id: c.id, label: c.label }));
+  const pickerSets: SecretCollection[] = allSets
+    .filter((c) => c.active)
+    .map((c) => ({ id: c.id, label: c.label }));
+  const cardsPerSet = new Map<string, number>();
+  for (const c of cards)
+    if (c.collection) cardsPerSet.set(c.collection, (cardsPerSet.get(c.collection) ?? 0) + 1);
+
+  /** One set edit, with the panel's usual toast + refetch + per-row spinner. */
+  function runSetEdit(
+    id: string,
+    label: string,
+    p: Promise<{ ok: boolean; reason?: string }>,
+    success: string,
+  ) {
+    setSetBusyId(id);
+    const done = p.then(async (r) => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(done, {
+      id: `set-${id}`,
+      loading: `Saving ${label}…`,
+      success: (r) =>
+        r.ok
+          ? success
+          : "reason" in r && r.reason === "in_use"
+            ? "That set still has cards in it — hide it instead"
+            : "reason" in r && r.reason === "exists"
+              ? "There's already a set with that name"
+              : "That name doesn't work — try letters and numbers",
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
+    void done.catch(() => {}).finally(() => setSetBusyId(null));
+  }
+
+  function addSet() {
+    const label = newSetName.trim();
+    if (!label) return;
+    setNewSetName("");
+    runSetEdit("new", label, createSetFn({ data: { label } }), `${label} added`);
+  }
+
+  function moveSet(index: number, delta: number) {
+    const a = allSets[index];
+    const b = allSets[index + delta];
+    if (!a || !b) return;
+    // Swap the two orders outright rather than nudging one, so repeated taps walk
+    // a set up the list one place at a time however the numbers were seeded.
+    setSetBusyId(a.id);
+    const p = Promise.all([
+      updateSetFn({ data: { id: a.id, sortOrder: b.sortOrder } }),
+      updateSetFn({ data: { id: b.id, sortOrder: a.sortOrder } }),
+    ]).then(async () => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+    });
+    void p
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Reorder failed"))
+      .finally(() => setSetBusyId(null));
+  }
 
   function addFiles(files: File[]) {
     const next: Draft[] = [];
@@ -313,7 +395,7 @@ export function SecretCardsPanel() {
           loading: look.collection !== undefined ? "Filing card…" : "Saving look…",
           success:
             look.collection !== undefined
-              ? `Filed under ${secretCollectionLabel(look.collection)}`
+              ? `Filed under ${secretCollectionLabel(look.collection, sets)}`
               : "Look saved",
           error: (e) => (e instanceof Error ? e.message : "Save failed"),
         });
@@ -518,7 +600,7 @@ export function SecretCardsPanel() {
             aria-label="Set for new uploads"
           >
             <option value="">Unsorted</option>
-            {SECRET_COLLECTIONS.map((c) => (
+            {pickerSets.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
               </option>
@@ -591,7 +673,7 @@ export function SecretCardsPanel() {
                       className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
                     >
                       <option value="">Unsorted</option>
-                      {SECRET_COLLECTIONS.map((c) => (
+                      {pickerSets.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.label}
                         </option>
@@ -631,6 +713,151 @@ export function SecretCardsPanel() {
         </div>
       )}
 
+      {/* Sets are data, not code: the commissioner invents a collection the week
+          it becomes funny, so making one has to happen here rather than in a
+          release. Folded away by default — most visits are about cards. */}
+      <div className="mt-3 rounded-lg border border-white/10">
+        <button
+          type="button"
+          onClick={() => setManageSets((v) => !v)}
+          aria-expanded={manageSets}
+          className="flex min-h-11 w-full items-center justify-between gap-2 px-3 text-left"
+        >
+          <span className="font-display text-xs font-black uppercase tracking-[0.25em] text-primary">
+            Sets
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              {allSets.length}
+            </span>
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                "h-4 w-4 text-primary/70 transition-transform",
+                manageSets && "rotate-180",
+              )}
+            />
+          </span>
+        </button>
+        {manageSets && (
+          <div className="space-y-2 p-2 pt-0">
+            <div className="flex gap-2">
+              <Input
+                value={newSetName}
+                placeholder="New set, e.g. Cornhole Collection"
+                maxLength={40}
+                aria-label="New set name"
+                onChange={(e) => setNewSetName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addSet();
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                onClick={addSet}
+                disabled={!newSetName.trim() || setBusyId !== null}
+                className="min-h-11 shrink-0 sm:min-h-0"
+              >
+                <Plus className="mr-1 h-3 w-3" aria-hidden />
+                Add
+              </Button>
+            </div>
+            {allSets.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                No sets yet. Cards stay in one Unsorted pile until you make one.
+              </p>
+            )}
+            {allSets.map((s, i) => (
+              <div
+                key={s.id}
+                className={cn(
+                  "flex items-center gap-2 rounded border border-white/10 p-2",
+                  !s.active && "opacity-50",
+                )}
+              >
+                <Input
+                  defaultValue={s.label}
+                  maxLength={40}
+                  aria-label={`Name for ${s.label}`}
+                  // Uncontrolled: the id never changes, so a rename is just a
+                  // label edit that can settle on blur like weight does.
+                  onBlur={(e) => {
+                    const label = e.target.value.trim();
+                    if (!label || label === s.label) return;
+                    runSetEdit(s.id, label, updateSetFn({ data: { id: s.id, label } }), "Renamed");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  className="min-w-0 flex-1"
+                />
+                <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {cardsPerSet.get(s.id) ?? 0}
+                </span>
+                {setBusyId === s.id && (
+                  <Loader2
+                    className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
+                    aria-hidden
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => moveSet(i, -1)}
+                  disabled={i === 0 || setBusyId !== null}
+                  aria-label={`Move ${s.label} up`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveSet(i, 1)}
+                  disabled={i === allSets.length - 1 || setBusyId !== null}
+                  aria-label={`Move ${s.label} down`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    runSetEdit(
+                      s.id,
+                      s.label,
+                      updateSetFn({ data: { id: s.id, active: !s.active } }),
+                      s.active ? `${s.label} hidden` : `${s.label} back in the list`,
+                    )
+                  }
+                  disabled={setBusyId !== null}
+                  aria-label={s.active ? `Hide ${s.label}` : `Show ${s.label}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground"
+                >
+                  {s.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Deleting a set with cards in it would strand them under a
+                    // raw slug, so the server refuses; this is only ever the
+                    // "made a typo, made it twice" case.
+                    if (!confirm(`Delete the "${s.label}" set? Only works if it's empty.`)) return;
+                    runSetEdit(s.id, s.label, deleteSetFn({ data: { id: s.id } }), "Set deleted");
+                  }}
+                  disabled={setBusyId !== null}
+                  aria-label={`Delete ${s.label}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground hover:border-destructive/50 hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="mt-3 space-y-3">
         {cards.length === 0 && drafts.length === 0 && (
           <p className="text-[11px] text-muted-foreground">
@@ -639,15 +866,15 @@ export function SecretCardsPanel() {
         )}
         {/* One collapsible section per set. The whole point is that the list stays
             navigable at forty cards, which it does not as one flat scroll. */}
-        {groupBySecretCollection(cards).map((group) => {
+        {groupBySecretCollection(cards, sets).map((group) => {
           const key = group.id ?? "";
-          const open = !collapsed.has(key);
+          const open = expanded.has(key);
           return (
             <section key={key} className="rounded-lg border border-white/10">
               <button
                 type="button"
                 onClick={() =>
-                  setCollapsed((prev) => {
+                  setExpanded((prev) => {
                     const next = new Set(prev);
                     if (next.has(key)) next.delete(key);
                     else next.add(key);
@@ -688,6 +915,7 @@ export function SecretCardsPanel() {
                       card={card}
                       claimedMembers={list.data?.claimedMembers ?? 0}
                       roster={roster}
+                      sets={pickerSets}
                       busy={busy}
                       grantTarget={grantTarget[card.id] ?? ""}
                       onGrantTargetChange={(participantId) =>
@@ -796,7 +1024,7 @@ export function SecretCardsPanel() {
                     className="mt-1 min-h-11 w-full rounded border border-white/15 bg-background px-2 text-base text-foreground"
                   >
                     <option value="">Unsorted</option>
-                    {SECRET_COLLECTIONS.map((c) => (
+                    {pickerSets.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label}
                       </option>

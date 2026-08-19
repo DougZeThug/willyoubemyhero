@@ -276,24 +276,45 @@ export const SECRET_BORDER_FX_OPTIONS = [
   { id: "steady", label: "Steady" },
 ] as const;
 
+/** One set, as the admin authored it. */
+export type SecretCollection = { id: string; label: string };
+
 /**
- * The sets a secret card can be filed into.
+ * The sets that shipped before sets were data.
  *
- * Stored in `secret_cards.collection`, so ids are add-only for the same reason
- * foil ids and award category ids are: renaming one orphans every row already
- * carrying it. Labels are free to change; ids are not. Null means unsorted, which
- * is what every card written before this existed is.
+ * The live list now lives in `public.secret_collections`, which admins edit from
+ * the panel; this array is the seed those four rows were created from, and the
+ * fallback for any render that has not loaded the list yet.
+ *
+ * Ids are stored in `secret_cards.collection`, so they stay add-only for the same
+ * reason foil ids and award category ids are: renaming one orphans every row
+ * already carrying it. Labels are free to change; ids are not. Null means
+ * unsorted, which is what every card written before this existed is.
  */
-export const SECRET_COLLECTIONS = [
+export const SECRET_COLLECTIONS: readonly SecretCollection[] = [
   { id: "cornhole", label: "Cornhole Collection" },
   { id: "wags", label: "WAGs" },
   { id: "pets", label: "Pets" },
   { id: "legacyPets", label: "Legacy Pets" },
-] as const;
-
-export type SecretCollectionId = (typeof SECRET_COLLECTIONS)[number]["id"];
+];
 
 export const SECRET_COLLECTION_IDS = SECRET_COLLECTIONS.map((c) => c.id) as readonly string[];
+
+/**
+ * A set id an admin can create. Not an enum any more — the vocabulary lives in a
+ * table — so the shape is pinned here and existence is checked against the table.
+ */
+export const SECRET_COLLECTION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$/;
+
+/** Turn a typed set name into a stable, storable id. */
+export function toSecretCollectionId(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
+}
 
 /** What an unfiled card is grouped under. Never a set id, so it can't be stored. */
 export const UNSORTED_COLLECTION_LABEL = "Unsorted";
@@ -311,9 +332,12 @@ export const VAULT_UNSORTED_LABEL = "Secrets";
  * Label for a stored value. An id retired from the list above still has rows
  * pointing at it, so an unknown id renders as itself rather than disappearing.
  */
-export function secretCollectionLabel(id: string | null | undefined): string {
+export function secretCollectionLabel(
+  id: string | null | undefined,
+  sets: readonly SecretCollection[] = SECRET_COLLECTIONS,
+): string {
   if (!id) return UNSORTED_COLLECTION_LABEL;
-  return SECRET_COLLECTIONS.find((c) => c.id === id)?.label ?? id;
+  return sets.find((c) => c.id === id)?.label ?? id;
 }
 
 /**
@@ -322,6 +346,7 @@ export function secretCollectionLabel(id: string | null | undefined): string {
  */
 export function groupBySecretCollection<T extends { collection?: string | null }>(
   items: readonly T[],
+  sets: readonly SecretCollection[] = SECRET_COLLECTIONS,
 ): { id: string | null; label: string; items: T[] }[] {
   const groups = new Map<string | null, T[]>();
   for (const item of items) {
@@ -337,7 +362,7 @@ export function groupBySecretCollection<T extends { collection?: string | null }
     else groups.set(key, [item]);
   }
   const ordered: { id: string | null; label: string; items: T[] }[] = [];
-  for (const c of SECRET_COLLECTIONS) {
+  for (const c of sets) {
     const items = groups.get(c.id);
     if (items) {
       ordered.push({ id: c.id, label: c.label, items });
@@ -347,7 +372,8 @@ export function groupBySecretCollection<T extends { collection?: string | null }
   // Anything stored but not in the list (a retired id), then the unsorted pile.
   const unsorted = groups.get(null);
   groups.delete(null);
-  for (const [id, items] of groups) ordered.push({ id, label: secretCollectionLabel(id), items });
+  for (const [id, items] of groups)
+    ordered.push({ id, label: secretCollectionLabel(id, sets), items });
   if (unsorted) ordered.push({ id: null, label: UNSORTED_COLLECTION_LABEL, items: unsorted });
   return ordered;
 }
