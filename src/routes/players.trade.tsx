@@ -26,8 +26,9 @@ import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { tradeSummaryLabel, type TradeItemView, type TradeSpares } from "@/lib/trades";
-import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import { rarityMap, rarityRank, rarityStyle } from "@/lib/card-rarity";
 import { editionRank } from "@/lib/card-edition";
+import { secretTierRank } from "@/lib/secret-rarity";
 import { burst } from "@/lib/card-confetti";
 import {
   TradeItemTile,
@@ -460,17 +461,39 @@ function SparePicker({
   onToggle: (staged: Staged) => void;
 }) {
   const items: Staged[] = [
+    // Secrets lead the strip, rarest copy first: they are what anyone opening
+    // this panel is actually scrolling for, and on a phone the base cards used
+    // to bury them. Every secret they hold, single copies included — `lastCopy`
+    // carries through so the tile can say which ones they cannot get back.
+    ...[...(spares?.secrets ?? [])]
+      .sort((a, b) => secretTierRank(a.tier) - secretTierRank(b.tier) || a.name.localeCompare(b.name)) // prettier-ignore
+      .map(
+        (s): Staged => ({
+          key: `s:${s.pullId}`,
+          item: {
+            kind: "secret",
+            pullId: s.pullId,
+            name: s.name,
+            artUrl: s.artUrl,
+            tier: s.tier,
+            lastCopy: s.lastCopy,
+          },
+          payload: { kind: "secret", secretPullId: s.pullId },
+        }),
+      ),
     // One tile per COPY, so "my gold Alice" and "my standard Alice" are separately
-    // pickable. Sorted by card then by finish, rarest first, so the copies of one
-    // card sit together and the best of them leads.
+    // pickable. Earned tier first, then finish, then the card itself — so the
+    // champion's card leads and the copies of one card still sit together.
     ...[...(spares?.roster ?? [])]
       .sort(
         (a, b) =>
+          rarityRank(lookup(a.eventParticipantId).rarity.tier) -
+            rarityRank(lookup(b.eventParticipantId).rarity.tier) ||
           a.eventParticipantId.localeCompare(b.eventParticipantId) ||
           editionRank(a.edition) - editionRank(b.edition),
       )
       // Annotated rather than cast. An `as TradeItemView` here silently dropped
-      // `lastCopy` off the secret tiles below and the marker simply never
+      // `lastCopy` off the secret tiles above and the marker simply never
       // rendered — the compiler had the answer and the cast threw it away.
       .map(
         (r): Staged => ({
@@ -484,22 +507,6 @@ function SparePicker({
           payload: { kind: "roster", cardCopyId: r.copyId },
         }),
       ),
-    // Every secret they hold, single copies included — and `lastCopy` carries
-    // through so the tile can say which ones they cannot get back.
-    ...(spares?.secrets ?? []).map(
-      (s): Staged => ({
-        key: `s:${s.pullId}`,
-        item: {
-          kind: "secret",
-          pullId: s.pullId,
-          name: s.name,
-          artUrl: s.artUrl,
-          tier: s.tier,
-          lastCopy: s.lastCopy,
-        },
-        payload: { kind: "secret", secretPullId: s.pullId },
-      }),
-    ),
   ];
 
   return (
