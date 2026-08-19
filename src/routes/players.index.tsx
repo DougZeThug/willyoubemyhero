@@ -242,7 +242,6 @@ function PlayersPage() {
             },
           ]
         : []),
-      { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rosterRows.length },
       ...secretGroups.map((g) => ({
         kind: "secrets" as const,
         id: secretSectionId(g.id),
@@ -251,6 +250,9 @@ function PlayersPage() {
         meta: g.items.length,
         items: g.items,
       })),
+      // Last by default: the roster is the one shelf you already know by heart,
+      // so the sets you are collecting lead the page.
+      { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rosterRows.length },
     ],
     [favourites, rosterRows.length, secretGroups],
   );
