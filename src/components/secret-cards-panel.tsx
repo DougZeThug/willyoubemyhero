@@ -160,6 +160,63 @@ export function SecretCardsPanel() {
 
   const cards = (list.data?.cards ?? []) as SecretCardAdminRow[];
   const roster: Roster = list.data?.participants ?? [];
+  // Every set the admin has authored, in their order. Hidden ones still order
+  // and label the cards already filed under them; they just stop being an option.
+  const allSets = list.data?.collections ?? [];
+  const sets: SecretCollection[] = allSets.map((c) => ({ id: c.id, label: c.label }));
+  const pickerSets: SecretCollection[] = allSets
+    .filter((c) => c.active)
+    .map((c) => ({ id: c.id, label: c.label }));
+  const cardsPerSet = new Map<string, number>();
+  for (const c of cards) if (c.collection) cardsPerSet.set(c.collection, (cardsPerSet.get(c.collection) ?? 0) + 1);
+
+  /** One set edit, with the panel's usual toast + refetch + per-row spinner. */
+  function runSetEdit(id: string, label: string, p: Promise<{ ok: boolean }>, success: string) {
+    setSetBusyId(id);
+    const done = p.then(async (r) => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      return r;
+    });
+    toast.promise(done, {
+      id: `set-${id}`,
+      loading: `Saving ${label}…`,
+      success: (r) =>
+        r.ok
+          ? success
+          : "reason" in r && r.reason === "in_use"
+            ? "That set still has cards in it — hide it instead"
+            : "reason" in r && r.reason === "exists"
+              ? "There's already a set with that name"
+              : "That name doesn't work — try letters and numbers",
+      error: (e) => (e instanceof Error ? e.message : "Save failed"),
+    });
+    void done.catch(() => {}).finally(() => setSetBusyId(null));
+  }
+
+  function addSet() {
+    const label = newSetName.trim();
+    if (!label) return;
+    setNewSetName("");
+    runSetEdit("new", label, createSetFn({ data: { label } }), `${label} added`);
+  }
+
+  function moveSet(index: number, delta: number) {
+    const a = allSets[index];
+    const b = allSets[index + delta];
+    if (!a || !b) return;
+    // Swap the two orders outright rather than nudging one, so repeated taps walk
+    // a set up the list one place at a time however the numbers were seeded.
+    setSetBusyId(a.id);
+    const p = Promise.all([
+      updateSetFn({ data: { id: a.id, sortOrder: b.sortOrder } }),
+      updateSetFn({ data: { id: b.id, sortOrder: a.sortOrder } }),
+    ]).then(async () => {
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+    });
+    void p
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Reorder failed"))
+      .finally(() => setSetBusyId(null));
+  }
 
   function addFiles(files: File[]) {
     const next: Draft[] = [];
