@@ -16,6 +16,7 @@ import {
   Share2,
   Smartphone,
   Sparkles,
+  Star,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -42,6 +43,7 @@ import { FieldComparison } from "@/components/field-comparison";
 import { RosterFilmstrip } from "@/components/roster-filmstrip";
 import { CardSlab } from "@/components/card-slab";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
+import { rosterFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
 import { packedByLabel } from "@/lib/card-pulls";
 import { CardCompare } from "@/components/card-compare";
 import {
@@ -113,6 +115,7 @@ function PlayerCardPage() {
   const member = useMemberSession();
 
   const sfx = useCardSfx();
+  const favourites = useVaultFavourites();
 
   const [flipped, setFlipped] = useState(false);
   const [gyro, setGyro] = useState(false);
@@ -396,6 +399,9 @@ function PlayerCardPage() {
     setGyro(true);
   }
 
+  const favouriteId = rosterFavouriteId(ep.id);
+  const pinned = favourites.isFavourite(favouriteId);
+
   // Settings rather than actions: they change how the card behaves, and none of
   // them is the reason anyone opened the page. Declared once and rendered twice,
   // as chips on a wide screen and as menu items on a phone.
@@ -413,6 +419,22 @@ function PlayerCardPage() {
       active: gyro,
       onClick: () => void onToggleGyro(),
     },
+    // Secondary rather than a fourth primary chip: the note above the action row
+    // records that six chips already wrap to three rows on a phone. Only on a
+    // card you own — there is nothing to pin about a slot you have not opened.
+    ...(locked
+      ? []
+      : [
+          {
+            key: "pin",
+            label: pinned ? "Pinned" : "Pin",
+            icon: (
+              <Star className="h-3.5 w-3.5" fill={pinned ? "currentColor" : "none"} aria-hidden />
+            ),
+            active: pinned,
+            onClick: () => favourites.toggle(favouriteId),
+          },
+        ]),
     {
       key: "copy",
       label: "Copy Link",

@@ -24,6 +24,9 @@ const EMPTY: VaultLayout = { order: [], collapsed: [] };
 /** The roster grid's section id. Stored, so it is add-only like a collection id. */
 export const ROSTER_SECTION = "roster";
 
+/** The pinned shelf. Only present once this device has favourited something. */
+export const FAVOURITES_SECTION = "favourites";
+
 /**
  * A secret set's section id. Prefixed so it can never collide with `roster`, and
  * the unsorted pile gets the empty suffix rather than a word — `null` is not a

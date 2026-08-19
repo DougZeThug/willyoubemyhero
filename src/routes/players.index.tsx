@@ -14,6 +14,7 @@ import { useMyCollection } from "@/hooks/use-my-collection";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
 import { VaultSection } from "@/components/vault-section";
+import { FavouriteButton } from "@/components/favourite-button";
 import {
   groupBySecretCollection,
   secretFoil,
@@ -22,7 +23,13 @@ import {
   VAULT_UNSORTED_LABEL,
   type OwnedSecret,
 } from "@/lib/secret-cards";
-import { ROSTER_SECTION, secretSectionId, useVaultLayout } from "@/lib/vault-layout";
+import {
+  FAVOURITES_SECTION,
+  ROSTER_SECTION,
+  secretSectionId,
+  useVaultLayout,
+} from "@/lib/vault-layout";
+import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -164,22 +171,78 @@ function PlayersPage() {
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
   const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
 
+  const ownedSecrets = useMemo(() => secrets.data?.cards ?? [], [secrets.data]);
+  const { ids: favouriteIds, isFavourite, toggle: toggleFavourite } = useVaultFavourites();
+
+  /**
+   * The pinned shelf, in the order things were pinned.
+   *
+   * Walks the stored ids rather than filtering the grids, because the grids are
+   * in whatever order the sort put them and the shelf is meant to read in the
+   * order you built it. An id that resolves to neither a roster row nor an owned
+   * secret is skipped in silence: the card was traded away, or this device pinned
+   * it against a different combine, and neither is worth an error state.
+   *
+   * Locked cards can never match — the star is only drawn on cards you own — so a
+   * favourite you trade away simply stops appearing rather than pinning a
+   * face-down slot to the top of the page.
+   */
+  type Pinned =
+    | { kind: "roster"; key: string; row: (typeof rows)[number] }
+    | { kind: "secret"; key: string; card: OwnedSecret };
+
+  const favourites = useMemo(() => {
+    const byRoster = new Map(
+      rows.filter((p) => !isLocked(p.id)).map((p) => [rosterFavouriteId(p.id), p]),
+    );
+    const bySecret = new Map(ownedSecrets.map((s) => [secretFavouriteId(s.id), s]));
+    const out: Pinned[] = [];
+    for (const id of favouriteIds) {
+      const row = byRoster.get(id);
+      if (row) {
+        out.push({ kind: "roster", key: id, row });
+        continue;
+      }
+      const card = bySecret.get(id);
+      if (card) out.push({ kind: "secret", key: id, card });
+    }
+    return out;
+  }, [favouriteIds, rows, isLocked, ownedSecrets]);
+
+  // A pinned card moves rather than appearing twice, so the shelves below are
+  // what is left over.
+  const pinnedIds = useMemo(() => new Set(favourites.map((f) => f.key)), [favourites]);
+  const rosterRows = useMemo(
+    () => rows.filter((p) => !pinnedIds.has(rosterFavouriteId(p.id))),
+    [rows, pinnedIds],
+  );
+
   // Only sets this person owns something from ever become a shelf. An empty
   // "Pets" header leaks the shape of the set they have not pulled yet, which is
-  // the one thing the whole feature withholds.
-  //
-  // The `?? []` lives inside the memo: hoisted out it is a fresh array on every
-  // render while the query is still loading, and every memo downstream of this
-  // one — the section list, the order, the sheet's card list — would rebuild with
-  // it.
+  // the one thing the whole feature withholds — and a set whose every card is
+  // pinned upstairs drops out here by exactly the same rule.
   const secretGroups = useMemo(
-    () => groupBySecretCollection(secrets.data?.cards ?? []),
-    [secrets.data],
+    () =>
+      groupBySecretCollection(ownedSecrets.filter((s) => !pinnedIds.has(secretFavouriteId(s.id)))),
+    [ownedSecrets, pinnedIds],
   );
 
   const sections = useMemo(
     () => [
-      { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rows.length },
+      // First in this array is top of the page by default: orderSections seeds
+      // from the order sections are presented in. It stays movable like any other.
+      ...(favourites.length > 0
+        ? [
+            {
+              kind: "favourites" as const,
+              id: FAVOURITES_SECTION,
+              title: "Favourites",
+              meta: favourites.length,
+              items: favourites,
+            },
+          ]
+        : []),
+      { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rosterRows.length },
       ...secretGroups.map((g) => ({
         kind: "secrets" as const,
         id: secretSectionId(g.id),
@@ -189,7 +252,7 @@ function PlayersPage() {
         items: g.items,
       })),
     ],
-    [rows.length, secretGroups],
+    [favourites, rosterRows.length, secretGroups],
   );
 
   const presentIds = useMemo(() => sections.map((x) => x.id), [sections]);
@@ -199,61 +262,166 @@ function PlayersPage() {
   // The sheet swipes what is on screen, in the order it is on screen. It used to
   // swipe the flat newest-pull-first list while the grid was already grouped, so
   // the next card of a swipe was rarely the one to the right of the last — and
-  // once the shelves can be rearranged that gap only widens.
+  // once the shelves can be rearranged, and secrets can be pinned out of them,
+  // that gap only widens.
   const visibleSecrets = useMemo(
     () =>
       order.flatMap((id) => {
         const section = sectionsById.get(id);
-        return section?.kind === "secrets" ? section.items : [];
+        if (section?.kind === "secrets") return section.items;
+        if (section?.kind === "favourites")
+          return section.items.flatMap((f) => (f.kind === "secret" ? [f.card] : []));
+        return [];
       }),
     [order, sectionsById],
   );
 
-  const secretGrid = (items: OwnedSecret[]) => (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-      {items.map((s) => {
-        const rarity = secretFoil(s.foil, s.borderFx);
-        return (
-          <div key={s.id} className="flex flex-col gap-2">
-            <HoloCard
-              frontUrl={s.artUrl}
-              backUrl={null}
-              name={s.name}
-              rarity={rarity}
-              intensity="subtle"
-              interactive={false}
-              onClick={() => setOpenSecret(visibleSecrets.indexOf(s))}
-            />
-            <div className="text-center">
-              <div className="truncate font-display text-xs font-black uppercase tracking-wide">
-                {s.name}
-              </div>
-              {/* The level of your copy leads, in its own colour — the same
-                  hierarchy a special finish takes on a roster tile. */}
-              <div
-                className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                style={{ color: secretTierStyle(s.tier).accent }}
-              >
-                {secretTierCaption(s.tier)}
-              </div>
-              <div
-                className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                style={{ color: rarity.border }}
-              >
-                {/* Same vocabulary as card-slab.tsx, so the two halves of the
-                    collection speak the same language. */}
-                {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
-              </div>
-              {packedByLabel(s.ownerCount) && (
-                <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-                  {packedByLabel(s.ownerCount)}
-                </div>
-              )}
-            </div>
+  const secretTile = (s: OwnedSecret) => {
+    const rarity = secretFoil(s.foil, s.borderFx);
+    const favourite = secretFavouriteId(s.id);
+    return (
+      <div key={s.id} className="flex flex-col gap-2">
+        <div className="relative">
+          <HoloCard
+            frontUrl={s.artUrl}
+            backUrl={null}
+            name={s.name}
+            rarity={rarity}
+            intensity="subtle"
+            interactive={false}
+            onClick={() => setOpenSecret(visibleSecrets.indexOf(s))}
+          />
+          <FavouriteButton
+            name={s.name}
+            on={isFavourite(favourite)}
+            onToggle={() => toggleFavourite(favourite)}
+            className="absolute right-1.5 top-1.5"
+          />
+        </div>
+        <div className="text-center">
+          <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+            {s.name}
           </div>
-        );
-      })}
-    </div>
+          {/* The level of your copy leads, in its own colour — the same
+              hierarchy a special finish takes on a roster tile. */}
+          <div
+            className="text-[9px] font-bold uppercase tracking-[0.25em]"
+            style={{ color: secretTierStyle(s.tier).accent }}
+          >
+            {secretTierCaption(s.tier)}
+          </div>
+          <div
+            className="text-[9px] font-bold uppercase tracking-[0.25em]"
+            style={{ color: rarity.border }}
+          >
+            {/* Same vocabulary as card-slab.tsx, so the two halves of the
+                collection speak the same language. */}
+            {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
+          </div>
+          {packedByLabel(s.ownerCount) && (
+            <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+              {packedByLabel(s.ownerCount)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const rosterTile = (p: (typeof rows)[number]) => {
+    const urls = cards.data?.[p.id];
+    const rarity = rarities.get(p.id) ?? rarityStyle("base");
+    const name = p.participant?.name ?? "—";
+    const locked = isLocked(p.id);
+    const favourite = rosterFavouriteId(p.id);
+    const tileBadge = cardBadge(
+      { label: rarity.label, reason: "", accent: rarity.accent },
+      locked ? "standard" : toEdition(collected[p.id]?.edition),
+    );
+    return (
+      <div key={p.id} className="relative">
+        <Link to="/players/$id" params={{ id: p.id }} className="group block focus:outline-none">
+          {/* The link survives the lock: the detail page is gated too, and
+              it is where someone finds out what they are missing. */}
+          {locked ? (
+            <LockedCard
+              back={cardBack.data?.urls ?? null}
+              name={name}
+              className="transition-transform group-hover:scale-[1.02]"
+            />
+          ) : (
+            <HoloCard
+              frontUrl={urls?.front ?? null}
+              backUrl={null}
+              name={name}
+              rarity={rarity}
+              // The finish belongs to your copy, so it comes from the
+              // collection, not the roster row. Same expression the label
+              // below uses — the two must never disagree. It is already the
+              // best copy you hold: resync_card_pull writes card_pulls.edition
+              // as the top-ranked edition across every row in card_copies.
+              edition={toEdition(collected[p.id]?.edition)}
+              intensity="subtle"
+              className="transition-transform group-hover:scale-[1.02]"
+            />
+          )}
+          <div className="mt-2 text-center">
+            <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
+              {name}
+            </div>
+            {/* A tick, not a word: the label is the line's real content,
+                and the set only fills in a card at a time. On a special
+                finish that label is the metal, in its own colour, with the
+                tier demoted to the muted line under it — see cardBadge. */}
+            <div className="flex items-center justify-center gap-1">
+              {!locked && (
+                <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
+              )}
+              <span
+                className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                style={{
+                  color: locked
+                    ? undefined
+                    : !urls?.front
+                      ? undefined
+                      : tileBadge.isEdition
+                        ? tileBadge.color
+                        : rarity.tier === "base"
+                          ? undefined
+                          : rarity.border,
+                }}
+              >
+                {locked ? "Not packed yet" : urls?.front ? tileBadge.headline : "No card yet"}
+              </span>
+            </div>
+            {/* The league's number, not yours. Its own line and muted, so
+                it never reads as one statement with the tick above it —
+                that tick is "you have this", this is "they do". */}
+            {packedByLabel(pullCounts.data?.[p.id]) && (
+              <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                {packedByLabel(pullCounts.data?.[p.id])}
+              </div>
+            )}
+          </div>
+        </Link>
+        {/* A sibling of the Link, never a child: nested, every tap to pin a card
+            would navigate to that card's page as well. Same lesson as the move
+            buttons in vault-section.tsx. Not drawn on a locked slot — you cannot
+            pin a card you have not seen, and there would be no copy to show. */}
+        {!locked && (
+          <FavouriteButton
+            name={name}
+            on={isFavourite(favourite)}
+            onToggle={() => toggleFavourite(favourite)}
+            className="absolute right-1.5 top-1.5"
+          />
+        )}
+      </div>
+    );
+  };
+
+  const cardGrid = (tiles: React.ReactNode) => (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{tiles}</div>
   );
 
   const rosterBody = (
@@ -292,93 +460,21 @@ function PlayersPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {rows.map((p) => {
-          const urls = cards.data?.[p.id];
-          const rarity = rarities.get(p.id) ?? rarityStyle("base");
-          const name = p.participant?.name ?? "—";
-          const locked = isLocked(p.id);
-          const tileBadge = cardBadge(
-            { label: rarity.label, reason: "", accent: rarity.accent },
-            locked ? "standard" : toEdition(collected[p.id]?.edition),
-          );
-          return (
-            <Link
-              key={p.id}
-              to="/players/$id"
-              params={{ id: p.id }}
-              className="group block focus:outline-none"
-            >
-              {/* The link survives the lock: the detail page is gated too, and
-                  it is where someone finds out what they are missing. */}
-              {locked ? (
-                <LockedCard
-                  back={cardBack.data?.urls ?? null}
-                  name={name}
-                  className="transition-transform group-hover:scale-[1.02]"
-                />
-              ) : (
-                <HoloCard
-                  frontUrl={urls?.front ?? null}
-                  backUrl={null}
-                  name={name}
-                  rarity={rarity}
-                  // The finish belongs to your copy, so it comes from the
-                  // collection, not the roster row. Same expression the label
-                  // above uses — the two must never disagree.
-                  edition={toEdition(collected[p.id]?.edition)}
-                  intensity="subtle"
-                  className="transition-transform group-hover:scale-[1.02]"
-                />
-              )}
-              <div className="mt-2 text-center">
-                <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
-                  {name}
-                </div>
-                {/* A tick, not a word: the label is the line's real content,
-                    and the set only fills in a card at a time. On a special
-                    finish that label is the metal, in its own colour, with the
-                    tier demoted to the muted line under it — see cardBadge. */}
-                <div className="flex items-center justify-center gap-1">
-                  {!locked && (
-                    <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
-                  )}
-                  <span
-                    className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                    style={{
-                      color: locked
-                        ? undefined
-                        : !urls?.front
-                          ? undefined
-                          : tileBadge.isEdition
-                            ? tileBadge.color
-                            : rarity.tier === "base"
-                              ? undefined
-                              : rarity.border,
-                    }}
-                  >
-                    {locked ? "Not packed yet" : urls?.front ? tileBadge.headline : "No card yet"}
-                  </span>
-                </div>
-                {/* The league's number, not yours. Its own line and muted, so
-                    it never reads as one statement with the tick above it —
-                    that tick is "you have this", this is "they do". */}
-                {packedByLabel(pullCounts.data?.[p.id]) && (
-                  <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-                    {packedByLabel(pullCounts.data?.[p.id])}
-                  </div>
-                )}
-              </div>
-            </Link>
-          );
-        })}
-        {rows.length === 0 && (
-          <div className="col-span-full flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
-            <Layers className="h-6 w-6 opacity-50" />
-            No participants yet.
-          </div>
-        )}
-      </div>
+      {/* An empty roster and a roster whose every card is pinned upstairs look
+          identical in the markup and mean opposite things, so they are two
+          separate states rather than one shrug. */}
+      {rows.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
+          <Layers className="h-6 w-6 opacity-50" />
+          No participants yet.
+        </div>
+      ) : rosterRows.length === 0 ? (
+        <p className="p-6 text-center text-xs text-muted-foreground">
+          Every card is pinned to Favourites.
+        </p>
+      ) : (
+        cardGrid(rosterRows.map(rosterTile))
+      )}
     </>
   );
 
@@ -502,7 +598,18 @@ function PlayersPage() {
               canMoveDown={i < order.length - 1}
               onMove={(delta) => move(id, delta)}
             >
-              {section.kind === "roster" ? rosterBody : secretGrid(section.items)}
+              {section.kind === "roster"
+                ? rosterBody
+                : section.kind === "favourites"
+                  ? // Both kinds of card land on one shelf, each drawn by the
+                    // renderer it would have had downstairs, so a pinned card
+                    // looks like itself rather than like a third thing.
+                    cardGrid(
+                      section.items.map((f) =>
+                        f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
+                      ),
+                    )
+                  : cardGrid(section.items.map(secretTile))}
             </VaultSection>
           );
         })}
