@@ -44,6 +44,7 @@ export type SecretCardRow = {
 export type SecretPullRow = {
   id: string;
   participant_id: string;
+*** PLACEHOLDER ***
   secret_card_id: string;
   pulled_on: string;
   event_id: string | null;
