@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowLeftRight, Inbox, Send } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMemberSession } from "@/lib/member-token";
+import { useAuthUser } from "@/hooks/use-account";
 import { getClaimRoster } from "@/lib/member.functions";
 import {
   acceptTradeOffer,
@@ -61,6 +62,8 @@ type Staged = { key: string; item: TradeItemView; payload: Record<string, unknow
 function TradePage() {
   const { event, bundle } = useEventBundle();
   const me = useMemberSession();
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuthUser();
   const qc = useQueryClient();
   const cards = useEventCardUrls(event?.id ?? null);
 
@@ -211,6 +214,20 @@ function TradePage() {
     set([...list, staged]);
   }
 
+  // A visitor with neither a player token nor an account has nothing to trade
+  // with, so send them to make one rather than parking them on a dead end.
+  // Waits for both identities to settle: `me` hydrates in an effect, and
+  // `authLoading` covers the session lookup.
+  const anonymous = !me && !authLoading && !user;
+  useEffect(() => {
+    if (!anonymous) return;
+    void navigate({
+      to: "/auth",
+      search: { mode: "signup", next: "/players/trade" },
+      replace: true,
+    });
+  }, [anonymous, navigate]);
+
   // Null on the first render whether or not a token exists — useMemberSession
   // hydrates in an effect so server and client agree — so this must not be read
   // as "signed out" until the query below has something to say.
@@ -219,12 +236,14 @@ function TradePage() {
       <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
         <div className="mx-auto max-w-3xl px-4 py-6">
           <Header />
-          <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-            <Link to="/claim" className="font-bold text-primary underline">
-              Claim your player
-            </Link>{" "}
-            <span className="text-muted-foreground">to trade cards.</span>
-          </div>
+          {!anonymous && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+              <Link to="/claim" className="font-bold text-primary underline">
+                Claim your player
+              </Link>{" "}
+              <span className="text-muted-foreground">to trade cards.</span>
+            </div>
+          )}
         </div>
       </div>
     );

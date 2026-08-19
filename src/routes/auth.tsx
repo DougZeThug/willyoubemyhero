@@ -13,6 +13,17 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
+  // Both optional: /auth stays a plain sign-in page when linked without them.
+  validateSearch: (search: Record<string, unknown>) => ({
+    mode: search["mode"] === "signup" ? ("signup" as const) : undefined,
+    // Same-origin paths only — a protocol-relative "//evil.com" is not a path.
+    next:
+      typeof search["next"] === "string" &&
+      search["next"].startsWith("/") &&
+      !search["next"].startsWith("//")
+        ? search["next"]
+        : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Sign In — Will YOU Be My Hero? Draft Combine" },
@@ -37,9 +48,10 @@ type Mode = "signin" | "signup";
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { mode: modeParam, next } = Route.useSearch();
   const { user, loading } = useAuthUser();
   const member = useMemberSession();
-  const [mode, setMode] = useState<Mode>("signin");
+  const [mode, setMode] = useState<Mode>(modeParam ?? "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,9 +61,9 @@ function AuthPage() {
   // the way rather than parking a signed-in user on a sign-in page.
   useEffect(() => {
     if (!user) return;
-    const t = window.setTimeout(() => void navigate({ to: "/players" }), 900);
+    const t = window.setTimeout(() => void navigate({ to: next ?? "/players" }), 900);
     return () => window.clearTimeout(t);
-  }, [user, navigate]);
+  }, [user, navigate, next]);
 
   async function signInWithGoogle() {
     setBusy(true);
@@ -148,6 +160,11 @@ function AuthPage() {
         <h1 className="font-display text-2xl font-black uppercase tracking-[0.18em] text-foreground">
           {mode === "signup" ? "Create an account" : "Sign in"}
         </h1>
+        {next === "/players/trade" && (
+          <p className="mt-2 text-sm font-bold text-primary">
+            Trading needs an account — it's how the other player knows who they're swapping with.
+          </p>
+        )}
         <p className="mt-2 text-sm text-muted-foreground">
           Keep your packs, secret pulls and trades on every phone. Everything this device has
           already collected comes with you.
