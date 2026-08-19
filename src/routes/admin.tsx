@@ -28,6 +28,7 @@ import { SecretCardsPanel } from "@/components/secret-cards-panel";
 import { CardPromptStudio } from "@/components/card-prompt-studio";
 import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
 import { CardGrantPanel } from "@/components/card-grant-panel";
+import { StationsPanel } from "@/components/stations-panel";
 import { AdminSection } from "@/components/admin-section";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
@@ -843,6 +844,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       <MemberCodesPanel eventId={eventId} />
       <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
       <CardGrantPanel eventId={eventId} />
+      <StationsPanel eventId={eventId} />
 
       <div className="md:col-span-2">
         <AddPlayerPanel eventId={eventId} />
