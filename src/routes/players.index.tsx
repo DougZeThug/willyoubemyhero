@@ -583,6 +583,27 @@ function PlayersPage() {
           onOpenChange={(open) => !open && setOpenSecret(null)}
         />
 
+        {/* One toggle for the whole vault, rather than arrows living permanently
+            beside every collapse header. */}
+        {order.length > 1 && (
+          <div className="mb-2 flex justify-end">
+            <button
+              type="button"
+              aria-pressed={rearranging}
+              onClick={() => setRearranging((v) => !v)}
+              className={cn(
+                "inline-flex min-h-9 items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
+                rearranging
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+              )}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5" />
+              {rearranging ? "Done" : "Rearrange"}
+            </button>
+          </div>
+        )}
+
         {/* Secrets keep shelves of their own rather than being interleaved into
             the roster: every SortKey branch reads a field a secret does not have,
             and editorially a secret is not a roster card. Now that the shelves
