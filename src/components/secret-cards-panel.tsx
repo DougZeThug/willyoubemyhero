@@ -2,13 +2,26 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ChevronDown, EyeOff, Loader2, Trash2, UploadCloud, X } from "lucide-react";
 import {
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff,
+  Loader2,
+  Plus,
+  Trash2,
+  UploadCloud,
+  X,
+} from "lucide-react";
+import {
+  createSecretCollection,
   createSecretCards,
   deleteSecretCard,
+  deleteSecretCollection,
   grantSecretCard,
   listSecretCards,
   updateSecretCard,
+  updateSecretCollection,
   updateSecretCollectionLook,
   uploadSecretCardArt,
 } from "@/lib/secret-cards.functions";
@@ -17,8 +30,8 @@ import { AdminSection } from "@/components/admin-section";
 import { BorderFxPicker, FoilPicker, FoilSwatch } from "@/components/secret-look-picker";
 import {
   SECRET_BORDER_FX_OPTIONS,
-  SECRET_COLLECTIONS,
   SECRET_FOIL_OPTIONS,
+  type SecretCollection,
   groupBySecretCollection,
   secretCollectionLabel,
 } from "@/lib/secret-cards";
