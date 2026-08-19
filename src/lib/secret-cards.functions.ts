@@ -398,9 +398,137 @@ const cardBorderFx = z.enum(SECRET_BORDER_FX_OPTIONS.map((o) => o.id) as [string
 // Same cap as every other upload path: base64 expands by 4/3, so this is the
 // 8.8 MB the client-side check enforces before encoding.
 const cardArt = z.string().min(32).max(12_000_000);
-// Nullable rather than just optional: clearing a card back to unsorted is a real
-// edit, and `undefined` already means "leave it alone" in updateSecretCard.
-const cardCollection = z.enum(SECRET_COLLECTION_IDS as [string, ...string[]]);
+// Sets are data now, so this validates the *shape* of an id and existence is
+// checked against secret_collections by assertCollections below. Nullable rather
+// than just optional wherever it appears: clearing a card back to unsorted is a
+// real edit, and `undefined` already means "leave it alone" in updateSecretCard.
+const cardCollection = z.string().trim().regex(SECRET_COLLECTION_ID_PATTERN);
+const collectionLabel = z.string().trim().min(1).max(40);
+
+/**
+ * Reject set ids nobody authored.
+ *
+ * The column is unconstrained text, so without this a typo'd id would file a card
+ * into a set that renders as its own slug and can never be found again.
+ */
+async function assertCollections(ids: readonly (string | null | undefined)[]) {
+  const wanted = [...new Set(ids.filter((i): i is string => !!i))];
+  if (wanted.length === 0) return;
+  const db = await secrets();
+  const { data, error } = await db
+    .from("secret_collections")
+    .select("id")
+    .in("id", wanted)
+    .returns<{ id: string }[]>();
+  if (error) throw error;
+  const known = new Set((data ?? []).map((r) => r.id));
+  const missing = wanted.filter((id) => !known.has(id));
+  if (missing.length) throw new Error(`Unknown card set: ${missing.join(", ")}`);
+}
+
+/** The sets, in the order the admin arranged them. Hidden ones are left out. */
+export const getSecretCollections = createServerFn({ method: "GET" }).handler(async () => {
+  const db = await secrets();
+  const { data, error } = await db
+    .from("secret_collections")
+    .select("id, label, sort_order, active")
+    .eq("active", true)
+    .order("sort_order", { ascending: true })
+    .order("label", { ascending: true })
+    .returns<SecretCollectionRow[]>();
+  if (error) throw error;
+  // Names of sets, never their sizes: this says nothing about what is inside one,
+  // so the silence rule at the top of this file still holds for a member.
+  return { collections: (data ?? []).map((c) => ({ id: c.id, label: c.label })) };
+});
+
+/** Create a set. The id is derived from the name once, then never changes. */
+export const createSecretCollection = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ label: collectionLabel }).parse(d))
+  .handler(async ({ data }) => {
+    await requireLeagueAdmin();
+    const { toSecretCollectionId } = await import("./secret-cards");
+    const id = toSecretCollectionId(data.label);
+    if (!SECRET_COLLECTION_ID_PATTERN.test(id)) {
+      return { ok: false as const, reason: "bad_name" as const };
+    }
+    const db = await secrets();
+    const { data: existing } = await db
+      .from("secret_collections")
+      .select("id")
+      .eq("id", id)
+      .maybeSingle<{ id: string }>();
+    if (existing) return { ok: false as const, reason: "exists" as const };
+
+    // Land at the bottom of the list; reordering is a separate, explicit edit.
+    const { data: last } = await db
+      .from("secret_collections")
+      .select("sort_order")
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ sort_order: number }>();
+
+    const { error } = await db
+      .from("secret_collections")
+      .insert({ id, label: data.label, sort_order: (last?.sort_order ?? 0) + 10 });
+    if (error) throw error;
+    return { ok: true as const, id, label: data.label };
+  });
+
+/** Rename, reorder or hide a set. The id is never touched — rows point at it. */
+export const updateSecretCollection = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        id: cardCollection,
+        label: collectionLabel.optional(),
+        sortOrder: z.number().int().min(0).max(100_000).optional(),
+        active: z.boolean().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireLeagueAdmin();
+    const patch: { label?: string; sort_order?: number; active?: boolean } = {};
+    if (data.label !== undefined) patch.label = data.label;
+    if (data.sortOrder !== undefined) patch.sort_order = data.sortOrder;
+    if (data.active !== undefined) patch.active = data.active;
+    if (Object.keys(patch).length === 0) return { ok: true as const };
+
+    const db = await secrets();
+    const { data: row, error } = await db
+      .from("secret_collections")
+      .update(patch)
+      .eq("id", data.id)
+      .select("id")
+      .maybeSingle<{ id: string }>();
+    if (error) throw error;
+    if (!row) return { ok: false as const, reason: "not_found" as const };
+    return { ok: true as const };
+  });
+
+/**
+ * Remove a set, but only an empty one.
+ *
+ * Deleting a set with cards in it would leave those rows pointing at an id with
+ * no label — they would render as a raw slug and lose their shelf. Hiding is the
+ * answer for a set that has served its purpose.
+ */
+export const deleteSecretCollection = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ id: cardCollection }).parse(d))
+  .handler(async ({ data }) => {
+    await requireLeagueAdmin();
+    const db = await secrets();
+    const { count } = await db
+      .from("secret_cards")
+      .select("id", { count: "exact", head: true })
+      .eq("collection", data.id);
+    if ((count ?? 0) > 0) return { ok: false as const, reason: "in_use" as const, cards: count };
+
+    const { error } = await db.from("secret_collections").delete().eq("id", data.id);
+    if (error) throw error;
+    return { ok: true as const };
+  });
 
 /**
  * Add cards to the set. Bulk, because the alternative is twelve rounds of pick-
