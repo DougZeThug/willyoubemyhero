@@ -11,6 +11,9 @@ function renderSection(over: Partial<React.ComponentProps<typeof VaultSection>> 
     canMoveUp: true,
     canMoveDown: true,
     onMove: vi.fn(),
+    // Most cases here are about the move buttons, which only exist in reorder
+    // mode; the two cases below cover the default, where they do not.
+    rearranging: true,
     children: <p>Gary the Grill</p>,
     ...over,
   };
@@ -32,11 +35,26 @@ describe("VaultSection", () => {
   });
 
   it("rolls up when the header is tapped", async () => {
-    const { props } = renderSection();
+    const { props } = renderSection({ rearranging: false });
     // The exact name, not a pattern: the two move buttons carry the shelf's name
     // in their labels too, and a loose match finds all three.
     await userEvent.click(screen.getByRole("button", { name: "Cornhole Collection" }));
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("hides the move buttons until the vault is being rearranged", () => {
+    // Two targets a thumb-width apart is the mistap this mode removes: with it
+    // off the header row is collapse and nothing else.
+    renderSection({ rearranging: false });
+    expect(
+      screen.queryByRole("button", { name: "Move Cornhole Collection up" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("stops the header toggling while it is being rearranged", async () => {
+    const { props } = renderSection();
+    await userEvent.click(screen.getByRole("button", { name: "Cornhole Collection" }));
+    expect(props.onOpenChange).not.toHaveBeenCalled();
   });
 
   it("moves one step in the direction that was pressed", async () => {
