@@ -9,8 +9,9 @@ import {
 } from "@/components/secret-look-picker";
 import {
   SECRET_BORDER_FX_OPTIONS,
-  SECRET_COLLECTIONS,
   SECRET_FOIL_OPTIONS,
+  type SecretCollection,
+  secretCollectionLabel,
 } from "@/lib/secret-cards";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,7 @@ export function SecretCardTile({
   card,
   claimedMembers,
   roster,
+  sets,
   grantTarget,
   onGrantTargetChange,
   granting,
@@ -95,6 +97,7 @@ export function SecretCardTile({
   card: SecretCardAdminRow;
   claimedMembers: number;
   roster: Roster;
+  sets: readonly SecretCollection[];
   grantTarget: string;
   onGrantTargetChange: (participantId: string) => void;
   granting: boolean;
@@ -250,7 +253,12 @@ export function SecretCardTile({
             aria-label={`Set for ${card.name}`}
           >
             <option value="">Unsorted</option>
-            {SECRET_COLLECTIONS.map((c) => (
+            {/* A card filed into a set that has since been hidden keeps its own
+                option, or picking anything else would be the only way out. */}
+            {(card.collection && !sets.some((c) => c.id === card.collection)
+              ? [...sets, { id: card.collection, label: secretCollectionLabel(card.collection) }]
+              : sets
+            ).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
               </option>
