@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck } from "lucide-react"; // prettier-ignore
+import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck, ArrowUpDown } from "lucide-react"; // prettier-ignore
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -89,6 +89,10 @@ function PlayersPage() {
   // An index rather than the card itself: the sheet swipes between secrets, so it
   // needs to know where in the shelf the open one sits.
   const [openSecret, setOpenSecret] = useState<number | null>(null);
+  // Reorder mode. Off by default and never persisted: it is a thing you turn on
+  // for a moment, not a preference — and while it is off a shelf header has one
+  // job, which is what stops the arrows being mistapped for the chevron.
+  const [rearranging, setRearranging] = useState(false);
   // Set on claim and never cleared, so a member on a new phone gets told where
   // their collection went instead of watching it silently vanish. Read in an
   // effect rather than during render: SSR has no localStorage, and a mismatched
