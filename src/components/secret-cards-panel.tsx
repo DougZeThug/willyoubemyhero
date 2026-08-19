@@ -171,7 +171,7 @@ export function SecretCardsPanel() {
   for (const c of cards) if (c.collection) cardsPerSet.set(c.collection, (cardsPerSet.get(c.collection) ?? 0) + 1);
 
   /** One set edit, with the panel's usual toast + refetch + per-row spinner. */
-  function runSetEdit(id: string, label: string, p: Promise<{ ok: boolean }>, success: string) {
+  function runSetEdit(id: string, label: string, p: Promise<{ ok: boolean; reason?: string }>, success: string) {
     setSetBusyId(id);
     const done = p.then(async (r) => {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
@@ -389,7 +389,7 @@ export function SecretCardsPanel() {
           loading: look.collection !== undefined ? "Filing card…" : "Saving look…",
           success:
             look.collection !== undefined
-              ? `Filed under ${secretCollectionLabel(look.collection)}`
+              ? `Filed under ${secretCollectionLabel(look.collection, sets)}`
               : "Look saved",
           error: (e) => (e instanceof Error ? e.message : "Save failed"),
         });
