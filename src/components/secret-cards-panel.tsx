@@ -168,10 +168,16 @@ export function SecretCardsPanel() {
     .filter((c) => c.active)
     .map((c) => ({ id: c.id, label: c.label }));
   const cardsPerSet = new Map<string, number>();
-  for (const c of cards) if (c.collection) cardsPerSet.set(c.collection, (cardsPerSet.get(c.collection) ?? 0) + 1);
+  for (const c of cards)
+    if (c.collection) cardsPerSet.set(c.collection, (cardsPerSet.get(c.collection) ?? 0) + 1);
 
   /** One set edit, with the panel's usual toast + refetch + per-row spinner. */
-  function runSetEdit(id: string, label: string, p: Promise<{ ok: boolean; reason?: string }>, success: string) {
+  function runSetEdit(
+    id: string,
+    label: string,
+    p: Promise<{ ok: boolean; reason?: string }>,
+    success: string,
+  ) {
     setSetBusyId(id);
     const done = p.then(async (r) => {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
@@ -792,7 +798,10 @@ export function SecretCardsPanel() {
                   {cardsPerSet.get(s.id) ?? 0}
                 </span>
                 {setBusyId === s.id && (
-                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+                  <Loader2
+                    className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
+                    aria-hidden
+                  />
                 )}
                 <button
                   type="button"
