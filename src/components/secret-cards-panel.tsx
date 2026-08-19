@@ -594,7 +594,7 @@ export function SecretCardsPanel() {
             aria-label="Set for new uploads"
           >
             <option value="">Unsorted</option>
-            {SECRET_COLLECTIONS.map((c) => (
+            {pickerSets.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
               </option>
@@ -667,7 +667,7 @@ export function SecretCardsPanel() {
                       className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
                     >
                       <option value="">Unsorted</option>
-                      {SECRET_COLLECTIONS.map((c) => (
+                      {pickerSets.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.label}
                         </option>
@@ -872,7 +872,7 @@ export function SecretCardsPanel() {
                     className="mt-1 min-h-11 w-full rounded border border-white/15 bg-background px-2 text-base text-foreground"
                   >
                     <option value="">Unsorted</option>
-                    {SECRET_COLLECTIONS.map((c) => (
+                    {pickerSets.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label}
                       </option>
