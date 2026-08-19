@@ -906,6 +906,7 @@ export function SecretCardsPanel() {
                       card={card}
                       claimedMembers={list.data?.claimedMembers ?? 0}
                       roster={roster}
+                      sets={pickerSets}
                       busy={busy}
                       grantTarget={grantTarget[card.id] ?? ""}
                       onGrantTargetChange={(participantId) =>
