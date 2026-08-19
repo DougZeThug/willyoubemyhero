@@ -375,8 +375,23 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
     name: (p.nickname as string | null) || (p.name as string),
   }));
 
+  // Every set, hidden ones included: this is the screen where they are managed.
+  const { data: collectionRows } = await db
+    .from("secret_collections")
+    .select("id, label, sort_order, active")
+    .order("sort_order", { ascending: true })
+    .order("label", { ascending: true })
+    .returns<SecretCollectionRow[]>();
+  const collections = (collectionRows ?? []).map((c) => ({
+    id: c.id,
+    label: c.label,
+    sortOrder: c.sort_order,
+    active: c.active,
+  }));
+
   return {
     cards,
+    collections,
     claimedMembers: claimed,
     // Everyone who could pull has pulled everything there is. The panel says so,
     // because otherwise the admin has no way to know the daily drop has gone
