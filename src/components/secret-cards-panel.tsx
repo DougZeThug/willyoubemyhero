@@ -104,6 +104,9 @@ export function SecretCardsPanel() {
   const createFn = useServerFn(createSecretCards);
   const updateFn = useServerFn(updateSecretCard);
   const setLookFn = useServerFn(updateSecretCollectionLook);
+  const createSetFn = useServerFn(createSecretCollection);
+  const updateSetFn = useServerFn(updateSecretCollection);
+  const deleteSetFn = useServerFn(deleteSecretCollection);
   const uploadFn = useServerFn(uploadSecretCardArt);
   const deleteFn = useServerFn(deleteSecretCard);
   const grantFn = useServerFn(grantSecretCard);
@@ -136,11 +139,14 @@ export function SecretCardsPanel() {
   // Which set new uploads are filed into. Sticky across drops, because the whole
   // point is dumping twelve WAGs in one go.
   const [uploadCollection, setUploadCollection] = useState<string | null>(null);
-  // Collapsed sets, by id ("" for unsorted). Default to everything closed so the
-  // admin sees a tidy table of contents instead of a wall of cards.
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
-    new Set(["", ...SECRET_COLLECTIONS.map((c) => c.id)]),
-  );
+  // Expanded sets, by id ("" for unsorted). Tracked as "what is open" rather than
+  // "what is closed" so a set created after this mounted is closed like the rest
+  // instead of springing open because nobody had listed it as collapsed.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  // Sets management: the name being typed, and the row being renamed.
+  const [newSetName, setNewSetName] = useState("");
+  const [manageSets, setManageSets] = useState(false);
+  const [setBusyId, setSetBusyId] = useState<string | null>(null);
 
   // No eventId in the key, which is itself the documentation that the set is
   // league-wide — and keeps the panel from going stale when the active event
