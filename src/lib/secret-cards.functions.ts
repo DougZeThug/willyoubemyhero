@@ -8,13 +8,14 @@ import { VARIANT_WIDTHS } from "./media";
 import type {
   PullSecretCardResult,
   SecretCardRow,
+  SecretCollectionRow,
   SecretPullRow,
   SecretPullStatusResult,
 } from "./secret-cards-db.server";
 import type { SecretCardView } from "./secret-cards";
 import {
   SECRET_BORDER_FX_OPTIONS,
-  SECRET_COLLECTION_IDS,
+  SECRET_COLLECTION_ID_PATTERN,
   SECRET_FOIL_OPTIONS,
 } from "./secret-cards";
 import { bestSecretTier, toSecretTier } from "./secret-rarity";
