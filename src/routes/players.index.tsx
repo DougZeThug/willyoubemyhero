@@ -603,6 +603,7 @@ function PlayersPage() {
               canMoveUp={i > 0}
               canMoveDown={i < order.length - 1}
               onMove={(delta) => move(id, delta)}
+              rearranging={rearranging}
             >
               {section.kind === "roster"
                 ? rosterBody
