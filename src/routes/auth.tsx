@@ -160,6 +160,11 @@ function AuthPage() {
         <h1 className="font-display text-2xl font-black uppercase tracking-[0.18em] text-foreground">
           {mode === "signup" ? "Create an account" : "Sign in"}
         </h1>
+        {next === "/players/trade" && (
+          <p className="mt-2 text-sm font-bold text-primary">
+            Trading needs an account — it's how the other player knows who they're swapping with.
+          </p>
+        )}
         <p className="mt-2 text-sm text-muted-foreground">
           Keep your packs, secret pulls and trades on every phone. Everything this device has
           already collected comes with you.
