@@ -41,10 +41,19 @@ export type SecretCardRow = {
   updated_at: string;
 };
 
+/** A set, as authored in the admin panel. Ids are stored on secret_cards.collection. */
+export type SecretCollectionRow = {
+  id: string;
+  label: string;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SecretPullRow = {
   id: string;
   participant_id: string;
-*** PLACEHOLDER ***
   secret_card_id: string;
   pulled_on: string;
   event_id: string | null;
