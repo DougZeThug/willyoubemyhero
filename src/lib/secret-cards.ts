@@ -285,10 +285,10 @@ export const SECRET_BORDER_FX_OPTIONS = [
  * is what every card written before this existed is.
  */
 export const SECRET_COLLECTIONS = [
+  { id: "cornhole", label: "Cornhole Collection" },
   { id: "wags", label: "WAGs" },
   { id: "pets", label: "Pets" },
   { id: "legacyPets", label: "Legacy Pets" },
-  { id: "cornhole", label: "Cornhole Collection" },
 ] as const;
 
 export type SecretCollectionId = (typeof SECRET_COLLECTIONS)[number]["id"];
@@ -297,6 +297,15 @@ export const SECRET_COLLECTION_IDS = SECRET_COLLECTIONS.map((c) => c.id) as read
 
 /** What an unfiled card is grouped under. Never a set id, so it can't be stored. */
 export const UNSORTED_COLLECTION_LABEL = "Unsorted";
+
+/**
+ * The same pile, headed on a player's own shelf.
+ *
+ * "Unsorted" is admin vocabulary — it describes filing work nobody but the
+ * commissioner can do, and on the vault it reads as though the owner left their
+ * cards in a mess. To the person holding them it is just "Secrets".
+ */
+export const VAULT_UNSORTED_LABEL = "Secrets";
 
 /**
  * Label for a stored value. An id retired from the list above still has rows

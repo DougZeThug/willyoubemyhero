@@ -13,12 +13,16 @@ import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
+import { VaultSection } from "@/components/vault-section";
 import {
   groupBySecretCollection,
   secretFoil,
   secretsPulledLabel,
   SECRET_RARITY,
+  VAULT_UNSORTED_LABEL,
+  type OwnedSecret,
 } from "@/lib/secret-cards";
+import { ROSTER_SECTION, secretSectionId, useVaultLayout } from "@/lib/vault-layout";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { seededRng, shuffle } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -159,7 +163,224 @@ function PlayersPage() {
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
   const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
-  const ownedSecrets = secrets.data?.cards ?? [];
+
+  // Only sets this person owns something from ever become a shelf. An empty
+  // "Pets" header leaks the shape of the set they have not pulled yet, which is
+  // the one thing the whole feature withholds.
+  //
+  // The `?? []` lives inside the memo: hoisted out it is a fresh array on every
+  // render while the query is still loading, and every memo downstream of this
+  // one — the section list, the order, the sheet's card list — would rebuild with
+  // it.
+  const secretGroups = useMemo(
+    () => groupBySecretCollection(secrets.data?.cards ?? []),
+    [secrets.data],
+  );
+
+  const sections = useMemo(
+    () => [
+      { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rows.length },
+      ...secretGroups.map((g) => ({
+        kind: "secrets" as const,
+        id: secretSectionId(g.id),
+        title: g.id === null ? VAULT_UNSORTED_LABEL : g.label,
+        // How many of this set you hold. Never a denominator — see the shelf below.
+        meta: g.items.length,
+        items: g.items,
+      })),
+    ],
+    [rows.length, secretGroups],
+  );
+
+  const presentIds = useMemo(() => sections.map((x) => x.id), [sections]);
+  const { order, collapsed, toggle, move } = useVaultLayout(presentIds);
+  const sectionsById = useMemo(() => new Map(sections.map((x) => [x.id, x])), [sections]);
+
+  // The sheet swipes what is on screen, in the order it is on screen. It used to
+  // swipe the flat newest-pull-first list while the grid was already grouped, so
+  // the next card of a swipe was rarely the one to the right of the last — and
+  // once the shelves can be rearranged that gap only widens.
+  const visibleSecrets = useMemo(
+    () =>
+      order.flatMap((id) => {
+        const section = sectionsById.get(id);
+        return section?.kind === "secrets" ? section.items : [];
+      }),
+    [order, sectionsById],
+  );
+
+  const secretGrid = (items: OwnedSecret[]) => (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      {items.map((s) => {
+        const rarity = secretFoil(s.foil, s.borderFx);
+        return (
+          <div key={s.id} className="flex flex-col gap-2">
+            <HoloCard
+              frontUrl={s.artUrl}
+              backUrl={null}
+              name={s.name}
+              rarity={rarity}
+              intensity="subtle"
+              interactive={false}
+              onClick={() => setOpenSecret(visibleSecrets.indexOf(s))}
+            />
+            <div className="text-center">
+              <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+                {s.name}
+              </div>
+              {/* The level of your copy leads, in its own colour — the same
+                  hierarchy a special finish takes on a roster tile. */}
+              <div
+                className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                style={{ color: secretTierStyle(s.tier).accent }}
+              >
+                {secretTierCaption(s.tier)}
+              </div>
+              <div
+                className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                style={{ color: rarity.border }}
+              >
+                {/* Same vocabulary as card-slab.tsx, so the two halves of the
+                    collection speak the same language. */}
+                {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
+              </div>
+              {packedByLabel(s.ownerCount) && (
+                <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                  {packedByLabel(s.ownerCount)}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const rosterBody = (
+    <>
+      {/* Sits with the grid it sorts. Left in the page header it would strand
+          above a shelf that is rolled up, controlling nothing you can see. */}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {SORTS.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => {
+              setSort(s.key);
+              setShuffleSeed(0);
+            }}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
+              sort === s.key && shuffleSeed === 0
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
+        <button
+          onClick={() => setShuffleSeed((n) => n + 1)}
+          className={cn(
+            "ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
+            shuffleSeed > 0
+              ? "bg-primary/15 text-primary"
+              : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+          )}
+        >
+          <Shuffle className="h-3.5 w-3.5" />
+          Shuffle
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {rows.map((p) => {
+          const urls = cards.data?.[p.id];
+          const rarity = rarities.get(p.id) ?? rarityStyle("base");
+          const name = p.participant?.name ?? "—";
+          const locked = isLocked(p.id);
+          const tileBadge = cardBadge(
+            { label: rarity.label, reason: "", accent: rarity.accent },
+            locked ? "standard" : toEdition(collected[p.id]?.edition),
+          );
+          return (
+            <Link
+              key={p.id}
+              to="/players/$id"
+              params={{ id: p.id }}
+              className="group block focus:outline-none"
+            >
+              {/* The link survives the lock: the detail page is gated too, and
+                  it is where someone finds out what they are missing. */}
+              {locked ? (
+                <LockedCard
+                  back={cardBack.data?.urls ?? null}
+                  name={name}
+                  className="transition-transform group-hover:scale-[1.02]"
+                />
+              ) : (
+                <HoloCard
+                  frontUrl={urls?.front ?? null}
+                  backUrl={null}
+                  name={name}
+                  rarity={rarity}
+                  // The finish belongs to your copy, so it comes from the
+                  // collection, not the roster row. Same expression the label
+                  // above uses — the two must never disagree.
+                  edition={toEdition(collected[p.id]?.edition)}
+                  intensity="subtle"
+                  className="transition-transform group-hover:scale-[1.02]"
+                />
+              )}
+              <div className="mt-2 text-center">
+                <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
+                  {name}
+                </div>
+                {/* A tick, not a word: the label is the line's real content,
+                    and the set only fills in a card at a time. On a special
+                    finish that label is the metal, in its own colour, with the
+                    tier demoted to the muted line under it — see cardBadge. */}
+                <div className="flex items-center justify-center gap-1">
+                  {!locked && (
+                    <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
+                  )}
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                    style={{
+                      color: locked
+                        ? undefined
+                        : !urls?.front
+                          ? undefined
+                          : tileBadge.isEdition
+                            ? tileBadge.color
+                            : rarity.tier === "base"
+                              ? undefined
+                              : rarity.border,
+                    }}
+                  >
+                    {locked ? "Not packed yet" : urls?.front ? tileBadge.headline : "No card yet"}
+                  </span>
+                </div>
+                {/* The league's number, not yours. Its own line and muted, so
+                    it never reads as one statement with the tick above it —
+                    that tick is "you have this", this is "they do". */}
+                {packedByLabel(pullCounts.data?.[p.id]) && (
+                  <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+                    {packedByLabel(pullCounts.data?.[p.id])}
+                  </div>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+        {rows.length === 0 && (
+          <div className="col-span-full flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
+            <Layers className="h-6 w-6 opacity-50" />
+            No participants yet.
+          </div>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
@@ -251,205 +472,40 @@ function PlayersPage() {
               </Link>
             </div>
           </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-1.5">
-            {SORTS.map((s) => (
-              <button
-                key={s.key}
-                onClick={() => {
-                  setSort(s.key);
-                  setShuffleSeed(0);
-                }}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
-                  sort === s.key && shuffleSeed === 0
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-                )}
-              >
-                {s.label}
-              </button>
-            ))}
-            <button
-              onClick={() => setShuffleSeed((n) => n + 1)}
-              className={cn(
-                "ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
-                shuffleSeed > 0
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-              )}
-            >
-              <Shuffle className="h-3.5 w-3.5" />
-              Shuffle
-            </button>
-          </div>
         </div>
 
-        {/* Its own shelf rather than interleaved into the grid: every SortKey
-            branch reads a field a secret does not have, and editorially a secret
-            is not a roster card. Nothing is rendered at zero — no header, no
-            slots, no silhouettes. An unpulled secret is not "missing", it is
-            unknown. */}
-        {ownedSecrets.length > 0 && (
-          <section className="mb-6">
-            <div
-              className="mb-3 font-display text-[10px] font-bold uppercase tracking-[0.3em]"
-              style={{ color: SECRET_RARITY.accent }}
-            >
-              Secrets
-            </div>
-            {/* One shelf per set. Only sets this person actually owns something
-                from appear — an empty "Pets" heading would leak the shape of the
-                set they haven't pulled yet. */}
-            {groupBySecretCollection(ownedSecrets).map((group) => (
-              <div key={group.id ?? ""} className="mb-5 last:mb-0">
-                <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-                  {group.label}
-                </div>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                  {group.items.map((s) => {
-                    const rarity = secretFoil(s.foil, s.borderFx);
-                    return (
-                      <div key={s.id} className="flex flex-col gap-2">
-                        <HoloCard
-                          frontUrl={s.artUrl}
-                          backUrl={null}
-                          name={s.name}
-                          rarity={rarity}
-                          intensity="subtle"
-                          interactive={false}
-                          onClick={() => setOpenSecret(ownedSecrets.indexOf(s))}
-                        />
-                        <div className="text-center">
-                          <div className="truncate font-display text-xs font-black uppercase tracking-wide">
-                            {s.name}
-                          </div>
-                          {/* The level of your copy leads, in its own colour —
-                              the same hierarchy a special finish takes on a
-                              roster tile. */}
-                          <div
-                            className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                            style={{ color: secretTierStyle(s.tier).accent }}
-                          >
-                            {secretTierCaption(s.tier)}
-                          </div>
-                          <div
-                            className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                            style={{ color: rarity.border }}
-                          >
-                            {/* Same vocabulary as card-slab.tsx, so the two halves of
-                                the collection speak the same language. */}
-                            {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
-                          </div>
-                          {packedByLabel(s.ownerCount) && (
-                            <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-                              {packedByLabel(s.ownerCount)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </section>
-        )}
-
         <SecretCardSheet
-          cards={ownedSecrets}
+          cards={visibleSecrets}
           index={openSecret}
           onIndexChange={setOpenSecret}
           onOpenChange={(open) => !open && setOpenSecret(null)}
         />
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {rows.map((p) => {
-            const urls = cards.data?.[p.id];
-            const rarity = rarities.get(p.id) ?? rarityStyle("base");
-            const name = p.participant?.name ?? "—";
-            const locked = isLocked(p.id);
-            const tileBadge = cardBadge(
-              { label: rarity.label, reason: "", accent: rarity.accent },
-              locked ? "standard" : toEdition(collected[p.id]?.edition),
-            );
-            return (
-              <Link
-                key={p.id}
-                to="/players/$id"
-                params={{ id: p.id }}
-                className="group block focus:outline-none"
-              >
-                {/* The link survives the lock: the detail page is gated too, and
-                    it is where someone finds out what they are missing. */}
-                {locked ? (
-                  <LockedCard
-                    back={cardBack.data?.urls ?? null}
-                    name={name}
-                    className="transition-transform group-hover:scale-[1.02]"
-                  />
-                ) : (
-                  <HoloCard
-                    frontUrl={urls?.front ?? null}
-                    backUrl={null}
-                    name={name}
-                    rarity={rarity}
-                    // The finish belongs to your copy, so it comes from the
-                    // collection, not the roster row. Same expression the label
-                    // above uses — the two must never disagree.
-                    edition={toEdition(collected[p.id]?.edition)}
-                    intensity="subtle"
-                    className="transition-transform group-hover:scale-[1.02]"
-                  />
-                )}
-                <div className="mt-2 text-center">
-                  <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
-                    {name}
-                  </div>
-                  {/* A tick, not a word: the label is the line's real content,
-                      and the set only fills in a card at a time. On a special
-                      finish that label is the metal, in its own colour, with the
-                      tier demoted to the muted line under it — see cardBadge. */}
-                  <div className="flex items-center justify-center gap-1">
-                    {!locked && (
-                      <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
-                    )}
-                    <span
-                      className="text-[9px] font-bold uppercase tracking-[0.25em]"
-                      style={{
-                        color: locked
-                          ? undefined
-                          : !urls?.front
-                            ? undefined
-                            : tileBadge.isEdition
-                              ? tileBadge.color
-                              : rarity.tier === "base"
-                                ? undefined
-                                : rarity.border,
-                      }}
-                    >
-                      {locked ? "Not packed yet" : urls?.front ? tileBadge.headline : "No card yet"}
-                    </span>
-                  </div>
-                  {/* The league's number, not yours. Its own line and muted, so
-                      it never reads as one statement with the tick above it —
-                      that tick is "you have this", this is "they do". */}
-                  {packedByLabel(pullCounts.data?.[p.id]) && (
-                    <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-                      {packedByLabel(pullCounts.data?.[p.id])}
-                    </div>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-          {rows.length === 0 && (
-            <div className="col-span-full flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
-              <Layers className="h-6 w-6 opacity-50" />
-              No participants yet.
-            </div>
-          )}
-        </div>
+        {/* Secrets keep shelves of their own rather than being interleaved into
+            the roster: every SortKey branch reads a field a secret does not have,
+            and editorially a secret is not a roster card. Now that the shelves
+            sit as peers, the accent on their headers is what says so. Nothing is
+            rendered at zero — no header, no slots, no silhouettes. An unpulled
+            secret is not "missing", it is unknown. */}
+        {order.map((id, i) => {
+          const section = sectionsById.get(id);
+          if (!section) return null;
+          return (
+            <VaultSection
+              key={id}
+              title={section.title}
+              meta={section.meta}
+              accent={section.kind === "secrets" ? SECRET_RARITY.accent : undefined}
+              open={!collapsed.has(id)}
+              onOpenChange={() => toggle(id)}
+              canMoveUp={i > 0}
+              canMoveDown={i < order.length - 1}
+              onMove={(delta) => move(id, delta)}
+            >
+              {section.kind === "roster" ? rosterBody : secretGrid(section.items)}
+            </VaultSection>
+          );
+        })}
       </div>
     </div>
   );

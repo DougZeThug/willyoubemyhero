@@ -3,12 +3,15 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { rarityStyle, type BorderFx, type FoilPattern, type RarityTier } from "./card-rarity";
 import {
+  groupBySecretCollection,
   SECRET_BORDER_FX_OPTIONS,
+  SECRET_COLLECTIONS,
   SECRET_FOIL_OPTIONS,
   SECRET_RARITY,
   secretFoil,
   secretsPulledLabel,
   SECRET_REASON,
+  UNSORTED_COLLECTION_LABEL,
 } from "./secret-cards";
 
 const RARITY_TIERS: RarityTier[] = [
@@ -241,5 +244,47 @@ describe("every border animation has a rule to render it", () => {
     for (const cls of declared) {
       expect(Object.values(CLASS)).toContain(cls);
     }
+  });
+});
+
+describe("groupBySecretCollection", () => {
+  const card = (collection: string | null, name: string) => ({ collection, name });
+
+  it("reads the sets in the order the league prints them", () => {
+    // The array is the running order for the admin panel and the vault alike, so
+    // this is the one place it is asserted rather than assumed.
+    expect(SECRET_COLLECTIONS.map((c) => c.id)).toEqual(["cornhole", "wags", "pets", "legacyPets"]);
+  });
+
+  it("groups into that order whatever order the cards arrive in", () => {
+    const groups = groupBySecretCollection([
+      card("legacyPets", "Rufus"),
+      card("cornhole", "The Board"),
+      card("pets", "Bandit"),
+      card("wags", "Steph"),
+    ]);
+    expect(groups.map((g) => g.id)).toEqual(["cornhole", "wags", "pets", "legacyPets"]);
+  });
+
+  it("says nothing about a set the holder owns none of", () => {
+    // An empty "Pets" heading announces that Pets exists, which is the shape of
+    // the set the whole feature withholds.
+    const groups = groupBySecretCollection([card("cornhole", "The Board")]);
+    expect(groups.map((g) => g.label)).toEqual(["Cornhole Collection"]);
+  });
+
+  it("keeps a retired id visible, ahead of the unsorted pile", () => {
+    // Ids are add-only, but a set dropped from the list still has rows pointing
+    // at it. Those cards render under their own id rather than vanishing.
+    const groups = groupBySecretCollection([
+      card(null, "Unfiled"),
+      card("gazebos", "The Gazebo"),
+      card("cornhole", "The Board"),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual([
+      "Cornhole Collection",
+      "gazebos",
+      UNSORTED_COLLECTION_LABEL,
+    ]);
   });
 });
