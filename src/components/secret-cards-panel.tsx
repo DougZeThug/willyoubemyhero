@@ -715,15 +715,15 @@ export function SecretCardsPanel() {
         )}
         {/* One collapsible section per set. The whole point is that the list stays
             navigable at forty cards, which it does not as one flat scroll. */}
-        {groupBySecretCollection(cards).map((group) => {
+        {groupBySecretCollection(cards, sets).map((group) => {
           const key = group.id ?? "";
-          const open = !collapsed.has(key);
+          const open = expanded.has(key);
           return (
             <section key={key} className="rounded-lg border border-white/10">
               <button
                 type="button"
                 onClick={() =>
-                  setCollapsed((prev) => {
+                  setExpanded((prev) => {
                     const next = new Set(prev);
                     if (next.has(key)) next.delete(key);
                     else next.add(key);
