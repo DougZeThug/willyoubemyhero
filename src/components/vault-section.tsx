@@ -22,6 +22,7 @@ export function VaultSection({
   canMoveUp,
   canMoveDown,
   onMove,
+  rearranging = false,
   children,
 }: {
   title: string;
@@ -37,6 +38,12 @@ export function VaultSection({
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMove: (delta: -1 | 1) => void;
+  /**
+   * Reorder mode. The move arrows only exist while it is on, and the header
+   * stops toggling — two targets a thumb-width apart is the mistap this mode
+   * exists to remove.
+   */
+  rearranging?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -44,8 +51,11 @@ export function VaultSection({
       <section className="mb-3 rounded-lg border border-white/10 last:mb-0">
         {/* The move buttons are siblings of the trigger, never inside it: nested,
             every tap to reorder would also roll the shelf up or down. */}
-        <div className="flex items-center gap-0.5 pl-3 pr-1.5">
-          <CollapsibleTrigger className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 text-left">
+        <div className="flex items-center pl-3 pr-1.5">
+          <CollapsibleTrigger
+            disabled={rearranging}
+            className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 text-left disabled:cursor-default"
+          >
             <h2
               className="truncate font-display text-[11px] font-black uppercase tracking-[0.3em]"
               style={accent ? { color: accent } : undefined}
@@ -63,16 +73,23 @@ export function VaultSection({
                 className={cn(
                   "h-4 w-4 shrink-0 text-primary/70 transition-transform",
                   open && "rotate-180",
+                  rearranging && "opacity-30",
                 )}
               />
             </span>
           </CollapsibleTrigger>
-          <MoveButton label={`Move ${title} up`} enabled={canMoveUp} onMove={() => onMove(-1)}>
-            <ArrowUp className="h-3.5 w-3.5" />
-          </MoveButton>
-          <MoveButton label={`Move ${title} down`} enabled={canMoveDown} onMove={() => onMove(1)}>
-            <ArrowDown className="h-3.5 w-3.5" />
-          </MoveButton>
+          {rearranging && (
+            // A divider and real space, so the arrows read as their own control
+            // group rather than as more header.
+            <div className="ml-3 flex shrink-0 items-center gap-0.5 border-l border-white/10 pl-2">
+              <MoveButton label={`Move ${title} up`} enabled={canMoveUp} onMove={() => onMove(-1)}>
+                <ArrowUp className="h-3.5 w-3.5" />
+              </MoveButton>
+              <MoveButton label={`Move ${title} down`} enabled={canMoveDown} onMove={() => onMove(1)}>
+                <ArrowDown className="h-3.5 w-3.5" />
+              </MoveButton>
+            </div>
+          )}
         </div>
         <CollapsibleContent className="px-3 pb-3">{children}</CollapsibleContent>
       </section>
