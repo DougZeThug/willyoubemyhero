@@ -187,6 +187,26 @@ export function rarityStyle(tier: RarityTier): Rarity {
   return { tier, ...RARITY[tier] };
 }
 
+/**
+ * Rarest first. The index into this IS the rank, same shape as
+ * SECRET_TIER_ORDER — it exists so pickers can sort by tier without each of
+ * them inventing its own ordering.
+ */
+export const RARITY_ORDER: readonly RarityTier[] = [
+  "champion",
+  "podium",
+  "stationKing",
+  "penaltyBox",
+  "dnf",
+  "base",
+];
+
+/** 0 is champion. An unknown tier sorts last. */
+export function rarityRank(tier: string | null | undefined): number {
+  const i = RARITY_ORDER.indexOf(tier as RarityTier);
+  return i === -1 ? RARITY_ORDER.length : i;
+}
+
 // The subset of the event bundle this module needs. Kept structural so it accepts
 // the live bundle from useEventBundle and an archived snapshot alike.
 type RarityBundle = {
