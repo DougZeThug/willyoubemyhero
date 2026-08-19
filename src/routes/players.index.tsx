@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck } from "lucide-react"; // prettier-ignore
+import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck, ArrowUpDown } from "lucide-react"; // prettier-ignore
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -89,6 +89,10 @@ function PlayersPage() {
   // An index rather than the card itself: the sheet swipes between secrets, so it
   // needs to know where in the shelf the open one sits.
   const [openSecret, setOpenSecret] = useState<number | null>(null);
+  // Reorder mode. Off by default and never persisted: it is a thing you turn on
+  // for a moment, not a preference — and while it is off a shelf header has one
+  // job, which is what stops the arrows being mistapped for the chevron.
+  const [rearranging, setRearranging] = useState(false);
   // Set on claim and never cleared, so a member on a new phone gets told where
   // their collection went instead of watching it silently vanish. Read in an
   // effect rather than during render: SSR has no localStorage, and a mismatched
@@ -242,7 +246,6 @@ function PlayersPage() {
             },
           ]
         : []),
-      { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rosterRows.length },
       ...secretGroups.map((g) => ({
         kind: "secrets" as const,
         id: secretSectionId(g.id),
@@ -251,6 +254,9 @@ function PlayersPage() {
         meta: g.items.length,
         items: g.items,
       })),
+      // Last by default: the roster is the one shelf you already know by heart,
+      // so the sets you are collecting lead the page.
+      { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rosterRows.length },
     ],
     [favourites, rosterRows.length, secretGroups],
   );
@@ -577,6 +583,27 @@ function PlayersPage() {
           onOpenChange={(open) => !open && setOpenSecret(null)}
         />
 
+        {/* One toggle for the whole vault, rather than arrows living permanently
+            beside every collapse header. */}
+        {order.length > 1 && (
+          <div className="mb-2 flex justify-end">
+            <button
+              type="button"
+              aria-pressed={rearranging}
+              onClick={() => setRearranging((v) => !v)}
+              className={cn(
+                "inline-flex min-h-9 items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
+                rearranging
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+              )}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5" />
+              {rearranging ? "Done" : "Rearrange"}
+            </button>
+          </div>
+        )}
+
         {/* Secrets keep shelves of their own rather than being interleaved into
             the roster: every SortKey branch reads a field a secret does not have,
             and editorially a secret is not a roster card. Now that the shelves
@@ -597,6 +624,7 @@ function PlayersPage() {
               canMoveUp={i > 0}
               canMoveDown={i < order.length - 1}
               onMove={(delta) => move(id, delta)}
+              rearranging={rearranging}
             >
               {section.kind === "roster"
                 ? rosterBody
