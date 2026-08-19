@@ -85,7 +85,11 @@ export function VaultSection({
               <MoveButton label={`Move ${title} up`} enabled={canMoveUp} onMove={() => onMove(-1)}>
                 <ArrowUp className="h-3.5 w-3.5" />
               </MoveButton>
-              <MoveButton label={`Move ${title} down`} enabled={canMoveDown} onMove={() => onMove(1)}>
+              <MoveButton
+                label={`Move ${title} down`}
+                enabled={canMoveDown}
+                onMove={() => onMove(1)}
+              >
                 <ArrowDown className="h-3.5 w-3.5" />
               </MoveButton>
             </div>
