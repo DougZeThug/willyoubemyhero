@@ -10,7 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 type StationRow = {
   id: string;
@@ -276,6 +282,9 @@ export function StationsPanel({ eventId }: { eventId: string }) {
             <SheetTitle className="font-display uppercase tracking-widest">
               {draft?.id ? "Edit station" : "New station"}
             </SheetTitle>
+            <SheetDescription className="text-xs">
+              Names show on the timing console, the card back and the station ladder.
+            </SheetDescription>
           </SheetHeader>
 
           {draft && (
