@@ -68,3 +68,18 @@ ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role;
 GRANT SELECT ON storage.buckets TO anon, authenticated, service_role;
 GRANT ALL ON storage.objects TO service_role;
+
+-- Auth. GoTrue owns this schema on the platform; here it exists only so the
+-- migrations that name it can replay. `admin_accounts` has a foreign key to
+-- auth.users(id) and seeds itself with a lookup on `email`, so those two
+-- columns are all that is recreated — a stand-in that drifts any further from
+-- the real thing would be worse than none. On an empty cluster the seed matches
+-- nothing, which is correct: a test database has no admin account.
+CREATE SCHEMA IF NOT EXISTS auth;
+
+CREATE TABLE IF NOT EXISTS auth.users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text
+);
+
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;

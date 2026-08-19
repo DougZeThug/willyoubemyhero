@@ -9,6 +9,8 @@ import { migrationFiles } from "./cluster";
 afterAll(closeDb);
 
 const EXPECTED_TABLES = [
+  "account_identities",
+  "admin_accounts",
   "audit_logs",
   "award_votes",
   "awards",
