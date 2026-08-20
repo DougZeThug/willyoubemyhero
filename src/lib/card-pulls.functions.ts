@@ -4,6 +4,7 @@ import { EDITION_IDS } from "./card-edition";
 import { optionalGuest, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
 import type { CardPullRow, PackOpenRow } from "./secret-cards-db.server";
 import type { CardPullCounts, MyCardStats } from "./card-pulls";
+import { uuid as zuuid } from "./zod-uuid";
 
 /**
  * Who has packed which roster card.

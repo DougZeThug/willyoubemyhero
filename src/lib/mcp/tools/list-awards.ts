@@ -2,6 +2,7 @@ import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import { supabaseAnon } from "../supabase";
 import { fail, json, resolveEventId } from "../shared";
+import { uuid as zuuid } from "@/lib/zod-uuid";
 
 export default defineTool({
   name: "list_awards",

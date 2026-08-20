@@ -15,6 +15,7 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { uuid as zuuid } from "./zod-uuid";
 
 function publicClient() {
   const url = process.env.SUPABASE_URL!;

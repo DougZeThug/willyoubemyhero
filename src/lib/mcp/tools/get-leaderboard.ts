@@ -4,6 +4,7 @@ import { supabaseAnon } from "../supabase";
 import { RUNS_PUBLIC_COLUMNS } from "@/lib/runs-columns";
 import { formatTime } from "@/lib/format";
 import { fail, json, resolveEventId } from "../shared";
+import { uuid as zuuid } from "@/lib/zod-uuid";
 
 export default defineTool({
   name: "get_leaderboard",

@@ -8,6 +8,7 @@ import {
   requireMember,
 } from "./require-auth.server";
 import { AWARD_CATEGORIES, isAwardCategory } from "./awards";
+import { uuid as zuuid } from "./zod-uuid";
 
 /**
  * Reactions, trash talk, and superlative voting.

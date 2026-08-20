@@ -23,6 +23,7 @@ import type {
   TradeOfferRow,
   TradeRow,
 } from "./trades-db.server";
+import { uuid as zuuid } from "./zod-uuid";
 
 /**
  * The Trading Post: moving a spare card from one member to another.

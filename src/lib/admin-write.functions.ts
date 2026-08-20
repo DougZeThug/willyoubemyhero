@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
+import { uuid as zuuid } from "./zod-uuid";
 
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })

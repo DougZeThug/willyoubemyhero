@@ -3,6 +3,7 @@ import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { requireLeagueAdmin } from "./league-admin.server";
+import { uuid as zuuid } from "./zod-uuid";
 
 async function db() {
   const { cardPromptDb } = await import("./card-prompt-db.server");
