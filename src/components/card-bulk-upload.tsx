@@ -144,8 +144,9 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => {
-      const gone = prev.find((p) => p.id === id);
-      if (gone) URL.revokeObjectURL(gone.previewUrl);
+      // Defensive: ids can repeat when the same file is dropped twice, so revoke
+      // every url we are about to drop rather than just the first match.
+      prev.filter((p) => p.id === id).forEach((p) => URL.revokeObjectURL(p.previewUrl));
       return prev.filter((p) => p.id !== id);
     });
   }, []);
