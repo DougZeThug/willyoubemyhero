@@ -12,7 +12,7 @@ export async function resolveEventId(eventId?: string): Promise<string> {
     .limit(1)
     .maybeSingle();
   if (error) throw new ToolError(error.message);
-  if (!data) throw new ToolError("No active event. Pass an explicit event_id.");
+  if (!data?.id) throw new ToolError("No active event. Pass an explicit event_id.");
   return data.id;
 }
 

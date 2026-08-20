@@ -19,7 +19,7 @@ export default defineTool({
       .limit(1)
       .maybeSingle();
     if (error) fail(error.message);
-    if (!event) fail("No active event right now.");
+    if (!event?.id) fail("No active event right now.");
     const { data: stations } = await sb
       .from("stations")
       .select("id, name, station_order")
