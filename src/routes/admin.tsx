@@ -532,9 +532,10 @@ function TimingConsole() {
                 <Button
                   size="lg"
                   onClick={finishRun}
+                  disabled={finishing}
                   className="h-12 flex-1 sm:h-10 sm:min-w-28 sm:flex-none"
                 >
-                  <Flag className="mr-1.5 h-4 w-4" /> Finish
+                  <Flag className="mr-1.5 h-4 w-4" /> {finishing ? "Saving…" : "Finish"}
                 </Button>
                 <Button
                   size="lg"
