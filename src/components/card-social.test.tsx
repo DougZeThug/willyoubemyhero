@@ -133,7 +133,7 @@ describe("when signed out", () => {
       data: {
         eventParticipantId: CARD_ID,
         emoji: "🔥",
-        guest: { key: expect.any(String), name: "Garden Guest" },
+        guest: { name: "Garden Guest" },
       },
     });
     expect(screen.queryByText(/What should we call you/i)).not.toBeInTheDocument();
@@ -153,7 +153,7 @@ describe("when signed out", () => {
       data: {
         eventParticipantId: CARD_ID,
         body: "hello",
-        guest: { key: expect.any(String), name: "Garden Guest" },
+        guest: { name: "Garden Guest" },
       },
     });
   });
@@ -310,7 +310,10 @@ describe("trash talk", () => {
 
   it("offers a delete button on your own comment only", async () => {
     await renderSocial({
-      comments: [comment({ id: "mine", participant_id: ME, mine: true }), comment({ id: "theirs" })],
+      comments: [
+        comment({ id: "mine", participant_id: ME, mine: true }),
+        comment({ id: "theirs" }),
+      ],
     });
     expect(screen.getAllByRole("button", { name: "Delete your comment" })).toHaveLength(1);
   });
