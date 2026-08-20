@@ -342,6 +342,12 @@ function TimingConsole() {
 
   async function finishRun() {
     if (!run || !event?.id) return;
+    // A double tap fires two handlers off the same render, both holding the
+    // pre-finish `run`. They'd upsert the same client_key with different stop
+    // times and the second one would silently become the official time.
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    setFinishing(true);
     const finishedAtPerf = performance.now();
     const finishedAtIso = new Date().toISOString();
     const raw_time_ms = computeElapsedMs(
@@ -385,6 +391,9 @@ function TimingConsole() {
       setRun(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save run — kept locally");
+    } finally {
+      finishingRef.current = false;
+      setFinishing(false);
     }
   }
 
