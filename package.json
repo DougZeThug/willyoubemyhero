@@ -116,9 +116,9 @@
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "@tanstack/router-core": "1.171.15"
+    "@tanstack/router-core": "1.171.13"
   },
   "resolutions": {
-    "@tanstack/router-core": "1.171.15"
+    "@tanstack/router-core": "1.171.13"
   }
 }
