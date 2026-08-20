@@ -236,7 +236,9 @@ export function SecretCardsPanel() {
         continue;
       }
       next.push({
-        key: `${file.name}-${file.size}-${next.length}`,
+        // Batch index alone repeats across drops, so the same file added twice
+        // produced two drafts sharing a key — removing one wiped both.
+        key: `${file.name}-${file.size}-${next.length}-${crypto.randomUUID()}`,
         name: nameFromFile(file.name),
         flavour: "",
         collection: uploadCollection,
@@ -293,8 +295,7 @@ export function SecretCardsPanel() {
 
   function removeDraft(key: string) {
     setDrafts((prev) => {
-      const gone = prev.find((d) => d.key === key);
-      if (gone) URL.revokeObjectURL(gone.previewUrl);
+      prev.filter((d) => d.key === key).forEach((d) => URL.revokeObjectURL(d.previewUrl));
       return prev.filter((d) => d.key !== key);
     });
   }
