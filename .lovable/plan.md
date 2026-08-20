@@ -1,43 +1,64 @@
-# Show the odds on the daily secret pull
+# Put Ryan Pham's collection back on his roster card
 
-The draw is already fair — a flat random pick among the cards you don't own yet,
-with the rarity tier rolled separately. Nothing about the selection changes. What
-changes is that the pull screen stops being silent about the pool, so the overlap
-everyone is noticing reads as "we've all nearly swept a small set" rather than
-"this thing is rigged".
+## What actually happened
 
-## What you'll see
+Ryan's cards are not lost. They sit on a **second participant record named
+"Ryan Herr"** — 39 roster copies, 14 secret cards, 13 pack opens, and both of the
+trades with David Weidensaul. That record is the one his phone (and, since today,
+his signed-in account) is attached to.
 
-On the pack / secret screen, under the daily card:
+On Aug 20 at 00:34 that record was set inactive during a roster tidy-up, and it is
+not on the combine roster at all. Three symptoms follow from that one fact:
 
-- **Collected 19 of 39** — how much of the league catalogue you hold.
-- **20 left to find** — and when that hits zero, a line saying every future pull
-  is a duplicate (which is already what happens, just never explained).
-- **Tier odds** for the rarity roll, printed as the real numbers:
-  Mythic 0.5% · Legendary 3.5% · Epic 8% · Rare 18% · Common 70%.
-- A one-line note that the next card is picked evenly from what you're missing —
-  so newly added cards are no rarer than old ones, they've just had fewer days.
+- The claim screen only lists active players, so his real record vanished and the
+  empty "Ryan Pham" record shows as needing a code.
+- The trading list only offers players on the roster, so he can no longer be
+  traded with.
+- The trade feed looks names up on the roster, so his two trades render as
+  "David Weidensaul sent a secret to someone".
 
-Nothing names an unpulled card. You see counts and odds only, never the
-catalogue.
+Meanwhile the active "Ryan Pham" record holds nothing: 0 cards, 0 packs, 0 trades.
+Its code was re-issued today at 12:49 and never claimed.
+
+## The fix
+
+Move everything onto the active **Ryan Pham** record, then retire the duplicate.
+
+1. **Move the collection.** Re-point all 39 card copies, 14 secret pulls and 13
+   pack opens from the old record to Ryan Pham, collapsing anything he would end
+   up owning twice into duplicates so his vault stays coherent.
+2. **Move the history.** Re-point the two completed trades and any trade offers so
+   the feed reads "David Weidensaul sent a secret to Ryan Pham".
+3. **Move his identity.** Re-point the account linked to the old record onto Ryan
+   Pham, so the phone he signed in on lands straight on his cards with no
+   re-claim. Reset the fresh code so it is still claimable as a backup.
+4. **Retire the duplicate.** Leave the "Ryan Herr" record inactive and empty, with
+   nothing pointing at it.
+5. **Verify** afterwards: card counts on Ryan Pham, his presence in the claim and
+   trading lists, and the two feed lines reading his name.
+
+Nothing changes for anyone else. The Lipko pair is already correct and is left
+alone.
+
+## Also worth fixing while I'm in here
+
+The combine's event id (`1111…1111`) is not a valid v4 UUID, and several trading
+endpoints validate their `eventId` with a strict UUID check. That is throwing a
+validation error in the live app right now. I will relax those checks to accept
+any UUID shape so the trade feed and offer creation stop erroring on this event.
 
 ## Technical notes
 
-- `SecretDayStatus` in `src/lib/secret-cards.ts` gains `total` (count of active,
-  pullable cards) and `remaining`. That is a deliberate relaxation of the current
-  "never how many exist" comment on `pulled` — a count is not an identity, and
-  the comment gets rewritten to say exactly where the new line is drawn.
-- `secret_pull_status` already runs server-side with the full catalogue in
-  reach; the two counts come from the same predicate `pull_secret_card` uses
-  (`active AND art_path IS NOT NULL AND weight > 0`) so the number on screen is
-  the number actually drawn from. Done in the RPC via migration, keeping the
-  existing shape and idempotency (`CREATE OR REPLACE`).
-- Odds come from the existing tier table in `src/lib/secret-rarity.ts` —
-  rendered from `SECRET_TIER_ORDER` and its basis points, never hardcoded in the
-  component, so the ladder and the printed odds can't drift.
-- New presentational piece `src/components/secret-odds.tsx`, rendered on
-  `src/routes/players.pack.tsx` near the secret slot and on the secrets shelf
-  header in `src/routes/players.index.tsx`.
-- Tests: extend `src/lib/secret-cards.functions.test.ts` for the new status
-  fields, a unit test asserting the printed odds sum to 100%, and a `tests/db`
-  assertion that the status counts match the pull predicate.
+- Data change (no schema change) run through the data tool, in one transaction:
+  `card_copies`, `secret_card_pulls`, `pack_opens`, `trades`, `trade_offers`,
+  `account_identities`, `member_codes`.
+- Collisions handled explicitly: `secret_card_pulls` has a one-owned-copy and a
+  one-pull-per-day constraint, and `pack_opens`/`card_copies` are unique per day —
+  incoming rows that clash are marked duplicate or dropped rather than failing the
+  move. `resync_card_pull` and `resync_secret_ownership` are run for every affected
+  card so the derived ownership rows match the copies.
+- Ryan Pham is already on the event roster (`event_participants`, running order 7),
+  so no roster row is created.
+- Code change limited to swapping `z.string().uuid()` for `z.string().min(1)` on
+  the `eventId` inputs in `src/lib/trades.functions.ts` (and the matching guest /
+  secret endpoints if they carry the same check).
