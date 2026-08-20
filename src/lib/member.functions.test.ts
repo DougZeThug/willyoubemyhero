@@ -238,6 +238,7 @@ describe("getClaimRoster", () => {
         nickname: "Dougie",
         hasCode: true,
         claimed: true,
+        isCollector: false,
         reachable: true,
       },
       // A code was issued but never redeemed.
@@ -247,6 +248,7 @@ describe("getClaimRoster", () => {
         nickname: null,
         hasCode: true,
         claimed: false,
+        isCollector: false,
         reachable: false,
       },
     ]);
@@ -270,6 +272,7 @@ describe("getClaimRoster", () => {
         hasCode: true,
         // Unchanged: /claim still means the paper code alone.
         claimed: false,
+        isCollector: false,
         reachable: true,
       },
     ]);
@@ -288,6 +291,7 @@ describe("getClaimRoster", () => {
         nickname: null,
         hasCode: false,
         claimed: false,
+        isCollector: false,
         reachable: false,
       },
     ]);
