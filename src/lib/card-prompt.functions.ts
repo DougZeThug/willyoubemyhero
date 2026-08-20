@@ -139,9 +139,7 @@ export const saveCardPromptRun = createServerFn({ method: "POST" })
 
 export const listCardPromptRuns = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) =>
-    z
-      .object({ eventId: zuuid(), limit: z.number().int().min(1).max(50).default(30) })
-      .parse(data),
+    z.object({ eventId: zuuid(), limit: z.number().int().min(1).max(50).default(30) }).parse(data),
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);

@@ -223,9 +223,7 @@ export const upsertStation = createServerFn({ method: "POST" })
   });
 
 export const deleteStation = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: zuuid(), id: zuuid() }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), id: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -348,9 +346,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
   });
 
 export const deleteRun = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: zuuid(), runId: zuuid() }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
