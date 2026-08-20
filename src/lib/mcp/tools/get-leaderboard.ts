@@ -11,7 +11,7 @@ export default defineTool({
   description:
     "Fastest official obstacle-course times for one combine, quickest first. Defaults to the active combine.",
   inputSchema: {
-    event_id: z.string().uuid().optional().describe("Event id; omit for the active combine."),
+    event_id: zuuid().optional().describe("Event id; omit for the active combine."),
     limit: z.number().int().optional().describe("How many rows to return (default 20, max 50)."),
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },

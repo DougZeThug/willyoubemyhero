@@ -9,7 +9,7 @@ export default defineTool({
   description:
     "List everyone in a combine's roster with their running order, bib number and participation status. Defaults to the active combine.",
   inputSchema: {
-    event_id: z.string().uuid().optional().describe("Event id; omit for the active combine."),
+    event_id: zuuid().optional().describe("Event id; omit for the active combine."),
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ event_id }) => {

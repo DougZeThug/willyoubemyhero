@@ -5,7 +5,7 @@ import { hashPin, signAdminToken, timingSafeEq } from "./session.server";
 
 export const verifyEventPin = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
-    z.object({ eventId: z.string().uuid(), pin: z.string().min(1).max(32) }).parse(data),
+    z.object({ eventId: zuuid(), pin: z.string().min(1).max(32) }).parse(data),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

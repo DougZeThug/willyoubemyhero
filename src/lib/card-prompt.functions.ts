@@ -62,15 +62,15 @@ export const updateCardPromptTemplate = createServerFn({ method: "POST" })
 const snapshot = z.record(z.string(), z.unknown()).default({});
 const saveSchema = z
   .object({
-    eventId: z.string().uuid(),
-    templateId: z.string().uuid().nullable().optional(),
+    eventId: zuuid(),
+    templateId: zuuid().nullable().optional(),
     templateSlug: slug,
-    eventParticipantId: z.string().uuid().nullable().optional(),
+    eventParticipantId: zuuid().nullable().optional(),
     subjectName: z.string().trim().min(1).max(120),
     inputSnapshot: snapshot,
     generatedPrompt: z.string().min(20).max(20000),
     kind: z.enum(["initial", "revision"]),
-    parentPromptId: z.string().uuid().nullable().optional(),
+    parentPromptId: zuuid().nullable().optional(),
     revisionInstruction: z.string().max(4000).nullable().optional(),
   })
   .superRefine((data, ctx) => {
@@ -139,7 +139,7 @@ export const saveCardPromptRun = createServerFn({ method: "POST" })
 export const listCardPromptRuns = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) =>
     z
-      .object({ eventId: z.string().uuid(), limit: z.number().int().min(1).max(50).default(30) })
+      .object({ eventId: zuuid(), limit: z.number().int().min(1).max(50).default(30) })
       .parse(data),
   )
   .handler(async ({ data }) => {
