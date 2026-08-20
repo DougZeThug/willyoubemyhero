@@ -625,15 +625,18 @@ function StartCard({
   selectedParticipantId,
   onSelect,
   onStart,
+  onSetOnClock,
 }: {
   participants: NonNullable<ReturnType<typeof useEventBundle>["bundle"]>["participants"];
   selectedParticipantId: string;
   onSelect: (id: string) => void;
   onStart: () => void;
+  onSetOnClock: (participantId: string | null) => void;
 }) {
   const queued = participants.filter(
     (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
   );
+  const slot = currentAthlete(participants);
   const nextUp = queued[0];
   useEffect(() => {
     if (!selectedParticipantId && nextUp) onSelect(nextUp.participant_id);
@@ -644,6 +647,33 @@ function StartCard({
     <Card>
       <CardContent className="p-4 sm:p-5">
         <h2 className="mb-3 font-display text-xl font-black uppercase">Send next athlete</h2>
+        <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-2">
+          <Radio
+            className={"h-4 w-4 shrink-0 " + (slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground")}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+              {slot.onClock ? "On the clock" : "Up next on the crowd screens"}
+            </div>
+            <div className="truncate text-sm font-semibold uppercase">
+              {slot.athlete?.participant?.name ?? "Nobody left"}
+            </div>
+          </div>
+          {slot.onClock ? (
+            <Button size="sm" variant="ghost" onClick={() => onSetOnClock(null)}>
+              Clear
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!selectedParticipantId}
+              onClick={() => onSetOnClock(selectedParticipantId)}
+            >
+              On the clock
+            </Button>
+          )}
+        </div>
         <div className="max-h-[55vh] overflow-auto rounded border border-white/5 divide-y divide-white/5 sm:max-h-72">
           {queued.map((p) => {
             const sel = p.participant_id === selectedParticipantId;
