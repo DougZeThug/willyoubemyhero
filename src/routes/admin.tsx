@@ -404,6 +404,30 @@ function TimingConsole() {
     setRun(null);
   }
 
+  /** Put someone on the clock for the crowd screens without starting the timer. */
+  async function setOnClock(participantId: string | null) {
+    if (!event?.id) return;
+    const onClockNow = participants.find((p) => p.participation_status === "running");
+    try {
+      if (onClockNow && onClockNow.participant_id !== participantId) {
+        await setStatusFn({
+          data: { eventId: event.id, eventParticipantId: onClockNow.id, status: "waiting" },
+        });
+      }
+      if (participantId) {
+        const ep = participants.find((p) => p.participant_id === participantId);
+        if (ep) {
+          await setStatusFn({
+            data: { eventId: event.id, eventParticipantId: ep.id, status: "running" },
+          });
+        }
+      }
+      await qc.invalidateQueries();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update the clock");
+    }
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-4">
       <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-3">
@@ -451,6 +475,7 @@ function TimingConsole() {
           selectedParticipantId={selectedParticipantId}
           onSelect={setSelected}
           onStart={startRun}
+          onSetOnClock={setOnClock}
         />
       ) : (
         <Card className={"hud-bezel " + (paused ? "border-warn/60" : "border-primary/50 hud-glow")}>
