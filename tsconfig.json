@@ -30,7 +30,14 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      /* TanStack Start ships its own nested copy of router-core, so the
+         `server.handlers` augmentation it declares lands on a different type
+         identity than the router-core the app resolves. Collapsing both onto
+         the hoisted copy is what makes server routes (the generated MCP ones)
+         typecheck. */
+      "@tanstack/router-core": ["./node_modules/@tanstack/router-core"],
+      "@tanstack/router-core/*": ["./node_modules/@tanstack/router-core/*"]
     }
   }
 }

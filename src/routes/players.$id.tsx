@@ -85,7 +85,9 @@ export const Route = createFileRoute("/players/$id")({
   }),
   // `?vs=` makes a head-to-head a link you can drop in the group chat, rather
   // than something only reachable by tapping through the drawer.
-  validateSearch: (search: Record<string, unknown>) => ({
+  // Annotate `vs` as optional: an inferred `{ vs: string | undefined }` makes
+  // router-core treat the key as required at every Link/navigate call site.
+  validateSearch: (search: Record<string, unknown>): { vs?: string } => ({
     vs: typeof search.vs === "string" && search.vs ? search.vs : undefined,
   }),
   component: PlayerCardPage,

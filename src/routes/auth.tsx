@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
   // Both optional: /auth stays a plain sign-in page when linked without them.
-  validateSearch: (search: Record<string, unknown>) => ({
+  // Optional-key annotation: inferred `| undefined` values would otherwise be
+  // required search params at every Link/navigate to /auth.
+  validateSearch: (search: Record<string, unknown>): { mode?: "signup"; next?: string } => ({
     mode: search["mode"] === "signup" ? ("signup" as const) : undefined,
     // Same-origin paths only — a protocol-relative "//evil.com" is not a path.
     next:

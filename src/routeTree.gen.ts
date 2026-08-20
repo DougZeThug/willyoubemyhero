@@ -9,66 +9,30 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TvRouteImport } from './routes/tv'
-import { Route as OrderRouteImport } from './routes/order'
-import { Route as LiveRouteImport } from './routes/live'
-import { Route as LeaderboardRouteImport } from './routes/leaderboard'
-import { Route as DraftRouteImport } from './routes/draft'
-import { Route as ClaimRouteImport } from './routes/claim'
-import { Route as AwardsRouteImport } from './routes/awards'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AwardsRouteImport } from './routes/awards'
+import { Route as ClaimRouteImport } from './routes/claim'
+import { Route as DraftRouteImport } from './routes/draft'
+import { Route as LeaderboardRouteImport } from './routes/leaderboard'
+import { Route as LiveRouteImport } from './routes/live'
+import { Route as McpRouteImport } from './routes/mcp'
+import { Route as OrderRouteImport } from './routes/order'
+import { Route as TvRouteImport } from './routes/tv'
+import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as PlayersIndexRouteImport } from './routes/players.index'
-import { Route as RecapSlugRouteImport } from './routes/recap.$slug'
-import { Route as PlayersTradeRouteImport } from './routes/players.trade'
-import { Route as PlayersPackRouteImport } from './routes/players.pack'
 import { Route as PlayersIdRouteImport } from './routes/players.$id'
+import { Route as PlayersPackRouteImport } from './routes/players.pack'
+import { Route as PlayersTradeRouteImport } from './routes/players.trade'
+import { Route as RecapSlugRouteImport } from './routes/recap.$slug'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 
-const TvRoute = TvRouteImport.update({
-  id: '/tv',
-  path: '/tv',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OrderRoute = OrderRouteImport.update({
-  id: '/order',
-  path: '/order',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LiveRoute = LiveRouteImport.update({
-  id: '/live',
-  path: '/live',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LeaderboardRoute = LeaderboardRouteImport.update({
-  id: '/leaderboard',
-  path: '/leaderboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DraftRoute = DraftRouteImport.update({
-  id: '/draft',
-  path: '/draft',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClaimRoute = ClaimRouteImport.update({
-  id: '/claim',
-  path: '/claim',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AwardsRoute = AwardsRouteImport.update({
-  id: '/awards',
-  path: '/awards',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalyticsRoute = AnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -76,29 +40,71 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AwardsRoute = AwardsRouteImport.update({
+  id: '/awards',
+  path: '/awards',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClaimRoute = ClaimRouteImport.update({
+  id: '/claim',
+  path: '/claim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DraftRoute = DraftRouteImport.update({
+  id: '/draft',
+  path: '/draft',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeaderboardRoute = LeaderboardRouteImport.update({
+  id: '/leaderboard',
+  path: '/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrderRoute = OrderRouteImport.update({
+  id: '/order',
+  path: '/order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TvRoute = TvRouteImport.update({
+  id: '/tv',
+  path: '/tv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const PlayersIndexRoute = PlayersIndexRouteImport.update({
   id: '/players/',
   path: '/players/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RecapSlugRoute = RecapSlugRouteImport.update({
-  id: '/recap/$slug',
-  path: '/recap/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlayersTradeRoute = PlayersTradeRouteImport.update({
-  id: '/players/trade',
-  path: '/players/trade',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlayersPackRoute = PlayersPackRouteImport.update({
-  id: '/players/pack',
-  path: '/players/pack',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlayersIdRoute = PlayersIdRouteImport.update({
@@ -106,6 +112,27 @@ const PlayersIdRoute = PlayersIdRouteImport.update({
   path: '/players/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlayersPackRoute = PlayersPackRouteImport.update({
+  id: '/players/pack',
+  path: '/players/pack',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlayersTradeRoute = PlayersTradeRouteImport.update({
+  id: '/players/trade',
+  path: '/players/trade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecapSlugRoute = RecapSlugRouteImport.update({
+  id: '/recap/$slug',
+  path: '/recap/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Char91DotmcpChar93InvokeToolToolRoute =
+  Char91DotmcpChar93InvokeToolToolRouteImport.update({
+    id: '/.mcp/invoke-tool/$tool',
+    path: '/.mcp/invoke-tool/$tool',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -117,13 +144,17 @@ export interface FileRoutesByFullPath {
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
+  '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
   '/tv': typeof TvRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/players/$id': typeof PlayersIdRoute
   '/players/pack': typeof PlayersPackRoute
   '/players/trade': typeof PlayersTradeRoute
   '/recap/$slug': typeof RecapSlugRoute
   '/players/': typeof PlayersIndexRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -135,13 +166,17 @@ export interface FileRoutesByTo {
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
+  '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
   '/tv': typeof TvRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/players/$id': typeof PlayersIdRoute
   '/players/pack': typeof PlayersPackRoute
   '/players/trade': typeof PlayersTradeRoute
   '/recap/$slug': typeof RecapSlugRoute
   '/players': typeof PlayersIndexRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -154,13 +189,17 @@ export interface FileRoutesById {
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
   '/live': typeof LiveRoute
+  '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
   '/tv': typeof TvRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/players/$id': typeof PlayersIdRoute
   '/players/pack': typeof PlayersPackRoute
   '/players/trade': typeof PlayersTradeRoute
   '/recap/$slug': typeof RecapSlugRoute
   '/players/': typeof PlayersIndexRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -174,13 +213,17 @@ export interface FileRouteTypes {
     | '/draft'
     | '/leaderboard'
     | '/live'
+    | '/mcp'
     | '/order'
     | '/tv'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/players/$id'
     | '/players/pack'
     | '/players/trade'
     | '/recap/$slug'
     | '/players/'
+    | '/.mcp/invoke-tool/$tool'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -192,13 +235,17 @@ export interface FileRouteTypes {
     | '/draft'
     | '/leaderboard'
     | '/live'
+    | '/mcp'
     | '/order'
     | '/tv'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/players/$id'
     | '/players/pack'
     | '/players/trade'
     | '/recap/$slug'
     | '/players'
+    | '/.mcp/invoke-tool/$tool'
   id:
     | '__root__'
     | '/'
@@ -210,13 +257,17 @@ export interface FileRouteTypes {
     | '/draft'
     | '/leaderboard'
     | '/live'
+    | '/mcp'
     | '/order'
     | '/tv'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/players/$id'
     | '/players/pack'
     | '/players/trade'
     | '/recap/$slug'
     | '/players/'
+    | '/.mcp/invoke-tool/$tool'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -229,78 +280,26 @@ export interface RootRouteChildren {
   DraftRoute: typeof DraftRoute
   LeaderboardRoute: typeof LeaderboardRoute
   LiveRoute: typeof LiveRoute
+  McpRoute: typeof McpRoute
   OrderRoute: typeof OrderRoute
   TvRoute: typeof TvRoute
+  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   PlayersIdRoute: typeof PlayersIdRoute
   PlayersPackRoute: typeof PlayersPackRoute
   PlayersTradeRoute: typeof PlayersTradeRoute
   RecapSlugRoute: typeof RecapSlugRoute
   PlayersIndexRoute: typeof PlayersIndexRoute
+  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/tv': {
-      id: '/tv'
-      path: '/tv'
-      fullPath: '/tv'
-      preLoaderRoute: typeof TvRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/order': {
-      id: '/order'
-      path: '/order'
-      fullPath: '/order'
-      preLoaderRoute: typeof OrderRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/live': {
-      id: '/live'
-      path: '/live'
-      fullPath: '/live'
-      preLoaderRoute: typeof LiveRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/leaderboard': {
-      id: '/leaderboard'
-      path: '/leaderboard'
-      fullPath: '/leaderboard'
-      preLoaderRoute: typeof LeaderboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/draft': {
-      id: '/draft'
-      path: '/draft'
-      fullPath: '/draft'
-      preLoaderRoute: typeof DraftRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/claim': {
-      id: '/claim'
-      path: '/claim'
-      fullPath: '/claim'
-      preLoaderRoute: typeof ClaimRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/awards': {
-      id: '/awards'
-      path: '/awards'
-      fullPath: '/awards'
-      preLoaderRoute: typeof AwardsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analytics': {
-      id: '/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AnalyticsRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -310,11 +309,88 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/awards': {
+      id: '/awards'
+      path: '/awards'
+      fullPath: '/awards'
+      preLoaderRoute: typeof AwardsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/claim': {
+      id: '/claim'
+      path: '/claim'
+      fullPath: '/claim'
+      preLoaderRoute: typeof ClaimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/draft': {
+      id: '/draft'
+      path: '/draft'
+      fullPath: '/draft'
+      preLoaderRoute: typeof DraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leaderboard': {
+      id: '/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/leaderboard'
+      preLoaderRoute: typeof LeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/order': {
+      id: '/order'
+      path: '/order'
+      fullPath: '/order'
+      preLoaderRoute: typeof OrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tv': {
+      id: '/tv'
+      path: '/tv'
+      fullPath: '/tv'
+      preLoaderRoute: typeof TvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/list-tools': {
+      id: '/.mcp/list-tools'
+      path: '/.mcp/list-tools'
+      fullPath: '/.mcp/list-tools'
+      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/players/': {
@@ -324,18 +400,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/recap/$slug': {
-      id: '/recap/$slug'
-      path: '/recap/$slug'
-      fullPath: '/recap/$slug'
-      preLoaderRoute: typeof RecapSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/players/trade': {
-      id: '/players/trade'
-      path: '/players/trade'
-      fullPath: '/players/trade'
-      preLoaderRoute: typeof PlayersTradeRouteImport
+    '/players/$id': {
+      id: '/players/$id'
+      path: '/players/$id'
+      fullPath: '/players/$id'
+      preLoaderRoute: typeof PlayersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/players/pack': {
@@ -345,11 +414,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayersPackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/players/$id': {
-      id: '/players/$id'
-      path: '/players/$id'
-      fullPath: '/players/$id'
-      preLoaderRoute: typeof PlayersIdRouteImport
+    '/players/trade': {
+      id: '/players/trade'
+      path: '/players/trade'
+      fullPath: '/players/trade'
+      preLoaderRoute: typeof PlayersTradeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recap/$slug': {
+      id: '/recap/$slug'
+      path: '/recap/$slug'
+      fullPath: '/recap/$slug'
+      preLoaderRoute: typeof RecapSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -365,13 +448,18 @@ const rootRouteChildren: RootRouteChildren = {
   DraftRoute: DraftRoute,
   LeaderboardRoute: LeaderboardRoute,
   LiveRoute: LiveRoute,
+  McpRoute: McpRoute,
   OrderRoute: OrderRoute,
   TvRoute: TvRoute,
+  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
   PlayersIdRoute: PlayersIdRoute,
   PlayersPackRoute: PlayersPackRoute,
   PlayersTradeRoute: PlayersTradeRoute,
   RecapSlugRoute: RecapSlugRoute,
   PlayersIndexRoute: PlayersIndexRoute,
+  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
