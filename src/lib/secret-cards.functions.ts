@@ -360,7 +360,10 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
     })),
   );
 
-  const pullable = cards.filter((c) => c.active && c.hasArt);
+  // Mirrors pull_secret_card's WHERE clause: weight 0 takes a card out of the
+  // daily draw without retiring it, so it can never be "found" and must not
+  // hold the set back from reading as exhausted.
+  const pullable = cards.filter((c) => c.active && c.hasArt && c.weight > 0);
 
   // Roster for the grant control: id + display name only, sorted for the picker.
   // Kept on this response so the panel needs no second round trip; the admin
