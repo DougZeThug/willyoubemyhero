@@ -5,8 +5,8 @@
 // service_role with RLS out of the picture.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
-import { adminHeaders, callServerFn, memberHeaders } from "@/test/server-fn";
-import { signAdminToken, signMemberToken } from "./session.server";
+import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/server-fn";
+import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
 import { AWARD_CATEGORIES } from "./awards";
 
 let mock = createSupabaseMock();
@@ -30,6 +30,8 @@ function withDb(responses: SupabaseResponses = {}) {
 
 const asMe = () => memberHeaders(signMemberToken(ME).token);
 const asAdmin = (eventId = EVENT_ID) => adminHeaders(signAdminToken(eventId).token);
+const GUEST = "guest-1";
+const asGuest = (id = GUEST) => guestHeaders(signGuestToken(id).token);
 
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret");
@@ -55,8 +57,8 @@ describe("getEventSocial", () => {
     const { getEventSocial } = await import("./social.functions");
     const res = await callServerFn(getEventSocial, { data: { eventId: EVENT_ID } });
     expect(res).toEqual({
-      reactions: [{ id: "r1", emoji: "🔥" }],
-      comments: [{ id: "c1", body: "hi" }],
+      reactions: [{ id: "r1", emoji: "🔥", mine: false }],
+      comments: [{ id: "c1", body: "hi", mine: false }],
     });
     for (const table of ["card_reactions", "card_comments"]) {
       const [call] = mock.callsFor(table, "select");
@@ -65,6 +67,32 @@ describe("getEventSocial", () => {
         [CARD_ID],
       ]);
     }
+  });
+
+  it("never returns guest_key — a public key is an identity anyone can wear", async () => {
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_ID }] },
+      "card_reactions.select": { data: [{ id: "r1", emoji: "🔥", guest_key: GUEST }] },
+      "card_comments.select": { data: [{ id: "c1", body: "hi", guest_key: GUEST }] },
+    });
+    const { getEventSocial } = await import("./social.functions");
+    const res = await callServerFn(getEventSocial, { data: { eventId: EVENT_ID } });
+    expect(JSON.stringify(res)).not.toContain(GUEST);
+    expect(res.comments[0].mine).toBe(false);
+  });
+
+  it("marks the caller's own rows as theirs, from the signed guest token", async () => {
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_ID }] },
+      "card_reactions.select": { data: [] },
+      "card_comments.select": { data: [{ id: "c1", body: "hi", guest_key: GUEST }] },
+    });
+    const { getEventSocial } = await import("./social.functions");
+    const res = await callServerFn(getEventSocial, {
+      data: { eventId: EVENT_ID },
+      headers: asGuest(),
+    });
+    expect(res.comments[0].mine).toBe(true);
   });
 
   it("is readable without a session — attribution is the point", async () => {
@@ -217,6 +245,46 @@ describe("deleteComment", () => {
     withDb(commentBy(THEM));
     await expect(del(asMe())).rejects.toThrow("Not your comment");
     expect(mock.callsFor("card_comments", "delete")).toHaveLength(0);
+  });
+
+  it("refuses a guest key lifted from someone else's comment", async () => {
+    // The old shape trusted `guest.key` off the request body, so anyone who read
+    // a key out of the public feed could delete that guest's trash talk.
+    withDb({
+      "card_comments.select": {
+        data: {
+          id: COMMENT_ID,
+          participant_id: null,
+          guest_key: GUEST,
+          event_participant: { event_id: EVENT_ID },
+        },
+        error: null,
+      },
+    });
+    const { deleteComment } = await import("./social.functions");
+    await expect(
+      callServerFn(deleteComment, {
+        data: { commentId: COMMENT_ID, guest: { key: GUEST, name: "impostor" } },
+        headers: asGuest("someone-else"),
+      }),
+    ).rejects.toThrow("Not your comment");
+    expect(mock.callsFor("card_comments", "delete")).toHaveLength(0);
+  });
+
+  it("lets a guest delete their own, matched on the signed token", async () => {
+    withDb({
+      "card_comments.select": {
+        data: {
+          id: COMMENT_ID,
+          participant_id: null,
+          guest_key: GUEST,
+          event_participant: { event_id: EVENT_ID },
+        },
+        error: null,
+      },
+    });
+    expect(await del(asGuest())).toEqual({ ok: true });
+    expect(mock.callsFor("card_comments", "delete")).toHaveLength(1);
   });
 
   it("lets the commissioner delete anyone's", async () => {
