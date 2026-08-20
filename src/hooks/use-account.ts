@@ -51,6 +51,10 @@ export function useAccountSync(user: User | null) {
     if (syncedFor.current === user.id) return;
     syncedFor.current = user.id;
 
+    // A slow sync for the previous user must never land after a sign-out or an
+    // account switch: the device would then act as that stale identity.
+    let cancelled = false;
+
     void (async () => {
       try {
         // Snapshotted before the token changes, for the same reason as the claim
@@ -58,6 +62,7 @@ export function useAccountSync(user: User | null) {
         // pruned, and a guest's base cards exist nowhere else.
         const held = await snapshotLocalCollection();
         const res = await syncAccountSession({ data: undefined });
+        if (cancelled) return;
         if (res.kind === "member") {
           clearGuestToken();
           setMemberToken(res.token, res.name ?? "Player");
@@ -73,9 +78,13 @@ export function useAccountSync(user: User | null) {
       } catch {
         // Signed in but unsynced simply behaves like the signed-out app: the
         // device keeps whatever identity it already had.
-        syncedFor.current = null;
+        if (!cancelled) syncedFor.current = null;
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 }
 
