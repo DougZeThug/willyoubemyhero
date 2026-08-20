@@ -4,6 +4,7 @@ import { EDITION_IDS } from "./card-edition";
 import { optionalGuest, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
 import type { CardPullRow, PackOpenRow } from "./secret-cards-db.server";
 import type { CardPullCounts, MyCardStats } from "./card-pulls";
+import { uuid as zuuid } from "./zod-uuid";
 
 /**
  * Who has packed which roster card.
@@ -31,7 +32,7 @@ async function db() {
  * Unguarded, like getEventSocial: this is a public aggregate about public cards.
  */
 export const getCardPullCounts = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<CardPullCounts> => {
     const sb = await admin();
     // Resolve the event's own cards first and constrain to them, the way
@@ -110,7 +111,7 @@ export const recordCardPulls = createServerFn({ method: "POST" })
       .object({
         // A pack is three cards. The ceiling is loose enough to survive PACK_SIZE
         // changing and tight enough that nobody can post the roster as one pack.
-        eventParticipantIds: z.array(z.string().uuid()).min(1).max(16),
+        eventParticipantIds: z.array(zuuid()).min(1).max(16),
         // Optional so a phone still holding a bundle from before editions keeps
         // recording its packs; the RPC defaults those rows to standard.
         editions: z.array(z.enum(EDITION_IDS)).max(16).optional(),
@@ -216,7 +217,7 @@ export const adoptCollection = createServerFn({ method: "POST" })
     z
       .object({
         // A whole roster's worth, since this is a collection rather than a pack.
-        eventParticipantIds: z.array(z.string().uuid()).min(1).max(64),
+        eventParticipantIds: z.array(zuuid()).min(1).max(64),
         editions: z.array(z.enum(EDITION_IDS)).max(64).optional(),
       })
       .refine(
@@ -252,9 +253,9 @@ export const grantCard = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        participantId: z.string().uuid(),
-        eventParticipantId: z.string().uuid(),
+        eventId: zuuid(),
+        participantId: zuuid(),
+        eventParticipantId: zuuid(),
         edition: z.enum(EDITION_IDS).optional(),
       })
       .parse(d),
@@ -281,7 +282,7 @@ export const grantCard = createServerFn({ method: "POST" })
  * rows `getCardPullCounts` is careful never to expose.
  */
 export const getMyCardStats = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<MyCardStats> => {
     const me = await requireMember();
     const sb = await admin();

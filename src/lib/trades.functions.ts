@@ -23,6 +23,7 @@ import type {
   TradeOfferRow,
   TradeRow,
 } from "./trades-db.server";
+import { uuid as zuuid } from "./zod-uuid";
 
 /**
  * The Trading Post: moving a spare card from one member to another.
@@ -90,8 +91,8 @@ const itemSchema = z.discriminatedUnion("kind", [
   // A COPY, not a card. Which of your three Alices you are handing over is the
   // whole point of card_copies — naming the card leaves it undecidable, and every
   // traded card arriving `standard` was the symptom.
-  z.object({ kind: z.literal("roster"), cardCopyId: z.string().uuid() }),
-  z.object({ kind: z.literal("secret"), secretPullId: z.string().uuid() }),
+  z.object({ kind: z.literal("roster"), cardCopyId: zuuid() }),
+  z.object({ kind: z.literal("secret"), secretPullId: zuuid() }),
 ]);
 
 // Four a side, matching the RPC. Enforced in both places on purpose: this one
@@ -151,7 +152,7 @@ async function hydrateSecrets(
  * a second pull.
  */
 export const getTradeSpares = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ participantId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ participantId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeSpares> => {
     await requireMember();
     noStore();
@@ -427,7 +428,7 @@ export const createTradeOffer = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        recipientId: z.string().uuid(),
+        recipientId: zuuid(),
         /** What you are handing over. */
         give: sideSchema,
         /** What you are asking for. */
@@ -459,7 +460,7 @@ export const createTradeOffer = createServerFn({ method: "POST" })
  * both are toasts rather than errors.
  */
 export const acceptTradeOffer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ offerId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await db();
@@ -484,7 +485,7 @@ export const acceptTradeOffer = createServerFn({ method: "POST" })
  * an UPDATE that matches nothing is not an error.
  */
 export const declineTradeOffer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ offerId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await db();
@@ -503,7 +504,7 @@ export const declineTradeOffer = createServerFn({ method: "POST" })
 
 /** Take your own offer back. Same shape as decline, from the other side. */
 export const cancelTradeOffer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ offerId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await db();
@@ -532,7 +533,7 @@ const FEED_LIMIT = 25;
  * no way for a future edit to this handler to forget to.
  */
 export const getTradeFeed = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeFeedEntry[]> => {
     const sb = await db();
     const { data: rows, error } = await sb

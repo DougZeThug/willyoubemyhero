@@ -8,6 +8,7 @@ import {
   requireMember,
 } from "./require-auth.server";
 import { AWARD_CATEGORIES, isAwardCategory } from "./awards";
+import { uuid as zuuid } from "./zod-uuid";
 
 /**
  * Reactions, trash talk, and superlative voting.
@@ -58,7 +59,7 @@ function actor(input: GuestInput): {
 
 /** Every reaction and comment for one event, in a single round trip. */
 export const getEventSocial = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: eps } = await sb
@@ -108,7 +109,7 @@ export const toggleReaction = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventParticipantId: z.string().uuid(),
+        eventParticipantId: zuuid(),
         emoji: reactionEmoji,
         guest: guestSchema,
       })
@@ -153,7 +154,7 @@ export const postComment = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventParticipantId: z.string().uuid(),
+        eventParticipantId: zuuid(),
         body: z.string().trim().min(1).max(280),
         guest: guestSchema,
       })
@@ -187,9 +188,7 @@ export const postComment = createServerFn({ method: "POST" })
 
 /** You can delete your own trash talk; the commissioner can delete anyone's. */
 export const deleteComment = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ commentId: z.string().uuid(), guest: guestSchema }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ commentId: zuuid(), guest: guestSchema }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: row } = await sb
@@ -224,7 +223,7 @@ export const deleteComment = createServerFn({ method: "POST" })
 
 /** Your own ballot. Only ever returns the requesting member's votes. */
 export const getMyAwardVotes = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await admin();
@@ -245,9 +244,9 @@ export const castAwardVote = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
+        eventId: zuuid(),
         category: z.string().min(1).max(40),
-        targetParticipantId: z.string().uuid(),
+        targetParticipantId: zuuid(),
       })
       .parse(d),
   )
@@ -272,7 +271,7 @@ export const castAwardVote = createServerFn({ method: "POST" })
 
 /** Published winners. Public — this is what renders on cards and the recap. */
 export const getAwards = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: rows } = await sb
@@ -284,7 +283,7 @@ export const getAwards = createServerFn({ method: "GET" })
 
 /** Live tally. Commissioner only, so the room can't see it before the reveal. */
 export const getAwardTally = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();
@@ -308,7 +307,7 @@ export const getAwardTally = createServerFn({ method: "GET" })
  * voters a tie is common and picking a winner by row order would be a lie.
  */
 export const closeAwardVoting = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();
@@ -326,7 +325,7 @@ export const closeAwardVoting = createServerFn({ method: "POST" })
 
 /** Reopen voting and unpublish, for when someone was left out. */
 export const reopenAwardVoting = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();

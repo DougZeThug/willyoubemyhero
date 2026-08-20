@@ -4,6 +4,7 @@ import { supabaseAnon } from "../supabase";
 import { RUNS_PUBLIC_COLUMNS } from "@/lib/runs-columns";
 import { formatTime } from "@/lib/format";
 import { fail, json, resolveEventId } from "../shared";
+import { uuid as zuuid } from "@/lib/zod-uuid";
 
 export default defineTool({
   name: "get_leaderboard",
@@ -11,7 +12,7 @@ export default defineTool({
   description:
     "Fastest official obstacle-course times for one combine, quickest first. Defaults to the active combine.",
   inputSchema: {
-    event_id: z.string().uuid().optional().describe("Event id; omit for the active combine."),
+    event_id: zuuid().optional().describe("Event id; omit for the active combine."),
     limit: z.number().int().optional().describe("How many rows to return (default 20, max 50)."),
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },

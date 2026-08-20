@@ -19,6 +19,7 @@ import {
   SECRET_FOIL_OPTIONS,
 } from "./secret-cards";
 import { bestSecretTier, toSecretTier } from "./secret-rarity";
+import { uuid as zuuid } from "./zod-uuid";
 
 /**
  * The daily secret card: a permanent league collection nobody can browse.
@@ -649,7 +650,7 @@ async function storeArt(cardId: string, dataUrl: string) {
 }
 
 export const uploadSecretCardArt = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), dataUrl: cardArt }).parse(d))
+  .inputValidator((d: unknown) => z.object({ id: zuuid(), dataUrl: cardArt }).parse(d))
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
     const path = await storeArt(data.id, data.dataUrl);
@@ -660,7 +661,7 @@ export const updateSecretCard = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        id: z.string().uuid(),
+        id: zuuid(),
         name: cardName.optional(),
         flavour: cardFlavour.nullable().optional(),
         active: z.boolean().optional(),
@@ -754,7 +755,7 @@ export const updateSecretCollectionLook = createServerFn({ method: "POST" })
  * branch exists to turn a foreign-key error into an answer the panel can explain.
  */
 export const deleteSecretCard = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ id: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
     const db = await secrets();
@@ -800,8 +801,8 @@ export const grantSecretCard = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        participantId: z.string().uuid(),
-        cardId: z.string().uuid(),
+        participantId: zuuid(),
+        cardId: zuuid(),
       })
       .parse(d),
   )

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { RUNS_PUBLIC_COLUMNS } from "./runs-columns";
+import { uuid as zuuid } from "./zod-uuid";
 
 function publicClient() {
   const url = process.env.SUPABASE_URL!;
@@ -36,7 +37,7 @@ export const getActiveEvent = createServerFn({ method: "GET" }).handler(async ()
 });
 
 export const getEventBundle = createServerFn({ method: "GET" })
-  .validator((data: unknown) => z.object({ eventId: z.string().uuid() }).parse(data))
+  .validator((data: unknown) => z.object({ eventId: zuuid() }).parse(data))
   .handler(async ({ data }) => {
     const sb = publicClient();
     // Wrap each query so a rejection or PostgREST error on one table never

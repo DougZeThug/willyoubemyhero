@@ -3,6 +3,7 @@ import { z } from "zod";
 import { hashCode, signMemberToken } from "./session.server";
 import { optionalGuest, requireAdmin, requireMember } from "./require-auth.server";
 import { timingSafeEq } from "./session.server";
+import { uuid as zuuid } from "./zod-uuid";
 
 // Codes get read off paper and typed on a phone, so the alphabet drops every
 // character pair people confuse: 0/O, 1/I/L, 2/Z, 5/S, 8/B.
@@ -62,7 +63,7 @@ export const claimPlayer = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        participantId: z.string().uuid(),
+        participantId: zuuid(),
         code: z.string().min(4).max(16),
       })
       .parse(d),
@@ -154,8 +155,8 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        participantIds: z.array(z.string().uuid()).max(64).optional(),
+        eventId: zuuid(),
+        participantIds: z.array(zuuid()).max(64).optional(),
         // "unclaimed" leaves already-claimed players' codes alone, so a re-issue
         // for stragglers doesn't invalidate codes people are already using.
         scope: z.enum(["all", "unclaimed"]).optional(),
@@ -216,7 +217,7 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
 
 /** Claim status per player, for the admin console. Never returns code material. */
 export const listMemberClaims = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

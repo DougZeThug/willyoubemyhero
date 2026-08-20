@@ -2,10 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { hashPin, signAdminToken, timingSafeEq } from "./session.server";
+import { uuid as zuuid } from "./zod-uuid";
 
 export const verifyEventPin = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
-    z.object({ eventId: z.string().uuid(), pin: z.string().min(1).max(32) }).parse(data),
+    z.object({ eventId: zuuid(), pin: z.string().min(1).max(32) }).parse(data),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

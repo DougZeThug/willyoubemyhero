@@ -1,14 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
+import { uuid as zuuid } from "./zod-uuid";
 
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        id: z.string().uuid().optional(),
+        eventId: zuuid(),
+        id: zuuid().optional(),
         name: z.string().min(1).max(80),
         nickname: z.string().max(80).optional().nullable(),
         fantasy_team_name: z.string().max(80).optional().nullable(),
@@ -45,8 +46,8 @@ export const addParticipantToEvent = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        participantId: z.string().uuid(),
+        eventId: zuuid(),
+        participantId: zuuid(),
         bib_number: z.number().int().optional().nullable(),
       })
       .parse(d),
@@ -74,7 +75,7 @@ export const addParticipantToEvent = createServerFn({ method: "POST" })
 
 export const removeParticipantFromEvent = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
-    z.object({ eventId: z.string().uuid(), eventParticipantId: z.string().uuid() }).parse(d),
+    z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d),
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
@@ -91,8 +92,8 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        eventParticipantId: z.string().uuid(),
+        eventId: zuuid(),
+        eventParticipantId: zuuid(),
         status: z.string(),
       })
       .parse(d),
@@ -114,7 +115,7 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
  * scratched — being out of the field is a roster decision, not a result.
  */
 export const resetCombine = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -143,8 +144,8 @@ export const setRunningOrder = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        order: z.array(z.object({ id: z.string().uuid(), running_order: z.number().int() })),
+        eventId: zuuid(),
+        order: z.array(z.object({ id: zuuid(), running_order: z.number().int() })),
       })
       .parse(d),
   )
@@ -167,7 +168,7 @@ export const recordRandomization = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
+        eventId: zuuid(),
         scope: z.string(),
         previous: z.array(z.any()),
         resulting: z.array(z.any()),
@@ -194,8 +195,8 @@ export const upsertStation = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        id: z.string().uuid().optional(),
+        eventId: zuuid(),
+        id: zuuid().optional(),
         name: z.string().min(1).max(80),
         short_name: z.string().max(20).optional().nullable(),
         description: z.string().max(400).optional().nullable(),
@@ -222,9 +223,7 @@ export const upsertStation = createServerFn({ method: "POST" })
   });
 
 export const deleteStation = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: z.string().uuid(), id: z.string().uuid() }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), id: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -238,8 +237,8 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        participantId: z.string().uuid(),
+        eventId: zuuid(),
+        participantId: zuuid(),
         clientKey: z.string().min(8),
         started_at: z.string(),
         finished_at: z.string(),
@@ -248,7 +247,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
         splits: z
           .array(
             z.object({
-              stationId: z.string().uuid(),
+              stationId: zuuid(),
               cumulative_time_ms: z.number().int().nonnegative(),
               segment_time_ms: z.number().int().nonnegative().nullable(),
               clientKey: z.string(),
@@ -259,7 +258,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
         penalties: z
           .array(
             z.object({
-              stationId: z.string().uuid().nullable(),
+              stationId: zuuid().nullable(),
               penalty_ms: z.number().int(),
               reason: z.string().nullable(),
               clientKey: z.string(),
@@ -347,9 +346,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
   });
 
 export const deleteRun = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: z.string().uuid(), runId: z.string().uuid() }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -363,8 +360,8 @@ export const recordDraftSelection = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
-        participantId: z.string().uuid(),
+        eventId: zuuid(),
+        participantId: zuuid(),
         draftPosition: z.number().int().positive(),
       })
       .parse(d),
@@ -392,7 +389,7 @@ export const recordDraftSelection = createServerFn({ method: "POST" })
   });
 
 export const undoLastDraftSelection = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -418,7 +415,7 @@ export const updateEvent = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        eventId: z.string().uuid(),
+        eventId: zuuid(),
         status: z.string().optional(),
         results_locked: z.boolean().optional(),
         draft_locked: z.boolean().optional(),
