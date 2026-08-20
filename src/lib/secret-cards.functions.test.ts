@@ -42,6 +42,7 @@ const card = (id = CARD_ID, over: Record<string, unknown> = {}) => ({
   flavour: "Lit at 11am. Still going at 11pm.",
   foil: "rosette",
   border_fx: "spin",
+  weight: 100,
   art_path: `secrets/${id}/art-1.webp`,
   back_path: null,
   active: true,
