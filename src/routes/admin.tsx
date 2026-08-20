@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { verifyEventPin, startAdminSessionFromAccount } from "@/lib/admin.functions";
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
 import { useAuthUser } from "@/hooks/use-account";
-import { saveCompletedRun, setParticipantStatus } from "@/lib/admin-write.functions";
+import { saveCompletedRun, setParticipantStatus, resetCombine } from "@/lib/admin-write.functions";
 import {
   upsertParticipant,
   addParticipantToEvent,
@@ -64,8 +64,14 @@ import {
   IdCard,
   Trash2,
   UserPlus,
+  UserMinus,
+  UserCheck,
+  Radio,
+  RotateCcw,
   Wand2,
 } from "lucide-react";
+
+import { currentAthlete, fieldSize } from "@/lib/current-athlete";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
