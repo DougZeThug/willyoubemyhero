@@ -164,26 +164,30 @@ function ClaimPage() {
               <p className="text-xs text-muted-foreground">Loading roster…</p>
             ) : (
               <div className="grid grid-cols-2 gap-1.5">
-                {(roster.data ?? []).map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setSelected(p.id)}
-                    className={cn(
-                      "truncate rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
-                      selected === p.id
-                        ? "border-primary bg-primary/15 text-primary"
-                        : "border-white/10 bg-white/[0.02] text-foreground hover:border-primary/40",
-                    )}
-                  >
-                    {p.name}
-                    {p.claimed && (
-                      <span className="ml-1 text-[9px] font-bold tracking-widest text-muted-foreground">
-                        ✓
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {/* Collectors are signed-in traders, not athletes — there is no
+                    paper code to type here for them. */}
+                {(roster.data ?? [])
+                  .filter((p) => !p.isCollector)
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setSelected(p.id)}
+                      className={cn(
+                        "truncate rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
+                        selected === p.id
+                          ? "border-primary bg-primary/15 text-primary"
+                          : "border-white/10 bg-white/[0.02] text-foreground hover:border-primary/40",
+                      )}
+                    >
+                      {p.name}
+                      {p.claimed && (
+                        <span className="ml-1 text-[9px] font-bold tracking-widest text-muted-foreground">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  ))}
               </div>
             )}
           </div>

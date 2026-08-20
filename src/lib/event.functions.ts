@@ -118,7 +118,12 @@ export const getEventBundle = createServerFn({ method: "GET" })
 
 export const getAllParticipants = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
-  const { data } = await sb.from("participants").select("*").order("name");
+  // Roster only: collectors hold cards but never ran the course.
+  const { data } = await sb
+    .from("participants")
+    .select("*")
+    .eq("is_collector", false)
+    .order("name");
   return data ?? [];
 });
 

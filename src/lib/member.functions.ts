@@ -30,7 +30,7 @@ export const getClaimRoster = createServerFn({ method: "GET" }).handler(async ()
   const [{ data: participants }, { data: codes }, { data: accounts }] = await Promise.all([
     supabaseAdmin
       .from("participants")
-      .select("id, name, nickname")
+      .select("id, name, nickname, is_collector")
       .eq("active", true)
       .order("name"),
     supabaseAdmin.from("member_codes").select("participant_id, claimed_at"),
@@ -47,6 +47,8 @@ export const getClaimRoster = createServerFn({ method: "GET" }).handler(async ()
     nickname: p.nickname,
     hasCode: claimed.has(p.id),
     claimed: !!claimed.get(p.id),
+    /** A signed-in account that is not a combine athlete: tradeable, not claimable. */
+    isCollector: !!p.is_collector,
     /** Somebody an offer can actually reach: claimed a code, or signed in. */
     reachable: !!claimed.get(p.id) || linked.has(p.id),
   }));
@@ -179,6 +181,8 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
         .from("participants")
         .select("id, name")
         .eq("active", true)
+        // Collectors sign in; they never get a paper code.
+        .eq("is_collector", false)
         .order("name");
       targets = rows ?? [];
       if (data.scope === "unclaimed") {
