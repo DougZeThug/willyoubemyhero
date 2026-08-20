@@ -135,21 +135,25 @@ function PlayerCardPage() {
 
   const go = useCallback(
     (targetId: string | undefined) => {
-      if (!targetId || targetId === id) return;
+      // The share export reads shareRef after an async refetch + settle delay,
+      // so navigating mid-export would hand it the next card's DOM while the
+      // filename still says this one. Freeze navigation until it finishes.
+      if (!targetId || targetId === id || sharing) return;
       setFlipped(false);
       navigate({ to: "/players/$id", params: { id: targetId } });
     },
-    [id, navigate],
+    [id, navigate, sharing],
   );
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (sharing) return;
       if (e.key === "ArrowLeft") go(prev?.id);
       if (e.key === "ArrowRight") go(next?.id);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, prev?.id, next?.id]);
+  }, [go, prev?.id, next?.id, sharing]);
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
@@ -553,14 +557,14 @@ function PlayerCardPage() {
             onClick={() => go(prev?.id)}
             label={`Previous: ${prev?.participant?.name ?? ""}`}
             icon={<ChevronLeft className="h-5 w-5" />}
-            disabled={roster.length < 2}
+            disabled={roster.length < 2 || sharing}
             className="left-0"
           />
           <NavButton
             onClick={() => go(next?.id)}
             label={`Next: ${next?.participant?.name ?? ""}`}
             icon={<ChevronRight className="h-5 w-5" />}
-            disabled={roster.length < 2}
+            disabled={roster.length < 2 || sharing}
             className="right-0"
           />
         </div>
