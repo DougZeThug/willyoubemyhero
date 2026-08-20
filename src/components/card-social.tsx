@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { MessageSquare, Send, Trash2 } from "lucide-react";
 import { deleteComment, postComment, toggleReaction } from "@/lib/social.functions";
 import { useMemberSession } from "@/lib/member-token";
-import { deviceId } from "@/lib/device-id";
+import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import type { CommentRow, ReactionRow } from "@/hooks/use-event-social";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -62,9 +62,10 @@ export function CardSocial({
   const postFn = useServerFn(postComment);
   const deleteFn = useServerFn(deleteComment);
 
-  // Guest identity is minted lazily — never in render, or the server and first
-  // client render disagree on what the button shows.
-  const [guestKey, setGuestKey] = useState<string | null>(null);
+  // Guest identity is a server-signed session, not a device id: ownership of a
+  // reaction or a comment is decided from the signed token, so a key copied out
+  // of someone else's row can't be replayed to delete their trash talk.
+  const guest = useEnsureGuestSession(!me);
   const [guestName, setGuestName] = useState<string>("");
   /**
    * The same name, readable synchronously.
@@ -81,7 +82,6 @@ export function CardSocial({
     setGuestName(next);
   }
   useEffect(() => {
-    setGuestKey(deviceId());
     rememberGuestName(readGuestName());
   }, []);
 
@@ -96,7 +96,7 @@ export function CardSocial({
   const [bursting, setBursting] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<Record<string, number>>({});
 
-  type Actor = { kind: "member" } | { kind: "guest"; guest: { key: string; name: string } };
+  type Actor = { kind: "member" } | { kind: "guest"; guest: { name: string } };
 
   /**
    * Resolve who this device is acting as, or open the inline name prompt.
@@ -104,10 +104,10 @@ export function CardSocial({
    */
   function ensureIdentity(runAfterNamed: () => void): Actor | null {
     if (me) return { kind: "member" };
-    if (!guestKey) return null;
+    if (!guest) return null;
     const trimmed = guestNameRef.current.trim();
     if (trimmed.length > 0) {
-      return { kind: "guest", guest: { key: guestKey, name: trimmed } };
+      return { kind: "guest", guest: { name: trimmed } };
     }
     // Stash so a first-time guest who names themselves picks up where they
     // left off, rather than losing the tap that surfaced the prompt.
@@ -136,13 +136,9 @@ export function CardSocial({
 
   const mine = useMemo(() => {
     const set = new Set<string>();
-    if (me) {
-      for (const r of reactions) if (r.participant_id === me.participantId) set.add(r.emoji);
-    } else if (guestKey) {
-      for (const r of reactions) if (r.guest_key === guestKey) set.add(r.emoji);
-    }
+    for (const r of reactions) if (r.mine) set.add(r.emoji);
     return set;
-  }, [reactions, me, guestKey]);
+  }, [reactions]);
 
   const counts = useMemo(() => {
     const map = new Map<string, ReactionRow[]>();
@@ -320,9 +316,7 @@ export function CardSocial({
         ) : (
           <ul className="space-y-1.5">
             {comments.map((c) => {
-              const canDelete = me
-                ? c.participant_id === me.participantId
-                : !!guestKey && c.guest_key === guestKey;
+              const canDelete = !!c.mine;
               return (
                 <li
                   key={c.id}
