@@ -340,8 +340,17 @@ function TimingConsole() {
     });
   }
 
+  const finishingRef = useRef(false);
+  const [finishing, setFinishing] = useState(false);
+
   async function finishRun() {
     if (!run || !event?.id) return;
+    // A double tap fires two handlers off the same render, both holding the
+    // pre-finish `run`. They'd upsert the same client_key with different stop
+    // times and the second one would silently become the official time.
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    setFinishing(true);
     const finishedAtPerf = performance.now();
     const finishedAtIso = new Date().toISOString();
     const raw_time_ms = computeElapsedMs(
@@ -385,6 +394,9 @@ function TimingConsole() {
       setRun(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save run — kept locally");
+    } finally {
+      finishingRef.current = false;
+      setFinishing(false);
     }
   }
 
@@ -520,9 +532,10 @@ function TimingConsole() {
                 <Button
                   size="lg"
                   onClick={finishRun}
+                  disabled={finishing}
                   className="h-12 flex-1 sm:h-10 sm:min-w-28 sm:flex-none"
                 >
-                  <Flag className="mr-1.5 h-4 w-4" /> Finish
+                  <Flag className="mr-1.5 h-4 w-4" /> {finishing ? "Saving…" : "Finish"}
                 </Button>
                 <Button
                   size="lg"
