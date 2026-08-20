@@ -108,6 +108,36 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Clear the combine back to "not started yet": every run for the event goes,
+ * and everybody on the roster returns to `waiting`. Scratched athletes stay
+ * scratched — being out of the field is a roster decision, not a result.
+ */
+export const resetCombine = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ eventId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: runs } = await supabaseAdmin
+      .from("runs")
+      .select("id")
+      .eq("event_id", data.eventId);
+    const runIds = (runs ?? []).map((r) => r.id);
+    if (runIds.length) {
+      await supabaseAdmin.from("penalties").delete().in("run_id", runIds);
+      await supabaseAdmin.from("splits").delete().in("run_id", runIds);
+      const { error } = await supabaseAdmin.from("runs").delete().in("id", runIds);
+      if (error) throw error;
+    }
+    const { error: statusError } = await supabaseAdmin
+      .from("event_participants")
+      .update({ participation_status: "waiting" })
+      .eq("event_id", data.eventId)
+      .neq("participation_status", "scratched");
+    if (statusError) throw statusError;
+    return { ok: true, clearedRuns: runIds.length };
+  });
+
 // ---------- Running order ----------
 export const setRunningOrder = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>

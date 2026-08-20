@@ -9,6 +9,7 @@ import { FinishCelebration } from "@/components/finish-celebration";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
+import { currentAthlete, fieldSize } from "@/lib/current-athlete";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -38,10 +39,10 @@ function LivePage() {
     deltaMs: number;
   } | null>(null);
 
-  const { current, leaderboard, done, total } = useMemo(() => {
+  const { current, onClock, leaderboard, done, total } = useMemo(() => {
     const parts = bundle?.participants ?? [];
     const runs = bundle?.runs ?? [];
-    const idx = parts.findIndex((p) => p.participation_status === "running");
+    const slot = currentAthlete(parts);
     const finished = runs
       .filter((r) => r.is_official)
       .map((r) => {
@@ -50,10 +51,11 @@ function LivePage() {
       })
       .sort((a, b) => (a.run.official_time_ms ?? 0) - (b.run.official_time_ms ?? 0));
     return {
-      current: idx >= 0 ? parts[idx] : null,
+      current: slot.athlete,
+      onClock: slot.onClock,
       leaderboard: finished.slice(0, 5),
       done: finished.length,
-      total: parts.filter((p) => p.participation_status !== "scratched").length,
+      total: fieldSize(parts),
     };
   }, [bundle]);
 
@@ -72,8 +74,10 @@ function LivePage() {
         <div className="flex flex-col items-center">
           <HudTimer
             runningSinceMs={0}
-            paused={!current}
-            status={current ? "On the Clock" : loading ? "Loading" : "Standby"}
+            paused={!onClock}
+            status={
+              onClock ? "On the Clock" : current ? "Up Next" : loading ? "Loading" : "Standby"
+            }
             size={340}
           >
             {current ? (
@@ -106,7 +110,9 @@ function LivePage() {
               )}
             </div>
           ) : (
-            <div className="mt-4 text-xs text-muted-foreground">Waiting for the next athlete.</div>
+            <div className="mt-4 text-xs text-muted-foreground">
+              Every athlete is done. Nice work.
+            </div>
           )}
         </div>
 

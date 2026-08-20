@@ -48,8 +48,15 @@ function OrderPage() {
     try {
       const seed = newSeed();
       const rng = seededRng(seed);
-      const shuffled = shuffle(rows, rng);
-      const orderPayload = shuffled.map((r, i) => ({ id: r.id, running_order: i + 1 }));
+      // Scratched athletes are not in the field, so they are not in the draw —
+      // they keep their place at the tail rather than eating a slot the crowd
+      // screen would then have to skip.
+      const field = rows.filter((r) => r.participation_status !== "scratched");
+      const out = rows.filter((r) => r.participation_status === "scratched");
+      const orderPayload = [...shuffle(field, rng), ...out].map((r, i) => ({
+        id: r.id,
+        running_order: i + 1,
+      }));
       await setOrderFn({ data: { eventId: event.id, order: orderPayload } });
       await recordFn({
         data: {

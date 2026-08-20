@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { verifyEventPin, startAdminSessionFromAccount } from "@/lib/admin.functions";
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
 import { useAuthUser } from "@/hooks/use-account";
-import { saveCompletedRun, setParticipantStatus } from "@/lib/admin-write.functions";
+import { saveCompletedRun, setParticipantStatus, resetCombine } from "@/lib/admin-write.functions";
 import {
   upsertParticipant,
   addParticipantToEvent,
@@ -64,8 +64,14 @@ import {
   IdCard,
   Trash2,
   UserPlus,
+  UserMinus,
+  UserCheck,
+  Radio,
+  RotateCcw,
   Wand2,
 } from "lucide-react";
+
+import { currentAthlete, fieldSize } from "@/lib/current-athlete";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -398,6 +404,30 @@ function TimingConsole() {
     setRun(null);
   }
 
+  /** Put someone on the clock for the crowd screens without starting the timer. */
+  async function setOnClock(participantId: string | null) {
+    if (!event?.id) return;
+    const onClockNow = participants.find((p) => p.participation_status === "running");
+    try {
+      if (onClockNow && onClockNow.participant_id !== participantId) {
+        await setStatusFn({
+          data: { eventId: event.id, eventParticipantId: onClockNow.id, status: "waiting" },
+        });
+      }
+      if (participantId) {
+        const ep = participants.find((p) => p.participant_id === participantId);
+        if (ep) {
+          await setStatusFn({
+            data: { eventId: event.id, eventParticipantId: ep.id, status: "running" },
+          });
+        }
+      }
+      await qc.invalidateQueries();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update the clock");
+    }
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-4">
       <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-3">
@@ -445,6 +475,7 @@ function TimingConsole() {
           selectedParticipantId={selectedParticipantId}
           onSelect={setSelected}
           onStart={startRun}
+          onSetOnClock={setOnClock}
         />
       ) : (
         <Card className={"hud-bezel " + (paused ? "border-warn/60" : "border-primary/50 hud-glow")}>
@@ -594,15 +625,18 @@ function StartCard({
   selectedParticipantId,
   onSelect,
   onStart,
+  onSetOnClock,
 }: {
   participants: NonNullable<ReturnType<typeof useEventBundle>["bundle"]>["participants"];
   selectedParticipantId: string;
   onSelect: (id: string) => void;
   onStart: () => void;
+  onSetOnClock: (participantId: string | null) => void;
 }) {
   const queued = participants.filter(
     (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
   );
+  const slot = currentAthlete(participants);
   const nextUp = queued[0];
   useEffect(() => {
     if (!selectedParticipantId && nextUp) onSelect(nextUp.participant_id);
@@ -613,6 +647,36 @@ function StartCard({
     <Card>
       <CardContent className="p-4 sm:p-5">
         <h2 className="mb-3 font-display text-xl font-black uppercase">Send next athlete</h2>
+        <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-2">
+          <Radio
+            className={
+              "h-4 w-4 shrink-0 " +
+              (slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground")
+            }
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+              {slot.onClock ? "On the clock" : "Up next on the crowd screens"}
+            </div>
+            <div className="truncate text-sm font-semibold uppercase">
+              {slot.athlete?.participant?.name ?? "Nobody left"}
+            </div>
+          </div>
+          {slot.onClock ? (
+            <Button size="sm" variant="ghost" onClick={() => onSetOnClock(null)}>
+              Clear
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!selectedParticipantId}
+              onClick={() => onSetOnClock(selectedParticipantId)}
+            >
+              On the clock
+            </Button>
+          )}
+        </div>
         <div className="max-h-[55vh] overflow-auto rounded border border-white/5 divide-y divide-white/5 sm:max-h-72">
           {queued.map((p) => {
             const sel = p.participant_id === selectedParticipantId;
@@ -999,10 +1063,13 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
   const upsertFn = useServerFn(upsertParticipant);
   const addFn = useServerFn(addParticipantToEvent);
   const removeFn = useServerFn(removeParticipantFromEvent);
+  const statusFn = useServerFn(setParticipantStatus);
+  const resetFn = useServerFn(resetCombine);
   const { bundle } = useEventBundle();
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   async function onAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -1040,13 +1107,43 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
     }
   }
 
+  /** In/out of this year's field. Out keeps the person, their cards and page. */
+  async function toggleIn(epId: string, playerName: string, isIn: boolean) {
+    try {
+      await statusFn({
+        data: { eventId, eventParticipantId: epId, status: isIn ? "scratched" : "waiting" },
+      });
+      await qc.invalidateQueries();
+      toast.success(isIn ? `${playerName} is out` : `${playerName} is in`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update the roster");
+    }
+  }
+
+  async function onReset() {
+    if (!confirm("Delete every recorded run for this combine and set everyone back to waiting?")) {
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await resetFn({ data: { eventId } });
+      await qc.invalidateQueries();
+      toast.success(`Combine reset — ${res.clearedRuns} run(s) cleared`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not reset the combine");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   const roster = bundle?.participants ?? [];
+  const inField = fieldSize(roster);
 
   return (
     <AdminSection
       icon={<UserPlus className="h-4 w-4 shrink-0" />}
-      title="Add Player"
-      meta={`${roster.length} on roster`}
+      title="Combine Roster"
+      meta={`${inField} in · ${roster.length - inField} out`}
     >
       <form onSubmit={onAdd} className="space-y-2">
         <div className="grid gap-2 sm:grid-cols-2">
@@ -1089,24 +1186,67 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
       </form>
 
       {roster.length > 0 && (
-        <ul className="mt-3 max-h-56 space-y-0.5 overflow-auto pr-1">
-          {roster.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between gap-2 rounded px-1 py-1 text-xs"
-            >
-              <span className="truncate uppercase">{p.participant?.name}</span>
-              <button
-                onClick={() => onRemove(p.id, p.participant?.name ?? "player")}
-                className="shrink-0 rounded p-2 text-muted-foreground hover:text-destructive"
-                aria-label="Remove player"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
+        <ul className="mt-3 max-h-72 space-y-0.5 overflow-auto pr-1">
+          {[...roster]
+            .sort((a, b) => a.running_order - b.running_order)
+            .map((p) => {
+              const isIn = p.participation_status !== "scratched";
+              const playerName = p.participant?.name ?? "player";
+              return (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between gap-2 rounded px-1 py-1 text-xs"
+                >
+                  <span
+                    className={
+                      "truncate uppercase " + (isIn ? "" : "text-muted-foreground line-through")
+                    }
+                  >
+                    {playerName}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant={isIn ? "secondary" : "ghost"}
+                      className="h-8 px-2 text-[10px] uppercase tracking-widest"
+                      onClick={() => toggleIn(p.id, playerName, isIn)}
+                    >
+                      {isIn ? (
+                        <>
+                          <UserCheck className="mr-1 h-3.5 w-3.5" />
+                          In
+                        </>
+                      ) : (
+                        <>
+                          <UserMinus className="mr-1 h-3.5 w-3.5" />
+                          Out
+                        </>
+                      )}
+                    </Button>
+                    <button
+                      onClick={() => onRemove(p.id, playerName)}
+                      className="rounded p-2 text-muted-foreground hover:text-destructive"
+                      aria-label={`Drop ${playerName} from the event`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
         </ul>
       )}
+
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={resetting}
+        onClick={onReset}
+        className="mt-3 min-h-11 w-full border-destructive/40 text-destructive hover:bg-destructive/10 sm:min-h-0"
+      >
+        <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+        {resetting ? "Resetting…" : "Reset combine"}
+      </Button>
     </AdminSection>
   );
 }
