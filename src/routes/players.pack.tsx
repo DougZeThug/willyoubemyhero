@@ -594,6 +594,10 @@ function PackPage() {
           setSecret(res.card);
           setSecretDuplicate(res.duplicate);
           setSecretUnavailable(false);
+          // A card minted just now has never been seen, whatever the device's
+          // stored reveal state says — local midnight and league midnight can
+          // be hours apart, so the resumed pack can carry a stale "revealed".
+          if (res.fresh) setSecretRevealed(false);
           qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
           qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
         } else {
