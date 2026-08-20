@@ -173,6 +173,21 @@ export function useCardZoom({ onSwipe, onTap, enabled = true }: CardZoomOptions 
 
       const d = drag.current;
       drag.current = null;
+
+      // A pinch that ends with a finger still down should hand straight over to
+      // panning; drag state was cleared when the pinch began, so rebuild it here
+      // rather than making the user lift and touch again.
+      if (pointers.current.size === 1 && view.current.zoom > MIN_ZOOM) {
+        const [id, point] = [...pointers.current.entries()][0]!;
+        drag.current = {
+          id,
+          from: point,
+          at: Date.now(),
+          view: { x: view.current.x, y: view.current.y },
+        };
+        return;
+      }
+
       if (cancelled || !d || d.id !== e.pointerId) return;
 
       const dx = p.x - d.from.x;
