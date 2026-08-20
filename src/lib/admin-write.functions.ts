@@ -305,7 +305,9 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     if (error) throw error;
 
     if (data.splits.length) {
-      await supabaseAdmin.from("splits").upsert(
+      // A silent failure here loses the splits for good: the console clears its
+      // local backup as soon as this resolves.
+      const { error: splitsError } = await supabaseAdmin.from("splits").upsert(
         data.splits.map((s) => ({
           run_id: run.id,
           station_id: s.stationId,
@@ -317,9 +319,10 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
         })),
         { onConflict: "client_key" },
       );
+      if (splitsError) throw splitsError;
     }
     if (data.penalties.length) {
-      await supabaseAdmin.from("penalties").upsert(
+      const { error: penaltiesError } = await supabaseAdmin.from("penalties").upsert(
         data.penalties.map((p) => ({
           run_id: run.id,
           station_id: p.stationId,
@@ -329,14 +332,16 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
         })),
         { onConflict: "client_key" },
       );
+      if (penaltiesError) throw penaltiesError;
     }
 
     // Mark participant finished
-    await supabaseAdmin
+    const { error: statusError } = await supabaseAdmin
       .from("event_participants")
       .update({ participation_status: "finished" })
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
+    if (statusError) throw statusError;
 
     return { runId: run.id };
   });
