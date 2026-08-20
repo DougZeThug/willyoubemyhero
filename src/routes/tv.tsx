@@ -4,6 +4,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { formatTime } from "@/lib/format";
+import { currentAthlete } from "@/lib/current-athlete";
 
 export const Route = createFileRoute("/tv")({
   head: () => ({
@@ -32,7 +33,7 @@ function TvPage() {
       .sort((a, b) => (a.run.official_time_ms ?? 0) - (b.run.official_time_ms ?? 0));
   }, [bundle]);
 
-  const current = bundle?.participants.find((p) => p.participation_status === "running");
+  const { athlete: current, onClock } = currentAthlete(bundle?.participants ?? []);
 
   return (
     <div className="circuit-bg -mx-4 -mb-8 -mt-4 min-h-screen px-8 py-8 sm:-mx-6 sm:px-10">
@@ -48,7 +49,7 @@ function TvPage() {
         {current && (
           <div className="text-right">
             <div className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground">
-              On the Clock
+              {onClock ? "On the Clock" : "Up Next"}
             </div>
             <div className="font-display text-3xl font-black uppercase text-primary">
               {current.participant?.name}
