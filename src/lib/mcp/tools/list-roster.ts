@@ -17,7 +17,7 @@ export default defineTool({
     const { data, error } = await supabaseAnon()
       .from("event_participants")
       .select(
-        "id, bib_number, running_order, participation_status, participant:participants(id, name, nickname, fantasy_team_name, trash_talk_quote)",
+        "id, bib_number, running_order, participation_status, participant:participants!event_participants_participant_id_fkey(id, name, nickname, fantasy_team_name, trash_talk_quote)",
       )
       .eq("event_id", eventId)
       .order("running_order", { ascending: true });
