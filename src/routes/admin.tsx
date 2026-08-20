@@ -340,6 +340,9 @@ function TimingConsole() {
     });
   }
 
+  const finishingRef = useRef(false);
+  const [finishing, setFinishing] = useState(false);
+
   async function finishRun() {
     if (!run || !event?.id) return;
     // A double tap fires two handlers off the same render, both holding the
