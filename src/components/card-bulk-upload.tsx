@@ -82,12 +82,23 @@ function bestMatch(filename: string, targets: BulkTarget[]) {
   const { side, rest } = detectSide(normalize(filename));
   const tokens = rest.split(" ").filter(Boolean);
   let best: { id: string; score: number } | null = null;
+  // Two Weidensauls and two Ryans on this roster, so `weidensaul-back.png` scores
+  // identically for both. Keeping the first one would hand the card to whoever
+  // happens to sit earlier in the running order — a match that silently changes
+  // when the commissioner reorders the combine. A tie means "ask the human".
+  let tied = false;
   for (const t of targets) {
     const score = scoreMatch(tokens, t);
-    if (score > 0 && (!best || score > best.score)) best = { id: t.id, score };
+    if (score <= 0) continue;
+    if (!best || score > best.score) {
+      best = { id: t.id, score };
+      tied = false;
+    } else if (score === best.score) {
+      tied = true;
+    }
   }
   // Require a real signal — a single weak token match is a guess, not a match.
-  return { side, id: best && best.score >= 2 ? best.id : null };
+  return { side, id: best && !tied && best.score >= 2 ? best.id : null };
 }
 
 export function CardBulkUpload({ eventId, targets }: { eventId: string; targets: BulkTarget[] }) {
