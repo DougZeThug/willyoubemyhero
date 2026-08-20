@@ -42,7 +42,7 @@ describe("createCollector", () => {
     const res = await create("Jane Doe");
 
     expect(res.participantId).toBe(NEW_ID);
-    expect(verifyMemberToken(res.token).participantId).toBe(NEW_ID);
+    expect(verifyMemberToken(res.token)?.participantId).toBe(NEW_ID);
     const [insert] = mock.callsFor("participants", "insert");
     expect(insert?.payload).toMatchObject({ name: "Jane Doe", is_collector: true, active: true });
   });
