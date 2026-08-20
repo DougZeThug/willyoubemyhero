@@ -649,7 +649,10 @@ function StartCard({
         <h2 className="mb-3 font-display text-xl font-black uppercase">Send next athlete</h2>
         <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-2">
           <Radio
-            className={"h-4 w-4 shrink-0 " + (slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground")}
+            className={
+              "h-4 w-4 shrink-0 " +
+              (slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground")
+            }
           />
           <div className="min-w-0 flex-1">
             <div className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
@@ -1194,7 +1197,11 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
                   key={p.id}
                   className="flex items-center justify-between gap-2 rounded px-1 py-1 text-xs"
                 >
-                  <span className={"truncate uppercase " + (isIn ? "" : "text-muted-foreground line-through")}>
+                  <span
+                    className={
+                      "truncate uppercase " + (isIn ? "" : "text-muted-foreground line-through")
+                    }
+                  >
                     {playerName}
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
@@ -1206,11 +1213,13 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
                     >
                       {isIn ? (
                         <>
-                          <UserCheck className="mr-1 h-3.5 w-3.5" />In
+                          <UserCheck className="mr-1 h-3.5 w-3.5" />
+                          In
                         </>
                       ) : (
                         <>
-                          <UserMinus className="mr-1 h-3.5 w-3.5" />Out
+                          <UserMinus className="mr-1 h-3.5 w-3.5" />
+                          Out
                         </>
                       )}
                     </Button>

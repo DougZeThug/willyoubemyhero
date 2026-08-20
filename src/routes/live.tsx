@@ -75,7 +75,9 @@ function LivePage() {
           <HudTimer
             runningSinceMs={0}
             paused={!onClock}
-            status={onClock ? "On the Clock" : current ? "Up Next" : loading ? "Loading" : "Standby"}
+            status={
+              onClock ? "On the Clock" : current ? "Up Next" : loading ? "Loading" : "Standby"
+            }
             size={340}
           >
             {current ? (
