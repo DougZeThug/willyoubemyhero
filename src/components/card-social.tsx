@@ -65,7 +65,9 @@ export function CardSocial({
   // Guest identity is a server-signed session, not a device id: ownership of a
   // reaction or a comment is decided from the signed token, so a key copied out
   // of someone else's row can't be replayed to delete their trash talk.
-  const guest = useEnsureGuestSession(!me);
+  // Minted on mount rather than on first tap: the send needs the signed header,
+  // and the name prompt should not be gated on a round trip.
+  useEnsureGuestSession(!me);
   const [guestName, setGuestName] = useState<string>("");
   /**
    * The same name, readable synchronously.
@@ -104,7 +106,6 @@ export function CardSocial({
    */
   function ensureIdentity(runAfterNamed: () => void): Actor | null {
     if (me) return { kind: "member" };
-    if (!guest) return null;
     const trimmed = guestNameRef.current.trim();
     if (trimmed.length > 0) {
       return { kind: "guest", guest: { name: trimmed } };
