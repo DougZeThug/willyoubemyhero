@@ -39,9 +39,8 @@ export function clearAdminToken() {
 }
 
 export function useAdminSession(): Parsed | null {
-  const [session, setSession] = useState<Parsed | null>(() =>
-    typeof window === "undefined" ? null : parse(window.localStorage.getItem(KEY)),
-  );
+  // Start null so server and first client render agree; hydrate in the effect.
+  const [session, setSession] = useState<Parsed | null>(null);
   useEffect(() => {
     function refresh() {
       setSession(parse(window.localStorage.getItem(KEY)));
