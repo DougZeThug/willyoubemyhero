@@ -538,6 +538,7 @@ describe("the admin catalogue", () => {
   });
 
   it("does not let guest pulls declare the set exhausted early", async () => {
+    // placeholder
     // `exhausted` is measured against the claimed-member count, so it has to be
     // counted in members. Two guests holding a card would otherwise clear the bar
     // for two members while both members still had it to find, and the panel
