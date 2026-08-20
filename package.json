@@ -114,5 +114,11 @@
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.16",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "@tanstack/router-core": "1.171.15"
+  },
+  "resolutions": {
+    "@tanstack/router-core": "1.171.15"
   }
 }
