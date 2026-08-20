@@ -54,43 +54,69 @@ export function useAccountSync(user: User | null) {
     // A slow sync for the previous user must never land after a sign-out or an
     // account switch: the device would then act as that stale identity.
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+
+    async function runSync() {
+      // Snapshotted before the token changes, for the same reason as the claim
+      // page: once this device is a member, its unrecognised local cards are
+      // pruned, and a guest's base cards exist nowhere else.
+      const held = await snapshotLocalCollection();
+      const res = await syncAccountSession({ data: undefined });
+      if (cancelled) return;
+      if (res.kind === "member") {
+        clearGuestToken();
+        setMemberToken(res.token, res.name ?? "Player");
+        try {
+          await adoptLocalCollection(held);
+        } catch {
+          /* signed in without the upload: the cards can be granted back */
+        }
+      } else {
+        clearMemberToken();
+        setGuestToken(res.token);
+      }
+    }
 
     void (async () => {
-      try {
-        // Snapshotted before the token changes, for the same reason as the claim
-        // page: once this device is a member, its unrecognised local cards are
-        // pruned, and a guest's base cards exist nowhere else.
-        const held = await snapshotLocalCollection();
-        const res = await syncAccountSession({ data: undefined });
-        if (cancelled) return;
-        if (res.kind === "member") {
-          clearGuestToken();
-          setMemberToken(res.token, res.name ?? "Player");
-          try {
-            await adoptLocalCollection(held);
-          } catch {
-            /* signed in without the upload: the cards can be granted back */
-          }
-        } else {
-          clearMemberToken();
-          setGuestToken(res.token);
+      // A failed sync used to be silent, and silence here is expensive: the
+      // device keeps whatever identity it minted for itself, so somebody who
+      // signed in on a flaky connection sits in front of an empty vault while
+      // their real collection is safe on the server. Retry a few times, backing
+      // off, before giving up.
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+        try {
+          await runSync();
+          return;
+        } catch {
+          if (cancelled) return;
+          const wait = 1000 * 2 ** attempt;
+          await new Promise<void>((resolve) => {
+            retry = setTimeout(resolve, wait);
+          });
         }
-      } catch {
-        // Signed in but unsynced simply behaves like the signed-out app: the
-        // device keeps whatever identity it already had.
-        if (!cancelled) syncedFor.current = null;
       }
+      // Still unsynced: unlatch so a later auth event (a token refresh, a
+      // revisit) gets another go rather than the device being stuck.
+      if (!cancelled) syncedFor.current = null;
     })();
 
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [user]);
 }
 
-/** Sign out, then leave the device with no borrowed identity. */
+/**
+ * Sign out and drop the member identity.
+ *
+ * The GUEST token deliberately survives. It is a pointer to a collection, not
+ * an authorisation to act as anybody, and clearing it orphaned the cards an
+ * unnamed visitor had pulled on this handset: the next visit minted a fresh
+ * guest id and the vault looked empty. Signing back in re-adopts (and merges)
+ * whatever this device holds, so leaving it in place is strictly safer.
+ */
 export async function signOutAccount() {
   await supabase.auth.signOut();
   clearMemberToken();
-  clearGuestToken();
 }
