@@ -82,9 +82,14 @@ function useSignedUrls<T>(
   });
 
   const data = query.data;
+  // `dataUpdatedAt` is 0 for the seeded snapshot (see `updatedAt: 0` above) and
+  // only becomes a real timestamp once a fetch resolves. Gating on it stops a
+  // mount from re-stamping a stale snapshot — a failed refetch used to buy the
+  // old, possibly deleted, URLs another 3.5 hours of life.
+  const fetchedAt = query.isSuccess ? query.dataUpdatedAt : 0;
   useEffect(() => {
-    if (eventId && data) writeSnapshot(storageKey, data);
-  }, [eventId, storageKey, data]);
+    if (eventId && data && fetchedAt > 0) writeSnapshot(storageKey, data);
+  }, [eventId, storageKey, data, fetchedAt]);
 
   return query;
 }
