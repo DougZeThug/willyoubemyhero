@@ -537,8 +537,26 @@ describe("the admin catalogue", () => {
     expect(res.exhausted).toBe(true);
   });
 
+  it("does not count weight=0 cards toward exhausted", async () => {
+    // weight 0 takes a card out of the daily draw, so nobody can ever find it.
+    // Counting it would keep the set reading as not exhausted forever.
+    withDb({
+      "secret_cards.select": { data: [card(CARD_ID), card(OTHER_CARD, { weight: 0 })] },
+      "secret_card_pulls.select": {
+        data: [
+          { secret_card_id: CARD_ID, participant_id: ME },
+          { secret_card_id: CARD_ID, participant_id: THEM },
+          { secret_card_id: OTHER_CARD, participant_id: ME },
+        ],
+      },
+      "member_codes.select": { data: null, count: 2 },
+    });
+    const { listSecretCards } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ exhausted: boolean }>(listSecretCards, { headers: asAdmin() });
+    expect(res.exhausted).toBe(true);
+  });
+
   it("does not let guest pulls declare the set exhausted early", async () => {
-    // placeholder
     // `exhausted` is measured against the claimed-member count, so it has to be
     // counted in members. Two guests holding a card would otherwise clear the bar
     // for two members while both members still had it to find, and the panel
