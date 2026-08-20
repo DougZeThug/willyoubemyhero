@@ -22,3 +22,9 @@ src/integrations/supabase/
 # on the next sync.
 AGENTS.md
 .lovable/
+
+# Emitted by @lovable.dev/mcp-js's Vite plugin on every build, banner and all,
+# so any formatting we apply is overwritten on the next run.
+src/routes/mcp.ts
+src/routes/[.mcp]/
+src/routes/[.well-known]/
