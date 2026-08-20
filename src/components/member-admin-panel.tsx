@@ -30,7 +30,13 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     staleTime: 30_000,
   });
 
-  const claimedCount = (claims.data ?? []).filter((c) => c.claimed_at).length;
+  // member_codes is league-wide, the panel is one event. Counting every claimed
+  // code against this event's roster made "unclaimed" hit zero once other events
+  // existed, which silently disabled the issue-unclaimed button.
+  const rosterIds = new Set((bundle?.participants ?? []).map((p) => p.participant_id));
+  const claimedCount = (claims.data ?? []).filter(
+    (c) => c.claimed_at && rosterIds.has(c.participant_id),
+  ).length;
   const rosterSize = bundle?.participants.length ?? 0;
   const unclaimedCount = Math.max(rosterSize - claimedCount, 0);
 
