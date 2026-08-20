@@ -179,7 +179,12 @@ export function useCardZoom({ onSwipe, onTap, enabled = true }: CardZoomOptions 
       // rather than making the user lift and touch again.
       if (pointers.current.size === 1 && view.current.zoom > MIN_ZOOM) {
         const [id, point] = [...pointers.current.entries()][0]!;
-        drag.current = { id, from: point, at: Date.now(), view: { x: view.current.x, y: view.current.y } };
+        drag.current = {
+          id,
+          from: point,
+          at: Date.now(),
+          view: { x: view.current.x, y: view.current.y },
+        };
         return;
       }
 
