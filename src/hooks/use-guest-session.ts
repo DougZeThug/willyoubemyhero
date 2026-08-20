@@ -21,8 +21,15 @@ export function useEnsureGuestSession(enabled: boolean) {
   const guest = useGuestSession();
   const start = useServerFn(startGuestSession);
   const firedRef = useRef(false);
+  const priorMemberRef = useRef(member);
 
   useEffect(() => {
+    // Signing out (usually in another tab) clears both tokens, so the latch has
+    // to drop with them — otherwise the re-run this dependency exists for exits
+    // one line later and the phone sits with no identity until it navigates.
+    if (priorMemberRef.current && !member) firedRef.current = false;
+    priorMemberRef.current = member;
+
     if (!enabled || firedRef.current) return;
     // Both reads go straight to storage rather than to the hook state above,
     // which is null for one render on every mount while it hydrates. Trusting
