@@ -80,14 +80,21 @@ export function useCardSfx() {
   const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
-    const sync = () => setIsMuted(readMuted());
-    sync();
-    window.addEventListener("wwbh:sfx-muted-changed", sync);
-    // Covers the app being open in two tabs.
-    window.addEventListener("storage", sync);
+    // Same tab: module state is already authoritative, just mirror it into React.
+    const mine = () => setIsMuted(isCardSfxMuted());
+    // Another tab: storage is the only thing that changed, so the module flag —
+    // which is what actually gates playback in `audio()` — has to be caught up
+    // too, or this tab shows muted while it keeps making noise.
+    const theirs = () => {
+      muted = readMuted();
+      setIsMuted(muted);
+    };
+    theirs();
+    window.addEventListener("wwbh:sfx-muted-changed", mine);
+    window.addEventListener("storage", theirs);
     return () => {
-      window.removeEventListener("wwbh:sfx-muted-changed", sync);
-      window.removeEventListener("storage", sync);
+      window.removeEventListener("wwbh:sfx-muted-changed", mine);
+      window.removeEventListener("storage", theirs);
     };
   }, []);
 
