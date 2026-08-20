@@ -31,7 +31,7 @@
       {
         "name": "list_roster",
         "title": "List the roster",
-        "description": "List everyone in a combine's roster with their running order, run status and trading-card rarity. Defaults to the active combine.",
+        "description": "List everyone in a combine's roster with their running order, bib number and participation status. Defaults to the active combine.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
