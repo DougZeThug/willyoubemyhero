@@ -42,6 +42,7 @@ const card = (id = CARD_ID, over: Record<string, unknown> = {}) => ({
   flavour: "Lit at 11am. Still going at 11pm.",
   foil: "rosette",
   border_fx: "spin",
+  weight: 100,
   art_path: `secrets/${id}/art-1.webp`,
   back_path: null,
   active: true,
@@ -527,6 +528,25 @@ describe("the admin catalogue", () => {
         data: [
           { secret_card_id: CARD_ID, participant_id: ME },
           { secret_card_id: CARD_ID, participant_id: THEM },
+        ],
+      },
+      "member_codes.select": { data: null, count: 2 },
+    });
+    const { listSecretCards } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ exhausted: boolean }>(listSecretCards, { headers: asAdmin() });
+    expect(res.exhausted).toBe(true);
+  });
+
+  it("does not count weight=0 cards toward exhausted", async () => {
+    // weight 0 takes a card out of the daily draw, so nobody can ever find it.
+    // Counting it would keep the set reading as not exhausted forever.
+    withDb({
+      "secret_cards.select": { data: [card(CARD_ID), card(OTHER_CARD, { weight: 0 })] },
+      "secret_card_pulls.select": {
+        data: [
+          { secret_card_id: CARD_ID, participant_id: ME },
+          { secret_card_id: CARD_ID, participant_id: THEM },
+          { secret_card_id: OTHER_CARD, participant_id: ME },
         ],
       },
       "member_codes.select": { data: null, count: 2 },
