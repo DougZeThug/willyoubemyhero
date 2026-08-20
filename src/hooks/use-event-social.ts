@@ -8,8 +8,9 @@ export type ReactionRow = {
   id: string;
   event_participant_id: string;
   participant_id: string | null;
-  guest_key?: string | null;
   guest_name?: string | null;
+  /** Server-resolved: this row belongs to the identity that made the request. */
+  mine?: boolean;
   emoji: string;
   created_at: string;
 };
@@ -18,8 +19,9 @@ export type CommentRow = {
   id: string;
   event_participant_id: string;
   participant_id: string | null;
-  guest_key?: string | null;
   guest_name?: string | null;
+  /** Server-resolved: this row belongs to the identity that made the request. */
+  mine?: boolean;
   body: string;
   created_at: string;
 };

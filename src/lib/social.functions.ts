@@ -1,6 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { isAdminFor, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
+import {
+  isAdminFor,
+  optionalGuest,
+  optionalMember,
+  requireAdmin,
+  requireMember,
+} from "./require-auth.server";
 import { AWARD_CATEGORIES, isAwardCategory } from "./awards";
 
 /**
@@ -22,17 +28,19 @@ async function admin() {
 }
 
 /**
- * Guest identity forwarded from the browser. `key` is `d:<deviceId>`, minted
- * per device and stable across reloads. `name` is what the guest typed the
- * first time they wanted to say something.
+ * Display name a guest typed for themselves. The identity itself is NOT taken
+ * from here: `key` is accepted for compatibility with older clients and
+ * deliberately ignored, because anything the caller supplies can be copied off
+ * somebody else and replayed. The guest id comes from the signed
+ * `x-guest-token` header instead, the same way the daily secret pull works.
  *
  * A member session always wins over a guest identity in the same request, so
  * signing in later can't silently double up your reactions.
  */
 const guestSchema = z
   .object({
-    key: z.string().trim().min(4).max(80),
-    name: z.string().trim().min(1).max(40),
+    key: z.string().trim().max(80).optional(),
+    name: z.string().trim().min(1).max(40).optional(),
   })
   .optional();
 type GuestInput = z.infer<typeof guestSchema>;
@@ -43,8 +51,9 @@ function actor(input: GuestInput): {
 } {
   const member = optionalMember();
   if (member) return { member, guest: null };
-  if (!input) throw new Error("Claim your player or add a name to join in");
-  return { member: null, guest: input };
+  const guestId = optionalGuest();
+  if (!guestId) throw new Error("Claim your player or add a name to join in");
+  return { member: null, guest: { key: guestId, name: input?.name?.trim() || "Guest" } };
 }
 
 /** Every reaction and comment for one event, in a single round trip. */
@@ -72,7 +81,26 @@ export const getEventSocial = createServerFn({ method: "GET" })
         .in("event_participant_id", ids)
         .order("created_at", { ascending: true }),
     ]);
-    return { reactions: reactions ?? [], comments: comments ?? [] };
+
+    // guest_key never leaves the server: this endpoint is public, and a guest key
+    // that anyone can read is a guest anyone can act as. The client only needs to
+    // know which rows are its own, so resolve that here against the verified
+    // identity on the request and strip the key itself.
+    const meMember = optionalMember();
+    const meGuest = meMember ? null : optionalGuest();
+    const isMine = (row: { participant_id: string | null; guest_key: string | null }) =>
+      meMember ? row.participant_id === meMember : !!meGuest && row.guest_key === meGuest;
+
+    return {
+      reactions: (reactions ?? []).map(({ guest_key, ...r }) => ({
+        ...r,
+        mine: isMine({ participant_id: r.participant_id, guest_key }),
+      })),
+      comments: (comments ?? []).map(({ guest_key, ...c }) => ({
+        ...c,
+        mine: isMine({ participant_id: c.participant_id, guest_key }),
+      })),
+    };
   });
 
 /** Add or remove one of your reactions on a card. Returns the new state. */
@@ -182,7 +210,10 @@ export const deleteComment = createServerFn({ method: "POST" })
     if (!eventId || !isAdminFor(eventId)) {
       const me = optionalMember();
       const isOwnMember = !!me && row.participant_id === me;
-      const isOwnGuest = !me && !!data.guest && !!row.guest_key && row.guest_key === data.guest.key;
+      // Guest ownership is decided by the signed token, never by a key in the
+      // request body — that key is copyable and used to be readable publicly.
+      const guestId = me ? null : optionalGuest();
+      const isOwnGuest = !!guestId && !!row.guest_key && row.guest_key === guestId;
       if (!isOwnMember && !isOwnGuest) throw new Error("Not your comment");
     }
     await sb.from("card_comments").delete().eq("id", data.commentId);

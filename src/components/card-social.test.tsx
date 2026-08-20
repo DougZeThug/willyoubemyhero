@@ -133,7 +133,7 @@ describe("when signed out", () => {
       data: {
         eventParticipantId: CARD_ID,
         emoji: "🔥",
-        guest: { key: expect.any(String), name: "Garden Guest" },
+        guest: { name: "Garden Guest" },
       },
     });
     expect(screen.queryByText(/What should we call you/i)).not.toBeInTheDocument();
@@ -153,7 +153,7 @@ describe("when signed out", () => {
       data: {
         eventParticipantId: CARD_ID,
         body: "hello",
-        guest: { key: expect.any(String), name: "Garden Guest" },
+        guest: { name: "Garden Guest" },
       },
     });
   });
@@ -212,7 +212,7 @@ describe("reactions", () => {
     toggleReaction.mockImplementation(
       () => new Promise((resolve) => (release = () => resolve({ ok: true }))),
     );
-    await renderSocial({ reactions: [reaction({ participant_id: ME })] });
+    await renderSocial({ reactions: [reaction({ participant_id: ME, mine: true })] });
     const fire = screen.getByRole("button", { name: "React with 🔥" });
     expect(fire).toHaveTextContent("1");
 
@@ -227,7 +227,7 @@ describe("reactions", () => {
       () => new Promise((resolve) => (release = () => resolve({ ok: true }))),
     );
     // Marked as mine but absent from the list — a stale render mid-refetch.
-    await renderSocial({ reactions: [reaction({ participant_id: ME, emoji: "💀" })] });
+    await renderSocial({ reactions: [reaction({ participant_id: ME, emoji: "💀", mine: true })] });
     const skull = screen.getByRole("button", { name: "React with 💀" });
     await userEvent.click(skull);
     expect(skull).toHaveTextContent("0");
@@ -310,13 +310,16 @@ describe("trash talk", () => {
 
   it("offers a delete button on your own comment only", async () => {
     await renderSocial({
-      comments: [comment({ id: "mine", participant_id: ME }), comment({ id: "theirs" })],
+      comments: [
+        comment({ id: "mine", participant_id: ME, mine: true }),
+        comment({ id: "theirs" }),
+      ],
     });
     expect(screen.getAllByRole("button", { name: "Delete your comment" })).toHaveLength(1);
   });
 
   it("deletes by comment id", async () => {
-    await renderSocial({ comments: [comment({ id: "mine", participant_id: ME })] });
+    await renderSocial({ comments: [comment({ id: "mine", participant_id: ME, mine: true })] });
     await userEvent.click(screen.getByRole("button", { name: "Delete your comment" }));
     await waitFor(() =>
       expect(deleteComment).toHaveBeenCalledWith({ data: { commentId: "mine" } }),
