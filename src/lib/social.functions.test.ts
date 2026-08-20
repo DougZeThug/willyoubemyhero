@@ -76,7 +76,9 @@ describe("getEventSocial", () => {
       "card_comments.select": { data: [{ id: "c1", body: "hi", guest_key: GUEST }] },
     });
     const { getEventSocial } = await import("./social.functions");
-    const res = await callServerFn(getEventSocial, { data: { eventId: EVENT_ID } });
+    const res = (await callServerFn(getEventSocial, { data: { eventId: EVENT_ID } })) as {
+      comments: { mine: boolean }[];
+    };
     expect(JSON.stringify(res)).not.toContain(GUEST);
     expect(res.comments[0].mine).toBe(false);
   });
@@ -88,10 +90,10 @@ describe("getEventSocial", () => {
       "card_comments.select": { data: [{ id: "c1", body: "hi", guest_key: GUEST }] },
     });
     const { getEventSocial } = await import("./social.functions");
-    const res = await callServerFn(getEventSocial, {
+    const res = (await callServerFn(getEventSocial, {
       data: { eventId: EVENT_ID },
       headers: asGuest(),
-    });
+    })) as { comments: { mine: boolean }[] };
     expect(res.comments[0].mine).toBe(true);
   });
 
