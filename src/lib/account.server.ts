@@ -134,6 +134,22 @@ export async function syncAccount(
 export async function bindParticipant(userId: string, participantId: string) {
   const row = await readRow(userId);
   const priorGuest = row?.guest_id ?? null;
+  const priorParticipant = row?.participant_id ?? null;
+
+  // Re-claiming the same player is a no-op rather than an error: the phone may
+  // simply have lost its local token and re-run the paper code.
+  if (priorParticipant === participantId) {
+    return { kind: "member" as const, id: participantId, name: await nameFor(participantId) };
+  }
+
+  // A second, DIFFERENT roster player is refused instead of silently taking over.
+  // syncAccount treats this row as authoritative, so an overwrite would re-mint
+  // every other device onto the new player and strand the first identity with no
+  // recovery path. Guest -> member is still an upgrade and handled below.
+  if (priorParticipant) {
+    throw new Error("This account is already linked to another player");
+  }
+
   await supabaseAdmin
     .from("account_identities")
     .upsert(
