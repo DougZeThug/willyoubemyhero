@@ -1060,10 +1060,13 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
   const upsertFn = useServerFn(upsertParticipant);
   const addFn = useServerFn(addParticipantToEvent);
   const removeFn = useServerFn(removeParticipantFromEvent);
+  const statusFn = useServerFn(setParticipantStatus);
+  const resetFn = useServerFn(resetCombine);
   const { bundle } = useEventBundle();
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   async function onAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -1101,13 +1104,43 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
     }
   }
 
+  /** In/out of this year's field. Out keeps the person, their cards and page. */
+  async function toggleIn(epId: string, playerName: string, isIn: boolean) {
+    try {
+      await statusFn({
+        data: { eventId, eventParticipantId: epId, status: isIn ? "scratched" : "waiting" },
+      });
+      await qc.invalidateQueries();
+      toast.success(isIn ? `${playerName} is out` : `${playerName} is in`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update the roster");
+    }
+  }
+
+  async function onReset() {
+    if (!confirm("Delete every recorded run for this combine and set everyone back to waiting?")) {
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await resetFn({ data: { eventId } });
+      await qc.invalidateQueries();
+      toast.success(`Combine reset — ${res.clearedRuns} run(s) cleared`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not reset the combine");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   const roster = bundle?.participants ?? [];
+  const inField = fieldSize(roster);
 
   return (
     <AdminSection
       icon={<UserPlus className="h-4 w-4 shrink-0" />}
-      title="Add Player"
-      meta={`${roster.length} on roster`}
+      title="Combine Roster"
+      meta={`${inField} in · ${roster.length - inField} out`}
     >
       <form onSubmit={onAdd} className="space-y-2">
         <div className="grid gap-2 sm:grid-cols-2">
@@ -1150,24 +1183,61 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
       </form>
 
       {roster.length > 0 && (
-        <ul className="mt-3 max-h-56 space-y-0.5 overflow-auto pr-1">
-          {roster.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between gap-2 rounded px-1 py-1 text-xs"
-            >
-              <span className="truncate uppercase">{p.participant?.name}</span>
-              <button
-                onClick={() => onRemove(p.id, p.participant?.name ?? "player")}
-                className="shrink-0 rounded p-2 text-muted-foreground hover:text-destructive"
-                aria-label="Remove player"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
+        <ul className="mt-3 max-h-72 space-y-0.5 overflow-auto pr-1">
+          {[...roster]
+            .sort((a, b) => a.running_order - b.running_order)
+            .map((p) => {
+              const isIn = p.participation_status !== "scratched";
+              const playerName = p.participant?.name ?? "player";
+              return (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between gap-2 rounded px-1 py-1 text-xs"
+                >
+                  <span className={"truncate uppercase " + (isIn ? "" : "text-muted-foreground line-through")}>
+                    {playerName}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant={isIn ? "secondary" : "ghost"}
+                      className="h-8 px-2 text-[10px] uppercase tracking-widest"
+                      onClick={() => toggleIn(p.id, playerName, isIn)}
+                    >
+                      {isIn ? (
+                        <>
+                          <UserCheck className="mr-1 h-3.5 w-3.5" />In
+                        </>
+                      ) : (
+                        <>
+                          <UserMinus className="mr-1 h-3.5 w-3.5" />Out
+                        </>
+                      )}
+                    </Button>
+                    <button
+                      onClick={() => onRemove(p.id, playerName)}
+                      className="rounded p-2 text-muted-foreground hover:text-destructive"
+                      aria-label={`Drop ${playerName} from the event`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
         </ul>
       )}
+
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={resetting}
+        onClick={onReset}
+        className="mt-3 min-h-11 w-full border-destructive/40 text-destructive hover:bg-destructive/10 sm:min-h-0"
+      >
+        <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+        {resetting ? "Resetting…" : "Reset combine"}
+      </Button>
     </AdminSection>
   );
 }
