@@ -14,6 +14,7 @@ import { useAdminSession } from "@/lib/admin-token";
 import { recordRandomization, setRunningOrder } from "@/lib/admin-write.functions";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { toast } from "sonner";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 
 export const Route = createFileRoute("/order")({
   head: () => ({
@@ -28,7 +29,8 @@ export const Route = createFileRoute("/order")({
 });
 
 function OrderPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
+    useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const setOrderFn = useServerFn(setRunningOrder);
@@ -80,9 +82,30 @@ function OrderPage() {
     }
   }
 
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-3xl px-4 py-10">
+          <FeedLoading label="Reading the running order…" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-3xl px-4 py-10">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-3xl px-4 py-6">
+        {realtimeDegraded && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 flex items-end justify-between gap-2 border-b border-primary/20 pb-4">
           <div>
             <div className="flex items-center gap-2 text-primary">
@@ -105,6 +128,13 @@ function OrderPage() {
 
         <Card className="hud-bezel border-white/10">
           <CardContent className="p-0">
+            {rows.length === 0 && (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                {failedTables.includes("event_participants")
+                  ? "Couldn't read the roster just now — retrying."
+                  : "No roster yet. The commissioner sets the field."}
+              </div>
+            )}
             <ol className="divide-y divide-white/5">
               {rows.map((r) => {
                 const status = r.participation_status ?? "queued";

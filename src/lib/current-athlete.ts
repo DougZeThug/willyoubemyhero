@@ -28,3 +28,19 @@ export function currentAthlete<T extends QueueEntry>(entries: readonly T[]): Ath
 export function fieldSize(entries: readonly QueueEntry[]): number {
   return entries.filter((e) => e.participation_status !== "scratched").length;
 }
+
+/**
+ * Why nobody is on the clock, for the screens that have to say something.
+ *
+ * "Everyone is done" is only true when there was a field to finish. An empty
+ * roster reads the same whether the fetch has not landed yet, the read failed,
+ * or the commissioner has not set the field — and /live used to congratulate
+ * all three.
+ */
+export type IdleField = "roster-failed" | "no-roster" | "all-done" | "waiting";
+
+export function idleFieldState(done: number, total: number, rosterFailed: boolean): IdleField {
+  if (rosterFailed) return "roster-failed";
+  if (total === 0) return "no-roster";
+  return done >= total ? "all-done" : "waiting";
+}

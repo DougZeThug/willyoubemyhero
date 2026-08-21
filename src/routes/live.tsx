@@ -9,7 +9,8 @@ import { FinishCelebration } from "@/components/finish-celebration";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
-import { currentAthlete, fieldSize } from "@/lib/current-athlete";
+import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -30,7 +31,8 @@ export const Route = createFileRoute("/live")({
 });
 
 function LivePage() {
-  const { event, bundle, loading } = useEventBundle();
+  const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
+    useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const [celebration, setCelebration] = useState<{
@@ -61,6 +63,35 @@ function LivePage() {
 
   useFinishWatcher(bundle, (finish) => setCelebration(finish));
 
+  // "Everyone is done" is only true when there was somebody to be done. It used
+  // to be what the page said before the first fetch had even returned.
+  const emptyReason = {
+    "roster-failed": "Couldn't read the roster just now — retrying.",
+    "no-roster": "No roster yet. The commissioner sets the field.",
+    "all-done": "Every athlete is done. Nice work.",
+    waiting: "Nobody on the clock right now.",
+  }[idleFieldState(done, total, failedTables.includes("event_participants"))];
+
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
+        <div className="mx-auto max-w-6xl px-4 pb-6 pt-10">
+          <FeedLoading />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
+        <div className="mx-auto max-w-6xl px-4 pb-6 pt-10">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
       <div className="mx-auto max-w-6xl space-y-6 px-4 pb-6 pt-4 sm:pt-6">
@@ -70,6 +101,8 @@ function LivePage() {
             Live · Spectator
           </span>
         </div>
+
+        {realtimeDegraded && <FeedDegradedBanner />}
 
         <div className="flex flex-col items-center">
           <HudTimer
@@ -110,9 +143,7 @@ function LivePage() {
               )}
             </div>
           ) : (
-            <div className="mt-4 text-xs text-muted-foreground">
-              Every athlete is done. Nice work.
-            </div>
+            <div className="mt-4 text-center text-xs text-muted-foreground">{emptyReason}</div>
           )}
         </div>
 

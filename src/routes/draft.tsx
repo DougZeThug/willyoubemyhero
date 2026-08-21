@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { formatTime } from "@/lib/format";
 import { ClipboardList, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 
 export const Route = createFileRoute("/draft")({
   head: () => ({
@@ -30,7 +31,8 @@ export const Route = createFileRoute("/draft")({
 });
 
 function DraftPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
+    useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const recordFn = useServerFn(recordDraftSelection);
@@ -99,9 +101,30 @@ function DraftPage() {
     }
   }
 
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-5xl px-4 py-10">
+          <FeedLoading label="Reading the draft board…" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-5xl px-4 py-10">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+        {realtimeDegraded && <FeedDegradedBanner />}
         <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-4">
           <div>
             <div className="flex items-center gap-2 text-primary">
@@ -156,9 +179,11 @@ function DraftPage() {
         ) : (
           <Card className="hud-bezel border-white/10">
             <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              {rankings.length === 0
-                ? "No combine results yet. Draft board opens once athletes finish."
-                : "All picks are in. Congrats on a clean draft."}
+              {failedTables.length > 0
+                ? "Couldn't read the combine just now — retrying."
+                : rankings.length === 0
+                  ? "No combine results yet. Draft board opens once athletes finish."
+                  : "All picks are in. Congrats on a clean draft."}
             </CardContent>
           </Card>
         )}
