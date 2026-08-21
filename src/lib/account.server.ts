@@ -42,23 +42,30 @@ function toIdentity(row: Row): AccountIdentity {
     : { kind: "guest", id: row.guest_id! };
 }
 
-/** Swallowed on failure: a merge that did not happen is worth far less than a sign-in that did. */
 async function mergeGuestInto(identity: AccountIdentity, guestId: string) {
   if (identity.kind === "guest" && identity.id === guestId) return;
-  try {
-    if (identity.kind === "member") {
-      await supabaseAdmin.rpc("claim_guest_secrets", {
-        _participant_id: identity.id,
-        _guest_id: guestId,
-      });
-    } else {
-      await supabaseAdmin.rpc("merge_guest_pulls", {
-        _into_guest: identity.id,
-        _from_guest: guestId,
-      });
-    }
-  } catch {
-    /* the sign-in stands; the cards can be reconciled by signing in again */
+  if (identity.kind === "member") {
+    const { error: secretsError } = await supabaseAdmin.rpc("claim_guest_secrets", {
+      _participant_id: identity.id,
+      _guest_id: guestId,
+    });
+    if (secretsError) throw secretsError;
+    const { error: packsError } = await supabaseAdmin.rpc("claim_guest_packs", {
+      _participant_id: identity.id,
+      _guest_id: guestId,
+    });
+    if (packsError) throw packsError;
+  } else {
+    const { error: secretsError } = await supabaseAdmin.rpc("merge_guest_pulls", {
+      _into_guest: identity.id,
+      _from_guest: guestId,
+    });
+    if (secretsError) throw secretsError;
+    const { error: packsError } = await supabaseAdmin.rpc("merge_guest_packs", {
+      _into_guest: identity.id,
+      _from_guest: guestId,
+    });
+    if (packsError) throw packsError;
   }
 }
 
@@ -87,9 +94,10 @@ function mint(identity: AccountIdentity, name: string | null): AccountSession {
  */
 export async function syncAccount(
   userId: string,
-  device: { memberId: string | null; guestId: string | null },
+  device: { memberId: string | null; guestIds: string[] },
 ): Promise<AccountSession> {
   const row = await readRow(userId);
+  const guestIds = [...new Set(device.guestIds)];
 
   // First sign-in on this account: adopt whatever this phone is already holding,
   // so absorbing a device's cards is a no-op rather than a data move that could
@@ -97,8 +105,8 @@ export async function syncAccount(
   if (!row) {
     const identity: AccountIdentity = device.memberId
       ? { kind: "member", id: device.memberId }
-      : { kind: "guest", id: device.guestId ?? randomUUID() };
-    await supabaseAdmin.from("account_identities").upsert(
+      : { kind: "guest", id: guestIds[0] ?? randomUUID() };
+    const { error } = await supabaseAdmin.from("account_identities").upsert(
       {
         user_id: userId,
         participant_id: identity.kind === "member" ? identity.id : null,
@@ -106,6 +114,8 @@ export async function syncAccount(
       },
       { onConflict: "user_id" },
     );
+    if (error) throw error;
+    for (const guestId of guestIds) await mergeGuestInto(identity, guestId);
     return mint(identity, identity.kind === "member" ? await nameFor(identity.id) : null);
   }
 
@@ -116,16 +126,17 @@ export async function syncAccount(
   if (identity.kind === "guest" && device.memberId) {
     const guestId = identity.id;
     identity = { kind: "member", id: device.memberId };
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from("account_identities")
       .update({ participant_id: device.memberId, guest_id: null })
       .eq("user_id", userId);
+    if (error) throw error;
     await mergeGuestInto(identity, guestId);
   }
 
   // A different guest id on this phone — pulls made here before signing in, or on
   // a second handset — is folded into the account's collection.
-  if (device.guestId) await mergeGuestInto(identity, device.guestId);
+  for (const guestId of guestIds) await mergeGuestInto(identity, guestId);
 
   return mint(identity, identity.kind === "member" ? await nameFor(identity.id) : null);
 }
@@ -150,12 +161,13 @@ export async function bindParticipant(userId: string, participantId: string) {
     throw new Error("This account is already linked to another player");
   }
 
-  await supabaseAdmin
+  const { error } = await supabaseAdmin
     .from("account_identities")
     .upsert(
       { user_id: userId, participant_id: participantId, guest_id: null },
       { onConflict: "user_id" },
     );
+  if (error) throw error;
   if (priorGuest) await mergeGuestInto({ kind: "member", id: participantId }, priorGuest);
   return { kind: "member" as const, id: participantId, name: await nameFor(participantId) };
 }
