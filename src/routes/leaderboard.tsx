@@ -107,7 +107,7 @@ function LeaderboardPage() {
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-4xl px-4 py-6">
-        {realtimeDegraded && <FeedDegradedBanner className="mb-4" />}
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <PageHeader
           eyebrow="Standings"
           title="Leaderboard"

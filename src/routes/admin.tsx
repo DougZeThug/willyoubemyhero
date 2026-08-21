@@ -373,11 +373,9 @@ function TimingConsole() {
     ? "Paused"
     : !finished
       ? "Running"
-      : finishSave.state === "failed"
-        ? "Finished — not saved"
-        : finishSave.state === "saving"
-          ? "Finished — saving"
-          : "Finished";
+      : finishSave.state === "saving"
+        ? "Finished — saving"
+        : "Finished — not saved";
 
   async function finishRun() {
     if (!run || !event?.id || run.status === "finished") return;
@@ -499,7 +497,7 @@ function TimingConsole() {
                   <div
                     className={
                       "text-xs font-bold uppercase tracking-[0.28em] " +
-                      (finishSave.state === "failed" ? "text-warn" : "text-muted-foreground")
+                      (finished ? "text-warn" : "text-muted-foreground")
                     }
                   >
                     {statusLabel}
@@ -546,8 +544,8 @@ function TimingConsole() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Discard this run?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          {currentEp?.participant?.name ?? "This athlete"} ran {formatTime(elapsed)}
-                          . Discarding throws that time away and puts them back in the queue. Nobody
+                          {`${currentEp?.participant?.name ?? "This athlete"} ran ${formatTime(elapsed)}.`}{" "}
+                          Discarding throws that time away and puts them back in the queue. Nobody
                           runs the course twice, so there is no undo.
                         </AlertDialogDescription>
                       </AlertDialogHeader>

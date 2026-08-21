@@ -124,7 +124,7 @@ function DraftPage() {
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
-        {realtimeDegraded && <FeedDegradedBanner />}
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner />}
         <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-4">
           <div>
             <div className="flex items-center gap-2 text-primary">

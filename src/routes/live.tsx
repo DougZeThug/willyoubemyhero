@@ -115,7 +115,7 @@ function LivePage() {
           </span>
         </div>
 
-        {realtimeDegraded && <FeedDegradedBanner />}
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner />}
 
         <div className="flex flex-col items-center">
           <HudTimer

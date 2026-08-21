@@ -58,7 +58,7 @@ function TvPage() {
 
   return (
     <div className="circuit-bg -mx-4 -mb-8 -mt-4 min-h-screen px-8 py-8 sm:-mx-6 sm:px-10">
-      {realtimeDegraded && (
+      {(realtimeDegraded || !!error) && (
         <div className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-4 py-2 text-center font-display text-lg font-black uppercase tracking-[0.2em] text-warn">
           Live feed down — refreshing every few seconds
         </div>
