@@ -52,6 +52,14 @@ async function merge(into = GUEST_A, from = GUEST_B) {
   return row.merge_guest_pulls;
 }
 
+async function mergePacks(into = GUEST_A, from = GUEST_B) {
+  const [row] = await sql<{ merge_guest_packs: number }>(
+    "SELECT public.merge_guest_packs($1, $2)",
+    [into, from],
+  );
+  return row.merge_guest_packs;
+}
+
 async function pullsFor(guestId: string) {
   return sql<{ secret_card_id: string; is_duplicate: boolean; tier: string }>(
     "SELECT secret_card_id, is_duplicate, tier FROM public.secret_card_pulls WHERE guest_id = $1",
@@ -114,6 +122,28 @@ describe("merge_guest_pulls", () => {
   it("is not executable by anon or authenticated", async () => {
     expect(await isDenied("anon", "SELECT public.merge_guest_pulls($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
     expect(await isDenied("authenticated", "SELECT public.merge_guest_pulls($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
+  });
+});
+
+describe("merge_guest_packs", () => {
+  it("moves pack history and drops a same-day collision", async () => {
+    await sql(
+      `INSERT INTO public.pack_opens (guest_id, opened_on, card_count)
+       VALUES ($1, '2026-01-01', 3), ($2, '2026-01-01', 3), ($2, '2026-01-02', 3)`,
+      [GUEST_A, GUEST_B],
+    );
+
+    expect(await mergePacks()).toBe(1);
+    const rows = await sql<{ guest_id: string; opened_on: string }>(
+      "SELECT guest_id, opened_on FROM public.pack_opens ORDER BY opened_on",
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.guest_id === GUEST_A)).toBe(true);
+  });
+
+  it("is not executable by anon or authenticated", async () => {
+    expect(await isDenied("anon", "SELECT public.merge_guest_packs($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
+    expect(await isDenied("authenticated", "SELECT public.merge_guest_packs($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
   });
 });
 

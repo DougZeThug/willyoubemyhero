@@ -36,7 +36,10 @@ function existing(row: { participant_id?: string | null; guest_id?: string | nul
 
 async function sync(device: { memberId: string | null; guestId: string | null }) {
   const { syncAccount } = await import("./account.server");
-  return syncAccount(USER, device);
+  return syncAccount(USER, {
+    memberId: device.memberId,
+    guestIds: device.guestId ? [device.guestId] : [],
+  });
 }
 
 beforeEach(() => {
@@ -51,7 +54,7 @@ describe("syncAccount", () => {
 
     expect(res).toMatchObject({ kind: "member", id: PLAYER, name: "Alice" });
     expect(verifyMemberToken(res.token)?.participantId).toBe(PLAYER);
-    const [saved] = mock.callsFor("account_identities", "upsert");
+    const [saved] = mock.callsFor("account_identities", "insert");
     expect(saved?.payload).toMatchObject({ user_id: USER, participant_id: PLAYER });
   });
 
@@ -74,7 +77,7 @@ describe("syncAccount", () => {
     const res = await sync({ memberId: null, guestId: null });
 
     expect(res).toMatchObject({ kind: "member", id: PLAYER });
-    expect(mock.callsFor("account_identities", "upsert")).toHaveLength(0);
+    expect(mock.callsFor("account_identities", "insert")).toHaveLength(0);
   });
 
   it("folds a stray guest id on this phone into the account's guest collection", async () => {
@@ -105,12 +108,23 @@ describe("syncAccount", () => {
     });
   });
 
-  it("survives a merge that fails, because a sign-in is worth more than a merge", async () => {
+  it("refuses to replace the device identity when a merge fails", async () => {
     withDb({
       ...existing({ guest_id: GUEST_ACCOUNT }),
       "rpc.merge_guest_pulls": { error: { message: "nope" } },
     });
-    const res = await sync({ memberId: null, guestId: GUEST_DEVICE });
-    expect(res.id).toBe(GUEST_ACCOUNT);
+    await expect(sync({ memberId: null, guestId: GUEST_DEVICE })).rejects.toEqual({
+      message: "nope",
+    });
+  });
+
+  it("merges both the live and pre-auth guest identities", async () => {
+    withDb(existing({ guest_id: GUEST_ACCOUNT }));
+    const { syncAccount } = await import("./account.server");
+    await syncAccount(USER, { memberId: null, guestIds: [GUEST_DEVICE, GUEST_ACCOUNT] });
+    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_pulls", {
+      _into_guest: GUEST_ACCOUNT,
+      _from_guest: GUEST_DEVICE,
+    });
   });
 });

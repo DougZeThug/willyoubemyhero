@@ -29,7 +29,7 @@ function withDb(responses: SupabaseResponses = {}) {
 
 async function create(displayName: string, deviceGuestId: string | null = null) {
   const { createCollector } = await import("./collector.server");
-  return createCollector(USER, displayName, deviceGuestId);
+  return createCollector(USER, displayName, deviceGuestId ? [deviceGuestId] : []);
 }
 
 beforeEach(() => {

@@ -1702,6 +1702,10 @@ export type Database = {
         }
         Returns: Json
       }
+      merge_guest_packs: {
+        Args: { _from_guest: string; _into_guest: string }
+        Returns: number
+      }
       merge_guest_pulls: {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number

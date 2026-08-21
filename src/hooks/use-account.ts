@@ -5,6 +5,8 @@ import { syncAccountSession } from "@/lib/account.functions";
 import { setMemberToken, clearMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import { clearAccountHandoff } from "@/lib/account-handoff";
+import { setAccountSyncState } from "@/lib/account-sync-state";
 
 /** The Supabase user this browser is signed in as, or null. */
 export function useAuthUser(): { user: User | null; loading: boolean } {
@@ -46,10 +48,13 @@ export function useAccountSync(user: User | null) {
   useEffect(() => {
     if (!user) {
       syncedFor.current = null;
+      setAccountSyncState({ status: "idle", userId: null, message: null });
       return;
     }
-    if (syncedFor.current === user.id) return;
-    syncedFor.current = user.id;
+    const userId = user.id;
+    if (syncedFor.current === userId) return;
+    syncedFor.current = userId;
+    setAccountSyncState({ status: "syncing", userId, message: null });
 
     // A slow sync for the previous user must never land after a sign-out or an
     // account switch: the device would then act as that stale identity.
@@ -64,8 +69,8 @@ export function useAccountSync(user: User | null) {
       const res = await syncAccountSession({ data: undefined });
       if (cancelled) return;
       if (res.kind === "member") {
-        clearGuestToken();
         setMemberToken(res.token, res.name ?? "Player");
+        clearGuestToken();
         try {
           await adoptLocalCollection(held);
         } catch {
@@ -75,6 +80,8 @@ export function useAccountSync(user: User | null) {
         clearMemberToken();
         setGuestToken(res.token);
       }
+      clearAccountHandoff();
+      setAccountSyncState({ status: "ready", userId, message: null });
     }
 
     void (async () => {
@@ -98,6 +105,13 @@ export function useAccountSync(user: User | null) {
       // Still unsynced: unlatch so a later auth event (a token refresh, a
       // revisit) gets another go rather than the device being stuck.
       if (!cancelled) syncedFor.current = null;
+      if (!cancelled) {
+        setAccountSyncState({
+          status: "error",
+          userId,
+          message: "Your cards are safe, but this phone could not finish linking them.",
+        });
+      }
     })();
 
     return () => {

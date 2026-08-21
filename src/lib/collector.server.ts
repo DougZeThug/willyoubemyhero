@@ -25,7 +25,7 @@ export type CollectorIdentity = {
 export async function createCollector(
   userId: string,
   displayName: string,
-  deviceGuestId: string | null,
+  deviceGuestIds: string[],
 ): Promise<CollectorIdentity> {
   const { data: row } = await supabaseAdmin
     .from("account_identities")
@@ -34,7 +34,17 @@ export async function createCollector(
     .maybeSingle();
 
   if (row?.participant_id) {
-    throw new Error("This account already has a player");
+    const { data: participant, error } = await supabaseAdmin
+      .from("participants")
+      .select("id, name, is_collector")
+      .eq("id", row.participant_id)
+      .maybeSingle();
+    if (error || !participant?.is_collector) {
+      throw error ?? new Error("This account already has a player");
+    }
+    await mergeGuests(participant.id, deviceGuestIds);
+    const { token, expiresAt } = signMemberToken(participant.id);
+    return { participantId: participant.id, name: participant.name, token, expiresAt };
   }
 
   const { data: created, error } = await supabaseAdmin
@@ -44,33 +54,31 @@ export async function createCollector(
     .single();
   if (error || !created) throw error ?? new Error("Could not create your collector");
 
-  await supabaseAdmin
+  const { error: identityError } = await supabaseAdmin
     .from("account_identities")
     .upsert(
       { user_id: userId, participant_id: created.id, guest_id: null },
       { onConflict: "user_id" },
     );
+  if (identityError) throw identityError;
 
-  // Whatever they pulled before naming themselves is theirs. Swallowed on
-  // failure for the same reason as a paper-code claim: an identity that exists
-  // beats an identity that half-exists, and the cards can be reconciled later.
-  for (const guestId of new Set(
-    [row?.guest_id ?? null, deviceGuestId].filter(Boolean) as string[],
-  )) {
-    try {
-      await supabaseAdmin.rpc("claim_guest_secrets", {
-        _participant_id: created.id,
-        _guest_id: guestId,
-      });
-      await supabaseAdmin.rpc("claim_guest_packs", {
-        _participant_id: created.id,
-        _guest_id: guestId,
-      });
-    } catch {
-      /* the collector stands; the cards can be granted back */
-    }
-  }
+  await mergeGuests(created.id, [row?.guest_id ?? "", ...deviceGuestIds]);
 
   const { token, expiresAt } = signMemberToken(created.id);
   return { participantId: created.id, name: created.name, token, expiresAt };
+}
+
+async function mergeGuests(participantId: string, guestIds: string[]) {
+  for (const guestId of new Set(guestIds.filter(Boolean))) {
+    const { error: secretsError } = await supabaseAdmin.rpc("claim_guest_secrets", {
+      _participant_id: participantId,
+      _guest_id: guestId,
+    });
+    if (secretsError) throw secretsError;
+    const { error: packsError } = await supabaseAdmin.rpc("claim_guest_packs", {
+      _participant_id: participantId,
+      _guest_id: guestId,
+    });
+    if (packsError) throw packsError;
+  }
 }

@@ -1,6 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { optionalGuest, optionalMember, requireMember } from "./require-auth.server";
+import {
+  optionalAccountHandoff,
+  optionalGuest,
+  optionalMember,
+  requireMember,
+} from "./require-auth.server";
 import type { AccountSession } from "./account.server";
 
 /**
@@ -14,9 +19,12 @@ export const syncAccountSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<AccountSession> => {
     const { syncAccount } = await import("./account.server");
+    const handoff = optionalAccountHandoff();
     return syncAccount(context.userId, {
-      memberId: optionalMember(),
-      guestId: optionalGuest(),
+      memberId: optionalMember() ?? (handoff?.kind === "member" ? handoff.id : null),
+      guestIds: [optionalGuest(), handoff?.kind === "guest" ? handoff.id : null].filter(
+        (id): id is string => Boolean(id),
+      ),
     });
   });
 
@@ -25,9 +33,12 @@ export const getAccountIdentity = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ kind: "member" | "guest"; name: string | null }> => {
     const { syncAccount } = await import("./account.server");
+    const handoff = optionalAccountHandoff();
     const session = await syncAccount(context.userId, {
-      memberId: optionalMember(),
-      guestId: optionalGuest(),
+      memberId: optionalMember() ?? (handoff?.kind === "member" ? handoff.id : null),
+      guestIds: [optionalGuest(), handoff?.kind === "guest" ? handoff.id : null].filter(
+        (id): id is string => Boolean(id),
+      ),
     });
     return { kind: session.kind, name: session.name };
   });
