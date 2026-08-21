@@ -85,6 +85,7 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
   },
   undoLastDraftSelection: { eventId: EVENT_ID },
   updateEvent: { eventId: EVENT_ID, status: "live" },
+  resetCombine: { eventId: EVENT_ID },
 };
 
 describe("every write requires the commissioner", () => {
@@ -161,9 +162,23 @@ describe("saveCompletedRun", () => {
   it("counts only this participant's runs at this event", async () => {
     withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
     await save(base);
-    const [count] = mock.callsFor("runs", "select");
+    const count = mock.callsFor("runs", "select").find((c) => c.terminal === "await")!;
     expect(mock.eqValue(count, "event_id")).toBe(EVENT_ID);
     expect(mock.eqValue(count, "participant_id")).toBe(PARTICIPANT_ID);
+  });
+
+  it("keeps the attempt number a retry was already given", async () => {
+    // The console's Retry button re-sends the same client_key. Renumbering it
+    // would turn a first run into "attempt 2" purely because the phone had to
+    // try twice.
+    withDb({
+      "runs.select": [{ data: { attempt_number: 1 } }, { count: 1 }],
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
+    await save(base);
+    expect(runInserted().attempt_number).toBe(1);
+    const lookup = mock.callsFor("runs", "select").find((c) => c.terminal === "maybeSingle")!;
+    expect(mock.eqValue(lookup, "client_key")).toBe("client-key-1");
   });
 
   it("totals the penalties onto the run", async () => {

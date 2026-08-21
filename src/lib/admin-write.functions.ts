@@ -272,7 +272,16 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Attempt count
+    // Attempt count. A retry of a save that already landed must keep the number
+    // it was given: counting again would include the row this client_key wrote
+    // and renumber a first run as attempt 2. Matching on client_key rather than
+    // excluding it from the count keeps this NULL-safe — client_key is nullable
+    // and Postgres `<>` drops NULL rows.
+    const { data: alreadySaved } = await supabaseAdmin
+      .from("runs")
+      .select("attempt_number")
+      .eq("client_key", data.clientKey)
+      .maybeSingle();
     const { count } = await supabaseAdmin
       .from("runs")
       .select("*", { count: "exact", head: true })
@@ -287,7 +296,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
         {
           event_id: data.eventId,
           participant_id: data.participantId,
-          attempt_number: (count ?? 0) + 1,
+          attempt_number: alreadySaved?.attempt_number ?? (count ?? 0) + 1,
           started_at: data.started_at,
           finished_at: data.finished_at,
           raw_time_ms: data.raw_time_ms,
