@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
 import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import { onClockElapsedMs, type OnClockEntry } from "@/lib/live-clock";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -63,6 +64,18 @@ function LivePage() {
 
   useFinishWatcher(bundle, (finish) => setCelebration(finish));
 
+  // Memoised on the stamp rather than recomputed each render: HudTimer restarts
+  // its interpolation whenever runningSinceMs changes, so a fresh Date.now()
+  // every render would re-anchor the clock on every bundle refetch.
+  // Read structurally: on_clock_since is newer than the checked-in generated
+  // types (supabase/migrations/20260821120000_on_clock_since.sql), the same way
+  // card-rarity.ts declares card_rarity for itself.
+  const onClockSince = onClock ? ((current as OnClockEntry | null)?.on_clock_since ?? null) : null;
+  const onClockBaseMs = useMemo(
+    () => onClockElapsedMs({ on_clock_since: onClockSince }, Date.now()) ?? 0,
+    [onClockSince],
+  );
+
   // "Everyone is done" is only true when there was somebody to be done. It used
   // to be what the page said before the first fetch had even returned.
   const emptyReason = {
@@ -106,7 +119,7 @@ function LivePage() {
 
         <div className="flex flex-col items-center">
           <HudTimer
-            runningSinceMs={0}
+            runningSinceMs={onClockBaseMs}
             paused={!onClock}
             status={
               onClock ? "On the Clock" : current ? "Up Next" : loading ? "Loading" : "Standby"
@@ -127,6 +140,11 @@ function LivePage() {
               <User2 className="h-40 w-40 text-primary/60" strokeWidth={1.25} />
             )}
           </HudTimer>
+          {onClock && onClockSince && (
+            <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              Unofficial
+            </div>
+          )}
           {current ? (
             <div className="mt-4 text-center">
               <Link

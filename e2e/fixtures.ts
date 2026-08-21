@@ -29,6 +29,7 @@ function eventParticipant(p: (typeof PLAYERS)[number], i: number) {
     participant_id: p.pid,
     participation_status: p.timeMs == null ? "scratched" : "finished",
     card_rarity: null,
+    on_clock_since: null,
     running_order: i + 1,
     bib_number: i + 1,
     photo_path: null,

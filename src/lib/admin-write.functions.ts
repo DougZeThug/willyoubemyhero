@@ -3,6 +3,20 @@ import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { uuid as zuuid } from "./zod-uuid";
 
+/**
+ * Stamp the crowd-clock column onto a participant status update.
+ *
+ * The cast is the only way to write `on_clock_since` today: the column landed
+ * in supabase/migrations/20260821120000_on_clock_since.sql but the checked-in
+ * generated types have not been regenerated since, the same drift card_rarity
+ * already has. Regenerating types.ts makes this a plain object again.
+ */
+type ParticipantStatusPatch = { participation_status: string };
+
+function withOnClock<T extends ParticipantStatusPatch>(patch: T, since: Date | null) {
+  return { ...patch, on_clock_since: since ? since.toISOString() : null } as T;
+}
+
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -103,7 +117,12 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("event_participants")
-      .update({ participation_status: data.status })
+      .update(
+        withOnClock(
+          { participation_status: data.status },
+          data.status === "running" ? new Date() : null,
+        ),
+      )
       .eq("id", data.eventParticipantId);
     if (error) throw error;
     return { ok: true };
@@ -132,7 +151,7 @@ export const resetCombine = createServerFn({ method: "POST" })
     }
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
-      .update({ participation_status: "waiting" })
+      .update(withOnClock({ participation_status: "waiting" }, null))
       .eq("event_id", data.eventId)
       .neq("participation_status", "scratched");
     if (statusError) throw statusError;
@@ -346,7 +365,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     // Mark participant finished
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
-      .update({ participation_status: "finished" })
+      .update(withOnClock({ participation_status: "finished" }, null))
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
     if (statusError) throw statusError;

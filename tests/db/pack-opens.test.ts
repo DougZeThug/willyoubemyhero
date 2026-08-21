@@ -158,7 +158,7 @@ describe("the backfill", () => {
         FROM public.card_pulls cp
         JOIN public.event_participants ep ON ep.id = cp.event_participant_id
        GROUP BY cp.participant_id, (cp.first_pulled_at AT TIME ZONE 'America/New_York')::date
-      ON CONFLICT (participant_id, opened_on) DO NOTHING`;
+      ON CONFLICT (participant_id, opened_on) WHERE participant_id IS NOT NULL DO NOTHING`;
 
     await sql(backfill);
     expect(await rowCount()).toBe(1);
@@ -186,7 +186,7 @@ describe("the backfill", () => {
         FROM public.card_pulls cp
         JOIN public.event_participants ep ON ep.id = cp.event_participant_id
        GROUP BY cp.participant_id, (cp.first_pulled_at AT TIME ZONE 'America/New_York')::date
-      ON CONFLICT (participant_id, opened_on) DO NOTHING`);
+      ON CONFLICT (participant_id, opened_on) WHERE participant_id IS NOT NULL DO NOTHING`);
 
     const [row] = await sql<{ card_count: number }>("SELECT card_count FROM public.pack_opens");
     expect(row.card_count).toBe(3);

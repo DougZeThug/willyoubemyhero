@@ -79,6 +79,17 @@ describe("public reads", () => {
     expect(await visibleRows("anon", table)).not.toBeNull();
   });
 
+  it("lets anon read on_clock_since, which is what makes the crowd clock tick", async () => {
+    // event_participants is granted at table level, so a new column is readable
+    // without a fresh grant — but the spectator timer is the one thing that
+    // breaks silently if that ever stops being true.
+    const rows = await asRole<{ on_clock_since: string | null }>(
+      "anon",
+      "SELECT on_clock_since FROM public.event_participants",
+    );
+    expect(rows).not.toBeNull();
+  });
+
   it("anon sees the seeded roster, not an empty result from a silent policy", async () => {
     const rows = await asRole<{ name: string }>(
       "anon",
