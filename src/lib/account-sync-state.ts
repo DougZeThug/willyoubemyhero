@@ -6,6 +6,7 @@ export type AccountSyncState =
   | { status: "error"; userId: string; message: string };
 
 let state: AccountSyncState = { status: "idle", userId: null, message: null };
+const serverState: AccountSyncState = { status: "idle", userId: null, message: null };
 const listeners = new Set<() => void>();
 
 export function setAccountSyncState(next: AccountSyncState) {
@@ -20,6 +21,6 @@ export function useAccountSyncState() {
       return () => listeners.delete(listener);
     },
     () => state,
-    (): AccountSyncState => ({ status: "idle", userId: null, message: null }),
+    () => serverState,
   );
 }
