@@ -20,7 +20,6 @@ export function useAccountSyncState() {
     listeners.add(listener);
     listener();
     return () => {
-      listeners.add(listener);
       listeners.delete(listener);
     };
   }, []);
