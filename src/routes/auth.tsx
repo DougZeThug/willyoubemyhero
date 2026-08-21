@@ -71,7 +71,7 @@ function AuthPage() {
     setBusy(true);
     preserveAccountHandoff();
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/auth`,
     });
     if (result.error) {
       setBusy(false);
@@ -91,7 +91,7 @@ function AuthPage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin },
+          options: { emailRedirectTo: `${window.location.origin}/auth` },
         });
         if (error) throw error;
         // With email confirmation on, signUp returns no session — the account is
