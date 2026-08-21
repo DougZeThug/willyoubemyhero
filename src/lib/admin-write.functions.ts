@@ -115,14 +115,28 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Putting somebody on the clock and then starting their run both write
+    // "running". Re-stamping on the second one would drag the spectator clock
+    // forward to the Start tap and lose the moment they actually stepped up, so
+    // an athlete already on the clock keeps the stamp they were given.
+    const { data: current } = await supabaseAdmin
+      .from("event_participants")
+      .select("participation_status")
+      .eq("id", data.eventParticipantId)
+      .maybeSingle();
+    const alreadyOnClock = current?.participation_status === "running";
+
+    const patch =
+      data.status === "running"
+        ? alreadyOnClock
+          ? { participation_status: data.status }
+          : withOnClock({ participation_status: data.status }, new Date())
+        : withOnClock({ participation_status: data.status }, null);
+
     const { error } = await supabaseAdmin
       .from("event_participants")
-      .update(
-        withOnClock(
-          { participation_status: data.status },
-          data.status === "running" ? new Date() : null,
-        ),
-      )
+      .update(patch)
       .eq("id", data.eventParticipantId);
     if (error) throw error;
     return { ok: true };

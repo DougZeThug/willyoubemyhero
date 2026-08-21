@@ -4,7 +4,7 @@
 // official time.
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ACTIVE_RUN_VERSION } from "@/lib/active-run";
+import { ACTIVE_RUN_VERSION, type ActiveRun } from "@/lib/active-run";
 import type { FinishedRun } from "./use-finish-save";
 
 const saveCompletedRun = vi.fn();
@@ -41,6 +41,11 @@ function makeFinished(over: Partial<FinishedRun> = {}): FinishedRun {
   };
 }
 
+function makeRunning(over: Partial<ActiveRun> = {}): ActiveRun {
+  const { finishedAt: _a, finishedAtIso: _b, ...rest } = makeFinished();
+  return { ...rest, status: "running", ...over };
+}
+
 beforeEach(() => {
   saveCompletedRun.mockReset().mockResolvedValue({ runId: "run-1" });
 });
@@ -49,20 +54,20 @@ describe("buildFinishPayload", () => {
   it("takes the recorded time from the run, not from the clock", async () => {
     const { buildFinishPayload } = await import("./use-finish-save");
     const run = makeFinished();
-    const first = buildFinishPayload(run, EVENT_ID);
+    const first = buildFinishPayload(run);
     vi.setSystemTime(new Date(START + 10 * 60_000));
-    const later = buildFinishPayload(run, EVENT_ID);
+    const later = buildFinishPayload(run);
     vi.useRealTimers();
     expect(later).toEqual(first);
     expect(first.raw_time_ms).toBe(45_000);
     expect(first.finished_at).toBe("2026-07-28T12:00:45.000Z");
+    expect(first.eventId).toBe(EVENT_ID);
   });
 
   it("subtracts paused time and reports it separately", async () => {
     const { buildFinishPayload } = await import("./use-finish-save");
     const payload = buildFinishPayload(
       makeFinished({ pauses: [{ pausedAt: START + 10_000, resumedAt: START + 20_000 }] }),
-      EVENT_ID,
     );
     expect(payload.raw_time_ms).toBe(35_000);
     expect(payload.paused_duration_ms).toBe(10_000);
@@ -83,7 +88,6 @@ describe("buildFinishPayload", () => {
         ],
         penalties: [{ clientKey: "ck-pen", stationId: "st-1", penalty_ms: 5_000, reason: "Cone" }],
       }),
-      EVENT_ID,
     );
     expect(payload.splits).toEqual([
       {
@@ -116,9 +120,10 @@ describe("asFinishedRun", () => {
 
 describe("useFinishSave", () => {
   async function setup(onSaved = vi.fn()) {
+    const onDraft = vi.fn();
     const { useFinishSave } = await import("./use-finish-save");
-    const view = renderHook(() => useFinishSave({ eventId: EVENT_ID, onSaved }));
-    return { ...view, onSaved };
+    const view = renderHook(() => useFinishSave({ onDraft, onSaved }));
+    return { ...view, onSaved, onDraft };
   }
 
   it("walks idle → saving → idle and reports the run saved", async () => {
@@ -129,7 +134,7 @@ describe("useFinishSave", () => {
     expect(result.current.state).toBe("idle");
     let done!: Promise<void>;
     act(() => {
-      done = result.current.save(makeFinished());
+      done = result.current.retry(makeFinished());
     });
     await waitFor(() => expect(result.current.state).toBe("saving"));
     await act(async () => {
@@ -146,7 +151,7 @@ describe("useFinishSave", () => {
     const { result, onSaved } = await setup();
 
     await act(async () => {
-      await result.current.save(makeFinished());
+      await result.current.retry(makeFinished());
     });
     expect(result.current.state).toBe("failed");
     expect(result.current.error).toBe("Admin PIN required");
@@ -161,13 +166,13 @@ describe("useFinishSave", () => {
     const run = makeFinished();
 
     await act(async () => {
-      await result.current.save(run);
+      await result.current.retry(run);
     });
     expect(result.current.state).toBe("failed");
 
     saveCompletedRun.mockResolvedValueOnce({ runId: "run-1" });
     await act(async () => {
-      await result.current.save(run);
+      await result.current.retry(run);
     });
     expect(result.current.state).toBe("idle");
     expect(saveCompletedRun).toHaveBeenCalledTimes(2);
@@ -182,10 +187,10 @@ describe("useFinishSave", () => {
 
     let first!: Promise<void>;
     act(() => {
-      first = result.current.save(run);
+      first = result.current.retry(run);
     });
     await act(async () => {
-      await result.current.save(run);
+      await result.current.retry(run);
     });
     expect(saveCompletedRun).toHaveBeenCalledTimes(1);
     await act(async () => {
@@ -194,13 +199,84 @@ describe("useFinishSave", () => {
     });
   });
 
-  it("does nothing without an event id", async () => {
-    const { useFinishSave } = await import("./use-finish-save");
-    const { result } = renderHook(() => useFinishSave({ eventId: null, onSaved: vi.fn() }));
-    await act(async () => {
-      await result.current.save(makeFinished());
+  it("stops the clock once, however many times Finish is tapped", async () => {
+    // The bug this guards: two taps in one tick both hold the pre-finish run,
+    // because React state has not committed between them. Each would stamp its
+    // own finish time and race the other into the recovery record, and a Retry
+    // after a partly written save would then send the loser's time under the
+    // winner's client_key — quietly rewriting the official result.
+    let release!: (v: unknown) => void;
+    saveCompletedRun.mockReturnValue(new Promise((r) => (release = r)));
+    const { result, onDraft } = await setup();
+    const running = makeRunning();
+
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.finish(running);
     });
+    await act(async () => {
+      await result.current.finish(running);
+    });
+
+    // onDraft is called synchronously, before the record is written to this
+    // phone; the request itself waits on that write.
+    expect(onDraft).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(saveCompletedRun).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      release({ runId: "run-1" });
+      await first;
+    });
+  });
+
+  it("refuses to finish a run that has already stopped", async () => {
+    const { result, onDraft } = await setup();
+    await act(async () => {
+      await result.current.finish(makeFinished());
+    });
+    expect(onDraft).not.toHaveBeenCalled();
     expect(saveCompletedRun).not.toHaveBeenCalled();
+  });
+
+  it("hands the console the stopped record before the network sees it", async () => {
+    // The console persists what it is given, so a save that throws still leaves
+    // the run on the phone.
+    saveCompletedRun.mockRejectedValue(new Error("offline"));
+    const { result, onDraft } = await setup();
+    await act(async () => {
+      await result.current.finish(makeRunning());
+    });
+    const draft = onDraft.mock.calls[0][0];
+    expect(draft.status).toBe("finished");
+    expect(draft.finishedAt).toBeTypeOf("number");
+    expect(Date.parse(draft.finishedAtIso)).toBe(draft.finishedAt);
+    expect(result.current.state).toBe("failed");
+  });
+
+  it("retries a failed finish with the time it was given, not a fresh one", async () => {
+    saveCompletedRun.mockRejectedValueOnce(new Error("offline"));
+    const { result, onDraft } = await setup();
+    await act(async () => {
+      await result.current.finish(makeRunning());
+    });
+    expect(result.current.state).toBe("failed");
+
+    saveCompletedRun.mockResolvedValueOnce({ runId: "run-1" });
+    await act(async () => {
+      await result.current.retry(onDraft.mock.calls[0][0]);
+    });
+    expect(saveCompletedRun.mock.calls[1][0]).toEqual(saveCompletedRun.mock.calls[0][0]);
+  });
+
+  it("saves against the event the run was actually run at", async () => {
+    // A recovered run outlives the page that produced it. Taking the event from
+    // whatever happens to be active when Retry is tapped would file an archived
+    // event's time against the new one, and would disable recovery outright in
+    // the window where no event is active at all.
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.retry(makeFinished({ eventId: "event-from-last-year" }));
+    });
+    expect(saveCompletedRun.mock.calls[0][0].data.eventId).toBe("event-from-last-year");
   });
 
   it("reports the run saved even if the caller's cleanup throws", async () => {
@@ -209,7 +285,7 @@ describe("useFinishSave", () => {
     const onSaved = vi.fn().mockRejectedValue(new Error("IndexedDB is gone"));
     const { result } = await setup(onSaved);
     await act(async () => {
-      await result.current.save(makeFinished()).catch(() => {});
+      await result.current.retry(makeFinished()).catch(() => {});
     });
     expect(result.current.state).toBe("idle");
   });
@@ -218,7 +294,7 @@ describe("useFinishSave", () => {
     saveCompletedRun.mockRejectedValue(new Error("offline"));
     const { result } = await setup();
     await act(async () => {
-      await result.current.save(makeFinished());
+      await result.current.retry(makeFinished());
     });
     expect(result.current.state).toBe("failed");
     act(() => result.current.reset());

@@ -155,6 +155,16 @@ describe("the crowd clock", () => {
     expect(Date.parse(payload.on_clock_since as string)).not.toBeNaN();
   });
 
+  it("keeps the original stamp when an athlete already on the clock is started", async () => {
+    // setOnClock and then Start both write "running". Re-stamping on the second
+    // would drag the spectator clock forward to the Start tap and lose the
+    // moment the athlete actually stepped up.
+    withDb({ "event_participants.select": { data: { participation_status: "running" } } });
+    const payload = await setStatus("running");
+    expect(payload).toEqual({ participation_status: "running" });
+    expect(payload).not.toHaveProperty("on_clock_since");
+  });
+
   it("clears the clock on every other status", async () => {
     for (const status of ["waiting", "queued", "finished", "scratched"]) {
       withDb();

@@ -32,7 +32,7 @@ import { StationsPanel } from "@/components/stations-panel";
 import { AdminSection } from "@/components/admin-section";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { asFinishedRun, useFinishSave, type FinishedRun } from "@/hooks/use-finish-save";
+import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -358,7 +358,7 @@ function TimingConsole() {
   }
 
   const finishSave = useFinishSave({
-    eventId: event?.id,
+    onDraft: setRun,
     onSaved: async () => {
       toast.success("Run saved");
       await clearActiveRun();
@@ -378,20 +378,8 @@ function TimingConsole() {
         : "Finished — not saved";
 
   async function finishRun() {
-    if (!run || !event?.id || run.status === "finished") return;
-    const finishedAt = Date.now();
-    const draft: FinishedRun = {
-      ...run,
-      status: "finished",
-      finishedAt,
-      finishedAtIso: new Date(finishedAt).toISOString(),
-    };
-    // Written to this phone before the network call. If the save throws the run
-    // is still here, and Retry re-sends this exact record rather than re-reading
-    // a clock that has moved on.
-    setRun(draft);
-    await saveActiveRun(draft);
-    await finishSave.save(draft);
+    if (!run) return;
+    await finishSave.finish(run);
   }
 
   async function cancelRun() {
@@ -521,7 +509,7 @@ function TimingConsole() {
                   {finishedRun && (
                     <Button
                       size="lg"
-                      onClick={() => finishSave.save(finishedRun)}
+                      onClick={() => finishSave.retry(finishedRun)}
                       disabled={finishing}
                       className="h-12 flex-1 sm:h-10 sm:min-w-28 sm:flex-none"
                     >
