@@ -41,6 +41,7 @@ import { ParticipantAvatar } from "@/components/participant-avatar";
 import { BigTimer } from "@/components/big-timer";
 import { formatTime, newClientKey } from "@/lib/format";
 import {
+  ACTIVE_RUN_VERSION,
   clearActiveRun,
   computeElapsedMs,
   loadActiveRun,
@@ -247,7 +248,7 @@ function TimingConsole() {
 
   const paused = run?.status === "paused";
   const finished = run?.status === "finished";
-  const elapsed = run ? computeElapsedMs(run, performance.now()) : 0;
+  const elapsed = run ? computeElapsedMs(run, Date.now()) : 0;
 
   const usedStationIds = new Set(run?.splits.map((s) => s.stationId) ?? []);
 
@@ -258,14 +259,16 @@ function TimingConsole() {
 
   async function startRun() {
     if (!event?.id || !selectedParticipantId) return;
-    const startedAtPerf = performance.now();
-    const startedAtIso = new Date().toISOString();
+    // One instant behind both anchors. Read separately they can land a tick
+    // apart, and startedAtIso is what the server stores as the start time.
+    const startedAt = Date.now();
     const nextRun: ActiveRun = {
+      v: ACTIVE_RUN_VERSION,
       clientKey: newClientKey(),
       eventId: event.id,
       participantId: selectedParticipantId,
-      startedAtIso,
-      startedAtPerf,
+      startedAtIso: new Date(startedAt).toISOString(),
+      startedAt,
       status: "running",
       pauses: [],
       splits: [],
@@ -294,12 +297,12 @@ function TimingConsole() {
       setRun({
         ...run,
         status: "paused",
-        pauses: [...run.pauses, { pausedAt: performance.now(), resumedAt: null }],
+        pauses: [...run.pauses, { pausedAt: Date.now(), resumedAt: null }],
       });
     } else if (run.status === "paused") {
       const pauses = run.pauses.slice();
       const last = pauses[pauses.length - 1];
-      if (last && last.resumedAt == null) last.resumedAt = performance.now();
+      if (last && last.resumedAt == null) last.resumedAt = Date.now();
       setRun({ ...run, status: "running", pauses });
     }
   }
@@ -307,7 +310,8 @@ function TimingConsole() {
   function recordSplit(stationId: string) {
     if (!run || run.status !== "running") return;
     if (usedStationIds.has(stationId)) return;
-    const cumulative = computeElapsedMs(run, performance.now());
+    const now = Date.now();
+    const cumulative = computeElapsedMs(run, now);
     const prevMax = run.splits.reduce((m, s) => Math.max(m, s.cumulative_time_ms), 0);
     setRun({
       ...run,
@@ -318,7 +322,7 @@ function TimingConsole() {
           stationId,
           cumulative_time_ms: cumulative,
           segment_time_ms: cumulative - prevMax,
-          recorded_at: new Date().toISOString(),
+          recorded_at: new Date(now).toISOString(),
         },
       ],
     });
@@ -351,17 +355,14 @@ function TimingConsole() {
     if (finishingRef.current) return;
     finishingRef.current = true;
     setFinishing(true);
-    const finishedAtPerf = performance.now();
-    const finishedAtIso = new Date().toISOString();
-    const raw_time_ms = computeElapsedMs(
-      { ...run, status: "finished", finishedAtPerf },
-      finishedAtPerf,
-    );
+    const finishedAt = Date.now();
+    const finishedAtIso = new Date(finishedAt).toISOString();
+    const draft = { ...run, status: "finished" as const, finishedAtIso, finishedAt };
+    const raw_time_ms = computeElapsedMs(draft, finishedAt);
     const paused_duration_ms = run.pauses.reduce(
-      (s, p) => s + ((p.resumedAt ?? finishedAtPerf) - p.pausedAt),
+      (s, p) => s + ((p.resumedAt ?? finishedAt) - p.pausedAt),
       0,
     );
-    const draft = { ...run, status: "finished" as const, finishedAtIso, finishedAtPerf };
     setRun(draft);
     await saveActiveRun(draft);
     try {
