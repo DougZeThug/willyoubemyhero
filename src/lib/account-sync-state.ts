@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 export type AccountSyncState =
   | { status: "idle" | "syncing"; userId: string | null; message: null }
@@ -6,7 +6,6 @@ export type AccountSyncState =
   | { status: "error"; userId: string; message: string };
 
 let state: AccountSyncState = { status: "idle", userId: null, message: null };
-const serverState: AccountSyncState = { status: "idle", userId: null, message: null };
 const listeners = new Set<() => void>();
 
 export function setAccountSyncState(next: AccountSyncState) {
@@ -15,12 +14,15 @@ export function setAccountSyncState(next: AccountSyncState) {
 }
 
 export function useAccountSyncState() {
-  return useSyncExternalStore(
-    (listener) => {
+  const [snapshot, setSnapshot] = useState<AccountSyncState>(() => state);
+  useEffect(() => {
+    const listener = () => setSnapshot(state);
+    listeners.add(listener);
+    listener();
+    return () => {
       listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => state,
-    () => serverState,
-  );
+      listeners.delete(listener);
+    };
+  }, []);
+  return snapshot;
 }
