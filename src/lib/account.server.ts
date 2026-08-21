@@ -61,7 +61,11 @@ async function mergeGuestInto(identity: AccountIdentity, guestId: string) {
       _from_guest: guestId,
     });
     if (secretsError) throw secretsError;
-    const { error: packsError } = await supabaseAdmin.rpc("merge_guest_packs", {
+    const mergePacks = supabaseAdmin.rpc as unknown as (
+      name: "merge_guest_packs",
+      args: { _into_guest: string; _from_guest: string },
+    ) => Promise<{ error: unknown }>;
+    const { error: packsError } = await mergePacks("merge_guest_packs", {
       _into_guest: identity.id,
       _from_guest: guestId,
     });

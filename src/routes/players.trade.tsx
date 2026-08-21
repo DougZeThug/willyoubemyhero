@@ -12,6 +12,7 @@ import { getClaimRoster } from "@/lib/member.functions";
 import { createCollectorIdentity } from "@/lib/collector.functions";
 import { setMemberToken } from "@/lib/member-token";
 import { clearGuestToken } from "@/lib/guest-token";
+import { clearAccountHandoff } from "@/lib/account-handoff";
 import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
 import {
   acceptTradeOffer,
@@ -587,6 +588,7 @@ function CollectorSignup({ email }: { email: string | null }) {
       const held = await snapshotLocalCollection();
       const res = await createFn({ data: { displayName } });
       clearGuestToken();
+      clearAccountHandoff();
       setMemberToken(res.token, res.name);
       try {
         await adoptLocalCollection(held);

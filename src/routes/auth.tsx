@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { LogIn, LogOut, ShieldCheck, UserRoundPlus } from "lucide-react";
+import { LoaderCircle, LogIn, LogOut, ShieldCheck, UserRoundPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { signOutAccount, useAuthUser } from "@/hooks/use-account";
@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { preserveAccountHandoff } from "@/lib/account-handoff";
+import { useAccountSyncState } from "@/lib/account-sync-state";
 
 export const Route = createFileRoute("/auth")({
   // Both optional: /auth stays a plain sign-in page when linked without them.
@@ -53,22 +55,21 @@ function AuthPage() {
   const { mode: modeParam, next } = Route.useSearch();
   const { user, loading } = useAuthUser();
   const member = useMemberSession();
+  const sync = useAccountSyncState();
   const [mode, setMode] = useState<Mode>(modeParam ?? "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
 
-  // A fresh sign-in lands back here; give the token sync a beat, then get out of
-  // the way rather than parking a signed-in user on a sign-in page.
   useEffect(() => {
-    if (!user) return;
-    const t = window.setTimeout(() => void navigate({ to: next ?? "/players" }), 900);
-    return () => window.clearTimeout(t);
-  }, [user, navigate, next]);
+    if (!user || sync.status !== "ready" || sync.userId !== user.id) return;
+    void navigate({ to: next ?? "/players" });
+  }, [user, sync, navigate, next]);
 
   async function signInWithGoogle() {
     setBusy(true);
+    preserveAccountHandoff();
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: window.location.origin,
     });
@@ -86,6 +87,7 @@ function AuthPage() {
     setBusy(true);
     try {
       if (mode === "signup") {
+        preserveAccountHandoff();
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -101,6 +103,7 @@ function AuthPage() {
         }
         toast.success("You're in");
       } else {
+        preserveAccountHandoff();
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back");
@@ -119,20 +122,28 @@ function AuthPage() {
       <div className="mx-auto max-w-md px-4 py-10">
         <Card className="border-primary/20 bg-card/70">
           <CardContent className="space-y-4 p-6 text-center">
-            <ShieldCheck className="mx-auto h-8 w-8 text-primary" />
+            {sync.status === "ready" ? (
+              <ShieldCheck className="mx-auto h-8 w-8 text-primary" />
+            ) : (
+              <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-primary" />
+            )}
             <div>
               <h1 className="font-display text-xl font-black uppercase tracking-[0.18em]">
-                Signed in
+                {sync.status === "error" ? "Link needs another try" : "Securing your cards"}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
               <p className="mt-3 text-sm text-muted-foreground">
-                {member?.name
-                  ? `Your cards are saved to ${member.name}.`
-                  : "Your cards are saved to this account — they'll follow you to any phone."}
+                {sync.status === "error"
+                  ? sync.message
+                  : sync.status !== "ready"
+                    ? "Keep this page open while this phone's collection is linked."
+                    : member?.name
+                      ? `Your cards are saved to ${member.name}.`
+                      : "Your cards are saved to this account — they'll follow you to any phone."}
               </p>
             </div>
             <div className="flex flex-col gap-2">
-              <Button asChild>
+              <Button asChild disabled={sync.status !== "ready"}>
                 <Link to="/players">Go to the vault</Link>
               </Button>
               {!member && (

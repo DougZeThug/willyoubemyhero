@@ -36,7 +36,10 @@ function existing(row: { participant_id?: string | null; guest_id?: string | nul
 
 async function sync(device: { memberId: string | null; guestId: string | null }) {
   const { syncAccount } = await import("./account.server");
-  return syncAccount(USER, device);
+  return syncAccount(USER, {
+    memberId: device.memberId,
+    guestIds: device.guestId ? [device.guestId] : [],
+  });
 }
 
 beforeEach(() => {
@@ -105,12 +108,23 @@ describe("syncAccount", () => {
     });
   });
 
-  it("survives a merge that fails, because a sign-in is worth more than a merge", async () => {
+  it("refuses to replace the device identity when a merge fails", async () => {
     withDb({
       ...existing({ guest_id: GUEST_ACCOUNT }),
       "rpc.merge_guest_pulls": { error: { message: "nope" } },
     });
-    const res = await sync({ memberId: null, guestId: GUEST_DEVICE });
-    expect(res.id).toBe(GUEST_ACCOUNT);
+    await expect(sync({ memberId: null, guestId: GUEST_DEVICE })).rejects.toEqual({
+      message: "nope",
+    });
+  });
+
+  it("merges both the live and pre-auth guest identities", async () => {
+    withDb(existing({ guest_id: GUEST_ACCOUNT }));
+    const { syncAccount } = await import("./account.server");
+    await syncAccount(USER, { memberId: null, guestIds: [GUEST_DEVICE, GUEST_ACCOUNT] });
+    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_pulls", {
+      _into_guest: GUEST_ACCOUNT,
+      _from_guest: GUEST_DEVICE,
+    });
   });
 });
