@@ -54,7 +54,7 @@ describe("syncAccount", () => {
 
     expect(res).toMatchObject({ kind: "member", id: PLAYER, name: "Alice" });
     expect(verifyMemberToken(res.token)?.participantId).toBe(PLAYER);
-    const [saved] = mock.callsFor("account_identities", "upsert");
+    const [saved] = mock.callsFor("account_identities", "insert");
     expect(saved?.payload).toMatchObject({ user_id: USER, participant_id: PLAYER });
   });
 
@@ -77,7 +77,7 @@ describe("syncAccount", () => {
     const res = await sync({ memberId: null, guestId: null });
 
     expect(res).toMatchObject({ kind: "member", id: PLAYER });
-    expect(mock.callsFor("account_identities", "upsert")).toHaveLength(0);
+    expect(mock.callsFor("account_identities", "insert")).toHaveLength(0);
   });
 
   it("folds a stray guest id on this phone into the account's guest collection", async () => {

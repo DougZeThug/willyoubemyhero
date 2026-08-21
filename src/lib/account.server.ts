@@ -96,7 +96,7 @@ export async function syncAccount(
   userId: string,
   device: { memberId: string | null; guestIds: string[] },
 ): Promise<AccountSession> {
-  const row = await readRow(userId);
+  let row = await readRow(userId);
   const guestIds = [...new Set(device.guestIds)];
 
   // First sign-in on this account: adopt whatever this phone is already holding,
@@ -106,17 +106,20 @@ export async function syncAccount(
     const identity: AccountIdentity = device.memberId
       ? { kind: "member", id: device.memberId }
       : { kind: "guest", id: guestIds[0] ?? randomUUID() };
-    const { error } = await supabaseAdmin.from("account_identities").upsert(
-      {
-        user_id: userId,
-        participant_id: identity.kind === "member" ? identity.id : null,
-        guest_id: identity.kind === "guest" ? identity.id : null,
-      },
-      { onConflict: "user_id" },
-    );
-    if (error) throw error;
-    for (const guestId of guestIds) await mergeGuestInto(identity, guestId);
-    return mint(identity, identity.kind === "member" ? await nameFor(identity.id) : null);
+    const { error } = await supabaseAdmin.from("account_identities").insert({
+      user_id: userId,
+      participant_id: identity.kind === "member" ? identity.id : null,
+      guest_id: identity.kind === "guest" ? identity.id : null,
+    });
+    if (!error) {
+      for (const guestId of guestIds) await mergeGuestInto(identity, guestId);
+      return mint(identity, identity.kind === "member" ? await nameFor(identity.id) : null);
+    }
+    // Another tab may have created this account between our read and insert.
+    // Its row wins; fold this device into it rather than overwriting either id.
+    if (error.code !== "23505") throw error;
+    row = await readRow(userId);
+    if (!row) throw error;
   }
 
   let identity = toIdentity(row);

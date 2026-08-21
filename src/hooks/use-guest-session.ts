@@ -4,6 +4,20 @@ import { startGuestSession } from "@/lib/guest.functions";
 import { getGuestToken, setGuestToken, useGuestSession } from "@/lib/guest-token";
 import { getMemberToken, useMemberSession } from "@/lib/member-token";
 
+type StartGuest = ReturnType<typeof useServerFn<typeof startGuestSession>>;
+let startInFlight: Promise<void> | null = null;
+
+function ensureOneGuest(start: StartGuest) {
+  if (startInFlight) return startInFlight;
+  startInFlight = (async () => {
+    const res = await start({});
+    if (res?.token && !getMemberToken() && !getGuestToken()) setGuestToken(res.token);
+  })().finally(() => {
+    startInFlight = null;
+  });
+  return startInFlight;
+}
+
 /**
  * Make sure this device has an identity it can own a secret card with.
  *
@@ -41,8 +55,7 @@ export function useEnsureGuestSession(enabled: boolean) {
 
     void (async () => {
       try {
-        const res = await start({});
-        if (res?.token) setGuestToken(res.token);
+        await ensureOneGuest(start);
       } catch {
         // A guest without a session simply gets no fourth card, which is exactly
         // the behaviour that shipped before guests could pull at all.
