@@ -166,6 +166,58 @@ describe("subscribeToEventChannel", () => {
     expect(late.health).toHaveBeenCalledWith("degraded");
   });
 
+  it("polls slowly while the socket is healthy, and hard once it is not", async () => {
+    // One timer for the event, not one per mounted hook: refetchInterval lives
+    // on the observer, so /admin's eight subscribers would each have polled.
+    const { subscribeToEventChannel, HEALTHY_POLL_MS, DEGRADED_POLL_MS } = await freshModule();
+    const a = { change: vi.fn(), health: vi.fn() };
+    const b = { change: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, a);
+    subscribeToEventChannel(EVENT_ID, b);
+    statusCallbacks[0]("SUBSCRIBED");
+
+    vi.advanceTimersByTime(DEGRADED_POLL_MS);
+    expect(a.change).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(HEALTHY_POLL_MS);
+    expect(a.change).toHaveBeenCalledTimes(1);
+    expect(b.change).toHaveBeenCalledTimes(1);
+
+    statusCallbacks[0]("CHANNEL_ERROR");
+    // Losing the socket fires its own catch-up refetch; the poll is what comes
+    // after it.
+    a.change.mockClear();
+    vi.advanceTimersByTime(DEGRADED_POLL_MS);
+    expect(a.change).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not poll a tab nobody is looking at", async () => {
+    // refetchOnWindowFocus catches the tab up when it comes back, so polling a
+    // phone in a pocket only costs battery.
+    const { subscribeToEventChannel, HEALTHY_POLL_MS } = await freshModule();
+    const sub = { change: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, sub);
+    const visibility = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockReturnValue("hidden" as DocumentVisibilityState);
+    vi.advanceTimersByTime(HEALTHY_POLL_MS * 2);
+    expect(sub.change).not.toHaveBeenCalled();
+    visibility.mockReturnValue("visible" as DocumentVisibilityState);
+    vi.advanceTimersByTime(HEALTHY_POLL_MS);
+    expect(sub.change).toHaveBeenCalledTimes(1);
+    visibility.mockRestore();
+  });
+
+  it("stops polling once the channel is gone", async () => {
+    const { subscribeToEventChannel, TEARDOWN_GRACE_MS, HEALTHY_POLL_MS } = await freshModule();
+    const sub = { change: vi.fn(), health: vi.fn() };
+    const off = subscribeToEventChannel(EVENT_ID, sub);
+    off();
+    vi.advanceTimersByTime(TEARDOWN_GRACE_MS);
+    sub.change.mockClear();
+    vi.advanceTimersByTime(HEALTHY_POLL_MS * 3);
+    expect(sub.change).not.toHaveBeenCalled();
+  });
+
   it("holds the channel open across a route change", async () => {
     // The old page unmounts before the new one mounts, so the count dips to
     // zero for a tick. Closing there costs a reconnect and a blind window.

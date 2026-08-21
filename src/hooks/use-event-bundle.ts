@@ -4,11 +4,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { subscribeToEventChannel, type ChannelHealth } from "@/lib/event-channel";
 import { getActiveEvent, getEventBundle } from "@/lib/event.functions";
 
-/** Realtime is carrying the updates; this is only a backstop. */
-const HEALTHY_POLL_MS = 15_000;
-/** Realtime is down, so polling is the only thing keeping the screens honest. */
-const DEGRADED_POLL_MS = 4_000;
-
 export function useEventBundle() {
   const activeFn = useServerFn(getActiveEvent);
   const bundleFn = useServerFn(getEventBundle);
@@ -32,7 +27,8 @@ export function useEventBundle() {
     enabled: !!eventId,
     staleTime: 3_000,
     refetchOnWindowFocus: true,
-    refetchInterval: realtimeDegraded ? DEGRADED_POLL_MS : HEALTHY_POLL_MS,
+    // No refetchInterval: the poll that backs realtime up lives in the channel
+    // registry, one timer per event rather than one per mounted hook.
   });
 
   useEffect(() => {

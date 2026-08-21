@@ -21,6 +21,7 @@ type Entry = {
   health: ChannelHealth;
   subscribers: Set<EventChannelSubscriber>;
   teardown: ReturnType<typeof setTimeout> | null;
+  poll: ReturnType<typeof setInterval> | null;
 };
 
 /**
@@ -29,6 +30,11 @@ type Entry = {
  * reconnect and a window where changes land unseen.
  */
 export const TEARDOWN_GRACE_MS = 5_000;
+
+/** Realtime is carrying the updates; this is only a backstop. */
+export const HEALTHY_POLL_MS = 15_000;
+/** Realtime is down, so polling is the only thing keeping the screens honest. */
+export const DEGRADED_POLL_MS = 4_000;
 
 const entries = new Map<string, Entry>();
 
@@ -42,6 +48,7 @@ function openChannel(eventId: string): Entry {
     health: "connecting",
     subscribers: new Set(),
     teardown: null,
+    poll: null,
   };
   entries.set(eventId, entry);
 
@@ -51,6 +58,22 @@ function openChannel(eventId: string): Entry {
     for (const s of [...entry.subscribers]) s.change();
   };
 
+  // One timer for the whole event, not one per mounted hook. refetchInterval
+  // lives on the observer, so /admin's eight subscribers would each have run
+  // their own — a bundle fetch every half second while degraded.
+  const restartPoll = () => {
+    if (entry.poll) clearInterval(entry.poll);
+    entry.poll = setInterval(
+      () => {
+        // A phone in a pocket is not watching, and a background tab that wakes
+        // up refetches on focus anyway.
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+        fanOut();
+      },
+      entry.health === "degraded" ? DEGRADED_POLL_MS : HEALTHY_POLL_MS,
+    );
+  };
+
   const setHealth = (next: ChannelHealth) => {
     if (entries.get(eventId) !== entry || entry.health === next) return;
     // Changes that happened while the socket was down were never delivered, so
@@ -58,6 +81,7 @@ function openChannel(eventId: string): Entry {
     const recovered = entry.health === "degraded" && next === "live";
     entry.health = next;
     for (const s of [...entry.subscribers]) s.health(next);
+    restartPoll();
     if (recovered) fanOut();
   };
 
@@ -96,6 +120,7 @@ function openChannel(eventId: string): Entry {
       setHealth(status === "SUBSCRIBED" ? "live" : "degraded");
     });
 
+  restartPoll();
   return entry;
 }
 
@@ -122,6 +147,8 @@ export function subscribeToEventChannel(
     joined.teardown = setTimeout(() => {
       if (entries.get(eventId) !== joined || joined.subscribers.size > 0) return;
       entries.delete(eventId);
+      if (joined.poll) clearInterval(joined.poll);
+      joined.poll = null;
       supabase.removeChannel(joined.channel);
     }, TEARDOWN_GRACE_MS);
   };
