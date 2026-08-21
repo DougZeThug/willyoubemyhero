@@ -30,6 +30,15 @@ export function optionalGuest(): string | null {
   return verifyGuestToken(getRequestHeader("x-guest-token") ?? null)?.guestId ?? null;
 }
 
+/** A signed identity saved immediately before authentication started. */
+export function optionalAccountHandoff(): Actor | null {
+  const token = getRequestHeader("x-account-handoff-token") ?? null;
+  const member = verifyMemberToken(token);
+  if (member) return { kind: "member", id: member.participantId };
+  const guest = verifyGuestToken(token);
+  return guest ? { kind: "guest", id: guest.guestId } : null;
+}
+
 /**
  * Whoever is asking, member or guest.
  *
