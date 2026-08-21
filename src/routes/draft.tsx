@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { useEventBundle } from "@/hooks/use-event-bundle";
@@ -35,6 +36,12 @@ function DraftPage() {
   const recordFn = useServerFn(recordDraftSelection);
   const undoFn = useServerFn(undoLastDraftSelection);
   const [busy, setBusy] = useState(false);
+  const qc = useQueryClient();
+
+  // The board used to wait on the realtime subscription alone. With the socket
+  // down — a blocked websocket, a throttled tab — a pick landed in the database
+  // and the picker was still staring at their own name.
+  const refresh = () => qc.invalidateQueries({ queryKey: ["event-bundle", event?.id] });
 
   const admin = useAdminSession();
   const isAdmin = !!event?.id && admin?.eventId === event.id;
@@ -69,6 +76,7 @@ function DraftPage() {
           draftPosition: pos,
         },
       });
+      await refresh();
       toast.success(`${currentPicker.ep!.participant?.name} picks #${pos}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
@@ -82,6 +90,7 @@ function DraftPage() {
     setBusy(true);
     try {
       await undoFn({ data: { eventId: event.id } });
+      await refresh();
       toast.success("Undid last pick");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");

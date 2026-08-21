@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -33,6 +34,7 @@ function OrderPage() {
   const setOrderFn = useServerFn(setRunningOrder);
   const recordFn = useServerFn(recordRandomization);
   const [busy, setBusy] = useState(false);
+  const qc = useQueryClient();
 
   const admin = useAdminSession();
   const isAdmin = !!event?.id && admin?.eventId === event.id;
@@ -67,6 +69,9 @@ function OrderPage() {
           seed,
         },
       });
+      // Not left to the realtime subscription: a reshuffle nobody can see is
+      // worse than no reshuffle, and this is the screen everyone is looking at.
+      await qc.invalidateQueries({ queryKey: ["event-bundle", event.id] });
       toast.success("Running order re-randomized");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to shuffle");
