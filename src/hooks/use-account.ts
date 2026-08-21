@@ -51,9 +51,10 @@ export function useAccountSync(user: User | null) {
       setAccountSyncState({ status: "idle", userId: null, message: null });
       return;
     }
-    if (syncedFor.current === user.id) return;
-    syncedFor.current = user.id;
-    setAccountSyncState({ status: "syncing", userId: user.id, message: null });
+    const userId = user.id;
+    if (syncedFor.current === userId) return;
+    syncedFor.current = userId;
+    setAccountSyncState({ status: "syncing", userId, message: null });
 
     // A slow sync for the previous user must never land after a sign-out or an
     // account switch: the device would then act as that stale identity.
@@ -80,7 +81,7 @@ export function useAccountSync(user: User | null) {
         setGuestToken(res.token);
       }
       clearAccountHandoff();
-      setAccountSyncState({ status: "ready", userId: user.id, message: null });
+      setAccountSyncState({ status: "ready", userId, message: null });
     }
 
     void (async () => {
@@ -107,7 +108,7 @@ export function useAccountSync(user: User | null) {
       if (!cancelled) {
         setAccountSyncState({
           status: "error",
-          userId: user.id,
+          userId,
           message: "Your cards are safe, but this phone could not finish linking them.",
         });
       }
