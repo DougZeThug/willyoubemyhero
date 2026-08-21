@@ -21,8 +21,8 @@ export const createCollectorIdentity = createServerFn({ method: "POST" })
     return createCollector(
       context.userId,
       data.displayName,
-      [optionalGuest(), handoff?.kind === "guest" ? handoff.id : null].filter(
-        (id): id is string => Boolean(id),
+      [optionalGuest(), handoff?.kind === "guest" ? handoff.id : null].filter((id): id is string =>
+        Boolean(id),
       ),
     );
   });
