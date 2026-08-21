@@ -143,9 +143,13 @@ function AuthPage() {
               </p>
             </div>
             <div className="flex flex-col gap-2">
-              <Button asChild disabled={sync.status !== "ready"}>
-                <Link to="/players">Go to the vault</Link>
-              </Button>
+              {sync.status === "error" ? (
+                <Button onClick={() => window.location.reload()}>Try linking again</Button>
+              ) : (
+                <Button asChild disabled={sync.status !== "ready"}>
+                  <Link to="/players">Go to the vault</Link>
+                </Button>
+              )}
               {!member && (
                 <Button variant="outline" asChild>
                   <Link to="/claim">I have a player code</Link>
