@@ -149,6 +149,32 @@ test.describe("the daily secret", () => {
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 15_000 });
   });
 
+  test("tapping try again after a failed pull actually pulls", async ({ page, server }) => {
+    // The retry cleared its latch and three state flags, none of which the pull
+    // effect depended on — so the effect never re-ran, nothing was requested,
+    // and with every flag false the slot computed to "hidden" and the fourth
+    // card simply vanished.
+    await asMember(page);
+    withSecret(server);
+    server.fail("pullSecretCard", "offline");
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await revealAll(page);
+
+    const retry = page.getByRole("button", { name: /tap to try again/i });
+    await expect(retry).toBeVisible();
+
+    server.recover("pullSecretCard");
+    const before = server.calls.filter((c) => c.includes("pullSecretCard")).length;
+    await retry.click();
+
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("pullSecretCard")).length)
+      .toBeGreaterThan(before);
+    // And the slot stays on screen rather than disappearing on the way.
+    await expect(page.getByText(/one more card/i)).toBeVisible();
+  });
+
   test("a duplicate reads as a wink, not a failure", async ({ page, server }) => {
     await asMember(page);
     withSecret(server, { pull: { duplicate: true }, status: { pulled: 9 } });

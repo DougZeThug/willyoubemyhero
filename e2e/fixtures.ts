@@ -238,6 +238,8 @@ export type ServerFnMock = {
   set: (key: string, value: unknown) => void;
   /** Fail one server function with an error the UI has to handle. */
   fail: (key: string, message: string) => void;
+  /** Stop failing one, so a retry the UI offers has something to succeed at. */
+  recover: (key: string) => void;
   /**
    * Hold one server function's answer back, for the races a fast stub hides.
    *
@@ -287,6 +289,9 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
     },
     fail: (key, message) => {
       failures[key] = message;
+    },
+    recover: (key) => {
+      delete failures[key];
     },
     delay: (key, ms) => {
       delays[key] = ms;
