@@ -1,28 +1,19 @@
-import { useEffect } from "react";
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
+import { subscribeToEventChannel, type ChannelHealth } from "@/lib/event-channel";
 import { getActiveEvent, getEventBundle } from "@/lib/event.functions";
 
-export const activeEventQuery = () =>
-  queryOptions({
-    queryKey: ["active-event"],
-    queryFn: () => getActiveEvent(),
-    staleTime: 60_000,
-  });
-
-export const eventBundleQuery = (eventId: string | null | undefined) =>
-  queryOptions({
-    queryKey: ["event-bundle", eventId],
-    queryFn: () => getEventBundle({ data: { eventId: eventId! } }),
-    enabled: !!eventId,
-    staleTime: 5_000,
-  });
+/** Realtime is carrying the updates; this is only a backstop. */
+const HEALTHY_POLL_MS = 15_000;
+/** Realtime is down, so polling is the only thing keeping the screens honest. */
+const DEGRADED_POLL_MS = 4_000;
 
 export function useEventBundle() {
   const activeFn = useServerFn(getActiveEvent);
   const bundleFn = useServerFn(getEventBundle);
   const qc = useQueryClient();
+  const [health, setHealth] = useState<ChannelHealth>("connecting");
 
   const event = useQuery({
     queryKey: ["active-event"],
@@ -31,54 +22,50 @@ export function useEventBundle() {
   });
   const eventId = event.data?.id ?? null;
 
+  // "connecting" is the state before the socket has answered at all. Counting
+  // it as degraded would flash an offline banner on every page load.
+  const realtimeDegraded = health === "degraded";
+
   const bundle = useQuery({
     queryKey: ["event-bundle", eventId],
     queryFn: () => bundleFn({ data: { eventId: eventId! } }),
     enabled: !!eventId,
     staleTime: 3_000,
     refetchOnWindowFocus: true,
+    refetchInterval: realtimeDegraded ? DEGRADED_POLL_MS : HEALTHY_POLL_MS,
   });
 
   useEffect(() => {
-    if (!eventId) return;
-    const invalidate = () => {
-      qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
-    };
-    const channelName = `event:${eventId}:${Math.random().toString(36).slice(2)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "runs", filter: `event_id=eq.${eventId}` },
-        invalidate,
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "event_participants",
-          filter: `event_id=eq.${eventId}`,
-        },
-        invalidate,
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "draft_selections",
-          filter: `event_id=eq.${eventId}`,
-        },
-        invalidate,
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "splits" }, invalidate)
-      .on("postgres_changes", { event: "*", schema: "public", table: "penalties" }, invalidate)
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    if (!eventId) {
+      setHealth("connecting");
+      return;
+    }
+    return subscribeToEventChannel(eventId, {
+      change: () => {
+        qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
+      },
+      health: setHealth,
+    });
   }, [eventId, qc]);
 
-  return { event: event.data, bundle: bundle.data, loading: event.isLoading || bundle.isLoading };
+  const refetchEvent = event.refetch;
+  const refetchBundle = bundle.refetch;
+  const refetch = useCallback(async () => {
+    await Promise.all([refetchEvent(), refetchBundle()]);
+  }, [refetchEvent, refetchBundle]);
+
+  return {
+    event: event.data,
+    bundle: bundle.data,
+    loading: event.isLoading || bundle.isLoading,
+    error: event.error ?? bundle.error ?? null,
+    /**
+     * Tables getEventBundle could not read. The bundle coalesces a failed read
+     * to an empty array, so without this a broken roster looks like an empty
+     * one — which is how /live ended up congratulating nobody on being done.
+     */
+    failedTables: bundle.data?.failed ?? [],
+    realtimeDegraded,
+    refetch,
+  };
 }

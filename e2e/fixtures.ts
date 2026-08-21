@@ -75,6 +75,7 @@ export const BUNDLE = {
   })),
   penalties: [],
   drafts: [],
+  failed: [],
 };
 
 /**

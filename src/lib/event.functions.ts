@@ -43,16 +43,25 @@ export const getEventBundle = createServerFn({ method: "GET" })
     // Wrap each query so a rejection or PostgREST error on one table never
     // wipes the whole bundle — participants and stations must render even
     // if splits/penalties temporarily fail. Log server-side either way.
+    //
+    // A failed read still coalesces to an empty array below, which reads
+    // exactly like "there is nothing here" — so the labels that failed are
+    // reported alongside the data and the screens can say which it was.
+    const failed: string[] = [];
     const safe = async <T>(
       label: string,
       p: PromiseLike<{ data: T | null; error: unknown }>,
     ): Promise<T | null> => {
       try {
         const { data: d, error } = await p;
-        if (error) console.error(`[getEventBundle] ${label} error`, error);
+        if (error) {
+          console.error(`[getEventBundle] ${label} error`, error);
+          failed.push(label);
+        }
         return d ?? null;
       } catch (e) {
         console.error(`[getEventBundle] ${label} rejected`, e);
+        failed.push(label);
         return null;
       }
     };
@@ -113,6 +122,7 @@ export const getEventBundle = createServerFn({ method: "GET" })
       splits: splits ?? [],
       penalties: penalties ?? [],
       drafts: drafts ?? [],
+      failed,
     };
   });
 

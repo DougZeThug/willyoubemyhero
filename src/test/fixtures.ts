@@ -77,6 +77,8 @@ export type FixtureBundle = {
   splits: FixtureSplit[];
   penalties: FixturePenalty[];
   drafts: unknown[];
+  /** Tables getEventBundle could not read; empty on a healthy fetch. */
+  failed: string[];
 };
 
 export const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
@@ -159,6 +161,7 @@ export function makeBundle(over: Partial<FixtureBundle> = {}): FixtureBundle {
     splits: [],
     penalties: [],
     drafts: [],
+    failed: [],
     ...over,
   };
 }
