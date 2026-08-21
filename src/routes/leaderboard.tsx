@@ -8,6 +8,7 @@ import { formatTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
 import { ResultCard } from "@/components/result-card";
 import { exportCardPng } from "@/lib/share-card";
@@ -28,7 +29,8 @@ export const Route = createFileRoute("/leaderboard")({
 });
 
 function LeaderboardPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
+    useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const [sharingRunId, setSharingRunId] = useState<string | null>(null);
@@ -82,9 +84,30 @@ function LeaderboardPage() {
     }
   }
 
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-4xl px-4 py-10">
+          <FeedLoading label="Reading the standings…" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-4xl px-4 py-10">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-4xl px-4 py-6">
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <PageHeader
           eyebrow="Standings"
           title="Leaderboard"
@@ -104,7 +127,9 @@ function LeaderboardPage() {
           <CardContent className="p-0">
             {rows.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                No official times yet — check back after the first athlete crosses.
+                {failedTables.length > 0
+                  ? "Couldn't read the results just now — retrying."
+                  : "No official times yet — check back after the first athlete crosses."}
               </div>
             ) : (
               <ul className="divide-y divide-white/5">

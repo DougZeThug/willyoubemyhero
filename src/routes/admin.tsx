@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { verifyEventPin, startAdminSessionFromAccount } from "@/lib/admin.functions";
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
 import { useAuthUser } from "@/hooks/use-account";
-import { saveCompletedRun, setParticipantStatus, resetCombine } from "@/lib/admin-write.functions";
+import { setParticipantStatus, resetCombine } from "@/lib/admin-write.functions";
 import {
   upsertParticipant,
   addParticipantToEvent,
@@ -32,7 +32,19 @@ import { StationsPanel } from "@/components/stations-panel";
 import { AdminSection } from "@/components/admin-section";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +53,7 @@ import { ParticipantAvatar } from "@/components/participant-avatar";
 import { BigTimer } from "@/components/big-timer";
 import { formatTime, newClientKey } from "@/lib/format";
 import {
+  ACTIVE_RUN_VERSION,
   clearActiveRun,
   computeElapsedMs,
   loadActiveRun,
@@ -214,7 +227,6 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
 function TimingConsole() {
   const { event, bundle } = useEventBundle();
   const qc = useQueryClient();
-  const saveRunFn = useServerFn(saveCompletedRun);
   const setStatusFn = useServerFn(setParticipantStatus);
 
   const [run, setRun] = useState<ActiveRun | null>(null);
@@ -247,7 +259,9 @@ function TimingConsole() {
 
   const paused = run?.status === "paused";
   const finished = run?.status === "finished";
-  const elapsed = run ? computeElapsedMs(run, performance.now()) : 0;
+  const elapsed = run ? computeElapsedMs(run, Date.now()) : 0;
+  /** The stopped record Retry re-sends, byte for byte. */
+  const finishedRun = asFinishedRun(run);
 
   const usedStationIds = new Set(run?.splits.map((s) => s.stationId) ?? []);
 
@@ -258,14 +272,16 @@ function TimingConsole() {
 
   async function startRun() {
     if (!event?.id || !selectedParticipantId) return;
-    const startedAtPerf = performance.now();
-    const startedAtIso = new Date().toISOString();
+    // One instant behind both anchors. Read separately they can land a tick
+    // apart, and startedAtIso is what the server stores as the start time.
+    const startedAt = Date.now();
     const nextRun: ActiveRun = {
+      v: ACTIVE_RUN_VERSION,
       clientKey: newClientKey(),
       eventId: event.id,
       participantId: selectedParticipantId,
-      startedAtIso,
-      startedAtPerf,
+      startedAtIso: new Date(startedAt).toISOString(),
+      startedAt,
       status: "running",
       pauses: [],
       splits: [],
@@ -294,12 +310,12 @@ function TimingConsole() {
       setRun({
         ...run,
         status: "paused",
-        pauses: [...run.pauses, { pausedAt: performance.now(), resumedAt: null }],
+        pauses: [...run.pauses, { pausedAt: Date.now(), resumedAt: null }],
       });
     } else if (run.status === "paused") {
       const pauses = run.pauses.slice();
       const last = pauses[pauses.length - 1];
-      if (last && last.resumedAt == null) last.resumedAt = performance.now();
+      if (last && last.resumedAt == null) last.resumedAt = Date.now();
       setRun({ ...run, status: "running", pauses });
     }
   }
@@ -307,7 +323,8 @@ function TimingConsole() {
   function recordSplit(stationId: string) {
     if (!run || run.status !== "running") return;
     if (usedStationIds.has(stationId)) return;
-    const cumulative = computeElapsedMs(run, performance.now());
+    const now = Date.now();
+    const cumulative = computeElapsedMs(run, now);
     const prevMax = run.splits.reduce((m, s) => Math.max(m, s.cumulative_time_ms), 0);
     setRun({
       ...run,
@@ -318,7 +335,7 @@ function TimingConsole() {
           stationId,
           cumulative_time_ms: cumulative,
           segment_time_ms: cumulative - prevMax,
-          recorded_at: new Date().toISOString(),
+          recorded_at: new Date(now).toISOString(),
         },
       ],
     });
@@ -340,64 +357,29 @@ function TimingConsole() {
     });
   }
 
-  const finishingRef = useRef(false);
-  const [finishing, setFinishing] = useState(false);
-
-  async function finishRun() {
-    if (!run || !event?.id) return;
-    // A double tap fires two handlers off the same render, both holding the
-    // pre-finish `run`. They'd upsert the same client_key with different stop
-    // times and the second one would silently become the official time.
-    if (finishingRef.current) return;
-    finishingRef.current = true;
-    setFinishing(true);
-    const finishedAtPerf = performance.now();
-    const finishedAtIso = new Date().toISOString();
-    const raw_time_ms = computeElapsedMs(
-      { ...run, status: "finished", finishedAtPerf },
-      finishedAtPerf,
-    );
-    const paused_duration_ms = run.pauses.reduce(
-      (s, p) => s + ((p.resumedAt ?? finishedAtPerf) - p.pausedAt),
-      0,
-    );
-    const draft = { ...run, status: "finished" as const, finishedAtIso, finishedAtPerf };
-    setRun(draft);
-    await saveActiveRun(draft);
-    try {
-      await saveRunFn({
-        data: {
-          eventId: event.id,
-          participantId: run.participantId,
-          clientKey: run.clientKey,
-          started_at: run.startedAtIso,
-          finished_at: finishedAtIso,
-          raw_time_ms,
-          paused_duration_ms: Math.round(paused_duration_ms),
-          splits: run.splits.map((s) => ({
-            stationId: s.stationId,
-            cumulative_time_ms: s.cumulative_time_ms,
-            segment_time_ms: s.segment_time_ms,
-            clientKey: s.clientKey,
-            recorded_at: s.recorded_at,
-          })),
-          penalties: run.penalties.map((p) => ({
-            stationId: p.stationId,
-            penalty_ms: p.penalty_ms,
-            reason: p.reason,
-            clientKey: p.clientKey,
-          })),
-        },
-      });
+  const finishSave = useFinishSave({
+    onDraft: setRun,
+    onSaved: async () => {
       toast.success("Run saved");
       await clearActiveRun();
       setRun(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save run — kept locally");
-    } finally {
-      finishingRef.current = false;
-      setFinishing(false);
-    }
+    },
+  });
+  const finishing = finishSave.state === "saving";
+
+  // A finished run that has not reached the league is the state this console
+  // used to hide entirely, so the header says so rather than a bare "Finished".
+  const statusLabel = paused
+    ? "Paused"
+    : !finished
+      ? "Running"
+      : finishSave.state === "saving"
+        ? "Finished — saving"
+        : "Finished — not saved";
+
+  async function finishRun() {
+    if (!run) return;
+    await finishSave.finish(run);
   }
 
   async function cancelRun() {
@@ -500,8 +482,13 @@ function TimingConsole() {
                   size={64}
                 />
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-[0.28em] text-muted-foreground">
-                    {paused ? "Paused" : finished ? "Finished" : "Running"}
+                  <div
+                    className={
+                      "text-xs font-bold uppercase tracking-[0.28em] " +
+                      (finished ? "text-warn" : "text-muted-foreground")
+                    }
+                  >
+                    {statusLabel}
                   </div>
                   <div className="font-display text-2xl font-black uppercase leading-tight">
                     {currentEp?.participant?.name ?? "—"}
@@ -511,7 +498,54 @@ function TimingConsole() {
               <BigTimer runningSinceMs={elapsed} paused={paused || finished} />
             </div>
 
-            {!finished && (
+            {finished ? (
+              <div className="mt-4 space-y-2">
+                <p className="text-center text-sm text-warn">
+                  {finishSave.state === "saving"
+                    ? "Sending this run to the league…"
+                    : `${finishSave.error ?? "The save did not go through."} The run is safe on this phone — retry once you have signal.`}
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {finishedRun && (
+                    <Button
+                      size="lg"
+                      onClick={() => finishSave.retry(finishedRun)}
+                      disabled={finishing}
+                      className="h-12 flex-1 sm:h-10 sm:min-w-28 sm:flex-none"
+                    >
+                      <RotateCcw className="mr-1.5 h-4 w-4" />
+                      {finishing ? "Saving…" : "Retry save"}
+                    </Button>
+                  )}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="lg"
+                        variant="ghost"
+                        disabled={finishing}
+                        className="h-12 w-full sm:h-10 sm:w-auto"
+                      >
+                        <Trash2 className="mr-1.5 h-4 w-4" /> Discard
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Discard this run?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {`${currentEp?.participant?.name ?? "This athlete"} ran ${formatTime(elapsed)}.`}{" "}
+                          Discarding throws that time away and puts them back in the queue. Nobody
+                          runs the course twice, so there is no undo.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep it</AlertDialogCancel>
+                        <AlertDialogAction onClick={cancelRun}>Discard</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            ) : (
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 <Button
                   size="lg"

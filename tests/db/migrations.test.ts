@@ -33,6 +33,7 @@ const EXPECTED_TABLES = [
   "runs",
   "secret_card_pulls",
   "secret_cards",
+  "secret_collections",
   "splits",
   "stations",
   "trade_offer_items",
@@ -163,6 +164,20 @@ describe("migrations", () => {
     `);
     expect(row.is_nullable).toBe("NO");
     expect(row.column_default).toContain("standard");
+  });
+
+  it("gives the crowd screens a timestamp for who is on the clock", async () => {
+    // Between "on the clock" and "finished" the database held no timestamp at
+    // all — the runs row is only written when the run ends — so /live counted
+    // up from whenever the browser noticed rather than from anything real.
+    const [row] = await sql<{ data_type: string; is_nullable: string }>(`
+      SELECT data_type, is_nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'event_participants'
+         AND column_name = 'on_clock_since'
+    `);
+    expect(row.data_type).toBe("timestamp with time zone");
+    // Nullable is the point: null means nobody is on the clock.
+    expect(row.is_nullable).toBe("YES");
   });
 
   it("exposes events through a public view", async () => {

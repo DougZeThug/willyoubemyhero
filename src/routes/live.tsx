@@ -9,7 +9,9 @@ import { FinishCelebration } from "@/components/finish-celebration";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
-import { currentAthlete, fieldSize } from "@/lib/current-athlete";
+import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import { onClockElapsedMs, type OnClockEntry } from "@/lib/live-clock";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -30,7 +32,8 @@ export const Route = createFileRoute("/live")({
 });
 
 function LivePage() {
-  const { event, bundle, loading } = useEventBundle();
+  const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
+    useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const [celebration, setCelebration] = useState<{
@@ -61,6 +64,47 @@ function LivePage() {
 
   useFinishWatcher(bundle, (finish) => setCelebration(finish));
 
+  // Memoised on the stamp rather than recomputed each render: HudTimer restarts
+  // its interpolation whenever runningSinceMs changes, so a fresh Date.now()
+  // every render would re-anchor the clock on every bundle refetch.
+  // Read structurally: on_clock_since is newer than the checked-in generated
+  // types (supabase/migrations/20260821120000_on_clock_since.sql), the same way
+  // card-rarity.ts declares card_rarity for itself.
+  const onClockSince = onClock ? ((current as OnClockEntry | null)?.on_clock_since ?? null) : null;
+  const onClockBaseMs = useMemo(
+    () => onClockElapsedMs({ on_clock_since: onClockSince }, Date.now()) ?? 0,
+    [onClockSince],
+  );
+
+  // "Everyone is done" is only true when there was somebody to be done. It used
+  // to be what the page said before the first fetch had even returned.
+  const emptyReason = {
+    "roster-failed": "Couldn't read the roster just now — retrying.",
+    "no-roster": "No roster yet. The commissioner sets the field.",
+    "all-done": "Every athlete is done. Nice work.",
+    waiting: "Nobody on the clock right now.",
+  }[idleFieldState(done, total, failedTables.includes("event_participants"))];
+
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
+        <div className="mx-auto max-w-6xl px-4 pb-6 pt-10">
+          <FeedLoading />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
+        <div className="mx-auto max-w-6xl px-4 pb-6 pt-10">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
       <div className="mx-auto max-w-6xl space-y-6 px-4 pb-6 pt-4 sm:pt-6">
@@ -71,9 +115,11 @@ function LivePage() {
           </span>
         </div>
 
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner />}
+
         <div className="flex flex-col items-center">
           <HudTimer
-            runningSinceMs={0}
+            runningSinceMs={onClockBaseMs}
             paused={!onClock}
             status={
               onClock ? "On the Clock" : current ? "Up Next" : loading ? "Loading" : "Standby"
@@ -94,6 +140,11 @@ function LivePage() {
               <User2 className="h-40 w-40 text-primary/60" strokeWidth={1.25} />
             )}
           </HudTimer>
+          {onClock && onClockSince && (
+            <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              Unofficial
+            </div>
+          )}
           {current ? (
             <div className="mt-4 text-center">
               <Link
@@ -110,9 +161,7 @@ function LivePage() {
               )}
             </div>
           ) : (
-            <div className="mt-4 text-xs text-muted-foreground">
-              Every athlete is done. Nice work.
-            </div>
+            <div className="mt-4 text-center text-xs text-muted-foreground">{emptyReason}</div>
           )}
         </div>
 

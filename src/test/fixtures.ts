@@ -24,6 +24,7 @@ export type FixtureParticipant = {
   participant_id: string;
   participation_status: string;
   card_rarity: string | null;
+  on_clock_since: string | null;
   running_order: number;
   bib_number: number | null;
   photo_path: string | null;
@@ -77,6 +78,8 @@ export type FixtureBundle = {
   splits: FixtureSplit[];
   penalties: FixturePenalty[];
   drafts: unknown[];
+  /** Tables getEventBundle could not read; empty on a healthy fetch. */
+  failed: string[];
 };
 
 export const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
@@ -90,6 +93,7 @@ export function makeParticipant(over: Partial<FixtureParticipant> = {}): Fixture
     participant_id: participantId,
     participation_status: "queued",
     card_rarity: null,
+    on_clock_since: null,
     running_order: 1,
     bib_number: null,
     photo_path: null,
@@ -159,6 +163,7 @@ export function makeBundle(over: Partial<FixtureBundle> = {}): FixtureBundle {
     splits: [],
     penalties: [],
     drafts: [],
+    failed: [],
     ...over,
   };
 }

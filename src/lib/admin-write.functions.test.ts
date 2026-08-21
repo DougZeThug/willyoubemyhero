@@ -85,6 +85,7 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
   },
   undoLastDraftSelection: { eventId: EVENT_ID },
   updateEvent: { eventId: EVENT_ID, status: "live" },
+  resetCombine: { eventId: EVENT_ID },
 };
 
 describe("every write requires the commissioner", () => {
@@ -134,6 +135,55 @@ describe("every write requires the commissioner", () => {
   );
 });
 
+describe("the crowd clock", () => {
+  // /live counts up from event_participants.on_clock_since. Nothing else
+  // records when somebody stepped up: the runs row is not written until the run
+  // is over, so before this column the spectator timer just counted from
+  // whenever the browser happened to load.
+  async function setStatus(status: string) {
+    const { setParticipantStatus } = await import("./admin-write.functions");
+    await callServerFn(setParticipantStatus, {
+      data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status },
+      headers: asAdmin(),
+    });
+    return mock.callsFor("event_participants", "update")[0].payload as Record<string, unknown>;
+  }
+
+  it("starts the clock when somebody goes on it", async () => {
+    const payload = await setStatus("running");
+    expect(payload.participation_status).toBe("running");
+    expect(Date.parse(payload.on_clock_since as string)).not.toBeNaN();
+  });
+
+  it("keeps the original stamp when an athlete already on the clock is started", async () => {
+    // setOnClock and then Start both write "running". Re-stamping on the second
+    // would drag the spectator clock forward to the Start tap and lose the
+    // moment the athlete actually stepped up.
+    withDb({ "event_participants.select": { data: { participation_status: "running" } } });
+    const payload = await setStatus("running");
+    expect(payload).toEqual({ participation_status: "running" });
+    expect(payload).not.toHaveProperty("on_clock_since");
+  });
+
+  it("clears the clock on every other status", async () => {
+    for (const status of ["waiting", "queued", "finished", "scratched"]) {
+      withDb();
+      expect(await setStatus(status)).toEqual({
+        participation_status: status,
+        on_clock_since: null,
+      });
+    }
+  });
+
+  it("clears the clock when the combine is reset", async () => {
+    const { resetCombine } = await import("./admin-write.functions");
+    withDb({ "runs.select": { data: [] } });
+    await callServerFn(resetCombine, { data: { eventId: EVENT_ID }, headers: asAdmin() });
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(update.payload).toEqual({ participation_status: "waiting", on_clock_since: null });
+  });
+});
+
 describe("saveCompletedRun", () => {
   const base = VALID_PAYLOADS.saveCompletedRun;
 
@@ -161,9 +211,23 @@ describe("saveCompletedRun", () => {
   it("counts only this participant's runs at this event", async () => {
     withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
     await save(base);
-    const [count] = mock.callsFor("runs", "select");
+    const count = mock.callsFor("runs", "select").find((c) => c.terminal === "await")!;
     expect(mock.eqValue(count, "event_id")).toBe(EVENT_ID);
     expect(mock.eqValue(count, "participant_id")).toBe(PARTICIPANT_ID);
+  });
+
+  it("keeps the attempt number a retry was already given", async () => {
+    // The console's Retry button re-sends the same client_key. Renumbering it
+    // would turn a first run into "attempt 2" purely because the phone had to
+    // try twice.
+    withDb({
+      "runs.select": [{ data: { attempt_number: 1 } }, { count: 1 }],
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
+    await save(base);
+    expect(runInserted().attempt_number).toBe(1);
+    const lookup = mock.callsFor("runs", "select").find((c) => c.terminal === "maybeSingle")!;
+    expect(mock.eqValue(lookup, "client_key")).toBe("client-key-1");
   });
 
   it("totals the penalties onto the run", async () => {
@@ -231,11 +295,14 @@ describe("saveCompletedRun", () => {
     expect(mock.callsFor("penalties")).toHaveLength(0);
   });
 
-  it("marks the participant finished", async () => {
+  it("marks the participant finished and stops the crowd clock", async () => {
     withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
     await save(base);
     const [update] = mock.callsFor("event_participants", "update");
-    expect(update.payload).toEqual({ participation_status: "finished" });
+    expect(update.payload).toEqual({
+      participation_status: "finished",
+      on_clock_since: null,
+    });
     expect(mock.eqValue(update, "participant_id")).toBe(PARTICIPANT_ID);
   });
 

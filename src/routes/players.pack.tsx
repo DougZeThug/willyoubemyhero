@@ -209,6 +209,10 @@ function PackPage() {
   const [secretPulling, setSecretPulling] = useState(false);
   const [secretFailed, setSecretFailed] = useState(false);
   const [secretUnavailable, setSecretUnavailable] = useState(false);
+  // Bumped by the retry button. Clearing the latch alone leaves every value the
+  // pull effect depends on unchanged, so the effect never re-runs and the retry
+  // does nothing at all.
+  const [retryNonce, setRetryNonce] = useState(0);
   // Set synchronously before the request goes out. setDealtIds is async, so two
   // Enter presses in one tick both see the old state; this also survives
   // StrictMode mounting every effect twice in development.
@@ -624,7 +628,7 @@ function PackPage() {
     })();
 
     return () => clearTimeout(timer);
-  }, [torn, actor, pull, qc]);
+  }, [torn, actor, pull, qc, retryNonce]);
 
   /**
    * Tell the server which cards were in this pack, so the vault can say how many
@@ -1084,9 +1088,12 @@ function PackPage() {
             onRetrySecret={() => {
               pullFiredRef.current = false;
               setSecretFailed(false);
-              // Flipping this back off re-runs the pull effect, whose latch was
-              // just cleared.
-              setSecretPulling(false);
+              // Held on through the render between the tap and the effect. With
+              // every flag false the slot computes to "hidden" and the fourth
+              // card disappears instead of showing that it is trying again.
+              setSecretPulling(true);
+              // The dependency that actually re-runs the effect.
+              setRetryNonce((n) => n + 1);
             }}
           />
         )}

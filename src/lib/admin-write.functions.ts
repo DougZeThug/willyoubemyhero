@@ -3,6 +3,20 @@ import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { uuid as zuuid } from "./zod-uuid";
 
+/**
+ * Stamp the crowd-clock column onto a participant status update.
+ *
+ * The cast is the only way to write `on_clock_since` today: the column landed
+ * in supabase/migrations/20260821120000_on_clock_since.sql but the checked-in
+ * generated types have not been regenerated since, the same drift card_rarity
+ * already has. Regenerating types.ts makes this a plain object again.
+ */
+type ParticipantStatusPatch = { participation_status: string };
+
+function withOnClock<T extends ParticipantStatusPatch>(patch: T, since: Date | null) {
+  return { ...patch, on_clock_since: since ? since.toISOString() : null } as T;
+}
+
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -101,9 +115,28 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Putting somebody on the clock and then starting their run both write
+    // "running". Re-stamping on the second one would drag the spectator clock
+    // forward to the Start tap and lose the moment they actually stepped up, so
+    // an athlete already on the clock keeps the stamp they were given.
+    const { data: current } = await supabaseAdmin
+      .from("event_participants")
+      .select("participation_status")
+      .eq("id", data.eventParticipantId)
+      .maybeSingle();
+    const alreadyOnClock = current?.participation_status === "running";
+
+    const patch =
+      data.status === "running"
+        ? alreadyOnClock
+          ? { participation_status: data.status }
+          : withOnClock({ participation_status: data.status }, new Date())
+        : withOnClock({ participation_status: data.status }, null);
+
     const { error } = await supabaseAdmin
       .from("event_participants")
-      .update({ participation_status: data.status })
+      .update(patch)
       .eq("id", data.eventParticipantId);
     if (error) throw error;
     return { ok: true };
@@ -132,7 +165,7 @@ export const resetCombine = createServerFn({ method: "POST" })
     }
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
-      .update({ participation_status: "waiting" })
+      .update(withOnClock({ participation_status: "waiting" }, null))
       .eq("event_id", data.eventId)
       .neq("participation_status", "scratched");
     if (statusError) throw statusError;
@@ -272,7 +305,16 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Attempt count
+    // Attempt count. A retry of a save that already landed must keep the number
+    // it was given: counting again would include the row this client_key wrote
+    // and renumber a first run as attempt 2. Matching on client_key rather than
+    // excluding it from the count keeps this NULL-safe — client_key is nullable
+    // and Postgres `<>` drops NULL rows.
+    const { data: alreadySaved } = await supabaseAdmin
+      .from("runs")
+      .select("attempt_number")
+      .eq("client_key", data.clientKey)
+      .maybeSingle();
     const { count } = await supabaseAdmin
       .from("runs")
       .select("*", { count: "exact", head: true })
@@ -287,7 +329,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
         {
           event_id: data.eventId,
           participant_id: data.participantId,
-          attempt_number: (count ?? 0) + 1,
+          attempt_number: alreadySaved?.attempt_number ?? (count ?? 0) + 1,
           started_at: data.started_at,
           finished_at: data.finished_at,
           raw_time_ms: data.raw_time_ms,
@@ -337,7 +379,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     // Mark participant finished
     const { error: statusError } = await supabaseAdmin
       .from("event_participants")
-      .update({ participation_status: "finished" })
+      .update(withOnClock({ participation_status: "finished" }, null))
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
     if (statusError) throw statusError;

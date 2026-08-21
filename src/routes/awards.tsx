@@ -12,6 +12,7 @@ import { castAwardVote, getMyAwardVotes } from "@/lib/social.functions";
 import { AWARD_CATEGORIES } from "@/lib/awards";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 
 export const Route = createFileRoute("/awards")({
   head: () => ({
@@ -29,7 +30,8 @@ export const Route = createFileRoute("/awards")({
 });
 
 function AwardsPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
+    useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const me = useMemberSession();
@@ -90,9 +92,30 @@ function AwardsPage() {
   const nameOf = (participantId: string) =>
     roster.find((p) => p.participant_id === participantId)?.participant?.name ?? "Someone";
 
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-3xl px-4 py-10">
+          <FeedLoading label="Reading the awards…" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-3xl px-4 py-10">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-3xl px-4 py-6">
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Award className="h-5 w-5" />
@@ -159,7 +182,11 @@ function AwardsPage() {
                       )}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">No votes cast.</p>
+                    <p className="text-xs text-muted-foreground">
+                      {failedTables.length > 0
+                        ? "Couldn't read the votes just now — retrying."
+                        : "No votes cast."}
+                    </p>
                   )
                 ) : (
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">

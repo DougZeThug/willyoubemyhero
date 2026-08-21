@@ -20,7 +20,8 @@ export const Route = createFileRoute("/tv")({
 });
 
 function TvPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
+    useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
 
@@ -35,8 +36,33 @@ function TvPage() {
 
   const { athlete: current, onClock } = currentAthlete(bundle?.participants ?? []);
 
+  if ((loading || error) && !bundle) {
+    return (
+      <div className="circuit-bg -mx-4 -mb-8 -mt-4 grid min-h-screen place-items-center px-8 py-8 sm:-mx-6 sm:px-10">
+        <div className="text-center">
+          <div className="font-display text-4xl font-black uppercase tracking-[0.2em] text-muted-foreground">
+            {error ? "Can't reach the combine" : "Reading the combine…"}
+          </div>
+          {error && (
+            <button
+              onClick={() => void refetch()}
+              className="mt-6 rounded-md border border-warn/40 bg-warn/10 px-6 py-3 font-display text-xl font-black uppercase tracking-widest text-warn"
+            >
+              Try again
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="circuit-bg -mx-4 -mb-8 -mt-4 min-h-screen px-8 py-8 sm:-mx-6 sm:px-10">
+      {(realtimeDegraded || !!error) && (
+        <div className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-4 py-2 text-center font-display text-lg font-black uppercase tracking-[0.2em] text-warn">
+          Live feed down — refreshing every few seconds
+        </div>
+      )}
       <header className="mb-6 flex items-end justify-between">
         <div>
           <div className="font-display text-xs font-black uppercase tracking-[0.5em] text-primary">
@@ -115,7 +141,9 @@ function TvPage() {
         ))}
         {rows.length === 0 && (
           <div className="col-span-2 rounded-2xl border border-primary/20 bg-[oklch(0.16_0.02_240)] p-10 text-center text-muted-foreground">
-            No official times yet.
+            {failedTables.length > 0
+              ? "Couldn't read the results just now — retrying."
+              : "No official times yet."}
           </div>
         )}
       </div>

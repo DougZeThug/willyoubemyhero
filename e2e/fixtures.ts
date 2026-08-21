@@ -29,6 +29,7 @@ function eventParticipant(p: (typeof PLAYERS)[number], i: number) {
     participant_id: p.pid,
     participation_status: p.timeMs == null ? "scratched" : "finished",
     card_rarity: null,
+    on_clock_since: null,
     running_order: i + 1,
     bib_number: i + 1,
     photo_path: null,
@@ -75,6 +76,7 @@ export const BUNDLE = {
   })),
   penalties: [],
   drafts: [],
+  failed: [],
 };
 
 /**
@@ -237,6 +239,8 @@ export type ServerFnMock = {
   set: (key: string, value: unknown) => void;
   /** Fail one server function with an error the UI has to handle. */
   fail: (key: string, message: string) => void;
+  /** Stop failing one, so a retry the UI offers has something to succeed at. */
+  recover: (key: string) => void;
   /**
    * Hold one server function's answer back, for the races a fast stub hides.
    *
@@ -286,6 +290,9 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
     },
     fail: (key, message) => {
       failures[key] = message;
+    },
+    recover: (key) => {
+      delete failures[key];
     },
     delay: (key, ms) => {
       delays[key] = ms;
