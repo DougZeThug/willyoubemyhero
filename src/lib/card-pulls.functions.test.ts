@@ -6,8 +6,8 @@
 // back a participant id — the aggregate is public, the rows behind it are not.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
-import { callServerFn, memberHeaders } from "@/test/server-fn";
-import { signMemberToken } from "./session.server";
+import { adminHeaders, callServerFn, memberHeaders } from "@/test/server-fn";
+import { signAdminToken, signMemberToken } from "./session.server";
 
 let mock = createSupabaseMock();
 
@@ -429,5 +429,39 @@ describe("getMyCardStats", () => {
       cards: unknown[];
     }>(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
     expect(res).toEqual({ packsOpened: 0, firstPackOn: null, lastPackOn: null, cards: [] });
+  });
+});
+
+describe("grantCard", () => {
+  async function grant(data: unknown, eventId = EVENT_ID) {
+    const { grantCard } = await import("./card-pulls.functions");
+    return callServerFn(grantCard, { data, headers: adminHeaders(signAdminToken(eventId).token) });
+  }
+
+  const payload = { eventId: EVENT_ID, participantId: ME, eventParticipantId: CARD_A };
+
+  it("refuses a card that belongs to another event", async () => {
+    // grant_card_copy takes the card id on trust, so this lookup is the only
+    // thing stopping a commissioner minting copies of another event's roster.
+    withDb({ "event_participants.select": { data: null } });
+    await expect(grant(payload)).rejects.toThrow("does not belong to this event");
+    expect(mock.client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("looks the card up inside the token's event before granting", async () => {
+    withDb({
+      "event_participants.select": { data: { id: CARD_A } },
+      "rpc.grant_card_copy": { data: 1 },
+    });
+    const res = await grant(payload);
+    const [roster] = mock.callsFor("event_participants", "select");
+    expect(mock.eqValue(roster, "id")).toBe(CARD_A);
+    expect(mock.eqValue(roster, "event_id")).toBe(EVENT_ID);
+    expect(res).toEqual({ ok: true, copies: 1 });
+  });
+
+  it("still refuses an admin for a different event outright", async () => {
+    withDb({ "event_participants.select": { data: { id: CARD_A } } });
+    await expect(grant(payload, OTHER_EVENT)).rejects.toThrow("Admin PIN required");
   });
 });

@@ -262,6 +262,20 @@ export const grantCard = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
+
+    // The card being handed over arrives in the payload, and the RPC takes it on
+    // trust — so without this an admin for this event could mint a copy of a card
+    // from somebody else's event.
+    const sbEvent = await admin();
+    const { data: onRoster, error: rosterError } = await sbEvent
+      .from("event_participants")
+      .select("id")
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .maybeSingle();
+    if (rosterError) throw rosterError;
+    if (!onRoster) throw new Error("Card does not belong to this event");
+
     const secrets = await db();
     const { data: n, error } = await secrets.rpc("grant_card_copy", {
       _participant_id: data.participantId,

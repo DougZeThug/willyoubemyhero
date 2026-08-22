@@ -4,6 +4,16 @@ import { requireAdmin } from "./require-auth.server";
 import { uuid as zuuid } from "./zod-uuid";
 
 /**
+ * EVERY WRITE BELOW IS SCOPED TO THE EVENT THE TOKEN AUTHORIZES.
+ *
+ * `requireAdmin(eventId)` proves admin of event A and nothing more. Row ids
+ * arrive in the payload, so a write matched on the primary key alone would let
+ * an admin for A edit a station, run or roster row belonging to event B — the
+ * principle deleteComment states in social.functions.ts, applied here. Hence
+ * the `.eq("event_id", …)` alongside every `.eq("id", …)`.
+ */
+
+/**
  * Stamp the crowd-clock column onto a participant status update.
  *
  * The cast is the only way to write `on_clock_since` today: the column landed
@@ -97,7 +107,8 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("event_participants")
       .delete()
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
     if (error) throw error;
     return { ok: true };
   });
@@ -124,6 +135,7 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
       .from("event_participants")
       .select("participation_status")
       .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
       .maybeSingle();
     const alreadyOnClock = current?.participation_status === "running";
 
@@ -137,7 +149,8 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("event_participants")
       .update(patch)
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
     if (error) throw error;
     return { ok: true };
   });
@@ -191,7 +204,8 @@ export const setRunningOrder = createServerFn({ method: "POST" })
         supabaseAdmin
           .from("event_participants")
           .update({ running_order: row.running_order })
-          .eq("id", row.id),
+          .eq("id", row.id)
+          .eq("event_id", data.eventId),
       ),
     );
     return { ok: true };
@@ -246,7 +260,11 @@ export const upsertStation = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { eventId, id, ...rest } = data;
     if (id) {
-      const { error } = await supabaseAdmin.from("stations").update(rest).eq("id", id);
+      const { error } = await supabaseAdmin
+        .from("stations")
+        .update(rest)
+        .eq("id", id)
+        .eq("event_id", eventId);
       if (error) throw error;
     } else {
       const { error } = await supabaseAdmin.from("stations").insert({ ...rest, event_id: eventId });
@@ -260,7 +278,11 @@ export const deleteStation = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("stations").delete().eq("id", data.id);
+    const { error } = await supabaseAdmin
+      .from("stations")
+      .delete()
+      .eq("id", data.id)
+      .eq("event_id", data.eventId);
     if (error) throw error;
     return { ok: true };
   });
@@ -305,6 +327,17 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    // `participantId` is a global id, so an admin for this event could otherwise
+    // file a run against somebody who only ever ran a different one.
+    const { data: onRoster, error: rosterError } = await supabaseAdmin
+      .from("event_participants")
+      .select("id")
+      .eq("event_id", data.eventId)
+      .eq("participant_id", data.participantId)
+      .maybeSingle();
+    if (rosterError) throw rosterError;
+    if (!onRoster) throw new Error("Participant does not belong to this event");
+
     // Attempt count. A retry of a save that already landed must keep the number
     // it was given: counting again would include the row this client_key wrote
     // and renumber a first run as attempt 2. Matching on client_key rather than
@@ -314,6 +347,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
       .from("runs")
       .select("attempt_number")
       .eq("client_key", data.clientKey)
+      .eq("event_id", data.eventId)
       .maybeSingle();
     const { count } = await supabaseAdmin
       .from("runs")
@@ -392,7 +426,11 @@ export const deleteRun = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("runs").delete().eq("id", data.runId);
+    const { error } = await supabaseAdmin
+      .from("runs")
+      .delete()
+      .eq("id", data.runId)
+      .eq("event_id", data.eventId);
     if (error) throw error;
     return { ok: true };
   });

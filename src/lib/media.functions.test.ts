@@ -31,7 +31,13 @@ const PNG =
 const threeSizes = (large: string) => ({ thumb: large, medium: large, large });
 
 function withDb(responses: SupabaseResponses = {}) {
-  mock = createSupabaseMock(responses);
+  // Card and photo writes prove the participant is on this event's roster before
+  // anything reaches the bucket, so that lookup answers by default. Tests about
+  // the read paths declare their own rows and override it.
+  mock = createSupabaseMock({
+    "event_participants.select": { data: [{ id: CARD_ID }] },
+    ...responses,
+  });
 }
 
 const asAdmin = (eventId = EVENT_ID) => adminHeaders(signAdminToken(eventId).token);
@@ -583,6 +589,174 @@ describe("getEventCardBack", () => {
     const mod = await freshModule();
     expect(await callServerFn(mod.getEventCardBack, { data: { eventId: EVENT_ID } })).toEqual({
       urls: { thumb: "https://cdn/u", medium: "https://cdn/u", large: "https://cdn/u" },
+    });
+  });
+});
+
+/**
+ * Card art is written by primary key, and the key comes from the payload.
+ *
+ * `requireAdmin(eventId)` says nothing about which event a participant id
+ * belongs to, so without these checks a commissioner for one event could
+ * overwrite the artwork — or the universal card back — of another.
+ */
+describe("cross-event scoping", () => {
+  const OFF_ROSTER: SupabaseResponses = { "event_participants.select": { data: [] } };
+
+  it("refuses a card upload for a participant on another event's roster", async () => {
+    withDb({ ...OFF_ROSTER, "storage.upload": { data: { path: "ok" }, error: null } });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantCard, {
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("does not belong to this event");
+    // Checked before the upload, so a refused call leaves nothing in the bucket.
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+  });
+
+  it("checks the roster, and writes the card, inside the token's event", async () => {
+    withDb({
+      "storage.upload": { data: { path: "ok" }, error: null },
+      "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.uploadParticipantCard, {
+      data: {
+        eventId: EVENT_ID,
+        eventParticipantId: CARD_ID,
+        side: "front",
+        dataUrls: threeSizes(PNG),
+      },
+      headers: asAdmin(),
+    });
+    const [roster] = mock.callsFor("event_participants", "select");
+    expect(mock.eqValue(roster, "event_id")).toBe(EVENT_ID);
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
+  });
+
+  it("fails the whole bulk batch when one item is on another event's roster", async () => {
+    // The roster lookup is per item, so a mixed batch reports the stranger as
+    // failed and still writes the rest.
+    withDb({ ...OFF_ROSTER, "storage.upload": { data: { path: "ok" }, error: null } });
+    const mod = await freshModule();
+    const res = (await callServerFn(mod.uploadParticipantCardsBulk, {
+      data: {
+        eventId: EVENT_ID,
+        items: [{ eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(PNG) }],
+      },
+      headers: asAdmin(),
+    })) as { ok: boolean; results: { ok: boolean; error?: string }[] };
+    expect(res.ok).toBe(false);
+    expect(res.results[0].error).toMatch(/does not belong to this event/);
+  });
+
+  it("refuses a photo upload for a participant on another event's roster", async () => {
+    withDb({ ...OFF_ROSTER, "storage.upload": { data: { path: "ok" }, error: null } });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantPhoto, {
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          dataUrls: threeSizes(PNG),
+        },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("does not belong to this event");
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete a card belonging to another event", async () => {
+    withDb({ "event_participants.select": { data: null } });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.deleteParticipantCard, {
+        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front" },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("does not belong to this event");
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+  });
+
+  it("deletes a card only inside the token's event", async () => {
+    withDb({
+      "event_participants.select": { data: { card_path: "cards/x/a-large.png" } },
+      "storage.remove": { data: null, error: null },
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.deleteParticipantCard, {
+      data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front" },
+      headers: asAdmin(),
+    });
+    const [read] = mock.callsFor("event_participants", "select");
+    expect(mock.eqValue(read, "event_id")).toBe(EVENT_ID);
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
+  });
+
+  describe("writeImageVariants", () => {
+    const variant = (over: Record<string, unknown>) => ({
+      eventId: EVENT_ID,
+      updates: [{ id: CARD_ID, kind: "photo", dataUrls: threeSizes(PNG), ...over }],
+    });
+
+    it("refuses a universal back whose id is not this event", async () => {
+      // The worst of the set: this branch updates an `events` row by the id in
+      // the payload, so an unchecked one rewrites another event's card back.
+      withDb({ "storage.upload": { data: { path: "ok" }, error: null } });
+      const mod = await freshModule();
+      await expect(
+        callServerFn(mod.writeImageVariants, {
+          data: variant({ id: OTHER_EVENT_ID, kind: "universal_back" }),
+          headers: asAdmin(),
+        }),
+      ).rejects.toThrow("does not belong to this event");
+      expect(mock.callsFor("events", "update")).toHaveLength(0);
+      expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+    });
+
+    it("writes the universal back onto the token's own event row", async () => {
+      withDb({
+        "storage.upload": { data: { path: "ok" }, error: null },
+        "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+      });
+      const mod = await freshModule();
+      await callServerFn(mod.writeImageVariants, {
+        data: variant({ id: EVENT_ID, kind: "universal_back" }),
+        headers: asAdmin(),
+      });
+      const [update] = mock.callsFor("events", "update");
+      expect(mock.eqValue(update, "id")).toBe(EVENT_ID);
+    });
+
+    it("refuses a participant variant for another event's roster", async () => {
+      withDb({ ...OFF_ROSTER, "storage.upload": { data: { path: "ok" }, error: null } });
+      const mod = await freshModule();
+      await expect(
+        callServerFn(mod.writeImageVariants, { data: variant({}), headers: asAdmin() }),
+      ).rejects.toThrow("does not belong to this event");
+      expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+    });
+
+    it("writes participant variants inside the token's event", async () => {
+      withDb({
+        "storage.upload": { data: { path: "ok" }, error: null },
+        "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+      });
+      const mod = await freshModule();
+      await callServerFn(mod.writeImageVariants, { data: variant({}), headers: asAdmin() });
+      const [update] = mock.callsFor("event_participants", "update");
+      expect(mock.eqValue(update, "id")).toBe(CARD_ID);
+      expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
     });
   });
 });

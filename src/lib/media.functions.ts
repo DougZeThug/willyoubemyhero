@@ -226,6 +226,32 @@ async function uploadSized(
   };
 }
 
+/**
+ * Prove roster rows belong to the event the caller's token authorizes.
+ *
+ * `requireAdmin(eventId)` proves admin of event A, and every participant id
+ * below arrives in the payload — so without this an admin for A could write
+ * over a row in event B. Checked before anything reaches the bucket, so a
+ * rejected call leaves no orphan objects behind.
+ */
+async function assertOnRoster(
+  supabaseAdmin: SupabaseClient<Database>,
+  eventId: string,
+  eventParticipantIds: readonly string[],
+) {
+  const wanted = [...new Set(eventParticipantIds)];
+  if (wanted.length === 0) return;
+  const { data, error } = await supabaseAdmin
+    .from("event_participants")
+    .select("id")
+    .eq("event_id", eventId)
+    .in("id", wanted);
+  if (error) throw error;
+  if ((data ?? []).length !== wanted.length) {
+    throw new Error("Participant does not belong to this event");
+  }
+}
+
 async function storeCard(
   eventId: string,
   eventParticipantId: string,
@@ -233,13 +259,15 @@ async function storeCard(
   dataUrls: SizedDataUrls,
 ) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  await assertOnRoster(supabaseAdmin, eventId, [eventParticipantId]);
   const basePath = `cards/${eventId}/${eventParticipantId}-${side}-${Date.now()}`;
   const paths = await uploadSized(supabaseAdmin, basePath, dataUrls);
 
   const { error: dbErr } = await supabaseAdmin
     .from("event_participants")
     .update(cardPatch(side, paths))
-    .eq("id", eventParticipantId);
+    .eq("id", eventParticipantId)
+    .eq("event_id", eventId);
   if (dbErr) throw dbErr;
 
   return { urls: await signSet(paths), paths };
@@ -489,7 +517,11 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
         "card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium",
       )
       .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
       .maybeSingle();
+    // Absent means the id names somebody else's event, not an empty card: the
+    // roster row itself is what the filter above did or did not match.
+    if (!row) throw new Error("Participant does not belong to this event");
 
     const existing = {
       large: side === "front" ? row?.card_path : row?.card_back_path,
@@ -501,7 +533,8 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
     await supabaseAdmin
       .from("event_participants")
       .update(cardPatch(side, null))
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
     return { ok: true };
   });
 
@@ -522,6 +555,7 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertOnRoster(supabaseAdmin, data.eventId, [data.eventParticipantId]);
 
     const basePath = `${data.eventId}/${data.eventParticipantId}-${Date.now()}`;
     const paths = await uploadSized(supabaseAdmin, basePath, data.dataUrls);
@@ -533,7 +567,8 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
         photo_path_thumb: paths.thumb,
         photo_path_medium: paths.medium,
       })
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
     if (dbErr) throw dbErr;
     return { ok: true, urls: await signSet(paths), paths };
   });
@@ -605,6 +640,20 @@ export const writeImageVariants = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    // The whole batch is authorized before the first byte is uploaded. A
+    // universal back is the event's own row, so its id must be this event; every
+    // other id must name a row on this event's roster.
+    for (const u of data.updates) {
+      if (u.kind === "universal_back" && u.id !== data.eventId) {
+        throw new Error("Card back does not belong to this event");
+      }
+    }
+    await assertOnRoster(
+      supabaseAdmin,
+      data.eventId,
+      data.updates.filter((u) => u.kind !== "universal_back").map((u) => u.id),
+    );
+
     for (const u of data.updates) {
       const basePath =
         u.kind === "universal_back"
@@ -626,7 +675,7 @@ export const writeImageVariants = createServerFn({ method: "POST" })
             card_back_path_thumb: patchPaths.thumb,
             card_back_path_medium: patchPaths.medium,
           })
-          .eq("id", u.id);
+          .eq("id", data.eventId);
         if (error) throw error;
       } else {
         const patch: Partial<Record<CardPathColumn, string | null>> = {};
@@ -646,7 +695,8 @@ export const writeImageVariants = createServerFn({ method: "POST" })
         const { error } = await supabaseAdmin
           .from("event_participants")
           .update(patch)
-          .eq("id", u.id);
+          .eq("id", u.id)
+          .eq("event_id", data.eventId);
         if (error) throw error;
       }
     }

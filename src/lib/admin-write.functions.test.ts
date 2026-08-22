@@ -22,7 +22,14 @@ const STATION_ID = "00000000-0000-4000-8000-000000000022";
 const RUN_ID = "00000000-0000-4000-8000-000000000033";
 
 function withDb(responses: SupabaseResponses = {}) {
-  mock = createSupabaseMock(responses);
+  // Every write here is matched on `event_id` as well as the row id, and
+  // saveCompletedRun proves the athlete is on the roster before it writes
+  // anything — so a roster row answers by default, and a test declares its own
+  // only when it wants a different answer.
+  mock = createSupabaseMock({
+    "event_participants.select": { data: { id: EVENT_PARTICIPANT_ID } },
+    ...responses,
+  });
 }
 
 const asAdmin = (eventId = EVENT_ID) => adminHeaders(signAdminToken(eventId).token);
@@ -515,5 +522,81 @@ describe("updateEvent", () => {
       headers: asAdmin(),
     });
     expect(mock.callsFor("events", "update")[0].payload).toEqual({ status: "live" });
+  });
+});
+
+/**
+ * The second half of the guard.
+ *
+ * `requireAdmin(eventId)` proves admin of THIS event; the row ids come from the
+ * payload. Without an `event_id` on the write, an admin for a live event could
+ * scratch a player, delete a run or rename a station belonging to a different
+ * one — every id here is a plain uuid with nothing about it saying which event
+ * it came from.
+ */
+describe("cross-event scoping", () => {
+  async function call(name: string, data: unknown) {
+    const mod = (await import("./admin-write.functions")) as unknown as Record<
+      string,
+      (o?: { data?: unknown }) => Promise<unknown>
+    >;
+    return callServerFn(mod[name], { data, headers: asAdmin() });
+  }
+
+  const SCOPED: [string, string, "update" | "delete"][] = [
+    ["removeParticipantFromEvent", "event_participants", "delete"],
+    ["setParticipantStatus", "event_participants", "update"],
+    ["setRunningOrder", "event_participants", "update"],
+    ["deleteStation", "stations", "delete"],
+    ["deleteRun", "runs", "delete"],
+  ];
+
+  it.each(SCOPED)("%s writes only inside the token's event", async (name, table, op) => {
+    await call(name, VALID_PAYLOADS[name]);
+    const writes = mock.callsFor(table, op);
+    expect(writes.length).toBeGreaterThan(0);
+    for (const write of writes) expect(mock.eqValue(write, "event_id")).toBe(EVENT_ID);
+  });
+
+  it("setParticipantStatus reads the current status inside the event too", async () => {
+    // The read decides whether the crowd clock is re-stamped, so an unscoped one
+    // would let another event's row change what this event writes.
+    await call("setParticipantStatus", VALID_PAYLOADS.setParticipantStatus);
+    const [read] = mock.callsFor("event_participants", "select");
+    expect(mock.eqValue(read, "event_id")).toBe(EVENT_ID);
+  });
+
+  it("upsertStation edits a station only inside the token's event", async () => {
+    await call("upsertStation", { ...VALID_PAYLOADS.upsertStation, id: STATION_ID });
+    const [update] = mock.callsFor("stations", "update");
+    expect(mock.eqValue(update, "id")).toBe(STATION_ID);
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
+  });
+
+  it("saveCompletedRun refuses an athlete who is not on this event's roster", async () => {
+    withDb({ "event_participants.select": { data: null } });
+    await expect(call("saveCompletedRun", VALID_PAYLOADS.saveCompletedRun)).rejects.toThrow(
+      "Participant does not belong to this event",
+    );
+    expect(mock.callsFor("runs", "upsert")).toHaveLength(0);
+  });
+
+  it("saveCompletedRun looks the roster row up by event and participant", async () => {
+    withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
+    await call("saveCompletedRun", VALID_PAYLOADS.saveCompletedRun);
+    const [roster] = mock.callsFor("event_participants", "select");
+    expect(mock.eqValue(roster, "event_id")).toBe(EVENT_ID);
+    expect(mock.eqValue(roster, "participant_id")).toBe(PARTICIPANT_ID);
+  });
+
+  it("saveCompletedRun looks a replayed client key up inside this event", async () => {
+    // The attempt number a retry inherits comes from this row. A key from
+    // another event answering here would number this event's run from it.
+    withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
+    await call("saveCompletedRun", VALID_PAYLOADS.saveCompletedRun);
+    const replay = mock
+      .callsFor("runs", "select")
+      .find((c) => mock.eqValue(c, "client_key") !== undefined);
+    expect(mock.eqValue(replay!, "event_id")).toBe(EVENT_ID);
   });
 });
