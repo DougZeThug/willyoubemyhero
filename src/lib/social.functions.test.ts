@@ -116,6 +116,78 @@ describe("getEventSocial", () => {
       callServerFn(getEventSocial, { data: { eventId: EVENT_ID } }),
     ).resolves.toBeTruthy();
   });
+
+  describe("resolving a guest's own rows", () => {
+    // 20260822122000 took guest_key out of anon's grant, so the public read
+    // cannot fetch it any more and `mine` cannot be computed from the rows it
+    // returns. It comes from a service_role lookup instead — one that filters on
+    // the key and selects nothing but ids, so the key is a WHERE and never a
+    // value in a response.
+    async function asGuestRead() {
+      withDb({
+        "event_participants.select": { data: [{ id: CARD_ID }] },
+        "card_reactions.select": { data: [{ id: "r1", emoji: "🔥" }] },
+        "card_comments.select": { data: [{ id: "c1", body: "hi" }] },
+      });
+      const { getEventSocial } = await import("./social.functions");
+      return callServerFn(getEventSocial, { data: { eventId: EVENT_ID }, headers: asGuest() });
+    }
+
+    it("never asks the publishable key for guest_key", async () => {
+      await asGuestRead();
+      for (const table of ["card_reactions", "card_comments"]) {
+        const [call] = publicMock.callsFor(table, "select");
+        expect(call.columns).not.toContain("guest_key");
+      }
+    });
+
+    it("looks the caller's own rows up as service_role, by key, ids only", async () => {
+      await asGuestRead();
+      for (const table of ["card_reactions", "card_comments"]) {
+        const [call] = mock.callsFor(table, "select");
+        expect(mock.eqValue(call, "guest_key")).toBe(GUEST);
+        expect(call.columns).toBe("id");
+      }
+    });
+
+    it("does not run that lookup at all for a caller with no guest token", async () => {
+      // A member is decided by participant_id, which is public. Nobody else has
+      // rows to find.
+      withDb({
+        "event_participants.select": { data: [{ id: CARD_ID }] },
+        "card_reactions.select": { data: [{ id: "r1", emoji: "🔥" }] },
+        "card_comments.select": { data: [] },
+      });
+      const { getEventSocial } = await import("./social.functions");
+      await callServerFn(getEventSocial, { data: { eventId: EVENT_ID } });
+      expect(mock.calls).toHaveLength(0);
+    });
+
+    it("marks only the rows that lookup returned", async () => {
+      withDb({
+        "event_participants.select": { data: [{ id: CARD_ID }] },
+        "card_comments.select": {
+          data: [
+            { id: "c1", body: "mine" },
+            { id: "c2", body: "theirs" },
+          ],
+        },
+      });
+      // The two clients answer differently here, which is the point: the public
+      // read returns the whole feed, and the service_role lookup returns only the
+      // ids belonging to this guest. `mine` comes from the second one alone.
+      mock = createSupabaseMock({ "card_comments.select": { data: [{ id: "c1" }] } });
+      const { getEventSocial } = await import("./social.functions");
+      const res = (await callServerFn(getEventSocial, {
+        data: { eventId: EVENT_ID },
+        headers: asGuest(),
+      })) as { comments: { id: string; mine: boolean }[] };
+      expect(res.comments.map((c) => [c.id, c.mine])).toEqual([
+        ["c1", true],
+        ["c2", false],
+      ]);
+    });
+  });
 });
 
 describe("toggleReaction", () => {

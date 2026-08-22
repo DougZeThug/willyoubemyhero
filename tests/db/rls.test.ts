@@ -175,6 +175,50 @@ describe("public reads", () => {
     expect(cards === null || cards === 0).toBe(true);
   });
 
+  it("keeps the public half of a reaction and a comment readable", async () => {
+    // Attribution is the whole point of the feed, so everything it renders has to
+    // survive the column-scoped grant 20260822122000 put on these two tables.
+    await sql(
+      `INSERT INTO public.card_reactions (event_participant_id, guest_key, guest_name, emoji)
+       SELECT id, 'guest-key-1', 'Someone', '🔥' FROM public.event_participants LIMIT 1`,
+    );
+    await sql(
+      `INSERT INTO public.card_comments (event_participant_id, guest_key, guest_name, body)
+       SELECT id, 'guest-key-1', 'Someone', 'nice split' FROM public.event_participants LIMIT 1`,
+    );
+    const reactions = await asRole<{ emoji: string; guest_name: string }>(
+      "anon",
+      "SELECT id, event_participant_id, participant_id, guest_name, emoji, created_at FROM public.card_reactions",
+    );
+    expect(reactions.map((r) => [r.emoji, r.guest_name])).toEqual([["🔥", "Someone"]]);
+    const comments = await asRole<{ body: string }>(
+      "anon",
+      "SELECT id, event_participant_id, participant_id, guest_name, body, created_at FROM public.card_comments",
+    );
+    expect(comments.map((c) => c.body)).toEqual(["nice split"]);
+  });
+
+  it.each(["public.card_reactions", "public.card_comments"])(
+    "keeps guest_key on %s out of anon's reach",
+    async (table) => {
+      // A guest_key is client-minted and unsigned, so whoever can read one can
+      // present it: that guest's reactions and trash talk become theirs to
+      // delete. getEventSocial always stripped it from its response, but the
+      // grant underneath was table-wide until 20260822122000.
+      expect(await isDenied("anon", `SELECT guest_key FROM ${table}`)).toBe(true);
+      expect(await isDenied("authenticated", `SELECT guest_key FROM ${table}`)).toBe(true);
+    },
+  );
+
+  it.each(["public.card_reactions", "public.card_comments"])(
+    "refuses a star expansion on %s, which is what a column grant means",
+    async (table) => {
+      // PostgREST refuses `select=*` the moment one column in it is ungranted,
+      // and that is exactly why getEventSocial names its columns.
+      expect(await isDenied("anon", `SELECT * FROM ${table}`)).toBe(true);
+    },
+  );
+
   it("hides the private columns on runs while keeping the times readable", async () => {
     // 20260724151735 narrowed the runs grant to named columns: notes and the
     // idempotency key are not among them.

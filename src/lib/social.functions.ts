@@ -82,37 +82,67 @@ export const getEventSocial = createServerFn({ method: "GET" })
     const ids = (eps ?? []).map((e) => e.id);
     if (ids.length === 0) return { reactions: [], comments: [] };
 
+    // guest_key is not in either list, and 20260822122000 took it out of anon's
+    // grant as well: it is a client-minted, unsigned identity, so a guest key
+    // anybody can read is a guest anybody can act as. This read could not fetch
+    // it now even if the list asked.
     const [{ data: reactions }, { data: comments }] = await Promise.all([
       sb
         .from("card_reactions")
-        .select(
-          "id, event_participant_id, participant_id, guest_key, guest_name, emoji, created_at",
-        )
+        .select("id, event_participant_id, participant_id, guest_name, emoji, created_at")
         .in("event_participant_id", ids),
       sb
         .from("card_comments")
-        .select("id, event_participant_id, participant_id, guest_key, guest_name, body, created_at")
+        .select("id, event_participant_id, participant_id, guest_name, body, created_at")
         .in("event_participant_id", ids)
         .order("created_at", { ascending: true }),
     ]);
 
-    // guest_key never leaves the server: this endpoint is public, and a guest key
-    // that anyone can read is a guest anyone can act as. The client only needs to
-    // know which rows are its own, so resolve that here against the verified
-    // identity on the request and strip the key itself.
+    // The client still needs to know which rows are its own, so resolve that
+    // here against the verified identity on the request. A member is decided by
+    // participant_id, which is public anyway. A guest takes one more query per
+    // table — as service_role, because guest_key is server-only now — filtered to
+    // the caller's own key and selecting nothing but row ids. The key is used as
+    // a WHERE and never enters a response.
     const meMember = optionalMember();
     const meGuest = meMember ? null : optionalGuest();
-    const isMine = (row: { participant_id: string | null; guest_key: string | null }) =>
-      meMember ? row.participant_id === meMember : !!meGuest && row.guest_key === meGuest;
+    const sbAdmin = meGuest ? await admin() : null;
+    const mineIds = async (table: "card_reactions" | "card_comments") => {
+      if (!sbAdmin) return new Set<string>();
+      const { data: rows } = await sbAdmin
+        .from(table)
+        .select("id")
+        .in("event_participant_id", ids)
+        .eq("guest_key", meGuest!);
+      return new Set((rows ?? []).map((r) => r.id));
+    };
+    const [myReactions, myComments] = await Promise.all([
+      mineIds("card_reactions"),
+      mineIds("card_comments"),
+    ]);
 
+    // Built field by field rather than spread. The row cannot carry guest_key
+    // any more — it is not selected and not granted — but naming the fields on
+    // the way out means no future column can ride along either, which is the
+    // failure this endpoint keeps having to be protected from.
     return {
-      reactions: (reactions ?? []).map(({ guest_key, ...r }) => ({
-        ...r,
-        mine: isMine({ participant_id: r.participant_id, guest_key }),
+      reactions: (reactions ?? []).map((r) => ({
+        id: r.id,
+        event_participant_id: r.event_participant_id,
+        participant_id: r.participant_id,
+        guest_name: r.guest_name,
+        emoji: r.emoji,
+        created_at: r.created_at,
+        mine: meMember ? r.participant_id === meMember : myReactions.has(r.id),
       })),
-      comments: (comments ?? []).map(({ guest_key, ...c }) => ({
-        ...c,
-        mine: isMine({ participant_id: c.participant_id, guest_key }),
+      comments: (comments ?? []).map((c) => ({
+        id: c.id,
+        event_participant_id: c.event_participant_id,
+        participant_id: c.participant_id,
+        guest_name: c.guest_name,
+        body: c.body,
+        created_at: c.created_at,
+        mine: meMember ? c.participant_id === meMember : myComments.has(c.id),
       })),
     };
   });
