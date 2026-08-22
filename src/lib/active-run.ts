@@ -193,7 +193,6 @@ export async function clearActiveRun(): Promise<void> {
   }
 }
 
-
 /** `nowMs` is epoch ms — `Date.now()`, not `performance.now()`. */
 export function computeElapsedMs(run: ActiveRun, nowMs: number): number {
   if (run.status === "finished" && run.finishedAt != null) {

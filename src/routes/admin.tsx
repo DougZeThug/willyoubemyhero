@@ -1025,7 +1025,6 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
     }
   }
 
-
   const roster = bundle?.participants ?? [];
   const inField = fieldSize(roster);
 

@@ -39,7 +39,6 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     setOnClock,
   } = rc;
 
-
   const queued = participants.filter(
     (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
   );
@@ -219,7 +218,6 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
           </Button>
         </div>
       )}
-
     </section>
   );
 }

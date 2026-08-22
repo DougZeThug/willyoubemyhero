@@ -54,7 +54,6 @@ export function useRunConsole() {
     if (run) saveActiveRun(run);
   }, [run]);
 
-
   const participants = useMemo(
     () => [...(bundle?.participants ?? [])].sort((a, b) => a.running_order - b.running_order),
     [bundle],
@@ -212,7 +211,6 @@ export function useRunConsole() {
     setSelected("");
     await qc.invalidateQueries();
   }
-
 
   /** Put someone on the clock for the crowd screens without starting the timer. */
   async function setOnClock(participantId: string | null) {
