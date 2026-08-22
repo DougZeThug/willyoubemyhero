@@ -1003,12 +1003,19 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
   }
 
   async function onReset() {
-    if (!confirm("Delete every recorded run for this combine and set everyone back to waiting?")) {
+    if (
+      !confirm(
+        "Delete every recorded run for this combine, clear the timer on this phone and set everyone back to waiting?",
+      )
+    ) {
       return;
     }
     setResetting(true);
     try {
       const res = await resetFn({ data: { eventId } });
+      // The stored run is what made a reset look like it "didn't take": the
+      // server was clean but this phone kept timing the old athlete.
+      await clearActiveRun();
       await qc.invalidateQueries();
       toast.success(`Combine reset — ${res.clearedRuns} run(s) cleared`);
     } catch (err) {
@@ -1017,6 +1024,7 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
       setResetting(false);
     }
   }
+
 
   const roster = bundle?.participants ?? [];
   const inField = fieldSize(roster);
