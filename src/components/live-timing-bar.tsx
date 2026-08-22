@@ -36,6 +36,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     undoLastSplit,
     finishRun,
     cancelRun,
+    resetAthlete,
     setOnClock,
   } = rc;
 
@@ -43,6 +44,9 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
   );
   const slot = currentAthlete(participants);
+  // Anyone already timed — the commissioner needs a way to undo one bad result
+  // without resetting the whole combine.
+  const done = participants.filter((p) => p.participation_status === "finished");
 
   // The picker defaults to whoever is next in running order, so the common case
   // is one tap: Start.
@@ -216,6 +220,36 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
           >
             <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Reset timer
           </Button>
+        </div>
+      )}
+
+      {done.length > 0 && (
+        <div className="mt-3 border-t border-white/10 pt-2">
+          <div className="mb-1 font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
+            Reset an athlete
+          </div>
+          <ul className="max-h-40 space-y-0.5 overflow-auto pr-1">
+            {done.map((p) => {
+              const playerName = p.participant?.name ?? "player";
+              return (
+                <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate uppercase">{playerName}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 shrink-0 px-2 text-[10px] uppercase tracking-widest text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      if (confirm(`Clear ${playerName}'s run and put them back in the queue?`)) {
+                        resetAthlete(p.participant_id);
+                      }
+                    }}
+                  >
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </section>
