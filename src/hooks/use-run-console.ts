@@ -189,10 +189,15 @@ export function useRunConsole() {
     await finishSave.finish(run);
   }
 
+  /**
+   * Throw the run away. The local record goes first and unconditionally: a run
+   * left over from another event — or from a save that will never land — used
+   * to be unclearable, because the status write bailed out before the wipe.
+   */
   async function cancelRun() {
-    if (!run || !event?.id) return;
+    if (!run) return;
     const ep = participants.find((p) => p.participant_id === run.participantId);
-    if (ep) {
+    if (ep && event?.id) {
       try {
         await setStatusFn({
           data: { eventId: event.id, eventParticipantId: ep.id, status: "queued" },
@@ -203,7 +208,11 @@ export function useRunConsole() {
     }
     await clearActiveRun();
     setRun(null);
+    finishSave.reset();
+    setSelected("");
+    await qc.invalidateQueries();
   }
+
 
   /** Put someone on the clock for the crowd screens without starting the timer. */
   async function setOnClock(participantId: string | null) {
