@@ -16,6 +16,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
 import { newClientKey } from "@/lib/format";
 import {
+  ACTIVE_RUN_CLEARED_EVENT,
   ACTIVE_RUN_VERSION,
   clearActiveRun,
   computeElapsedMs,
@@ -39,9 +40,20 @@ export function useRunConsole() {
     });
   }, []);
 
+  // Another screen (or a combine reset) wiped the stored run: drop it here too
+  // rather than keep timing a record that is gone.
+  useEffect(() => {
+    function onCleared() {
+      setRun(null);
+    }
+    window.addEventListener(ACTIVE_RUN_CLEARED_EVENT, onCleared);
+    return () => window.removeEventListener(ACTIVE_RUN_CLEARED_EVENT, onCleared);
+  }, []);
+
   useEffect(() => {
     if (run) saveActiveRun(run);
   }, [run]);
+
 
   const participants = useMemo(
     () => [...(bundle?.participants ?? [])].sort((a, b) => a.running_order - b.running_order),
