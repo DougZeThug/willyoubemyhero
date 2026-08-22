@@ -166,6 +166,13 @@ export async function saveActiveRun(run: ActiveRun): Promise<void> {
   }
 }
 
+/**
+ * Any screen that clears the run also has to tell the mounted consoles, or the
+ * timer keeps counting a run that no longer exists on this phone — which is
+ * exactly what made a reset "not stick" until a reload.
+ */
+export const ACTIVE_RUN_CLEARED_EVENT = "wwbh:active-run-cleared";
+
 export async function clearActiveRun(): Promise<void> {
   if (!isBrowser()) return;
   try {
@@ -179,7 +186,13 @@ export async function clearActiveRun(): Promise<void> {
   } catch {
     /* ignore */
   }
+  try {
+    window.dispatchEvent(new Event(ACTIVE_RUN_CLEARED_EVENT));
+  } catch {
+    /* ignore */
+  }
 }
+
 
 /** `nowMs` is epoch ms — `Date.now()`, not `performance.now()`. */
 export function computeElapsedMs(run: ActiveRun, nowMs: number): number {
