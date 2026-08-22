@@ -172,6 +172,42 @@ export const resetCombine = createServerFn({ method: "POST" })
     return { ok: true, clearedRuns: runIds.length };
   });
 
+/**
+ * Same idea as a combine reset, scoped to one athlete: their runs (and the
+ * splits/penalties hanging off them) go, and they return to `waiting` so the
+ * commissioner can re-time them without wiping everybody else's day.
+ */
+export const resetParticipantRuns = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ eventId: zuuid(), participantId: zuuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: runs } = await supabaseAdmin
+      .from("runs")
+      .select("id")
+      .eq("event_id", data.eventId)
+      .eq("participant_id", data.participantId);
+    const runIds = (runs ?? []).map((r) => r.id);
+    if (runIds.length) {
+      await supabaseAdmin.from("penalties").delete().in("run_id", runIds);
+      await supabaseAdmin.from("splits").delete().in("run_id", runIds);
+      const { error } = await supabaseAdmin.from("runs").delete().in("id", runIds);
+      if (error) throw error;
+    }
+    const { error: statusError } = await supabaseAdmin
+      .from("event_participants")
+      .update(withOnClock({ participation_status: "waiting" }, null))
+      .eq("event_id", data.eventId)
+      .eq("participant_id", data.participantId)
+      .neq("participation_status", "scratched");
+    if (statusError) throw statusError;
+    return { ok: true, clearedRuns: runIds.length };
+  });
+
+
+
 // ---------- Running order ----------
 export const setRunningOrder = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
