@@ -8,7 +8,7 @@
  *
  * Renders nothing at all without a valid admin session for the active event.
  */
-import { Flag, Pause, Play, Radio, Redo2, RotateCcw } from "lucide-react";
+import { Flag, Pause, Play, Radio, Redo2, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatTime } from "@/lib/format";
@@ -35,6 +35,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     recordSplit,
     undoLastSplit,
     finishRun,
+    cancelRun,
     setOnClock,
   } = rc;
 
@@ -199,6 +200,22 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
               </div>
             </>
           )}
+
+          {/* The way out of a timer that is simply wrong — a mis-started run, or
+              a finished one that will never save. Nothing is written to the
+              league, so the athlete just goes back in the queue. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              if (confirm("Throw this timer away and put the athlete back in the queue?")) {
+                cancelRun();
+              }
+            }}
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Reset timer
+          </Button>
         </div>
       )}
     </section>

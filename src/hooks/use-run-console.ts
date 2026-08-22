@@ -16,6 +16,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
 import { newClientKey } from "@/lib/format";
 import {
+  ACTIVE_RUN_CLEARED_EVENT,
   ACTIVE_RUN_VERSION,
   clearActiveRun,
   computeElapsedMs,
@@ -37,6 +38,16 @@ export function useRunConsole() {
     loadActiveRun().then((r) => {
       if (r) setRun(r);
     });
+  }, []);
+
+  // Another screen (or a combine reset) wiped the stored run: drop it here too
+  // rather than keep timing a record that is gone.
+  useEffect(() => {
+    function onCleared() {
+      setRun(null);
+    }
+    window.addEventListener(ACTIVE_RUN_CLEARED_EVENT, onCleared);
+    return () => window.removeEventListener(ACTIVE_RUN_CLEARED_EVENT, onCleared);
   }, []);
 
   useEffect(() => {
@@ -177,10 +188,15 @@ export function useRunConsole() {
     await finishSave.finish(run);
   }
 
+  /**
+   * Throw the run away. The local record goes first and unconditionally: a run
+   * left over from another event — or from a save that will never land — used
+   * to be unclearable, because the status write bailed out before the wipe.
+   */
   async function cancelRun() {
-    if (!run || !event?.id) return;
+    if (!run) return;
     const ep = participants.find((p) => p.participant_id === run.participantId);
-    if (ep) {
+    if (ep && event?.id) {
       try {
         await setStatusFn({
           data: { eventId: event.id, eventParticipantId: ep.id, status: "queued" },
@@ -191,6 +207,9 @@ export function useRunConsole() {
     }
     await clearActiveRun();
     setRun(null);
+    finishSave.reset();
+    setSelected("");
+    await qc.invalidateQueries();
   }
 
   /** Put someone on the clock for the crowd screens without starting the timer. */
