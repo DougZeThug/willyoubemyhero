@@ -481,17 +481,11 @@ test.describe("opening a pack", () => {
     await expect(standStep(page)).toHaveText("3 / 3");
 
     // It stays face-down and tappable for the whole 900ms hold. Every tap in
-    // that window used to start another ceremony over the same card. The taps
-    // are paced inside the page — a task apart, so the render-gated guard they
-    // probe gets its re-render between them — because awaited clicks are a
-    // protocol round trip each, and on a busy runner the later ones drifted
-    // past the hold and flipped the already-revealed card back over instead.
-    await standCard(page).evaluate(async (el) => {
-      for (let i = 0; i < 3; i++) {
-        (el as HTMLElement).click();
-        await new Promise((r) => setTimeout(r, 50));
-      }
-    });
+    // that window used to start another ceremony over the same card.
+    const card = standCard(page);
+    await card.click();
+    await card.click({ force: true });
+    await card.click({ force: true });
 
     await expect(swipeHint(page)).toBeVisible({ timeout: 15_000 });
     // Long enough for a second and third 900ms hold to have finished too. The
