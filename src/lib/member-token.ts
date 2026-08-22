@@ -1,6 +1,6 @@
 // League-member session on this device. Mirrors src/lib/admin-token.ts, with a
 // separate storage key so claiming a player and unlocking admin are independent.
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 const KEY = "wwbh:member-token";
 const NAME_KEY = "wwbh:member-name";
@@ -57,28 +57,47 @@ export function clearMemberToken() {
   window.dispatchEvent(new Event("wwbh:member-token-changed"));
 }
 
-function read(): MemberSession | null {
-  if (typeof window === "undefined") return null;
-  return parse(window.localStorage.getItem(KEY), window.localStorage.getItem(NAME_KEY));
+// useSyncExternalStore re-renders whenever getSnapshot returns a new reference,
+// so an unchanged token must keep handing back the same object.
+let cached: MemberSession | null = null;
+let cachedKey: string | null = null;
+
+function snapshot(): MemberSession | null {
+  const raw = window.localStorage.getItem(KEY);
+  const name = window.localStorage.getItem(NAME_KEY);
+  // Parsed fresh every time rather than keyed on the raw strings alone: expiry
+  // makes the result time-dependent, and the hourly tick below relies on the
+  // same token starting to parse to null.
+  const next = parse(raw, name);
+  if (next === null) {
+    cached = null;
+    cachedKey = null;
+    return null;
+  }
+  const key = `${raw}\u0000${name ?? ""}`;
+  if (cached !== null && cachedKey === key) return cached;
+  cached = next;
+  cachedKey = key;
+  return next;
+}
+
+function subscribe(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener("wwbh:member-token-changed", onStoreChange);
+  // Tokens last 90 days, so an hourly expiry check is plenty.
+  const iv = window.setInterval(onStoreChange, 60 * 60_000);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener("wwbh:member-token-changed", onStoreChange);
+    window.clearInterval(iv);
+  };
 }
 
 export function useMemberSession(): MemberSession | null {
-  // Start null so server and first client render agree; hydrate in the effect.
-  const [session, setSession] = useState<MemberSession | null>(null);
-  useEffect(() => {
-    function refresh() {
-      setSession(read());
-    }
-    refresh();
-    window.addEventListener("storage", refresh);
-    window.addEventListener("wwbh:member-token-changed", refresh);
-    // Tokens last 90 days, so an hourly expiry check is plenty.
-    const iv = window.setInterval(refresh, 60 * 60_000);
-    return () => {
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("wwbh:member-token-changed", refresh);
-      window.clearInterval(iv);
-    };
-  }, []);
-  return session;
+  // A snapshot read at render time, not state hydrated in an effect. The old
+  // effect left `me` null for one render after other async state had settled,
+  // and the trading post's signed-out gate fired in exactly that window —
+  // bouncing a claimed member to /auth. The server snapshot stays null so SSR
+  // and the hydration render agree; every render after that reads the truth.
+  return useSyncExternalStore(subscribe, snapshot, () => null);
 }

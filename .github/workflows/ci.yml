@@ -65,12 +65,11 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      # Advisory for now. The suite is new, so a red test reports itself without
-      # blocking a Lovable sync; drop continue-on-error once it has settled and
-      # this becomes a real gate like lint and typecheck.
+      # A real gate, like lint and typecheck. It ran advisory while the suite
+      # was new; that let stale tests sit red on main for days, which is the
+      # failure mode gating exists to prevent.
       - name: Unit tests
         run: bun run test
-        continue-on-error: true
 
       - name: Build
         run: bun run build

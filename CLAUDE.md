@@ -183,10 +183,10 @@ and fail with a mysteriously empty page.
 `.github/workflows/ci.yml` runs lint → typecheck → **unit tests** → build, plus
 separate `db` and `e2e` jobs.
 
-The three test steps are **advisory today** (`continue-on-error: true`) so a red
-test reports itself without blocking a Lovable sync. Once the suite has settled,
-drop `continue-on-error` from the unit-test step so it gates like lint and
-typecheck do.
+Unit tests **gate** alongside lint, typecheck and build — a red test blocks the
+sync. The `db` and `e2e` jobs are still **advisory** (`continue-on-error: true`
+at the job level); drop those flags too once each job has held a green streak on
+main, since an advisory suite is how stale tests accumulated unnoticed before.
 
 ## Lovable
 
