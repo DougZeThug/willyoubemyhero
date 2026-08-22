@@ -103,7 +103,9 @@ const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 ```
 
 A top-level import in a `*.functions.ts` or route file pulls it into the client
-bundle. Top-level is only safe in another `*.server.ts` module.
+bundle. Top-level is only safe in another `*.server.ts` module. `eslint.config.js`
+enforces this for those two file groups — `import type` is still allowed, since a
+type is erased before it can reach a bundle.
 
 ### Never hand-edit
 

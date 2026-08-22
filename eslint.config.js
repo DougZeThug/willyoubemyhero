@@ -50,6 +50,37 @@ export default tseslint.config(
     },
   },
   {
+    // The service_role client bypasses RLS, and these two file groups ship to the
+    // browser: a *.functions.ts module keeps its exports on the client so the RPC
+    // stubs resolve, and a route file is client code outright. A top-level import
+    // therefore pulls the admin client into the bundle, which is why every handler
+    // reaches it through `await import(...)` instead. That rule was written down
+    // in CLAUDE.md and in client.server.ts and enforced by nothing until now.
+    //
+    // The base no-restricted-imports rule above stays on for these files: it
+    // restricts `paths` while this restricts `patterns`, so the two do not
+    // overlap and the `server-only` guard survives here.
+    files: ["src/lib/*.functions.ts", "src/routes/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/integrations/supabase/client.server"],
+              // Several *.functions.ts files legitimately take a type from a
+              // *.server module; a type import is erased before it can reach a
+              // bundle.
+              allowTypeImports: true,
+              message:
+                'Load the service_role client inside the handler: `const { supabaseAdmin } = await import("@/integrations/supabase/client.server")`. A top-level import pulls it into the client bundle.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Playwright fixtures hand control back by calling `use(value)`. The React
     // hooks plugin sees the name and assumes React's `use`, which it is not.
     files: ["e2e/**/*.ts"],
