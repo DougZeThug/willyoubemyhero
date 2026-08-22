@@ -96,7 +96,7 @@ export function useFinishSave({
         stored = true;
       } catch (e) {
         setState("failed");
-        setError(e instanceof Error ? e.message : "Could not reach the server");
+        setError(saveErrorMessage(e));
       }
       // Outside the catch on purpose: the row is written by this point, so a
       // throw from the caller's cleanup must not report the run as unsaved.
