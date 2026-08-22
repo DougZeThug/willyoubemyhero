@@ -8,7 +8,7 @@
  *
  * Renders nothing at all without a valid admin session for the active event.
  */
-import { Flag, Pause, Play, Radio, Redo2, RotateCcw } from "lucide-react";
+import { Flag, Pause, Play, Radio, Redo2, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatTime } from "@/lib/format";
@@ -35,8 +35,10 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     recordSplit,
     undoLastSplit,
     finishRun,
+    cancelRun,
     setOnClock,
   } = rc;
+
 
   const queued = participants.filter(
     (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
