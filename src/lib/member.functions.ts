@@ -3,6 +3,7 @@ import { z } from "zod";
 import { hashCode, signMemberToken } from "./session.server";
 import { optionalGuest, requireAdmin, requireMember } from "./require-auth.server";
 import { timingSafeEq } from "./session.server";
+import { clearAttempts, clientIp, recordFailedAttempt, tooManyAttempts } from "./rate-limit.server";
 import { uuid as zuuid } from "./zod-uuid";
 
 // Codes get read off paper and typed on a phone, so the alphabet drops every
@@ -71,6 +72,21 @@ export const claimPlayer = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
+    // Before the database. Six characters from a 25-letter alphabet is only a
+    // secret while the guesses are bounded.
+    //
+    // Keyed on the participant, not the event: thirteen people claiming from one
+    // garden's WiFi share an address, and a single shared bucket would let one
+    // person's fumbling lock everybody else out.
+    const key = `claim:${clientIp()}:${data.participantId}`;
+    if (tooManyAttempts(key)) {
+      // The SAME shape a wrong code gets, deliberately. A distinct "slow down"
+      // reason would answer "does this player have a code?" for anybody willing
+      // to send eleven requests, which is the enumeration the generic failure
+      // below exists to prevent.
+      return { ok: false as const, reason: "bad_code" as const };
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row } = await supabaseAdmin
       .from("member_codes")
@@ -80,10 +96,15 @@ export const claimPlayer = createServerFn({ method: "POST" })
 
     // Same generic failure for "no code issued" and "wrong code" so the endpoint
     // can't be used to enumerate which players have codes.
-    if (!row) return { ok: false as const, reason: "bad_code" as const };
-    if (!timingSafeEq(hashCode(row.code_salt, data.code), row.code_hash)) {
+    if (!row) {
+      recordFailedAttempt(key);
       return { ok: false as const, reason: "bad_code" as const };
     }
+    if (!timingSafeEq(hashCode(row.code_salt, data.code), row.code_hash)) {
+      recordFailedAttempt(key);
+      return { ok: false as const, reason: "bad_code" as const };
+    }
+    clearAttempts(key);
 
     const now = new Date().toISOString();
     await supabaseAdmin

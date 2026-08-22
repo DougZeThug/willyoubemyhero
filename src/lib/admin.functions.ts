@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { hashPin, signAdminToken, timingSafeEq } from "./session.server";
+import { clearAttempts, clientIp, recordFailedAttempt, tooManyAttempts } from "./rate-limit.server";
 import { uuid as zuuid } from "./zod-uuid";
 
 export const verifyEventPin = createServerFn({ method: "POST" })
@@ -9,6 +10,15 @@ export const verifyEventPin = createServerFn({ method: "POST" })
     z.object({ eventId: zuuid(), pin: z.string().min(1).max(32) }).parse(data),
   )
   .handler(async ({ data }) => {
+    // Before the database, because the PIN is four digits: without a ceiling the
+    // whole console is ten thousand requests away for anyone who can reach it.
+    // The event id is public, so a distinct reason gives nothing away here and
+    // saves the commissioner staring at "Incorrect PIN" for a correct one.
+    const key = `pin:${clientIp()}:${data.eventId}`;
+    if (tooManyAttempts(key)) {
+      return { ok: false as const, reason: "too_many_attempts" as const };
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: secret, error } = await supabaseAdmin
       .from("event_secrets")
@@ -16,12 +26,17 @@ export const verifyEventPin = createServerFn({ method: "POST" })
       .eq("event_id", data.eventId)
       .maybeSingle();
     if (error || !secret) {
+      recordFailedAttempt(key);
       return { ok: false as const, reason: "event_not_found" as const };
     }
     const candidate = hashPin(secret.pin_salt, data.pin);
     if (!timingSafeEq(candidate, secret.pin_hash)) {
+      recordFailedAttempt(key);
       return { ok: false as const, reason: "bad_pin" as const };
     }
+    // A commissioner who fumbled the PIN twice before getting it right starts
+    // the next window clean.
+    clearAttempts(key);
     const { token, expiresAt } = signAdminToken(secret.event_id);
     return { ok: true as const, token, expiresAt };
   });

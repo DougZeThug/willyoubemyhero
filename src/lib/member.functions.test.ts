@@ -9,6 +9,7 @@ import {
   signMemberToken,
   verifyMemberToken,
 } from "./session.server";
+import { resetRateLimits } from "./rate-limit.server";
 
 let mock = createSupabaseMock();
 
@@ -44,6 +45,9 @@ function codeRow(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret");
+  // Module state by design: without this, one test's failed claims would be
+  // spent out of the next one's budget.
+  resetRateLimits();
   withDb({});
 });
 
@@ -313,6 +317,72 @@ describe("getClaimRoster", () => {
   it("survives both queries returning nothing", async () => {
     const { getClaimRoster } = await import("./member.functions");
     expect(await callServerFn(getClaimRoster)).toEqual([]);
+  });
+});
+
+describe("attempt limiting", () => {
+  const LIMIT = 10;
+
+  async function wrongCode(headers?: Record<string, string>) {
+    const { claimPlayer } = await import("./member.functions");
+    return callServerFn(claimPlayer, {
+      data: { participantId: PARTICIPANT_ID, code: "WRONG7" },
+      headers,
+    });
+  }
+
+  it("gives a limited caller the same answer a wrong code gets", async () => {
+    // The whole point of the generic bad_code shape is that this endpoint cannot
+    // be asked which players have codes. A distinct "slow down" reason would
+    // answer that question for anybody willing to send eleven requests.
+    withDb({ "member_codes.select": codeRow() });
+    const genuine = await wrongCode();
+    for (let i = 1; i < LIMIT; i++) await wrongCode();
+    const limited = await wrongCode();
+    expect(genuine).toEqual({ ok: false, reason: "bad_code" });
+    expect(limited).toEqual(genuine);
+  });
+
+  it("does not reach the database once it is refusing", async () => {
+    withDb({ "member_codes.select": codeRow() });
+    for (let i = 0; i < LIMIT; i++) await wrongCode();
+    const before = mock.calls.length;
+    await wrongCode();
+    expect(mock.calls).toHaveLength(before);
+  });
+
+  it("counts per player, so one person's fumbling cannot lock out the garden", async () => {
+    // Thirteen people claiming from one house's WiFi share an address, so the
+    // key has to carry the participant or the first fumbler locks out the rest.
+    withDb({ "member_codes.select": codeRow() });
+    const headers = { "cf-connecting-ip": "1.1.1.1" };
+    for (let i = 0; i < LIMIT; i++) await wrongCode(headers);
+    const { claimPlayer } = await import("./member.functions");
+    withDb({
+      "member_codes.select": codeRow({ participant_id: OTHER_ID }),
+      "participants.select": { data: { name: "Bob" }, error: null },
+    });
+    expect(
+      await callServerFn(claimPlayer, {
+        data: { participantId: OTHER_ID, code: CODE },
+        headers,
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("claims fine after fumbles, and forgets them", async () => {
+    withDb({ "member_codes.select": codeRow() });
+    for (let i = 0; i < LIMIT - 1; i++) await wrongCode();
+    withDb({
+      "member_codes.select": codeRow(),
+      "participants.select": { data: { name: "Doug" }, error: null },
+    });
+    const { claimPlayer } = await import("./member.functions");
+    expect(
+      await callServerFn(claimPlayer, { data: { participantId: PARTICIPANT_ID, code: CODE } }),
+    ).toMatchObject({ ok: true });
+    withDb({ "member_codes.select": codeRow() });
+    expect(await wrongCode()).toEqual({ ok: false, reason: "bad_code" });
   });
 });
 

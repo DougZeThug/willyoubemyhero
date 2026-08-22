@@ -158,7 +158,14 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
     try {
       const res = await verifyFn({ data: { eventId, pin: value } });
       if (!res.ok) {
-        toast.error("Incorrect PIN");
+        // The gate submits on the fourth digit, so a fumble is an attempt. Say
+        // which wall was hit rather than telling a commissioner with the right
+        // PIN that it is wrong.
+        toast.error(
+          res.reason === "too_many_attempts"
+            ? "Too many tries — wait a few minutes"
+            : "Incorrect PIN",
+        );
         setPin("");
         return;
       }

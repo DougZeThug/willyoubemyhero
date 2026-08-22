@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
 import { callServerFn } from "@/test/server-fn";
 import { hashPin, verifyAdminToken } from "./session.server";
+import { resetRateLimits } from "./rate-limit.server";
 
 let mock = createSupabaseMock();
 
@@ -31,6 +32,9 @@ function secretsRow() {
 
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret");
+  // The limiter's Map is module state and outlives a single call by design, so
+  // one test's failed attempts would otherwise be spent by the next.
+  resetRateLimits();
   withDb({});
 });
 
@@ -121,6 +125,56 @@ describe("verifyEventPin", () => {
       withDb({ "event_secrets.select": secretsRow() });
       await expect(verify({ eventId: "nope", pin: PIN })).rejects.toThrow();
       expect(mock.calls).toHaveLength(0);
+    });
+  });
+});
+
+describe("attempt limiting", () => {
+  const LIMIT = 10;
+
+  async function wrongPin(headers?: Record<string, string>) {
+    const { verifyEventPin } = await import("./admin.functions");
+    return callServerFn(verifyEventPin, {
+      data: { eventId: EVENT_ID, pin: "0000" },
+      headers,
+    });
+  }
+
+  it("refuses to keep answering after the budget is spent", async () => {
+    // A four-digit PIN is ten thousand guesses. Unbounded, that is the console.
+    withDb({ "event_secrets.select": secretsRow() });
+    for (let i = 0; i < LIMIT; i++) {
+      expect(await wrongPin()).toEqual({ ok: false, reason: "bad_pin" });
+    }
+    expect(await wrongPin()).toEqual({ ok: false, reason: "too_many_attempts" });
+  });
+
+  it("does not reach the database once it is refusing", async () => {
+    withDb({ "event_secrets.select": secretsRow() });
+    for (let i = 0; i < LIMIT; i++) await wrongPin();
+    const before = mock.calls.length;
+    await wrongPin();
+    expect(mock.calls).toHaveLength(before);
+  });
+
+  it("mints a token for the right PIN after fumbles, and forgets them", async () => {
+    withDb({ "event_secrets.select": secretsRow() });
+    for (let i = 0; i < LIMIT - 1; i++) await wrongPin();
+    expect(await verify({ eventId: EVENT_ID, pin: PIN })).toMatchObject({ ok: true });
+    // The success returned the budget: the next fumble is a fumble, not a wall.
+    expect(await wrongPin()).toEqual({ ok: false, reason: "bad_pin" });
+  });
+
+  it("counts per caller, so one flailing phone cannot lock out another", async () => {
+    withDb({ "event_secrets.select": secretsRow() });
+    for (let i = 0; i < LIMIT; i++) await wrongPin({ "cf-connecting-ip": "1.1.1.1" });
+    expect(await wrongPin({ "cf-connecting-ip": "1.1.1.1" })).toEqual({
+      ok: false,
+      reason: "too_many_attempts",
+    });
+    expect(await wrongPin({ "cf-connecting-ip": "2.2.2.2" })).toEqual({
+      ok: false,
+      reason: "bad_pin",
     });
   });
 });
