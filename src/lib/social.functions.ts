@@ -18,6 +18,13 @@ import { uuid as zuuid } from "./zod-uuid";
  * Award votes are not: they are a secret ballot, readable only by the
  * commissioner and only as a tally, until voting is closed and winners are
  * written into the public `awards` table.
+ *
+ * WHICH CLIENT EACH HANDLER USES follows from that. `getEventSocial` and
+ * `getAwards` take no guard, so on `admin()` their SELECT lists would be the only
+ * thing between them and a private column; they read on `publicClient()` instead,
+ * where the grants in supabase/migrations are a second layer and every table
+ * involved is one tests/db/rls.test.ts already lists as publicly readable.
+ * Everything else here writes, or reads the ballot, and stays on service_role.
  */
 
 const REACTIONS = ["🔥", "💀", "😂", "🐐", "🤡", "🍺"] as const;
@@ -27,18 +34,6 @@ export const REACTION_EMOJIS: readonly string[] = REACTIONS;
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
-}
-
-/**
- * The publishable key, for the two handlers here that are public reads.
- *
- * Neither takes a guard, so served as service_role the column list below would
- * be the only thing between them and a private column. Read as anon and the
- * grants in supabase/migrations back them up — every table they touch is one
- * tests/db/rls.test.ts already lists as publicly readable.
- */
-function publicDb() {
-  return publicClient();
 }
 
 /**
@@ -74,7 +69,7 @@ function actor(input: GuestInput): {
 export const getEventSocial = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
-    const sb = publicDb();
+    const sb = publicClient();
     const { data: eps } = await sb
       .from("event_participants")
       .select("id")
@@ -108,12 +103,12 @@ export const getEventSocial = createServerFn({ method: "GET" })
     const meGuest = meMember ? null : optionalGuest();
     const sbAdmin = meGuest ? await admin() : null;
     const mineIds = async (table: "card_reactions" | "card_comments") => {
-      if (!sbAdmin) return new Set<string>();
+      if (!meGuest || !sbAdmin) return new Set<string>();
       const { data: rows } = await sbAdmin
         .from(table)
         .select("id")
         .in("event_participant_id", ids)
-        .eq("guest_key", meGuest!);
+        .eq("guest_key", meGuest);
       return new Set((rows ?? []).map((r) => r.id));
     };
     const [myReactions, myComments] = await Promise.all([
@@ -316,7 +311,7 @@ export const castAwardVote = createServerFn({ method: "POST" })
 export const getAwards = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
-    const sb = publicDb();
+    const sb = publicClient();
     const { data: rows } = await sb
       .from("awards")
       .select("id, event_id, participant_id, award_name, award_type, description")

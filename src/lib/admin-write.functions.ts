@@ -1,17 +1,15 @@
+// The commissioner's write surface.
+//
+// EVERY WRITE HERE IS SCOPED TO THE EVENT THE TOKEN AUTHORIZES. requireAdmin
+// (eventId) proves admin of event A and nothing more, and row ids arrive in the
+// payload — so a write matched on the primary key alone would let an admin for A
+// edit a station, run or roster row belonging to event B. That is the principle
+// deleteComment states in social.functions.ts, applied here: an
+// `.eq("event_id", ...)` alongside every `.eq("id", ...)`.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { uuid as zuuid } from "./zod-uuid";
-
-/**
- * EVERY WRITE BELOW IS SCOPED TO THE EVENT THE TOKEN AUTHORIZES.
- *
- * `requireAdmin(eventId)` proves admin of event A and nothing more. Row ids
- * arrive in the payload, so a write matched on the primary key alone would let
- * an admin for A edit a station, run or roster row belonging to event B — the
- * principle deleteComment states in social.functions.ts, applied here. Hence
- * the `.eq("event_id", …)` alongside every `.eq("id", …)`.
- */
 
 /**
  * Stamp the crowd-clock column onto a participant status update.
