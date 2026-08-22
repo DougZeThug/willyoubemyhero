@@ -217,8 +217,11 @@ export const recordRandomization = createServerFn({ method: "POST" })
       .object({
         eventId: zuuid(),
         scope: z.string(),
-        previous: z.array(z.any()),
-        resulting: z.array(z.any()),
+        // Two snapshots of a running order, so they are roster-sized. Untyped
+        // and stored as jsonb, which is exactly why they need a length: nothing
+        // downstream would notice a million entries until the row was written.
+        previous: z.array(z.any()).max(64),
+        resulting: z.array(z.any()).max(64),
         seed: z.string(),
       })
       .parse(d),

@@ -760,3 +760,92 @@ describe("cross-event scoping", () => {
     });
   });
 });
+
+/**
+ * The size of what a caller may post.
+ *
+ * Every one of these strings is decoded into memory and handed to storage, and
+ * the batch multiplies that by its length — so the ceilings are what stops one
+ * request being an arbitrarily large one.
+ */
+describe("input bounds", () => {
+  // One character over the documented 12,000,000, which is the 8.8 MB the
+  // client enforces before base64 expands it by 4/3.
+  const TOO_BIG = `data:image/png;base64,${"A".repeat(12_000_001)}`;
+
+  it("rejects a data url past the cap without touching storage", async () => {
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantCard, {
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(TOO_BIG),
+        },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow();
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a card back", "uploadEventCardBack", { eventId: EVENT_ID }],
+    [
+      "a participant photo",
+      "uploadParticipantPhoto",
+      { eventId: EVENT_ID, eventParticipantId: CARD_ID },
+    ],
+  ])("rejects an over-long data url on %s too", async (_label, name, base) => {
+    const mod = (await freshModule()) as unknown as Record<
+      string,
+      (o: { data: unknown; headers: Record<string, string> }) => Promise<unknown>
+    >;
+    await expect(
+      callServerFn(mod[name], {
+        data: { ...base, dataUrls: threeSizes(TOO_BIG) },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects an over-long data url inside a bulk item", async () => {
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantCardsBulk, {
+        data: {
+          eventId: EVENT_ID,
+          items: [{ eventParticipantId: CARD_ID, side: "front", dataUrls: threeSizes(TOO_BIG) }],
+        },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects a variant batch past the 30-item cap", async () => {
+    const mod = await freshModule();
+    const update = { id: CARD_ID, kind: "photo", dataUrls: threeSizes(PNG) };
+    await expect(
+      callServerFn(mod.writeImageVariants, {
+        data: { eventId: EVENT_ID, updates: Array.from({ length: 31 }, () => update) },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow();
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+  });
+
+  it("still accepts a full 30-item batch", async () => {
+    withDb({
+      "storage.upload": { data: { path: "ok" }, error: null },
+      "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+    });
+    const mod = await freshModule();
+    const update = { id: CARD_ID, kind: "photo", dataUrls: threeSizes(PNG) };
+    await expect(
+      callServerFn(mod.writeImageVariants, {
+        data: { eventId: EVENT_ID, updates: Array.from({ length: 30 }, () => update) },
+        headers: asAdmin(),
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+});

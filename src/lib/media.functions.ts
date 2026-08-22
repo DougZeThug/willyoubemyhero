@@ -146,6 +146,13 @@ export const getEventPhotoUrls = createServerFn({ method: "GET" })
 
 const cardSide = z.enum(["front", "back"]);
 
+// Base64 expands by 4/3, so this is the 8.8 MB the client-side check enforces
+// before encoding — the same cap secret-cards.functions.ts puts on card art. An
+// unbounded string here is a request body the handler decodes into memory and
+// then hands to storage, so the ceiling is the point.
+const dataUrl = z.string().min(32).max(12_000_000);
+const sizedDataUrls = z.object({ thumb: dataUrl, medium: dataUrl, large: dataUrl });
+
 type SizedCardPaths = {
   thumb: string | null;
   medium: string | null;
@@ -355,11 +362,7 @@ export const uploadEventCardBack = createServerFn({ method: "POST" })
     z
       .object({
         eventId: zuuid(),
-        dataUrls: z.object({
-          thumb: z.string().min(32),
-          medium: z.string().min(32),
-          large: z.string().min(32),
-        }),
+        dataUrls: sizedDataUrls,
       })
       .parse(d),
   )
@@ -427,11 +430,7 @@ export const uploadParticipantCard = createServerFn({ method: "POST" })
         eventId: zuuid(),
         eventParticipantId: zuuid(),
         side: cardSide.default("front"),
-        dataUrls: z.object({
-          thumb: z.string().min(32),
-          medium: z.string().min(32),
-          large: z.string().min(32),
-        }),
+        dataUrls: sizedDataUrls,
       })
       .parse(d),
   )
@@ -451,11 +450,7 @@ export const uploadParticipantCardsBulk = createServerFn({ method: "POST" })
             z.object({
               eventParticipantId: zuuid(),
               side: cardSide,
-              dataUrls: z.object({
-                thumb: z.string().min(32),
-                medium: z.string().min(32),
-                large: z.string().min(32),
-              }),
+              dataUrls: sizedDataUrls,
             }),
           )
           .min(1)
@@ -544,11 +539,7 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
       .object({
         eventId: zuuid(),
         eventParticipantId: zuuid(),
-        dataUrls: z.object({
-          thumb: z.string().min(32),
-          medium: z.string().min(32),
-          large: z.string().min(32),
-        }),
+        dataUrls: sizedDataUrls,
       })
       .parse(d),
   )
@@ -622,17 +613,18 @@ export const writeImageVariants = createServerFn({ method: "POST" })
     z
       .object({
         eventId: zuuid(),
-        updates: z.array(
-          z.object({
-            id: zuuid(),
-            kind: z.enum(["photo", "card_front", "card_back", "universal_back"]),
-            dataUrls: z.object({
-              thumb: z.string().min(32),
-              medium: z.string().min(32),
-              large: z.string().min(32),
+        // Each entry carries three images, so an uncapped array is an uncapped
+        // request body. Thirty is more than a backfill pass over this roster
+        // ever needs, and well under the 40 the bulk card upload allows.
+        updates: z
+          .array(
+            z.object({
+              id: zuuid(),
+              kind: z.enum(["photo", "card_front", "card_back", "universal_back"]),
+              dataUrls: sizedDataUrls,
             }),
-          }),
-        ),
+          )
+          .max(30),
       })
       .parse(d),
   )

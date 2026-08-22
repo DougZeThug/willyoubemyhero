@@ -600,3 +600,34 @@ describe("cross-event scoping", () => {
     expect(mock.eqValue(replay!, "event_id")).toBe(EVENT_ID);
   });
 });
+
+describe("recordRandomization input bounds", () => {
+  const order = Array.from({ length: 65 }, (_, i) => ({ id: EVENT_PARTICIPANT_ID, order: i }));
+
+  it("rejects a snapshot longer than any roster", async () => {
+    // Both arrays are untyped and land in jsonb, so nothing downstream would
+    // notice a million entries until the row had been written.
+    const { recordRandomization } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(recordRandomization, {
+        data: { ...VALID_PAYLOADS.recordRandomization, previous: order },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow();
+    expect(mock.callsFor("running_order_randomizations", "insert")).toHaveLength(0);
+  });
+
+  it("still records a full 64-entry snapshot", async () => {
+    const { recordRandomization } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(recordRandomization, {
+        data: {
+          ...VALID_PAYLOADS.recordRandomization,
+          previous: order.slice(0, 64),
+          resulting: order.slice(0, 64),
+        },
+        headers: asAdmin(),
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+});
