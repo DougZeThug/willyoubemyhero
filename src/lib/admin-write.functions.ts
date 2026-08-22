@@ -178,9 +178,7 @@ export const resetCombine = createServerFn({ method: "POST" })
  * commissioner can re-time them without wiping everybody else's day.
  */
 export const resetParticipantRuns = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: zuuid(), participantId: zuuid() }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), participantId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -205,8 +203,6 @@ export const resetParticipantRuns = createServerFn({ method: "POST" })
     if (statusError) throw statusError;
     return { ok: true, clearedRuns: runIds.length };
   });
-
-
 
 // ---------- Running order ----------
 export const setRunningOrder = createServerFn({ method: "POST" })
