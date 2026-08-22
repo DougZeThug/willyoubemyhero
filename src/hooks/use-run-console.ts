@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { setParticipantStatus } from "@/lib/admin-write.functions";
+import { resetParticipantRuns, setParticipantStatus } from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
 import { newClientKey } from "@/lib/format";
@@ -29,6 +29,7 @@ export function useRunConsole() {
   const { event, bundle } = useEventBundle();
   const qc = useQueryClient();
   const setStatusFn = useServerFn(setParticipantStatus);
+  const resetAthleteFn = useServerFn(resetParticipantRuns);
 
   const [run, setRun] = useState<ActiveRun | null>(null);
   const [selectedParticipantId, setSelected] = useState<string>("");
@@ -212,6 +213,28 @@ export function useRunConsole() {
     await qc.invalidateQueries();
   }
 
+  /**
+   * Wipe one athlete's result so they can run again. If the active timer on
+   * this device belongs to them it goes too — otherwise a stale local run
+   * would re-save the result we just deleted.
+   */
+  async function resetAthlete(participantId: string) {
+    if (!event?.id) return;
+    try {
+      const res = await resetAthleteFn({ data: { eventId: event.id, participantId } });
+      if (run?.participantId === participantId) {
+        await clearActiveRun();
+        setRun(null);
+        finishSave.reset();
+        setSelected("");
+      }
+      await qc.invalidateQueries();
+      toast.success(`Reset — ${res.clearedRuns} run(s) cleared`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not reset that athlete");
+    }
+  }
+
   /** Put someone on the clock for the crowd screens without starting the timer. */
   async function setOnClock(participantId: string | null) {
     if (!event?.id) return;
@@ -259,6 +282,7 @@ export function useRunConsole() {
     addPenalty,
     finishRun,
     cancelRun,
+    resetAthlete,
     setOnClock,
   };
 }
