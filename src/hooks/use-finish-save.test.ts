@@ -154,7 +154,7 @@ describe("useFinishSave", () => {
       await result.current.retry(makeFinished());
     });
     expect(result.current.state).toBe("failed");
-    expect(result.current.error).toBe("Admin PIN required");
+    expect(result.current.error).toMatch(/admin session expired/i);
     // The console clears local storage from onSaved, so it must not fire: this
     // is the only copy of the run left.
     expect(onSaved).not.toHaveBeenCalled();
