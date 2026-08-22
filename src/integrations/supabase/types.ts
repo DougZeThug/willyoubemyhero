@@ -633,6 +633,7 @@ export type Database = {
           draft_choice_priority: number | null
           event_id: string
           id: string
+          on_clock_since: string | null
           participant_id: string
           participation_status: string
           photo_path: string | null
@@ -654,6 +655,7 @@ export type Database = {
           draft_choice_priority?: number | null
           event_id: string
           id?: string
+          on_clock_since?: string | null
           participant_id: string
           participation_status?: string
           photo_path?: string | null
@@ -675,6 +677,7 @@ export type Database = {
           draft_choice_priority?: number | null
           event_id?: string
           id?: string
+          on_clock_since?: string | null
           participant_id?: string
           participation_status?: string
           photo_path?: string | null
