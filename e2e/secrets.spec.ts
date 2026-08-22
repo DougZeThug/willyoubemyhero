@@ -112,8 +112,16 @@ test.describe("the daily secret", () => {
 
     await expect(page.getByText(/one more card/i)).toBeVisible({ timeout: 15_000 });
     // No gate any more: a guest gets a server-minted identity and the card that
-    // comes with it, so nothing here should send them to /claim.
-    await expect(page.getByText(/not on the roster/i).first()).toBeVisible();
+    // comes with it, so nothing here should send them to /claim. Filtered to
+    // what is actually on screen, as in the member test above: the phrase also
+    // appears on the card's own back face, rotated away behind
+    // backface-visibility.
+    await expect(
+      page
+        .getByText(/not on the roster/i)
+        .filter({ visible: true })
+        .first(),
+    ).toBeVisible();
     await expect(page.getByRole("link", { name: /claim your player/i })).toHaveCount(0);
   });
 
