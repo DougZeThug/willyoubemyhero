@@ -12,6 +12,10 @@ import { useFinishWatcher } from "@/hooks/use-finish-watcher";
 import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { onClockElapsedMs, type OnClockEntry } from "@/lib/live-clock";
+import { computeElapsedMs } from "@/lib/active-run";
+import { useAdminSession } from "@/lib/admin-token";
+import { useRunConsole } from "@/hooks/use-run-console";
+import { LiveTimingBar } from "@/components/live-timing-bar";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -41,6 +45,14 @@ function LivePage() {
     timeMs: number;
     deltaMs: number;
   } | null>(null);
+
+  // The commissioner's console, mounted here so timing can happen on the
+  // broadcast view. It reads the same single active run as /admin; spectators
+  // never see any of its controls.
+  const admin = useAdminSession();
+  const rc = useRunConsole();
+  const isAdmin = !!event?.id && admin?.eventId === event.id;
+  const adminRun = isAdmin && rc.run && rc.run.status !== "finished" ? rc.run : null;
 
   const { current, onClock, leaderboard, done, total } = useMemo(() => {
     const parts = bundle?.participants ?? [];
@@ -75,6 +87,18 @@ function LivePage() {
     () => onClockElapsedMs({ on_clock_since: onClockSince }, Date.now()) ?? 0,
     [onClockSince],
   );
+
+  // While an admin is timing, the big ring shows the run they are actually
+  // timing rather than the unofficial on-clock counter. Anchored on the run's
+  // own stamps for the same reason as above: HudTimer re-anchors whenever this
+  // number changes, so it must only change when the run really does.
+  const runBaseMs = useMemo(
+    () => (adminRun ? computeElapsedMs(adminRun, Date.now()) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [adminRun?.clientKey, adminRun?.status, adminRun?.startedAt, adminRun?.pauses.length],
+  );
+  const timedEp = adminRun ? (rc.currentEp ?? null) : null;
+  const shown = timedEp ?? current;
 
   // "Everyone is done" is only true when there was somebody to be done. It used
   // to be what the page said before the first fetch had even returned.
@@ -119,20 +143,28 @@ function LivePage() {
 
         <div className="flex flex-col items-center">
           <HudTimer
-            runningSinceMs={onClockBaseMs}
-            paused={!onClock}
+            runningSinceMs={runBaseMs ?? onClockBaseMs}
+            paused={adminRun ? adminRun.status !== "running" : !onClock}
             status={
-              onClock ? "On the Clock" : current ? "Up Next" : loading ? "Loading" : "Standby"
+              adminRun
+                ? adminRun.status === "running"
+                  ? "Running"
+                  : "Paused"
+                : onClock
+                  ? "On the Clock"
+                  : current
+                    ? "Up Next"
+                    : loading
+                      ? "Loading"
+                      : "Standby"
             }
             size={340}
           >
-            {current ? (
+            {shown ? (
               <ParticipantAvatar
-                name={current.participant?.name ?? "?"}
-                cardUrl={cards.data?.[current.id]?.front ?? null}
-                photoUrl={
-                  photos.data?.[current.id] ?? current.participant?.profile_image_url ?? null
-                }
+                name={shown.participant?.name ?? "?"}
+                cardUrl={cards.data?.[shown.id]?.front ?? null}
+                photoUrl={photos.data?.[shown.id] ?? shown.participant?.profile_image_url ?? null}
                 size={220}
                 className="opacity-80"
               />
@@ -140,23 +172,23 @@ function LivePage() {
               <User2 className="h-40 w-40 text-primary/60" strokeWidth={1.25} />
             )}
           </HudTimer>
-          {onClock && onClockSince && (
+          {!adminRun && onClock && onClockSince && (
             <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
               Unofficial
             </div>
           )}
-          {current ? (
+          {shown ? (
             <div className="mt-4 text-center">
               <Link
                 to="/players/$id"
-                params={{ id: current.id }}
+                params={{ id: shown.id }}
                 className="font-display text-3xl font-black uppercase tracking-wide hover:text-primary"
               >
-                {current.participant?.name}
+                {shown.participant?.name}
               </Link>
-              {current.participant?.fantasy_team_name && (
+              {shown.participant?.fantasy_team_name && (
                 <div className="text-xs text-muted-foreground">
-                  {current.participant.fantasy_team_name}
+                  {shown.participant.fantasy_team_name}
                 </div>
               )}
             </div>
@@ -164,6 +196,8 @@ function LivePage() {
             <div className="mt-4 text-center text-xs text-muted-foreground">{emptyReason}</div>
           )}
         </div>
+
+        {isAdmin && <LiveTimingBar console={rc} />}
 
         <Card className="hud-bezel border-primary/20">
           <CardContent className="p-4">
