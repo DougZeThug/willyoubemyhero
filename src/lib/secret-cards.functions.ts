@@ -3,6 +3,7 @@ import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { optionalActor, requireActor } from "./require-auth.server";
 import { requireLeagueAdmin } from "./league-admin.server";
+import { publicDbClient } from "./public-client.server";
 import { decodeImageDataUrl, forgetSignedPath, signPath } from "./media.functions";
 import { VARIANT_WIDTHS } from "./media";
 import type {
@@ -447,7 +448,11 @@ async function assertCollections(ids: readonly (string | null | undefined)[]) {
 
 /** The sets, in the order the admin arranged them. Hidden ones are left out. */
 export const getSecretCollections = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await secrets();
+  // Unguarded, and the only handler in this file that is — the vault has to
+  // label the shelves it shows anyone. Reading on the publishable key puts the
+  // column-scoped grant from 20260822121000 underneath the SELECT below, so the
+  // list of columns stops being the only thing keeping the rest of the row in.
+  const db = publicDbClient();
   const { data, error } = await db
     .from("secret_collections")
     .select("id, label, sort_order, active")

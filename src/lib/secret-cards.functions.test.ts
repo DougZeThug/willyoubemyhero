@@ -18,6 +18,15 @@ vi.mock("@/integrations/supabase/client.server", () => ({
   },
 }));
 
+// The publishable-key client is built with createClient rather than imported, so
+// it is stubbed at the supabase-js boundary. A SECOND fake, not the same one:
+// which client served a read is the thing worth asserting on a public handler,
+// and one shared object cannot answer that.
+let publicMock = createSupabaseMock();
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: () => publicMock.client,
+}));
+
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
 const OTHER_EVENT = "00000000-0000-4000-8000-0000000000fe";
 const ME = "00000000-0000-4000-8000-0000000000aa";
@@ -29,7 +38,10 @@ const GUEST = "00000000-0000-4000-8000-0000000000e1";
 const activeEvent = { "events.select": { data: { id: EVENT_ID } } };
 
 function withDb(responses: SupabaseResponses = {}) {
+  // Both clients answer the same declarations, so a test that only cares about
+  // the rows it gets back does not have to know which one served them.
   mock = createSupabaseMock({ ...activeEvent, ...responses });
+  publicMock = createSupabaseMock({ ...activeEvent, ...responses });
 }
 
 const asMe = () => memberHeaders(signMemberToken(ME).token);
@@ -732,5 +744,43 @@ describe("the admin catalogue", () => {
     expect(res).toEqual({ ok: true });
     expect(mock.callsFor("secret_cards", "delete")).toHaveLength(1);
     expect(mock.storageBucket.remove).toHaveBeenCalledWith(["secrets/x/art-1.webp"]);
+  });
+});
+
+describe("getSecretCollections", () => {
+  async function collections() {
+    const { getSecretCollections } = await import("./secret-cards.functions");
+    return callServerFn(getSecretCollections);
+  }
+
+  it("returns names and order, and nothing about what is in a set", async () => {
+    // The silence rule: a set's label says nothing about its contents or size,
+    // which is why this one handler in the file is unguarded at all.
+    withDb({
+      "secret_collections.select": {
+        data: [{ id: "pets", label: "Pets", sort_order: 30, active: true }],
+      },
+    });
+    expect(await collections()).toEqual({ collections: [{ id: "pets", label: "Pets" }] });
+  });
+
+  it("reads on the publishable key rather than service_role", async () => {
+    withDb({ "secret_collections.select": { data: [] } });
+    await collections();
+    const [call] = publicMock.callsFor("secret_collections", "select");
+    expect(call.columns).toBe("id, label, sort_order, active");
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it("asks only for the columns 20260822121000 grants anon", async () => {
+    // A star expansion is refused outright by PostgREST the moment one column in
+    // it is not granted, so this list and that GRANT have to stay in step.
+    withDb({ "secret_collections.select": { data: [] } });
+    await collections();
+    const [call] = publicMock.callsFor("secret_collections", "select");
+    expect(call.columns).not.toContain("*");
+    for (const column of ["created_at", "updated_at"]) {
+      expect(call.columns).not.toContain(column);
+    }
   });
 });

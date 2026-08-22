@@ -8,6 +8,7 @@ import {
   requireMember,
 } from "./require-auth.server";
 import { AWARD_CATEGORIES, isAwardCategory } from "./awards";
+import { publicClient } from "./public-client.server";
 import { uuid as zuuid } from "./zod-uuid";
 
 /**
@@ -26,6 +27,18 @@ export const REACTION_EMOJIS: readonly string[] = REACTIONS;
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
+}
+
+/**
+ * The publishable key, for the two handlers here that are public reads.
+ *
+ * Neither takes a guard, so served as service_role the column list below would
+ * be the only thing between them and a private column. Read as anon and the
+ * grants in supabase/migrations back them up — every table they touch is one
+ * tests/db/rls.test.ts already lists as publicly readable.
+ */
+function publicDb() {
+  return publicClient();
 }
 
 /**
@@ -61,7 +74,7 @@ function actor(input: GuestInput): {
 export const getEventSocial = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
-    const sb = await admin();
+    const sb = publicDb();
     const { data: eps } = await sb
       .from("event_participants")
       .select("id")
@@ -273,7 +286,7 @@ export const castAwardVote = createServerFn({ method: "POST" })
 export const getAwards = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
-    const sb = await admin();
+    const sb = publicDb();
     const { data: rows } = await sb
       .from("awards")
       .select("id, event_id, participant_id, award_name, award_type, description")

@@ -25,7 +25,16 @@ function randomSalt(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Roster for the claim picker: names plus whether each has been claimed yet. */
+/**
+ * Roster for the claim picker: names plus whether each has been claimed yet.
+ *
+ * Unguarded, and STAYS ON service_role. Two of the three tables it reads are
+ * server-only and have to be: `member_codes` holds the salted claim codes, and
+ * `account_identities` maps players to signed-in accounts. `claimed` and
+ * `reachable` cannot be derived without both, so serving this on the publishable
+ * key would mean granting anon a read on one or the other. The response is
+ * assembled column by column below instead, and never carries code material.
+ */
 export const getClaimRoster = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const [{ data: participants }, { data: codes }, { data: accounts }] = await Promise.all([

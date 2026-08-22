@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireMember } from "./require-auth.server";
+import { publicDbClient } from "./public-client.server";
 import { signPath } from "./media.functions";
 import { VARIANT_WIDTHS } from "./media";
 import { toSecretTier } from "./secret-rarity";
@@ -535,7 +536,11 @@ const FEED_LIMIT = 25;
 export const getTradeFeed = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeFeedEntry[]> => {
-    const sb = await db();
+    // The one trading table anon may read, and the only unguarded handler in
+    // this file — so it reads on the publishable key and lets the grant in
+    // 20260817120000 be the second layer. Everything else here goes through
+    // requireMember() and stays on service_role.
+    const sb = publicDbClient();
     const { data: rows, error } = await sb
       .from("trades")
       .select("id, proposer_id, recipient_id, proposer_gave, recipient_gave, executed_at")

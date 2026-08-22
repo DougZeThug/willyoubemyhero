@@ -17,6 +17,15 @@ vi.mock("@/integrations/supabase/client.server", () => ({
   },
 }));
 
+// The publishable-key client is built with createClient rather than imported, so
+// it is stubbed at the supabase-js boundary. A SECOND fake, not the same one:
+// which client served a read is the thing worth asserting on a public handler,
+// and one shared object cannot answer that.
+let publicMock = createSupabaseMock();
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: () => publicMock.client,
+}));
+
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
 const OTHER_EVENT_ID = "00000000-0000-4000-8000-0000000000ee";
 const CARD_ID = "00000000-0000-4000-8000-000000000011";
@@ -25,7 +34,10 @@ const THEM = "00000000-0000-4000-8000-0000000000bb";
 const COMMENT_ID = "00000000-0000-4000-8000-000000000022";
 
 function withDb(responses: SupabaseResponses = {}) {
+  // Both clients answer the same declarations, so a test that only cares about
+  // the rows it gets back does not have to know which one served them.
   mock = createSupabaseMock(responses);
+  publicMock = createSupabaseMock(responses);
 }
 
 const asMe = () => memberHeaders(signMemberToken(ME).token);
@@ -61,7 +73,7 @@ describe("getEventSocial", () => {
       comments: [{ id: "c1", body: "hi", mine: false }],
     });
     for (const table of ["card_reactions", "card_comments"]) {
-      const [call] = mock.callsFor(table, "select");
+      const [call] = publicMock.callsFor(table, "select");
       expect(call.filters.find((f) => f.method === "in")?.args).toEqual([
         "event_participant_id",
         [CARD_ID],
@@ -502,5 +514,49 @@ describe("award voting", () => {
       const { getAwards } = await import("./social.functions");
       await expect(callServerFn(getAwards, { data: { eventId: EVENT_ID } })).resolves.toEqual([]);
     });
+  });
+});
+
+/**
+ * Which client serves a public read.
+ *
+ * Neither handler here takes a guard, so on service_role the SELECT string is
+ * the only thing between the response and a private column — get it wrong, or
+ * add a column to the table later, and the endpoint starts publishing it. On the
+ * publishable key the grants in supabase/migrations are underneath it.
+ */
+describe("public reads go through the publishable key", () => {
+  it("getEventSocial never touches the service_role client", async () => {
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_ID }] },
+      "card_reactions.select": { data: [{ id: "r1", emoji: "🔥" }] },
+      "card_comments.select": { data: [{ id: "c1", body: "hi" }] },
+    });
+    const { getEventSocial } = await import("./social.functions");
+    await callServerFn(getEventSocial, { data: { eventId: EVENT_ID } });
+    expect(publicMock.callsFor("card_reactions", "select")).toHaveLength(1);
+    expect(publicMock.callsFor("card_comments", "select")).toHaveLength(1);
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it("getAwards never touches the service_role client", async () => {
+    withDb({ "awards.select": { data: [] } });
+    const { getAwards } = await import("./social.functions");
+    await callServerFn(getAwards, { data: { eventId: EVENT_ID } });
+    expect(publicMock.callsFor("awards", "select")).toHaveLength(1);
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it("leaves the guarded handlers on service_role", async () => {
+    // The tally is commissioner-only and award_votes is REVOKE ALL from anon, so
+    // this one both may and must stay where it is.
+    withDb({ "award_votes.select": { data: [] } });
+    const { getAwardTally } = await import("./social.functions");
+    await callServerFn(getAwardTally, {
+      data: { eventId: EVENT_ID },
+      headers: adminHeaders(signAdminToken(EVENT_ID).token),
+    });
+    expect(mock.callsFor("award_votes", "select")).toHaveLength(1);
+    expect(publicMock.calls).toHaveLength(0);
   });
 });

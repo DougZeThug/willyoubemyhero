@@ -30,6 +30,14 @@ async function db() {
  * How many people have packed each card in an event.
  *
  * Unguarded, like getEventSocial: this is a public aggregate about public cards.
+ *
+ * STAYS ON service_role while its neighbours moved to the publishable key. What
+ * is public here is the aggregate, not the rows behind it: `card_pulls` is
+ * REVOKE ALL from anon, and tests/db/rls.test.ts lists it as server-only
+ * precisely because the rows say who has never packed whom. Reading them as anon
+ * would mean granting that, which is the leak the whole table is locked down to
+ * prevent — so the `select("event_participant_id")` below carries the load, and
+ * the comment on it is load-bearing rather than decorative.
  */
 export const getCardPullCounts = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))

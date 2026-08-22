@@ -34,6 +34,10 @@ const PUBLIC_READ = [
   // Completed trades are an announcement — the feed is the point. Public-safe by
   // construction rather than by filtering: see the redaction test below.
   "public.trades",
+  // Set NAMES only, granted by 20260822121000 so getSecretCollections can serve
+  // them on the publishable key. The catalogue itself stays in SERVER_ONLY below,
+  // which is the half that matters.
+  "public.secret_collections",
 ];
 
 /** Server-only tables. Each one leaks something specific if it becomes readable. */
@@ -136,6 +140,39 @@ describe("public reads", () => {
     );
     const rows = await asRole<{ id: string }>("anon", "SELECT id FROM public.trades");
     expect(rows.map((r) => r.id)).toEqual([TRADE_ID]);
+  });
+
+  it("lets anon read a set's name and order, which is all the vault labels need", async () => {
+    // The positive control for secret_collections being in PUBLIC_READ: the list
+    // above passes on `!== null`, which an empty table satisfies without proving
+    // a row comes back. The table is seeded by 20260819222006 itself.
+    const rows = await asRole<{ id: string; label: string }>(
+      "anon",
+      "SELECT id, label, sort_order, active FROM public.secret_collections ORDER BY sort_order",
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.map((r) => r.id)).toContain("pets");
+  });
+
+  it("keeps the timestamps on a set out of the grant", async () => {
+    // The grant is column-scoped, like runs. Anything not named in it stays out
+    // of reach, which is what stops a later column being published by accident.
+    expect(await isDenied("anon", "SELECT created_at FROM public.secret_collections")).toBe(true);
+  });
+
+  it("grants the names of the sets without granting the cards in them", async () => {
+    // The silence rule the whole secret-card feature rests on: a label says
+    // nothing about contents or size. This is the pair that has to stay true
+    // together — one readable, the other not.
+    await sql(
+      `INSERT INTO public.secret_cards (id, name, art_path, collection)
+       VALUES ($1, 'Gary the Grill', 'secrets/x/art-1.webp', 'pets')
+       ON CONFLICT (id) DO NOTHING`,
+      [SECRET_CARD_ID],
+    );
+    expect(await visibleRows("anon", "public.secret_collections")).toBeGreaterThan(0);
+    const cards = await visibleRows("anon", "public.secret_cards");
+    expect(cards === null || cards === 0).toBe(true);
   });
 
   it("hides the private columns on runs while keeping the times readable", async () => {
@@ -362,6 +399,10 @@ describe("anon has no write grant anywhere", () => {
     // The whole swap runs inside accept_trade_offer as service_role. Reaching the
     // status column directly would take both people's cards out of the loop.
     ["accept somebody else's offer", `UPDATE public.trade_offers SET status = 'accepted'`, []], // prettier-ignore
+    // 20260822121000 granted SELECT on the set names. Read-only, like every other
+    // public grant in this app — renaming a set from devtools is still refused.
+    ["rename a set", `UPDATE public.secret_collections SET label = 'pwned'`, []], // prettier-ignore
+    ["invent a set", `INSERT INTO public.secret_collections (id, label) VALUES ('pwned', 'Pwned')`, []], // prettier-ignore
   ];
 
   it.each(WRITES)("anon cannot %s", async (_label, statement, params) => {

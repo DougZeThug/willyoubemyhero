@@ -19,6 +19,15 @@ vi.mock("@/integrations/supabase/client.server", () => ({
   },
 }));
 
+// The publishable-key client is built with createClient rather than imported, so
+// it is stubbed at the supabase-js boundary. A SECOND fake, not the same one:
+// which client served a read is the thing worth asserting on a public handler,
+// and one shared object cannot answer that.
+let publicMock = createSupabaseMock();
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: () => publicMock.client,
+}));
+
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
 const ME = "00000000-0000-4000-8000-0000000000aa";
 const THEM = "00000000-0000-4000-8000-0000000000bb";
@@ -35,7 +44,10 @@ const COPY_3 = "00000000-0000-4000-8000-000000000053";
 const ACTIVE_EVENT = { "events.select": { data: { id: EVENT_ID } } };
 
 function withDb(responses: SupabaseResponses = {}) {
+  // Both clients answer the same declarations, so a test that only cares about
+  // the rows it gets back does not have to know which one served them.
   mock = createSupabaseMock({ ...ACTIVE_EVENT, ...responses });
+  publicMock = createSupabaseMock({ ...ACTIVE_EVENT, ...responses });
 }
 
 const asMe = () => memberHeaders(signMemberToken(ME).token);
@@ -561,8 +573,8 @@ describe("getTradeFeed", () => {
   it("scopes to one event, newest first, and capped", async () => {
     withDb({ "trades.select": { data: [] } });
     await feed();
-    const [call] = mock.callsFor("trades", "select");
-    expect(mock.eqValue(call, "event_id")).toBe(EVENT_ID);
+    const [call] = publicMock.callsFor("trades", "select");
+    expect(publicMock.eqValue(call, "event_id")).toBe(EVENT_ID);
     expect(call.filters.find((f) => f.method === "order")?.args).toEqual([
       "executed_at",
       { ascending: false },
@@ -573,7 +585,19 @@ describe("getTradeFeed", () => {
   it("never selects a column that could name a secret card", async () => {
     withDb({ "trades.select": { data: [] } });
     await feed();
-    const [call] = mock.callsFor("trades", "select");
+    const [call] = publicMock.callsFor("trades", "select");
     expect(call.columns).not.toContain("secret");
+  });
+});
+
+describe("the feed goes through the publishable key", () => {
+  it("reads trades as anon, leaving the grant as a second layer", async () => {
+    // `trades` is the one trading table anon may SELECT. Everything else in this
+    // file is behind requireMember() and reads rows anon is refused outright.
+    withDb({ "trades.select": { data: [] } });
+    const { getTradeFeed } = await import("./trades.functions");
+    await callServerFn(getTradeFeed, { data: { eventId: EVENT_ID } });
+    expect(publicMock.callsFor("trades", "select")).toHaveLength(1);
+    expect(mock.calls).toHaveLength(0);
   });
 });
