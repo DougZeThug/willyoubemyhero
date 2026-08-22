@@ -58,6 +58,28 @@ export function buildFinishPayload(run: FinishedRun) {
   };
 }
 
+/**
+ * Whatever the server threw, said in words a person standing in a garden can
+ * act on. The generic "could not reach the server" used to cover an expired
+ * admin session too, which sent people looking for signal they already had.
+ */
+export function saveErrorMessage(e: unknown): string {
+  const raw =
+    e instanceof Error
+      ? e.message
+      : typeof e === "object" && e !== null && typeof (e as { message?: unknown }).message === "string"
+        ? (e as { message: string }).message
+        : "";
+  if (/admin pin required/i.test(raw)) {
+    return "Your admin session expired — re-enter the PIN on the Admin tab, then retry.";
+  }
+  if (!raw || /failed to fetch|networkerror|load failed/i.test(raw)) {
+    return "Could not reach the server.";
+  }
+  return raw.endsWith(".") ? raw : `${raw}.`;
+}
+
+
 export function useFinishSave({
   onDraft,
   onSaved,
