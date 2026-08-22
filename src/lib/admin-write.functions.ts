@@ -27,6 +27,18 @@ function withOnClock<T extends ParticipantStatusPatch>(patch: T, since: Date | n
   return { ...patch, on_clock_since: since ? since.toISOString() : null } as T;
 }
 
+/**
+ * Postgres `unique_violation`, as PostgREST reports it.
+ *
+ * The one error saveCompletedRun retries rather than throws: it means another
+ * save took the attempt number between this one's read and its write.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && (error as { code?: string }).code === "23505"
+  );
+}
+
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -341,46 +353,68 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     if (rosterError) throw rosterError;
     if (!onRoster) throw new Error("Participant does not belong to this event");
 
-    // Attempt count. A retry of a save that already landed must keep the number
-    // it was given: counting again would include the row this client_key wrote
-    // and renumber a first run as attempt 2. Matching on client_key rather than
-    // excluding it from the count keeps this NULL-safe — client_key is nullable
-    // and Postgres `<>` drops NULL rows.
+    // A retry of a save that already landed must keep the number it was given:
+    // recomputing would renumber a first run as attempt 2. Matching on client_key
+    // rather than excluding it from a count keeps this NULL-safe — client_key is
+    // nullable and Postgres `<>` drops NULL rows.
     const { data: alreadySaved } = await supabaseAdmin
       .from("runs")
       .select("attempt_number")
       .eq("client_key", data.clientKey)
       .eq("event_id", data.eventId)
       .maybeSingle();
-    const { count } = await supabaseAdmin
-      .from("runs")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", data.participantId);
+
+    // The highest number in use, not how many rows there are. A count renumbers
+    // downwards after a deleteRun: delete attempt 1 of two and the next save
+    // computes 2, which is taken. That was a silent duplicate before
+    // 20260822120000 added the unique index, and would be a refused save after it.
+    const nextAttempt = async () => {
+      const { data: highest } = await supabaseAdmin
+        .from("runs")
+        .select("attempt_number")
+        .eq("event_id", data.eventId)
+        .eq("participant_id", data.participantId)
+        .order("attempt_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return (highest?.attempt_number ?? 0) + 1;
+    };
 
     const penaltyTotal = data.penalties.reduce((s, p) => s + p.penalty_ms, 0);
 
-    const { data: run, error } = await supabaseAdmin
-      .from("runs")
-      .upsert(
-        {
-          event_id: data.eventId,
-          participant_id: data.participantId,
-          attempt_number: alreadySaved?.attempt_number ?? (count ?? 0) + 1,
-          started_at: data.started_at,
-          finished_at: data.finished_at,
-          raw_time_ms: data.raw_time_ms,
-          paused_duration_ms: data.paused_duration_ms,
-          penalty_ms: penaltyTotal,
-          status: "official",
-          is_official: true,
-          client_key: data.clientKey,
-        },
-        { onConflict: "client_key" },
-      )
-      .select()
-      .single();
-    if (error) throw error;
+    const saveRun = (attemptNumber: number) =>
+      supabaseAdmin
+        .from("runs")
+        .upsert(
+          {
+            event_id: data.eventId,
+            participant_id: data.participantId,
+            attempt_number: attemptNumber,
+            started_at: data.started_at,
+            finished_at: data.finished_at,
+            raw_time_ms: data.raw_time_ms,
+            paused_duration_ms: data.paused_duration_ms,
+            penalty_ms: penaltyTotal,
+            status: "official",
+            is_official: true,
+            client_key: data.clientKey,
+          },
+          { onConflict: "client_key" },
+        )
+        .select()
+        .single();
+
+    let saved = await saveRun(alreadySaved?.attempt_number ?? (await nextAttempt()));
+    // Two consoles saving at once read the same highest number and both write it;
+    // the unique index refuses the loser. One recomputation is enough to land
+    // behind the winner. A second failure is not a race, and losing the run to a
+    // thrown error — which leaves the console's local backup intact — beats
+    // looping on it. A replay keeps its own number, so it never comes through here.
+    if (saved.error && !alreadySaved && isUniqueViolation(saved.error)) {
+      saved = await saveRun(await nextAttempt());
+    }
+    if (saved.error) throw saved.error;
+    const run = saved.data;
 
     if (data.splits.length) {
       // A silent failure here loses the splits for good: the console clears its

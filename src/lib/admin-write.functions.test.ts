@@ -2,7 +2,11 @@
 // with RLS out of the picture, so `requireAdmin` is the only thing between a
 // request and the database.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
+import {
+  createSupabaseMock,
+  type RecordedCall,
+  type SupabaseResponses,
+} from "@/test/supabase-mock";
 import { adminHeaders, callServerFn, memberHeaders } from "@/test/server-fn";
 import { signAdminToken, signMemberToken } from "./session.server";
 
@@ -203,24 +207,51 @@ describe("saveCompletedRun", () => {
     return mock.callsFor("runs", "upsert")[0].payload as Record<string, unknown>;
   }
 
+  /**
+   * The handler reads `runs` twice — once for a replayed client_key, once for the
+   * highest attempt number in use — and the mock keys both on "runs.select".
+   * Tell them apart by the filter each one carries.
+   */
+  const isReplayLookup = (call: RecordedCall) =>
+    call.filters.some((f) => f.method === "eq" && f.args[0] === "client_key");
+
+  function runsSelect({ replayed, highest }: { replayed?: unknown; highest?: unknown } = {}) {
+    return (call: RecordedCall) => ({ data: (isReplayLookup(call) ? replayed : highest) ?? null });
+  }
+
   it("numbers a first attempt 1", async () => {
-    withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
+    withDb({ "runs.select": runsSelect(), "runs.upsert": { data: { id: RUN_ID } } });
     await save(base);
     expect(runInserted().attempt_number).toBe(1);
   });
 
-  it("numbers the next attempt after the existing ones", async () => {
-    withDb({ "runs.select": { count: 2 }, "runs.upsert": { data: { id: RUN_ID } } });
+  it("numbers the next attempt above the highest one in use", async () => {
+    withDb({
+      "runs.select": runsSelect({ highest: { attempt_number: 2 } }),
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
     await save(base);
     expect(runInserted().attempt_number).toBe(3);
   });
 
-  it("counts only this participant's runs at this event", async () => {
-    withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
+  it("stays above a deleted attempt rather than renumbering into a live one", async () => {
+    // Two attempts run, the first is deleted: one row left, numbered 3. Counting
+    // rows would compute 2, which is taken — a silent duplicate before the unique
+    // index in 20260822120000, and a refused save after it.
+    withDb({
+      "runs.select": runsSelect({ highest: { attempt_number: 3 } }),
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
     await save(base);
-    const count = mock.callsFor("runs", "select").find((c) => c.terminal === "await")!;
-    expect(mock.eqValue(count, "event_id")).toBe(EVENT_ID);
-    expect(mock.eqValue(count, "participant_id")).toBe(PARTICIPANT_ID);
+    expect(runInserted().attempt_number).toBe(4);
+  });
+
+  it("reads the highest attempt for this participant at this event only", async () => {
+    withDb({ "runs.select": runsSelect(), "runs.upsert": { data: { id: RUN_ID } } });
+    await save(base);
+    const highest = mock.callsFor("runs", "select").find((c) => !isReplayLookup(c))!;
+    expect(mock.eqValue(highest, "event_id")).toBe(EVENT_ID);
+    expect(mock.eqValue(highest, "participant_id")).toBe(PARTICIPANT_ID);
   });
 
   it("keeps the attempt number a retry was already given", async () => {
@@ -228,13 +259,71 @@ describe("saveCompletedRun", () => {
     // would turn a first run into "attempt 2" purely because the phone had to
     // try twice.
     withDb({
-      "runs.select": [{ data: { attempt_number: 1 } }, { count: 1 }],
+      "runs.select": runsSelect({
+        replayed: { attempt_number: 1 },
+        highest: { attempt_number: 1 },
+      }),
       "runs.upsert": { data: { id: RUN_ID } },
     });
     await save(base);
     expect(runInserted().attempt_number).toBe(1);
-    const lookup = mock.callsFor("runs", "select").find((c) => c.terminal === "maybeSingle")!;
+    const lookup = mock.callsFor("runs", "select").find(isReplayLookup)!;
     expect(mock.eqValue(lookup, "client_key")).toBe("client-key-1");
+  });
+
+  describe("losing the race for an attempt number", () => {
+    const DUPLICATE = { code: "23505", message: "duplicate key value" };
+
+    it("recomputes once and saves behind the winner", async () => {
+      // Two consoles read the same highest number and both write it; the unique
+      // index refuses the second. Re-reading picks up the winner's row.
+      let highest = 1;
+      withDb({
+        "runs.select": (call: RecordedCall) => ({
+          data: isReplayLookup(call) ? null : { attempt_number: highest },
+        }),
+        "runs.upsert": () => {
+          if (mock.callsFor("runs", "upsert").length === 1) {
+            highest = 2;
+            return { error: DUPLICATE };
+          }
+          return { data: { id: RUN_ID } };
+        },
+      });
+      await expect(save(base)).resolves.toEqual({ runId: RUN_ID });
+      const upserts = mock.callsFor("runs", "upsert");
+      expect(upserts).toHaveLength(2);
+      expect((upserts[0].payload as Record<string, unknown>).attempt_number).toBe(2);
+      expect((upserts[1].payload as Record<string, unknown>).attempt_number).toBe(3);
+    });
+
+    it("throws rather than looping when the second try collides too", async () => {
+      // The console keeps its local backup while this throws, so the run is still
+      // on the phone. Looping on a collision that is not a race is worse.
+      withDb({ "runs.select": runsSelect(), "runs.upsert": { error: DUPLICATE } });
+      await expect(save(base)).rejects.toMatchObject({ code: "23505" });
+      expect(mock.callsFor("runs", "upsert")).toHaveLength(2);
+    });
+
+    it("does not renumber a replay, whatever the conflict was", async () => {
+      // A replayed client_key already owns its number. Recomputing would give the
+      // same run a second one.
+      withDb({
+        "runs.select": runsSelect({ replayed: { attempt_number: 1 } }),
+        "runs.upsert": { error: DUPLICATE },
+      });
+      await expect(save(base)).rejects.toMatchObject({ code: "23505" });
+      expect(mock.callsFor("runs", "upsert")).toHaveLength(1);
+    });
+
+    it("does not retry an error that is not a duplicate key", async () => {
+      withDb({
+        "runs.select": runsSelect(),
+        "runs.upsert": { error: { code: "42501", message: "permission denied" } },
+      });
+      await expect(save(base)).rejects.toMatchObject({ code: "42501" });
+      expect(mock.callsFor("runs", "upsert")).toHaveLength(1);
+    });
   });
 
   it("totals the penalties onto the run", async () => {
