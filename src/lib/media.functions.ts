@@ -501,9 +501,9 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
     if (!row) throw new Error("Participant does not belong to this event");
 
     const existing = {
-      large: side === "front" ? row?.card_path : row?.card_back_path,
-      thumb: side === "front" ? row?.card_path_thumb : row?.card_back_path_thumb,
-      medium: side === "front" ? row?.card_path_medium : row?.card_back_path_medium,
+      large: side === "front" ? row.card_path : row.card_back_path,
+      thumb: side === "front" ? row.card_path_thumb : row.card_back_path_thumb,
+      medium: side === "front" ? row.card_path_medium : row.card_back_path_medium,
     };
 
     await removePaths(supabaseAdmin, [existing.large, existing.thumb, existing.medium]);
