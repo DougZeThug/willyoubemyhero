@@ -67,7 +67,9 @@ export function saveErrorMessage(e: unknown): string {
   const raw =
     e instanceof Error
       ? e.message
-      : typeof e === "object" && e !== null && typeof (e as { message?: unknown }).message === "string"
+      : typeof e === "object" &&
+          e !== null &&
+          typeof (e as { message?: unknown }).message === "string"
         ? (e as { message: string }).message
         : "";
   if (/admin pin required/i.test(raw)) {
@@ -78,7 +80,6 @@ export function saveErrorMessage(e: unknown): string {
   }
   return raw.endsWith(".") ? raw : `${raw}.`;
 }
-
 
 export function useFinishSave({
   onDraft,
