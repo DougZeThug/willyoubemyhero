@@ -150,4 +150,35 @@ describe("EditResultSheet", () => {
       { stationId: "b", cumulative_time_ms: 40000 },
     ]);
   });
+
+  it("re-saves an existing result without shaving time off it", async () => {
+    // Opening a result and saving it untouched used to drift down a hundredth
+    // per leg, because the boxes were seeded from a truncating formatter.
+    bundle.current = {
+      ...bundle.current,
+      runs: [{ id: "run-1", participant_id: PLAYER, is_official: true, raw_time_ms: 101_320 }],
+      splits: [
+        { run_id: "run-1", station_id: "a", cumulative_time_ms: 15_350 },
+        { run_id: "run-1", station_id: "b", cumulative_time_ms: 53_560 },
+        { run_id: "run-1", station_id: "c", cumulative_time_ms: 101_320 },
+      ],
+      penalties: [],
+    };
+    const user = userEvent.setup();
+    renderSheet();
+
+    const course = screen.getByLabelText(/course time/i) as HTMLInputElement;
+    await waitFor(() => expect(course.value).toBe("1:41.32"));
+
+    await user.click(screen.getByRole("button", { name: /save result/i }));
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    const sent = serverFnMock.mock.calls[0]?.[0].data;
+    expect(sent.raw_time_ms).toBe(101_320);
+    expect(sent.splits).toEqual([
+      { stationId: "a", cumulative_time_ms: 15_350 },
+      { stationId: "b", cumulative_time_ms: 53_560 },
+      { stationId: "c", cumulative_time_ms: 101_320 },
+    ]);
+  });
 });
+
