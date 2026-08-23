@@ -31,7 +31,12 @@ import {
 import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
-import { tradeSummaryLabel, type TradeItemView, type TradeSpares } from "@/lib/trades";
+import {
+  BLOCKED_LABEL,
+  tradeSummaryLabel,
+  type TradeItemView,
+  type TradeSpares,
+} from "@/lib/trades";
 import { rarityMap, rarityRank, rarityStyle } from "@/lib/card-rarity";
 import { editionRank } from "@/lib/card-edition";
 import { secretTierRank } from "@/lib/secret-rarity";
@@ -487,6 +492,8 @@ function SparePicker({
   staged: Staged[];
   onToggle: (staged: Staged) => void;
 }) {
+  const blocked = spares?.blocked ?? [];
+
   const items: Staged[] = [
     // Secrets lead the strip, rarest copy first: they are what anyone opening
     // this panel is actually scrolling for, and on a phone the base cards used
@@ -559,6 +566,25 @@ function SparePicker({
             />
           ))}
         </div>
+      )}
+      {/* Only ever your own side: the server sends `blocked` empty for anybody
+          else. Shown so "where is my card?" has an answer on the screen. */}
+      {blocked.length > 0 && (
+        <>
+          <div className="mt-2 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground/70">
+            Can&apos;t be traded
+          </div>
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {blocked.map((b) => (
+              <TradeItemTile
+                key={b.item.kind === "secret" ? `bs:${b.item.pullId}` : `bc:${b.item.copyId}`}
+                item={b.item}
+                lookup={lookup}
+                blockedLabel={BLOCKED_LABEL[b.reason]}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
