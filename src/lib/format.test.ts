@@ -64,6 +64,27 @@ describe("formatTime", () => {
   });
 });
 
+describe("parseTime over a minute", () => {
+  it("reads the dotted keypad form as minutes.seconds.fraction", () => {
+    // The station boxes open a numeric keypad with no colon key.
+    expect(parseTime("1.38.25")).toBe(98_250);
+    expect(parseTime("2.05.7")).toBe(125_700);
+  });
+
+  it("allows a colon-less seconds value past 99", () => {
+    expect(parseTime("98.25")).toBe(98_250);
+    expect(parseTime("138.25")).toBe(138_250);
+    expect(formatTime(parseTime("138.25")!)).toBe("2:18.25");
+  });
+
+  it("still rejects nonsense", () => {
+    expect(parseTime("1.75.00")).toBeNull();
+    expect(parseTime("1.2.3.4")).toBeNull();
+    expect(parseTime("1:75.00")).toBeNull();
+    expect(parseTime("abc")).toBeNull();
+  });
+});
+
 describe("initialsOf", () => {
   it("takes the first letter of the first two words", () => {
     expect(initialsOf("Doug Weidensaul")).toBe("DW");
