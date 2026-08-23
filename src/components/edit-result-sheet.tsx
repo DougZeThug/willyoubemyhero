@@ -131,6 +131,28 @@ export function EditResultSheet({
     setRawTime((prev) => (prev === next ? prev : next));
   }, [open, courseTouched, splitDerivedMs]);
 
+  // Splits are cumulative, so correcting one station also moves every station
+  // after it: their legs are still right, they just start later. Without this
+  // the final split — and so the official time — never budges after a fix.
+  function setSplitAt(stationId: string, value: string) {
+    setSplitTimes((prev) => {
+      const next = { ...prev, [stationId]: value };
+      const before = parseTime(prev[stationId] ?? "");
+      const after = parseTime(value);
+      if (before == null || after == null || before === after) return next;
+      const delta = after - before;
+      const idx = stations.findIndex((st) => st.id === stationId);
+      if (idx < 0) return next;
+      for (const st of stations.slice(idx + 1)) {
+        const cur = prev[st.id];
+        const ms = cur == null || cur.trim() === "" ? null : parseTime(cur);
+        if (ms == null) continue;
+        next[st.id] = timeField(Math.max(0, ms + delta));
+      }
+      return next;
+    });
+  }
+
   const rawMs = parseTime(rawTime);
   const penaltyMs = penalties.reduce((sum, p) => sum + (parseTime(p.ms) ?? 0), 0);
   const badSplit = Object.values(splitTimes).some((v) => v.trim() !== "" && parseTime(v) == null);
@@ -260,9 +282,7 @@ export function EditResultSheet({
                       aria-label={`${st.name} split`}
                       inputMode="decimal"
                       value={value}
-                      onChange={(e) =>
-                        setSplitTimes((prev) => ({ ...prev, [st.id]: e.target.value }))
-                      }
+                      onChange={(e) => setSplitAt(st.id, e.target.value)}
                       placeholder="—"
                       className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
                     />
