@@ -23,6 +23,8 @@ export type TradeItemTileProps = {
   /** Rendered as a control rather than a picture. */
   onClick?: () => void;
   selected?: boolean;
+  /** Rendered dimmed with this caption instead of as a control. */
+  blockedLabel?: string;
 };
 
 /**
@@ -33,7 +35,13 @@ export type TradeItemTileProps = {
  * — which is the whole reason a staked secret is shown at all: "a secret card"
  * is not something anyone can say yes or no to.
  */
-export function TradeItemTile({ item, lookup, onClick, selected }: TradeItemTileProps) {
+export function TradeItemTile({
+  item,
+  lookup,
+  onClick,
+  selected,
+  blockedLabel,
+}: TradeItemTileProps) {
   const roster = item.kind === "roster" ? lookup(item.eventParticipantId) : null;
   const tier = item.kind === "secret" ? secretTierStyle(item.tier) : null;
   const name = item.kind === "roster" ? (roster?.name ?? "—") : item.name;
@@ -88,6 +96,19 @@ export function TradeItemTile({ item, lookup, onClick, selected }: TradeItemTile
       </div>
     </>
   );
+
+  // Untradeable, and saying so where the card is: a card that simply vanishes
+  // from the picker reads as data loss, which is what people actually report.
+  if (blockedLabel) {
+    return (
+      <div className="w-[84px] shrink-0 opacity-40 grayscale" aria-disabled="true">
+        {body}
+        <div className="mt-0.5 text-center text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+          {blockedLabel}
+        </div>
+      </div>
+    );
+  }
 
   if (!onClick) return <div className="w-[84px] shrink-0">{body}</div>;
   return (
