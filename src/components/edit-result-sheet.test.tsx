@@ -1,7 +1,8 @@
 /**
  * The sheet's arithmetic is the part admins trust while standing in a garden:
- * the total has to follow the splits they just typed, and stop following them
- * the moment they type a course time themselves.
+ * each box is that station's own time, the running clock beside it and the
+ * official total have to follow every keystroke, and a typed course time has to
+ * stop them following.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -55,7 +56,7 @@ function renderSheet() {
 beforeEach(() => {
   serverFnMock.mockReset().mockResolvedValue({ ok: true });
   bundle.current = {
-    stations: [station("a", "FLIP", 1), station("b", "CORN", 2)],
+    stations: [station("a", "FLIP", 1), station("b", "CORN", 2), station("c", "PONG", 3)],
     runs: [],
     splits: [],
     penalties: [],
@@ -63,103 +64,90 @@ beforeEach(() => {
 });
 
 describe("EditResultSheet", () => {
-  it("fills the course time from the splits as they are typed", async () => {
+  it("adds the station times up into the course time", async () => {
     const user = userEvent.setup();
     renderSheet();
 
-    await user.type(screen.getByLabelText("FLIP split"), "15.00");
-    await user.type(screen.getByLabelText("CORN split"), "40.00");
+    await user.type(screen.getByLabelText("FLIP time"), "15.00");
+    await user.type(screen.getByLabelText("CORN time"), "25.00");
 
     const course = screen.getByLabelText(/course time/i) as HTMLInputElement;
     await waitFor(() => expect(course.value).toBe("40.00"));
-    expect(screen.getByText("40.00")).toBeInTheDocument();
   });
 
-  it("shows each station's leg time", async () => {
+  it("shows the running clock beside each station", async () => {
     const user = userEvent.setup();
     renderSheet();
 
-    await user.type(screen.getByLabelText("FLIP split"), "15.00");
-    await user.type(screen.getByLabelText("CORN split"), "40.00");
+    await user.type(screen.getByLabelText("FLIP time"), "15.00");
+    await user.type(screen.getByLabelText("CORN time"), "25.00");
 
-    expect(screen.getByText("+15.00")).toBeInTheDocument();
-    expect(screen.getByText("+25.00")).toBeInTheDocument();
+    expect(screen.getByText("at 15.00")).toBeInTheDocument();
+    expect(screen.getByText("at 40.00")).toBeInTheDocument();
   });
 
-  it("flags a split that goes backwards", async () => {
+  it("moves every later station when a middle one is corrected", async () => {
     const user = userEvent.setup();
     renderSheet();
 
-    await user.type(screen.getByLabelText("FLIP split"), "40.00");
-    await user.type(screen.getByLabelText("CORN split"), "15.00");
+    await user.type(screen.getByLabelText("FLIP time"), "15.00");
+    await user.type(screen.getByLabelText("CORN time"), "25.00");
+    await user.type(screen.getByLabelText("PONG time"), "10.00");
 
-    expect(screen.getByText("out of order")).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("CORN time"));
+    await user.type(screen.getByLabelText("CORN time"), "35.00");
+
+    expect(screen.getByText("at 15.00")).toBeInTheDocument();
+    expect(screen.getByText("at 50.00")).toBeInTheDocument();
+    expect(screen.getByText("at 1:00.00")).toBeInTheDocument();
+    const course = screen.getByLabelText(/course time/i) as HTMLInputElement;
+    await waitFor(() => expect(course.value).toBe("1:00.00"));
   });
 
-  it("lets a typed course time win over the splits", async () => {
+  it("skips blank stations in the running clock", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.type(screen.getByLabelText("FLIP time"), "15.00");
+    await user.type(screen.getByLabelText("PONG time"), "10.00");
+
+    expect(screen.getByText("at 25.00")).toBeInTheDocument();
+  });
+
+  it("lets a typed course time win over the stations", async () => {
     const user = userEvent.setup();
     renderSheet();
 
     const course = screen.getByLabelText(/course time/i) as HTMLInputElement;
     await user.type(course, "1:00.00");
-    await user.type(screen.getByLabelText("FLIP split"), "15.00");
+    await user.type(screen.getByLabelText("FLIP time"), "15.00");
 
     expect(course.value).toBe("1:00.00");
     expect(screen.getByText(/from splits/i)).toBeInTheDocument();
   });
 
-  it("shifts every later split when an earlier one is corrected", async () => {
-    const user = userEvent.setup();
-    bundle.current = {
-      stations: [station("a", "FLIP", 1), station("b", "CORN", 2), station("c", "PONG", 3)],
-      runs: [],
-      splits: [],
-      penalties: [],
-    };
-    renderSheet();
-
-    const flip = screen.getByLabelText("FLIP split") as HTMLInputElement;
-    const corn = screen.getByLabelText("CORN split") as HTMLInputElement;
-    const pong = screen.getByLabelText("PONG split") as HTMLInputElement;
-
-    await user.type(flip, "15.00");
-    await user.type(corn, "40.00");
-    await user.type(pong, "50.00");
-
-    // Correct the middle station by +10s: the legs after it must not move.
-    await user.clear(corn);
-    await user.type(corn, "50.00");
-
-    expect(flip.value).toBe("15.00");
-    await waitFor(() => expect(pong.value).toBe("1:00.00"));
-    const course = screen.getByLabelText(/course time/i) as HTMLInputElement;
-    await waitFor(() => expect(course.value).toBe("1:00.00"));
-  });
-
-  it("does not shift later splits when a blank station is filled in", async () => {
-    const user = userEvent.setup();
-    bundle.current = {
-      stations: [station("a", "FLIP", 1), station("b", "CORN", 2), station("c", "PONG", 3)],
-      runs: [],
-      splits: [],
-      penalties: [],
-    };
-    renderSheet();
-
-    await user.type(screen.getByLabelText("CORN split"), "40.00");
-    await user.type(screen.getByLabelText("PONG split"), "50.00");
-    await user.type(screen.getByLabelText("FLIP split"), "15.00");
-
-    expect((screen.getByLabelText("PONG split") as HTMLInputElement).value).toBe("50.00");
-  });
-
-  it("adds penalties on top of the split-derived time", async () => {
+  it("adds penalties on top of the station total", async () => {
     const user = userEvent.setup();
     renderSheet();
 
-    await user.type(screen.getByLabelText("FLIP split"), "40.00");
+    await user.type(screen.getByLabelText("FLIP time"), "40.00");
     await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => expect(screen.getByText("45.00")).toBeInTheDocument());
+  });
+
+  it("saves cumulative splits, not the per-station times", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.type(screen.getByLabelText("FLIP time"), "15.00");
+    await user.type(screen.getByLabelText("CORN time"), "25.00");
+    await user.click(screen.getByRole("button", { name: /add result/i }));
+
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    expect(serverFnMock.mock.calls[0]?.[0].data.splits).toEqual([
+      { stationId: "a", cumulative_time_ms: 15000 },
+      { stationId: "b", cumulative_time_ms: 40000 },
+    ]);
   });
 });
