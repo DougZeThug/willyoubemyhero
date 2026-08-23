@@ -108,6 +108,51 @@ describe("EditResultSheet", () => {
     expect(screen.getByText(/from splits/i)).toBeInTheDocument();
   });
 
+  it("shifts every later split when an earlier one is corrected", async () => {
+    const user = userEvent.setup();
+    bundle.current = {
+      stations: [station("a", "FLIP", 1), station("b", "CORN", 2), station("c", "PONG", 3)],
+      runs: [],
+      splits: [],
+      penalties: [],
+    };
+    renderSheet();
+
+    const flip = screen.getByLabelText("FLIP split") as HTMLInputElement;
+    const corn = screen.getByLabelText("CORN split") as HTMLInputElement;
+    const pong = screen.getByLabelText("PONG split") as HTMLInputElement;
+
+    await user.type(flip, "15.00");
+    await user.type(corn, "40.00");
+    await user.type(pong, "50.00");
+
+    // Correct the middle station by +10s: the legs after it must not move.
+    await user.clear(corn);
+    await user.type(corn, "50.00");
+
+    expect(flip.value).toBe("15.00");
+    await waitFor(() => expect(pong.value).toBe("1:00.00"));
+    const course = screen.getByLabelText(/course time/i) as HTMLInputElement;
+    await waitFor(() => expect(course.value).toBe("1:00.00"));
+  });
+
+  it("does not shift later splits when a blank station is filled in", async () => {
+    const user = userEvent.setup();
+    bundle.current = {
+      stations: [station("a", "FLIP", 1), station("b", "CORN", 2), station("c", "PONG", 3)],
+      runs: [],
+      splits: [],
+      penalties: [],
+    };
+    renderSheet();
+
+    await user.type(screen.getByLabelText("CORN split"), "40.00");
+    await user.type(screen.getByLabelText("PONG split"), "50.00");
+    await user.type(screen.getByLabelText("FLIP split"), "15.00");
+
+    expect((screen.getByLabelText("PONG split") as HTMLInputElement).value).toBe("50.00");
+  });
+
   it("adds penalties on top of the split-derived time", async () => {
     const user = userEvent.setup();
     renderSheet();
