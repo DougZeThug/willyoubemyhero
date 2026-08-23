@@ -89,6 +89,7 @@ export function EditResultSheet({
     if (!open) return;
     setError(null);
     setCourseTouched(false);
+    setLegsTouched(false);
     if (!run) {
       setRawTime("");
       setLegTimes({});
