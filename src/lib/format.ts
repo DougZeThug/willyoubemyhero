@@ -1,15 +1,20 @@
 export function formatTime(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms)) return "—";
-  const totalSec = ms / 1000;
-  const minutes = Math.floor(totalSec / 60);
-  const secs = totalSec - minutes * 60;
-  const hundredths = Math.floor((secs - Math.floor(secs)) * 100);
-  const wholeSec = Math.floor(secs);
+  // Integer maths all the way down. Deriving the hundredths from a float
+  // remainder printed 101_320 ms as 1:41.31, because 101.32 - 101 lands on
+  // 0.3199999999999932 — which reads to a commissioner as "my edit did not
+  // save" right after they typed 1:41.32.
+  const sign = ms < 0 ? "-" : "";
+  const totalHundredths = Math.floor(Math.abs(ms) / 10);
+  const hundredths = totalHundredths % 100;
+  const totalSec = (totalHundredths - hundredths) / 100;
+  const wholeSec = totalSec % 60;
+  const minutes = (totalSec - wholeSec) / 60;
   const pad = (n: number, w = 2) => n.toString().padStart(w, "0");
   if (minutes > 0) {
-    return `${minutes}:${pad(wholeSec)}.${pad(hundredths)}`;
+    return `${sign}${minutes}:${pad(wholeSec)}.${pad(hundredths)}`;
   }
-  return `${pad(wholeSec)}.${pad(hundredths)}`;
+  return `${sign}${pad(wholeSec)}.${pad(hundredths)}`;
 }
 
 /**

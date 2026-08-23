@@ -29,7 +29,11 @@ import { formatTime, parseTime } from "@/lib/format";
 type PenaltyDraft = { stationId: string; ms: string; reason: string };
 
 function timeField(ms: number | null | undefined): string {
-  return ms == null ? "" : formatTime(ms).replace("—", "");
+  if (ms == null) return "";
+  // The boxes only carry hundredths, so a stored value with stray milliseconds
+  // has to land on the nearest hundredth rather than being truncated: opening a
+  // result and saving it untouched would otherwise shave time off every leg.
+  return formatTime(Math.round(ms / 10) * 10).replace("—", "");
 }
 
 export function EditResultSheet({
