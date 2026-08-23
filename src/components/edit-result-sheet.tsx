@@ -131,20 +131,28 @@ export function EditResultSheet({
     setRawTime((prev) => (prev === next ? prev : next));
   }, [open, courseTouched, splitDerivedMs]);
 
+  // Snapshot of the splits when the admin entered a field. Every keystroke is
+  // measured against this, not against the previous keystroke — otherwise
+  // typing "58.57" over "43.21" would shift the later stations once per
+  // character and send them minutes into the future.
+  const baseline = useRef<{ stationId: string; splits: Record<string, string> } | null>(null);
+
   // Splits are cumulative, so correcting one station also moves every station
   // after it: their legs are still right, they just start later. Without this
   // the final split — and so the official time — never budges after a fix.
   function setSplitAt(stationId: string, value: string) {
+    const base = baseline.current?.stationId === stationId ? baseline.current.splits : null;
     setSplitTimes((prev) => {
+      const source = base ?? prev;
       const next = { ...prev, [stationId]: value };
-      const before = parseTime(prev[stationId] ?? "");
+      const before = parseTime(source[stationId] ?? "");
       const after = parseTime(value);
-      if (before == null || after == null || before === after) return next;
+      if (before == null || after == null) return next;
       const delta = after - before;
       const idx = stations.findIndex((st) => st.id === stationId);
       if (idx < 0) return next;
       for (const st of stations.slice(idx + 1)) {
-        const cur = prev[st.id];
+        const cur = source[st.id];
         const ms = cur == null || cur.trim() === "" ? null : parseTime(cur);
         if (ms == null) continue;
         next[st.id] = timeField(Math.max(0, ms + delta));
