@@ -104,14 +104,18 @@ export function EditResultSheet({
       }
     }
     // Stored splits are cumulative; show the gap from the previous recorded
-    // station so each box reads as that station's own time.
+    // station so each box reads as that station's own time. Round each
+    // cumulative onto the hundredth grid *before* differencing — rounding the
+    // gaps instead lets each leg round up independently, and six of those add a
+    // hundredth to the total every time the sheet is opened.
     const seeded: Record<string, string> = {};
     let prev = 0;
     for (const st of stations) {
       const ms = cumulative[st.id];
       if (ms == null) continue;
-      seeded[st.id] = timeField(Math.max(0, ms - prev));
-      prev = ms;
+      const at = Math.round(ms / 10) * 10;
+      seeded[st.id] = timeField(Math.max(0, at - prev));
+      prev = at;
     }
     setLegTimes(seeded);
     setPenalties(
