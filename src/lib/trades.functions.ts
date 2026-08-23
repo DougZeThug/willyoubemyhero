@@ -8,6 +8,7 @@ import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
 import { leagueDay } from "./trades";
 import type {
+  BlockedSpare,
   SecretSpare,
   TradeFeedEntry,
   TradeItemView,
