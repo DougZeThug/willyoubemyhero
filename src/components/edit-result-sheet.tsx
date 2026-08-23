@@ -23,7 +23,11 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { updateRunResult } from "@/lib/admin-write.functions";
+import {
+  createManualRun,
+  deleteRunResult,
+  updateRunResult,
+} from "@/lib/admin-write.functions";
 import { formatTime, parseTime } from "@/lib/format";
 
 type PenaltyDraft = { stationId: string; ms: string; reason: string };
