@@ -67,7 +67,10 @@ export function EditResultSheet({
   // Once the admin types a course time by hand it wins: auto-fill from the
   // splits would otherwise fight them mid-correction.
   const [courseTouched, setCourseTouched] = useState(false);
-  const [splitTimes, setSplitTimes] = useState<Record<string, string>>({});
+  // Per-station times, not cumulative clock times: an admin thinks "cornhole
+  // took 43 seconds", not "the clock read 58.57 when he left it". They are
+  // converted back to cumulative splits on save.
+  const [legTimes, setLegTimes] = useState<Record<string, string>>({});
   const [penalties, setPenalties] = useState<PenaltyDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,18 +83,28 @@ export function EditResultSheet({
     setCourseTouched(false);
     if (!run) {
       setRawTime("");
-      setSplitTimes({});
+      setLegTimes({});
       setPenalties([]);
       return;
     }
     setRawTime(timeField(run.raw_time_ms));
-    const splits: Record<string, string> = {};
+    const cumulative: Record<string, number> = {};
     for (const s of bundle?.splits ?? []) {
-      if (s.run_id === run.id && s.station_id) {
-        splits[s.station_id] = timeField(s.cumulative_time_ms);
+      if (s.run_id === run.id && s.station_id && s.cumulative_time_ms != null) {
+        cumulative[s.station_id] = s.cumulative_time_ms;
       }
     }
-    setSplitTimes(splits);
+    // Stored splits are cumulative; show the gap from the previous recorded
+    // station so each box reads as that station's own time.
+    const seeded: Record<string, string> = {};
+    let prev = 0;
+    for (const st of stations) {
+      const ms = cumulative[st.id];
+      if (ms == null) continue;
+      seeded[st.id] = timeField(Math.max(0, ms - prev));
+      prev = ms;
+    }
+    setLegTimes(seeded);
     setPenalties(
       (bundle?.penalties ?? [])
         .filter((p) => p.run_id === run.id)
