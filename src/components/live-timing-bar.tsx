@@ -46,7 +46,6 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
   const eventId = event?.id ?? null;
   const [editing, setEditing] = useState<string | null>(null);
 
-
   const queued = participants.filter(
     (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
   );
@@ -281,7 +280,6 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
           onOpenChange={(o) => !o && setEditing(null)}
         />
       )}
-
     </section>
   );
 }

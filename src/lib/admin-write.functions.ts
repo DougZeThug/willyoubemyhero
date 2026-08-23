@@ -447,7 +447,11 @@ export const updateRunResult = createServerFn({ method: "POST" })
       .object({
         eventId: zuuid(),
         runId: zuuid(),
-        raw_time_ms: z.number().int().min(0).max(24 * 60 * 60 * 1000),
+        raw_time_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(24 * 60 * 60 * 1000),
         splits: z
           .array(
             z.object({
@@ -491,10 +495,7 @@ export const updateRunResult = createServerFn({ method: "POST" })
       .eq("id", run.id);
     if (updateError) throw updateError;
 
-    const { error: delSplits } = await supabaseAdmin
-      .from("splits")
-      .delete()
-      .eq("run_id", run.id);
+    const { error: delSplits } = await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
     if (delSplits) throw delSplits;
     const { error: delPenalties } = await supabaseAdmin
       .from("penalties")

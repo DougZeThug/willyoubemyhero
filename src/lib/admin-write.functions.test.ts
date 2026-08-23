@@ -96,7 +96,6 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
   },
 };
 
-
 describe("every write requires the commissioner", () => {
   it("covers every exported handler", async () => {
     // If this fails, a new endpoint was added without an entry above, and the
