@@ -33,7 +33,6 @@ export type LadderRow = {
   fieldCount: number;
 };
 
-
 export type CardStats = {
   /** Fastest official run, or null if they have none. */
   bestRun: StatsBundle["runs"][number] | null;
@@ -122,7 +121,6 @@ export function cardStats(
       fieldCount: perParticipant.size,
     };
   });
-
 
   return { bestRun, ladder, rank, fieldSize: allBest.size };
 }

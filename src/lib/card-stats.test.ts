@@ -278,8 +278,6 @@ describe("cardStats", () => {
       expect(cardStats(bundle, dave.participant_id).ladder[0].place).toBeNull();
     });
 
-
-
     it("does not let a participant's re-run skew the field median", () => {
       // One participant recording a second, much slower split at a station
       // would otherwise drag the median up and flatter everybody.
