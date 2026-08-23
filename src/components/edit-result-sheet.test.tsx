@@ -180,4 +180,30 @@ describe("EditResultSheet", () => {
       { stationId: "c", cumulative_time_ms: 101_320 },
     ]);
   });
+  it("keeps the saved course time when splits are off the hundredth grid", async () => {
+    // Rounding each leg gap independently added a hundredth per open; the legs
+    // now come from rounded cumulatives, so re-opening is lossless.
+    bundle.current = {
+      ...bundle.current,
+      runs: [{ id: "run-1", participant_id: PLAYER, is_official: true, raw_time_ms: 101_320 }],
+      splits: [
+        { run_id: "run-1", station_id: "a", cumulative_time_ms: 15_354 },
+        { run_id: "run-1", station_id: "b", cumulative_time_ms: 53_558 },
+        { run_id: "run-1", station_id: "c", cumulative_time_ms: 101_317 },
+      ],
+      penalties: [],
+    };
+    const user = userEvent.setup();
+    renderSheet();
+
+    const course = screen.getByLabelText(/course time/i) as HTMLInputElement;
+    await waitFor(() => expect(course.value).toBe("1:41.32"));
+    expect(screen.getByText("at 1:41.32")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /save result/i }));
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    const sent = serverFnMock.mock.calls[0]?.[0].data;
+    expect(sent.raw_time_ms).toBe(101_320);
+    expect(sent.splits.at(-1).cumulative_time_ms).toBe(101_320);
+  });
 });
