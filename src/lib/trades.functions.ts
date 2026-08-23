@@ -228,7 +228,9 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       held.filter((r) => perCard.get(r.secret_card_id) === 1).map((r) => r.id),
     );
 
-    const secrets = await hydrateSecrets(stakeable, lastCopyIds);
+    // Hydrated over every row rather than only the stakeable ones, so the blocked
+    // list below can render a face too — a greyed tile with no art explains nothing.
+    const secrets = await hydrateSecrets(mine ? held : stakeable, lastCopyIds);
 
     // Every copy of a card they hold two or more of. All of them, not "the ones
     // beyond the first": the giver picks which copy to keep, so listing only the
