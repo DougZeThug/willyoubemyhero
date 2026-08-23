@@ -429,7 +429,128 @@ export const deleteRun = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Correct a result that is already in the books.
+ *
+ * A stopwatch tapped late, a split missed at the sled, a penalty argued down
+ * an hour after the fact — before this the only remedy was deleting the run and
+ * re-timing the athlete. The splits and penalties are replaced wholesale rather
+ * than diffed: the sheet always sends the complete intended set, so a station
+ * left blank means "there is no split here" and disappears.
+ *
+ * `official_time_ms` is a generated column (raw + penalty), so it is never
+ * written here — fixing the parts fixes the total.
+ */
+export const updateRunResult = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: zuuid(),
+        runId: zuuid(),
+        raw_time_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(24 * 60 * 60 * 1000),
+        splits: z
+          .array(
+            z.object({
+              stationId: zuuid(),
+              cumulative_time_ms: z.number().int().min(0),
+            }),
+          )
+          .max(50),
+        penalties: z
+          .array(
+            z.object({
+              stationId: zuuid().nullable().optional(),
+              penalty_ms: z.number().int().min(0),
+              reason: z.string().max(120).nullable().optional(),
+            }),
+          )
+          .max(50),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Never trust the run id alone: an admin token is scoped to one event, so
+    // the run has to belong to that event before anything is touched.
+    const { data: run, error: runError } = await supabaseAdmin
+      .from("runs")
+      .select("id, event_id, started_at, raw_time_ms, penalty_ms")
+      .eq("id", data.runId)
+      .eq("event_id", data.eventId)
+      .maybeSingle();
+    if (runError) throw runError;
+    if (!run) throw new Error("That run is not part of this event.");
+
+    const penaltyTotal = data.penalties.reduce((sum, p) => sum + p.penalty_ms, 0);
+
+    const { error: updateError } = await supabaseAdmin
+      .from("runs")
+      .update({ raw_time_ms: data.raw_time_ms, penalty_ms: penaltyTotal })
+      .eq("id", run.id);
+    if (updateError) throw updateError;
+
+    const { error: delSplits } = await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
+    if (delSplits) throw delSplits;
+    const { error: delPenalties } = await supabaseAdmin
+      .from("penalties")
+      .delete()
+      .eq("run_id", run.id);
+    if (delPenalties) throw delPenalties;
+
+    // Segment times are derived, not typed: sorting by cumulative time and
+    // differencing keeps them consistent with whatever the commissioner entered.
+    const ordered = [...data.splits].sort((a, b) => a.cumulative_time_ms - b.cumulative_time_ms);
+    const startMs = run.started_at ? Date.parse(run.started_at) : Date.now();
+    if (ordered.length) {
+      const { error } = await supabaseAdmin.from("splits").insert(
+        ordered.map((s, i) => ({
+          run_id: run.id,
+          station_id: s.stationId,
+          cumulative_time_ms: s.cumulative_time_ms,
+          segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
+          recorded_at: new Date(startMs + s.cumulative_time_ms).toISOString(),
+          entry_method: "admin_edit",
+          client_key: `edit:${run.id}:${s.stationId}`,
+          corrected: true,
+        })),
+      );
+      if (error) throw error;
+    }
+    if (data.penalties.length) {
+      const { error } = await supabaseAdmin.from("penalties").insert(
+        data.penalties.map((p, i) => ({
+          run_id: run.id,
+          station_id: p.stationId ?? null,
+          penalty_ms: p.penalty_ms,
+          reason: p.reason ?? null,
+          created_by: "admin",
+          client_key: `edit:${run.id}:${i}`,
+        })),
+      );
+      if (error) throw error;
+    }
+
+    await supabaseAdmin.from("audit_logs").insert({
+      event_id: data.eventId,
+      entity_type: "runs",
+      entity_id: run.id,
+      action: "update_run_result",
+      previous_value: { raw_time_ms: run.raw_time_ms, penalty_ms: run.penalty_ms },
+      new_value: { raw_time_ms: data.raw_time_ms, penalty_ms: penaltyTotal },
+      performed_by: "admin",
+    });
+
+    return { ok: true, official_time_ms: data.raw_time_ms + penaltyTotal };
+  });
+
 // ---------- Draft selections ----------
+
 export const recordDraftSelection = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z

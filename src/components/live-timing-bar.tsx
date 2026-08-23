@@ -8,15 +8,18 @@
  *
  * Renders nothing at all without a valid admin session for the active event.
  */
-import { Flag, Pause, Play, Radio, Redo2, RotateCcw, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Flag, Pause, Pencil, Play, Radio, Redo2, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EditResultSheet } from "@/components/edit-result-sheet";
 import { formatTime } from "@/lib/format";
 import { currentAthlete } from "@/lib/current-athlete";
 import type { RunConsole } from "@/hooks/use-run-console";
 
 export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
   const {
+    event,
     run,
     participants,
     stations,
@@ -39,6 +42,9 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     resetAthlete,
     setOnClock,
   } = rc;
+
+  const eventId = event?.id ?? null;
+  const [editing, setEditing] = useState<string | null>(null);
 
   const queued = participants.filter(
     (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
@@ -226,14 +232,24 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
       {done.length > 0 && (
         <div className="mt-3 border-t border-white/10 pt-2">
           <div className="mb-1 font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
-            Reset an athlete
+            Fix a result
           </div>
-          <ul className="max-h-40 space-y-0.5 overflow-auto pr-1">
+          <ul className="max-h-52 space-y-0.5 overflow-auto pr-1">
             {done.map((p) => {
               const playerName = p.participant?.name ?? "player";
               return (
-                <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate uppercase">{playerName}</span>
+                <li key={p.id} className="flex items-center justify-between gap-1 text-xs">
+                  <span className="min-w-0 flex-1 truncate uppercase">{playerName}</span>
+                  {eventId && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 shrink-0 px-2 text-[10px] uppercase tracking-widest"
+                      onClick={() => setEditing(p.participant_id)}
+                    >
+                      <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -251,6 +267,18 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
             })}
           </ul>
         </div>
+      )}
+
+      {eventId && editing && (
+        <EditResultSheet
+          eventId={eventId}
+          participantId={editing}
+          participantName={
+            done.find((p) => p.participant_id === editing)?.participant?.name ?? "Athlete"
+          }
+          open={!!editing}
+          onOpenChange={(o) => !o && setEditing(null)}
+        />
       )}
     </section>
   );

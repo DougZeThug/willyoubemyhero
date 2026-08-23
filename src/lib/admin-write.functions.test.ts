@@ -86,6 +86,14 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
   undoLastDraftSelection: { eventId: EVENT_ID },
   updateEvent: { eventId: EVENT_ID, status: "live" },
   resetCombine: { eventId: EVENT_ID },
+  resetParticipantRuns: { eventId: EVENT_ID, participantId: PARTICIPANT_ID },
+  updateRunResult: {
+    eventId: EVENT_ID,
+    runId: RUN_ID,
+    raw_time_ms: 61_000,
+    splits: [{ stationId: STATION_ID, cumulative_time_ms: 20_000 }],
+    penalties: [{ stationId: STATION_ID, penalty_ms: 5_000, reason: "Missed cone" }],
+  },
 };
 
 describe("every write requires the commissioner", () => {
