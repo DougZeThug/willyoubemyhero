@@ -71,6 +71,10 @@ export function EditResultSheet({
   // Once the admin types a course time by hand it wins: auto-fill from the
   // splits would otherwise fight them mid-correction.
   const [courseTouched, setCourseTouched] = useState(false);
+  // A saved run already has a course time; only start deriving it from the legs
+  // once the admin actually changes a station, otherwise the hundredth-rounding
+  // of the seeded legs would silently rewrite the stored time on open.
+  const [legsTouched, setLegsTouched] = useState(false);
   // Per-station times, not cumulative clock times: an admin thinks "cornhole
   // took 43 seconds", not "the clock read 58.57 when he left it". They are
   // converted back to cumulative splits on save.
@@ -85,6 +89,7 @@ export function EditResultSheet({
     if (!open) return;
     setError(null);
     setCourseTouched(false);
+    setLegsTouched(false);
     if (!run) {
       setRawTime("");
       setLegTimes({});
@@ -99,14 +104,18 @@ export function EditResultSheet({
       }
     }
     // Stored splits are cumulative; show the gap from the previous recorded
-    // station so each box reads as that station's own time.
+    // station so each box reads as that station's own time. Round each
+    // cumulative onto the hundredth grid *before* differencing — rounding the
+    // gaps instead lets each leg round up independently, and six of those add a
+    // hundredth to the total every time the sheet is opened.
     const seeded: Record<string, string> = {};
     let prev = 0;
     for (const st of stations) {
       const ms = cumulative[st.id];
       if (ms == null) continue;
-      seeded[st.id] = timeField(Math.max(0, ms - prev));
-      prev = ms;
+      const at = Math.round(ms / 10) * 10;
+      seeded[st.id] = timeField(Math.max(0, at - prev));
+      prev = at;
     }
     setLegTimes(seeded);
     setPenalties(
@@ -141,11 +150,13 @@ export function EditResultSheet({
   }, [cumulatives]);
 
   // Auto-fill the course time from the splits until the admin overrides it.
+  // A saved run keeps its stored time until a station is actually edited.
   useEffect(() => {
     if (!open || courseTouched || splitDerivedMs == null) return;
+    if (run && !legsTouched) return;
     const next = timeField(splitDerivedMs);
     setRawTime((prev) => (prev === next ? prev : next));
-  }, [open, courseTouched, splitDerivedMs]);
+  }, [open, courseTouched, splitDerivedMs, run, legsTouched]);
 
   const rawMs = parseTime(rawTime);
   const penaltyMs = penalties.reduce((sum, p) => sum + (parseTime(p.ms) ?? 0), 0);
@@ -269,9 +280,10 @@ export function EditResultSheet({
                       aria-label={`${st.name} time`}
                       inputMode="decimal"
                       value={value}
-                      onChange={(e) =>
-                        setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        setLegsTouched(true);
+                        setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }));
+                      }}
                       placeholder="—"
                       className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
                     />
