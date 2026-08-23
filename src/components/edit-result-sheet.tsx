@@ -71,6 +71,10 @@ export function EditResultSheet({
   // Once the admin types a course time by hand it wins: auto-fill from the
   // splits would otherwise fight them mid-correction.
   const [courseTouched, setCourseTouched] = useState(false);
+  // A saved run already has a course time; only start deriving it from the legs
+  // once the admin actually changes a station, otherwise the hundredth-rounding
+  // of the seeded legs would silently rewrite the stored time on open.
+  const [legsTouched, setLegsTouched] = useState(false);
   // Per-station times, not cumulative clock times: an admin thinks "cornhole
   // took 43 seconds", not "the clock read 58.57 when he left it". They are
   // converted back to cumulative splits on save.
