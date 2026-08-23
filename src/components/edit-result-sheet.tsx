@@ -9,7 +9,7 @@
  * sheet sends the complete intended set of splits and penalties, so clearing a
  * station's field deletes that split.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, Save, Trash2 } from "lucide-react";
@@ -290,6 +290,9 @@ export function EditResultSheet({
                       aria-label={`${st.name} split`}
                       inputMode="decimal"
                       value={value}
+                      onFocus={() =>
+                        (baseline.current = { stationId: st.id, splits: splitTimes })
+                      }
                       onChange={(e) => setSplitAt(st.id, e.target.value)}
                       placeholder="—"
                       className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
