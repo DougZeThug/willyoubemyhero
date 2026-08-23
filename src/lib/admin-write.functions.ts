@@ -114,7 +114,7 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
     if ((copies ?? 0) > 0 || (pulls ?? 0) > 0) {
       const { error: retireError } = await supabaseAdmin
         .from("event_participants")
-        .update({ participation_status: "waiting" })
+        .update({ participation_status: "scratched" })
         .eq("id", data.eventParticipantId);
       if (retireError) throw retireError;
       return { ok: true, retained: true } as const;

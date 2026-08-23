@@ -983,9 +983,15 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
   async function onRemove(epId: string, playerName: string) {
     if (!confirm(`Remove ${playerName} from this event?`)) return;
     try {
-      await removeFn({ data: { eventId, eventParticipantId: epId } });
+      const res = await removeFn({ data: { eventId, eventParticipantId: epId } });
       await qc.invalidateQueries();
-      toast.success(`Removed ${playerName}`);
+      // Deleting a roster row cascades away every copy of that card in the
+      // league, so a packed player is scratched instead of deleted.
+      toast.success(
+        res.retained
+          ? `${playerName} marked out — their cards stay in people's collections`
+          : `Removed ${playerName}`,
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not remove player");
     }
