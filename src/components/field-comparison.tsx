@@ -31,7 +31,7 @@ export function FieldComparison({
 
   return (
     <section className="mt-8">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
           Vs. the field
         </h2>
@@ -54,13 +54,19 @@ export function FieldComparison({
         </div>
       </div>
 
-      <ul className="space-y-2">
+      {/* Said once here rather than on every row: the gap column was the part
+          people could not read, and repeating the caption seven times is worse. */}
+      <p className="mb-3 text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+        Place at each station · gap vs. field median
+      </p>
+
+      <ul className="space-y-2.5">
         {ladder.map((row) => (
-          <li key={row.id} className="flex items-center gap-3">
-            <span className="w-20 shrink-0 truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <li key={row.id} className="flex items-center gap-2.5">
+            <span className="w-16 shrink-0 truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               {row.label}
             </span>
-            <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/5">
+            <span className="hidden h-2 flex-1 overflow-hidden rounded-full bg-white/5 min-[380px]:block">
               {row.ms != null && (
                 <span
                   className="block h-full rounded-full transition-[width] duration-700 ease-out"
@@ -76,12 +82,27 @@ export function FieldComparison({
                 />
               )}
             </span>
-            <span className="w-12 shrink-0 text-right text-[11px] tabular text-foreground/90">
-              {row.ms != null ? formatTime(row.ms) : "—"}
+            {/* On a narrow phone the place tucks under the time instead of
+                becoming a fourth column nobody can read. */}
+            <span className="ml-auto flex shrink-0 flex-col items-end leading-tight min-[380px]:ml-0">
+              <span className="text-[11px] tabular text-foreground/90">
+                {row.ms != null ? formatTime(row.ms) : "—"}
+              </span>
+              {row.place != null && row.fieldCount > 0 && (
+                <span
+                  className={
+                    "text-[9px] font-bold uppercase tracking-wider tabular " +
+                    (row.place === 1 ? "" : "text-muted-foreground")
+                  }
+                  style={row.place === 1 ? { color: "var(--tier)" } : undefined}
+                >
+                  {ordinal(row.place)}/{row.fieldCount}
+                </span>
+              )}
             </span>
             <span
               className={
-                "w-14 shrink-0 text-right text-[10px] font-bold tabular " +
+                "w-[4.75rem] shrink-0 text-right text-[10px] font-bold tabular leading-tight " +
                 (row.deltaMs == null
                   ? "text-muted-foreground"
                   : row.deltaMs <= 0
@@ -89,13 +110,29 @@ export function FieldComparison({
                     : "text-warn")
               }
             >
-              {row.deltaMs == null
-                ? ""
-                : `${row.deltaMs <= 0 ? "▼" : "▲"}${formatTime(Math.abs(row.deltaMs))}`}
+              {row.deltaMs == null ? (
+                ""
+              ) : (
+                <>
+                  {formatTime(Math.abs(row.deltaMs))}
+                  <br />
+                  <span className="font-semibold uppercase tracking-wider">
+                    {row.deltaMs <= 0 ? "faster" : "slower"}
+                  </span>
+                </>
+              )}
             </span>
           </li>
         ))}
       </ul>
     </section>
   );
+}
+
+/** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th. */
+function ordinal(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  const suffix = { 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th";
+  return `${n}${suffix}`;
 }

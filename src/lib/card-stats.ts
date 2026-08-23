@@ -27,6 +27,10 @@ export type LadderRow = {
   deltaMs: number | null;
   /** True when nobody in the field was faster here — the station-king split. */
   best: boolean;
+  /** Place at this station among everyone with a split here, 1-based. Ties share. */
+  place: number | null;
+  /** How many players have a split at this station — the denominator for place. */
+  fieldCount: number;
 };
 
 export type CardStats = {
@@ -103,12 +107,18 @@ export function cardStats(
       ? (forStation.find((s) => s.run_id === bestRun.id)?.segment_time_ms ?? null)
       : null;
     const fastest = perParticipant.size ? Math.min(...perParticipant.values()) : null;
+    // Same shape as the overall rank: count everyone strictly faster, +1, so a
+    // dead heat shares a place instead of one of them silently dropping a spot.
+    const place =
+      ms != null ? [...perParticipant.values()].filter((other) => other < ms).length + 1 : null;
     return {
       id: st.id,
       label: st.short_name || st.name,
       ms,
       deltaMs: ms != null && fieldMedian != null ? ms - fieldMedian : null,
       best: ms != null && fastest != null && ms <= fastest,
+      place,
+      fieldCount: perParticipant.size,
     };
   });
 

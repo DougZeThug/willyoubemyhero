@@ -4,14 +4,26 @@ import { FieldComparison } from "./field-comparison";
 import type { LadderRow } from "@/lib/card-stats";
 
 function row(over: Partial<LadderRow> = {}): LadderRow {
-  return { id: "s1", label: "SLED", ms: 20_000, deltaMs: 0, best: false, ...over };
+  return {
+    id: "s1",
+    label: "SLED",
+    ms: 20_000,
+    deltaMs: 0,
+    best: false,
+    place: 3,
+    fieldCount: 8,
+    ...over,
+  };
 }
 
 describe("FieldComparison", () => {
   it("renders nothing when the player has no timed splits", () => {
     const { container } = render(
       <FieldComparison
-        ladder={[row({ ms: null, deltaMs: null }), row({ id: "s2", ms: null, deltaMs: null })]}
+        ladder={[
+          row({ ms: null, deltaMs: null, place: null }),
+          row({ id: "s2", ms: null, deltaMs: null, place: null }),
+        ]}
         rank={null}
         fieldSize={0}
       />,
@@ -68,7 +80,44 @@ describe("FieldComparison", () => {
 
   it("says nothing about station wins when there are none", () => {
     render(<FieldComparison ladder={[row()]} rank={1} fieldSize={4} />);
-    expect(screen.queryByText(/station/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/stations won/)).not.toBeInTheDocument();
+  });
+
+  it("shows where the split placed at that station", () => {
+    render(
+      <FieldComparison ladder={[row({ place: 2, fieldCount: 16 })]} rank={1} fieldSize={16} />,
+    );
+    expect(screen.getByText("2nd/16")).toBeInTheDocument();
+  });
+
+  it("uses th for the teens", () => {
+    render(
+      <FieldComparison ladder={[row({ place: 11, fieldCount: 16 })]} rank={1} fieldSize={16} />,
+    );
+    expect(screen.getByText("11th/16")).toBeInTheDocument();
+  });
+
+  it("omits the place when the athlete has no split there", () => {
+    render(
+      <FieldComparison
+        ladder={[row({ ms: 1_000 }), row({ id: "b", ms: null, deltaMs: null, place: null })]}
+        rank={1}
+        fieldSize={16}
+      />,
+    );
+    expect(screen.queryAllByText(/\/8$/)).toHaveLength(1);
+  });
+
+  it("labels the gap in words rather than arrows", () => {
+    render(
+      <FieldComparison
+        ladder={[row({ deltaMs: -1_000 }), row({ id: "b", deltaMs: 1_000 })]}
+        rank={1}
+        fieldSize={16}
+      />,
+    );
+    expect(screen.getByText("faster")).toBeInTheDocument();
+    expect(screen.getByText("slower")).toBeInTheDocument();
   });
 
   it("lists a row per station, in the order given", () => {
@@ -100,7 +149,7 @@ describe("FieldComparison", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
-  it("points the delta arrow down when faster and up when slower", () => {
+  it("shows the size and direction of the gap", () => {
     render(
       <FieldComparison
         ladder={[row({ id: "a", deltaMs: -1_500 }), row({ id: "b", deltaMs: 2_250 })]}
@@ -108,8 +157,8 @@ describe("FieldComparison", () => {
         fieldSize={4}
       />,
     );
-    expect(screen.getByText("▼01.50")).toBeInTheDocument();
-    expect(screen.getByText("▲02.25")).toBeInTheDocument();
+    expect(screen.getByText(/01\.50/)).toBeInTheDocument();
+    expect(screen.getByText(/02\.25/)).toBeInTheDocument();
   });
 
   it("scales the bars against the slowest station, not the median", () => {
@@ -120,7 +169,7 @@ describe("FieldComparison", () => {
         fieldSize={4}
       />,
     );
-    const widths = [...container.querySelectorAll("li span span")].map(
+    const widths = [...container.querySelectorAll<HTMLElement>("li span[style*='width']")].map(
       (el) => (el as HTMLElement).style.width,
     );
     expect(widths).toEqual(["50%", "100%"]);
@@ -134,7 +183,7 @@ describe("FieldComparison", () => {
         fieldSize={4}
       />,
     );
-    const first = container.querySelector("li span span") as HTMLElement;
+    const first = container.querySelector("li span[style*='width']") as HTMLElement;
     expect(first.style.width).toBe("4%");
   });
 });
