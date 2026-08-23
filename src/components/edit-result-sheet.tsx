@@ -303,13 +303,25 @@ export function EditResultSheet({
               </span>
             </div>
 
-            {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
 
-            <Button className="h-12 w-full" disabled={!valid || saving} onClick={onSave}>
-              <Save className="mr-2 h-4 w-4" /> {saving ? "Saving…" : "Save result"}
+          <Button className="h-12 w-full" disabled={!valid || saving} onClick={onSave}>
+            <Save className="mr-2 h-4 w-4" />
+            {saving ? "Saving…" : creating ? "Add result" : "Save result"}
+          </Button>
+
+          {run && (
+            <Button
+              variant="ghost"
+              className="w-full text-destructive hover:bg-destructive/10"
+              disabled={saving}
+              onClick={onDelete}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Delete this result
             </Button>
-          </div>
-        )}
+          )}
+        </div>
+
       </SheetContent>
     </Sheet>
   );
