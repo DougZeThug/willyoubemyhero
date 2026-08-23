@@ -113,7 +113,7 @@ describe("EditResultSheet", () => {
     renderSheet();
 
     await user.type(screen.getByLabelText("FLIP split"), "40.00");
-    await user.click(screen.getByRole("button", { name: /add/i }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => expect(screen.getByText("45.00")).toBeInTheDocument());
   });
