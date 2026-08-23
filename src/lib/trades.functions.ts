@@ -154,10 +154,18 @@ async function hydrateSecrets(
 export const getTradeSpares = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ participantId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeSpares> => {
-    await requireMember();
+    const asker = await requireMember();
     noStore();
+    // Blocked cards are your own business only: a counterparty's untradeable
+    // copies are collection detail an offer screen has no reason to publish.
+    const mine = asker === data.participantId;
 
-    const empty: TradeSpares = { participantId: data.participantId, roster: [], secrets: [] };
+    const empty: TradeSpares = {
+      participantId: data.participantId,
+      roster: [],
+      secrets: [],
+      blocked: [],
+    };
     const eventId = await activeEventId();
     if (!eventId) return empty;
 
