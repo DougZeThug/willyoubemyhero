@@ -51,7 +51,9 @@ export function EditResultSheet({
   const createFn = useServerFn(createManualRun);
   const deleteFn = useServerFn(deleteRunResult);
 
-  const stations = bundle?.stations ?? [];
+  // Memoised: the leg maths below depends on this list, and a fresh array every
+  // render would recompute (and re-render) on every keystroke.
+  const stations = useMemo(() => bundle?.stations ?? [], [bundle?.stations]);
   // The result on the board is the athlete's official run; fall back to their
   // most recent one so a run saved before is_official existed is still editable.
   const run = useMemo(() => {
