@@ -107,3 +107,37 @@ describe("StationsPanel", () => {
     );
   });
 });
+
+describe("StationsPanel bulk rename", () => {
+  it("writes only the rows whose names changed", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: /rename all/i }));
+
+    const nameField = screen.getByLabelText("Sprint name");
+    await user.clear(nameField);
+    await user.type(nameField, "Dash");
+    await user.type(screen.getByLabelText("Sprint short name"), "DASH");
+
+    await user.click(screen.getByRole("button", { name: /save all names/i }));
+
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalledTimes(1));
+    expect(serverFnMock.mock.calls[0]?.[0]?.data).toMatchObject({
+      id: "a",
+      name: "Dash",
+      short_name: "DASH",
+    });
+    expect(toast.success).toHaveBeenCalled();
+  });
+
+  it("refuses a blank name", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: /rename all/i }));
+    await user.clear(screen.getByLabelText("Sprint name"));
+    await user.click(screen.getByRole("button", { name: /save all names/i }));
+
+    expect(serverFnMock).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith("Every station needs a name");
+  });
+});
