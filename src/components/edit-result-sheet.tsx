@@ -23,11 +23,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import {
-  createManualRun,
-  deleteRunResult,
-  updateRunResult,
-} from "@/lib/admin-write.functions";
+import { createManualRun, deleteRunResult, updateRunResult } from "@/lib/admin-write.functions";
 import { formatTime, parseTime } from "@/lib/format";
 
 type PenaltyDraft = { stationId: string; ms: string; reason: string };
@@ -178,134 +174,133 @@ export function EditResultSheet({
         </SheetHeader>
 
         <div className="space-y-4 p-4">
+          <div>
+            <label
+              htmlFor="raw-time"
+              className="mb-1 block font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground"
+            >
+              Course time (before penalties)
+            </label>
+            <Input
+              id="raw-time"
+              inputMode="decimal"
+              value={rawTime}
+              onChange={(e) => setRawTime(e.target.value)}
+              className={"tabular " + (rawMs == null ? "border-destructive" : "")}
+              placeholder="1:23.45"
+            />
+          </div>
 
-            <div>
-              <label
-                htmlFor="raw-time"
-                className="mb-1 block font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground"
-              >
-                Course time (before penalties)
-              </label>
-              <Input
-                id="raw-time"
-                inputMode="decimal"
-                value={rawTime}
-                onChange={(e) => setRawTime(e.target.value)}
-                className={"tabular " + (rawMs == null ? "border-destructive" : "")}
-                placeholder="1:23.45"
-              />
+          <div>
+            <div className="mb-1 font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
+              Splits
             </div>
-
-            <div>
-              <div className="mb-1 font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
-                Splits
-              </div>
-              <div className="space-y-2">
-                {stations.map((st) => {
-                  const value = splitTimes[st.id] ?? "";
-                  const bad = value.trim() !== "" && parseTime(value) == null;
-                  return (
-                    <div key={st.id} className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-xs uppercase">
-                        {st.short_name ?? st.name}
-                      </span>
-                      <Input
-                        aria-label={`${st.name} split`}
-                        inputMode="decimal"
-                        value={value}
-                        onChange={(e) =>
-                          setSplitTimes((prev) => ({ ...prev, [st.id]: e.target.value }))
-                        }
-                        placeholder="—"
-                        className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
-                      />
-                    </div>
-                  );
-                })}
-                {stations.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No stations set up.</p>
-                )}
-              </div>
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                Leave a station blank to remove its split.
-              </p>
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <span className="font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
-                  Penalties
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    setPenalties((prev) => [...prev, { stationId: "", ms: "5.00", reason: "" }])
-                  }
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Add
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {penalties.map((p, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <select
-                      aria-label="Penalty station"
-                      value={p.stationId}
-                      onChange={(e) =>
-                        setPenalties((prev) =>
-                          prev.map((row, j) =>
-                            j === i ? { ...row, stationId: e.target.value } : row,
-                          ),
-                        )
-                      }
-                      className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs uppercase"
-                    >
-                      <option value="">No station</option>
-                      {stations.map((st) => (
-                        <option key={st.id} value={st.id}>
-                          {st.short_name ?? st.name}
-                        </option>
-                      ))}
-                    </select>
+            <div className="space-y-2">
+              {stations.map((st) => {
+                const value = splitTimes[st.id] ?? "";
+                const bad = value.trim() !== "" && parseTime(value) == null;
+                return (
+                  <div key={st.id} className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs uppercase">
+                      {st.short_name ?? st.name}
+                    </span>
                     <Input
-                      aria-label="Penalty time"
+                      aria-label={`${st.name} split`}
                       inputMode="decimal"
-                      value={p.ms}
+                      value={value}
                       onChange={(e) =>
-                        setPenalties((prev) =>
-                          prev.map((row, j) => (j === i ? { ...row, ms: e.target.value } : row)),
-                        )
+                        setSplitTimes((prev) => ({ ...prev, [st.id]: e.target.value }))
                       }
-                      className={
-                        "h-9 w-24 tabular " + (parseTime(p.ms) == null ? "border-destructive" : "")
-                      }
+                      placeholder="—"
+                      className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
                     />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label="Remove penalty"
-                      className="h-9 shrink-0 px-2 text-destructive hover:bg-destructive/10"
-                      onClick={() => setPenalties((prev) => prev.filter((_, j) => j !== i))}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
                   </div>
-                ))}
-                {penalties.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Clean run — no penalties.</p>
-                )}
-              </div>
+                );
+              })}
+              {stations.length === 0 && (
+                <p className="text-xs text-muted-foreground">No stations set up.</p>
+              )}
             </div>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Leave a station blank to remove its split.
+            </p>
+          </div>
 
-            <div className="flex items-center justify-between rounded-md border border-primary/30 bg-primary/[0.06] px-3 py-2">
-              <span className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-                Official time
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
+                Penalties
               </span>
-              <span className="timer-digits tabular text-lg text-primary">
-                {rawMs == null ? "—" : formatTime(rawMs + penaltyMs)}
-              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setPenalties((prev) => [...prev, { stationId: "", ms: "5.00", reason: "" }])
+                }
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" /> Add
+              </Button>
             </div>
+            <div className="space-y-2">
+              {penalties.map((p, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <select
+                    aria-label="Penalty station"
+                    value={p.stationId}
+                    onChange={(e) =>
+                      setPenalties((prev) =>
+                        prev.map((row, j) =>
+                          j === i ? { ...row, stationId: e.target.value } : row,
+                        ),
+                      )
+                    }
+                    className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs uppercase"
+                  >
+                    <option value="">No station</option>
+                    {stations.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.short_name ?? st.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    aria-label="Penalty time"
+                    inputMode="decimal"
+                    value={p.ms}
+                    onChange={(e) =>
+                      setPenalties((prev) =>
+                        prev.map((row, j) => (j === i ? { ...row, ms: e.target.value } : row)),
+                      )
+                    }
+                    className={
+                      "h-9 w-24 tabular " + (parseTime(p.ms) == null ? "border-destructive" : "")
+                    }
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Remove penalty"
+                    className="h-9 shrink-0 px-2 text-destructive hover:bg-destructive/10"
+                    onClick={() => setPenalties((prev) => prev.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              {penalties.length === 0 && (
+                <p className="text-xs text-muted-foreground">Clean run — no penalties.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border border-primary/30 bg-primary/[0.06] px-3 py-2">
+            <span className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+              Official time
+            </span>
+            <span className="timer-digits tabular text-lg text-primary">
+              {rawMs == null ? "—" : formatTime(rawMs + penaltyMs)}
+            </span>
+          </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -325,7 +320,6 @@ export function EditResultSheet({
             </Button>
           )}
         </div>
-
       </SheetContent>
     </Sheet>
   );
