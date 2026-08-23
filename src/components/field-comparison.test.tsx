@@ -183,7 +183,7 @@ describe("FieldComparison", () => {
         fieldSize={4}
       />,
     );
-    const first = container.querySelector("li span span") as HTMLElement;
+    const first = container.querySelector("li span[style*='width']") as HTMLElement;
     expect(first.style.width).toBe("4%");
   });
 });
