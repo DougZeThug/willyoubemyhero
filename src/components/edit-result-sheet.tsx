@@ -48,6 +48,8 @@ export function EditResultSheet({
   const { bundle } = useEventBundle();
   const qc = useQueryClient();
   const saveFn = useServerFn(updateRunResult);
+  const createFn = useServerFn(createManualRun);
+  const deleteFn = useServerFn(deleteRunResult);
 
   const stations = bundle?.stations ?? [];
   // The result on the board is the athlete's official run; fall back to their
@@ -56,6 +58,8 @@ export function EditResultSheet({
     const mine = (bundle?.runs ?? []).filter((r) => r.participant_id === participantId);
     return mine.find((r) => r.is_official) ?? mine[mine.length - 1] ?? null;
   }, [bundle?.runs, participantId]);
+  // No run yet means this is a hand-entered result rather than a correction.
+  const creating = !run;
 
   const [rawTime, setRawTime] = useState("");
   const [splitTimes, setSplitTimes] = useState<Record<string, string>>({});
@@ -66,8 +70,14 @@ export function EditResultSheet({
   // Reload the draft from the league whenever the sheet is opened, so a stale
   // half-typed correction from last time never overwrites a newer result.
   useEffect(() => {
-    if (!open || !run) return;
+    if (!open) return;
     setError(null);
+    if (!run) {
+      setRawTime("");
+      setSplitTimes({});
+      setPenalties([]);
+      return;
+    }
     setRawTime(timeField(run.raw_time_ms));
     const splits: Record<string, string> = {};
     for (const s of bundle?.splits ?? []) {
@@ -95,29 +105,34 @@ export function EditResultSheet({
   const badPenalty = penalties.some((p) => parseTime(p.ms) == null);
   const valid = rawMs != null && !badSplit && !badPenalty;
 
+  const payload = () => ({
+    splits: Object.entries(splitTimes)
+      .map(([stationId, value]) => ({
+        stationId,
+        cumulative_time_ms: parseTime(value) ?? -1,
+      }))
+      .filter((s) => s.cumulative_time_ms >= 0),
+    penalties: penalties.map((p) => ({
+      stationId: p.stationId || null,
+      penalty_ms: parseTime(p.ms) ?? 0,
+      reason: p.reason.trim() || null,
+    })),
+  });
+
   async function onSave() {
-    if (!run || rawMs == null || !valid) return;
+    if (rawMs == null || !valid) return;
     setSaving(true);
     setError(null);
     try {
-      await saveFn({
-        data: {
-          eventId,
-          runId: run.id,
-          raw_time_ms: rawMs,
-          splits: Object.entries(splitTimes)
-            .map(([stationId, value]) => ({
-              stationId,
-              cumulative_time_ms: parseTime(value) ?? -1,
-            }))
-            .filter((s) => s.cumulative_time_ms >= 0),
-          penalties: penalties.map((p) => ({
-            stationId: p.stationId || null,
-            penalty_ms: parseTime(p.ms) ?? 0,
-            reason: p.reason.trim() || null,
-          })),
-        },
-      });
+      if (run) {
+        await saveFn({
+          data: { eventId, runId: run.id, raw_time_ms: rawMs, ...payload() },
+        });
+      } else {
+        await createFn({
+          data: { eventId, participantId, raw_time_ms: rawMs, ...payload() },
+        });
+      }
       await qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
       onOpenChange(false);
     } catch (e) {
@@ -127,22 +142,39 @@ export function EditResultSheet({
     }
   }
 
+  async function onDelete() {
+    if (!run) return;
+    if (!confirm(`Delete ${participantName}'s result? Their splits and penalties go with it.`)) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteFn({ data: { eventId, runId: run.id } });
+      await qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The delete did not go through. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto">
         <SheetHeader className="text-left">
-          <SheetTitle className="font-display uppercase">Edit result</SheetTitle>
+          <SheetTitle className="font-display uppercase">
+            {creating ? "Add result" : "Edit result"}
+          </SheetTitle>
           <SheetDescription>
             {participantName} — times as <span className="tabular">m:ss.hh</span> or{" "}
             <span className="tabular">ss.hh</span>.
           </SheetDescription>
         </SheetHeader>
 
-        {!run ? (
-          <p className="p-4 text-sm text-muted-foreground">
-            No saved run for this athlete yet — time them first.
-          </p>
-        ) : (
+        {(
+
           <div className="space-y-4 p-4">
             <div>
               <label
