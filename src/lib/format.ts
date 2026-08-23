@@ -17,7 +17,6 @@ export function formatTime(ms: number | null | undefined): string {
   return `${sign}${pad(wholeSec)}.${pad(hundredths)}`;
 }
 
-
 /**
  * The inverse of `formatTime`, for the commissioner typing a correction.
  *

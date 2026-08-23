@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatTime, hueOf, initialsOf, newClientKey, newSeed, parseTime, seededRng, shuffle } from "./format";
+import {
+  formatTime,
+  hueOf,
+  initialsOf,
+  newClientKey,
+  newSeed,
+  parseTime,
+  seededRng,
+  shuffle,
+} from "./format";
 
 describe("formatTime", () => {
   it("renders an em dash for a missing time", () => {

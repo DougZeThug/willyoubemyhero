@@ -36,7 +36,6 @@ function timeField(ms: number | null | undefined): string {
   return formatTime(Math.round(ms / 10) * 10).replace("—", "");
 }
 
-
 export function EditResultSheet({
   eventId,
   participantId,
