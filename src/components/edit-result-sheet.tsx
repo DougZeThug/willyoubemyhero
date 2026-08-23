@@ -280,9 +280,10 @@ export function EditResultSheet({
                       aria-label={`${st.name} time`}
                       inputMode="decimal"
                       value={value}
-                      onChange={(e) =>
-                        setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }))
-                      }
+                      onChange={(e) => {
+                        setLegsTouched(true);
+                        setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }));
+                      }}
                       placeholder="—"
                       className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
                     />
