@@ -246,6 +246,34 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       byCard.set(row.event_participant_id, list);
     }
 
+    // Everything you hold that the rules keep off the table, with the reason —
+    // shown greyed rather than silently dropped, because a missing card reads as
+    // a bug and "only copy" reads as a rule.
+    const blocked: BlockedSpare[] = mine
+      ? [
+          ...[...byCard.values()]
+            .filter((list) => list.length === 1)
+            .flat()
+            .map<BlockedSpare>((r) => ({
+              item: {
+                kind: "roster",
+                copyId: r.id,
+                eventParticipantId: r.event_participant_id,
+                edition: toEdition(r.edition),
+              },
+              reason: "only-copy",
+            })),
+          ...held
+            .filter((r) => !r.granted && r.pulled_on === today)
+            .map((r) => secrets.get(r.id))
+            .filter((s): s is SecretSpare => !!s)
+            .map<BlockedSpare>((s) => ({
+              item: { kind: "secret", ...s },
+              reason: "todays-pull",
+            })),
+        ]
+      : [];
+
     return {
       participantId: data.participantId,
       roster: [...byCard.values()]
@@ -257,6 +285,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
           edition: toEdition(r.edition),
         })),
       secrets: stakeable.map((r) => secrets.get(r.id)!).filter(Boolean),
+      blocked,
     };
   });
 
