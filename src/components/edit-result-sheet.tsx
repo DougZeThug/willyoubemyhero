@@ -150,8 +150,10 @@ export function EditResultSheet({
   }, [cumulatives]);
 
   // Auto-fill the course time from the splits until the admin overrides it.
+  // A saved run keeps its stored time until a station is actually edited.
   useEffect(() => {
     if (!open || courseTouched || splitDerivedMs == null) return;
+    if (run && !legsTouched) return;
     const next = timeField(splitDerivedMs);
     setRawTime((prev) => (prev === next ? prev : next));
   }, [open, courseTouched, splitDerivedMs]);
