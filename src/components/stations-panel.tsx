@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, ArrowUpDown, Flag, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Flag, Pencil, Plus, Trash2 } from "lucide-react";
 import { upsertStation, deleteStation } from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AdminSection } from "@/components/admin-section";
@@ -72,6 +72,12 @@ export function StationsPanel({ eventId }: { eventId: string }) {
   const removeFn = useServerFn(deleteStation);
 
   const [rearranging, setRearranging] = useState(false);
+  // Bulk rename keeps its own draft map so a half-typed batch is never written
+  // until the admin taps save — the per-station sheet stays for everything else.
+  const [renames, setRenames] = useState<Record<
+    string,
+    { name: string; short_name: string }
+  > | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -154,6 +160,50 @@ export function StationsPanel({ eventId }: { eventId: string }) {
     }
   }
 
+  function startRenaming() {
+    const draftMap: Record<string, { name: string; short_name: string }> = {};
+    for (const s of stations) draftMap[s.id] = { name: s.name, short_name: s.short_name ?? "" };
+    setRenames(draftMap);
+    setRearranging(false);
+  }
+
+  async function onSaveNames() {
+    if (!renames) return;
+    const changed = stations.filter((s) => {
+      const d = renames[s.id];
+      return d && (d.name.trim() !== s.name || d.short_name.trim() !== (s.short_name ?? ""));
+    });
+    const blank = changed.find((s) => !renames[s.id]?.name.trim());
+    if (blank) {
+      toast.error("Every station needs a name");
+      return;
+    }
+    if (changed.length === 0) {
+      setRenames(null);
+      return;
+    }
+    setBusy(true);
+    try {
+      // One write per changed row: a failure halfway leaves the earlier renames
+      // saved, so the message names the station that stopped the batch.
+      for (const s of changed) {
+        const d = renames[s.id]!;
+        try {
+          await save({ ...toDraft(s), name: d.name.trim(), short_name: d.short_name.trim() });
+        } catch (e) {
+          throw new Error(`${s.name} did not save${e instanceof Error ? `: ${e.message}` : ""}`);
+        }
+      }
+      await refresh();
+      toast.success(`Renamed ${changed.length} station${changed.length === 1 ? "" : "s"}`);
+      setRenames(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save those names");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onDelete(s: StationRow) {
     if (used.has(s.id)) {
       toast.error(`${s.name} has recorded times — switch it to inactive instead`);
@@ -196,15 +246,29 @@ export function StationsPanel({ eventId }: { eventId: string }) {
         <p className="text-xs text-muted-foreground">
           Tap a station to rename it or change its penalty.
         </p>
-        <Button
-          size="sm"
-          variant={rearranging ? "default" : "ghost"}
-          onClick={() => setRearranging((v) => !v)}
-          className="min-h-9 shrink-0"
-        >
-          <ArrowUpDown className="mr-1 h-3.5 w-3.5" />
-          {rearranging ? "Done" : "Rearrange"}
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            size="sm"
+            variant={renames ? "default" : "ghost"}
+            onClick={() => (renames ? setRenames(null) : startRenaming())}
+            className="min-h-9 shrink-0"
+          >
+            <Pencil className="mr-1 h-3.5 w-3.5" />
+            {renames ? "Cancel" : "Rename all"}
+          </Button>
+          <Button
+            size="sm"
+            variant={rearranging ? "default" : "ghost"}
+            onClick={() => {
+              setRenames(null);
+              setRearranging((v) => !v);
+            }}
+            className="min-h-9 shrink-0"
+          >
+            <ArrowUpDown className="mr-1 h-3.5 w-3.5" />
+            {rearranging ? "Done" : "Rearrange"}
+          </Button>
+        </div>
       </div>
 
       {hasRuns && (
@@ -214,7 +278,54 @@ export function StationsPanel({ eventId }: { eventId: string }) {
         </p>
       )}
 
-      <ul className="space-y-2">
+      {renames && (
+        <div className="mb-3 space-y-2">
+          {stations.map((s, i) => {
+            const d = renames[s.id] ?? { name: s.name, short_name: s.short_name ?? "" };
+            return (
+              <div
+                key={s.id}
+                className="rounded-md border border-primary/20 bg-white/5 p-2 flex items-center gap-2"
+              >
+                <span className="w-5 shrink-0 text-center font-display text-sm font-black text-primary">
+                  {i + 1}
+                </span>
+                <Input
+                  aria-label={`${s.name} name`}
+                  value={d.name}
+                  onChange={(e) =>
+                    setRenames((prev) => ({ ...prev, [s.id]: { ...d, name: e.target.value } }))
+                  }
+                  className="h-9 min-w-0 flex-1"
+                  placeholder="Tire Flip"
+                />
+                <Input
+                  aria-label={`${s.name} short name`}
+                  value={d.short_name}
+                  maxLength={20}
+                  onChange={(e) =>
+                    setRenames((prev) => ({
+                      ...prev,
+                      [s.id]: { ...d, short_name: e.target.value },
+                    }))
+                  }
+                  className="h-9 w-24 shrink-0 uppercase"
+                  placeholder="TIRE"
+                />
+              </div>
+            );
+          })}
+          <p className="text-[10px] text-muted-foreground">
+            Long name shows in the admin lists; the short label is what appears on cards, the ladder
+            and the timing buttons.
+          </p>
+          <Button className="min-h-11 w-full" disabled={busy} onClick={() => void onSaveNames()}>
+            {busy ? "Saving…" : "Save all names"}
+          </Button>
+        </div>
+      )}
+
+      <ul className={"space-y-2 " + (renames ? "hidden" : "")}>
         {stations.map((s, i) => (
           <li
             key={s.id}
