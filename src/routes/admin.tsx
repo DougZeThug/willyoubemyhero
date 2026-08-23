@@ -791,6 +791,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
       <CardGrantPanel eventId={eventId} />
       <StationsPanel eventId={eventId} />
+      <ResultsAdminPanel eventId={eventId} />
 
       <div className="md:col-span-2">
         <AddPlayerPanel eventId={eventId} />
