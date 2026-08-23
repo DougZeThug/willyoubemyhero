@@ -229,7 +229,7 @@ describe("getTradeSpares", () => {
 
   it("returns nothing at all out of season", async () => {
     withDb({ "events.select": { data: null } });
-    expect(await spares(ME, asMe())).toEqual({ participantId: ME, roster: [], secrets: [] });
+    expect(await spares(ME, asMe())).toEqual({ participantId: ME, roster: [], secrets: [], blocked: [] });
   });
 });
 
