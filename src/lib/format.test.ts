@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatTime, hueOf, initialsOf, newClientKey, newSeed, seededRng, shuffle } from "./format";
+import { formatTime, hueOf, initialsOf, newClientKey, newSeed, parseTime, seededRng, shuffle } from "./format";
 
 describe("formatTime", () => {
   it("renders an em dash for a missing time", () => {
@@ -28,6 +28,23 @@ describe("formatTime", () => {
     // A combine run is minutes long; an hour-plus reading means something is
     // wrong and should be visible, not silently reformatted.
     expect(formatTime(3_600_000)).toBe("60:00.00");
+  });
+
+  it("keeps hundredths exact for values a float remainder gets wrong", () => {
+    // 101_320 printed as 1:41.31 before this: 101.32 - 101 is 0.31999999999999
+    // in floating point, so the hundredths floored one low and an admin's saved
+    // correction looked like it had not saved.
+    expect(formatTime(101_320)).toBe("1:41.32");
+    expect(formatTime(1_070)).toBe("01.07");
+    expect(formatTime(15_350)).toBe("15.35");
+    expect(formatTime(78_850)).toBe("1:18.85");
+  });
+
+  it("round-trips through parseTime on the hundredth grid", () => {
+    for (let ms = 0; ms <= 200_000; ms += 1_130) {
+      const grid = Math.round(ms / 10) * 10;
+      expect(parseTime(formatTime(grid))).toBe(grid);
+    }
   });
 
   it("truncates hundredths rather than rounding", () => {
