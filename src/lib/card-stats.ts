@@ -27,7 +27,12 @@ export type LadderRow = {
   deltaMs: number | null;
   /** True when nobody in the field was faster here — the station-king split. */
   best: boolean;
+  /** Place at this station among everyone with a split here, 1-based. Ties share. */
+  place: number | null;
+  /** How many players have a split at this station — the denominator for place. */
+  fieldCount: number;
 };
+
 
 export type CardStats = {
   /** Fastest official run, or null if they have none. */
