@@ -49,7 +49,6 @@ export function parseTime(input: string): number | null {
   return Math.round((minutes * 60 + seconds) * 1000);
 }
 
-
 export function initialsOf(name: string): string {
   // Trim first: splitting " Doug Weidensaul" on whitespace leads with an empty
   // string, which eats one of the two slots and renders a single initial.

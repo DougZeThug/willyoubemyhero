@@ -64,7 +64,6 @@ describe("formatTime", () => {
   });
 });
 
-
 describe("parseTime over a minute", () => {
   it("reads the dotted keypad form as minutes.seconds.fraction", () => {
     // The station boxes open a numeric keypad with no colon key.
@@ -85,7 +84,6 @@ describe("parseTime over a minute", () => {
     expect(parseTime("abc")).toBeNull();
   });
 });
-
 
 describe("initialsOf", () => {
   it("takes the first letter of the first two words", () => {
