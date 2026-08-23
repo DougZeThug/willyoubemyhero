@@ -94,6 +94,14 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
     splits: [{ stationId: STATION_ID, cumulative_time_ms: 20_000 }],
     penalties: [{ stationId: STATION_ID, penalty_ms: 5_000, reason: "Missed cone" }],
   },
+  deleteRunResult: { eventId: EVENT_ID, runId: RUN_ID },
+  createManualRun: {
+    eventId: EVENT_ID,
+    participantId: PARTICIPANT_ID,
+    raw_time_ms: 61_000,
+    splits: [{ stationId: STATION_ID, cumulative_time_ms: 20_000 }],
+    penalties: [],
+  },
 };
 
 describe("every write requires the commissioner", () => {
