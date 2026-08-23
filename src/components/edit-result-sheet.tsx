@@ -279,8 +279,8 @@ export function EditResultSheet({
               )}
             </div>
             <p className="mt-1 text-[10px] text-muted-foreground">
-              Type how long each station took — the running clock beside it updates as you go.
-              Leave a station blank to remove its split.
+              Type how long each station took — the running clock beside it updates as you go. Leave
+              a station blank to remove its split.
             </p>
           </div>
 
