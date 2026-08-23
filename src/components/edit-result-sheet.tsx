@@ -243,34 +243,31 @@ export function EditResultSheet({
 
           <div>
             <div className="mb-1 font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
-              Splits
+              Station times
             </div>
             <div className="space-y-2">
               {stations.map((st) => {
-                const value = splitTimes[st.id] ?? "";
-                const bad = value.trim() !== "" && parseTime(value) == null;
-                const leg = legs.find((l) => l.id === st.id)?.leg ?? null;
+                const value = legTimes[st.id] ?? "";
+                const parsed = value.trim() === "" ? null : parseTime(value);
+                const bad = value.trim() !== "" && (parsed == null || parsed < 0);
+                const at = cumulatives.find((c) => c.id === st.id)?.at ?? null;
                 return (
                   <div key={st.id} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-xs uppercase">
                       {st.short_name ?? st.name}
                     </span>
-                    {leg != null && (
-                      <span
-                        className={
-                          "shrink-0 text-[10px] tabular " +
-                          (leg < 0 ? "text-destructive" : "text-muted-foreground")
-                        }
-                      >
-                        {leg < 0 ? "out of order" : `+${formatTime(leg)}`}
+                    {at != null && (
+                      <span className="shrink-0 text-[10px] tabular text-muted-foreground">
+                        at {formatTime(at)}
                       </span>
                     )}
                     <Input
-                      aria-label={`${st.name} split`}
+                      aria-label={`${st.name} time`}
                       inputMode="decimal"
                       value={value}
-                      onFocus={() => (baseline.current = { stationId: st.id, splits: splitTimes })}
-                      onChange={(e) => setSplitAt(st.id, e.target.value)}
+                      onChange={(e) =>
+                        setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }))
+                      }
                       placeholder="—"
                       className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
                     />
@@ -282,6 +279,7 @@ export function EditResultSheet({
               )}
             </div>
             <p className="mt-1 text-[10px] text-muted-foreground">
+              Type how long each station took — the running clock beside it updates as you go.
               Leave a station blank to remove its split.
             </p>
           </div>
