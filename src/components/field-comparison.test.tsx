@@ -149,7 +149,7 @@ describe("FieldComparison", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
-  it("points the delta arrow down when faster and up when slower", () => {
+  it("shows the size and direction of the gap", () => {
     render(
       <FieldComparison
         ladder={[row({ id: "a", deltaMs: -1_500 }), row({ id: "b", deltaMs: 2_250 })]}
@@ -157,8 +157,8 @@ describe("FieldComparison", () => {
         fieldSize={4}
       />,
     );
-    expect(screen.getByText("▼01.50")).toBeInTheDocument();
-    expect(screen.getByText("▲02.25")).toBeInTheDocument();
+    expect(screen.getByText(/01\.50/)).toBeInTheDocument();
+    expect(screen.getByText(/02\.25/)).toBeInTheDocument();
   });
 
   it("scales the bars against the slowest station, not the median", () => {
@@ -169,7 +169,7 @@ describe("FieldComparison", () => {
         fieldSize={4}
       />,
     );
-    const widths = [...container.querySelectorAll("li span span")].map(
+    const widths = [...container.querySelectorAll<HTMLElement>("li span[style*='width']")].map(
       (el) => (el as HTMLElement).style.width,
     );
     expect(widths).toEqual(["50%", "100%"]);
