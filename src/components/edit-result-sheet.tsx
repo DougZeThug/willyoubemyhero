@@ -290,9 +290,7 @@ export function EditResultSheet({
                       aria-label={`${st.name} split`}
                       inputMode="decimal"
                       value={value}
-                      onFocus={() =>
-                        (baseline.current = { stationId: st.id, splits: splitTimes })
-                      }
+                      onFocus={() => (baseline.current = { stationId: st.id, splits: splitTimes })}
                       onChange={(e) => setSplitAt(st.id, e.target.value)}
                       placeholder="—"
                       className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
