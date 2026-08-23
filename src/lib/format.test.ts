@@ -61,7 +61,9 @@ describe("formatTime", () => {
     // faster than the recorded one.
     expect(formatTime(1_239)).toBe("01.23");
     expect(formatTime(1_999)).toBe("01.99");
+  });
 });
+
 
 describe("parseTime over a minute", () => {
   it("reads the dotted keypad form as minutes.seconds.fraction", () => {
