@@ -156,7 +156,7 @@ export function EditResultSheet({
     if (run && !legsTouched) return;
     const next = timeField(splitDerivedMs);
     setRawTime((prev) => (prev === next ? prev : next));
-  }, [open, courseTouched, splitDerivedMs]);
+  }, [open, courseTouched, splitDerivedMs, run, legsTouched]);
 
   const rawMs = parseTime(rawTime);
   const penaltyMs = penalties.reduce((sum, p) => sum + (parseTime(p.ms) ?? 0), 0);
