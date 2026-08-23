@@ -232,6 +232,54 @@ describe("cardStats", () => {
       expect(cardStats(bundle, b.participant_id).ladder[0].best).toBe(true);
     });
 
+    it("places each split against everyone who ran that station", () => {
+      const station = makeStation();
+      const fast = makeParticipant();
+      const mid = makeParticipant();
+      const slow = makeParticipant();
+      const runs = [fast, mid, slow].map((p, i) =>
+        makeRun({ participant_id: p.participant_id, official_time_ms: (i + 1) * 10_000 }),
+      );
+      const bundle = makeBundle({
+        stations: [station],
+        runs,
+        splits: [
+          makeSplit({ run_id: runs[0].id, station_id: station.id, segment_time_ms: 1_000 }),
+          makeSplit({ run_id: runs[1].id, station_id: station.id, segment_time_ms: 2_000 }),
+          makeSplit({ run_id: runs[2].id, station_id: station.id, segment_time_ms: 3_000 }),
+        ],
+      });
+      expect(cardStats(bundle, fast.participant_id).ladder[0].place).toBe(1);
+      expect(cardStats(bundle, mid.participant_id).ladder[0].place).toBe(2);
+      expect(cardStats(bundle, slow.participant_id).ladder[0].place).toBe(3);
+      expect(cardStats(bundle, fast.participant_id).ladder[0].fieldCount).toBe(3);
+    });
+
+    it("shares a place on a dead heat", () => {
+      const station = makeStation();
+      const a = makeParticipant();
+      const b = makeParticipant();
+      const runs = [a, b].map((p, i) =>
+        makeRun({ participant_id: p.participant_id, official_time_ms: (i + 1) * 10_000 }),
+      );
+      const bundle = makeBundle({
+        stations: [station],
+        runs,
+        splits: runs.map((r) =>
+          makeSplit({ run_id: r.id, station_id: station.id, segment_time_ms: 5_000 }),
+        ),
+      });
+      expect(cardStats(bundle, a.participant_id).ladder[0].place).toBe(1);
+      expect(cardStats(bundle, b.participant_id).ladder[0].place).toBe(1);
+    });
+
+    it("leaves the place null when the participant has no split there", () => {
+      const { bundle, dave } = makeFieldBundle();
+      expect(cardStats(bundle, dave.participant_id).ladder[0].place).toBeNull();
+    });
+
+
+
     it("does not let a participant's re-run skew the field median", () => {
       // One participant recording a second, much slower split at a station
       // would otherwise drag the median up and flatter everybody.
