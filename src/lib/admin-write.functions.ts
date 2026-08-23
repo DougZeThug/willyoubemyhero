@@ -94,13 +94,40 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // A roster row is the parent of every copy of that person's card, with
+    // ON DELETE CASCADE all the way down — deleting one wipes the card out of
+    // everybody's collection at once, which is exactly how two players' cards
+    // disappeared from the league. Once anybody has packed the card, the row is
+    // no longer the admin's to delete: it is retired instead.
+    const [{ count: copies }, { count: pulls }] = await Promise.all([
+      supabaseAdmin
+        .from("card_copies")
+        .select("id", { count: "exact", head: true })
+        .eq("event_participant_id", data.eventParticipantId),
+      supabaseAdmin
+        .from("card_pulls")
+        .select("participant_id", { count: "exact", head: true })
+        .eq("event_participant_id", data.eventParticipantId),
+    ]);
+
+    if ((copies ?? 0) > 0 || (pulls ?? 0) > 0) {
+      const { error: retireError } = await supabaseAdmin
+        .from("event_participants")
+        .update({ participation_status: "scratched" })
+        .eq("id", data.eventParticipantId);
+      if (retireError) throw retireError;
+      return { ok: true, retained: true } as const;
+    }
+
     const { error } = await supabaseAdmin
       .from("event_participants")
       .delete()
       .eq("id", data.eventParticipantId);
     if (error) throw error;
-    return { ok: true };
+    return { ok: true, retained: false } as const;
   });
+
 
 export const setParticipantStatus = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
