@@ -74,9 +74,10 @@ export function StationsPanel({ eventId }: { eventId: string }) {
   const [rearranging, setRearranging] = useState(false);
   // Bulk rename keeps its own draft map so a half-typed batch is never written
   // until the admin taps save — the per-station sheet stays for everything else.
-  const [renames, setRenames] = useState<Record<string, { name: string; short_name: string }> | null>(
-    null,
-  );
+  const [renames, setRenames] = useState<Record<
+    string,
+    { name: string; short_name: string }
+  > | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -190,9 +191,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
         try {
           await save({ ...toDraft(s), name: d.name.trim(), short_name: d.short_name.trim() });
         } catch (e) {
-          throw new Error(
-            `${s.name} did not save${e instanceof Error ? `: ${e.message}` : ""}`,
-          );
+          throw new Error(`${s.name} did not save${e instanceof Error ? `: ${e.message}` : ""}`);
         }
       }
       await refresh();
@@ -317,8 +316,8 @@ export function StationsPanel({ eventId }: { eventId: string }) {
             );
           })}
           <p className="text-[10px] text-muted-foreground">
-            Long name shows in the admin lists; the short label is what appears on cards, the
-            ladder and the timing buttons.
+            Long name shows in the admin lists; the short label is what appears on cards, the ladder
+            and the timing buttons.
           </p>
           <Button className="min-h-11 w-full" disabled={busy} onClick={() => void onSaveNames()}>
             {busy ? "Saving…" : "Save all names"}

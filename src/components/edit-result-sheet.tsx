@@ -62,6 +62,9 @@ export function EditResultSheet({
   const creating = !run;
 
   const [rawTime, setRawTime] = useState("");
+  // Once the admin types a course time by hand it wins: auto-fill from the
+  // splits would otherwise fight them mid-correction.
+  const [courseTouched, setCourseTouched] = useState(false);
   const [splitTimes, setSplitTimes] = useState<Record<string, string>>({});
   const [penalties, setPenalties] = useState<PenaltyDraft[]>([]);
   const [saving, setSaving] = useState(false);
@@ -72,6 +75,7 @@ export function EditResultSheet({
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setCourseTouched(false);
     if (!run) {
       setRawTime("");
       setSplitTimes({});
@@ -98,6 +102,32 @@ export function EditResultSheet({
     // Only re-seed on open / run change: retyping mid-edit would fight the user.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, run?.id]);
+
+  // Splits are stored cumulatively, so the legs added together are just the
+  // last cumulative split — that is the course time the splits imply.
+  const legs = useMemo(() => {
+    let prev = 0;
+    return stations.map((st) => {
+      const value = splitTimes[st.id] ?? "";
+      const ms = value.trim() === "" ? null : parseTime(value);
+      if (ms == null) return { id: st.id, ms: null as number | null, leg: null as number | null };
+      const leg = ms - prev;
+      prev = ms;
+      return { id: st.id, ms, leg };
+    });
+  }, [stations, splitTimes]);
+
+  const splitDerivedMs = useMemo(() => {
+    const times = legs.map((l) => l.ms).filter((ms): ms is number => ms != null);
+    return times.length ? Math.max(...times) : null;
+  }, [legs]);
+
+  // Auto-fill the course time from the splits until the admin overrides it.
+  useEffect(() => {
+    if (!open || courseTouched || splitDerivedMs == null) return;
+    const next = timeField(splitDerivedMs);
+    setRawTime((prev) => (prev === next ? prev : next));
+  }, [open, courseTouched, splitDerivedMs]);
 
   const rawMs = parseTime(rawTime);
   const penaltyMs = penalties.reduce((sum, p) => sum + (parseTime(p.ms) ?? 0), 0);
@@ -185,10 +215,19 @@ export function EditResultSheet({
               id="raw-time"
               inputMode="decimal"
               value={rawTime}
-              onChange={(e) => setRawTime(e.target.value)}
+              onChange={(e) => {
+                setCourseTouched(true);
+                setRawTime(e.target.value);
+              }}
               className={"tabular " + (rawMs == null ? "border-destructive" : "")}
               placeholder="1:23.45"
             />
+            {splitDerivedMs != null && rawMs != null && rawMs !== splitDerivedMs && (
+              <p className="mt-1 text-[10px] text-warn">
+                From splits: <span className="tabular">{formatTime(splitDerivedMs)}</span> — your
+                typed time is being used instead.
+              </p>
+            )}
           </div>
 
           <div>
@@ -199,11 +238,22 @@ export function EditResultSheet({
               {stations.map((st) => {
                 const value = splitTimes[st.id] ?? "";
                 const bad = value.trim() !== "" && parseTime(value) == null;
+                const leg = legs.find((l) => l.id === st.id)?.leg ?? null;
                 return (
                   <div key={st.id} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-xs uppercase">
                       {st.short_name ?? st.name}
                     </span>
+                    {leg != null && (
+                      <span
+                        className={
+                          "shrink-0 text-[10px] tabular " +
+                          (leg < 0 ? "text-destructive" : "text-muted-foreground")
+                        }
+                      >
+                        {leg < 0 ? "out of order" : `+${formatTime(leg)}`}
+                      </span>
+                    )}
                     <Input
                       aria-label={`${st.name} split`}
                       inputMode="decimal"
