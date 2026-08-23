@@ -13,6 +13,7 @@ import {
   type SizedPhotoUrls,
 } from "./media";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
 
