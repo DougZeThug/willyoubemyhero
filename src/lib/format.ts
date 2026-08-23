@@ -21,20 +21,34 @@ export function formatTime(ms: number | null | undefined): string {
  * The inverse of `formatTime`, for the commissioner typing a correction.
  *
  * Accepts what people actually type on a phone: `1:23.45`, `83.45`, `83`,
- * `1:23`. Returns null for anything it cannot read, so the caller can keep the
- * field red rather than silently writing a zero into a saved result.
+ * `1:23`. The station boxes open a numeric keypad with no `:` key, so the
+ * dotted `1.23.45` form is accepted as minute.second.fraction too, and a
+ * colon-less seconds value may run past 99 (`138.25` is 2:18.25). Returns null
+ * for anything it cannot read, so the caller can keep the field red rather
+ * than silently writing a zero into a saved result.
  */
 export function parseTime(input: string): number | null {
   const s = input.trim();
   if (!s) return null;
-  const m = /^(?:(\d+):)?(\d{1,2}(?:\.\d{1,3})?)$/.exec(s);
+  // Dotted minutes form first: two dots can only mean m.ss.hh.
+  const dotted = /^(\d+)\.(\d{1,2})\.(\d{1,3})$/.exec(s);
+  if (dotted) {
+    const minutes = Number(dotted[1]);
+    const seconds = Number(`${dotted[2]}.${dotted[3]}`);
+    if (seconds >= 60) return null;
+    return Math.round((minutes * 60 + seconds) * 1000);
+  }
+  const m = /^(?:(\d+):)?(\d{1,6}(?:\.\d{1,3})?)$/.exec(s);
   if (!m) return null;
   const minutes = m[1] ? Number(m[1]) : 0;
   const seconds = Number(m[2]);
   if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+  // Only an explicit minutes part caps the seconds; a bare value like 138.25 is
+  // deliberately allowed to run over a minute.
   if (m[1] && seconds >= 60) return null;
   return Math.round((minutes * 60 + seconds) * 1000);
 }
+
 
 export function initialsOf(name: string): string {
   // Trim first: splitting " Doug Weidensaul" on whitespace leads with an empty
