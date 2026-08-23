@@ -67,7 +67,10 @@ export function EditResultSheet({
   // Once the admin types a course time by hand it wins: auto-fill from the
   // splits would otherwise fight them mid-correction.
   const [courseTouched, setCourseTouched] = useState(false);
-  const [splitTimes, setSplitTimes] = useState<Record<string, string>>({});
+  // Per-station times, not cumulative clock times: an admin thinks "cornhole
+  // took 43 seconds", not "the clock read 58.57 when he left it". They are
+  // converted back to cumulative splits on save.
+  const [legTimes, setLegTimes] = useState<Record<string, string>>({});
   const [penalties, setPenalties] = useState<PenaltyDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,18 +83,28 @@ export function EditResultSheet({
     setCourseTouched(false);
     if (!run) {
       setRawTime("");
-      setSplitTimes({});
+      setLegTimes({});
       setPenalties([]);
       return;
     }
     setRawTime(timeField(run.raw_time_ms));
-    const splits: Record<string, string> = {};
+    const cumulative: Record<string, number> = {};
     for (const s of bundle?.splits ?? []) {
-      if (s.run_id === run.id && s.station_id) {
-        splits[s.station_id] = timeField(s.cumulative_time_ms);
+      if (s.run_id === run.id && s.station_id && s.cumulative_time_ms != null) {
+        cumulative[s.station_id] = s.cumulative_time_ms;
       }
     }
-    setSplitTimes(splits);
+    // Stored splits are cumulative; show the gap from the previous recorded
+    // station so each box reads as that station's own time.
+    const seeded: Record<string, string> = {};
+    let prev = 0;
+    for (const st of stations) {
+      const ms = cumulative[st.id];
+      if (ms == null) continue;
+      seeded[st.id] = timeField(Math.max(0, ms - prev));
+      prev = ms;
+    }
+    setLegTimes(seeded);
     setPenalties(
       (bundle?.penalties ?? [])
         .filter((p) => p.run_id === run.id)
@@ -105,24 +118,23 @@ export function EditResultSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, run?.id]);
 
-  // Splits are stored cumulatively, so the legs added together are just the
-  // last cumulative split — that is the course time the splits imply.
-  const legs = useMemo(() => {
-    let prev = 0;
+  // Run the per-station times forward into the cumulative clock the database
+  // stores and the card back prints. Blank stations contribute nothing.
+  const cumulatives = useMemo(() => {
+    let total = 0;
     return stations.map((st) => {
-      const value = splitTimes[st.id] ?? "";
-      const ms = value.trim() === "" ? null : parseTime(value);
-      if (ms == null) return { id: st.id, ms: null as number | null, leg: null as number | null };
-      const leg = ms - prev;
-      prev = ms;
-      return { id: st.id, ms, leg };
+      const value = legTimes[st.id] ?? "";
+      const leg = value.trim() === "" ? null : parseTime(value);
+      if (leg == null) return { id: st.id, leg: null as number | null, at: null as number | null };
+      total += leg;
+      return { id: st.id, leg, at: total };
     });
-  }, [stations, splitTimes]);
+  }, [stations, legTimes]);
 
   const splitDerivedMs = useMemo(() => {
-    const times = legs.map((l) => l.ms).filter((ms): ms is number => ms != null);
-    return times.length ? Math.max(...times) : null;
-  }, [legs]);
+    const last = [...cumulatives].reverse().find((c) => c.at != null);
+    return last?.at ?? null;
+  }, [cumulatives]);
 
   // Auto-fill the course time from the splits until the admin overrides it.
   useEffect(() => {
@@ -131,49 +143,16 @@ export function EditResultSheet({
     setRawTime((prev) => (prev === next ? prev : next));
   }, [open, courseTouched, splitDerivedMs]);
 
-  // Snapshot of the splits when the admin entered a field. Every keystroke is
-  // measured against this, not against the previous keystroke — otherwise
-  // typing "58.57" over "43.21" would shift the later stations once per
-  // character and send them minutes into the future.
-  const baseline = useRef<{ stationId: string; splits: Record<string, string> } | null>(null);
-
-  // Splits are cumulative, so correcting one station also moves every station
-  // after it: their legs are still right, they just start later. Without this
-  // the final split — and so the official time — never budges after a fix.
-  function setSplitAt(stationId: string, value: string) {
-    const base = baseline.current?.stationId === stationId ? baseline.current.splits : null;
-    setSplitTimes((prev) => {
-      const source = base ?? prev;
-      const next = { ...prev, [stationId]: value };
-      const before = parseTime(source[stationId] ?? "");
-      const after = parseTime(value);
-      if (before == null || after == null) return next;
-      const delta = after - before;
-      const idx = stations.findIndex((st) => st.id === stationId);
-      if (idx < 0) return next;
-      for (const st of stations.slice(idx + 1)) {
-        const cur = source[st.id];
-        const ms = cur == null || cur.trim() === "" ? null : parseTime(cur);
-        if (ms == null) continue;
-        next[st.id] = timeField(Math.max(0, ms + delta));
-      }
-      return next;
-    });
-  }
-
   const rawMs = parseTime(rawTime);
   const penaltyMs = penalties.reduce((sum, p) => sum + (parseTime(p.ms) ?? 0), 0);
-  const badSplit = Object.values(splitTimes).some((v) => v.trim() !== "" && parseTime(v) == null);
+  const badSplit = Object.values(legTimes).some((v) => v.trim() !== "" && parseTime(v) == null);
   const badPenalty = penalties.some((p) => parseTime(p.ms) == null);
   const valid = rawMs != null && !badSplit && !badPenalty;
 
   const payload = () => ({
-    splits: Object.entries(splitTimes)
-      .map(([stationId, value]) => ({
-        stationId,
-        cumulative_time_ms: parseTime(value) ?? -1,
-      }))
-      .filter((s) => s.cumulative_time_ms >= 0),
+    splits: cumulatives
+      .filter((c): c is { id: string; leg: number; at: number } => c.at != null)
+      .map((c) => ({ stationId: c.id, cumulative_time_ms: c.at })),
     penalties: penalties.map((p) => ({
       stationId: p.stationId || null,
       penalty_ms: parseTime(p.ms) ?? 0,
@@ -264,34 +243,31 @@ export function EditResultSheet({
 
           <div>
             <div className="mb-1 font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
-              Splits
+              Station times
             </div>
             <div className="space-y-2">
               {stations.map((st) => {
-                const value = splitTimes[st.id] ?? "";
-                const bad = value.trim() !== "" && parseTime(value) == null;
-                const leg = legs.find((l) => l.id === st.id)?.leg ?? null;
+                const value = legTimes[st.id] ?? "";
+                const parsed = value.trim() === "" ? null : parseTime(value);
+                const bad = value.trim() !== "" && (parsed == null || parsed < 0);
+                const at = cumulatives.find((c) => c.id === st.id)?.at ?? null;
                 return (
                   <div key={st.id} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-xs uppercase">
                       {st.short_name ?? st.name}
                     </span>
-                    {leg != null && (
-                      <span
-                        className={
-                          "shrink-0 text-[10px] tabular " +
-                          (leg < 0 ? "text-destructive" : "text-muted-foreground")
-                        }
-                      >
-                        {leg < 0 ? "out of order" : `+${formatTime(leg)}`}
+                    {at != null && (
+                      <span className="shrink-0 text-[10px] tabular text-muted-foreground">
+                        at {formatTime(at)}
                       </span>
                     )}
                     <Input
-                      aria-label={`${st.name} split`}
+                      aria-label={`${st.name} time`}
                       inputMode="decimal"
                       value={value}
-                      onFocus={() => (baseline.current = { stationId: st.id, splits: splitTimes })}
-                      onChange={(e) => setSplitAt(st.id, e.target.value)}
+                      onChange={(e) =>
+                        setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }))
+                      }
                       placeholder="—"
                       className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
                     />
@@ -303,7 +279,8 @@ export function EditResultSheet({
               )}
             </div>
             <p className="mt-1 text-[10px] text-muted-foreground">
-              Leave a station blank to remove its split.
+              Type how long each station took — the running clock beside it updates as you go. Leave
+              a station blank to remove its split.
             </p>
           </div>
 
