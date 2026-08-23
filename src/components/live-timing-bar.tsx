@@ -8,15 +8,18 @@
  *
  * Renders nothing at all without a valid admin session for the active event.
  */
-import { Flag, Pause, Play, Radio, Redo2, RotateCcw, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Flag, Pause, Pencil, Play, Radio, Redo2, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EditResultSheet } from "@/components/edit-result-sheet";
 import { formatTime } from "@/lib/format";
 import { currentAthlete } from "@/lib/current-athlete";
 import type { RunConsole } from "@/hooks/use-run-console";
 
 export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
   const {
+    event,
     run,
     participants,
     stations,
@@ -39,6 +42,10 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     resetAthlete,
     setOnClock,
   } = rc;
+
+  const eventId = event?.id ?? null;
+  const [editing, setEditing] = useState<string | null>(null);
+
 
   const queued = participants.filter(
     (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
