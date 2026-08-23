@@ -430,6 +430,177 @@ export const deleteRun = createServerFn({ method: "POST" })
   });
 
 /**
+ * Delete one result and put the athlete back where they belong.
+ *
+ * `deleteRun` above drops the row and nothing else, which leaves the
+ * participant sitting in `finished` with no time — invisible on the ladder and
+ * missing from the queue. This is the version the admin UI uses: it removes the
+ * run and, when it was their last one, returns them to `waiting` so they can be
+ * timed again.
+ */
+export const deleteRunResult = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Scope the lookup to the event: an admin token is only good for one.
+    const { data: run, error: runError } = await supabaseAdmin
+      .from("runs")
+      .select("id, participant_id")
+      .eq("id", data.runId)
+      .eq("event_id", data.eventId)
+      .maybeSingle();
+    if (runError) throw runError;
+    if (!run) throw new Error("That run is not part of this event.");
+
+    await supabaseAdmin.from("penalties").delete().eq("run_id", run.id);
+    await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
+    const { error } = await supabaseAdmin.from("runs").delete().eq("id", run.id);
+    if (error) throw error;
+
+    const { count } = await supabaseAdmin
+      .from("runs")
+      .select("*", { count: "exact", head: true })
+      .eq("event_id", data.eventId)
+      .eq("participant_id", run.participant_id);
+    if (!count) {
+      const { error: statusError } = await supabaseAdmin
+        .from("event_participants")
+        .update(withOnClock({ participation_status: "waiting" }, null))
+        .eq("event_id", data.eventId)
+        .eq("participant_id", run.participant_id)
+        .neq("participation_status", "scratched");
+      if (statusError) throw statusError;
+    }
+
+    await supabaseAdmin.from("audit_logs").insert({
+      event_id: data.eventId,
+      entity_type: "runs",
+      entity_id: run.id,
+      action: "delete_run_result",
+      performed_by: "admin",
+    });
+
+    return { ok: true, remainingRuns: count ?? 0 };
+  });
+
+/**
+ * Type a result in for somebody the clock never caught.
+ *
+ * Phones die, saves are missed, and one year an athlete ran while the timer was
+ * on the wrong screen. The entered course time is anchored to "just now" —
+ * `started_at` is back-dated by that time — so the run sorts sensibly against
+ * the timed ones without pretending to know when it actually happened.
+ */
+export const createManualRun = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: zuuid(),
+        participantId: zuuid(),
+        raw_time_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(24 * 60 * 60 * 1000),
+        splits: z
+          .array(z.object({ stationId: zuuid(), cumulative_time_ms: z.number().int().min(0) }))
+          .max(50),
+        penalties: z
+          .array(
+            z.object({
+              stationId: zuuid().nullable().optional(),
+              penalty_ms: z.number().int().min(0),
+              reason: z.string().max(120).nullable().optional(),
+            }),
+          )
+          .max(50),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { count } = await supabaseAdmin
+      .from("runs")
+      .select("*", { count: "exact", head: true })
+      .eq("event_id", data.eventId)
+      .eq("participant_id", data.participantId);
+
+    const penaltyTotal = data.penalties.reduce((sum, p) => sum + p.penalty_ms, 0);
+    const finishedAt = new Date();
+    const startedAt = new Date(finishedAt.getTime() - data.raw_time_ms);
+
+    const { data: run, error } = await supabaseAdmin
+      .from("runs")
+      .insert({
+        event_id: data.eventId,
+        participant_id: data.participantId,
+        attempt_number: (count ?? 0) + 1,
+        started_at: startedAt.toISOString(),
+        finished_at: finishedAt.toISOString(),
+        raw_time_ms: data.raw_time_ms,
+        paused_duration_ms: 0,
+        penalty_ms: penaltyTotal,
+        status: "official",
+        is_official: true,
+        client_key: `manual:${crypto.randomUUID()}`,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    const ordered = [...data.splits].sort((a, b) => a.cumulative_time_ms - b.cumulative_time_ms);
+    if (ordered.length) {
+      const { error: splitsError } = await supabaseAdmin.from("splits").insert(
+        ordered.map((s, i) => ({
+          run_id: run.id,
+          station_id: s.stationId,
+          cumulative_time_ms: s.cumulative_time_ms,
+          segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
+          recorded_at: new Date(startedAt.getTime() + s.cumulative_time_ms).toISOString(),
+          entry_method: "admin_manual",
+          client_key: `manual:${run.id}:${s.stationId}`,
+        })),
+      );
+      if (splitsError) throw splitsError;
+    }
+    if (data.penalties.length) {
+      const { error: penaltiesError } = await supabaseAdmin.from("penalties").insert(
+        data.penalties.map((p, i) => ({
+          run_id: run.id,
+          station_id: p.stationId ?? null,
+          penalty_ms: p.penalty_ms,
+          reason: p.reason ?? null,
+          created_by: "admin",
+          client_key: `manual:${run.id}:${i}`,
+        })),
+      );
+      if (penaltiesError) throw penaltiesError;
+    }
+
+    const { error: statusError } = await supabaseAdmin
+      .from("event_participants")
+      .update(withOnClock({ participation_status: "finished" }, null))
+      .eq("event_id", data.eventId)
+      .eq("participant_id", data.participantId);
+    if (statusError) throw statusError;
+
+    await supabaseAdmin.from("audit_logs").insert({
+      event_id: data.eventId,
+      entity_type: "runs",
+      entity_id: run.id,
+      action: "manual_run_entry",
+      new_value: { raw_time_ms: data.raw_time_ms, penalty_ms: penaltyTotal },
+      performed_by: "admin",
+    });
+
+    return { runId: run.id };
+  });
+
+/**
  * Correct a result that is already in the books.
  *
  * A stopwatch tapped late, a split missed at the sled, a penalty argued down
