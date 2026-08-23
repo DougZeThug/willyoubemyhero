@@ -279,7 +279,54 @@ export function StationsPanel({ eventId }: { eventId: string }) {
         </p>
       )}
 
-      <ul className="space-y-2">
+      {renames && (
+        <div className="mb-3 space-y-2">
+          {stations.map((s, i) => {
+            const d = renames[s.id] ?? { name: s.name, short_name: s.short_name ?? "" };
+            return (
+              <div
+                key={s.id}
+                className="rounded-md border border-primary/20 bg-white/5 p-2 flex items-center gap-2"
+              >
+                <span className="w-5 shrink-0 text-center font-display text-sm font-black text-primary">
+                  {i + 1}
+                </span>
+                <Input
+                  aria-label={`${s.name} name`}
+                  value={d.name}
+                  onChange={(e) =>
+                    setRenames((prev) => ({ ...prev, [s.id]: { ...d, name: e.target.value } }))
+                  }
+                  className="h-9 min-w-0 flex-1"
+                  placeholder="Tire Flip"
+                />
+                <Input
+                  aria-label={`${s.name} short name`}
+                  value={d.short_name}
+                  maxLength={20}
+                  onChange={(e) =>
+                    setRenames((prev) => ({
+                      ...prev,
+                      [s.id]: { ...d, short_name: e.target.value },
+                    }))
+                  }
+                  className="h-9 w-24 shrink-0 uppercase"
+                  placeholder="TIRE"
+                />
+              </div>
+            );
+          })}
+          <p className="text-[10px] text-muted-foreground">
+            Long name shows in the admin lists; the short label is what appears on cards, the
+            ladder and the timing buttons.
+          </p>
+          <Button className="min-h-11 w-full" disabled={busy} onClick={() => void onSaveNames()}>
+            {busy ? "Saving…" : "Save all names"}
+          </Button>
+        </div>
+      )}
+
+      <ul className={"space-y-2 " + (renames ? "hidden" : "")}>
         {stations.map((s, i) => (
           <li
             key={s.id}
