@@ -523,6 +523,65 @@ export type Database = {
           },
         ]
       }
+      collection_trophies: {
+        Row: {
+          collection_id: string
+          completed_on: string
+          created_at: string
+          event_id: string | null
+          participant_id: string
+          size_at_completion: number
+          via: string
+        }
+        Insert: {
+          collection_id: string
+          completed_on: string
+          created_at?: string
+          event_id?: string | null
+          participant_id: string
+          size_at_completion: number
+          via: string
+        }
+        Update: {
+          collection_id?: string
+          completed_on?: string
+          created_at?: string
+          event_id?: string | null
+          participant_id?: string
+          size_at_completion?: number
+          via?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collection_trophies_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "secret_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_trophies_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_trophies_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_trophies_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       draft_selections: {
         Row: {
           created_by: string | null
@@ -1718,6 +1777,16 @@ export type Database = {
         }
         Returns: number
       }
+      award_collection_trophy: {
+        Args: {
+          _collection: string
+          _event_id: string
+          _participant_id: string
+          _via: string
+        }
+        Returns: Json
+      }
+      backfill_collection_trophies: { Args: never; Returns: number }
       card_edition_rank: { Args: { _edition: string }; Returns: number }
       cast_award_vote: {
         Args: {
