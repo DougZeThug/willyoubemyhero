@@ -67,6 +67,51 @@ describe("verifyEventPin", () => {
     });
   });
 
+  it("locks the gate after too many attempts, before touching the secret", async () => {
+    // Even the right PIN bounces during a lockout, and the secrets row is never
+    // read — the limiter is the outermost gate, not a decoration on bad_pin.
+    withDb({
+      "rpc.note_auth_attempt": { data: false },
+      "event_secrets.select": secretsRow(),
+    });
+    expect(await verify({ eventId: EVENT_ID, pin: PIN })).toEqual({
+      ok: false,
+      reason: "too_many_attempts",
+    });
+    expect(mock.callsFor("event_secrets", "select")).toHaveLength(0);
+  });
+
+  it("counts the attempt against the event, inside the window", async () => {
+    withDb({ "event_secrets.select": secretsRow() });
+    await verify({ eventId: EVENT_ID, pin: "0000" });
+    const note = mock.client.rpc.mock.calls.find((c) => c[0] === "note_auth_attempt");
+    expect(note?.[1]).toMatchObject({ _kind: "pin", _key: EVENT_ID });
+  });
+
+  it("fails open when the limiter itself is down", async () => {
+    // A party locked out of its own console by a limiter hiccup is a worse
+    // evening than ten extra guesses.
+    withDb({
+      "rpc.note_auth_attempt": { data: null, error: { message: "boom" } },
+      "event_secrets.select": secretsRow(),
+    });
+    const res = (await verify({ eventId: EVENT_ID, pin: PIN })) as { ok: boolean };
+    expect(res.ok).toBe(true);
+  });
+
+  it("a right PIN clears the counter", async () => {
+    withDb({ "event_secrets.select": secretsRow() });
+    await verify({ eventId: EVENT_ID, pin: PIN });
+    const clear = mock.client.rpc.mock.calls.find((c) => c[0] === "clear_auth_attempts");
+    expect(clear?.[1]).toMatchObject({ _kind: "pin", _key: EVENT_ID });
+  });
+
+  it("a wrong PIN leaves the counter standing", async () => {
+    withDb({ "event_secrets.select": secretsRow() });
+    await verify({ eventId: EVENT_ID, pin: "0000" });
+    expect(mock.client.rpc.mock.calls.some((c) => c[0] === "clear_auth_attempts")).toBe(false);
+  });
+
   it("rejects when the secrets lookup errors", async () => {
     withDb({ "event_secrets.select": { data: null, error: { message: "boom" } } });
     expect(await verify({ eventId: EVENT_ID, pin: PIN })).toEqual({

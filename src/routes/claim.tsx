@@ -62,7 +62,13 @@ function ClaimPage() {
       const held = await snapshotLocalCollection();
       const res = await claimFn({ data: { participantId: selected, code: code.trim() } });
       if (!res.ok) {
-        toast.error("That code doesn't match");
+        // Distinguished from a wrong code: during a lockout the RIGHT code
+        // fails too, and "doesn't match" would read as a misprinted card.
+        toast.error(
+          res.reason === "too_many_attempts"
+            ? "Too many tries for this player — wait a few minutes."
+            : "That code doesn't match",
+        );
         setCode("");
         return;
       }
