@@ -153,8 +153,15 @@ describe("record_card_pulls", () => {
     await record(IDS.alice, [ids[0]]);
     await rewindDay(2);
     await record(IDS.alice, [ids[0]]);
+    // Both sides of the comparison in the league's timezone. The RPCs run with
+    // SET timezone = 'America/New_York', so *their* current_date is the league
+    // day — but this session is on the cluster default (UTC in CI), where a
+    // bare current_date is tomorrow's date every night between midnight UTC
+    // and midnight New York. That mismatch failed this test nightly in that
+    // window, invisibly for as long as the db job was advisory.
     const [row] = await sql<{ today: boolean }>(
-      `SELECT (last_pulled_at AT TIME ZONE 'America/New_York')::date = current_date AS today
+      `SELECT (last_pulled_at AT TIME ZONE 'America/New_York')::date
+            = (now() AT TIME ZONE 'America/New_York')::date AS today
          FROM public.card_pulls WHERE event_participant_id = $1`,
       [ids[0]],
     );
