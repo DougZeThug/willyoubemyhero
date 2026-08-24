@@ -11,6 +11,7 @@ import { cue, playReveal, playSecretRiser } from "@/lib/card-sfx";
 import { SECRET_CHIME, SECRET_DUPE_CHIME, secretFoil } from "@/lib/secret-cards";
 import type { SecretCardView } from "@/lib/secret-cards";
 import { secretTierFloorLabel, secretTierStyle, type SecretTier } from "@/lib/secret-rarity";
+import type { ImageUrlSet } from "@/lib/media";
 
 /**
  * The milestone payoff: a flame that counts the days up, then the card it bought.
