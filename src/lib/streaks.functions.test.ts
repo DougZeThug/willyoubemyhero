@@ -67,7 +67,7 @@ describe("getStreakStatus", () => {
     withDb({
       "pack_opens.select": { data: daysEndingToday(3) },
       "streak_milestone_claims.select": { data: [] },
-      "account_identities.select": { data: null },
+      "account_identities.select": { data: [] },
     });
     const { getStreakStatus } = await import("./streaks.functions");
     const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
@@ -82,7 +82,7 @@ describe("getStreakStatus", () => {
     withDb({
       "pack_opens.select": { data: daysEndingToday(2) },
       "streak_milestone_claims.select": { data: [] },
-      "account_identities.select": { data: null },
+      "account_identities.select": { data: [] },
     });
     const { getStreakStatus } = await import("./streaks.functions");
     const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asGuest() });
@@ -98,7 +98,7 @@ describe("getStreakStatus", () => {
     withDb({
       "pack_opens.select": { data: daysEndingToday(3) },
       "streak_milestone_claims.select": { data: [] },
-      "account_identities.select": { data: null },
+      "account_identities.select": { data: [] },
     });
     const { getStreakStatus } = await import("./streaks.functions");
     const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asGuest() });
@@ -110,11 +110,36 @@ describe("getStreakStatus", () => {
     withDb({
       "pack_opens.select": { data: daysEndingToday(3) },
       "streak_milestone_claims.select": { data: [] },
-      "account_identities.select": { data: { user_id: "u" } },
+      "account_identities.select": { data: [{ user_id: "u" }] },
     });
     const { getStreakStatus } = await import("./streaks.functions");
     const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asGuest() });
     expect(res.canClaim).toBe(true);
+  });
+
+  it("still hands it over when two accounts have adopted the same identity", async () => {
+    // account_identities indexes participant_id and guest_id non-uniquely, so
+    // this is a state the schema permits — two people signing in on a shared
+    // handset, or one person with two emails. It used to read through
+    // maybeSingle(), which answers more than one row with an error and a null
+    // row, so canClaim went false and the button never appeared for someone
+    // claim_streak_milestone would have authorised.
+    withDb({
+      "pack_opens.select": { data: daysEndingToday(3) },
+      "streak_milestone_claims.select": { data: [] },
+      "account_identities.select": { data: [{ user_id: "u1" }, { user_id: "u2" }] },
+    });
+    const { getStreakStatus } = await import("./streaks.functions");
+    const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
+    expect(res.canClaim).toBe(true);
+
+    // Pinned on the query shape, not just the answer: this double returns
+    // whatever `data` is declared as and does not emulate maybeSingle()'s
+    // multi-row error, so the assertion above alone would still pass against the
+    // bug. A bounded existence read is what makes the duplicate harmless.
+    const call = mock.callsFor("account_identities", "select")[0]!;
+    expect(call.terminal).toBe("await");
+    expect(call.filters.map((f) => f.method)).toContain("limit");
   });
 
   it("counts a claim inside the run, however far back the run now starts", async () => {
@@ -127,7 +152,7 @@ describe("getStreakStatus", () => {
       "streak_milestone_claims.select": {
         data: [{ milestone: 3, streak_started_on: days[2]!.opened_on }],
       },
-      "account_identities.select": { data: { user_id: "u" } },
+      "account_identities.select": { data: [{ user_id: "u" }] },
     });
     const { getStreakStatus } = await import("./streaks.functions");
     const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
@@ -140,7 +165,7 @@ describe("getStreakStatus", () => {
       "streak_milestone_claims.select": {
         data: [{ milestone: 3, streak_started_on: "2020-01-01" }],
       },
-      "account_identities.select": { data: { user_id: "u" } },
+      "account_identities.select": { data: [{ user_id: "u" }] },
     });
     const { getStreakStatus } = await import("./streaks.functions");
     const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });

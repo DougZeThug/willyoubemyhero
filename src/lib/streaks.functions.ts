@@ -121,11 +121,20 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
     if (claimError) throw claimError;
 
     const sbAdmin = await admin();
-    const { data: account } = await sbAdmin
+    // An existence check, deliberately not maybeSingle(): account_identities
+    // indexes participant_id and guest_id NON-uniquely, so two accounts adopting
+    // the same identity is a state the schema permits. maybeSingle() answers
+    // that with an error and a null row, which would pin canClaim to false for
+    // exactly the people claim_streak_milestone's own `PERFORM 1 … IF NOT FOUND`
+    // gate lets through — a button that never appears for a claim the server
+    // would authorise. The error is rethrown rather than swallowed for the same
+    // reason: a silent false here is indistinguishable from "no account".
+    const { data: accounts, error: accountError } = await sbAdmin
       .from("account_identities")
       .select("user_id")
       .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
-      .maybeSingle();
+      .limit(1);
+    if (accountError) throw accountError;
 
     // A claim counts against this run when its start date falls anywhere inside
     // it — the same window claim_streak_milestone checks. Matching on the start
@@ -147,7 +156,7 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
       ...streak,
       kind: actor.kind,
       today,
-      canClaim: !!account,
+      canClaim: (accounts ?? []).length > 0,
       milestones: STREAK_MILESTONES.map((m) => ({
         days: m.days,
         label: m.label,
