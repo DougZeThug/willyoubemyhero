@@ -52,6 +52,7 @@ export function MilestoneReveal({
   card,
   tierFloor,
   duplicate,
+  universalBack = null,
   onDone,
 }: {
   milestone: number;
@@ -60,12 +61,21 @@ export function MilestoneReveal({
   /** What this rung guaranteed. Null on day 3, which promises nothing. */
   tierFloor: SecretTier | null;
   duplicate: boolean;
+  /**
+   * The event's shared card back, same as the pack stand uses. Secret cards
+   * almost never carry a back of their own, so `card.backUrl` alone left the
+   * reveal turning onto the generated text panel instead of the artwork.
+   */
+  universalBack?: ImageUrlSet | string | null;
   onDone: () => void;
 }) {
   // Still the hook for anything that only affects how a frame is drawn: it
   // settles a tick later, which is invisible there.
   const reduced = usePrefersReducedMotion();
   const [phase, setPhase] = useState<Phase>("flare");
+  // The card lands face-down and turns onto its ART. `flipped` is only the
+  // tap-to-read stats panel afterwards, exactly like the daily pull.
+  const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const rarity = secretFoil(card.foil, card.borderFx);
   const days = useCountUp(phase === "flare" ? streak : null, COUNT_MS);
@@ -90,13 +100,14 @@ export function MilestoneReveal({
   useEffect(() => {
     if (phase !== "card" || celebratedRef.current) return;
     celebratedRef.current = true;
-    setFlipped(true);
+    setRevealed(true);
     cue("secretImpact");
     playReveal(duplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
     // A duplicate is still a reward here — it was bought with a month of showing
     // up — but it does not get the cannon. Same rule the daily pull follows.
     if (!duplicate) void celebrateSecret(rarity);
   }, [phase, duplicate, rarity]);
+
 
   return (
     <div
