@@ -1077,6 +1077,7 @@ function PackPage() {
           card={milestoneReveal.card}
           tierFloor={milestoneReveal.tierFloor}
           duplicate={milestoneReveal.duplicate}
+          universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
           onDone={() => setMilestoneReveal(null)}
         />
       )}

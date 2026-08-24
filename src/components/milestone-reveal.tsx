@@ -11,6 +11,7 @@ import { cue, playReveal, playSecretRiser } from "@/lib/card-sfx";
 import { SECRET_CHIME, SECRET_DUPE_CHIME, secretFoil } from "@/lib/secret-cards";
 import type { SecretCardView } from "@/lib/secret-cards";
 import { secretTierFloorLabel, secretTierStyle, type SecretTier } from "@/lib/secret-rarity";
+import type { ImageUrlSet } from "@/lib/media";
 
 /**
  * The milestone payoff: a flame that counts the days up, then the card it bought.
@@ -27,6 +28,7 @@ import { secretTierFloorLabel, secretTierStyle, type SecretTier } from "@/lib/se
 
 const FLARE_MS = 1100;
 const COUNT_MS = 900;
+const TURN_DELAY_MS = 260;
 
 /**
  * The preference, read synchronously.
@@ -52,6 +54,7 @@ export function MilestoneReveal({
   card,
   tierFloor,
   duplicate,
+  universalBack = null,
   onDone,
 }: {
   milestone: number;
@@ -60,12 +63,21 @@ export function MilestoneReveal({
   /** What this rung guaranteed. Null on day 3, which promises nothing. */
   tierFloor: SecretTier | null;
   duplicate: boolean;
+  /**
+   * The event's shared card back, same as the pack stand uses. Secret cards
+   * almost never carry a back of their own, so `card.backUrl` alone left the
+   * reveal turning onto the generated text panel instead of the artwork.
+   */
+  universalBack?: ImageUrlSet | string | null;
   onDone: () => void;
 }) {
   // Still the hook for anything that only affects how a frame is drawn: it
   // settles a tick later, which is invisible there.
   const reduced = usePrefersReducedMotion();
   const [phase, setPhase] = useState<Phase>("flare");
+  // The card lands face-down and turns onto its ART. `flipped` is only the
+  // tap-to-read stats panel afterwards, exactly like the daily pull.
+  const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const rarity = secretFoil(card.foil, card.borderFx);
   const days = useCountUp(phase === "flare" ? streak : null, COUNT_MS);
@@ -90,12 +102,19 @@ export function MilestoneReveal({
   useEffect(() => {
     if (phase !== "card" || celebratedRef.current) return;
     celebratedRef.current = true;
-    setFlipped(true);
     cue("secretImpact");
     playReveal(duplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
     // A duplicate is still a reward here — it was bought with a month of showing
     // up — but it does not get the cannon. Same rule the daily pull follows.
     if (!duplicate) void celebrateSecret(rarity);
+    // A beat face-down so the turn onto the art reads as a turn. Under reduced
+    // motion the card is simply there.
+    if (reducedNow()) {
+      setRevealed(true);
+      return;
+    }
+    const t = setTimeout(() => setRevealed(true), TURN_DELAY_MS);
+    return () => clearTimeout(t);
   }, [phase, duplicate, rarity]);
 
   return (
@@ -161,11 +180,13 @@ export function MilestoneReveal({
         >
           <HoloCard
             frontUrl={card.artUrl}
-            backUrl={card.backUrl}
+            backUrl={universalBack ?? card.backUrl}
             name={card.name}
             rarity={rarity}
             tilt="hero"
-            flipped={flipped}
+            faceDown={!revealed}
+            flipped={revealed ? flipped : false}
+            onFlippedChange={revealed ? setFlipped : undefined}
             backContent={<SecretBackPanel card={card} rarity={rarity} />}
           />
         </motion.div>
