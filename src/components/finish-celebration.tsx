@@ -13,10 +13,19 @@ export function FinishCelebration({
   deltaMs: number | null;
   onDone: () => void;
 }) {
-  const fired = useRef(false);
+  // /live passes an inline onDone, so its identity changes on every parent
+  // render — and the bundle refetching on realtime means renders every few
+  // seconds. Reading it through a ref keeps it out of the effect deps: with
+  // onDone in the deps each render tore the effect down, which cleared the
+  // auto-dismiss timer, and the one-shot latch that papered over the re-fires
+  // meant finishers two through thirteen got a blocking overlay with no
+  // confetti and no timer. The effect now keys on the celebration itself.
+  const onDoneRef = useRef(onDone);
   useEffect(() => {
-    if (!name || fired.current) return;
-    fired.current = true;
+    onDoneRef.current = onDone;
+  });
+  useEffect(() => {
+    if (!name) return;
     let cancelled = false;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (!reduce) {
@@ -42,12 +51,13 @@ export function FinishCelebration({
         })();
       });
     }
-    const t = setTimeout(onDone, 4200);
+    const t = setTimeout(() => onDoneRef.current(), 4200);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [name, onDone]);
+    // timeMs distinguishes back-to-back finishes by the same athlete.
+  }, [name, timeMs]);
 
   return (
     <AnimatePresence>
