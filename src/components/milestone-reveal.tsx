@@ -117,9 +117,6 @@ export function MilestoneReveal({
     return () => clearTimeout(t);
   }, [phase, duplicate, rarity]);
 
-
-
-
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6"
@@ -192,7 +189,6 @@ export function MilestoneReveal({
             onFlippedChange={revealed ? setFlipped : undefined}
             backContent={<SecretBackPanel card={card} rarity={rarity} />}
           />
-
         </motion.div>
       )}
 
