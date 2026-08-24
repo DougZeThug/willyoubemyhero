@@ -13,9 +13,15 @@ export function useWakeLock(active: boolean) {
     if (!active) return;
     if (typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
     let released = false;
+    let acquiring = false;
     let sentinel: WakeLockSentinel | null = null;
 
     const acquire = async () => {
+      // One request in flight at a time, and none while a live lock is held:
+      // two resolved requests are two independent sentinels, and an overwrite
+      // here would strand the first one holding the screen awake forever.
+      if (acquiring || (sentinel && !sentinel.released)) return;
+      acquiring = true;
       try {
         const s = await navigator.wakeLock.request("screen");
         if (released) {
@@ -28,6 +34,8 @@ export function useWakeLock(active: boolean) {
       } catch {
         // Low battery, a permissions policy, or a hidden tab. The lock is a
         // nicety; every one of these already has the IndexedDB fallback.
+      } finally {
+        acquiring = false;
       }
     };
 

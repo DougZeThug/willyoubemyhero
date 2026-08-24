@@ -89,6 +89,7 @@ function AwardsPage() {
   // the lock and the nominee, and upserts under a unique index — so the only
   // job here is to show the choice now and put it back if the referee says no.
   const voteMutation = useMutation({
+    mutationKey: ["cast-award-vote"],
     mutationFn: (vars: { category: string; targetParticipantId: string }) =>
       voteFn({ data: { eventId: event!.id, ...vars } }),
     onMutate: async (vars) => {
@@ -101,12 +102,25 @@ function AwardsPage() {
       return { prev };
     },
     onError: (e, _vars, ctx) => {
-      if (ctx) qc.setQueryData(votesKey, ctx.prev);
+      // A vote cast before the ballot query ever answered has no snapshot, and
+      // setQueryData(key, undefined) is a no-op — the refused chip would stay
+      // lit. Dropping the entry instead makes the active query refetch, and
+      // until it answers the empty ballot reads as unlit, which is the truth.
+      if (ctx?.prev === undefined) qc.removeQueries({ queryKey: votesKey });
+      else qc.setQueryData(votesKey, ctx.prev);
       toast.error(e instanceof Error ? e.message : "Could not vote");
     },
-    // Reconcile behind the paint either way — the server may have tallied a
-    // concurrent vote from this member's other phone.
-    onSettled: () => qc.invalidateQueries({ queryKey: votesKey }),
+    // Reconcile behind the paint — the server may have tallied a concurrent
+    // vote from this member's other phone. Only once the LAST in-flight vote
+    // settles, though: thirteen quick taps run concurrently, and the first
+    // response's refetch cannot yet contain the votes still on the wire, so an
+    // early invalidate would snuff chips that are merely pending. isMutating
+    // counts this mutation too, so 1 means "I am the last one standing".
+    onSettled: () => {
+      if (qc.isMutating({ mutationKey: ["cast-award-vote"] }) === 1) {
+        void qc.invalidateQueries({ queryKey: votesKey });
+      }
+    },
   });
 
   function vote(category: string, targetParticipantId: string) {

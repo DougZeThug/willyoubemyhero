@@ -45,6 +45,63 @@ test.describe("awards voting", () => {
     await expect(chip).not.toHaveClass(/bg-primary\/15/);
   });
 
+  test("quick votes across categories reconcile once, after the last settles", async ({
+    page,
+    server,
+  }) => {
+    // Concurrent mutations: the first response's refetch cannot yet contain
+    // votes still on the wire, so an early reconcile would snuff chips that
+    // are merely pending. The invalidate waits for the last one standing —
+    // pinned here as exactly ONE ballot refetch for two quick votes, plus
+    // both chips staying lit once the recorded ballot comes back.
+    server.delay("castAwardVote", 1_200);
+    server.set("getMyAwardVotes", [
+      { category: "mvp", target_participant_id: "p-bob" },
+      { category: "best_card", target_participant_id: "p-carol" },
+    ]);
+    await asMember(page);
+    await page.goto("/awards");
+
+    const mvp = page.locator("section").filter({ hasText: "MVP" }).first();
+    const art = page.locator("section").filter({ hasText: "Best Card Art" }).first();
+    const first = mvp.getByRole("button", { name: /Bob/i });
+    const second = art.getByRole("button", { name: /Carol/i });
+
+    const ballotFetches = () => server.calls.filter((c) => c.includes("getMyAwardVotes")).length;
+    // Let the initial load settle so the count below is only about the votes.
+    await expect(first).toBeEnabled();
+    await page.waitForTimeout(300);
+    const before = ballotFetches();
+
+    await first.click();
+    await second.click();
+    await expect(first).toHaveClass(/bg-primary\/15/, { timeout: 1_000 });
+    await expect(second).toHaveClass(/bg-primary\/15/, { timeout: 1_000 });
+
+    // Both responses land, the single reconcile confirms the ballot.
+    await page.waitForTimeout(2_200);
+    await expect(first).toHaveClass(/bg-primary\/15/);
+    await expect(second).toHaveClass(/bg-primary\/15/);
+    expect(ballotFetches()).toBe(before + 1);
+  });
+
+  test("a refused vote with no ballot loaded yet still snaps back", async ({ page, server }) => {
+    // Voting is possible before the ballot query has ever answered, and a
+    // rollback to an undefined snapshot is a no-op in the query cache — the
+    // refused chip used to stay lit. The entry is dropped instead.
+    server.delay("getMyAwardVotes", 8_000);
+    server.fail("castAwardVote", "Voting is locked");
+    await asMember(page);
+    await page.goto("/awards");
+
+    const mvp = page.locator("section").filter({ hasText: "MVP" }).first();
+    const chip = mvp.getByRole("button", { name: /Bob/i });
+    await chip.click();
+
+    await expect(page.getByText(/voting is locked|could not vote/i).first()).toBeVisible();
+    await expect(chip).not.toHaveClass(/bg-primary\/15/);
+  });
+
   test("a signed-out visitor cannot cast anything", async ({ page, server }) => {
     await page.goto("/awards");
     const mvp = page.locator("section").filter({ hasText: "MVP" }).first();

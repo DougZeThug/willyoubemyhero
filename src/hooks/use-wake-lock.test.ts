@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useWakeLock } from "./use-wake-lock";
 
-type Sentinel = { release: ReturnType<typeof vi.fn> };
+type Sentinel = { released: boolean; release: ReturnType<typeof vi.fn> };
 
 function stubWakeLock() {
   const sentinels: Sentinel[] = [];
@@ -16,7 +16,10 @@ function stubWakeLock() {
     });
   });
   const grant = async () => {
-    const s: Sentinel = { release: vi.fn(async () => {}) };
+    const s: Sentinel = { released: false, release: vi.fn(async () => {}) };
+    s.release.mockImplementation(async () => {
+      s.released = true;
+    });
     sentinels.push(s);
     pending?.(s as unknown as WakeLockSentinel);
     pending = null;
@@ -59,10 +62,11 @@ describe("useWakeLock", () => {
   it("takes the lock back when the tab returns", async () => {
     const lock = stubWakeLock();
     renderHook(() => useWakeLock(true));
-    await lock.grant();
+    const held = await lock.grant();
     expect(lock.request).toHaveBeenCalledTimes(1);
 
     // The browser dropped the lock on hide; the return is what re-acquires.
+    held.released = true;
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
       value: "visible",
@@ -71,6 +75,28 @@ describe("useWakeLock", () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
     expect(lock.request).toHaveBeenCalledTimes(2);
+  });
+
+  it("never stacks a second request on one still in flight, or on a held lock", async () => {
+    // Two resolved requests are two independent sentinels; whichever one an
+    // overwrite dropped would hold the screen awake forever.
+    const lock = stubWakeLock();
+    renderHook(() => useWakeLock(true));
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    // While the first request is still pending…
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(lock.request).toHaveBeenCalledTimes(1);
+    // …and while its lock is held.
+    await lock.grant();
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(lock.request).toHaveBeenCalledTimes(1);
   });
 
   it("releases a lock that lands after the effect tore down", async () => {
