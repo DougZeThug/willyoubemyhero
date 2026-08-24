@@ -182,6 +182,11 @@ function AuthPage() {
             Trading needs an account — it's how the other player knows who they're swapping with.
           </p>
         )}
+        {next === "/players/pack" && (
+          <p className="mt-2 text-sm font-bold text-primary">
+            Your streak reward is waiting — an account is what keeps the card once you take it.
+          </p>
+        )}
         <p className="mt-2 text-sm text-muted-foreground">
           Keep your packs, secret pulls and trades on every phone. Everything this device has
           already collected comes with you.

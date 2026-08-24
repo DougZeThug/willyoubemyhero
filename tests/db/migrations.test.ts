@@ -37,6 +37,7 @@ const EXPECTED_TABLES = [
   "secret_collections",
   "splits",
   "stations",
+  "streak_milestone_claims",
   "trade_offer_items",
   "trade_offers",
   "trades",

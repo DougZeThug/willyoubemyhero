@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { Check, PackageOpen, Share2 } from "lucide-react";
+import { Check, Flame, PackageOpen, Share2 } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
@@ -12,6 +12,8 @@ import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { cardBadge, type Edition } from "@/lib/card-edition";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretSlot } from "@/lib/pack";
+import type { Streak } from "@/lib/streaks";
+import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { urlFromSet } from "@/lib/media";
@@ -56,6 +58,12 @@ export function PackSummary({
   collected,
   total,
   eventYear,
+  streak,
+  claimable,
+  canClaim,
+  claiming,
+  claimError,
+  onClaim,
   onRetrySecret,
 }: {
   pack: SummaryParticipant[];
@@ -76,6 +84,16 @@ export function PackSummary({
   collected: number;
   total: number;
   eventYear: number | null;
+  /** Null until the streak query answers, which is a missing block and not a zero. */
+  streak: Streak | null;
+  /** The highest rung earned and not yet cashed, or null when there is nothing to take. */
+  claimable: StreakMilestoneStatus | null;
+  /** Whether this actor may cash it at all. False until they have an account. */
+  canClaim: boolean;
+  claiming: boolean;
+  /** Inline, never a toast — see the note on the failed secret slot below. */
+  claimError: string | null;
+  onClaim: () => void;
   onRetrySecret: () => void;
 }) {
   // Rendered off-screen and rasterised on demand. Kept mounted rather than
@@ -231,6 +249,80 @@ export function PackSummary({
         universalBack={universalBack}
         onRetry={onRetrySecret}
       />
+
+      {/* Above the running total, because a reward you just earned outranks a
+          number that only went up by one. Absent entirely at streak zero: a first
+          pack should be a first pack, not a progress bar. */}
+      {streak && streak.current > 0 && (
+        <div
+          className="mx-auto flex max-w-xs flex-col items-center gap-2 rounded-xl border px-4 py-3 text-center"
+          style={{ borderColor: "oklch(0.82 0.19 85 / 35%)" }}
+        >
+          <div className="flex items-center gap-1.5">
+            <Flame
+              aria-hidden
+              className="h-4 w-4"
+              style={
+                {
+                  color: "oklch(0.82 0.19 85)",
+                  "--flame-edge": "oklch(0.82 0.19 85 / 55%)",
+                } as React.CSSProperties
+              }
+            />
+            <span
+              className="font-display text-sm font-black uppercase tracking-[0.2em]"
+              style={{ color: "oklch(0.82 0.19 85)" }}
+            >
+              Day {streak.current}
+            </span>
+          </div>
+
+          {claimable ? (
+            canClaim ? (
+              <>
+                <button
+                  onClick={onClaim}
+                  disabled={claiming}
+                  data-testid="streak-claim"
+                  className="neon-btn !px-4 !py-2 !text-xs disabled:opacity-40"
+                >
+                  {claiming ? "Opening…" : `Claim ${claimable.label}`}
+                </button>
+                {/* Never a toast, for the same reason the failed secret slot
+                    avoids one: it announces the reward to whoever is glancing at
+                    the phone over your shoulder. */}
+                {claimError && (
+                  <span className="text-[10px] leading-snug text-muted-foreground">
+                    {claimError}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/auth"
+                  search={{ mode: "signup", next: "/players/pack" }}
+                  className="neon-btn !px-4 !py-2 !text-xs"
+                >
+                  Sign in to claim
+                </Link>
+                {/* Deliberately not "claim your player": thirteen people are on
+                    the roster and everyone else is here to watch. An account is
+                    something anybody can have, and it is what keeps the card. */}
+                <span className="text-[10px] leading-snug text-muted-foreground">
+                  {claimable.label} is waiting. An account keeps it on every phone you play from.
+                </span>
+              </>
+            )
+          ) : (
+            <span className="text-[10px] leading-snug text-muted-foreground">
+              {streak.openedToday
+                ? "Streak alive. Come back tomorrow."
+                : "Open today's pack to keep it alive."}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* The counter that was hidden for the whole reveal. A running total over a
           card whose job is to be the biggest thing on screen is a distraction;

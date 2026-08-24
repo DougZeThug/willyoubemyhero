@@ -220,6 +220,15 @@ export const attachDeviceToPlayer = createServerFn({ method: "POST" })
     });
     if (packsError) throw packsError;
 
+    // Same order everywhere this runs: packs first, then the claims keyed off
+    // them, so a rescued guest cannot re-earn milestones they already collected.
+    const { streaksDb } = await import("./streaks-db.server");
+    const { error: streakError } = await streaksDb().rpc("claim_guest_streak_milestones", {
+      _participant_id: data.participantId,
+      _guest_id: data.guestId,
+    });
+    if (streakError) throw streakError;
+
     // An account sitting on this device with no player of its own would keep
     // acting as a guest on its next visit, re-stranding new pulls.
     const { data: identity } = await sb

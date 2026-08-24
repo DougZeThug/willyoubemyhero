@@ -1,0 +1,154 @@
+import { describe, expect, it } from "vitest";
+import {
+  STREAK_MILESTONES,
+  isStreakMilestone,
+  nextMilestone,
+  previousDay,
+  streakLine,
+  streakMilestone,
+  walkStreak,
+} from "./streaks";
+
+describe("STREAK_MILESTONES", () => {
+  it("is ascending, unique and positive", () => {
+    const days = STREAK_MILESTONES.map((m) => m.days);
+    expect(days).toEqual([...days].sort((a, b) => a - b));
+    expect(new Set(days).size).toBe(days.length);
+    expect(days.every((d) => d > 0)).toBe(true);
+  });
+
+  it("only pays secrets, because a guest cannot hold a roster card", () => {
+    expect(STREAK_MILESTONES.every((m) => m.reward === "secret")).toBe(true);
+  });
+
+  it("looks a rung up, and answers nothing for one that does not exist", () => {
+    expect(isStreakMilestone(3)).toBe(true);
+    expect(isStreakMilestone(5)).toBe(false);
+    expect(streakMilestone(7)?.days).toBe(7);
+    expect(streakMilestone(5)).toBeUndefined();
+  });
+
+  it("finds the next rung, and none once they are all behind you", () => {
+    expect(nextMilestone(0)?.days).toBe(3);
+    expect(nextMilestone(3)?.days).toBe(7);
+    expect(nextMilestone(29)?.days).toBe(30);
+    expect(nextMilestone(30)).toBeNull();
+    expect(nextMilestone(400)).toBeNull();
+  });
+});
+
+describe("previousDay", () => {
+  it("steps back one calendar day", () => {
+    expect(previousDay("2026-08-24")).toBe("2026-08-23");
+  });
+
+  it("crosses a month boundary", () => {
+    expect(previousDay("2026-09-01")).toBe("2026-08-31");
+    expect(previousDay("2026-03-01")).toBe("2026-02-28");
+  });
+
+  it("crosses a year boundary", () => {
+    expect(previousDay("2026-01-01")).toBe("2025-12-31");
+  });
+
+  it("handles a leap day", () => {
+    expect(previousDay("2028-03-01")).toBe("2028-02-29");
+    expect(previousDay("2028-02-29")).toBe("2028-02-28");
+  });
+
+  it("is unmoved by DST, in both directions", () => {
+    // 2026-03-08 is the US spring-forward and 2026-11-01 the fall-back. A
+    // local-time subtraction of 24h lands on the same calendar day on one of
+    // these and skips one on the other; a `date` in Postgres does neither, and
+    // neither does this.
+    expect(previousDay("2026-03-09")).toBe("2026-03-08");
+    expect(previousDay("2026-03-08")).toBe("2026-03-07");
+    expect(previousDay("2026-11-02")).toBe("2026-11-01");
+    expect(previousDay("2026-11-01")).toBe("2026-10-31");
+  });
+});
+
+describe("walkStreak", () => {
+  const TODAY = "2026-08-24";
+
+  it("is dead with no days at all", () => {
+    expect(walkStreak([], TODAY)).toEqual({
+      current: 0,
+      startedOn: null,
+      lastOpenedOn: null,
+      openedToday: false,
+    });
+  });
+
+  it("counts a run that ends today", () => {
+    const s = walkStreak(["2026-08-22", "2026-08-23", "2026-08-24"], TODAY);
+    expect(s).toEqual({
+      current: 3,
+      startedOn: "2026-08-22",
+      lastOpenedOn: "2026-08-24",
+      openedToday: true,
+    });
+  });
+
+  it("keeps a run that ended yesterday alive, and flags it", () => {
+    const s = walkStreak(["2026-08-22", "2026-08-23"], TODAY);
+    expect(s.current).toBe(2);
+    expect(s.openedToday).toBe(false);
+    expect(s.lastOpenedOn).toBe("2026-08-23");
+  });
+
+  it("kills a run that ended two days ago", () => {
+    expect(walkStreak(["2026-08-21", "2026-08-22"], TODAY).current).toBe(0);
+  });
+
+  it("stops at a gap rather than counting every day ever", () => {
+    const s = walkStreak(["2026-08-01", "2026-08-02", "2026-08-23", "2026-08-24"], TODAY);
+    expect(s.current).toBe(2);
+    expect(s.startedOn).toBe("2026-08-23");
+  });
+
+  it("does not care about order", () => {
+    const s = walkStreak(["2026-08-24", "2026-08-22", "2026-08-23"], TODAY);
+    expect(s.current).toBe(3);
+    expect(s.startedOn).toBe("2026-08-22");
+  });
+
+  it("counts a repeated day once", () => {
+    const s = walkStreak(["2026-08-23", "2026-08-23", "2026-08-24"], TODAY);
+    expect(s.current).toBe(2);
+  });
+
+  it("walks across a month boundary", () => {
+    const s = walkStreak(["2026-07-31", "2026-08-01", "2026-08-02"], "2026-08-02");
+    expect(s.current).toBe(3);
+    expect(s.startedOn).toBe("2026-07-31");
+  });
+
+  it("counts a single day opened today", () => {
+    const s = walkStreak([TODAY], TODAY);
+    expect(s).toEqual({
+      current: 1,
+      startedOn: TODAY,
+      lastOpenedOn: TODAY,
+      openedToday: true,
+    });
+  });
+});
+
+describe("streakLine", () => {
+  it("says nothing at zero, rather than saying zero", () => {
+    expect(streakLine(walkStreak([], "2026-08-24"))).toBeNull();
+  });
+
+  it("asks for today's pack when the run is at risk", () => {
+    const line = streakLine(walkStreak(["2026-08-23"], "2026-08-24"));
+    expect(line).toContain("Day 1");
+    expect(line).toContain("keep it alive");
+  });
+
+  it("just reports the day once today is in", () => {
+    const line = streakLine(walkStreak(["2026-08-24"], "2026-08-24"));
+    expect(line).toContain("Day 1");
+    expect(line).not.toContain("keep it alive");
+  });
+});

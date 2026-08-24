@@ -964,6 +964,24 @@
   animation: secret-seal-breathe 2.6s ease-in-out infinite;
 }
 
+/* The streak flame's glow, driven by --flame-edge the way .secret-seal is driven
+   by --seal-edge. Deliberately slower and dimmer than the seal: a streak is a
+   quiet running total on a screen whose job is the card, not a second thing
+   competing for the same attention. */
+.streak-flame-pulse {
+  animation: streak-flame-breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes streak-flame-breathe {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px var(--flame-edge));
+  }
+  50% {
+    filter: drop-shadow(0 0 9px var(--flame-edge));
+  }
+}
+
 @keyframes secret-seal-breathe {
   0%,
   100% {
@@ -998,8 +1016,15 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tear-hint,
-  .secret-seal {
+  .secret-seal,
+  .streak-flame-pulse {
     animation: none;
+  }
+  /* Same trade as the seal below: the glow is the tell that the streak is live,
+     the breathing is only the flourish. Held at the bright end so a still flame
+     does not read as a dead one. */
+  .streak-flame-pulse {
+    filter: drop-shadow(0 0 7px var(--flame-edge));
   }
   /* The ring is the tell; the breathing is only the flourish — same reasoning as
      the prism edge above, so a still card still reads as sealed and special. */

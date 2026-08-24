@@ -20,6 +20,8 @@ import { PackOpening } from "@/components/pack-opening";
 import { PackStand } from "@/components/pack-stand";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
 import { PackSummary } from "@/components/pack-summary";
+import { StreakFlame } from "@/components/streak-flame";
+import { MilestoneReveal } from "@/components/milestone-reveal";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
   collectCard,
@@ -45,6 +47,10 @@ import { editionCelebrates, editionSeed, rollEdition, type Edition } from "@/lib
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
+import { claimStreakMilestone } from "@/lib/streaks.functions";
+import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
+import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
+import { streakLine } from "@/lib/streaks";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
 import { urlFromSet } from "@/lib/media";
@@ -202,6 +208,7 @@ function PackPage() {
   // a member already has one.
   useEnsureGuestSession(true);
   const actor = useSecretActor();
+  const streakQuery = useStreakStatus(actor);
   const status = useSecretStatus(actor);
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
@@ -641,19 +648,26 @@ function PackPage() {
    * tear rather than on reveal, because "packed by" means the card was in your
    * pack, not that you got round to tapping it.
    *
-   * Fire-and-forget in both directions: a guest writes nothing, and a failure is
-   * swallowed. A decorative count must never surface as an error on a screen
-   * somebody is enjoying.
+   * Keyed on the ACTOR, not on the member: a guest's pack open is recorded too,
+   * against their `g.` token, which is what gives them a streak before they have
+   * signed in — and `claim_guest_packs` carries it across when they do. Their
+   * roster cards still go nowhere server-side (card_copies is keyed on a
+   * participant), so the handler files the pack and ignores the ids.
+   *
+   * Fire-and-forget either way: a failure is swallowed, because a decorative
+   * count must never surface as an error on a screen somebody is enjoying.
    */
   const recordedForRef = useRef<string | null>(null);
-  // The retry loop below sleeps between attempts, and useMemberSession is live
+  // The retry loop below sleeps between attempts, and the actor behind it is live
   // — a phone can change hands while it waits. The request middleware reads
   // whatever token localStorage holds at send time, so a stale loop would post
   // the first person's ids under the second person's account. Each attempt
   // re-checks the current identity through this ref and abandons on a change.
-  const recordPidRef = useRef(me?.participantId);
+  // Tracking the actor rather than the participant is strictly stronger: `m:` and
+  // `g:` are both stable identities, and a guest claiming a player changes it.
+  const recordActorRef = useRef(actor);
   useEffect(() => {
-    recordPidRef.current = me?.participantId;
+    recordActorRef.current = actor;
   });
   // Re-arm signal for a record that exhausted its retries: the latch is a ref,
   // so handing it back re-runs nothing, and once a pack is torn the effect's
@@ -677,9 +691,9 @@ function PackPage() {
     // finishes — and the latch below would make that set permanent for the day
     // while the screen went on to show the corrected one. Waiting costs nothing:
     // the effect re-runs when the event lands.
-    if (!torn || !dealtIds?.length || !pid || !seed || !event?.id) return;
-    if (recordedForRef.current === pid) return;
-    recordedForRef.current = pid;
+    if (!torn || !dealtIds?.length || !actor || !seed || !event?.id) return;
+    if (recordedForRef.current === actor) return;
+    recordedForRef.current = actor;
 
     void (async () => {
       // Record only today's dealt cards. An earlier version also backfilled the
@@ -700,7 +714,7 @@ function PackPage() {
         // Abandon without touching the latch if the phone changed hands while
         // this loop slept — the new member's own effect run owns it now, and a
         // request sent here would carry their token with this pack's ids.
-        if (recordPidRef.current !== pid) return;
+        if (recordActorRef.current !== actor) return;
         try {
           // The same call records the pack itself. A pack of three cards you already
           // own writes no new card_pulls row, so counting packs from that table
@@ -720,7 +734,11 @@ function PackPage() {
           });
           await Promise.all([
             qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
-            qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) }),
+            // The pack open is what advances the streak, for a guest as much as
+            // for a member.
+            qc.invalidateQueries({ queryKey: streakStatusKey(actor) }),
+            // Only a member has card rows to recount; a guest's ids went nowhere.
+            ...(pid ? [qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) })] : []),
           ]);
           return;
         } catch {
@@ -729,9 +747,9 @@ function PackPage() {
       }
       // Only if it is still ours: an exhausted loop from before a handoff must
       // not clear the latch the next member's run has taken.
-      if (recordedForRef.current === pid) recordedForRef.current = null;
+      if (recordedForRef.current === actor) recordedForRef.current = null;
     })();
-  }, [torn, dealtIds, me?.participantId, record, qc, event?.id, seed, editions, recordWake]);
+  }, [torn, dealtIds, actor, me?.participantId, record, qc, event?.id, seed, editions, recordWake]);
 
   // A phone changing hands mid-party is a real thing in this league. Re-arm the
   // latch when the member changes so the next person gets their own card.
@@ -742,6 +760,13 @@ function PackPage() {
     setSecretRevealed(false);
     setSecretFailed(false);
     setSecretUnavailable(false);
+    // The next person's milestones are their own, and a reveal left on screen
+    // would be showing them somebody else's card.
+    claimedRef.current = new Set();
+    claimingRef.current = false;
+    setClaiming(false);
+    setClaimError(null);
+    setMilestoneReveal(null);
   }, [actor]);
 
   // The drop rolls over on the *server's* day, not this device's. Guarded on the
@@ -758,6 +783,86 @@ function PackPage() {
     }
     serverDayRef.current = day;
   }, [status.data?.day]);
+
+  /**
+   * Cashing a milestone.
+   *
+   * A button rather than an auto-grant on the pack open, because the reward is a
+   * card and a card needs a reveal to be worth anything — and because the claim
+   * table's uniqueness makes a retry free, so a tap that lost its response costs
+   * nothing.
+   *
+   * Two latches, doing different jobs. `claimingRef` stops a double tap racing
+   * itself to the same milestone; `claimedRef` stops a milestone that already
+   * showed its reveal from showing it again when the query refetches on focus.
+   */
+  const claimFn = useServerFn(claimStreakMilestone);
+  const claimingRef = useRef(false);
+  const claimedRef = useRef(new Set<number>());
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [milestoneReveal, setMilestoneReveal] = useState<{
+    milestone: number;
+    streak: number;
+    card: SecretCardView;
+    duplicate: boolean;
+  } | null>(null);
+
+  const streak = streakQuery.data ?? null;
+  // The highest rung earned and not yet taken. Highest rather than lowest so a
+  // 14-day streak claiming late collects the big one first and the rest follow on
+  // the next taps, instead of making somebody work up the ladder.
+  const claimable: StreakMilestoneStatus | null =
+    streak?.milestones
+      .filter((m) => m.earned && !m.claimed && !claimedRef.current.has(m.days))
+      .at(-1) ?? null;
+
+  const claimMilestone = useCallback(
+    async (days: number) => {
+      if (claimingRef.current) return;
+      claimingRef.current = true;
+      setClaiming(true);
+      setClaimError(null);
+      try {
+        const res = await claimFn({ data: { milestone: days } });
+        if (!res.ok) {
+          // Every one of these is something to say on the button. `claimed` is
+          // the one a person can actually hit by tapping twice on a flaky
+          // connection, and it means the card is already theirs.
+          setClaimError(
+            res.reason === "claimed"
+              ? "Already collected — it's in your vault."
+              : res.reason === "account_required"
+                ? "Sign in first to keep it."
+                : res.reason === "not_earned"
+                  ? "That streak isn't there yet."
+                  : "Nothing to give out right now. Try again in a bit.",
+          );
+          return;
+        }
+        claimedRef.current.add(days);
+        setMilestoneReveal({
+          milestone: res.milestone,
+          streak: res.streak,
+          card: res.card,
+          duplicate: res.duplicate,
+        });
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: streakStatusKey(actor) }),
+          qc.invalidateQueries({ queryKey: mySecretsKey(actor) }),
+          // A bonus pull is a non-duplicate row like any other, so the "pulled"
+          // count behind the secret slot moves with it.
+          qc.invalidateQueries({ queryKey: secretStatusKey(actor) }),
+        ]);
+      } catch {
+        setClaimError("No signal. Tap to try again.");
+      } finally {
+        claimingRef.current = false;
+        setClaiming(false);
+      }
+    },
+    [claimFn, qc, actor],
+  );
 
   const secretRarity = secretFoil(secret?.foil, secret?.borderFx);
 
@@ -955,8 +1060,20 @@ function PackPage() {
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
-      <PresentationMode active={presenting} />
-      <PresentationStage active={presenting} />
+      <PresentationMode active={presenting || milestoneReveal !== null} />
+      <PresentationStage active={presenting || milestoneReveal !== null} />
+      {/* Mounted here rather than inside the summary: the stage above uses
+          backdrop-filter, which is a grouping property, so anything it wraps
+          loses its 3D and the card would flip flat. */}
+      {milestoneReveal && (
+        <MilestoneReveal
+          milestone={milestoneReveal.milestone}
+          streak={milestoneReveal.streak}
+          card={milestoneReveal.card}
+          duplicate={milestoneReveal.duplicate}
+          onDone={() => setMilestoneReveal(null)}
+        />
+      )}
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-6">
         {/* Same gate as the vault, and here for the same reason: a pack opened
             before they pick a name lands on the device, not on them. Kept out of
@@ -994,6 +1111,9 @@ function PackPage() {
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Vault
             </Link>
+            {/* Height-matched to the Collected block beside it, so the row still
+                gives back none of its 90px when it fades for the tear. */}
+            {streak && <StreakFlame streak={streak} />}
             <div className="text-right">
               <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
                 Collected
@@ -1034,6 +1154,14 @@ function PackPage() {
                 One pack a day, dealt to you and nobody else. Refreshing won&apos;t reroll it — rip
                 the top off to open it.
               </p>
+              {/* No test id: the flame above already carries one, and a second
+                  node saying the same number is how the e2e suite ends up
+                  matching two. */}
+              {streak && streakLine(streak) && (
+                <p className="mt-2 text-xs font-bold" style={{ color: "oklch(0.82 0.19 85)" }}>
+                  {streakLine(streak)}
+                </p>
+              )}
             </motion.div>
 
             <PackOpening
@@ -1135,6 +1263,14 @@ function PackPage() {
             collected={collectedCount}
             total={total}
             eventYear={event?.year ?? null}
+            streak={streak}
+            claimable={claimable}
+            canClaim={streak?.canClaim ?? false}
+            claiming={claiming}
+            claimError={claimError}
+            onClaim={() => {
+              if (claimable) void claimMilestone(claimable.days);
+            }}
             onRetrySecret={() => {
               pullFiredRef.current = false;
               setSecretFailed(false);
