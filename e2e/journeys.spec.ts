@@ -783,6 +783,35 @@ test.describe("opening a pack", () => {
     await expect(page.locator(".card-edition")).toHaveCount(0);
     await expect(page.getByText(/Parallel/i)).toHaveCount(0);
   });
+
+  test("retries the day's record once the network comes back", async ({ page, server }) => {
+    // recordCardPulls is fire-and-forget by design, but a fire that failed used
+    // to latch as done — one garden dead spot at tear time silently lost the
+    // day's card_pulls and pack_opens. The route hands the latch back on
+    // failure and tries again after a pause, without any input from the person.
+    await page.addInitScript(([key, token]) => localStorage.setItem(key, token), [
+      MEMBER_KEY,
+      `m.p-alice.${Date.now() + 60 * 60_000}.signature`,
+    ] as const);
+    server.fail("recordCardPulls", "offline at the tear");
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+
+    // The first attempt goes out and dies.
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("recordCardPulls")).length)
+      .toBeGreaterThan(0);
+    const failed = server.calls.filter((c) => c.includes("recordCardPulls")).length;
+
+    // Signal returns; the record lands on its own.
+    server.recover("recordCardPulls");
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("recordCardPulls")).length, {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(failed);
+  });
 });
 
 test.describe("navigation", () => {

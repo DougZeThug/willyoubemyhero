@@ -663,27 +663,42 @@ function PackPage() {
       // revealed with "Packed by 1", making the counter meaningless. Better an
       // honest ramp than a uniform stripe.
       const ids = dealtIds.slice(0, 16);
-      try {
-        // The same call records the pack itself. A pack of three cards you already
-        // own writes no new card_pulls row, so counting packs from that table
-        // would stop counting the moment somebody's collection filled up.
-        //
-        // No event is sent: the handler resolves the active one itself. A resumed
-        // pack reaches here before the event query has answered, so passing it
-        // from the client stamped a null and the latch above stopped it ever
-        // being retried.
-        // Positional: the RPC zips the two arrays, so this map must stay keyed
-        // off `ids` in its own order and never be built independently.
-        await record({
-          data: { eventParticipantIds: ids, editions: ids.map((id) => editions[id] ?? "standard") },
-        });
-        await Promise.all([
-          qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
-          qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) }),
-        ]);
-      } catch {
-        /* a count nobody asked for is not worth an error nobody can act on */
+      // Three tries with a pause between them, then hand the latch back so a
+      // later pass — a resume, the tab coming back — can start over. One
+      // garden dead spot used to cost the whole day's count: the latch was
+      // taken before the await and a swallowed failure never returned it. A
+      // retry after a lost response can double-count a pull, accepted for the
+      // same reason the endpoint tolerates hand-posted ids: the ceiling is a
+      // decorative stat only its owner can see.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 4_000));
+        try {
+          // The same call records the pack itself. A pack of three cards you already
+          // own writes no new card_pulls row, so counting packs from that table
+          // would stop counting the moment somebody's collection filled up.
+          //
+          // No event is sent: the handler resolves the active one itself. A resumed
+          // pack reaches here before the event query has answered, so passing it
+          // from the client stamped a null and the latch above stopped it ever
+          // being retried.
+          // Positional: the RPC zips the two arrays, so this map must stay keyed
+          // off `ids` in its own order and never be built independently.
+          await record({
+            data: {
+              eventParticipantIds: ids,
+              editions: ids.map((id) => editions[id] ?? "standard"),
+            },
+          });
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
+            qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) }),
+          ]);
+          return;
+        } catch {
+          /* a count nobody asked for is not worth an error nobody can act on */
+        }
       }
+      recordedForRef.current = null;
     })();
   }, [torn, dealtIds, me?.participantId, record, qc, event?.id, seed, editions]);
 
