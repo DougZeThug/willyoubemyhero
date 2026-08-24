@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
 import { callServerFn, memberHeaders } from "@/test/server-fn";
 import { signMemberToken } from "./session.server";
+import { EDITION_IDS, editionSeed, rollEdition, type Edition } from "./card-edition";
+import { packSeed } from "./pack";
 
 let mock = createSupabaseMock();
 
@@ -118,6 +120,77 @@ describe("recordCardPulls", () => {
     await expect(
       callServerFn(recordCardPulls, { data: { eventParticipantIds: roster }, headers: asMe() }),
     ).rejects.toThrow();
+  });
+
+  it("stores a forged edition's derivation, never the forgery", async () => {
+    // The seed inputs are all server-known for a member (the day within ±1),
+    // so a claimed set that matches no candidate day cannot have come from the
+    // deal. The rpc must receive the derived set — this is what keeps a forged
+    // platinum out of every number a second person can see.
+    withDb({
+      "rpc.record_card_pulls": { data: 2 },
+      "rpc.record_pack_open": { data: 1 },
+      "events.select": { data: { id: EVENT_ID } },
+    });
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    const ids = [CARD_A, CARD_B];
+    // Candidate days computed the same way the handler computes them, taken
+    // both before and after the call so a midnight tick between the two cannot
+    // flake the assertion.
+    const days = (now: Date) => {
+      const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      return [0, -1, 1].map((d) => fmt.format(new Date(now.getTime() + d * 86_400_000)));
+    };
+    const derive = (day: string) =>
+      ids.map((id) => rollEdition(editionSeed(packSeed(EVENT_ID, day, `m:${ME}`), id)));
+    const before = days(new Date());
+    // An edition no candidate day rolls for the first card — five finishes and
+    // at most three candidates guarantees one exists.
+    const taken = new Set(before.map((d) => derive(d)[0]));
+    const forged = [EDITION_IDS.find((e) => !taken.has(e))!, derive(before[0])[1]];
+
+    await callServerFn(recordCardPulls, {
+      data: { eventParticipantIds: ids, editions: forged },
+      headers: asMe(),
+    });
+    const after = days(new Date());
+    const call = mock.client.rpc.mock.calls.find((c) => c[0] === "record_card_pulls");
+    const stored = (call?.[1] as { _editions: string[] })._editions;
+    expect(stored).not.toEqual(forged);
+    expect([derive(before[0]), derive(after[0])]).toContainEqual(stored);
+  });
+
+  it("stores an honest edition claim exactly as sent", async () => {
+    // Built with the same primitives the real deal uses, on the league's own
+    // clock — even if NY midnight ticks mid-test, yesterday is still inside
+    // the candidate window, so the claim stays honest and stays stored.
+    withDb({
+      "rpc.record_card_pulls": { data: 2 },
+      "rpc.record_pack_open": { data: 1 },
+      "events.select": { data: { id: EVENT_ID } },
+    });
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    const ids = [CARD_A, CARD_B];
+    const day = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const claimed = ids.map((id) =>
+      rollEdition(editionSeed(packSeed(EVENT_ID, day, `m:${ME}`), id)),
+    );
+    await callServerFn(recordCardPulls, {
+      data: { eventParticipantIds: ids, editions: claimed },
+      headers: asMe(),
+    });
+    const call = mock.client.rpc.mock.calls.find((c) => c[0] === "record_card_pulls");
+    expect((call?.[1] as { _editions: string[] })._editions).toEqual(claimed);
   });
 
   it("credits the pack to the token holder, whatever the payload claims", async () => {
@@ -429,5 +502,46 @@ describe("getMyCardStats", () => {
       cards: unknown[];
     }>(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
     expect(res).toEqual({ packsOpened: 0, firstPackOn: null, lastPackOn: null, cards: [] });
+  });
+});
+
+describe("deriveEditions", () => {
+  // Pinned mid-afternoon in New York, well clear of both midnights: the
+  // candidate days are exactly the 24th and its two neighbours.
+  const NOW = new Date("2026-08-24T18:00:00Z");
+  const IDS = [CARD_A, CARD_B];
+  const derive = (day: string) =>
+    IDS.map((id) => rollEdition(editionSeed(packSeed(EVENT_ID, day, `m:${ME}`), id)));
+
+  async function run(claimed: Edition[] | null, eventId: string | null = EVENT_ID) {
+    const { deriveEditions } = await import("./card-pulls.functions");
+    return deriveEditions({ eventId, participantId: ME, ids: IDS, claimed, now: NOW });
+  }
+
+  it("accepts a claim rolled on the league's own day", async () => {
+    const claimed = derive("2026-08-24");
+    expect(await run(claimed)).toEqual(claimed);
+  });
+
+  it("accepts a claim rolled a day either side — a UTC phone is not a forger", async () => {
+    expect(await run(derive("2026-08-23"))).toEqual(derive("2026-08-23"));
+    expect(await run(derive("2026-08-25"))).toEqual(derive("2026-08-25"));
+  });
+
+  it("replaces a claim no candidate day could have rolled", async () => {
+    const taken = new Set(["2026-08-23", "2026-08-24", "2026-08-25"].map((d) => derive(d)[0]));
+    const forged = [EDITION_IDS.find((e) => !taken.has(e))!, derive("2026-08-24")[1]];
+    expect(await run(forged)).toEqual(derive("2026-08-24"));
+  });
+
+  it("leaves an absent claim absent, for phones from before editions", async () => {
+    expect(await run(null)).toBeNull();
+  });
+
+  it("passes the claim through when no event is resolvable", async () => {
+    // The seed's event third would be wrong, so a derivation would be noise —
+    // and the claimed value is at worst a self-inflicted stat.
+    const claimed: Edition[] = ["platinum", "standard"];
+    expect(await run(claimed, null)).toEqual(claimed);
   });
 });

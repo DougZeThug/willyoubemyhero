@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { EDITION_IDS } from "./card-edition";
+import { EDITION_IDS, editionSeed, rollEdition, type Edition } from "./card-edition";
+import { packSeed } from "./pack";
 import { optionalGuest, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
 import type { CardPullRow, PackOpenRow } from "./secret-cards-db.server";
 import type { CardPullCounts, MyCardStats } from "./card-pulls";
@@ -65,6 +66,74 @@ export const getCardPullCounts = createServerFn({ method: "GET" })
   });
 
 /**
+ * The league days a device could honestly have sealed today's pack on.
+ *
+ * The pack seed's day is the DEVICE's local date (see packSeed) — the one input
+ * this server does not hold. Everyone at the party is on the league's own
+ * timezone, and a phone on UTC or a traveller is at most a calendar day out
+ * either side, so the league day and its two neighbours cover every honest
+ * clock. Around a DST shift two of the three can collapse to the same string;
+ * the Set keeps the derivation from checking a day twice.
+ */
+function leagueDayCandidates(now = new Date()): string[] {
+  // en-CA formats as YYYY-MM-DD, the exact shape of the client's todayKey().
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return [...new Set([0, -1, 1].map((d) => fmt.format(new Date(now.getTime() + d * 86_400_000))))];
+}
+
+/**
+ * Re-derive a member's claimed editions instead of trusting them.
+ *
+ * An honest client computed every edition from rollEdition(editionSeed(...)) on
+ * one of the candidate days, so its claim matches one candidate exactly and is
+ * stored as sent. A claim that matches no candidate cannot have come from the
+ * deal — it is replaced with the derivation for the league's own today, not
+ * rejected: the membership half of the payload is still worth recording (see
+ * the handler comment above), and refusing the whole pack over a forged finish
+ * would hand a griefer a way to un-record their own cards and retry forever.
+ *
+ * A claim can also be absent — a phone still holding a bundle from before
+ * editions existed — and stays absent: the RPC defaults those rows to standard,
+ * and inventing finishes for a client that never rolled any would be a lie in
+ * the other direction. Same when no active event is resolvable: the seed's
+ * event third would be wrong, so a derivation would be noise, and the claimed
+ * value is at worst a self-inflicted stat.
+ *
+ * Exported for its unit tests; `now` exists so they can pin the day.
+ */
+export function deriveEditions(args: {
+  eventId: string | null;
+  participantId: string;
+  ids: string[];
+  claimed: Edition[] | null;
+  now?: Date;
+}): Edition[] | null {
+  const { eventId, participantId, ids, claimed } = args;
+  if (!claimed) return null;
+  if (!eventId) return claimed;
+  const derive = (day: string) => {
+    const seed = packSeed(eventId, day, `m:${participantId}`);
+    return ids.map((id) => rollEdition(editionSeed(seed, id)));
+  };
+  const candidates = leagueDayCandidates(args.now);
+  for (const day of candidates) {
+    const derived = derive(day);
+    if (derived.length === claimed.length && derived.every((e, i) => e === claimed[i])) {
+      return claimed;
+    }
+  }
+  console.warn(
+    `recordCardPulls: claimed editions match no candidate league day for ${participantId}; storing the derived set`,
+  );
+  return derive(candidates[0]);
+}
+
+/**
  * Record that these cards were in this member's pack.
  *
  * The one mutating handler in this app that deliberately does not throw when
@@ -94,16 +163,16 @@ export const getCardPullCounts = createServerFn({ method: "GET" })
  * would silently drop genuine packs on a timezone edge, which is a worse failure
  * than the one it prevents for a thirteen-person party.
  *
- * THE EDITION IS CLIENT-ASSERTED, and it weakens the argument above in one
- * specific way. The card ids are a *membership* claim — the ceiling is a phantom
- * pack — but an edition is a *value*, and it is exactly the value a public
- * aggregate would read. So the rule that keeps the ceiling where the paragraph
- * above leaves it: an edition must never enter getCardPullCounts, or any other
- * number a second person can see, without being re-derived server-side first.
- * Everything needed to re-derive it is here except the device's local date —
- * card-edition.ts is pure client-safe TS, the participant comes from the verified
- * token, and the event is resolved below — so this is a deliberate v1 choice
- * rather than a dead end.
+ * THE EDITION IS VERIFIED, not trusted. The card ids are a *membership* claim —
+ * the ceiling is a phantom pack — but an edition is a *value*, and trading now
+ * shows other people's editions, so a forged platinum would reach a second
+ * person. Everything a member's edition derives from is available here: the
+ * participant comes from the verified token, the event is resolved below, and
+ * card-edition.ts is pure client-safe TS. The one input the server lacks is the
+ * device's local date, so deriveEditions tries the league day and its two
+ * neighbours — see its comment for why a mismatch is replaced rather than
+ * rejected. adoptCollection stays client-asserted out of necessity: a guest's
+ * packs were sealed on a device id this server never learns.
  */
 export const recordCardPulls = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -162,10 +231,16 @@ export const recordCardPulls = createServerFn({ method: "POST" })
     const { data: n, error } = await secrets.rpc("record_card_pulls", {
       _participant_id: me,
       _event_participant_ids: data.eventParticipantIds,
-      // Null rather than an empty array when absent: unnest() pads a NULL against
-      // the ids and every row falls to standard, while an empty array would zip
-      // to nothing and drop the pack.
-      _editions: data.editions ?? null,
+      // Verified before storage — see deriveEditions. Null rather than an empty
+      // array when absent: unnest() pads a NULL against the ids and every row
+      // falls to standard, while an empty array would zip to nothing and drop
+      // the pack.
+      _editions: deriveEditions({
+        eventId: activeEvent?.id ?? null,
+        participantId: me,
+        ids: data.eventParticipantIds,
+        claimed: data.editions ?? null,
+      }),
     });
     if (error) throw new Error(error.message);
     const recorded = (n as number | null) ?? 0;
