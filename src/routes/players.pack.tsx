@@ -50,7 +50,8 @@ import { recordCardPulls } from "@/lib/card-pulls.functions";
 import { claimStreakMilestone } from "@/lib/streaks.functions";
 import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
-import { streakLine } from "@/lib/streaks";
+import { streakLine, streakMilestone } from "@/lib/streaks";
+import type { SecretTier } from "@/lib/secret-rarity";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
 import { urlFromSet } from "@/lib/media";
@@ -805,6 +806,7 @@ function PackPage() {
     milestone: number;
     streak: number;
     card: SecretCardView;
+    tierFloor: SecretTier | null;
     duplicate: boolean;
   } | null>(null);
 
@@ -845,6 +847,9 @@ function PackPage() {
           milestone: res.milestone,
           streak: res.streak,
           card: res.card,
+          // From the ladder rather than the response, so the reveal prints what
+          // the rung promises even if an older server is still answering.
+          tierFloor: streakMilestone(res.milestone)?.tierFloor ?? null,
           duplicate: res.duplicate,
         });
         await Promise.all([
@@ -1070,6 +1075,7 @@ function PackPage() {
           milestone={milestoneReveal.milestone}
           streak={milestoneReveal.streak}
           card={milestoneReveal.card}
+          tierFloor={milestoneReveal.tierFloor}
           duplicate={milestoneReveal.duplicate}
           onDone={() => setMilestoneReveal(null)}
         />
