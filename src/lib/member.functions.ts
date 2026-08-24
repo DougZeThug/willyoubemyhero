@@ -54,6 +54,11 @@ export const getClaimRoster = createServerFn({ method: "GET" }).handler(async ()
   }));
 });
 
+// Ten tries per player per ten minutes — same shape as the PIN limiter in
+// admin.functions.ts, keyed by the participant being claimed.
+const CLAIM_ATTEMPT_WINDOW_S = 600;
+const CLAIM_ATTEMPT_MAX = 10;
+
 /**
  * Exchange a commissioner-issued code for a 90-day member token.
  *
@@ -72,6 +77,20 @@ export const claimPlayer = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Counted before the row is even looked up, so a player with no code issued
+    // rate-limits exactly like one with a wrong code — the limiter must not
+    // become the enumeration channel the generic bad_code below closes. Fails
+    // OPEN on a counter error: see verifyEventPin for the reasoning.
+    const { secretsDb } = await import("./secret-cards-db.server");
+    const { data: allowed } = await secretsDb().rpc("note_auth_attempt", {
+      _kind: "claim",
+      _key: data.participantId,
+      _window_seconds: CLAIM_ATTEMPT_WINDOW_S,
+      _max: CLAIM_ATTEMPT_MAX,
+    });
+    if (allowed === false) {
+      return { ok: false as const, reason: "too_many_attempts" as const };
+    }
     const { data: row } = await supabaseAdmin
       .from("member_codes")
       .select("participant_id, code_salt, code_hash, claimed_at, claim_count")
@@ -84,6 +103,9 @@ export const claimPlayer = createServerFn({ method: "POST" })
     if (!timingSafeEq(hashCode(row.code_salt, data.code), row.code_hash)) {
       return { ok: false as const, reason: "bad_code" as const };
     }
+    // A right code clears the counter — codes stay valid forever (see above), so
+    // a family of re-claims across the day must not stack into a lockout.
+    await secretsDb().rpc("clear_auth_attempts", { _kind: "claim", _key: data.participantId });
 
     const now = new Date().toISOString();
     await supabaseAdmin

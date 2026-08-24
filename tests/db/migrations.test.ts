@@ -12,6 +12,7 @@ const EXPECTED_TABLES = [
   "account_identities",
   "admin_accounts",
   "audit_logs",
+  "auth_attempts",
   "award_votes",
   "awards",
   "card_comments",

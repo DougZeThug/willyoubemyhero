@@ -97,7 +97,11 @@ describe("claimPlayer", () => {
       "participants.select": { data: { name: "Doug" }, error: null },
     });
     await claim({ participantId: PARTICIPANT_ID, code: CODE });
-    expect(mock.client.rpc).not.toHaveBeenCalled();
+    // Named, not "no rpc at all": the attempt limiter legitimately calls its
+    // own rpcs on every claim — what must not fire without a guest session is
+    // anything that carries guest secrets.
+    const names = mock.client.rpc.mock.calls.map((c) => c[0] as string);
+    expect(names.filter((n) => !n.includes("auth_attempt"))).toEqual([]);
   });
 
   it("still issues the token when carrying the secrets over fails", async () => {
@@ -158,6 +162,52 @@ describe("claimPlayer", () => {
     withDb({ "member_codes.select": codeRow() });
     await claim({ participantId: PARTICIPANT_ID, code: "WRONG7" });
     expect(mock.callsFor("member_codes", "update")).toHaveLength(0);
+  });
+
+  it("locks the claim after too many attempts, before reading the code row", async () => {
+    // Even the right code bounces during a lockout, and the code row is never
+    // read. The limiter fires before the lookup so a player with no code issued
+    // rate-limits exactly like one with a wrong code — the limiter must not
+    // become the enumeration channel bad_code closes.
+    withDb({
+      "rpc.note_auth_attempt": { data: false },
+      "member_codes.select": codeRow(),
+    });
+    expect(await claim({ participantId: PARTICIPANT_ID, code: CODE })).toEqual({
+      ok: false,
+      reason: "too_many_attempts",
+    });
+    expect(mock.callsFor("member_codes", "select")).toHaveLength(0);
+  });
+
+  it("counts the attempt against the player being claimed", async () => {
+    withDb({ "member_codes.select": codeRow() });
+    await claim({ participantId: PARTICIPANT_ID, code: "WRONG7" });
+    const note = mock.client.rpc.mock.calls.find((c) => c[0] === "note_auth_attempt");
+    expect(note?.[1]).toMatchObject({ _kind: "claim", _key: PARTICIPANT_ID });
+  });
+
+  it("fails open when the limiter itself is down", async () => {
+    withDb({
+      "rpc.note_auth_attempt": { data: null, error: { message: "boom" } },
+      "member_codes.select": codeRow(),
+      "participants.select": { data: { name: "Doug" }, error: null },
+    });
+    expect(await claim({ participantId: PARTICIPANT_ID, code: CODE })).toMatchObject({ ok: true });
+  });
+
+  it("a right code clears the counter; a wrong one leaves it standing", async () => {
+    withDb({
+      "member_codes.select": codeRow(),
+      "participants.select": { data: { name: "Doug" }, error: null },
+    });
+    await claim({ participantId: PARTICIPANT_ID, code: CODE });
+    const clear = mock.client.rpc.mock.calls.find((c) => c[0] === "clear_auth_attempts");
+    expect(clear?.[1]).toMatchObject({ _kind: "claim", _key: PARTICIPANT_ID });
+
+    withDb({ "member_codes.select": codeRow() });
+    await claim({ participantId: PARTICIPANT_ID, code: "WRONG7" });
+    expect(mock.client.rpc.mock.calls.some((c) => c[0] === "clear_auth_attempts")).toBe(false);
   });
 
   it("stamps claimed_at on the first claim", async () => {

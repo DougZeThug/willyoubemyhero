@@ -161,7 +161,14 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
     try {
       const res = await verifyFn({ data: { eventId, pin: value } });
       if (!res.ok) {
-        toast.error("Incorrect PIN");
+        // A locked-out gate must not read as "wrong PIN" — the next CORRECT
+        // entry fails too, and "incorrect" would send the commissioner hunting
+        // for a PIN they already have.
+        toast.error(
+          res.reason === "too_many_attempts"
+            ? "Too many tries — the gate is resting. Give it a few minutes."
+            : "Incorrect PIN",
+        );
         setPin("");
         return;
       }
