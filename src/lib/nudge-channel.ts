@@ -30,7 +30,11 @@ import { TRADE_NUDGE_EVENT } from "./trades";
 type NudgeChannel = ReturnType<typeof supabase.channel>;
 
 type Entry = {
-  channel: NudgeChannel;
+  /**
+   * Null until the channel is actually opened, which may have to wait for a
+   * previous channel on the same topic to finish leaving. See `closing`.
+   */
+  channel: NudgeChannel | null;
   subscribers: Set<() => void>;
   teardown: ReturnType<typeof setTimeout> | null;
 };
@@ -43,22 +47,46 @@ export const NUDGE_TEARDOWN_GRACE_MS = 5_000;
 
 const entries = new Map<string, Entry>();
 
+/**
+ * Topics whose previous channel is still leaving.
+ *
+ * The grace timer covers unsubscribe-then-resubscribe, but not resubscribe DURING
+ * the removal itself: `removeChannel` awaits an unsubscribe round trip, and the
+ * channel only leaves supabase-js's registry when that lands. Open a new one
+ * inside that window and `channel(topic)` hands back the dying one, `subscribe()`
+ * no-ops on it because it is not closed, and the removal then tears it down under
+ * the new entry — a session with no nudges and nothing raised. So a fresh channel
+ * waits for the old one to be gone.
+ */
+const closing = new Map<string, Promise<unknown>>();
+
 function openChannel(topic: string): Entry {
-  const entry: Entry = {
-    channel: undefined as unknown as NudgeChannel,
-    subscribers: new Set(),
-    teardown: null,
-  };
+  const entry: Entry = { channel: null, subscribers: new Set(), teardown: null };
   entries.set(topic, entry);
 
-  entry.channel = supabase
-    .channel(topic)
-    .on("broadcast", { event: TRADE_NUDGE_EVENT }, () => {
-      // Copied out before iterating: a subscriber that unsubscribes from its own
-      // callback would otherwise mutate the set mid-loop.
-      for (const notify of [...entry.subscribers]) notify();
-    })
-    .subscribe();
+  const fanOut = () => {
+    // Copied out before iterating: a subscriber that unsubscribes from its own
+    // callback would otherwise mutate the set mid-loop.
+    for (const notify of [...entry.subscribers]) notify();
+  };
+
+  void (closing.get(topic) ?? Promise.resolve()).then(() => {
+    // Superseded while we waited — somebody else owns this topic now.
+    if (entries.get(topic) !== entry) return;
+    entry.channel = supabase
+      .channel(topic)
+      .on("broadcast", { event: TRADE_NUDGE_EVENT }, fanOut)
+      .subscribe((status) => {
+        // THE JOIN ITSELF IS A REFETCH. Whatever changed between
+        // getMyTradeOffers reading the database and this channel joining was
+        // broadcast to nobody — the listener did not exist yet — so without this
+        // the badge stays stale until the next window focus, which on a desktop
+        // left open is a long time. Costs one extra read per join; a rejoin after
+        // the socket drops gets the same treatment, for the same reason
+        // event-channel.ts refetches on its degraded-to-live recovery.
+        if (status === "SUBSCRIBED") fanOut();
+      });
+  });
 
   return entry;
 }
@@ -89,7 +117,16 @@ export function subscribeToNudges(topic: string, onNudge: () => void): () => voi
     joined.teardown = setTimeout(() => {
       if (entries.get(topic) !== joined || joined.subscribers.size > 0) return;
       entries.delete(topic);
-      void supabase.removeChannel(joined.channel);
+      // Never opened — the entry was torn down while still waiting its turn. The
+      // deferred open above sees the entry is gone and never builds one.
+      if (!joined.channel) return;
+      // Published BEFORE it can resolve, so a resubscribe on the next tick finds
+      // it and waits rather than racing the removal.
+      const removal = supabase.removeChannel(joined.channel).catch(() => {});
+      closing.set(topic, removal);
+      void removal.then(() => {
+        if (closing.get(topic) === removal) closing.delete(topic);
+      });
     }, NUDGE_TEARDOWN_GRACE_MS);
   };
 }

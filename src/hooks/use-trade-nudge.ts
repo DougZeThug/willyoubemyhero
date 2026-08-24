@@ -8,13 +8,16 @@ import { tradeOffersKey } from "./use-trades";
 /**
  * Subscribe this device to its own trade nudges.
  *
- * FETCH-THEN-SUBSCRIBE, and that ordering is right rather than a compromise. The
- * topic only exists once getMyTradeOffers has answered, so there is a window on
- * first mount where no channel is open — but everything that happened before that
- * response was assembled is IN that response. The nudge only has to cover what
- * comes after it, which is exactly what it covers. Subscribing first would be the
- * classic realtime race instead: an event arriving for state the in-flight fetch
- * then overwrites with a staler read.
+ * FETCH-THEN-SUBSCRIBE, forced rather than chosen: the topic only exists once
+ * getMyTradeOffers has answered. That leaves a real gap — a trade settled between
+ * the handler reading the database and this channel joining was broadcast to a
+ * listener that did not exist, so neither the response nor the subscription
+ * carries it, and on a window that stays focused nothing would ever go back for
+ * it. nudge-channel.ts closes that by fanning out once on SUBSCRIBED, which is
+ * why joining costs a refetch.
+ *
+ * Subscribing first would not have avoided it, only moved it: an event would then
+ * arrive for state the in-flight fetch overwrites with a staler read.
  *
  * INVALIDATE, NEVER MERGE — the doctrine event-channel.ts and useTradeFeed follow.
  * There is no payload to merge even if we wanted one, which is the privacy
