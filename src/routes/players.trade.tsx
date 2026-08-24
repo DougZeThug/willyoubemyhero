@@ -9,11 +9,6 @@ import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMemberSession } from "@/lib/member-token";
 import { useAuthUser } from "@/hooks/use-account";
 import { getClaimRoster } from "@/lib/member.functions";
-import { createCollectorIdentity } from "@/lib/collector.functions";
-import { setMemberToken } from "@/lib/member-token";
-import { clearGuestToken } from "@/lib/guest-token";
-import { clearAccountHandoff } from "@/lib/account-handoff";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
 import {
   acceptTradeOffer,
   cancelTradeOffer,
