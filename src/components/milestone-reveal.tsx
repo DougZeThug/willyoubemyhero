@@ -100,13 +100,22 @@ export function MilestoneReveal({
   useEffect(() => {
     if (phase !== "card" || celebratedRef.current) return;
     celebratedRef.current = true;
-    setRevealed(true);
     cue("secretImpact");
     playReveal(duplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
     // A duplicate is still a reward here — it was bought with a month of showing
     // up — but it does not get the cannon. Same rule the daily pull follows.
     if (!duplicate) void celebrateSecret(rarity);
+    // A beat face-down so the turn onto the art reads as a turn. Under reduced
+    // motion the card is simply there.
+    if (reducedNow()) {
+      setRevealed(true);
+      return;
+    }
+    const t = setTimeout(() => setRevealed(true), TURN_DELAY_MS);
+    return () => clearTimeout(t);
   }, [phase, duplicate, rarity]);
+
+
 
 
   return (
