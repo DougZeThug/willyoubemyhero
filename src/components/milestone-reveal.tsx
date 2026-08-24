@@ -27,6 +27,7 @@ import { secretTierFloorLabel, secretTierStyle, type SecretTier } from "@/lib/se
 
 const FLARE_MS = 1100;
 const COUNT_MS = 900;
+const TURN_DELAY_MS = 260;
 
 /**
  * The preference, read synchronously.
