@@ -49,6 +49,7 @@ import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { packedByLabel } from "@/lib/card-pulls";
 import { urlFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
+import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/pack")({
@@ -912,6 +913,10 @@ function PackPage() {
       <PresentationMode active={presenting} />
       <PresentationStage active={presenting} />
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-6">
+        {/* Same gate as the vault, and here for the same reason: a pack opened
+            before they pick a name lands on the device, not on them. Kept out of
+            the ceremony itself — only while the pack is still sealed. */}
+        {stage === "sealed" && <CollectorSignupGate className="mb-5" />}
         {/* Only while the pack is still sealed. A phone screen is short, and this
             row is 90px of running total above a card whose whole job is to be the
             biggest thing on it.
