@@ -812,6 +812,39 @@ test.describe("opening a pack", () => {
       })
       .toBeGreaterThan(failed);
   });
+
+  test("a record that exhausted its retries wakes up when the network does", async ({
+    page,
+    server,
+  }) => {
+    // The latch is a ref, so handing it back after the third failure re-runs
+    // nothing by itself — and once a pack is torn the effect's deps sit still.
+    // The browser's own online signal is what re-arms the next cycle.
+    await page.addInitScript(([key, token]) => localStorage.setItem(key, token), [
+      MEMBER_KEY,
+      `m.p-alice.${Date.now() + 60 * 60_000}.signature`,
+    ] as const);
+    server.fail("recordCardPulls", "a long dead spot");
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+
+    // All three attempts of the first cycle go out and die (~0s, 4s, 12s in).
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("recordCardPulls")).length, {
+        timeout: 25_000,
+      })
+      .toBe(3);
+
+    server.recover("recordCardPulls");
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("recordCardPulls")).length, {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(3);
+  });
 });
 
 test.describe("navigation", () => {

@@ -645,6 +645,30 @@ function PackPage() {
    * somebody is enjoying.
    */
   const recordedForRef = useRef<string | null>(null);
+  // The retry loop below sleeps between attempts, and useMemberSession is live
+  // — a phone can change hands while it waits. The request middleware reads
+  // whatever token localStorage holds at send time, so a stale loop would post
+  // the first person's ids under the second person's account. Each attempt
+  // re-checks the current identity through this ref and abandons on a change.
+  const recordPidRef = useRef(me?.participantId);
+  useEffect(() => {
+    recordPidRef.current = me?.participantId;
+  });
+  // Re-arm signal for a record that exhausted its retries: the latch is a ref,
+  // so handing it back re-runs nothing, and once a pack is torn the effect's
+  // deps sit still. These are the two moments connectivity plausibly returned.
+  const [recordWake, setRecordWake] = useState(0);
+  useEffect(() => {
+    const wake = () => {
+      if (document.visibilityState === "visible") setRecordWake((n) => n + 1);
+    };
+    window.addEventListener("online", wake);
+    document.addEventListener("visibilitychange", wake);
+    return () => {
+      window.removeEventListener("online", wake);
+      document.removeEventListener("visibilitychange", wake);
+    };
+  }, []);
   useEffect(() => {
     const pid = me?.participantId;
     // The event gates this alongside the rest, not just the seed. A seed built
@@ -663,15 +687,19 @@ function PackPage() {
       // revealed with "Packed by 1", making the counter meaningless. Better an
       // honest ramp than a uniform stripe.
       const ids = dealtIds.slice(0, 16);
-      // Three tries with a pause between them, then hand the latch back so a
-      // later pass — a resume, the tab coming back — can start over. One
-      // garden dead spot used to cost the whole day's count: the latch was
-      // taken before the await and a swallowed failure never returned it. A
-      // retry after a lost response can double-count a pull, accepted for the
-      // same reason the endpoint tolerates hand-posted ids: the ceiling is a
+      // Three tries with a pause between them, then hand the latch back and
+      // wait for a wake (recordWake above) to start a fresh cycle. One garden
+      // dead spot used to cost the whole day's count: the latch was taken
+      // before the await and a swallowed failure never returned it. A retry
+      // after a lost response can double-count a pull, accepted for the same
+      // reason the endpoint tolerates hand-posted ids: the ceiling is a
       // decorative stat only its owner can see.
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 4_000));
+        // Abandon without touching the latch if the phone changed hands while
+        // this loop slept — the new member's own effect run owns it now, and a
+        // request sent here would carry their token with this pack's ids.
+        if (recordPidRef.current !== pid) return;
         try {
           // The same call records the pack itself. A pack of three cards you already
           // own writes no new card_pulls row, so counting packs from that table
@@ -698,9 +726,11 @@ function PackPage() {
           /* a count nobody asked for is not worth an error nobody can act on */
         }
       }
-      recordedForRef.current = null;
+      // Only if it is still ours: an exhausted loop from before a handoff must
+      // not clear the latch the next member's run has taken.
+      if (recordedForRef.current === pid) recordedForRef.current = null;
     })();
-  }, [torn, dealtIds, me?.participantId, record, qc, event?.id, seed, editions]);
+  }, [torn, dealtIds, me?.participantId, record, qc, event?.id, seed, editions, recordWake]);
 
   // A phone changing hands mid-party is a real thing in this league. Re-arm the
   // latch when the member changes so the next person gets their own card.
