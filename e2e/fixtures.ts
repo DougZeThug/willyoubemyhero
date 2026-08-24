@@ -148,6 +148,23 @@ export const DEFAULT_RESPONSES: Responses = {
     resetsAt: null,
   },
   getMySecrets: { cards: [], pulled: 0 },
+  // Streaks. Zero by default, so the flame and the summary's claim block render
+  // nothing and no existing pack spec has to know this feature exists. Neither
+  // key is a substring of another key here — check that again before adding one.
+  //
+  // claimStreakMilestone is deliberately NOT defaulted, for the same reason the
+  // trade mutations below are not: nothing should reach it unless a test means
+  // to, and an undefaulted handler falls through rather than quietly succeeding.
+  getStreakStatus: {
+    kind: null,
+    current: 0,
+    startedOn: null,
+    lastOpenedOn: null,
+    openedToday: false,
+    today: "2026-08-24",
+    canClaim: false,
+    milestones: [],
+  },
   pullSecretCard: { ok: false, reason: "unavailable" },
   listSecretCards: { cards: [], claimedMembers: 0, exhausted: false },
   // Empty by default, so packedByLabel renders nothing and no existing spec

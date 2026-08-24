@@ -64,6 +64,9 @@ const SERVER_ONLY = [
   // Unlike card_pulls there is no public aggregate over this at all — a pack
   // count is shown to the person it belongs to and to nobody else.
   "public.pack_opens",
+  // What somebody collected for showing up, which names the run they were on and
+  // the pull it bought them. Readable means the secret ledger leaks sideways.
+  "public.streak_milestone_claims",
   // Editable prompt sources and immutable authoring history are commissioner-only.
   "public.card_prompt_templates",
   "public.card_prompt_runs",
@@ -268,6 +271,20 @@ describe("server-only tables", () => {
     );
     expect(await sql("SELECT count(*)::int AS n FROM public.pack_opens")).toEqual([{ n: 1 }]);
     const visible = await visibleRows("anon", "public.pack_opens");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
+  it("keeps a streak milestone somebody has claimed out of anon's reach", async () => {
+    await sql(
+      `INSERT INTO public.streak_milestone_claims
+         (participant_id, streak_started_on, milestone, claimed_on, reward_kind)
+       VALUES ($1, current_date, 3, current_date, 'secret')`,
+      [IDS.alice],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.streak_milestone_claims")).toEqual([
+      { n: 1 },
+    ]);
+    const visible = await visibleRows("anon", "public.streak_milestone_claims");
     expect(visible === null || visible === 0).toBe(true);
   });
 

@@ -106,7 +106,17 @@ function toView(
   };
 }
 
-async function signCard(row: SecretCardRow, tier: string) {
+/**
+ * A card row plus signed, resized urls for its two faces.
+ *
+ * Exported for streaks.functions.ts, which pays a milestone out as a bonus secret
+ * and has to hand the reveal the same view this file builds — duplicating the
+ * signing would drift on VARIANT_WIDTHS the first time one of them changed.
+ *
+ * The INVARIANT at the top of this file still holds: both callers pass a row they
+ * looked up from an id an RPC returned, never one that arrived in a request.
+ */
+export async function signSecretCard(row: SecretCardRow, tier: string) {
   // Originals are multi-megabyte PNGs; the renderer hands back a WebP a fraction
   // of the size at the biggest width the card is ever shown at.
   const [artUrl, backUrl] = await Promise.all([
@@ -169,7 +179,7 @@ export const pullSecretCard = createServerFn({ method: "POST" }).handler(async (
     day: pull.day,
     duplicate: pull.duplicate,
     fresh: pull.fresh,
-    card: await signCard(card, pull.tier),
+    card: await signSecretCard(card, pull.tier),
   };
 });
 
@@ -278,7 +288,7 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
 
   const cards = await Promise.all(
     (rows ?? []).map(async (row) => ({
-      ...(await signCard(row, owned.get(row.id)!.tier)),
+      ...(await signSecretCard(row, owned.get(row.id)!.tier)),
       firstPulledOn: owned.get(row.id)!.firstPulledOn,
       count: owned.get(row.id)!.count,
       // How many people have found this one. A count of 1 means you are the only
