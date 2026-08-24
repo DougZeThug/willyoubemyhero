@@ -67,3 +67,10 @@ $$;
 
 REVOKE ALL ON FUNCTION public.note_auth_attempt(text, text, integer, integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.clear_auth_attempts(text, text) FROM PUBLIC, anon, authenticated;
+
+-- The REVOKE FROM PUBLIC above also strips the default EXECUTE that
+-- service_role inherits, and the handlers fail open on a limiter error — so
+-- without these grants the limiter would be silently inert in production.
+-- Same pattern as the trade RPCs in 20260817120000_card_trading.sql.
+GRANT EXECUTE ON FUNCTION public.note_auth_attempt(text, text, integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.clear_auth_attempts(text, text) TO service_role;

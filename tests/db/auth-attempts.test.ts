@@ -4,7 +4,7 @@
 // answers, so parallel guesses cannot share an allowance), and nothing that
 // ships to a browser can reach it in any direction.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, isDenied, sql } from "./helpers";
+import { asRole, closeDb, isDenied, sql } from "./helpers";
 
 afterAll(closeDb);
 beforeEach(async () => {
@@ -20,6 +20,20 @@ async function note(kind: string, key: string, windowS = 600, max = 3) {
 }
 
 describe("note_auth_attempt", () => {
+  it("is callable as service_role — the only caller the app has", async () => {
+    // REVOKE FROM PUBLIC also strips the default EXECUTE service_role
+    // inherits, and the handlers fail open on a limiter error — so a missing
+    // grant would leave the limiter silently inert. This test runs the way the
+    // app actually connects, not as the migration's owner.
+    const [row] = await asRole<{ note_auth_attempt: boolean }>(
+      "service_role",
+      "SELECT public.note_auth_attempt($1, $2, $3, $4)",
+      ["pin", "svc", 600, 10],
+    );
+    expect(row.note_auth_attempt).toBe(true);
+    await asRole("service_role", "SELECT public.clear_auth_attempts($1, $2)", ["pin", "svc"]);
+  });
+
   it("is unreachable with the publishable key, table and functions alike", async () => {
     // Without the REVOKEs, anyone holding the key that ships to every browser
     // could read who is being counted — or wipe their own counter.
