@@ -1792,7 +1792,12 @@ export type Database = {
         Returns: number
       }
       pull_bonus_secret_card: {
-        Args: { _event_id: string; _guest_id: string; _participant_id: string }
+        Args: {
+          _event_id: string
+          _floor_tier?: string
+          _guest_id: string
+          _participant_id: string
+        }
         Returns: Json
       }
       pull_secret_card: {
@@ -1826,6 +1831,7 @@ export type Database = {
         Returns: undefined
       }
       roll_secret_tier: { Args: never; Returns: string }
+      roll_secret_tier_at_least: { Args: { _floor: string }; Returns: string }
       secret_pull_status: {
         Args: { _guest_id: string; _participant_id: string }
         Returns: Json
