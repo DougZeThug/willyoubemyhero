@@ -28,6 +28,7 @@ export function SecretCardSheet({
   index,
   onIndexChange,
   onOpenChange,
+  completedCollections,
 }: {
   /** Every secret this device holds, so one can be swiped to the next. */
   cards: OwnedSecret[];
@@ -35,6 +36,11 @@ export function SecretCardSheet({
   index: number | null;
   onIndexChange: (next: number) => void;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Set ids this device's owner has finished, for the badge on the back. Ids
+   * rather than sizes: the back still says nothing about how big anything is.
+   */
+  completedCollections?: ReadonlySet<string>;
 }) {
   const card = index == null ? null : (cards[index] ?? null);
   const rarity = secretFoil(card?.foil, card?.borderFx);
@@ -92,6 +98,9 @@ export function SecretCardSheet({
                         card={card}
                         rarity={rarity}
                         pulledOn={card.firstPulledOn}
+                        completed={
+                          !!card.collection && !!completedCollections?.has(card.collection)
+                        }
                         size="large"
                       />
                     }

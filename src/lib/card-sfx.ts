@@ -298,6 +298,21 @@ function playSecretImpact() {
   buzz([30, 40, 60]);
 }
 
+/**
+ * The last card of a set seating into it.
+ *
+ * Lower and longer than secretImpact, with the shine above it dropped: a secret
+ * lands, and this closes. The buzz is the longest pattern in the file for the
+ * same reason — it is the only one that is not marking a single frame, and a
+ * handset that shudders once and stops reads as an impact rather than as an
+ * arrival.
+ */
+function playCollectionComplete() {
+  thud(150, 34, 1.1, 0.24);
+  noiseBurst(0.3, 2600, 400, 0.07);
+  buzz([40, 60, 40, 60, 120]);
+}
+
 /** Foil wrapper tearing open — longer, rougher, downward. */
 export function playTear() {
   noiseBurst(0.42, 5200, 700, 0.13);
@@ -390,6 +405,14 @@ export function playTearTick() {
 // resolves; this one does not, which is what "there is more of this" sounds like.
 const CHIMES: Record<string, number[]> = {
   secret: [659.25, 987.77, 1318.51, 1975.53], // E5 B5 E6 B6
+  // THE RESOLUTION OF THE SECRET BELL, and the only reason this entry is worth a
+  // fifth voice. `secret` is an open stack of fifths on E with no third in it,
+  // which is what makes it ring instead of land — "there is more of this". A
+  // finished set is the moment there is not, so this is the same E, with the G#
+  // the bell has been missing dropped into the middle of it. Somebody who has
+  // pulled cards all season has heard the unresolved version dozens of times and
+  // will not be able to say why this one feels like an ending.
+  collectionComplete: [329.63, 659.25, 830.61, 987.77, 1318.51], // E4 E5 G#5 B5 E6
   secretDupe: [1318.51, 1975.53], // the top half of the same bell
   champion: [523.25, 659.25, 987.77],
   podium: [523.25, 659.25, 783.99],
@@ -532,6 +555,8 @@ const CUES = {
   fakeEnding: playFakeEnding,
   /** The secret landing. */
   secretImpact: playSecretImpact,
+  /** A set closing: the last card seating into it. */
+  collectionComplete: playCollectionComplete,
 } as const;
 
 export type SfxCue = keyof typeof CUES;

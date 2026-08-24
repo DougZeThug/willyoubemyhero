@@ -21,6 +21,7 @@ const EXPECTED_TABLES = [
   "card_prompt_templates",
   "card_pulls",
   "card_reactions",
+  "collection_trophies",
   "draft_selections",
   "event_archive_snapshots",
   "event_participants",
@@ -277,6 +278,11 @@ describe("migrations", () => {
     // everyone else's phone. Unpublished, the feature works but never moves until
     // somebody reloads.
     expect(published).toContain("trades");
+    // The only channel that reaches somebody an admin just granted their last
+    // card to: grant_secret_card runs on the commissioner's phone, and
+    // grantSecretCard can invalidate nothing but the commissioner's own query
+    // key. Unpublished, the trophy is real but silent until a reload.
+    expect(published).toContain("collection_trophies");
   });
 
   it("keeps the secret tables out of realtime", async () => {

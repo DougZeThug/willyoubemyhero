@@ -34,6 +34,12 @@ const PUBLIC_READ = [
   // Completed trades are an announcement — the feed is the point. Public-safe by
   // construction rather than by filtering: see the redaction test below.
   "public.trades",
+  // The one place a secret set's SIZE is allowed to be readable, and only ever
+  // for a set somebody has already finished. Everything else in that feature
+  // exists to withhold that number; a trophy is the moment it becomes the prize
+  // rather than the spoiler. Other people's trophies on their player page are
+  // most of the point, so this is public by design and not by oversight.
+  "public.collection_trophies",
 ];
 
 /** Server-only tables. Each one leaks something specific if it becomes readable. */
@@ -139,6 +145,26 @@ describe("public reads", () => {
     );
     const rows = await asRole<{ id: string }>("anon", "SELECT id FROM public.trades");
     expect(rows.map((r) => r.id)).toEqual([TRADE_ID]);
+  });
+
+  it("lets anon read a trophy, size and all", async () => {
+    // The positive control for `collection_trophies`, and the one place in this
+    // suite asserting that a set size is DELIBERATELY readable. If this ever
+    // starts failing because somebody locked the table down, the trophy shelf and
+    // every other player's page went blank with it — that is a product decision,
+    // not a leak being closed.
+    await sql(
+      `INSERT INTO public.collection_trophies
+         (participant_id, collection_id, completed_on, size_at_completion, via)
+       VALUES ($1, 'pets', current_date, 9, 'pull')
+       ON CONFLICT (participant_id, collection_id) DO NOTHING`,
+      [IDS.alice],
+    );
+    const rows = await asRole<{ collection_id: string; size_at_completion: number }>(
+      "anon",
+      "SELECT collection_id, size_at_completion FROM public.collection_trophies",
+    );
+    expect(rows).toEqual([{ collection_id: "pets", size_at_completion: 9 }]);
   });
 
   it("hides the private columns on runs while keeping the times readable", async () => {
@@ -379,6 +405,13 @@ describe("anon has no write grant anywhere", () => {
     // The whole swap runs inside accept_trade_offer as service_role. Reaching the
     // status column directly would take both people's cards out of the loop.
     ["accept somebody else's offer", `UPDATE public.trade_offers SET status = 'accepted'`, []], // prettier-ignore
+    // The second read-only-grant public table, and the same argument as `trades`:
+    // a forged row here is a finished set announced on somebody's player page
+    // that they never finished. Carol rather than Alice, and a set id the
+    // positive control above does not use, so this cannot pass by colliding on
+    // the primary key — `isDenied` counts any error as a denial.
+    ["award itself a trophy it never earned", `INSERT INTO public.collection_trophies (participant_id, collection_id, completed_on, size_at_completion, via) VALUES ($1, 'wags', current_date, 3, 'pull')`, [IDS.carol]], // prettier-ignore
+    ["inflate a set it did finish", `UPDATE public.collection_trophies SET size_at_completion = 99`, []], // prettier-ignore
   ];
 
   it.each(WRITES)("anon cannot %s", async (_label, statement, params) => {

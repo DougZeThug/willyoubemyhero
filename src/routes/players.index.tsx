@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck, ArrowUpDown } from "lucide-react"; // prettier-ignore
+import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck, ArrowUpDown, Medal } from "lucide-react"; // prettier-ignore
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -30,8 +30,17 @@ import {
   FAVOURITES_SECTION,
   ROSTER_SECTION,
   secretSectionId,
+  TROPHIES_SECTION,
   useVaultLayout,
 } from "@/lib/vault-layout";
+import { useCollectionTrophies } from "@/hooks/use-collection-trophies";
+import {
+  completedIds,
+  trophiesFor,
+  trophySizeLabel,
+  TROPHY_RARITY,
+  type CollectionTrophy,
+} from "@/lib/collection-trophies";
 import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
 import { getSecretCollections } from "@/lib/secret-cards.functions";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
@@ -97,6 +106,21 @@ function PlayersPage() {
     queryFn: () => collectionsFn(),
     staleTime: 30 * 60_000,
   });
+  // The whole league's trophies, because the same rows badge your card backs and
+  // fill your shelf. Public data, so this is the one collection query on this
+  // page that is not scoped to whoever is holding the phone.
+  const allTrophies = useCollectionTrophies();
+  // A guest has no trophies by design — they are banked by claim_guest_secrets
+  // the moment a guest claims a player — so this reads the member id and not the
+  // actor.
+  const myTrophies = useMemo(
+    () => trophiesFor(allTrophies.data?.trophies ?? [], member?.participantId ?? null),
+    [allTrophies.data, member?.participantId],
+  );
+  const myCompleted = useMemo(
+    () => completedIds(allTrophies.data?.trophies ?? [], member?.participantId ?? null),
+    [allTrophies.data, member?.participantId],
+  );
   const secretStatus = useSecretStatus(actor);
   const pullCounts = useCardPullCounts(event?.id ?? null);
   // An index rather than the card itself: the sheet swipes between secrets, so it
@@ -265,6 +289,19 @@ function PlayersPage() {
             },
           ]
         : []),
+      // Above the sets themselves: the finished ones are the answer to what the
+      // shelves below are asking.
+      ...(myTrophies.length > 0
+        ? [
+            {
+              kind: "trophies" as const,
+              id: TROPHIES_SECTION,
+              title: "Complete",
+              meta: myTrophies.length,
+              trophies: myTrophies,
+            },
+          ]
+        : []),
       ...secretGroups.map((g) => ({
         kind: "secrets" as const,
         id: secretSectionId(g.id),
@@ -277,7 +314,7 @@ function PlayersPage() {
       // so the sets you are collecting lead the page.
       { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rosterRows.length },
     ],
-    [favourites, rosterRows.length, secretGroups],
+    [favourites, myTrophies, rosterRows.length, secretGroups],
   );
 
   const presentIds = useMemo(() => sections.map((x) => x.id), [sections]);
@@ -299,6 +336,40 @@ function PlayersPage() {
         return [];
       }),
     [order, sectionsById],
+  );
+
+  /**
+   * A finished set, as a plaque rather than a card.
+   *
+   * Deliberately not a HoloCard: a set is not a card, and drawing it as one puts
+   * a fourteenth thing on a shelf of thirteen. The size is printed here and
+   * nowhere else on this page — this is the one shelf entitled to a denominator,
+   * because it only ever describes something already finished.
+   */
+  const trophyTile = (t: CollectionTrophy) => (
+    <div
+      key={t.collection}
+      className="hud-bezel flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center"
+      style={{ borderColor: TROPHY_RARITY.border }}
+    >
+      <Medal
+        aria-hidden
+        className="h-9 w-9"
+        style={{ color: TROPHY_RARITY.accent, filter: "drop-shadow(0 0 10px currentColor)" }}
+      />
+      <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+        {t.label}
+      </div>
+      <div
+        className="text-[9px] font-bold uppercase tracking-[0.25em]"
+        style={{ color: TROPHY_RARITY.accent }}
+      >
+        {trophySizeLabel(t.size)}
+      </div>
+      <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+        {t.completedOn}
+      </div>
+    </div>
   );
 
   const secretTile = (s: OwnedSecret) => {
@@ -616,6 +687,7 @@ function PlayersPage() {
           index={openSecret}
           onIndexChange={setOpenSecret}
           onOpenChange={(open) => !open && setOpenSecret(null)}
+          completedCollections={myCompleted}
         />
 
         {/* One toggle for the whole vault, rather than arrows living permanently
@@ -663,16 +735,18 @@ function PlayersPage() {
             >
               {section.kind === "roster"
                 ? rosterBody
-                : section.kind === "favourites"
-                  ? // Both kinds of card land on one shelf, each drawn by the
-                    // renderer it would have had downstairs, so a pinned card
-                    // looks like itself rather than like a third thing.
-                    cardGrid(
-                      section.items.map((f) =>
-                        f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
-                      ),
-                    )
-                  : cardGrid(section.items.map(secretTile))}
+                : section.kind === "trophies"
+                  ? cardGrid(section.trophies.map(trophyTile))
+                  : section.kind === "favourites"
+                    ? // Both kinds of card land on one shelf, each drawn by the
+                      // renderer it would have had downstairs, so a pinned card
+                      // looks like itself rather than like a third thing.
+                      cardGrid(
+                        section.items.map((f) =>
+                          f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
+                        ),
+                      )
+                    : cardGrid(section.items.map(secretTile))}
             </VaultSection>
           );
         })}

@@ -19,6 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // A top-level client.server import is safe here and nowhere else: this is a
 // *.server.ts module, so it never reaches the client bundle.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { CompletedCollectionFor } from "./collection-trophies";
 import type { TradeOfferStatus, TradeSummaryItem } from "./trades";
 
 export type TradeOfferRow = {
@@ -87,7 +88,18 @@ export type CreateTradeOfferResult = { ok: true; offerId: string };
  * that had moved on by the time accept ran. Anything else raises.
  */
 export type AcceptTradeOfferResult =
-  | { ok: true; tradeId: string }
+  | {
+      ok: true;
+      tradeId: string;
+      /**
+       * Sets this trade finished, for either party — a two-way swap genuinely
+       * can complete both at once, which is why this is a list where the pull
+       * and grant paths carry a single value. Each entry names its owner,
+       * because the person who pressed accept is only one of the two people it
+       * can belong to.
+       */
+      completedCollections: CompletedCollectionFor[];
+    }
   | { ok: false; reason: "resolved" | "voided" };
 
 export function tradesDb(): SupabaseClient {

@@ -472,7 +472,12 @@ export function SecretCardsPanel() {
       success: (r) =>
         r.duplicate
           ? `${who} already had "${card.name}" — logged as a duplicate`
-          : `Granted "${card.name}" to ${who}`,
+          : // The commissioner's copy of a ceremony they cannot see: the recipient
+            // is somewhere else holding their own phone, and finds out through the
+            // realtime subscription on collection_trophies rather than from here.
+            r.completedCollection
+            ? `Granted "${card.name}" — that finished ${r.completedCollection.label} for ${who}`
+            : `Granted "${card.name}" to ${who}`,
       error: (e) => (e instanceof Error ? e.message : "Grant failed"),
     });
     try {

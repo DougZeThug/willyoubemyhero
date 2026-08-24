@@ -5,6 +5,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowLeftRight, Inbox, Send } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
+import { CollectionComplete } from "@/components/collection-complete";
+import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
+import type { CompletedCollection } from "@/lib/collection-trophies";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMemberSession } from "@/lib/member-token";
 import { useAuthUser } from "@/hooks/use-account";
@@ -90,6 +93,14 @@ function TradePage() {
   const [give, setGive] = useState<Staged[]>([]);
   const [want, setWant] = useState<Staged[]>([]);
   const [pending, setPending] = useState<string | null>(null);
+  /**
+   * Sets this trade just finished for the person holding the phone.
+   *
+   * A queue rather than one value: a two-way swap can close two, and the second
+   * ceremony runs when the first is dismissed. Almost always empty, occasionally
+   * one, and the two-entry case is why this is not a single slot.
+   */
+  const [completions, setCompletions] = useState<CompletedCollection[]>([]);
 
   const mySpares = useTradeSpares(myId);
   const theirSpares = useTradeSpares(theirId);
@@ -163,10 +174,26 @@ function TradePage() {
     try {
       const res = await acceptFn({ data: { offerId } });
       if (res.ok) {
-        toast.success("Trade done");
-        // The same flourish a pack pull gets, at half strength: a swap is a
-        // smaller moment than a hit, but it is still a card arriving.
-        void burst(rarityStyle("podium"), 0.7);
+        // MINE ONLY: a two-way swap can finish a set for the other person too and
+        // the response names them both, but their ceremony is theirs — the realtime
+        // subscription on collection_trophies is what tells their phone.
+        //
+        // Defaulted rather than asserted, because this response crosses a version
+        // boundary: a phone left open across a deploy, or a stubbed response, and
+        // reading `.filter` off an absent field turns a trade that worked into a
+        // thrown error on the one screen that just moved somebody's cards.
+        const mine = (res.completedCollections ?? []).filter((c) => c.participantId === myId);
+        if (mine.length) {
+          qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
+          // Queued rather than collapsed: one trade genuinely can close two sets,
+          // and showing one of them would be a worse bug than showing neither.
+          setCompletions(mine);
+        } else {
+          toast.success("Trade done");
+          // The same flourish a pack pull gets, at half strength: a swap is a
+          // smaller moment than a hit, but it is still a card arriving.
+          void burst(rarityStyle("podium"), 0.7);
+        }
       } else if (res.reason === "voided") {
         toast.error("One of those cards has already moved on");
       } else {
@@ -273,6 +300,17 @@ function TradePage() {
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      {/* Outside the page column and above everything, the same way the pack
+          screen mounts it. Shifting the queue on dismiss is what plays the second
+          one when a single trade closed two sets. */}
+      {completions[0] && (
+        <CollectionComplete
+          key={completions[0].collection}
+          label={completions[0].label}
+          size={completions[0].size}
+          onDone={() => setCompletions((q) => q.slice(1))}
+        />
+      )}
       <div className="mx-auto max-w-3xl px-4 py-6">
         <Header />
 

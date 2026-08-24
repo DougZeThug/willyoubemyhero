@@ -9,6 +9,7 @@ import {
   GitCompareArrows,
   IdCard,
   Link as LinkIcon,
+  Medal,
   MoreHorizontal,
   PackageOpen,
   QrCode,
@@ -57,6 +58,8 @@ import { useMemberSession } from "@/lib/member-token";
 import { PackStats } from "@/components/pack-stats";
 import { StatTile } from "@/components/stat-tile";
 import { useEventSocial, useEventAwards } from "@/hooks/use-event-social";
+import { useCollectionTrophies } from "@/hooks/use-collection-trophies";
+import { trophiesFor, trophySizeLabel, TROPHY_RARITY } from "@/lib/collection-trophies";
 import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle, TIER_REASON, type Rarity } from "@/lib/card-rarity";
@@ -113,6 +116,7 @@ function PlayerCardPage() {
   const cardBack = useEventCardBack(event?.id ?? null);
   const social = useEventSocial(event?.id ?? null);
   const awards = useEventAwards(event?.id ?? null);
+  const trophies = useCollectionTrophies();
   const pullCounts = useCardPullCounts(event?.id ?? null);
   const member = useMemberSession();
 
@@ -330,6 +334,10 @@ function PlayerCardPage() {
     (c) => c.event_participant_id === ep.id,
   );
   const myAwards = ep.participant_id ? (awards.byParticipant.get(ep.participant_id) ?? []) : [];
+  // Somebody else's finished sets, on somebody else's page. The public half of
+  // the trophy table earning its posture: a secret set's SIZE is readable here,
+  // by anyone, and only ever for a set that is already done.
+  const myTrophies = trophiesFor(trophies.data?.trophies ?? [], ep.participant_id);
 
   const shareBadge = cardBadge(
     { label: rarity.label, reason: "", accent: rarity.accent },
@@ -576,6 +584,28 @@ function PlayerCardPage() {
           {ep.participant?.fantasy_team_name && (
             <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">
               {ep.participant.fantasy_team_name}
+            </div>
+          )}
+          {myTrophies.length > 0 && (
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {myTrophies.map((t) => (
+                <span
+                  key={t.collection}
+                  className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest"
+                  style={{
+                    borderColor: TROPHY_RARITY.border,
+                    color: TROPHY_RARITY.accent,
+                    background: "oklch(0.82 0.19 85 / 10%)",
+                  }}
+                  // The pills below link to /awards; these link nowhere, because a
+                  // set's contents are still nobody's business. The trophy says it
+                  // was finished and how big it was, and that is the whole story.
+                  title={`${t.label} — ${trophySizeLabel(t.size)}`}
+                >
+                  <Medal aria-hidden className="h-3 w-3" />
+                  {t.label} · {t.size}
+                </span>
+              ))}
             </div>
           )}
           {myAwards.length > 0 && (

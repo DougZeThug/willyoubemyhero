@@ -90,6 +90,59 @@ describe("pullSecretCard", () => {
     );
   });
 
+  it("hands the finished set straight through, size and all", async () => {
+    // The designed exception to the silence rule, and the only response in this
+    // file allowed to carry a card count. The handler must not invent it: the
+    // detection is atomic with the write inside pull_secret_card, so this asserts
+    // the value arrives untouched rather than being recomputed here.
+    withDb({
+      "rpc.pull_secret_card": {
+        data: {
+          pullId: "p1",
+          cardId: CARD_ID,
+          day: "2026-07-28",
+          duplicate: false,
+          fresh: true,
+          completedCollection: {
+            collection: "pets",
+            label: "Pets",
+            size: 9,
+            completedOn: "2026-07-28",
+          },
+        },
+      },
+      "secret_cards.select": { data: card() },
+      "storage.createSignedUrl": { data: { signedUrl: "https://signed/art" } },
+    });
+    const { pullSecretCard } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ completedCollection: { size: number } | null }>(
+      pullSecretCard,
+      { headers: asMe() },
+    );
+    expect(res.completedCollection).toEqual({
+      collection: "pets",
+      label: "Pets",
+      size: 9,
+      completedOn: "2026-07-28",
+    });
+  });
+
+  it("says null, not undefined, on every pull that finished nothing", async () => {
+    // Which is all but one of them in a season. An absent key would make the
+    // ceremony's `if (res.completedCollection)` depend on an old server still
+    // being deployed; null is a shape the client can rely on.
+    withDb({
+      "rpc.pull_secret_card": {
+        data: { pullId: "p1", cardId: CARD_ID, day: "2026-07-28", duplicate: false, fresh: true },
+      },
+      "secret_cards.select": { data: card() },
+      "storage.createSignedUrl": { data: { signedUrl: "https://signed/art" } },
+    });
+    const { pullSecretCard } = await import("./secret-cards.functions");
+    const res = await callServerFn<Record<string, unknown>>(pullSecretCard, { headers: asMe() });
+    expect(res).toHaveProperty("completedCollection", null);
+  });
+
   it("pulls for the guest the token names, never for a caller-supplied id", async () => {
     // The whole reason the guest identity is signed rather than a plain device
     // id: without this, naming somebody else's id would spend their pull.
@@ -446,6 +499,117 @@ describe("getMySecrets", () => {
   });
 });
 
+describe("grantSecretCard", () => {
+  it("grants to the participant named in the payload, under an admin token", async () => {
+    // Unlike every member-facing handler in this file, the id here IS a payload
+    // parameter — the commissioner is acting on somebody else by definition, and
+    // requireLeagueAdmin is what makes that safe.
+    withDb({ "rpc.grant_secret_card": { data: { duplicate: false } } });
+    const { grantSecretCard } = await import("./secret-cards.functions");
+    await callServerFn(grantSecretCard, {
+      data: { participantId: THEM, cardId: CARD_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.client.rpc).toHaveBeenCalledWith(
+      "grant_secret_card",
+      expect.objectContaining({ _participant_id: THEM, _secret_card_id: CARD_ID }),
+    );
+  });
+
+  it("passes the finished set back for the commissioner's toast", async () => {
+    // The recipient is somewhere else in the garden holding their own phone, so
+    // this value cannot reach them from here — collection_trophies is published
+    // to realtime for exactly that reason. This is the admin's confirmation.
+    withDb({
+      "rpc.grant_secret_card": {
+        data: {
+          duplicate: false,
+          completedCollection: {
+            collection: "pets",
+            label: "Pets",
+            size: 9,
+            completedOn: "2026-07-28",
+          },
+        },
+      },
+    });
+    const { grantSecretCard } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ completedCollection: { size: number } | null }>(
+      grantSecretCard,
+      { data: { participantId: THEM, cardId: CARD_ID }, headers: asAdmin() },
+    );
+    expect(res.completedCollection).toMatchObject({ collection: "pets", label: "Pets", size: 9 });
+  });
+
+  it("reports a duplicate without a trophy", async () => {
+    withDb({ "rpc.grant_secret_card": { data: { duplicate: true } } });
+    const { grantSecretCard } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ duplicate: boolean; completedCollection: unknown }>(
+      grantSecretCard,
+      { data: { participantId: THEM, cardId: CARD_ID }, headers: asAdmin() },
+    );
+    expect(res).toMatchObject({ duplicate: true, completedCollection: null });
+  });
+});
+
+describe("getCollectionTrophies", () => {
+  const trophyRow = {
+    participant_id: ME,
+    collection_id: "pets",
+    size_at_completion: 9,
+    completed_on: "2026-07-28",
+    via: "pull",
+  };
+
+  it("answers anybody, because a finished set is public by design", async () => {
+    // Unguarded on purpose, the same as getSecretCollections. Other people's
+    // trophies on their player page are most of the point, and there is nothing
+    // here about a set still being collected.
+    withDb({
+      "collection_trophies.select": { data: [trophyRow] },
+      "secret_collections.select": { data: [{ id: "pets", label: "Pets" }] },
+    });
+    const { getCollectionTrophies } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ trophies: { label: string; size: number }[] }>(
+      getCollectionTrophies,
+    );
+    expect(res.trophies).toEqual([
+      {
+        participantId: ME,
+        collection: "pets",
+        label: "Pets",
+        size: 9,
+        completedOn: "2026-07-28",
+        via: "pull",
+      },
+    ]);
+  });
+
+  it("falls back to the id when the set has been hidden or renamed away", async () => {
+    // A trophy outlives its set — collection_trophies references
+    // secret_collections ON DELETE RESTRICT, but a hidden set is not returned by
+    // the label lookup. Rendering the id beats rendering nothing, which is the
+    // same fallback secretCollectionLabel makes.
+    withDb({
+      "collection_trophies.select": { data: [trophyRow] },
+      "secret_collections.select": { data: [] },
+    });
+    const { getCollectionTrophies } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ trophies: { label: string }[] }>(getCollectionTrophies);
+    expect(res.trophies[0].label).toBe("pets");
+  });
+
+  it("looks up no labels at all when nobody has finished anything", async () => {
+    // `.in("id", [])` is a query PostgREST will happily run and return everything
+    // for; skipping it is cheaper and cannot go wrong.
+    withDb({ "collection_trophies.select": { data: [] } });
+    const { getCollectionTrophies } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ trophies: unknown[] }>(getCollectionTrophies);
+    expect(res.trophies).toEqual([]);
+    expect(mock.callsFor("secret_collections", "select")).toHaveLength(0);
+  });
+});
+
 describe("the admin catalogue", () => {
   const ADMIN_FNS = [
     "listSecretCards",
@@ -453,6 +617,9 @@ describe("the admin catalogue", () => {
     "updateSecretCard",
     "uploadSecretCardArt",
     "deleteSecretCard",
+    // Added with the trophies. It mints a permanent collection card into somebody
+    // else's vault and was the one write in this file with no guard test at all.
+    "grantSecretCard",
   ] as const;
 
   const someInput: Record<string, unknown> = {
@@ -460,6 +627,7 @@ describe("the admin catalogue", () => {
     updateSecretCard: { id: CARD_ID, name: "Gary" },
     uploadSecretCardArt: { id: CARD_ID, dataUrl: `data:image/webp;base64,${"A".repeat(64)}` },
     deleteSecretCard: { id: CARD_ID },
+    grantSecretCard: { participantId: ME, cardId: CARD_ID },
   };
 
   it.each(ADMIN_FNS)("%s refuses an anonymous caller", async (name) => {

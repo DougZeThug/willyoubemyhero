@@ -22,6 +22,9 @@ import { PresentationMode, PresentationStage } from "@/components/presentation-m
 import { PackSummary } from "@/components/pack-summary";
 import { StreakFlame } from "@/components/streak-flame";
 import { MilestoneReveal } from "@/components/milestone-reveal";
+import { CollectionComplete } from "@/components/collection-complete";
+import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
+import type { CompletedCollection } from "@/lib/collection-trophies";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
   collectCard,
@@ -81,6 +84,15 @@ const PACK_SIZE = 3;
 const PEEK_MS = 900;
 /** The once-a-day card holds longer. It is the only card here nobody has seen. */
 const SECRET_PEEK_MS = 1600;
+
+/**
+ * The gap between a secret's own burst and the set closing behind it.
+ *
+ * Long enough that the two read as consequence rather than as one noise: the
+ * card's confetti is still in the air when this starts, and the ear has to have
+ * finished the secret chime before the resolving one lands on top of it.
+ */
+const COMPLETION_BEAT_MS = 900;
 /** Where in that hold the riser starts, so it lands on the chime's bottom note. */
 const SECRET_RISER_AT_MS = 700;
 /**
@@ -214,6 +226,20 @@ function PackPage() {
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
   const [secretRevealed, setSecretRevealed] = useState(false);
+  /**
+   * The set this pull just finished, held until the card has been turned over.
+   *
+   * Parked rather than shown on arrival because the order is the whole point:
+   * you see WHICH card it was, and only then find out it was the last one. Fired
+   * at the end of revealSecret below.
+   *
+   * A ref rather than state because nothing renders it and revealSecret is a
+   * plain function re-made every render — reached through a stale closure it
+   * would swallow the one ceremony this feature exists for, and a ref cannot go
+   * stale. Same reason the reveal latch beside it is one.
+   */
+  const pendingCompletionRef = useRef<CompletedCollection | null>(null);
+  const [completion, setCompletion] = useState<CompletedCollection | null>(null);
   const [secretPeeking, setSecretPeeking] = useState(false);
   const [secretPulling, setSecretPulling] = useState(false);
   const [secretFailed, setSecretFailed] = useState(false);
@@ -611,8 +637,14 @@ function PackPage() {
           // stored reveal state says — local midnight and league midnight can
           // be hours apart, so the resumed pack can carry a stale "revealed".
           if (res.fresh) setSecretRevealed(false);
+          // Null on all but one pull in a season. Held for revealSecret rather
+          // than shown here — the card comes first.
+          pendingCompletionRef.current = res.completedCollection ?? null;
           qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
           qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
+          if (res.completedCollection) {
+            qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
+          }
         } else {
           // Nothing in the set yet, or every card still missing its art. Not a
           // failure to retry — there is genuinely nothing to hand over.
@@ -897,6 +929,16 @@ function PackPage() {
       // which is the one frame it is supposed to be marking.
       // A duplicate gets the shimmer, never a second burst — a wink, not a parade.
       if (!secretDuplicate) await celebrateSecret(secretRarity);
+
+      // And only now, once the card has been seen and its own burst has run:
+      // "that was the last one". Two celebrations on top of each other is one
+      // celebration nobody can read.
+      const finished = pendingCompletionRef.current;
+      if (finished) {
+        pendingCompletionRef.current = null;
+        await new Promise((r) => setTimeout(r, COMPLETION_BEAT_MS));
+        setCompletion(finished);
+      }
     } finally {
       revealingRef.current = false;
     }
@@ -1070,6 +1112,13 @@ function PackPage() {
       {/* Mounted here rather than inside the summary: the stage above uses
           backdrop-filter, which is a grouping property, so anything it wraps
           loses its 3D and the card would flip flat. */}
+      {completion && (
+        <CollectionComplete
+          label={completion.label}
+          size={completion.size}
+          onDone={() => setCompletion(null)}
+        />
+      )}
       {milestoneReveal && (
         <MilestoneReveal
           milestone={milestoneReveal.milestone}

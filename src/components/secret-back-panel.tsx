@@ -13,17 +13,25 @@ import type { Rarity } from "@/lib/card-rarity";
  *
  * No serial and no set size. "3 of 12" printed here would give away in one glance
  * the exact thing the rest of the feature goes to some length to withhold.
+ *
+ * `completed` is the one exception, and it is a boolean rather than a count for
+ * exactly that reason: it says the set this card belongs to is FINISHED, which is
+ * public the moment a trophy exists, and it still says nothing about how big any
+ * set the holder is still working on might be.
  */
 export function SecretBackPanel({
   card,
   rarity,
   pulledOn,
+  completed = false,
   size = "small",
 }: {
   card: SecretCardView | OwnedSecret;
   rarity: Rarity;
   /** ISO date of the first pull, when the caller knows it. */
   pulledOn?: string | null;
+  /** Whether the holder has finished the set this card is filed in. */
+  completed?: boolean;
   /** Large renders bigger text for the full-sheet view. */
   size?: "small" | "large";
 }) {
@@ -94,12 +102,25 @@ export function SecretBackPanel({
               odds are for a metal finish. */}
           {secretTierLabel(card.tier)} · {secretTierOddsLabel(card.tier)}
         </span>
-        {pulledOn && (
+        {/* Takes the slot rather than sharing it: two facts in a footer this
+            narrow wrap on a phone, and on a card from a finished set the set is
+            the louder of the two. */}
+        {completed ? (
           <span
-            className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}
+            className={`inline-flex items-center gap-1 font-bold uppercase tracking-[0.2em] ${large ? "text-[10px]" : "text-[8px]"}`}
+            style={{ color: "oklch(0.82 0.19 85)" }}
           >
-            Pulled {pulledOn}
+            <span aria-hidden>◆</span>
+            Set complete
           </span>
+        ) : (
+          pulledOn && (
+            <span
+              className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}
+            >
+              Pulled {pulledOn}
+            </span>
+          )
         )}
       </div>
     </div>

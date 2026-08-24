@@ -74,7 +74,7 @@ test.describe("trading post", () => {
   test("accepting sends the offer id and nothing else", async ({ page, server }) => {
     await signIn(page);
     server.set("getMyTradeOffers", { inbox: [INBOX_OFFER], outbox: [], recent: [] });
-    server.set("acceptTradeOffer", { ok: true, tradeId: "t1" });
+    server.set("acceptTradeOffer", { ok: true, tradeId: "t1", completedCollections: [] });
 
     // Registered after the auto stub fixture, so this handler runs FIRST and
     // `fallback()` hands the request on to the stub. Kept as raw text rather than
