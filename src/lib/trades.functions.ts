@@ -8,6 +8,7 @@ import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
 import { leagueDay } from "./trades";
 import type {
+  BlockedSpare,
   SecretSpare,
   TradeFeedEntry,
   TradeItemView,
@@ -154,10 +155,18 @@ async function hydrateSecrets(
 export const getTradeSpares = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ participantId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeSpares> => {
-    await requireMember();
+    const asker = await requireMember();
     noStore();
+    // Blocked cards are your own business only: a counterparty's untradeable
+    // copies are collection detail an offer screen has no reason to publish.
+    const mine = asker === data.participantId;
 
-    const empty: TradeSpares = { participantId: data.participantId, roster: [], secrets: [] };
+    const empty: TradeSpares = {
+      participantId: data.participantId,
+      roster: [],
+      secrets: [],
+      blocked: [],
+    };
     const eventId = await activeEventId();
     if (!eventId) return empty;
 
@@ -220,7 +229,9 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       held.filter((r) => perCard.get(r.secret_card_id) === 1).map((r) => r.id),
     );
 
-    const secrets = await hydrateSecrets(stakeable, lastCopyIds);
+    // Hydrated over every row rather than only the stakeable ones, so the blocked
+    // list below can render a face too — a greyed tile with no art explains nothing.
+    const secrets = await hydrateSecrets(mine ? held : stakeable, lastCopyIds);
 
     // Every copy of a card they hold two or more of. All of them, not "the ones
     // beyond the first": the giver picks which copy to keep, so listing only the
@@ -236,6 +247,34 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       byCard.set(row.event_participant_id, list);
     }
 
+    // Everything you hold that the rules keep off the table, with the reason —
+    // shown greyed rather than silently dropped, because a missing card reads as
+    // a bug and "only copy" reads as a rule.
+    const blocked: BlockedSpare[] = mine
+      ? [
+          ...[...byCard.values()]
+            .filter((list) => list.length === 1)
+            .flat()
+            .map<BlockedSpare>((r) => ({
+              item: {
+                kind: "roster",
+                copyId: r.id,
+                eventParticipantId: r.event_participant_id,
+                edition: toEdition(r.edition),
+              },
+              reason: "only-copy",
+            })),
+          ...held
+            .filter((r) => !r.granted && r.pulled_on === today)
+            .map((r) => secrets.get(r.id))
+            .filter((s): s is SecretSpare => !!s)
+            .map<BlockedSpare>((s) => ({
+              item: { kind: "secret", ...s },
+              reason: "todays-pull",
+            })),
+        ]
+      : [];
+
     return {
       participantId: data.participantId,
       roster: [...byCard.values()]
@@ -247,6 +286,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
           edition: toEdition(r.edition),
         })),
       secrets: stakeable.map((r) => secrets.get(r.id)!).filter(Boolean),
+      blocked,
     };
   });
 

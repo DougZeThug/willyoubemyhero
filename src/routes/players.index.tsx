@@ -35,6 +35,7 @@ import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/
 import { getSecretCollections } from "@/lib/secret-cards.functions";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { seededRng, shuffle } from "@/lib/format";
+import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/")({
@@ -501,6 +502,10 @@ function PlayersPage() {
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-6xl px-4 py-6">
+        {/* Signed in with no player yet: their pulls are filed against this
+            handset and nobody can trade with them until they name themselves.
+            The vault is where they land, so it is where the prompt belongs. */}
+        <CollectorSignupGate className="mb-5" />
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>

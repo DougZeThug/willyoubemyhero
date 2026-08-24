@@ -9,11 +9,6 @@ import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMemberSession } from "@/lib/member-token";
 import { useAuthUser } from "@/hooks/use-account";
 import { getClaimRoster } from "@/lib/member.functions";
-import { createCollectorIdentity } from "@/lib/collector.functions";
-import { setMemberToken } from "@/lib/member-token";
-import { clearGuestToken } from "@/lib/guest-token";
-import { clearAccountHandoff } from "@/lib/account-handoff";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
 import {
   acceptTradeOffer,
   cancelTradeOffer,
@@ -31,7 +26,12 @@ import {
 import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
-import { tradeSummaryLabel, type TradeItemView, type TradeSpares } from "@/lib/trades";
+import {
+  BLOCKED_LABEL,
+  tradeSummaryLabel,
+  type TradeItemView,
+  type TradeSpares,
+} from "@/lib/trades";
 import { rarityMap, rarityRank, rarityStyle } from "@/lib/card-rarity";
 import { editionRank } from "@/lib/card-edition";
 import { secretTierRank } from "@/lib/secret-rarity";
@@ -41,6 +41,7 @@ import {
   TradeOfferCard,
   type RosterCardLookup,
 } from "@/components/trade-offer-card";
+import { CollectorSignup } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/trade")({
@@ -243,7 +244,7 @@ function TradePage() {
           <Header />
           {/* Signed in but nobody yet: they are not on the roster, so a paper
               code will never arrive. Name themselves and they can trade. */}
-          {user && <CollectorSignup email={user.email ?? null} />}
+          {user && <CollectorSignup />}
           {!anonymous && !user && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
               <Link to="/claim" className="font-bold text-primary underline">
@@ -487,6 +488,8 @@ function SparePicker({
   staged: Staged[];
   onToggle: (staged: Staged) => void;
 }) {
+  const blocked = spares?.blocked ?? [];
+
   const items: Staged[] = [
     // Secrets lead the strip, rarest copy first: they are what anyone opening
     // this panel is actually scrolling for, and on a phone the base cards used
@@ -560,87 +563,25 @@ function SparePicker({
           ))}
         </div>
       )}
+      {/* Only ever your own side: the server sends `blocked` empty for anybody
+          else. Shown so "where is my card?" has an answer on the screen. */}
+      {blocked.length > 0 && (
+        <>
+          <div className="mt-2 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground/70">
+            Can&apos;t be traded
+          </div>
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {blocked.map((b) => (
+              <TradeItemTile
+                key={b.item.kind === "secret" ? `bs:${b.item.pullId}` : `bc:${b.item.copyId}`}
+                item={b.item}
+                lookup={lookup}
+                blockedLabel={BLOCKED_LABEL[b.reason]}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
-}
-
-/**
- * The one-time name prompt for a signed-in person who is not on the roster.
- *
- * They can never claim a paper code, so without this the trading post is a dead
- * end for them. Naming themselves mints a member token against a collector
- * participant row, after which every trading rule treats them like anyone else.
- */
-function CollectorSignup({ email }: { email: string | null }) {
-  const qc = useQueryClient();
-  const createFn = useServerFn(createCollectorIdentity);
-  const [name, setName] = useState(() => suggestName(email));
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const displayName = name.trim();
-    if (displayName.length < 2 || busy) return;
-    setBusy(true);
-    try {
-      // Snapshotted before the token lands, exactly as the claim page does: a
-      // guest's base cards live only on this handset until they are adopted.
-      const held = await snapshotLocalCollection();
-      const res = await createFn({ data: { displayName } });
-      clearGuestToken();
-      clearAccountHandoff();
-      setMemberToken(res.token, res.name);
-      try {
-        await adoptLocalCollection(held);
-      } catch {
-        /* named without the upload: the cards can be granted back */
-      }
-      await qc.invalidateQueries();
-      toast.success(`You're in, ${res.name}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not set that up");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="hud-bezel rounded-lg border border-primary/30 p-4">
-      <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-primary">
-        Pick a trading name
-      </h2>
-      <p className="mt-1 text-xs text-muted-foreground">
-        You&apos;re not in the combine, but you can still collect and trade. This is the name the
-        league sees on your offers.
-      </p>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        maxLength={32}
-        placeholder="Your name"
-        className="mt-3 w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none focus:border-primary/60"
-      />
-      <button
-        type="submit"
-        disabled={busy || name.trim().length < 2}
-        className="neon-btn mt-3 w-full !py-2 !text-xs disabled:opacity-50"
-      >
-        {busy ? "Setting up…" : "Start trading"}
-      </button>
-    </form>
-  );
-}
-
-/** "jane.doe@x.com" → "Jane Doe". A starting point they can overwrite. */
-function suggestName(email: string | null): string {
-  const local = (email ?? "").split("@")[0] ?? "";
-  return local
-    .replace(/[._-]+/g, " ")
-    .replace(/\d+/g, "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0]!.toUpperCase() + w.slice(1))
-    .join(" ")
-    .slice(0, 32);
 }

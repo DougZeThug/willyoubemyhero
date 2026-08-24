@@ -93,10 +93,29 @@ export type SecretSpare = {
   lastCopy: boolean;
 };
 
+/**
+ * Why a card you own is not on the table.
+ *
+ * The picker used to simply omit these, which reads as "the app lost my card" —
+ * the single most common complaint about trading. Shown greyed with the reason
+ * instead, and only ever for your OWN collection: listing what a counterparty
+ * cannot trade would widen what an offer screen tells you about their vault.
+ */
+export type BlockedReason = "only-copy" | "todays-pull";
+
+export const BLOCKED_LABEL: Record<BlockedReason, string> = {
+  "only-copy": "only copy",
+  "todays-pull": "today's pull",
+};
+
+export type BlockedSpare = { item: TradeItemView; reason: BlockedReason };
+
 export type TradeSpares = {
   participantId: string;
   roster: RosterSpare[];
   secrets: SecretSpare[];
+  /** Populated only when you are looking at yourself. */
+  blocked: BlockedSpare[];
 };
 
 export type TradeFeedEntry = {
