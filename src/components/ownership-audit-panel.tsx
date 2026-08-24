@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -31,7 +31,7 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
 
   const players = audit.data?.players ?? [];
   const stranded = audit.data?.stranded ?? [];
-  const unreachable = useMemo(() => players.filter((p) => !p.reachable), [players]);
+  const unreachable = players.filter((p) => !p.reachable);
 
   async function attach(guestId: string) {
     const participantId = targets[guestId];

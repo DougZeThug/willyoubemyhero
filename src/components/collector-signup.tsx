@@ -97,7 +97,7 @@ export function CollectorSignupGate({ className }: { className?: string }) {
 }
 
 /** "jane.doe@x.com" → "Jane Doe". A starting point they can overwrite. */
-export function suggestName(email: string | null): string {
+function suggestName(email: string | null): string {
   const local = (email ?? "").split("@")[0] ?? "";
   return local
     .replace(/[._-]+/g, " ")
