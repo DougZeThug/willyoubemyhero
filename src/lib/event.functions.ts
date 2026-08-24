@@ -4,8 +4,6 @@ import { RUNS_PUBLIC_COLUMNS } from "./runs-columns";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
 
-
-
 export const getActiveEvent = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
   const { data: event, error } = await sb

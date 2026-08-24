@@ -97,9 +97,7 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
                     <select
                       className={selectClass}
                       value={targets[d.guestId] ?? ""}
-                      onChange={(e) =>
-                        setTargets((t) => ({ ...t, [d.guestId]: e.target.value }))
-                      }
+                      onChange={(e) => setTargets((t) => ({ ...t, [d.guestId]: e.target.value }))}
                     >
                       <option value="">Belongs to…</option>
                       {players.map((p) => (

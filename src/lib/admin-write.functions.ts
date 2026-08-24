@@ -128,7 +128,6 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
     return { ok: true, retained: false } as const;
   });
 
-
 export const setParticipantStatus = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
