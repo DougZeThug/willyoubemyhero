@@ -1407,6 +1407,67 @@ export type Database = {
           },
         ]
       }
+      streak_milestone_claims: {
+        Row: {
+          claimed_on: string
+          created_at: string
+          event_id: string | null
+          guest_id: string | null
+          id: string
+          milestone: number
+          participant_id: string | null
+          reward_kind: string
+          reward_ref: string | null
+          streak_started_on: string
+        }
+        Insert: {
+          claimed_on: string
+          created_at?: string
+          event_id?: string | null
+          guest_id?: string | null
+          id?: string
+          milestone: number
+          participant_id?: string | null
+          reward_kind?: string
+          reward_ref?: string | null
+          streak_started_on: string
+        }
+        Update: {
+          claimed_on?: string
+          created_at?: string
+          event_id?: string | null
+          guest_id?: string | null
+          id?: string
+          milestone?: number
+          participant_id?: string | null
+          reward_kind?: string
+          reward_ref?: string | null
+          streak_started_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "streak_milestone_claims_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "streak_milestone_claims_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "streak_milestone_claims_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trade_offer_items: {
         Row: {
           card_copy_id: string | null
@@ -1675,6 +1736,19 @@ export type Database = {
         Args: { _guest_id: string; _participant_id: string }
         Returns: number
       }
+      claim_guest_streak_milestones: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: number
+      }
+      claim_streak_milestone: {
+        Args: {
+          _event_id?: string
+          _guest_id: string
+          _milestone: number
+          _participant_id: string
+        }
+        Returns: Json
+      }
       close_award_voting: {
         Args: { _categories: Json; _event_id: string }
         Returns: number
@@ -1713,6 +1787,14 @@ export type Database = {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number
       }
+      merge_guest_streak_milestones: {
+        Args: { _from_guest: string; _into_guest: string }
+        Returns: number
+      }
+      pull_bonus_secret_card: {
+        Args: { _event_id: string; _guest_id: string; _participant_id: string }
+        Returns: Json
+      }
       pull_secret_card: {
         Args: { _event_id: string; _guest_id: string; _participant_id: string }
         Returns: Json
@@ -1749,6 +1831,14 @@ export type Database = {
         Returns: Json
       }
       secret_tier_rank: { Args: { _tier: string }; Returns: number }
+      streak_runs: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: {
+          ended_on: string
+          len: number
+          started_on: string
+        }[]
+      }
       trade_has_both_sides: { Args: { _offer_id: string }; Returns: boolean }
       trade_item_is_spare: {
         Args: {
