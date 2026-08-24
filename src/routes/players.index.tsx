@@ -12,6 +12,7 @@ import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
+import { useTradeBadge } from "@/hooks/use-trade-badge";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
@@ -185,6 +186,9 @@ function PlayersPage() {
   }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked, collected]);
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
+  // Same dot the nav carries, on the control that actually goes there. A member
+  // who is already on this screen should not have to read the nav to find out.
+  const tradeUnread = useTradeBadge();
   const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
 
   const ownedSecrets = useMemo(() => secrets.data?.cards ?? [], [secrets.data]);
@@ -567,10 +571,22 @@ function PlayersPage() {
                   answer than a button that is not there. */}
               <Link
                 to="/players/trade"
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                aria-label={tradeUnread > 0 ? "Trade — an offer is waiting" : undefined} // prettier-ignore
+                className={cn(
+                  "relative inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.25em] transition-colors",
+                  tradeUnread > 0
+                    ? "border-primary/50 text-primary"
+                    : "border-white/10 text-muted-foreground hover:border-primary/50 hover:text-primary",
+                )}
               >
                 <ArrowLeftRight className="h-3.5 w-3.5" />
                 Trade
+                {tradeUnread > 0 && (
+                  <span
+                    aria-hidden
+                    className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]"
+                  />
+                )}
               </Link>
               {/* The daily loop's alarm clock. Nothing else brings anyone back on
                   a random Tuesday. Leaks nothing: a guest, and a member who has

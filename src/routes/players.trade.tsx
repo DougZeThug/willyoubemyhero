@@ -23,6 +23,7 @@ import {
   useTradeOffers,
   useTradeSpares,
 } from "@/hooks/use-trades";
+import { markTradeOffersSeen } from "@/hooks/use-trade-badge";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
@@ -76,6 +77,14 @@ function TradePage() {
   const myId = me?.participantId ?? null;
   const offers = useTradeOffers(myId);
   const feed = useTradeFeed(event?.id ?? null, myId);
+
+  // Reading the inbox is what clears the dot, so this fires as soon as the list
+  // renders rather than on a tap nobody would think to make. Above the signed-out
+  // gate below, because hooks cannot live behind an early return.
+  useEffect(() => {
+    if (!offers.data) return;
+    markTradeOffersSeen(offers.data.inbox.map((o) => o.id));
+  }, [offers.data]);
 
   const [theirId, setTheirId] = useState<string | null>(null);
   const [give, setGive] = useState<Staged[]>([]);
