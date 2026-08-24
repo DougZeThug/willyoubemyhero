@@ -17,8 +17,6 @@ import type { Database } from "@/integrations/supabase/types";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
 
-
-
 // ------- Signed URL cache -------
 
 const SIGNED_TTL_S = 8 * 60 * 60;

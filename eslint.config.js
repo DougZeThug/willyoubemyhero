@@ -18,6 +18,10 @@ export default tseslint.config(
       "src/routes/mcp.ts",
       "src/routes/\\[.mcp\\]/**",
       "src/routes/\\[.well-known\\]/**",
+      // Generated Supabase integration files (.prettierignore explains why).
+      // Linting them means a regeneration can turn CI red on an unrelated
+      // change — a generated prefer-const did exactly that.
+      "src/integrations/supabase/**",
     ],
   },
   {
