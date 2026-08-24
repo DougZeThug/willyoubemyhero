@@ -12,7 +12,8 @@ import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { cardBadge, type Edition } from "@/lib/card-edition";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretSlot } from "@/lib/pack";
-import type { Streak } from "@/lib/streaks";
+import { nextMilestoneLine, type Streak } from "@/lib/streaks";
+import { secretTierFloorLabel, secretTierStyle } from "@/lib/secret-rarity";
 import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
@@ -102,6 +103,12 @@ export function PackSummary({
   const shareRef = useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = useState(false);
   const [shared, setShared] = useState(false);
+
+  // The rung above wherever they are standing. Null once all five are behind
+  // them, which is the one case with nothing left to promise. The copy lives in
+  // streaks.ts next to streakLine, so the sentence can be tested without
+  // rendering a component that takes twenty-five props.
+  const nextRung = streak ? nextMilestoneLine(streak) : null;
 
   const shareCards: SharePackCard[] = [
     ...pack.map((ep) => {
@@ -277,6 +284,19 @@ export function PackSummary({
             </span>
           </div>
 
+          {/* What the rung about to be cashed pays. The whole point of the ladder
+              is that a longer run buys a better level — a promise nobody can see
+              is not a reason to keep a streak alive, and it is the answer to
+              breaking one on purpose to re-farm day 3. */}
+          {claimable?.tierFloor && (
+            <span
+              className="font-display text-[10px] font-black uppercase tracking-[0.18em]"
+              style={{ color: secretTierStyle(claimable.tierFloor).accent }}
+            >
+              {secretTierFloorLabel(claimable.tierFloor)}
+            </span>
+          )}
+
           {claimable ? (
             canClaim ? (
               <>
@@ -315,11 +335,19 @@ export function PackSummary({
               </>
             )
           ) : (
-            <span className="text-[10px] leading-snug text-muted-foreground">
-              {streak.openedToday
-                ? "Streak alive. Come back tomorrow."
-                : "Open today's pack to keep it alive."}
-            </span>
+            <>
+              <span className="text-[10px] leading-snug text-muted-foreground">
+                {streak.openedToday
+                  ? "Streak alive. Come back tomorrow."
+                  : "Open today's pack to keep it alive."}
+              </span>
+              {/* The only place the ladder is visible BEFORE you are standing on
+                  it. Without it "come back tomorrow" is a request with nothing
+                  behind it. */}
+              {nextRung && (
+                <span className="text-[10px] leading-snug text-muted-foreground">{nextRung}</span>
+              )}
+            </>
           )}
         </div>
       )}

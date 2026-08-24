@@ -5,6 +5,7 @@ import {
   SECRET_TIER_WEIGHTS_BP,
   bestSecretTier,
   secretTierCaption,
+  secretTierFloorLabel,
   secretTierRank,
   toSecretTier,
 } from "./secret-rarity";
@@ -36,5 +37,20 @@ describe("secret rarity ladder", () => {
   it("prints the level with the rate that produced it", () => {
     expect(secretTierCaption("mythic")).toBe("Mythic · 0.5% pull");
     expect(secretTierCaption("rare")).toBe("Rare · 18% pull");
+  });
+
+  it("prints a floor as a promise, not as a rate", () => {
+    // Deliberately NOT the caption. A milestone that guaranteed a legendary
+    // would otherwise print "3.5% pull" under it — the odds of the thing that
+    // did not happen.
+    expect(secretTierFloorLabel("legendary")).toBe("Legendary or better");
+    expect(secretTierFloorLabel("rare")).toBe("Rare or better");
+  });
+
+  it("says guaranteed at the top, where there is nothing better to promise", () => {
+    expect(secretTierFloorLabel("mythic")).toBe("Mythic, guaranteed");
+    // Read off the ladder rather than hardcoded, so a rung added above mythic
+    // moves the word with it.
+    expect(secretTierFloorLabel(SECRET_TIER_ORDER[0])).toContain("guaranteed");
   });
 });

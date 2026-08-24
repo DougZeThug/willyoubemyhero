@@ -109,6 +109,27 @@ export function secretTierCaption(tier: string | null | undefined): string {
 }
 
 /**
+ * "Legendary or better" — what a streak milestone PROMISED, not what a copy is.
+ *
+ * Its own phrasing rather than reusing secretTierCaption, which prints the base
+ * pull rate: under a card that was guaranteed, "3.5% pull" is the odds of the
+ * thing that did not happen. The caption stays right in the vault, where a copy
+ * carries no memory of how it was earned; this line belongs only on the screen
+ * making the promise.
+ *
+ * Typed strictly, unlike its neighbours. They are loose because their values
+ * arrive from Postgres as bare strings; a floor is a literal in
+ * STREAK_MILESTONES, so a fallback here would hide a typo rather than survive one.
+ */
+export function secretTierFloorLabel(tier: SecretTier): string {
+  // Nothing sits above the top rung, so "or better" would be writing a cheque the
+  // ladder cannot cash.
+  return tier === SECRET_TIER_ORDER[0]
+    ? `${secretTierLabel(tier)}, guaranteed`
+    : `${secretTierLabel(tier)} or better`;
+}
+
+/**
  * Whether the level alone earns the celebration burst, whatever the card is.
  * Legendary and up, so roughly one secret in twenty-five stops the garden.
  */

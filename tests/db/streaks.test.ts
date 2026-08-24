@@ -7,6 +7,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
 import { STREAK_MILESTONES } from "../../src/lib/streaks";
+import { secretTierRank } from "../../src/lib/secret-rarity";
 import { leagueDay, LEAGUE_TIME_ZONE } from "../../src/lib/trades";
 
 afterAll(closeDb);
@@ -22,6 +23,7 @@ type ClaimResult = {
   milestone?: number;
   streak?: number;
   startedOn?: string;
+  floor?: string | null;
   reward?: { kind: string; pullId: string; cardId: string; tier: string; duplicate: boolean };
 };
 
@@ -55,6 +57,27 @@ async function seedAccount(opts: { participantId?: string; guestId?: string }) {
 async function openDays(n: number, opts: { participantId?: string; guestId?: string } = {}) {
   const pid = opts.participantId ?? IDS.alice;
   const gid = opts.guestId ?? null;
+  // Past a handful of days the per-day rewind below is hundreds of round trips,
+  // which the hundred-day rung would pay on every case that walks the ladder. One
+  // recorded open still supplies "today" — the rule this helper exists for — and
+  // generate_series lays the rest of the run out behind it in a single statement.
+  if (n > 5) {
+    await sql("SELECT public.record_pack_open($1, $2, $3, $4)", [
+      gid ? null : pid,
+      IDS.event,
+      3,
+      gid,
+    ]);
+    await sql(
+      `INSERT INTO public.pack_opens (participant_id, guest_id, opened_on, event_id, card_count)
+       SELECT $1, $2, (SELECT max(opened_on) FROM public.pack_opens
+                        WHERE ($1::uuid IS NOT NULL AND participant_id = $1)
+                           OR ($2::uuid IS NOT NULL AND guest_id = $2)) - g, $3, 3
+         FROM generate_series(1, $4::int) g`,
+      [gid ? null : pid, gid, IDS.event, n - 1],
+    );
+    return;
+  }
   for (let back = 0; back < n; back++) {
     await sql("SELECT public.record_pack_open($1, $2, $3, $4)", [
       opts.guestId ? null : pid,
@@ -136,8 +159,13 @@ describe("grants", () => {
         ]),
       ).toBe(true);
       expect(
-        await isDenied(role, "SELECT public.pull_bonus_secret_card($1, NULL, NULL)", [IDS.alice]),
+        await isDenied(role, "SELECT public.pull_bonus_secret_card($1, NULL, NULL, NULL)", [
+          IDS.alice,
+        ]),
       ).toBe(true);
+      expect(await isDenied(role, "SELECT public.roll_secret_tier_at_least('rare')", [])).toBe(
+        true,
+      );
       expect(await isDenied(role, "SELECT * FROM public.streak_runs($1, NULL)", [IDS.alice])).toBe(
         true,
       );
@@ -479,18 +507,100 @@ describe("carrying a guest's claims", () => {
   });
 });
 
+describe("roll_secret_tier_at_least", () => {
+  /** `n` rolls at one floor, in a single statement. */
+  const roll = async (floor: string | null, n = 300) =>
+    (
+      await sql<{ tier: string }>(
+        `SELECT public.roll_secret_tier_at_least($1) AS tier FROM generate_series(1, $2::int)`,
+        [floor, n],
+      )
+    ).map((r) => r.tier);
+
+  it("never rolls below the floor it was given", async () => {
+    const tiers = await roll("legendary");
+    expect(tiers.every((t) => secretTierRank(t) <= secretTierRank("legendary"))).toBe(true);
+    expect((await roll("mythic")).every((t) => t === "mythic")).toBe(true);
+  });
+
+  it("is a floor and not a pin — a good roll still stands", async () => {
+    // The assertion that tells the two apart. A body that just returned its
+    // argument passes every other test here and fails only this one. At a rare
+    // floor, 12% of rolls beat it, so a false failure is 0.88^300 ~ 1e-17.
+    const tiers = await roll("rare");
+    expect(tiers.some((t) => secretTierRank(t) < secretTierRank("rare"))).toBe(true);
+  });
+
+  it("degrades a floor it cannot read to the plain roll, rather than raising", async () => {
+    // secret_card_pulls.tier carries no CHECK constraint, so a floor written
+    // straight through would persist forever and render as "Common". And
+    // claim_streak_milestone files its claim row BEFORE the payout, so raising
+    // here would take somebody's claim down with it. Both say: degrade quietly.
+    for (const floor of [null, "gold", "__proto__"]) {
+      const tiers = await roll(floor);
+      expect(tiers.every((t) => secretTierRank(t) < 5)).toBe(true);
+      expect(tiers.includes(floor as string)).toBe(false);
+      // Not silently floored either: at the base rate 96% of rolls are worse
+      // than legendary, so seeing none of them in 300 would be 4e-8.
+      expect(tiers.some((t) => secretTierRank(t) > secretTierRank("legendary"))).toBe(true);
+    }
+  });
+});
+
 describe("the TypeScript ladder and the SQL one", () => {
-  it("agree on every rung", async () => {
+  it("agree on every rung, and on what each one pays", async () => {
     await seedSecrets();
     await seedAccount({ participantId: IDS.alice });
-    await openDays(30);
+    await openDays(100);
     for (const m of STREAK_MILESTONES) {
-      expect((await claim(m.days)).ok).toBe(true);
+      const res = await claim(m.days);
+      expect(res.ok).toBe(true);
+      // The floor map, pinned the same way the rung list is: this is the reason
+      // claim_streak_milestone puts `floor` on the wire at all.
+      expect(res.floor ?? null).toBe(m.tierFloor);
+      // And it reached the row, rather than only the response.
+      if (m.tierFloor) {
+        expect(secretTierRank(res.reward!.tier)).toBeLessThanOrEqual(secretTierRank(m.tierFloor));
+      }
+      const [row] = await sql<{ tier: string }>(
+        "SELECT tier FROM public.secret_card_pulls WHERE id = $1",
+        [res.reward!.pullId],
+      );
+      expect(row.tier).toBe(res.reward!.tier);
     }
-    // And nothing between them is claimable.
-    for (const notARung of [1, 2, 4, 6, 8, 15, 29, 31]) {
+  });
+
+  it("agree that nothing between the rungs is claimable", async () => {
+    await seedSecrets();
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(100);
+    // Rejected even on a run long enough to have earned them, because the ladder
+    // gate is the first check after the identity guard.
+    for (const notARung of [1, 2, 4, 6, 8, 15, 29, 31, 99, 101]) {
       expect((await claim(notARung)).reason).toBe("unknown_milestone");
     }
+  });
+
+  it("pays the capstone a mythic, even when the card is one they already hold", async () => {
+    // One card in the catalogue, so the second claim can only be a duplicate —
+    // and a duplicate that rolled better still upgrades the copy in the vault.
+    // That is what stops a hundred days being spent on a card they own.
+    await seedSecrets(1);
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(100);
+
+    const first = await claim(3);
+    expect(first.ok).toBe(true);
+    const capstone = await claim(100);
+    expect(capstone.reward!.tier).toBe("mythic");
+    expect(capstone.reward!.duplicate).toBe(true);
+
+    const [owned] = await sql<{ tier: string }>(
+      `SELECT tier FROM public.secret_card_pulls
+        WHERE participant_id = $1 AND NOT is_duplicate`,
+      [IDS.alice],
+    );
+    expect(owned.tier).toBe("mythic");
   });
 
   it("agree on where a day ends", async () => {

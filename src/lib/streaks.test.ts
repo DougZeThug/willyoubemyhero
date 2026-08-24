@@ -3,18 +3,47 @@ import {
   STREAK_MILESTONES,
   isStreakMilestone,
   nextMilestone,
+  nextMilestoneLine,
   previousDay,
   streakLine,
   streakMilestone,
   walkStreak,
+  type Streak,
 } from "./streaks";
+import { SECRET_TIER_ORDER, isSecretTier, secretTierRank } from "./secret-rarity";
+
+/** A live streak `current` days long. Only `current` matters to the copy. */
+function walkStreakOfLength(current: number): Streak {
+  return { current, startedOn: null, lastOpenedOn: null, openedToday: true };
+}
 
 describe("STREAK_MILESTONES", () => {
   it("is ascending, unique and positive", () => {
     const days = STREAK_MILESTONES.map((m) => m.days);
+    // Ascending is load-bearing, not tidiness: players.pack.tsx picks the
+    // claimable rung with .at(-1) to hand out the best one first, and out of
+    // order that hands out the worst.
     expect(days).toEqual([...days].sort((a, b) => a - b));
     expect(new Set(days).size).toBe(days.length);
     expect(days.every((d) => d > 0)).toBe(true);
+  });
+
+  it("pays a rarer floor the longer the run, which is what makes farming day 3 bad", () => {
+    // The invariant the whole feature exists for. A typo putting `rare` on day 14
+    // would restore the exploit — three days on and one off would out-earn a
+    // month — and nothing else in the suite would notice.
+    const ranks = STREAK_MILESTONES.map((m) =>
+      m.tierFloor === null ? Number.POSITIVE_INFINITY : secretTierRank(m.tierFloor),
+    );
+    expect(ranks).toEqual([...ranks].sort((a, b) => b - a));
+    expect(new Set(ranks).size).toBe(ranks.length);
+  });
+
+  it("floors the bottom rung at nothing and the top one at the top of the ladder", () => {
+    expect(STREAK_MILESTONES[0].tierFloor).toBeNull();
+    expect(STREAK_MILESTONES.at(-1)?.tierFloor).toBe(SECRET_TIER_ORDER[0]);
+    // Only the first rung may go unfloored: every other one is a promise.
+    expect(STREAK_MILESTONES.slice(1).every((m) => isSecretTier(m.tierFloor))).toBe(true);
   });
 
   it("only pays secrets, because a guest cannot hold a roster card", () => {
@@ -32,8 +61,31 @@ describe("STREAK_MILESTONES", () => {
     expect(nextMilestone(0)?.days).toBe(3);
     expect(nextMilestone(3)?.days).toBe(7);
     expect(nextMilestone(29)?.days).toBe(30);
-    expect(nextMilestone(30)).toBeNull();
+    expect(nextMilestone(30)?.days).toBe(100);
+    expect(nextMilestone(100)).toBeNull();
     expect(nextMilestone(400)).toBeNull();
+  });
+});
+
+describe("nextMilestoneLine", () => {
+  const at = (current: number) => walkStreakOfLength(current);
+
+  it("names the rung above and what it pays", () => {
+    expect(nextMilestoneLine(at(1))).toBe("Day 3 pays a bonus secret.");
+    expect(nextMilestoneLine(at(3))).toBe("Day 7 pays Rare or better.");
+    expect(nextMilestoneLine(at(13))).toBe("Day 14 pays Epic or better.");
+    expect(nextMilestoneLine(at(29))).toBe("Day 30 pays Legendary or better.");
+  });
+
+  it("says guaranteed at the top, where there is no better", () => {
+    expect(nextMilestoneLine(at(30))).toBe("Day 100 pays Mythic, guaranteed.");
+  });
+
+  it("says nothing once every rung is behind you", () => {
+    // Same rule as streakLine: a promise that does not exist is not worth a line
+    // of a phone screen.
+    expect(nextMilestoneLine(at(100))).toBeNull();
+    expect(nextMilestoneLine(at(365))).toBeNull();
   });
 });
 

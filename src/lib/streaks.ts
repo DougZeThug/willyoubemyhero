@@ -12,11 +12,18 @@
 // claim already paid at 7 and hand those people the reward twice. Same contract
 // as the award ids in awards.ts.
 //
+// The rungs are mirrored by the `IN` list inside `claim_streak_milestone`, and
+// `tierFloor` by the `CASE` beside it. Both live in SQL as well as here for the
+// same reason: that function is SECURITY DEFINER, so a ladder that existed only
+// in this module would be a ladder anybody could rewrite. A db test pins each.
+//
 // The walk below is duplicated in `claim_streak_milestone`, deliberately: the
 // button is drawn from this one and the payout is authorised by that one, and a
 // client that could shift the boundary is a client that can mint milestones. A db
 // test pins the two against each other, the way leagueDay() is pinned to the SQL
 // it mirrors.
+
+import { secretTierFloorLabel, type SecretTier } from "./secret-rarity";
 
 /**
  * What a milestone pays.
@@ -31,6 +38,17 @@ export type StreakMilestone = {
   /** Consecutive days required. Stored in streak_milestone_claims.milestone. */
   days: number;
   reward: StreakRewardKind;
+  /**
+   * The worst level this rung's secret may roll — null on day 3, which pays the
+   * plain rate. A floor only ever upgrades, so a deep rung can still roll better
+   * than it promised.
+   *
+   * This is what stops a broken streak being farmable. Every rung stays
+   * re-earnable, because a run that died and was rebuilt genuinely is a new run;
+   * but three days on and one day off now farms commons, while the thirty nobody
+   * broke is the only way to a guaranteed legendary.
+   */
+  tierFloor: SecretTier | null;
   label: string;
   blurb: string;
 };
@@ -39,26 +57,37 @@ export const STREAK_MILESTONES: readonly StreakMilestone[] = [
   {
     days: 3,
     reward: "secret",
+    tierFloor: null,
     label: "Three Days",
     blurb: "A bonus secret, on the house.",
   },
   {
     days: 7,
     reward: "secret",
+    tierFloor: "rare",
     label: "One Week",
-    blurb: "Seven days straight. Another secret.",
+    blurb: "Seven days straight. Rare or better.",
   },
   {
     days: 14,
     reward: "secret",
+    tierFloor: "epic",
     label: "Two Weeks",
-    blurb: "A fortnight without missing. One more secret.",
+    blurb: "A fortnight without missing. Epic or better.",
   },
   {
     days: 30,
     reward: "secret",
+    tierFloor: "legendary",
     label: "Thirty Days",
-    blurb: "A month of showing up. The big one.",
+    blurb: "A month of showing up. Legendary or better.",
+  },
+  {
+    days: 100,
+    reward: "secret",
+    tierFloor: "mythic",
+    label: "One Hundred Days",
+    blurb: "A hundred days without a gap. The mythic one.",
   },
 ] as const;
 
@@ -153,4 +182,23 @@ export function streakLine(streak: Streak): string | null {
   return streak.openedToday
     ? `Day ${streak.current} — streak alive.`
     : `Day ${streak.current} — open today's pack to keep it alive.`;
+}
+
+/**
+ * "Day 7 pays Rare or better." — the rung above wherever they are standing.
+ *
+ * The only place the ladder is visible BEFORE you are on it, and the whole reason
+ * the floors are worth having: without this line a longer run looks like the same
+ * card for more work, which is exactly the read that makes breaking a streak on
+ * purpose sensible.
+ *
+ * Null once every rung is behind them, on the same rule as streakLine: a promise
+ * that does not exist is not worth a line of a phone screen.
+ */
+export function nextMilestoneLine(streak: Streak): string | null {
+  const next = nextMilestone(streak.current);
+  if (!next) return null;
+  return next.tierFloor
+    ? `Day ${next.days} pays ${secretTierFloorLabel(next.tierFloor)}.`
+    : `Day ${next.days} pays a bonus secret.`;
 }

@@ -157,6 +157,22 @@ describe("migrations", () => {
     ]);
   });
 
+  it("leaves exactly one pull_bonus_secret_card, with the floor argument", async () => {
+    // The same trap record_card_pulls fell into, one migration later:
+    // 20260824190000 adds a rarity floor to the argument list, so it has to DROP
+    // the three-arg version first. Forget that and the new parameter's DEFAULT
+    // makes every three-argument call ambiguous — including the one inside
+    // claim_streak_milestone, which is a milestone nobody can cash.
+    const rows = await sql<{ args: string }>(`
+      SELECT pg_get_function_identity_arguments(p.oid) AS args
+        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND proname = 'pull_bonus_secret_card'
+    `);
+    expect(rows.map((r) => r.args)).toEqual([
+      "_participant_id uuid, _guest_id uuid, _event_id uuid, _floor_tier text",
+    ]);
+  });
+
   it("gives every card_pulls row a finish, defaulting to standard", async () => {
     // NOT NULL with a default is what backfills rows written before editions
     // existed, rather than leaving a null the TS fallback would have to cover.

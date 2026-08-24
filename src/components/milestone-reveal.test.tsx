@@ -47,6 +47,7 @@ function renderReveal(over: Partial<React.ComponentProps<typeof MilestoneReveal>
       milestone={7}
       streak={7}
       card={CARD}
+      tierFloor="rare"
       duplicate={false}
       onDone={onDone}
       {...over}
@@ -110,5 +111,17 @@ describe("MilestoneReveal", () => {
       screen.getByTestId("milestone-done").click();
     });
     expect(onDone).toHaveBeenCalled();
+  });
+
+  it("prints what the rung promised, above the card it bought", async () => {
+    const { getByText } = renderReveal({ milestone: 100, streak: 100, tierFloor: "mythic" });
+    expect(getByText("Mythic, guaranteed")).toBeTruthy();
+  });
+
+  it("promises nothing on the rung that guarantees nothing", async () => {
+    // Day 3 pays the plain roll. "Common or better" would be both a lie and
+    // noise, so the line is absent rather than empty.
+    const { queryByText } = renderReveal({ milestone: 3, streak: 3, tierFloor: null });
+    expect(queryByText(/or better|guaranteed/)).toBeNull();
   });
 });

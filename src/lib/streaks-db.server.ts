@@ -14,9 +14,14 @@
 // have been generated against, and folding an unrelated feature into it makes
 // that harder to ever do.
 //
-// DELETE THIS FILE once types.ts has been regenerated against a project with
-// 20260824130000_streak_milestones.sql applied: every call site then switches to
-// plain `supabaseAdmin` unchanged.
+// That regeneration has since happened, so `streaksDb()` is now a mechanical
+// four-call-site removal rather than a blocked one — and 20260824190000 does not
+// re-block it: it changes `pull_bonus_secret_card`, which no TypeScript calls, and
+// leaves `claim_streak_milestone`'s Args and `Returns: Json` untouched.
+//
+// The TYPES below outlive that removal either way. `Returns: Json` can never give
+// you a discriminated union, so ClaimStreakMilestoneResult has to be written by
+// hand however the client is obtained.
 import type { SupabaseClient } from "@supabase/supabase-js";
 // A top-level client.server import is safe here and nowhere else: this is a
 // *.server.ts module, so it never reaches the client bundle.
@@ -60,6 +65,13 @@ export type ClaimStreakMilestoneResult =
       milestone: number;
       streak: number;
       startedOn: string;
+      /**
+       * The floor this rung guaranteed, straight off the SQL CASE. `string` and
+       * not SecretTier: it crosses the wire as a bare Postgres text, and the
+       * screens read the ladder in streaks.ts rather than this. It is here so a
+       * db test can pin the two maps against each other.
+       */
+      floor: string | null;
       reward: StreakSecretReward;
     }
   | {

@@ -6,6 +6,7 @@ import { signSecretCard } from "./secret-cards.functions";
 import type { SecretCardRow, PackOpenRow } from "./secret-cards-db.server";
 import type { ClaimStreakMilestoneResult } from "./streaks-db.server";
 import type { SecretCardView } from "./secret-cards";
+import type { SecretTier } from "./secret-rarity";
 import { STREAK_MILESTONES, isStreakMilestone, walkStreak, type Streak } from "./streaks";
 import { leagueDay } from "./trades";
 
@@ -49,6 +50,8 @@ export type StreakMilestoneStatus = {
   days: number;
   label: string;
   blurb: string;
+  /** The worst this rung may roll, for the line that says so. Null on day 3. */
+  tierFloor: SecretTier | null;
   earned: boolean;
   claimed: boolean;
 };
@@ -75,6 +78,7 @@ const NO_STREAK: StreakStatus = {
     days: m.days,
     label: m.label,
     blurb: m.blurb,
+    tierFloor: m.tierFloor,
     earned: false,
     claimed: false,
   })),
@@ -161,6 +165,7 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
         days: m.days,
         label: m.label,
         blurb: m.blurb,
+        tierFloor: m.tierFloor,
         earned: streak.current >= m.days,
         claimed: claimed.has(m.days),
       })),

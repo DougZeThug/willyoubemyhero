@@ -10,6 +10,7 @@ import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock
 import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/server-fn";
 import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
 import type { StreakStatus } from "./streaks.functions";
+import { STREAK_MILESTONES } from "./streaks";
 
 let mock = createSupabaseMock();
 
@@ -61,6 +62,13 @@ describe("getStreakStatus", () => {
     expect(res.current).toBe(0);
     expect(res.canClaim).toBe(false);
     expect(res.milestones.every((m) => !m.earned && !m.claimed)).toBe(true);
+    // Carried out to the phone even with no identity behind the request, so the
+    // pill can say what a rung pays before anybody has a streak. Compared against
+    // the ladder rather than restated: what the server actually PAYS at is pinned
+    // against the SQL CASE over in tests/db/streaks.test.ts.
+    expect(res.milestones.map((m) => m.tierFloor)).toEqual(
+      STREAK_MILESTONES.map((m) => m.tierFloor),
+    );
   });
 
   it("reads a member's days off their participant id", async () => {
@@ -193,9 +201,11 @@ describe("claimStreakMilestone", () => {
 
   it("rejects a milestone that is not on the ladder, without reaching the database", async () => {
     const { claimStreakMilestone } = await import("./streaks.functions");
-    await expect(
-      callServerFn(claimStreakMilestone, { data: { milestone: 5 }, headers: asMe() }),
-    ).rejects.toThrow();
+    for (const milestone of [5, 99, 101]) {
+      await expect(
+        callServerFn(claimStreakMilestone, { data: { milestone }, headers: asMe() }),
+      ).rejects.toThrow();
+    }
     expect(mock.client.rpc).not.toHaveBeenCalled();
   });
 
