@@ -191,6 +191,82 @@ describe("rarityMap", () => {
       });
       expect(rarityMap(bundle).get(cheat.id)?.tier).toBe("dnf");
     });
+
+    it("hands champion to the fastest legal runner, not just dnf to the cheat", () => {
+      // The other half of the test above: the dq'd clock must not keep
+      // consuming place 1, or the event ends with no champion at all.
+      const cheat = makeParticipant();
+      const honest = makeParticipant();
+      const third = makeParticipant();
+      const bundle = makeBundle({
+        participants: [cheat, honest, third],
+        runs: [
+          makeRun({ participant_id: cheat.participant_id, official_time_ms: 10_000, status: "dq" }), // prettier-ignore
+          makeRun({ participant_id: honest.participant_id, official_time_ms: 20_000 }),
+          makeRun({ participant_id: third.participant_id, official_time_ms: 30_000 }),
+        ],
+      });
+      const map = rarityMap(bundle);
+      expect(map.get(honest.id)?.tier).toBe("champion");
+      expect(map.get(third.id)?.tier).toBe("podium");
+    });
+
+    it("a scratched roster status gives up its placement slot too", () => {
+      // Scratched after posting a time: the override tier was always dnf, but
+      // the stale time used to hold a podium place nobody could see.
+      const scratched = makeParticipant({ participation_status: "scratched" });
+      const runner = makeParticipant();
+      const bundle = makeBundle({
+        participants: [scratched, runner],
+        runs: [
+          makeRun({ participant_id: scratched.participant_id, official_time_ms: 10_000 }),
+          makeRun({ participant_id: runner.participant_id, official_time_ms: 20_000 }),
+        ],
+      });
+      const map = rarityMap(bundle);
+      expect(map.get(scratched.id)?.tier).toBe("dnf");
+      expect(map.get(runner.id)?.tier).toBe("champion");
+    });
+  });
+
+  describe("ties", () => {
+    it("a dead heat for first makes both cards champion", () => {
+      // Same rule as cardStats' rank: strictly-faster count + 1. Both card
+      // backs read "Rank 1", so both bezels must read champion — the old
+      // sort-index placing gave one of them podium by sort stability.
+      const a = makeParticipant();
+      const b = makeParticipant();
+      const c = makeParticipant();
+      const bundle = makeBundle({
+        participants: [a, b, c],
+        runs: [
+          makeRun({ participant_id: a.participant_id, official_time_ms: 10_000 }),
+          makeRun({ participant_id: b.participant_id, official_time_ms: 10_000 }),
+          makeRun({ participant_id: c.participant_id, official_time_ms: 20_000 }),
+        ],
+      });
+      const map = rarityMap(bundle);
+      expect(map.get(a.id)?.tier).toBe("champion");
+      expect(map.get(b.id)?.tier).toBe("champion");
+      // c is the second-fastest clock but the third place — still a podium.
+      expect(map.get(c.id)?.tier).toBe("podium");
+    });
+
+    it("a dead heat for third puts both on the podium", () => {
+      const parts = [0, 1, 2, 3, 4].map(() => makeParticipant());
+      const times = [10_000, 20_000, 30_000, 30_000, 40_000];
+      const bundle = makeBundle({
+        participants: parts,
+        runs: parts.map((p, i) =>
+          makeRun({ participant_id: p.participant_id, official_time_ms: times[i] }),
+        ),
+      });
+      const map = rarityMap(bundle);
+      expect(map.get(parts[2].id)?.tier).toBe("podium");
+      expect(map.get(parts[3].id)?.tier).toBe("podium");
+      // The tie at third pushes the next clock to place 5 — off the podium.
+      expect(map.get(parts[4].id)?.tier).toBe("base");
+    });
   });
 
   describe("stationKing", () => {
@@ -247,6 +323,39 @@ describe("rarityMap", () => {
       const { bundle, alice } = makeFieldBundle();
       // Alice owns station B outright and is also the champion.
       expect(rarityMap(bundle).get(alice.id)?.tier).toBe("champion");
+    });
+
+    it("passes the crown on when the outright fastest split was dq'd", () => {
+      // A dq'd split must not hold the station hostage — the crown goes to the
+      // fastest split still in contention.
+      const station = makeStation();
+      const cheat = makeParticipant();
+      const king = makeParticipant();
+      const rest = [0, 1, 2].map(() => makeParticipant());
+      const cheatRun = makeRun({
+        participant_id: cheat.participant_id,
+        official_time_ms: 5_000,
+        status: "dq",
+      });
+      const kingRun = makeRun({ participant_id: king.participant_id, official_time_ms: 90_000 });
+      const restRuns = rest.map((p, i) =>
+        makeRun({ participant_id: p.participant_id, official_time_ms: (i + 1) * 10_000 }),
+      );
+      const bundle = makeBundle({
+        participants: [cheat, king, ...rest],
+        stations: [station],
+        runs: [cheatRun, kingRun, ...restRuns],
+        splits: [
+          makeSplit({ run_id: cheatRun.id, station_id: station.id, segment_time_ms: 400 }),
+          makeSplit({ run_id: kingRun.id, station_id: station.id, segment_time_ms: 500 }),
+          ...restRuns.map((r) =>
+            makeSplit({ run_id: r.id, station_id: station.id, segment_time_ms: 5_000 }),
+          ),
+        ],
+      });
+      const map = rarityMap(bundle);
+      expect(map.get(cheat.id)?.tier).toBe("dnf");
+      expect(map.get(king.id)?.tier).toBe("stationKing");
     });
   });
 
@@ -308,6 +417,32 @@ describe("rarityMap", () => {
         ],
       });
       expect(rarityMap(bundle).get(heavy.id)?.tier).toBe("penaltyBox");
+    });
+
+    it("skips a dq'd runner's penalties so the box goes to the worst eligible offender", () => {
+      // A dq'd athlete is already wearing dnf; letting their penalty total win
+      // the scan just meant nobody wore the penalty box at all.
+      const cheat = makeParticipant();
+      const parts = [0, 1, 2, 3].map(() => makeParticipant());
+      const cheatRun = makeRun({
+        participant_id: cheat.participant_id,
+        official_time_ms: 5_000,
+        status: "dq",
+      });
+      const runs = parts.map((p, i) =>
+        makeRun({ participant_id: p.participant_id, official_time_ms: (i + 1) * 10_000 }),
+      );
+      const bundle = makeBundle({
+        participants: [cheat, ...parts],
+        runs: [cheatRun, ...runs],
+        penalties: [
+          makePenalty({ run_id: cheatRun.id, penalty_ms: 9_000 }),
+          makePenalty({ run_id: runs[3].id, penalty_ms: 5_000 }),
+        ],
+      });
+      const map = rarityMap(bundle);
+      expect(map.get(cheat.id)?.tier).toBe("dnf");
+      expect(map.get(parts[3].id)?.tier).toBe("penaltyBox");
     });
   });
 

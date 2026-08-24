@@ -244,9 +244,25 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
   const out = new Map<string, Rarity>();
   if (!bundle) return out;
 
-  const officialRuns = bundle.runs.filter((r) => r.is_official && r.official_time_ms != null);
+  // Anyone already bound for the dnf tier — a scratched/dq/dnp/absent roster
+  // status, or any disqualified run — is out of contention for every earned
+  // slot, not just their own tier. Without this a dq'd athlete who posted the
+  // fastest clock still held place 1: their own tier said dnf, but the champion
+  // slot stayed consumed and the honest winner shipped as podium. Same story
+  // for a station crown or the penalty box.
+  const dqParticipants = new Set(
+    bundle.runs.filter((r) => r.status === "dq").map((r) => r.participant_id),
+  );
+  const outOfContention = new Set(dqParticipants);
+  for (const p of bundle.participants) {
+    if (DNF_STATUSES.has(p.participation_status)) outOfContention.add(p.participant_id);
+  }
 
-  // Best official run per participant, then ordered fastest first.
+  const officialRuns = bundle.runs.filter(
+    (r) => r.is_official && r.official_time_ms != null && !outOfContention.has(r.participant_id),
+  );
+
+  // Best official run per participant.
   const bestByParticipant = new Map<string, (typeof officialRuns)[number]>();
   for (const run of officialRuns) {
     const prev = bestByParticipant.get(run.participant_id);
@@ -254,10 +270,17 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
       bestByParticipant.set(run.participant_id, run);
     }
   }
-  const ranked = [...bestByParticipant.values()].sort(
-    (a, b) => (a.official_time_ms ?? 0) - (b.official_time_ms ?? 0),
+  // Same shape as cardStats' rank: count everyone strictly faster, +1, so a
+  // dead heat shares the place. The old sort-index placing split ties on sort
+  // stability — one of two identical clocks drew champion and the other
+  // podium, while both card backs read "Rank 1".
+  const bests = [...bestByParticipant.values()];
+  const placeByParticipant = new Map(
+    bests.map((r) => [
+      r.participant_id,
+      bests.filter((o) => (o.official_time_ms ?? 0) < (r.official_time_ms ?? 0)).length + 1,
+    ]),
   );
-  const placeByParticipant = new Map(ranked.map((r, i) => [r.participant_id, i + 1]));
 
   // Participants owning the fastest segment at any single station.
   const runOwner = new Map(bundle.runs.map((r) => [r.id, r.participant_id]));
@@ -265,7 +288,7 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
   for (const s of bundle.splits) {
     if (s.segment_time_ms == null) continue;
     const participantId = runOwner.get(s.run_id);
-    if (!participantId) continue;
+    if (!participantId || outOfContention.has(participantId)) continue;
     const prev = bestPerStation.get(s.station_id);
     if (!prev || s.segment_time_ms < prev.ms) {
       bestPerStation.set(s.station_id, { ms: s.segment_time_ms, participantId });
@@ -277,7 +300,7 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
   const penaltyByParticipant = new Map<string, number>();
   for (const p of bundle.penalties) {
     const participantId = runOwner.get(p.run_id);
-    if (!participantId) continue;
+    if (!participantId || outOfContention.has(participantId)) continue;
     penaltyByParticipant.set(
       participantId,
       (penaltyByParticipant.get(participantId) ?? 0) + p.penalty_ms,
@@ -291,10 +314,6 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
       worstPenaltyParticipant = participantId;
     }
   }
-
-  const dqParticipants = new Set(
-    bundle.runs.filter((r) => r.status === "dq").map((r) => r.participant_id),
-  );
 
   for (const ep of bundle.participants) {
     // An explicit admin override always wins.
