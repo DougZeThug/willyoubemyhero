@@ -14,6 +14,18 @@ import type { SecretTier } from "./secret-rarity";
  */
 export type TradeSummaryItem = { kind: "roster"; eventParticipantId: string } | { kind: "secret" };
 
+/**
+ * The broadcast event name a trade nudge is sent under.
+ *
+ * Here rather than in nudge.server.ts because BOTH sides need it and the client
+ * cannot import a *.server.ts. A mismatch between the string the server sends and
+ * the string the browser binds is a silent, total, error-free failure in both
+ * directions — the kind of bug that costs an afternoon — so there is exactly one
+ * of it. The payload is always empty; see the header of nudge.server.ts for why
+ * that is a guarantee rather than a detail.
+ */
+export const TRADE_NUDGE_EVENT = "trade";
+
 /** Mirrors the CHECK on trade_offers.status. */
 export type TradeOfferStatus = "pending" | "accepted" | "declined" | "cancelled" | "voided";
 

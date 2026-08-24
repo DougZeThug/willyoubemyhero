@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useIsPresenting } from "@/hooks/use-presentation";
+import { useTradeBadge } from "@/hooks/use-trade-badge";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { signOutAccount, useAuthUser } from "@/hooks/use-account";
 import {
@@ -34,8 +35,19 @@ const links = [
   { to: "/admin", label: "Admin", icon: Settings },
 ] as const;
 
+/**
+ * A trade offer is the one thing in this app that arrives while you are looking at
+ * something else, so its dot rides the Players item rather than a nav entry of its
+ * own: /players/trade already lives under it, and a seventh icon across a phone's
+ * bottom bar buys nothing the pill on /players does not already give.
+ */
+const TRADE_PARENT = "/players";
+
 export function SiteNav() {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  // Rendered by __root.tsx on every screen, so this is also where the app joins
+  // its own nudge topic — useTradeBadge carries the subscription.
+  const tradeUnread = useTradeBadge();
   // A screen playing something cinematic gets the whole device. Faded and inert
   // rather than unmounted: unmounting the header reflows every page under it, and
   // the flag flips mid-ceremony. `inert` is the load-bearing half — chrome dimmed
@@ -69,18 +81,21 @@ export function SiteNav() {
           <nav className="hidden gap-1 md:flex">
             {links.map((l) => {
               const active = path.startsWith(l.to);
+              const waiting = l.to === TRADE_PARENT && tradeUnread > 0;
               return (
                 <Link
                   key={l.to}
                   to={l.to}
+                  aria-label={waiting ? `${l.label} — a trade offer is waiting` : undefined}
                   className={cn(
-                    "rounded-md px-3 py-1.5 text-sm font-semibold uppercase tracking-wide transition-colors",
+                    "relative rounded-md px-3 py-1.5 text-sm font-semibold uppercase tracking-wide transition-colors",
                     active
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
                   )}
                 >
                   {l.label}
+                  {waiting && <TradeDot className="right-0.5 top-0.5" />}
                 </Link>
               );
             })}
@@ -100,10 +115,12 @@ export function SiteNav() {
           {links.map((l) => {
             const Icon = l.icon;
             const active = path.startsWith(l.to);
+            const waiting = l.to === TRADE_PARENT && tradeUnread > 0;
             return (
               <li key={l.to}>
                 <Link
                   to={l.to}
+                  aria-label={waiting ? `${l.label} — a trade offer is waiting` : undefined}
                   className={cn(
                     "relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
                     active ? "text-primary" : "text-muted-foreground",
@@ -117,6 +134,9 @@ export function SiteNav() {
                     strokeWidth={1.75}
                   />
                   {l.label}
+                  {/* Offset from the icon rather than the tile, so it reads as a
+                      badge on the glyph instead of drifting into the neighbour. */}
+                  {waiting && <TradeDot className="right-[calc(50%-1.05rem)] top-1.5" />}
                   {active && (
                     <span
                       aria-hidden
@@ -131,6 +151,25 @@ export function SiteNav() {
         <div className="h-[env(safe-area-inset-bottom)]" />
       </motion.nav>
     </>
+  );
+}
+
+/**
+ * The "something is waiting" dot, same 2.5 units and same placement language as the
+ * secret-card dot on the pack button in players.index.tsx. Never carries the count:
+ * the number is not the point, and a numeral at this size is a smudge.
+ *
+ * aria-hidden because the link's own aria-label says it in words.
+ */
+function TradeDot({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "absolute h-2.5 w-2.5 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]",
+        className,
+      )}
+    />
   );
 }
 

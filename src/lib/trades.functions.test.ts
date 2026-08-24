@@ -19,6 +19,18 @@ vi.mock("@/integrations/supabase/client.server", () => ({
   },
 }));
 
+// Only the send is faked. `tradeNudgeTopic` stays real, so the topic these handlers
+// hand a member is the one nudge.server.ts would actually broadcast to rather than
+// a string this file made up.
+const sendTradeNudge = vi.fn<(participantId: string) => Promise<void>>();
+vi.mock("./nudge.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./nudge.server")>()),
+  sendTradeNudge: (participantId: string) => sendTradeNudge(participantId),
+}));
+
+/** Who got poked, in order. */
+const nudged = () => sendTradeNudge.mock.calls.map(([pid]) => pid);
+
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
 const ME = "00000000-0000-4000-8000-0000000000aa";
 const THEM = "00000000-0000-4000-8000-0000000000bb";
@@ -42,6 +54,8 @@ const asMe = () => memberHeaders(signMemberToken(ME).token);
 
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret");
+  sendTradeNudge.mockReset();
+  sendTradeNudge.mockResolvedValue(undefined);
   withDb();
 });
 
@@ -263,6 +277,28 @@ describe("createTradeOffer", () => {
     );
   });
 
+  it("nudges the recipient, and nobody else", async () => {
+    // The point of the whole nudge: before it, a phone in a pocket learned about a
+    // new offer only when its owner next unlocked it.
+    withDb({ "rpc.create_trade_offer": { data: { ok: true, offerId: OFFER_ID } } });
+    await propose(valid, asMe());
+    expect(nudged()).toEqual([THEM]);
+  });
+
+  it("does not nudge anyone when the RPC refuses the offer", async () => {
+    withDb({ "rpc.create_trade_offer": { error: { message: "Not a spare" } } });
+    await expect(propose(valid, asMe())).rejects.toThrow("Not a spare");
+    expect(nudged()).toEqual([]);
+  });
+
+  it("still puts the offer on the table when the nudge fails", async () => {
+    // A trade must never fail because Realtime did. sendTradeNudge swallows its own
+    // errors, and this is the assertion that keeps that true if it ever stops.
+    withDb({ "rpc.create_trade_offer": { data: { ok: true, offerId: OFFER_ID } } });
+    sendTradeNudge.mockRejectedValue(new Error("realtime down"));
+    expect(await propose(valid, asMe())).toEqual({ ok: true, offerId: OFFER_ID });
+  });
+
   it("resolves the event server-side rather than taking one", async () => {
     withDb({ "rpc.create_trade_offer": { data: { ok: true, offerId: OFFER_ID } } });
     await propose({ ...valid, eventId: "00000000-0000-4000-8000-0000000000e0" }, asMe());
@@ -337,6 +373,27 @@ describe("acceptTradeOffer", () => {
     });
   });
 
+  it("nudges the proposer, whose id it has to read back", async () => {
+    // The one counterparty these handlers never receive: accept takes an offer id
+    // and a token, and the RPC re-derives the rest.
+    withDb({
+      "rpc.accept_trade_offer": { data: { ok: true, tradeId: "t1" } },
+      "trade_offers.select": { data: { proposer_id: THEM } },
+    });
+    await take({ offerId: OFFER_ID }, asMe());
+    expect(nudged()).toEqual([THEM]);
+    const [call] = mock.callsFor("trade_offers", "select");
+    // Scoped to the caller for the same reason every other read here is: an
+    // unscoped lookup by offer id alone would answer for somebody else's offer.
+    expect(mock.eqValue(call, "recipient_id")).toBe(ME);
+  });
+
+  it("nudges nobody on a soft refusal, because nothing moved", async () => {
+    withDb({ "rpc.accept_trade_offer": { data: { ok: false, reason: "voided" } } });
+    await take({ offerId: OFFER_ID }, asMe());
+    expect(nudged()).toEqual([]);
+  });
+
   it("passes a soft refusal through for the UI to explain", async () => {
     withDb({ "rpc.accept_trade_offer": { data: { ok: false, reason: "voided" } } });
     expect(await take({ offerId: OFFER_ID }, asMe())).toEqual({ ok: false, reason: "voided" });
@@ -389,6 +446,27 @@ describe("declineTradeOffer and cancelTradeOffer", () => {
     expect((call.payload as { status: string }).status).toBe("cancelled");
   });
 
+  it("each nudges the other side, off the same UPDATE that decided it happened", async () => {
+    // The returning select names the counterparty as well as proving the row
+    // matched, so the nudge cannot disagree with the resolution that caused it.
+    withDb({ "trade_offers.update": { data: { id: OFFER_ID, proposer_id: THEM } } });
+    await decline({ offerId: OFFER_ID }, asMe());
+    expect(nudged()).toEqual([THEM]);
+
+    sendTradeNudge.mockClear();
+    withDb({ "trade_offers.update": { data: { id: OFFER_ID, recipient_id: THEM } } });
+    await cancel({ offerId: OFFER_ID }, asMe());
+    expect(nudged()).toEqual([THEM]);
+  });
+
+  it("nudges nobody when nothing matched", async () => {
+    // A double-tap must not poke somebody about a decline that already happened.
+    withDb({ "trade_offers.update": { data: null } });
+    await decline({ offerId: OFFER_ID }, asMe());
+    await cancel({ offerId: OFFER_ID }, asMe());
+    expect(nudged()).toEqual([]);
+  });
+
   it("reports a no-op rather than a success when nothing matched", async () => {
     // An UPDATE that matches no row is not an error, so without the returning
     // select this would tell somebody they had declined an offer they had not.
@@ -408,6 +486,7 @@ describe("getMyTradeOffers", () => {
       inbox: TradeOfferView[];
       outbox: TradeOfferView[];
       recent: TradeOfferView[];
+      nudgeTopic: string | null;
     }>(getMyTradeOffers, { headers });
   }
 
@@ -430,6 +509,15 @@ describe("getMyTradeOffers", () => {
 
   it("refuses a caller with no member token", async () => {
     await expect(offers()).rejects.toThrow("Claim your player first");
+  });
+
+  it("hands the caller the topic their own nudges arrive on", async () => {
+    // A member cannot derive this themselves — it is HMAC'd with SESSION_SECRET —
+    // so it rides the one response that is already member-guarded and no-store.
+    // Keyed on the TOKEN HOLDER, so it can never hand out somebody else's topic.
+    const { tradeNudgeTopic } = await import("./nudge.server");
+    withDb({ "trade_offers.select": { data: [] } });
+    expect((await offers(asMe())).nudgeTopic).toBe(tradeNudgeTopic(ME));
   });
 
   it("splits pending offers by which way they point", async () => {
@@ -524,7 +612,15 @@ describe("getMyTradeOffers", () => {
 
   it("does not go looking for items when there are no offers", async () => {
     withDb({ "trade_offers.select": { data: [] } });
-    expect(await offers(asMe())).toEqual({ inbox: [], outbox: [], recent: [] });
+    // The topic still comes back. A member with no offers at all is exactly the
+    // one who most needs the nudge, so the empty path cannot skip it.
+    const { tradeNudgeTopic } = await import("./nudge.server");
+    expect(await offers(asMe())).toEqual({
+      inbox: [],
+      outbox: [],
+      recent: [],
+      nudgeTopic: tradeNudgeTopic(ME),
+    });
     expect(mock.callsFor("trade_offer_items")).toHaveLength(0);
   });
 });
