@@ -23,7 +23,7 @@ describe("TROPHY_VIA", () => {
     // the same reason award category ids are: renaming one orphans every row
     // carrying it. If a migration adds a fifth source, it is added here too —
     // never renamed.
-    expect([...TROPHY_VIA]).toEqual(["pull", "trade", "grant", "claim"]);
+    expect([...TROPHY_VIA]).toEqual(["pull", "trade", "grant", "claim", "backfill"]);
   });
 });
 

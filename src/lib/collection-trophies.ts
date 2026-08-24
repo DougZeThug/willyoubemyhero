@@ -48,7 +48,7 @@ export const TROPHY_RARITY: Rarity = {
 export const TROPHY_CHIME = "collectionComplete";
 
 /** How a set got finished. Mirrors the CHECK in 20260825120000. */
-export const TROPHY_VIA = ["pull", "trade", "grant", "claim"] as const;
+export const TROPHY_VIA = ["pull", "trade", "grant", "claim", "backfill"] as const;
 export type TrophyVia = (typeof TROPHY_VIA)[number];
 
 /**

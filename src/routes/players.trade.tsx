@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowLeftRight, Inbox, Send } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { CollectionComplete } from "@/components/collection-complete";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
+import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
 import { useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMemberSession } from "@/lib/member-token";
@@ -184,6 +185,12 @@ function TradePage() {
         // thrown error on the one screen that just moved somebody's cards.
         const mine = (res.completedCollections ?? []).filter((c) => c.participantId === myId);
         if (mine.length) {
+          // Claimed before the refetch, so the global host does not play these a
+          // second time. The OTHER party's trophies are deliberately left
+          // unclaimed — their phone is where those belong.
+          if (myId) {
+            markTrophiesCelebrated(mine.map((c) => trophyKey(myId, c.collection)));
+          }
           qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
           // Queued rather than collapsed: one trade genuinely can close two sets,
           // and showing one of them would be a worse bug than showing neither.

@@ -16,7 +16,7 @@
 //     this feature is otherwise built to withhold. A test that asserts it comes
 //     back is asserting a product decision, not an implementation detail.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, IDS, seedEvent, sql } from "./helpers";
+import { closeDb, IDS, isDenied, seedEvent, sql } from "./helpers";
 // Imported rather than redeclared, so these tests pin the TypeScript shapes the
 // client renders against what Postgres actually returns. A drift here is a
 // ceremony that fires on a field the RPC stopped sending.
@@ -418,6 +418,115 @@ describe("accept_trade_offer", () => {
     const res = await accept(await offer([spare], [bobSpare]));
     expect(res.ok).toBe(true);
     expect(res.completedCollections).toEqual([]);
+  });
+});
+
+describe("backfill_collection_trophies", () => {
+  async function backfill(): Promise<number> {
+    const [row] = await sql<{ backfill_collection_trophies: number }>(
+      "SELECT public.backfill_collection_trophies()",
+    );
+    return row.backfill_collection_trophies;
+  }
+
+  it("catches a set somebody finished before this table existed", async () => {
+    // The reason this function has to exist. Every call site above only looks at
+    // the set a card just ARRIVED in, so a league that was already collecting has
+    // members who own a whole set and can never trigger a check on it: every
+    // remaining pull from it is a duplicate, and so is every grant and every
+    // traded copy.
+    const a = await addCard("Gary the Grill");
+    const b = await addCard("The Gazebo");
+    await own(IDS.alice, a);
+    await own(IDS.alice, b);
+    expect(await trophies()).toEqual([]);
+
+    expect(await backfill()).toBe(1);
+    expect(await trophies()).toMatchObject([
+      { participant_id: IDS.alice, collection_id: SET, size_at_completion: 2, via: "backfill" },
+    ]);
+  });
+
+  it("does nothing the second time", async () => {
+    await own(IDS.alice, await addCard("Gary the Grill"));
+    expect(await backfill()).toBe(1);
+    expect(await backfill()).toBe(0);
+    expect(await trophies()).toHaveLength(1);
+  });
+
+  it("leaves a set somebody is still collecting alone", async () => {
+    const a = await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    await own(IDS.alice, a);
+    expect(await backfill()).toBe(0);
+    expect(await trophies()).toEqual([]);
+  });
+
+  it("does the whole league in one pass, set by set", async () => {
+    const a = await addCard("Gary the Grill");
+    const wag = await addCard("WAG one", { collection: OTHER_SET });
+    await own(IDS.alice, a);
+    await own(IDS.alice, wag);
+    await own(IDS.bob, a);
+
+    expect(await backfill()).toBe(3);
+    expect((await trophies()).map((t) => [t.participant_id, t.collection_id]).sort()).toEqual(
+      [
+        [IDS.alice, SET],
+        [IDS.alice, OTHER_SET],
+        [IDS.bob, SET],
+      ].sort(),
+    );
+  });
+
+  it("respects every guard the live paths respect", async () => {
+    // It goes through award_collection_trophy rather than reimplementing the
+    // completeness test, which is what keeps these from needing to be re-argued:
+    // unsorted is not a set, a hidden set mints nothing, and a duplicate is not
+    // ownership.
+    await own(IDS.alice, await addCard("Loose card", { collection: null }));
+    const hidden = await addCard("Hidden set card", { collection: OTHER_SET });
+    await own(IDS.alice, hidden);
+    await sql("UPDATE public.secret_collections SET active = false WHERE id = $1", [OTHER_SET]);
+
+    const c = await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    await own(IDS.bob, c);
+    await own(IDS.bob, c, { duplicate: true });
+
+    expect(await backfill()).toBe(0);
+    expect(await trophies()).toEqual([]);
+    await sql("UPDATE public.secret_collections SET active = true WHERE id = $1", [OTHER_SET]);
+  });
+
+  it("repairs a set that grew back under its owner", async () => {
+    // The lockout nobody would think to look for. award_collection_trophy sizes
+    // the set on `active AND art_path IS NOT NULL` but checks ownership without
+    // either, so re-activating a card the holder already has a row for grows the
+    // size and their share of it together — they stay complete, and no acquiring
+    // path ever fires again. Being re-runnable is what makes this the answer.
+    const a = await addCard("Gary the Grill");
+    const retired = await addCard("Was retired", { active: false });
+    await own(IDS.alice, a);
+    await own(IDS.alice, retired);
+
+    expect(await backfill()).toBe(1);
+    expect(await trophies()).toMatchObject([{ size_at_completion: 1 }]);
+
+    await sql("UPDATE public.secret_cards SET active = true WHERE id = $1", [retired]);
+    // Still complete, and still theirs — but the trophy is stale, and the primary
+    // key means a re-run cannot restate it.
+    expect(await backfill()).toBe(0);
+    expect(await trophies()).toMatchObject([{ size_at_completion: 1 }]);
+  });
+
+  it("is unreachable by anon and authenticated", async () => {
+    // Blanket-tested in secret-cards.test.ts, said out loud here because this one
+    // writes public rows about other people from nothing but a table scan.
+    expect(await isDenied("anon", "SELECT public.backfill_collection_trophies()")).toBe(true);
+    expect(await isDenied("authenticated", "SELECT public.backfill_collection_trophies()")).toBe(
+      true,
+    );
   });
 });
 

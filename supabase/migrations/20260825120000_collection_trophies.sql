@@ -55,8 +55,10 @@ CREATE TABLE IF NOT EXISTS public.collection_trophies (
   -- they actually did.
   size_at_completion int  NOT NULL CHECK (size_at_completion > 0),
   -- Append-only, like every other stored vocabulary in this app: the value is in
-  -- the table, so renaming one orphans rows. 'claim' is the guest carry below.
-  via                text NOT NULL CHECK (via IN ('pull', 'trade', 'grant', 'claim')),
+  -- the table, so renaming one orphans rows. 'claim' is the guest carry below;
+  -- 'backfill' is the one-time sweep at the bottom of this file, named the same
+  -- way card_copies.source names its own.
+  via                text NOT NULL CHECK (via IN ('pull', 'trade', 'grant', 'claim', 'backfill')),
   event_id           uuid REFERENCES public.events(id) ON DELETE SET NULL,
   created_at         timestamptz NOT NULL DEFAULT now(),
   -- The whole idempotence story. Every acquiring path calls the helper below on
@@ -743,3 +745,62 @@ GRANT EXECUTE ON FUNCTION public.accept_trade_offer(uuid, uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.claim_guest_secrets(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_guest_secrets(uuid, uuid) TO service_role;
+
+-- ============ THE SETS ALREADY FINISHED ============
+--
+-- Everything above only ever looks at the set a card just ARRIVED in. That is the
+-- right shape for a league that has always had this table, and exactly the wrong
+-- one for a league that has been collecting for months without it: somebody who
+-- already owns all of a set is locked out permanently, because every remaining
+-- pull from it is a duplicate, every grant sets `_already`, and every trade of a
+-- card they hold arrives as a duplicate too. No amount of playing fixes it.
+--
+-- So: one sweep over every set anybody already holds a card in, at the moment
+-- this table comes into existence.
+--
+-- A FUNCTION rather than a bare INSERT, for two reasons. The db suite applies
+-- migrations once against an empty database, so a statement here would insert
+-- nothing and could never be tested — a function can be seeded against and
+-- called. And it is re-runnable, which matters more than it looks: re-activating
+-- a retired card, or filling in a missing art_path, grows the set and the
+-- holder's share of it by one at the same time, so they stay complete and no call
+-- site ever fires. This is the repair for that too.
+--
+-- It calls award_collection_trophy rather than reimplementing the completeness
+-- test. Two copies of that predicate would drift, and the one that drifted would
+-- hand out trophies for sets nobody finished.
+CREATE OR REPLACE FUNCTION public.backfill_collection_trophies() RETURNS int
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _rec record;
+  _n   int := 0;
+BEGIN
+  FOR _rec IN
+    SELECT DISTINCT p.participant_id, c.collection
+      FROM public.secret_card_pulls p
+      JOIN public.secret_cards c ON c.id = p.secret_card_id
+     WHERE p.participant_id IS NOT NULL
+       AND NOT p.is_duplicate
+       AND c.collection IS NOT NULL
+  LOOP
+    -- NULL back means "not complete" or "already had it", and both are the normal
+    -- answer here. Only a trophy minted by this call is counted.
+    IF public.award_collection_trophy(_rec.participant_id, _rec.collection,
+                                      'backfill', NULL) IS NOT NULL THEN
+      _n := _n + 1;
+    END IF;
+  END LOOP;
+  RETURN _n;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.backfill_collection_trophies() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.backfill_collection_trophies() TO service_role;
+
+-- Idempotent by the primary key inside the helper, so this replays with the rest
+-- of the file. A no-op on an empty database, which is every run of the db suite —
+-- the tests seed and call the function directly instead.
+SELECT public.backfill_collection_trophies();

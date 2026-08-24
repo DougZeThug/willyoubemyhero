@@ -24,6 +24,7 @@ import { StreakFlame } from "@/components/streak-flame";
 import { MilestoneReveal } from "@/components/milestone-reveal";
 import { CollectionComplete } from "@/components/collection-complete";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
+import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
@@ -643,6 +644,15 @@ function PackPage() {
           qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
           qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
           if (res.completedCollection) {
+            // Claimed HERE rather than when the ceremony fires, because the fire
+            // is a beat behind the card and the refetch below is not. Left until
+            // then, the global host would see an uncelebrated trophy first and
+            // play a second ceremony over the top of this one.
+            if (me?.participantId) {
+              markTrophiesCelebrated([
+                trophyKey(me.participantId, res.completedCollection.collection),
+              ]);
+            }
             qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
           }
         } else {
@@ -669,7 +679,10 @@ function PackPage() {
     })();
 
     return () => clearTimeout(timer);
-  }, [torn, actor, pull, qc, retryNonce]);
+    // `me?.participantId` only to stamp a completed set as already celebrated.
+    // Re-running on it is free: pullFiredRef latches on the first pass, so a
+    // second entry returns before it can spend anything.
+  }, [torn, actor, me?.participantId, pull, qc, retryNonce]);
 
   /**
    * Tell the server which cards were in this pack, so the vault can say how many

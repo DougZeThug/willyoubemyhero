@@ -366,9 +366,17 @@ function PlayersPage() {
       >
         {trophySizeLabel(t.size)}
       </div>
-      <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-        {t.completedOn}
-      </div>
+      {/* Backfilled trophies carry the day this table came into existence, not the
+          day the set was finished — nothing in the schema records when a given
+          person acquired a given card, and a traded row keeps the GIVER's pull
+          date. Better to say nothing than to state a date the data cannot
+          support, and better than eight people appearing to finish the same
+          afternoon. */}
+      {t.via !== "backfill" && (
+        <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+          {t.completedOn}
+        </div>
+      )}
     </div>
   );
 
