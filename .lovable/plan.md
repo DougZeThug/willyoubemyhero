@@ -1,23 +1,30 @@
-# Streak card art: get the fix live, and make it impossible to land on the text panel
+# Name the secret cards in the trade feed
 
-Streak rewards work as designed (each rung pays once — you hit Day 3 and Day 7 on the same run), so nothing changes there.
+Right now the league feed says "David Weidensaul sent a secret to Ryan Pham for a secret". Secret card identities are deliberately stripped when a trade settles, so the name simply is not stored anywhere the feed can read. This adds the name — visible to everyone — and recovers names for trades that already happened.
 
-## What's actually wrong with the art
+## What changes
 
-The card you claimed does have artwork — `Dave Stoltzfus` has an art file and no back file of its own. The reveal that greeted you was the generated name/flavour panel, which is what the milestone reveal used to turn onto.
+- A settled trade records the name of each secret that moved, alongside the roster cards it already records.
+- The feed reads: "DAVID WEIDENSAUL sent DRAGON to RYAN PHAM for ROCKY". Mixed sides read "1 card + TUCKER".
+- Existing trades are backfilled from the stored offer items, so the whole feed reads the same way — no "a secret" leftovers.
+- The offer cards ("Recently settled", incoming/outgoing) already show card names and are unchanged.
 
-That was already fixed in the editor: the reveal now lands face-down on the event's shared back and turns onto the front art. The screen you photographed came from the published site, which is still running the old build — the fix has not been published.
+## Privacy note
 
-## What to do
-
-1. Publish the current build so the corrected reveal reaches phones.
-2. Harden the reveal so this can never regress into a text panel:
-   - If the event has no shared back image, skip the face-down beat entirely and open straight on the front art.
-   - Keep the generated name/flavour panel only as the tap-to-flip reverse.
-3. Verify in the preview that a claimed milestone card shows the artwork, and that tapping it still reaches the name/flavour panel.
+The trades table is readable by everyone in the app, so this makes every traded secret's name public. Card art and the rest of the secret catalogue stay server-only — only names of cards that were actually traded become visible. This is the trade-off you chose; flagging it once so it isn't a surprise later.
 
 ## Technical detail
 
-- `src/components/milestone-reveal.tsx`: initialise `revealed` to `true` when no `universalBack` is supplied, so `faceDown` is never set on a card with nothing to show face-down.
-- No server, RPC or schema changes; `claim_streak_milestone` and `signSecretCard` already return the right card and a signed art URL.
-- `src/components/milestone-reveal.test.tsx`: add a case covering the no-shared-back path opening on the front art.
+Database migration:
+
+- `accept_trade_offer`: change the two summary aggregates so a secret item builds `{"kind":"secret","secretCardId":…,"name":…}` instead of `{"kind":"secret"}`, joining `trade_offer_items` → `secret_card_pulls` → `secret_cards`.
+- Update the `COMMENT ON COLUMN public.trades.proposer_gave` redaction note to describe the new, intentionally wider shape.
+- One-time backfill `UPDATE` over `public.trades`, rebuilding both summary columns from `trade_offer_items` for rows whose `offer_id` is still present; rows without recoverable items keep their current shape.
+- Idempotent (`CREATE OR REPLACE`, backfill guarded on the item join) so the db test suite replays it cleanly.
+
+Client:
+
+- `src/lib/trades.ts`: widen `TradeSummaryItem`'s secret variant with optional `secretCardId` and `name`; `tradeSummaryLabel` lists named secrets by name and falls back to the existing "a secret" / "2 secrets" wording when a name is absent (older rows, unknown data).
+- `src/routes/players.trade.tsx`: no structural change — it renders `tradeSummaryLabel`; update the comment above the feed that currently states secrets are unnameable.
+- `src/lib/trades-db.server.ts` row type follows the widened type.
+- Extend the existing `tradeSummaryLabel` unit tests to cover named, unnamed and mixed sides.
