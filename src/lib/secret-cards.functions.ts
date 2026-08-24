@@ -12,6 +12,7 @@ import type {
   SecretPullRow,
   SecretPullStatusResult,
 } from "./secret-cards-db.server";
+import type { CollectionTrophy, CompletedCollection } from "./collection-trophies";
 import type { SecretCardView } from "./secret-cards";
 import {
   SECRET_BORDER_FX_OPTIONS,
@@ -179,6 +180,10 @@ export const pullSecretCard = createServerFn({ method: "POST" }).handler(async (
     day: pull.day,
     duplicate: pull.duplicate,
     fresh: pull.fresh,
+    // The one number this whole file exists to withhold, and the only response
+    // allowed to carry it. Null on every pull that did not just finish a set,
+    // which is all but one of them in a season.
+    completedCollection: pull.completedCollection ?? null,
     card: await signSecretCard(card, pull.tier),
   };
 });
@@ -471,6 +476,65 @@ export const getSecretCollections = createServerFn({ method: "GET" }).handler(as
   return { collections: (data ?? []).map((c) => ({ id: c.id, label: c.label })) };
 });
 
+/**
+ * Every finished set in the league, whose it is, and how big it was.
+ *
+ * Unguarded, like getSecretCollections above — and unlike it, this one DOES
+ * return sizes. That is not a hole in the silence rule at the top of this file,
+ * it is the rule's one designed exception: a size here only ever describes a set
+ * somebody has already completed, and a set nobody has finished appears nowhere
+ * in this response at all. Seeing that Gary finished Pets at nine is the trophy
+ * working; there is no shape here that can leak the size of a set still in play.
+ *
+ * The whole league rather than one person, because the shelf, the badges and
+ * other people's player pages all read from it and it is thirteen people's worth
+ * of rows. The label is resolved server-side so a hidden or renamed set still
+ * renders as something rather than as a raw slug.
+ */
+export const getCollectionTrophies = createServerFn({ method: "GET" }).handler(async () => {
+  const { trophiesDb } = await import("./trophies-db.server");
+  const db = trophiesDb();
+  const { data, error } = await db
+    .from("collection_trophies")
+    .select("participant_id, collection_id, size_at_completion, completed_on, via")
+    .order("completed_on", { ascending: false })
+    .returns<
+      {
+        participant_id: string;
+        collection_id: string;
+        size_at_completion: number;
+        completed_on: string;
+        via: string;
+      }[]
+    >();
+  if (error) throw error;
+
+  const ids = [...new Set((data ?? []).map((t) => t.collection_id))];
+  const labels = new Map<string, string>();
+  if (ids.length) {
+    const { data: sets, error: setError } = await db
+      .from("secret_collections")
+      .select("id, label")
+      .in("id", ids)
+      .returns<Pick<SecretCollectionRow, "id" | "label">[]>();
+    if (setError) throw setError;
+    for (const set of sets ?? []) labels.set(set.id, set.label);
+  }
+
+  const trophies: CollectionTrophy[] = (data ?? []).map((t) => ({
+    participantId: t.participant_id,
+    collection: t.collection_id,
+    // An id whose set was hidden or renamed away still has a trophy pointing at
+    // it, so it renders as itself rather than disappearing — the same fallback
+    // secretCollectionLabel makes.
+    label: labels.get(t.collection_id) ?? t.collection_id,
+    size: t.size_at_completion,
+    completedOn: t.completed_on,
+    via: t.via,
+  }));
+  return { trophies };
+});
+
 /** Create a set. The id is derived from the name once, then never changes. */
 export const createSecretCollection = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ label: collectionLabel }).parse(d))
@@ -553,6 +617,18 @@ export const deleteSecretCollection = createServerFn({ method: "POST" })
       .select("id", { count: "exact", head: true })
       .eq("collection", data.id);
     if ((count ?? 0) > 0) return { ok: false as const, reason: "in_use" as const, cards: count };
+
+    // A set with no cards left can still have been finished by somebody, and
+    // collection_trophies references it ON DELETE RESTRICT precisely so that
+    // history cannot be deleted out from under them. Checked here as well so it
+    // arrives as a sentence rather than a raw foreign-key violation.
+    const { count: trophies } = await db
+      .from("collection_trophies")
+      .select("participant_id", { count: "exact", head: true })
+      .eq("collection_id", data.id);
+    if ((trophies ?? 0) > 0) {
+      return { ok: false as const, reason: "has_trophies" as const, trophies };
+    }
 
     const { error } = await db.from("secret_collections").delete().eq("id", data.id);
     if (error) throw error;
@@ -835,6 +911,16 @@ export const grantSecretCard = createServerFn({ method: "POST" })
       _event_id: event?.id ?? null,
     });
     if (error) throw new Error(error.message);
-    const row = result as { duplicate: boolean } | null;
-    return { ok: true as const, duplicate: row?.duplicate ?? false };
+    const row = result as {
+      duplicate: boolean;
+      completedCollection: CompletedCollection | null;
+    } | null;
+    // For the commissioner's toast. The recipient is somewhere else in the garden
+    // and cannot be told from here — collection_trophies is published to realtime
+    // so their own phone finds out.
+    return {
+      ok: true as const,
+      duplicate: row?.duplicate ?? false,
+      completedCollection: row?.completedCollection ?? null,
+    };
   });

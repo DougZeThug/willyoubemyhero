@@ -21,6 +21,7 @@
 // 20260813120000_card_pull_editions.sql
 // applied: every call site then switches to plain `supabaseAdmin` unchanged.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CompletedCollection } from "./collection-trophies";
 // A top-level client.server import is safe here and nowhere else: this is a
 // *.server.ts module, so it never reaches the client bundle.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -75,6 +76,15 @@ export type PullSecretCardResult = {
   duplicate: boolean;
   tier: string;
   fresh: boolean;
+  /**
+   * The set this pull just finished, or null — which is every pull but one.
+   *
+   * The single place in this feature a set SIZE crosses the wire, and it only
+   * ever describes a set that is already complete. Present on the `fresh: false`
+   * returns too, always null: they acquired nothing, and one shape is easier to
+   * reason about than an optional key.
+   */
+  completedCollection: CompletedCollection | null;
 } | null;
 
 /** What public.secret_pull_status returns. Note the absence of a set size. */

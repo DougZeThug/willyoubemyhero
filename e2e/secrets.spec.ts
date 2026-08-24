@@ -44,6 +44,9 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
     day: "2026-07-28",
     duplicate: false,
     fresh: true,
+    // Null on all but one pull in a season, and the default here for the same
+    // reason: a spec that wants the completion ceremony overrides it explicitly.
+    completedCollection: null,
     card: SECRET_CARD,
     ...(over.pull as object),
   });

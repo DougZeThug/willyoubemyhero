@@ -31,6 +31,16 @@ const GLOW: Record<RarityTier, number> = {
 export const SECRET_GLOW = 1;
 
 /**
+ * A finished set, and the only thing on this scale that is not a card.
+ *
+ * Pinned to the same 1 a secret gets rather than invented above it: the scale
+ * tops out at full, the wash has nowhere brighter to go, and a number over 1
+ * would silently clamp and read as a level that means something when it does
+ * not. What separates the two is the COLOUR and the confetti, not the volume.
+ */
+export const COMPLETE_GLOW = 1;
+
+/**
  * How loud a tier is, on the same 0..1 scale the wall behind it uses.
  *
  * Exported so the particle burst and the wash agree. Two scales would drift, and

@@ -28,6 +28,15 @@ export const ROSTER_SECTION = "roster";
 export const FAVOURITES_SECTION = "favourites";
 
 /**
+ * The trophy shelf. Only present once this device's owner has finished a set.
+ *
+ * Absent rather than empty, like `favourites`: a shelf that says "nothing yet"
+ * is a running reminder of something you have not done, and the vault's whole
+ * posture is to show what you have.
+ */
+export const TROPHIES_SECTION = "trophies";
+
+/**
  * A secret set's section id. Prefixed so it can never collide with `roster`, and
  * the unsorted pile gets the empty suffix rather than a word — `null` is not a
  * collection id and must not start looking like one.

@@ -104,3 +104,42 @@ export async function celebrateSecret(rarity: Rarity) {
   shot(0.1, 60);
   shot(0.9, 120);
 }
+
+/**
+ * A finished set.
+ *
+ * The fourth shape, by the same argument celebrateSecret makes for being the
+ * third: a single secret is framed from below, and doing more of that for a set
+ * would just read as a louder single card. So this one comes from ABOVE and
+ * keeps coming — a wide curtain falling across the whole screen for a second and
+ * a half, which is the only gesture in the app that outlasts the moment it
+ * belongs to. Finishing a set is not an impact, it is an occasion.
+ *
+ * Gold rather than the set's own colours, because a set has no tier: it is the
+ * one thing in this app that is not a card, and it should not borrow a card's
+ * palette. `warn` is already the league's award colour on the player pages.
+ */
+export async function celebrateCollection() {
+  if (reducedMotion()) return;
+  const confetti = await cannon();
+  // The amber the award pills and the streak flame already use, hex-ified for the
+  // same reason everything else here goes through palette(): canvas-confetti
+  // cannot read oklch() and would silently render an unrelated olive.
+  const colors = [oklchToHex("oklch(0.82 0.19 85)"), oklchToHex("oklch(0.9 0.15 95)"), "#ffffff"];
+  const end = Date.now() + 1500;
+  // Rectangular, tumbling, falling — the default confetti shape, used here on
+  // purpose where burst() went out of its way to avoid it. This IS the party.
+  (function frame() {
+    confetti({
+      particleCount: 4,
+      startVelocity: 0,
+      ticks: 200,
+      gravity: 0.6,
+      spread: 90,
+      scalar: 1.1,
+      origin: { x: Math.random(), y: -0.1 },
+      colors,
+    });
+    if (Date.now() < end) requestAnimationFrame(frame);
+  })();
+}

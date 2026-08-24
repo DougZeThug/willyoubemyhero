@@ -15,6 +15,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { SiteNav } from "@/components/site-nav";
 import { PresentationProvider } from "@/components/presentation-mode";
 import { AccountBridge } from "@/components/account-bridge";
+import { TrophyCeremonyHost } from "@/components/trophy-ceremony-host";
 import { hydrateCardSfxMuted } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
@@ -156,6 +157,13 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AccountBridge />
       <PresentationProvider>
+        {/* Inside the provider, not beside the Toaster: it uses PresentationMode
+            to fade the nav, and that context's default is a no-op. A set can close
+            while you are anywhere in the app — an admin grant runs on the
+            commissioner's phone, and the far side of a trade never sees the accept
+            response — so the ceremony for those has to live above the routes
+            rather than in one of them. */}
+        <TrophyCeremonyHost />
         <div className="flex min-h-screen flex-col">
           <SiteNav />
           {/* The bottom nav's reserved space stays reserved while presenting.
