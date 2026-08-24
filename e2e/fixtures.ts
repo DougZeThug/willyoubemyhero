@@ -180,7 +180,11 @@ export const DEFAULT_RESPONSES: Responses = {
   // are deliberately NOT defaulted: nothing reaches them unless a test means to,
   // and e2e/trades.spec.ts stubs each one where it exercises it, so the stub
   // reads next to the assertion it feeds.
-  getMyTradeOffers: { inbox: [], outbox: [], recent: [] },
+  // `nudgeTopic` is null on purpose. A topic string here would have SiteNav open a
+  // realtime websocket to the live Supabase URL on every page in the suite, which
+  // is both the one thing these stubs exist to prevent and a console error
+  // smoke.spec.ts asserts against.
+  getMyTradeOffers: { inbox: [], outbox: [], recent: [], nudgeTopic: null },
   // `roster` is one entry per COPY — {copyId, eventParticipantId, edition} — since
   // a trade moves a specific copy and its finish. Empty here either way.
   getTradeSpares: { participantId: null, roster: [], secrets: [] },

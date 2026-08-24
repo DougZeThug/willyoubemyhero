@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { TradeOfferView } from "@/lib/trades";
 import { useMemberSession } from "@/lib/member-token";
 import { useTradeOffers } from "./use-trades";
+import { useTradeNudge } from "./use-trade-nudge";
 
 const KEY = "wwbh:trade-seen";
 const CHANGED = "wwbh:trade-seen-changed";
@@ -104,14 +105,15 @@ function useSeenOffers(): readonly string[] {
  *
  * Safe to call from as many places as want a dot: every caller shares one
  * useTradeOffers query key, so the second one is a cache read.
- *
- * The count is only as fresh as `useTradeOffers`, which today means the focus
- * refetch — so on a phone, "the next time you unlock it".
  */
 export function useTradeBadge(): number {
   const me = useMemberSession();
   const participantId = me?.participantId ?? null;
   const offers = useTradeOffers(participantId).data;
+  // Mounted here rather than beside it, so every dot on the screen is fed by one
+  // subscription. Calling this hook twice costs nothing: the query dedupes on its
+  // key and nudge-channel.ts ref-counts the topic.
+  useTradeNudge(offers?.nudgeTopic ?? null, participantId);
   const seen = useSeenOffers();
   const inbox = offers?.inbox;
   return useMemo(() => unreadOfferIds(inbox ?? [], seen).length, [inbox, seen]);

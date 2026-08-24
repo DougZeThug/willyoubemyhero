@@ -64,6 +64,26 @@ async function db() {
 }
 
 /**
+ * Tell the other side something moved. Dynamic import for the same reason as the
+ * two above: nudge.server.ts reaches for node:crypto, and a top-level import here
+ * would drag it into the client bundle.
+ *
+ * Awaited, but it cannot fail — sendTradeNudge swallows everything and gives up
+ * after two seconds. A trade must never fail because Realtime did.
+ */
+async function nudge(participantId: string) {
+  try {
+    const { sendTradeNudge } = await import("./nudge.server");
+    await sendTradeNudge(participantId);
+  } catch {
+    // Belt and braces on top of sendTradeNudge already swallowing its own
+    // failures. This is the layer that holds if that ever stops being true, and
+    // it is what makes "a broken nudge does not break a trade" a fact rather
+    // than a promise about another module.
+  }
+}
+
+/**
  * These responses vary by the caller's token, and a shared cache hit would hand
  * one member another's inbox. Same reasoning as secret-cards.functions.ts.
  */
@@ -398,20 +418,30 @@ const RECENT_LIMIT = 10;
  * Everything the Trading Post screen needs about you: offers waiting on you,
  * offers you are waiting on, and what has been settled lately.
  *
- * The `recent` list is how a decline is ever seen. There is no push channel for
- * one — a ticker table would have to be anon-readable to be published, so even a
- * contentless one would broadcast "trade activity happened" to the whole league.
- * Window focus refetches instead, and party phones lock and unlock constantly.
+ * The `recent` list is how a decline is ever seen. There is still no push TABLE for
+ * one, and there will not be — a ticker would have to be anon-readable to be
+ * published, so even a contentless one would broadcast "trade activity happened" to
+ * the whole league. What there is now is a broadcast topic, which is not a table and
+ * publishes nothing: see nudge.server.ts, and `nudgeTopic` below. Window focus
+ * refetching stays the backstop, and party phones lock and unlock constantly.
  */
 export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
   async (): Promise<{
     inbox: TradeOfferView[];
     outbox: TradeOfferView[];
     recent: TradeOfferView[];
+    nudgeTopic: string | null;
   }> => {
     const me = await requireMember();
     noStore();
     const sb = await db();
+
+    // Handed out here rather than from a server function of its own. A member
+    // cannot derive their own topic — it is HMAC'd with SESSION_SECRET — and this
+    // response is already member-guarded, already no-store, and already the exact
+    // query the badge reads, so the topic rides along for free.
+    const { tradeNudgeTopic } = await import("./nudge.server");
+    const nudgeTopic = tradeNudgeTopic(me);
 
     // Two equality queries rather than one `.or(...)`: that filter is built by
     // interpolating a value into PostgREST's expression DSL, which nothing else
@@ -433,7 +463,7 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
     // whole league is thirteen people.
     const resolved = rows.filter((o) => o.status !== "pending").slice(0, RECENT_LIMIT);
     const wanted = [...pending, ...resolved];
-    if (wanted.length === 0) return { inbox: [], outbox: [], recent: [] };
+    if (wanted.length === 0) return { inbox: [], outbox: [], recent: [], nudgeTopic };
 
     const { data: items, error: itemError } = await sb
       .from("trade_offer_items")
@@ -451,6 +481,7 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
       inbox: pending.filter((o) => o.recipient_id === me).map((o) => byId.get(o.id)!),
       outbox: pending.filter((o) => o.proposer_id === me).map((o) => byId.get(o.id)!),
       recent: resolved.map((o) => byId.get(o.id)!),
+      nudgeTopic,
     };
   },
 );
@@ -488,6 +519,10 @@ export const createTradeOffer = createServerFn({ method: "POST" })
       _want: data.want,
     });
     if (error) throw new Error(error.message);
+
+    // Past the RPC, so the recipient is a real reachable member rather than
+    // whatever the payload named.
+    await nudge(data.recipientId);
     return result as CreateTradeOfferResult;
   });
 
@@ -513,7 +548,26 @@ export const acceptTradeOffer = createServerFn({ method: "POST" })
       _recipient_id: me,
     });
     if (error) throw new Error(error.message);
-    return result as AcceptTradeOfferResult;
+
+    const accepted = result as AcceptTradeOfferResult;
+    if (accepted.ok) {
+      // The proposer is the one id this handler never had: it takes an offer id
+      // and a token, and the RPC re-derives the rest. Read it back rather than
+      // trusting a payload, and only once the swap actually happened.
+      //
+      // Partly redundant and worth keeping anyway: accept also inserts into
+      // `trades`, which IS published, so a proposer sitting on /players/trade
+      // already hears about it through useTradeFeed. This is what reaches the
+      // proposer who is somewhere else in the app.
+      const { data: offer } = await sb
+        .from("trade_offers")
+        .select("proposer_id")
+        .eq("id", data.offerId)
+        .eq("recipient_id", me)
+        .maybeSingle<Pick<TradeOfferRow, "proposer_id">>();
+      if (offer) await nudge(offer.proposer_id);
+    }
+    return accepted;
   });
 
 /**
@@ -536,10 +590,15 @@ export const declineTradeOffer = createServerFn({ method: "POST" })
       .eq("id", data.offerId)
       .eq("recipient_id", me)
       .eq("status", "pending")
-      .select("id")
-      .maybeSingle<Pick<TradeOfferRow, "id">>();
+      // `proposer_id` comes back so the nudge has somebody to poke. The same
+      // UPDATE that decides whether this was a no-op also names the counterparty,
+      // which is one round trip rather than two and cannot disagree with itself.
+      .select("id, proposer_id")
+      .maybeSingle<Pick<TradeOfferRow, "id" | "proposer_id">>();
     if (error) throw error;
-    return row ? { ok: true as const } : { ok: false as const, reason: "resolved" as const };
+    if (!row) return { ok: false as const, reason: "resolved" as const };
+    await nudge(row.proposer_id);
+    return { ok: true as const };
   });
 
 /** Take your own offer back. Same shape as decline, from the other side. */
@@ -555,10 +614,12 @@ export const cancelTradeOffer = createServerFn({ method: "POST" })
       .eq("id", data.offerId)
       .eq("proposer_id", me)
       .eq("status", "pending")
-      .select("id")
-      .maybeSingle<Pick<TradeOfferRow, "id">>();
+      .select("id, recipient_id")
+      .maybeSingle<Pick<TradeOfferRow, "id" | "recipient_id">>();
     if (error) throw error;
-    return row ? { ok: true as const } : { ok: false as const, reason: "resolved" as const };
+    if (!row) return { ok: false as const, reason: "resolved" as const };
+    await nudge(row.recipient_id);
+    return { ok: true as const };
   });
 
 /** How many completed trades the feed carries. */

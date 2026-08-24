@@ -19,18 +19,30 @@ export type MyTradeOffers = {
   inbox: TradeOfferView[];
   outbox: TradeOfferView[];
   recent: TradeOfferView[];
+  /**
+   * The broadcast topic this member listens on for trade nudges, minted by the
+   * server because it is HMAC'd with SESSION_SECRET and a client cannot derive its
+   * own. Nullable so a fixture can say "open no channel" — the e2e suite must never
+   * reach Supabase, and useTradeNudge treats null as "there is nothing to join".
+   */
+  nudgeTopic: string | null;
 };
 
 /**
  * Offers waiting on you, offers you are waiting on, and what settled lately.
  *
- * NO REALTIME, and that is a decision rather than an omission. Every published
- * table has to be anon-readable for the browser client to subscribe to it, so
- * even a contentless "something traded" ticker would broadcast trade activity to
- * the whole league — and `trade_offers` itself is server-only precisely because
- * an offer names cards its two parties hold. Focus refetch instead: party phones
- * lock and unlock constantly, so it is near-live in the only setting that
- * matters. A completed trade does arrive live, through useTradeFeed below.
+ * NO REALTIME *TABLE*, and that is a decision rather than an omission. Every
+ * published table has to be anon-readable for the browser client to subscribe to
+ * it, so even a contentless "something traded" ticker would broadcast trade
+ * activity to the whole league — and `trade_offers` itself is server-only precisely
+ * because an offer names cards its two parties hold.
+ *
+ * What does arrive live is a BROADCAST, which is not a table and publishes nothing:
+ * useTradeNudge joins the topic this query hands back and invalidates this key when
+ * the server pokes it. Focus refetch stays underneath as the backstop, because a
+ * dropped broadcast must degrade to exactly the behaviour that shipped before it —
+ * and party phones lock and unlock constantly. A completed trade also arrives
+ * through useTradeFeed below.
  */
 export function useTradeOffers(participantId: string | null | undefined) {
   const fn = useServerFn(getMyTradeOffers);

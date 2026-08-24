@@ -21,10 +21,17 @@ vi.mock("@/lib/member-token", async (importOriginal) => ({
   useMemberSession: () => memberSession(),
 }));
 
+const subscribeToNudges = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/nudge-channel", () => ({
+  NUDGE_TEARDOWN_GRACE_MS: 5_000,
+  subscribeToNudges: (topic: string, cb: () => void) => subscribeToNudges(topic, cb),
+}));
+
 import { markTradeOffersSeen, unreadOfferIds, useTradeBadge } from "./use-trade-badge";
 
 const KEY = "wwbh:trade-seen";
 const ME = "p-me";
+const TOPIC = "nudge:v1:AbC-123_xyzQWer";
 
 const offer = (id: string): TradeOfferView => ({
   id,
@@ -41,6 +48,8 @@ const stored = () => JSON.parse(window.localStorage.getItem(KEY)!).ids as string
 
 beforeEach(() => {
   serverFnMock.mockReset();
+  subscribeToNudges.mockReset();
+  subscribeToNudges.mockReturnValue(() => {});
   memberSession.mockReturnValue({ participantId: ME });
   markTradeOffersSeen([]);
   window.localStorage.clear();
@@ -88,6 +97,7 @@ describe("markTradeOffersSeen", () => {
       inbox: [offer("a")],
       outbox: [],
       recent: [],
+      nudgeTopic: TOPIC,
     });
     const { wrapper } = createQueryWrapper();
     const { result } = renderHook(() => useTradeBadge(), { wrapper });
@@ -109,6 +119,7 @@ describe("useTradeBadge", () => {
     const { result } = renderHook(() => useTradeBadge(), { wrapper });
     await waitFor(() => expect(result.current).toBe(0));
     expect(serverFnMock).not.toHaveBeenCalled();
+    expect(subscribeToNudges).not.toHaveBeenCalled();
   });
 
   it("counts offers pointed at you, not ones you sent", async () => {
@@ -116,6 +127,7 @@ describe("useTradeBadge", () => {
       inbox: [offer("a"), offer("b")],
       outbox: [offer("mine")],
       recent: [offer("old")],
+      nudgeTopic: TOPIC,
     });
     const { wrapper } = createQueryWrapper();
     const { result } = renderHook(() => useTradeBadge(), { wrapper });
@@ -127,6 +139,7 @@ describe("useTradeBadge", () => {
       inbox: [offer("a")],
       outbox: [],
       recent: [],
+      nudgeTopic: TOPIC,
     });
     const { wrapper } = createQueryWrapper();
     const { result } = renderHook(() => useTradeBadge(), { wrapper });
@@ -138,5 +151,58 @@ describe("useTradeBadge", () => {
     // A second offer arrives while "a" is still sitting there unresolved.
     act(() => markTradeOffersSeen(["a"]));
     expect(unreadOfferIds([offer("a"), offer("b")], stored())).toEqual(["b"]);
+  });
+
+  it("joins the topic the server minted, and only once it has one", async () => {
+    serverFnMock.mockResolvedValue({
+      inbox: [],
+      outbox: [],
+      recent: [],
+      nudgeTopic: TOPIC,
+    });
+    const { wrapper } = createQueryWrapper();
+    renderHook(() => useTradeBadge(), { wrapper });
+    await waitFor(() => expect(subscribeToNudges).toHaveBeenCalledTimes(1));
+    expect(subscribeToNudges.mock.calls[0][0]).toBe(TOPIC);
+  });
+
+  it("does not subscribe when the response carries no topic", async () => {
+    // What the e2e fixture returns, so the suite never opens a websocket.
+    serverFnMock.mockResolvedValue({ inbox: [], outbox: [], recent: [], nudgeTopic: null });
+    const { wrapper } = createQueryWrapper();
+    const { result } = renderHook(() => useTradeBadge(), { wrapper });
+    await waitFor(() => expect(result.current).toBe(0));
+    expect(subscribeToNudges).not.toHaveBeenCalled();
+  });
+
+  it("leaves the topic when it unmounts", async () => {
+    const leave = vi.fn();
+    subscribeToNudges.mockReturnValue(leave);
+    serverFnMock.mockResolvedValue({ inbox: [], outbox: [], recent: [], nudgeTopic: TOPIC });
+    const { wrapper } = createQueryWrapper();
+    const { unmount } = renderHook(() => useTradeBadge(), { wrapper });
+    await waitFor(() => expect(subscribeToNudges).toHaveBeenCalled());
+    unmount();
+    expect(leave).toHaveBeenCalledTimes(1);
+  });
+
+  it("refetches the inbox when a nudge lands", async () => {
+    // The point of the whole feature: an offer arriving with the app already open
+    // updates the dot without the phone being touched.
+    serverFnMock.mockResolvedValue({ inbox: [], outbox: [], recent: [], nudgeTopic: TOPIC });
+    const { wrapper } = createQueryWrapper();
+    const { result } = renderHook(() => useTradeBadge(), { wrapper });
+    await waitFor(() => expect(subscribeToNudges).toHaveBeenCalled());
+    expect(serverFnMock).toHaveBeenCalledTimes(1);
+
+    serverFnMock.mockResolvedValue({
+      inbox: [offer("new")],
+      outbox: [],
+      recent: [],
+      nudgeTopic: TOPIC,
+    });
+    const onNudge = subscribeToNudges.mock.calls[0][1] as () => void;
+    act(() => onNudge());
+    await waitFor(() => expect(result.current).toBe(1));
   });
 });
