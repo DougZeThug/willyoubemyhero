@@ -172,13 +172,16 @@ export function MilestoneReveal({
         >
           <HoloCard
             frontUrl={card.artUrl}
-            backUrl={card.backUrl}
+            backUrl={universalBack ?? card.backUrl}
             name={card.name}
             rarity={rarity}
             tilt="hero"
-            flipped={flipped}
+            faceDown={!revealed}
+            flipped={revealed ? flipped : false}
+            onFlippedChange={revealed ? setFlipped : undefined}
             backContent={<SecretBackPanel card={card} rarity={rarity} />}
           />
+
         </motion.div>
       )}
 
