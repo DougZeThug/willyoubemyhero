@@ -279,6 +279,7 @@ export type Database = {
           acquired_on: string | null
           created_at: string
           edition: string
+          edition_asserted_by: string
           event_participant_id: string
           id: string
           participant_id: string
@@ -288,6 +289,7 @@ export type Database = {
           acquired_on?: string | null
           created_at?: string
           edition?: string
+          edition_asserted_by?: string
           event_participant_id: string
           id?: string
           participant_id: string
@@ -297,6 +299,7 @@ export type Database = {
           acquired_on?: string | null
           created_at?: string
           edition?: string
+          edition_asserted_by?: string
           event_participant_id?: string
           id?: string
           participant_id?: string
@@ -1879,7 +1882,7 @@ export type Database = {
           _event_participant_ids: string[]
           _participant_id: string
         }
-        Returns: number
+        Returns: Json
       }
       record_pack_open: {
         Args: {
@@ -1898,6 +1901,14 @@ export type Database = {
       resync_secret_ownership: {
         Args: { _participant_id: string; _secret_card_id: string }
         Returns: undefined
+      }
+      roll_card_edition: {
+        Args: {
+          _day: string
+          _event_participant_id: string
+          _participant_id: string
+        }
+        Returns: string
       }
       roll_secret_tier: { Args: never; Returns: string }
       roll_secret_tier_at_least: { Args: { _floor: string }; Returns: string }
