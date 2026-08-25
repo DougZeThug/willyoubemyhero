@@ -244,6 +244,82 @@ const SECRET_FOILS: Record<string, Rarity> = {
     pattern: "matte",
     sparkle: 0.45,
   },
+  crimson: {
+    ...SECRET_RARITY,
+    // Red into violet: the cool second stop is what keeps a red card from
+    // compounding with warm art the way a red→orange pair would.
+    holoA: "oklch(0.78 0.19 25)",
+    holoB: "oklch(0.66 0.15 305)",
+    border: "oklch(0.74 0.18 20)",
+    accent: "oklch(0.74 0.18 20)",
+    pattern: "scanline",
+    sparkle: 0.8,
+  },
+  sunset: {
+    ...SECRET_RARITY,
+    holoA: "oklch(0.85 0.15 40)",
+    holoB: "oklch(0.7 0.14 265)",
+    border: "oklch(0.82 0.15 35)",
+    accent: "oklch(0.82 0.15 35)",
+    pattern: "refractor",
+  },
+  citrine: {
+    ...SECRET_RARITY,
+    // Held a stop under champion's lightness: yellow is the easiest hue to
+    // blow out under color-dodge.
+    holoA: "oklch(0.9 0.16 100)",
+    holoB: "oklch(0.79 0.12 210)",
+    border: "oklch(0.87 0.15 95)",
+    accent: "oklch(0.87 0.15 95)",
+    pattern: "prismatic",
+  },
+  sandstorm: {
+    ...SECRET_RARITY,
+    // Copper's drier neighbour — lower chroma still, matte, so the two read
+    // apart at swatch size by texture as well as temperature.
+    holoA: "oklch(0.84 0.07 80)",
+    holoB: "oklch(0.68 0.06 315)",
+    border: "oklch(0.8 0.07 75)",
+    accent: "oklch(0.8 0.07 75)",
+    pattern: "matte",
+    sparkle: 0.55,
+  },
+  tidal: {
+    ...SECRET_RARITY,
+    holoA: "oklch(0.87 0.12 190)",
+    holoB: "oklch(0.7 0.14 260)",
+    border: "oklch(0.83 0.13 195)",
+    accent: "oklch(0.83 0.13 195)",
+    pattern: "refractor",
+  },
+  cobalt: {
+    ...SECRET_RARITY,
+    holoA: "oklch(0.8 0.16 255)",
+    holoB: "oklch(0.86 0.12 205)",
+    border: "oklch(0.78 0.16 250)",
+    accent: "oklch(0.78 0.16 250)",
+    pattern: "prismatic",
+  },
+  amethyst: {
+    ...SECRET_RARITY,
+    holoA: "oklch(0.82 0.15 300)",
+    holoB: "oklch(0.86 0.11 5)",
+    border: "oklch(0.8 0.15 295)",
+    accent: "oklch(0.8 0.15 295)",
+    pattern: "prismatic",
+    sparkle: 0.95,
+  },
+  pearl: {
+    ...SECRET_RARITY,
+    // Almost no chroma at all, warm into cool. Chrome is neutral-blue metal;
+    // this is the softer, whiter one, told apart by temperature at the top stop.
+    holoA: "oklch(0.93 0.03 85)",
+    holoB: "oklch(0.86 0.04 230)",
+    border: "oklch(0.9 0.03 100)",
+    accent: "oklch(0.9 0.03 100)",
+    pattern: "refractor",
+    sparkle: 1,
+  },
 };
 
 /**
@@ -257,13 +333,21 @@ export const SECRET_FOIL_OPTIONS = [
   { id: "rosette", label: "Spectral Green" },
   { id: "jade", label: "Jade" },
   { id: "toxic", label: "Toxic" },
+  { id: "citrine", label: "Citrine" },
   { id: "ember", label: "Ember" },
+  { id: "sunset", label: "Sunset" },
+  { id: "crimson", label: "Crimson" },
   { id: "copper", label: "Copper" },
+  { id: "sandstorm", label: "Sandstorm" },
   { id: "bubblegum", label: "Bubblegum" },
+  { id: "amethyst", label: "Amethyst" },
   { id: "ultraviolet", label: "Ultraviolet" },
   { id: "nebula", label: "Nebula" },
   { id: "aurora", label: "Aurora" },
+  { id: "tidal", label: "Tidal" },
+  { id: "cobalt", label: "Cobalt" },
   { id: "glacier", label: "Glacier" },
+  { id: "pearl", label: "Pearl" },
   { id: "chrome", label: "Liquid Chrome" },
   { id: "midnight", label: "Midnight" },
   { id: "onyx", label: "Onyx" },
