@@ -1,6 +1,6 @@
 // The dust shop's cache bookkeeping.
 //
-// Not the sheet's looks — the keys it invalidates. Every query this component
+// Not the panel's looks — the keys it invalidates. Every query this component
 // has to refresh after a purchase is registered somewhere else, on a key spelled
 // somewhere else, and getting that string wrong fails silently: the mutation
 // succeeds, the toast fires, and the screen keeps showing the old world. That is
@@ -13,7 +13,7 @@ import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { DUST_PRICES } from "@/lib/dust";
-import { DustShop } from "./dust-shop";
+import { DustShopPanel } from "./dust-shop";
 
 const ME = "11111111-1111-4111-8111-111111111111";
 const ACTOR = `m:${ME}`;
@@ -51,9 +51,7 @@ function renderShop() {
   const Wrapper = wrapper;
   render(
     <Wrapper>
-      <DustShop
-        open
-        onOpenChange={() => {}}
+      <DustShopPanel
         balance={DUST_PRICES.bonusPull}
         participantId={ME}
         actor={ACTOR}

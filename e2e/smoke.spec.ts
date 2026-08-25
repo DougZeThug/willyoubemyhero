@@ -7,6 +7,7 @@ const ROUTES = [
   { path: "/leaderboard", title: /Leaderboard/i },
   { path: "/players", title: /Vault|Players/i },
   { path: "/players/trade", title: /Trading Post/i },
+  { path: "/players/shop", title: /Dust/i },
   { path: "/awards", title: /Awards/i },
   { path: "/league", title: /League/i },
   { path: "/claim", title: /Claim/i },

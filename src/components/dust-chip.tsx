@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -14,11 +15,18 @@ import { cn } from "@/lib/utils";
  */
 export function DustChip({
   balance,
-  onClick,
+  to,
   className,
 }: {
   balance: number | undefined;
-  onClick?: () => void;
+  /**
+   * Where tapping it goes. Omitted, the chip is a plain read-out.
+   *
+   * A Link rather than the button-and-callback this used to take: the shop is a
+   * screen now, and a button that navigates gives up middle-click, long-press
+   * and "open in new tab" for nothing.
+   */
+  to?: string;
   className?: string;
 }) {
   if (balance == null) return null;
@@ -32,7 +40,7 @@ export function DustChip({
   const base =
     "inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-primary";
 
-  if (!onClick) {
+  if (!to) {
     return (
       <span className={cn(base, className)} aria-label={label}>
         {body}
@@ -40,9 +48,8 @@ export function DustChip({
     );
   }
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <Link
+      to={to}
       aria-label={`${label} — open the dust shop`}
       className={cn(
         base,
@@ -53,6 +60,6 @@ export function DustChip({
       )}
     >
       {body}
-    </button>
+    </Link>
   );
 }

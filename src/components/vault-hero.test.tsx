@@ -29,7 +29,6 @@ function renderHero(over: Partial<React.ComponentProps<typeof VaultHero>> = {}) 
       secretsPulled={0}
       dustOn={false}
       dustBalance={undefined}
-      onOpenShop={() => {}}
       isMember
       wasMember={false}
       streak={null}

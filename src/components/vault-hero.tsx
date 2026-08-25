@@ -28,7 +28,6 @@ export function VaultHero({
   secretsPulled,
   dustOn,
   dustBalance,
-  onOpenShop,
   isMember,
   wasMember,
   streak,
@@ -44,7 +43,6 @@ export function VaultHero({
   secretsPulled: number;
   dustOn: boolean;
   dustBalance: number | undefined;
-  onOpenShop: () => void;
   isMember: boolean;
   wasMember: boolean;
   streak: Streak | null;
@@ -65,7 +63,7 @@ export function VaultHero({
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="font-display text-3xl font-black uppercase leading-none">The Vault</h1>
-            {dustOn && <DustChip balance={dustBalance} onClick={onOpenShop} />}
+            {dustOn && <DustChip balance={dustBalance} to="/players/shop" />}
           </div>
           {/* The collected count waits for `ready`. It used to be read straight
               off IndexedDB, which had been inflated to the whole roster by the

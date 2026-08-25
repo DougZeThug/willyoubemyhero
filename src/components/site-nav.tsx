@@ -1,7 +1,7 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { Layers, PackageOpen, ArrowLeftRight, Timer, Trophy, UserRound, LogIn } from "lucide-react";
+import { UserRound, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { useIsPresenting } from "@/hooks/use-presentation";
 import { useTradeBadge } from "@/hooks/use-trade-badge";
@@ -17,27 +17,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { secretWaiting, SECRET_RARITY } from "@/lib/secret-cards";
-import { activeTab } from "@/lib/nav";
+import { activeTab, navTabs } from "@/lib/nav";
+import { useActiveEvent } from "@/hooks/use-active-event";
+import { dustLive } from "@/lib/dust";
 import { cn } from "@/lib/utils";
-
-/**
- * The card economy, in nav order, plus the two things it opens onto.
- *
- * The combine is a week a year and the collection is every other day of it, so
- * the first three slots belong to the vault, the pack and the trading post. The
- * board keeps a tab because a card's whole claim to a tier is a time on it; the
- * rest of the combine sits one tap away behind /league, and Admin lives in the
- * account menu where a PIN-gated screen belongs.
- */
-const links = [
-  { to: "/players", label: "Vault", icon: Layers },
-  { to: "/players/pack", label: "Pack", icon: PackageOpen },
-  { to: "/players/trade", label: "Trade", icon: ArrowLeftRight },
-  { to: "/leaderboard", label: "Board", icon: Timer },
-  { to: "/league", label: "League", icon: Trophy },
-] as const;
-
-const TABS = links.map((l) => l.to);
 
 export function SiteNav() {
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -50,6 +33,13 @@ export function SiteNav() {
   // nav share one round trip rather than making two.
   const secretStatus = useSecretStatus(useSecretActor());
   const packWaiting = secretWaiting(secretStatus.data);
+  // Whether the Shop tab exists at all. useActiveEvent rather than
+  // useEventBundle on purpose — see the note on that hook: the bundle one opens a
+  // realtime channel, and this component renders on every screen. It shares the
+  // bundle's query key, so on any page that already has the event this is a cache
+  // read rather than a request.
+  const dustOn = dustLive(useActiveEvent().data);
+  const links = navTabs(dustOn);
   // A screen playing something cinematic gets the whole device. Faded and inert
   // rather than unmounted: unmounting the header reflows every page under it, and
   // the flag flips mid-ceremony. `inert` is the load-bearing half — chrome dimmed
@@ -60,7 +50,10 @@ export function SiteNav() {
   // `inert` lifts the moment the flag clears, so a 300ms fade-in would leave the
   // nav tappable and focusable while it was still invisible.
   const step = { duration: reduced || !presenting ? 0 : 0.3, ease: "easeOut" } as const;
-  const active = activeTab(path, TABS);
+  const active = activeTab(
+    path,
+    links.map((l) => l.to),
+  );
 
   /**
    * What, if anything, is waiting behind a tab.
@@ -129,7 +122,9 @@ export function SiteNav() {
         transition={step}
         className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/15 bg-background/95 backdrop-blur md:hidden"
       >
-        <ul className="mx-auto grid max-w-md grid-cols-5">
+        {/* Both class names spelled out: Tailwind scans source for literals,
+            so a computed `grid-cols-${n}` emits no rule at all. */}
+        <ul className={cn("mx-auto grid max-w-md", dustOn ? "grid-cols-6" : "grid-cols-5")}>
           {links.map((l) => {
             const Icon = l.icon;
             const waiting = badge(l.to);

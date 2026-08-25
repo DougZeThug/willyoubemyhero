@@ -2,19 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { subscribeToEventChannel, type ChannelHealth } from "@/lib/event-channel";
-import { getActiveEvent, getEventBundle } from "@/lib/event.functions";
+import { getEventBundle } from "@/lib/event.functions";
+import { useActiveEvent } from "./use-active-event";
 
 export function useEventBundle() {
-  const activeFn = useServerFn(getActiveEvent);
   const bundleFn = useServerFn(getEventBundle);
   const qc = useQueryClient();
   const [health, setHealth] = useState<ChannelHealth>("connecting");
 
-  const event = useQuery({
-    queryKey: ["active-event"],
-    queryFn: () => activeFn(),
-    staleTime: 60_000,
-  });
+  // The same query the shell reads for the dust switch — shared rather than
+  // duplicated, so the two can never answer differently.
+  const event = useActiveEvent();
   const eventId = event.data?.id ?? null;
 
   // "connecting" is the state before the socket has answered at all. Counting

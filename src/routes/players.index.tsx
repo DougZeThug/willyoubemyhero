@@ -16,7 +16,6 @@ import { useTradeBadge } from "@/hooks/use-trade-badge";
 import { useStreakStatus } from "@/hooks/use-streak";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { useDustBalance } from "@/hooks/use-dust";
-import { DustShop } from "@/components/dust-shop";
 import { dustLive } from "@/lib/dust";
 import { packedByLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
@@ -105,14 +104,6 @@ function PlayersPage() {
   // not going to render.
   const dustOn = dustLive(event);
   const dust = useDustBalance(dustOn ? member?.participantId : null);
-  const [shopOpen, setShopOpen] = useState(false);
-  // The shop lists spares by card id, and the bundle is the only place a name
-  // lives. Passed in rather than re-fetched there: this page already holds it.
-  const nameFor = useCallback(
-    (eventParticipantId: string) =>
-      bundle?.participants.find((p) => p.id === eventParticipantId)?.participant?.name ?? "—",
-    [bundle],
-  );
   // A guest holds secrets too, so the shelf follows whoever this device is
   // pulling as. No session is minted here — that happens on the pack screen,
   // where a card is actually at stake; the vault only ever reads.
@@ -235,8 +226,9 @@ function PlayersPage() {
   }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked, collected]);
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
-  // Same dot the nav carries, on the control that actually goes there. A member
-  // who is already on this screen should not have to read the nav to find out.
+  // The hero turns this into an "Offer waiting" pill, and only above zero. The
+  // Trade tab carries the same news permanently, but its dot is easy to miss
+  // under a thumb on the screen you are already looking at.
   const tradeUnread = useTradeBadge();
   const packWaiting = secretWaiting(secretStatus.data);
 
@@ -623,7 +615,6 @@ function PlayersPage() {
           secretsPulled={secrets.data?.pulled ?? 0}
           dustOn={dustOn}
           dustBalance={dust.data?.balance}
-          onOpenShop={() => setShopOpen(true)}
           isMember={!!member}
           wasMember={wasMember}
           streak={streak}
@@ -700,20 +691,6 @@ function PlayersPage() {
           );
         })}
       </div>
-
-      {/* Not merely hidden: unmounted, so the shop's own spares query never
-          fires while the economy is off. */}
-      {dustOn && (
-        <DustShop
-          open={shopOpen}
-          onOpenChange={setShopOpen}
-          balance={dust.data?.balance}
-          participantId={member?.participantId}
-          actor={actor}
-          eventId={event?.id}
-          nameFor={nameFor}
-        />
-      )}
     </div>
   );
 }
