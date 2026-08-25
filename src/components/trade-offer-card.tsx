@@ -72,13 +72,18 @@ export function TradeItemTile({
         name={name}
         rarity={item.kind === "roster" ? (roster?.rarity ?? rarityStyle("base")) : SECRET_RARITY}
         edition={item.kind === "roster" ? item.edition : undefined}
-        // Subtle throughout: these are thumbnails in a list, and a full-strength
-        // foil on eight of them at once is noise rather than shine.
-        intensity="subtle"
+        // Subtle in a picker strip, where eight foils at once are noise. A live
+        // offer is one card a side, so it gets the real shine.
+        intensity={big ? "normal" : "subtle"}
         interactive={false}
       />
-      <div className="mt-1.5 text-center">
-        <div className="truncate font-display text-[11px] font-black uppercase tracking-wide">
+      <div className={cn("text-center", big ? "mt-2" : "mt-1.5")}>
+        <div
+          className={cn(
+            "truncate font-display font-black uppercase tracking-wide",
+            big ? "text-[13px]" : "text-[11px]",
+          )}
+        >
           {name}
         </div>
         {tier && (
