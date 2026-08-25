@@ -322,7 +322,6 @@ const SECRET_FOILS: Record<string, Rarity> = {
   },
 };
 
-
 /**
  * Admin-facing labels. One list feeds the panel pickers and the zod enums.
  *
@@ -352,7 +351,6 @@ export const SECRET_FOIL_OPTIONS = [
   { id: "chrome", label: "Liquid Chrome" },
   { id: "midnight", label: "Midnight" },
   { id: "onyx", label: "Onyx" },
-
 ] as const;
 
 export const SECRET_BORDER_FX_OPTIONS = [
