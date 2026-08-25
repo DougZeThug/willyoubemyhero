@@ -485,7 +485,10 @@ function TradePage() {
             <div className="hud-bezel hud-glow max-h-72 overflow-y-auto rounded-lg border border-primary/30">
               <ul className="divide-y divide-white/10">
                 {(feed.data ?? []).map((t) => (
-                  <li key={t.id} className="px-3 py-2.5 text-[11px] leading-relaxed text-foreground">
+                  <li
+                    key={t.id}
+                    className="px-3 py-2.5 text-[11px] leading-relaxed text-foreground"
+                  >
                     <span className="font-display font-black uppercase tracking-wide">
                       {nameOf(t.proposerId)}
                     </span>{" "}
@@ -503,7 +506,6 @@ function TradePage() {
             </div>
           </section>
         )}
-
       </div>
     </div>
   );
@@ -574,7 +576,6 @@ function SummaryText({ items }: { items: Parameters<typeof tradeSummaryLabel>[0]
     </>
   );
 }
-
 
 /**
  * One offer at a time, swiped.
