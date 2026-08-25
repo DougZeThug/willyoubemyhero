@@ -105,11 +105,7 @@ export type FoilPickerProps = {
 
 export function FoilPicker({ value, onChange, cardName, unsetLabel, disabled }: FoilPickerProps) {
   const selected =
-    value == null
-      ? null
-      : SECRET_FOIL_OPTIONS.some((o) => o.id === value)
-        ? value
-        : DEFAULT_FOIL;
+    value == null ? null : SECRET_FOIL_OPTIONS.some((o) => o.id === value) ? value : DEFAULT_FOIL;
   // Radios group by `name`, so two cards sharing one would behave as a single
   // thirteen-way choice across both rows — picking Toxic on Zucchini would
   // silently deselect Dragon's foil.
@@ -130,7 +126,6 @@ export function FoilPicker({ value, onChange, cardName, unsetLabel, disabled }: 
         aria-label={`Color effect for ${cardName}`}
         className="flex flex-wrap items-center gap-1.5"
       >
-
         {SECRET_FOIL_OPTIONS.map((o) => {
           const rarity = secretFoil(o.id);
           const isSelected = o.id === selected;
@@ -224,7 +219,6 @@ export function BorderFxPicker({
         aria-label={`Border animation for ${cardName}`}
         className="flex flex-wrap items-center gap-1.5"
       >
-
         {SECRET_BORDER_FX_OPTIONS.map((o) => (
           <ChipRadio
             key={o.id}

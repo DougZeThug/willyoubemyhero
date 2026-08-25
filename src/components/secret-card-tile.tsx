@@ -182,7 +182,6 @@ export function SecretCardTile({
         {/* The swatch strips at every width: a native picker on a phone is a
             list of names, and "Nebula" is not a colour until you have seen it. */}
         <div className="flex flex-col gap-2">
-
           <FoilPicker
             value={card.foil}
             cardName={card.name}
