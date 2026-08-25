@@ -56,12 +56,12 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/players/")({
   head: () => ({
     meta: [
-      { title: "The Vault — Will YOU Be My Hero? Draft Combine" },
+      { title: "The Vault — Will YOU Be My Hero?" },
       {
         name: "description",
-        content: "Every combine athlete's trading card. Tilt them, flip them, collect the set.",
+        content: "Every card you hold. Tilt them, flip them, collect the set.",
       },
-      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — The Vault" },
+      { property: "og:title", content: "Will YOU Be My Hero? — The Vault" },
       { property: "og:description", content: "Every athlete, every card." },
     ],
   }),

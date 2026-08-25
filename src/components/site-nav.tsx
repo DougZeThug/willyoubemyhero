@@ -94,7 +94,7 @@ export function SiteNav() {
               Will YOU Be My Hero?
             </span>
             <span className="font-display text-lg font-black uppercase tracking-[0.22em] text-foreground">
-              Draft Combine
+              Trading Cards
             </span>
           </Link>
           <nav className="hidden gap-1 md:flex">

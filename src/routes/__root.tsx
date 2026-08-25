@@ -83,19 +83,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Will YOU Be My Hero? Draft Combine" },
+      // "Hero" stays in the title wherever it appears: it is what the app is
+      // called, and the smoke suite pins it on the root.
+      { title: "Will YOU Be My Hero? — The Vault" },
       {
         name: "description",
         content:
-          "Live timing, leaderboard, and draft-pick selection for the Will YOU Be My Hero? fantasy football combine.",
+          "A pack a day, secret pulls, trades, dust and trophies — and the combine board when game day comes back around.",
       },
       { name: "author", content: "Will YOU Be My Hero?" },
       { name: "theme-color", content: "#0a1420" },
-      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine" },
+      { property: "og:title", content: "Will YOU Be My Hero? — The Vault" },
       {
         property: "og:description",
         content:
-          "Timed athletic-and-drinking combine that sets the fantasy football draft-pick order.",
+          "A pack a day, secret pulls, trades, dust and trophies — and the combine board when game day comes back around.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
