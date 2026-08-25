@@ -5,6 +5,7 @@ import { rarityStyle, type BorderFx, type FoilPattern, type RarityTier } from ".
 import {
   groupBySecretCollection,
   SECRET_BORDER_FX_OPTIONS,
+  SECRET_COLLECTION_ID_PATTERN,
   SECRET_COLLECTIONS,
   SECRET_FOIL_OPTIONS,
   SECRET_RARITY,
@@ -256,6 +257,10 @@ describe("groupBySecretCollection", () => {
     // The array is the running order for the admin panel and the vault alike, so
     // this is the one place it is asserted rather than assumed.
     expect(SECRET_COLLECTIONS.map((c) => c.id)).toEqual(["cornhole", "wags", "pets", "legacyPets"]);
+  });
+
+  it("accepts the original camel-cased Legacy Pets id at edit boundaries", () => {
+    expect(SECRET_COLLECTION_ID_PATTERN.test("legacyPets")).toBe(true);
   });
 
   it("groups into that order whatever order the cards arrive in", () => {
