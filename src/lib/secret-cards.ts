@@ -394,7 +394,7 @@ export function secretCollectionLabel(
 export function groupBySecretCollection<T extends { collection?: string | null }>(
   items: readonly T[],
   sets: readonly SecretCollection[] = SECRET_COLLECTIONS,
-): { id: string | null; label: string; items: T[] }[] {
+): { id: string | null; label: string; accent: string | null; items: T[] }[] {
   const groups = new Map<string | null, T[]>();
   for (const item of items) {
     // `||`, not `??`: the column is unconstrained text, so a row can hold "" as
@@ -408,11 +408,11 @@ export function groupBySecretCollection<T extends { collection?: string | null }
     if (bucket) bucket.push(item);
     else groups.set(key, [item]);
   }
-  const ordered: { id: string | null; label: string; items: T[] }[] = [];
+  const ordered: { id: string | null; label: string; accent: string | null; items: T[] }[] = [];
   for (const c of sets) {
     const items = groups.get(c.id);
     if (items) {
-      ordered.push({ id: c.id, label: c.label, items });
+      ordered.push({ id: c.id, label: c.label, accent: setAccentColor(c.accent), items });
       groups.delete(c.id);
     }
   }
@@ -420,8 +420,10 @@ export function groupBySecretCollection<T extends { collection?: string | null }
   const unsorted = groups.get(null);
   groups.delete(null);
   for (const [id, items] of groups)
-    ordered.push({ id, label: secretCollectionLabel(id, sets), items });
-  if (unsorted) ordered.push({ id: null, label: UNSORTED_COLLECTION_LABEL, items: unsorted });
+    ordered.push({ id, label: secretCollectionLabel(id, sets), accent: null, items });
+  if (unsorted)
+    ordered.push({ id: null, label: UNSORTED_COLLECTION_LABEL, accent: null, items: unsorted });
+
   return ordered;
 }
 
