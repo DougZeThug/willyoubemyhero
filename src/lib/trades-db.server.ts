@@ -69,9 +69,10 @@ export type TradeRow = {
   recipient_id: string;
   /**
    * Public-safe summaries, built only inside accept_trade_offer. Secret items
-   * carry their kind and NOTHING else — this table is anon-readable and
-   * published to realtime. See the column comments in the migration.
+   * carry their card's id and name and nothing more — this table is anon-readable
+   * and published to realtime. See the column comments in the migration.
    */
+
   proposer_gave: TradeSummaryItem[];
   recipient_gave: TradeSummaryItem[];
   executed_at: string;
