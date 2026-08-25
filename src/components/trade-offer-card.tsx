@@ -74,7 +74,7 @@ export function TradeItemTile({
         edition={item.kind === "roster" ? item.edition : undefined}
         // Subtle in a picker strip, where eight foils at once are noise. A live
         // offer is one card a side, so it gets the real shine.
-        intensity={big ? "normal" : "subtle"}
+        intensity={big ? "full" : "subtle"}
         interactive={false}
       />
       <div className={cn("text-center", big ? "mt-2" : "mt-1.5")}>
