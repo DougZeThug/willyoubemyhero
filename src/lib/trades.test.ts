@@ -10,7 +10,8 @@ import {
 } from "./trades";
 
 const rosterItem = (id = "ep-1"): TradeSummaryItem => ({ kind: "roster", eventParticipantId: id });
-const secretItem = (): TradeSummaryItem => ({ kind: "secret" });
+const secretItem = (name?: string): TradeSummaryItem =>
+  name ? { kind: "secret", secretCardId: "sc-1", name } : { kind: "secret" };
 
 describe("tradeSummaryLabel", () => {
   it("counts roster cards", () => {
@@ -18,17 +19,23 @@ describe("tradeSummaryLabel", () => {
     expect(tradeSummaryLabel([rosterItem("a"), rosterItem("b")])).toBe("2 cards");
   });
 
-  it("names secrets without naming them", () => {
-    // The whole reason this reads off `kind`: the public summary carries nothing
-    // else about a secret, so there is nothing here that could accidentally leak.
+  it("names the secrets that carry a name", () => {
+    expect(tradeSummaryLabel([secretItem("Tucker")])).toBe("Tucker");
+    expect(tradeSummaryLabel([secretItem("Rocky"), secretItem("Dragon")])).toBe("Rocky + Dragon");
+  });
+
+  it("falls back to counting the ones that do not", () => {
+    // Trades settled before the summary carried names, which stay in the feed.
     expect(tradeSummaryLabel([secretItem()])).toBe("a secret");
     expect(tradeSummaryLabel([secretItem(), secretItem()])).toBe("2 secrets");
+    expect(tradeSummaryLabel([secretItem("Tucker"), secretItem()])).toBe("Tucker + a secret");
   });
 
   it("joins the two halves", () => {
     expect(tradeSummaryLabel([rosterItem("a"), rosterItem("b"), secretItem()])).toBe(
       "2 cards + a secret",
     );
+    expect(tradeSummaryLabel([rosterItem("a"), secretItem("Zucchini")])).toBe("1 card + Zucchini");
   });
 
   it("has something to say about an empty side", () => {
@@ -51,7 +58,7 @@ describe("tradeItemsLabel", () => {
         lastCopy: true,
       },
     ];
-    expect(tradeItemsLabel(items)).toBe("1 card + a secret");
+    expect(tradeItemsLabel(items)).toBe("1 card + Gary the Grill");
   });
 });
 

@@ -472,9 +472,11 @@ function TradePage() {
           </section>
         )}
 
-        {/* The league-wide record. Names both sides and counts the cards, and
-            says nothing about which secrets moved — the feed is built from the
-            redacted summary and there is nothing else in it to show. */}
+        {/* The league-wide record. Names both sides, counts the player cards and
+            names the secrets — the summary carries a secret's name since the
+            trade-feed-secret-names migration, with the old count wording as the
+            fallback for trades settled before it. */}
+
         {(feed.data ?? []).length > 0 && (
           <section>
             <SectionTitle label="Around the league" />
