@@ -952,7 +952,8 @@ export function SecretCardsPanel() {
               style={
                 group.accent
                   ? {
-                      background: `radial-gradient(120% 100% at 50% 0%, color-mix(in oklab, ${group.accent} 12%, transparent) 0%, transparent 70%), var(--gradient-bezel)`,
+                      // Flat hue, not a wash: one even tint of the set's colour.
+                      background: `color-mix(in oklab, ${group.accent} 10%, var(--card))`,
                       borderColor: `color-mix(in oklab, ${group.accent} 35%, transparent)`,
                       boxShadow: open
                         ? `0 0 24px -6px color-mix(in oklab, ${group.accent} 55%, transparent)`
