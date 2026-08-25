@@ -350,7 +350,11 @@ export const SECRET_COLLECTION_IDS = SECRET_COLLECTIONS.map((c) => c.id) as read
  * A set id an admin can create. Not an enum any more — the vocabulary lives in a
  * table — so the shape is pinned here and existence is checked against the table.
  */
-export const SECRET_COLLECTION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$/;
+// New ids are slugged to lowercase by `toSecretCollectionId`, but the original
+// Legacy Pets row shipped as `legacyPets`. Accept the casing of existing rows
+// at the request boundary; existence is still checked against the sets table.
+export const SECRET_COLLECTION_ID_PATTERN =
+  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?$/;
 
 /** Turn a typed set name into a stable, storable id. */
 export function toSecretCollectionId(label: string): string {
