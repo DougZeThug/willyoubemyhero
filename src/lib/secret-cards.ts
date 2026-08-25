@@ -334,16 +334,25 @@ export const SECRET_FOIL_OPTIONS = [
   { id: "rosette", label: "Spectral Green" },
   { id: "jade", label: "Jade" },
   { id: "toxic", label: "Toxic" },
+  { id: "citrine", label: "Citrine" },
   { id: "ember", label: "Ember" },
+  { id: "sunset", label: "Sunset" },
+  { id: "crimson", label: "Crimson" },
   { id: "copper", label: "Copper" },
+  { id: "sandstorm", label: "Sandstorm" },
   { id: "bubblegum", label: "Bubblegum" },
+  { id: "amethyst", label: "Amethyst" },
   { id: "ultraviolet", label: "Ultraviolet" },
   { id: "nebula", label: "Nebula" },
   { id: "aurora", label: "Aurora" },
+  { id: "tidal", label: "Tidal" },
+  { id: "cobalt", label: "Cobalt" },
   { id: "glacier", label: "Glacier" },
+  { id: "pearl", label: "Pearl" },
   { id: "chrome", label: "Liquid Chrome" },
   { id: "midnight", label: "Midnight" },
   { id: "onyx", label: "Onyx" },
+
 ] as const;
 
 export const SECRET_BORDER_FX_OPTIONS = [
