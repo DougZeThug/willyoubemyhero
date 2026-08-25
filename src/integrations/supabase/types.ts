@@ -279,6 +279,7 @@ export type Database = {
           acquired_on: string | null
           created_at: string
           edition: string
+          edition_asserted_by: string
           event_participant_id: string
           id: string
           participant_id: string
@@ -288,6 +289,7 @@ export type Database = {
           acquired_on?: string | null
           created_at?: string
           edition?: string
+          edition_asserted_by?: string
           event_participant_id: string
           id?: string
           participant_id: string
@@ -297,6 +299,7 @@ export type Database = {
           acquired_on?: string | null
           created_at?: string
           edition?: string
+          edition_asserted_by?: string
           event_participant_id?: string
           id?: string
           participant_id?: string
@@ -312,6 +315,42 @@ export type Database = {
           },
           {
             foreignKeyName: "card_copies_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_mints: {
+        Row: {
+          created_at: string
+          event_participant_id: string
+          minted_on: string
+          participant_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_participant_id: string
+          minted_on: string
+          participant_id: string
+        }
+        Update: {
+          created_at?: string
+          event_participant_id?: string
+          minted_on?: string
+          participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_mints_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_mints_participant_id_fkey"
             columns: ["participant_id"]
             isOneToOne: false
             referencedRelation: "participants"
@@ -634,6 +673,44 @@ export type Database = {
           },
         ]
       }
+      dust_ledger: {
+        Row: {
+          created_at: string
+          delta: number
+          detail: Json | null
+          id: number
+          participant_id: string
+          reason: string
+          ref: string | null
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          detail?: Json | null
+          id?: never
+          participant_id: string
+          reason: string
+          ref?: string | null
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          detail?: Json | null
+          id?: never
+          participant_id?: string
+          reason?: string
+          ref?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dust_ledger_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_archive_snapshots: {
         Row: {
           created_at: string
@@ -819,6 +896,7 @@ export type Database = {
           created_at: string
           draft_locked: boolean
           draft_size: number
+          dust_enabled: boolean
           event_date: string | null
           id: string
           location: string | null
@@ -840,6 +918,7 @@ export type Database = {
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
+          dust_enabled?: boolean
           event_date?: string | null
           id?: string
           location?: string | null
@@ -861,6 +940,7 @@ export type Database = {
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
+          dust_enabled?: boolean
           event_date?: string | null
           id?: string
           location?: string | null
@@ -1713,6 +1793,7 @@ export type Database = {
           created_at: string | null
           draft_locked: boolean | null
           draft_size: number | null
+          dust_enabled: boolean | null
           event_date: string | null
           id: string | null
           location: string | null
@@ -1731,6 +1812,7 @@ export type Database = {
           created_at?: string | null
           draft_locked?: boolean | null
           draft_size?: number | null
+          dust_enabled?: boolean | null
           event_date?: string | null
           id?: string | null
           location?: string | null
@@ -1749,6 +1831,7 @@ export type Database = {
           created_at?: string | null
           draft_locked?: boolean | null
           draft_size?: number | null
+          dust_enabled?: boolean | null
           event_date?: string | null
           id?: string | null
           location?: string | null
@@ -1787,6 +1870,14 @@ export type Database = {
         Returns: Json
       }
       backfill_collection_trophies: { Args: never; Returns: number }
+      buy_bonus_secret_pull: {
+        Args: {
+          _event_id: string
+          _participant_id: string
+          _request_id: string
+        }
+        Returns: Json
+      }
       card_edition_rank: { Args: { _edition: string }; Returns: number }
       cast_award_vote: {
         Args: {
@@ -1832,6 +1923,8 @@ export type Database = {
         }
         Returns: Json
       }
+      dust_balance: { Args: { _participant_id: string }; Returns: number }
+      dust_enabled: { Args: never; Returns: boolean }
       grant_card_copy: {
         Args: {
           _edition?: string
@@ -1860,6 +1953,11 @@ export type Database = {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number
       }
+      mill_card_copy: {
+        Args: { _card_copy_id: string; _participant_id: string }
+        Returns: Json
+      }
+      mill_value: { Args: { _edition: string }; Returns: number }
       pull_bonus_secret_card: {
         Args: {
           _event_id: string
@@ -1879,7 +1977,7 @@ export type Database = {
           _event_participant_ids: string[]
           _participant_id: string
         }
-        Returns: number
+        Returns: Json
       }
       record_pack_open: {
         Args: {
@@ -1891,6 +1989,14 @@ export type Database = {
         Returns: number
       }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
+      reroll_copy_edition: {
+        Args: {
+          _card_copy_id: string
+          _participant_id: string
+          _request_id: string
+        }
+        Returns: Json
+      }
       resync_card_pull: {
         Args: { _event_participant_id: string; _participant_id: string }
         Returns: undefined
@@ -1898,6 +2004,14 @@ export type Database = {
       resync_secret_ownership: {
         Args: { _participant_id: string; _secret_card_id: string }
         Returns: undefined
+      }
+      roll_card_edition: {
+        Args: {
+          _day: string
+          _event_participant_id: string
+          _participant_id: string
+        }
+        Returns: string
       }
       roll_secret_tier: { Args: never; Returns: string }
       roll_secret_tier_at_least: { Args: { _floor: string }; Returns: string }
@@ -1925,6 +2039,10 @@ export type Database = {
         Returns: boolean
       }
       trade_leaves_a_copy: { Args: { _offer_id: string }; Returns: boolean }
+      trade_summary: {
+        Args: { _giver_side: string; _offer_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
