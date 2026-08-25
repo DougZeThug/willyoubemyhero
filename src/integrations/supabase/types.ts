@@ -2032,6 +2032,10 @@ export type Database = {
         Returns: boolean
       }
       trade_leaves_a_copy: { Args: { _offer_id: string }; Returns: boolean }
+      trade_summary: {
+        Args: { _giver_side: string; _offer_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
