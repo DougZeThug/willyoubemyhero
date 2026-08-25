@@ -220,8 +220,9 @@ NULL`. Balance is `sum(delta)` under the participant row lock; no stored total.
   corrected it, and the vault would offer a burn for a copy that is not there.
 - Mill also refuses a copy **staked on a pending offer** (`trade_has_both_sides`
   only catches a side reaching zero, so an offer that merely shrinks passes every
-  accept-time check) and **today's own pull** (milling it frees a mint-cap slot
-  and clears the once-a-day key, which reopens the mint-and-mill loop).
+  accept-time check) and **today's own pull** (a card pulled an hour ago is not
+  yet a spare — the loop this used to close moved with the cap to `card_mints`,
+  see R4a).
 - Sinks: `buy_bonus_secret_pull` (150) and `reroll_copy_edition` (50). The
   re-roll **replaces** rather than taking the better — a best-of would make 50
   dust a risk-free ratchet and the league would converge on platinum. Both take a
