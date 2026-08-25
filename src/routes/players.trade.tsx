@@ -524,11 +524,64 @@ function Header() {
   );
 }
 
-function SectionTitle({ icon, label }: { icon?: React.ReactNode; label: string }) {
+function SectionTitle({
+  icon,
+  label,
+  count,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  count?: number;
+}) {
   return (
-    <div className="mb-2 flex items-center gap-1.5 text-primary">
+    <div className="mb-2 flex items-center gap-2 text-primary">
       {icon}
-      <h2 className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">{label}</h2>
+      <h2 className="font-display text-[11px] font-bold uppercase tracking-[0.3em]">{label}</h2>
+      {count !== undefined && (
+        <span className="rounded-full bg-primary px-2 py-0.5 font-display text-[10px] font-black text-background">
+          {count}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One offer at a time, swiped.
+ *
+ * A vertical stack of full-size offers buries the second one below the fold on a
+ * phone, which is where this screen actually gets used. Scroll-snap rather than a
+ * carousel library: the browser already does the physics.
+ */
+function OfferCarousel({ children }: { children: React.ReactNode[] }) {
+  const [active, setActive] = useState(0);
+  if (children.length === 1) return <>{children[0]}</>;
+  return (
+    <div>
+      <div
+        className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setActive(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+        }}
+      >
+        {children.map((child, i) => (
+          <div key={i} className="w-full shrink-0 snap-center">
+            {child}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-center gap-1.5">
+        {children.map((_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-1.5 w-1.5 rounded-full transition-colors",
+              i === active ? "bg-primary" : "bg-white/25",
+            )}
+          />
+        ))}
+      </div>
     </div>
   );
 }
