@@ -467,16 +467,19 @@ export const getSecretCollections = createServerFn({ method: "GET" }).handler(as
   const db = await secrets();
   const { data, error } = await db
     .from("secret_collections")
-    .select("id, label, sort_order, active")
+    .select("id, label, accent, sort_order, active")
     .eq("active", true)
     .order("sort_order", { ascending: true })
     .order("label", { ascending: true })
     .returns<SecretCollectionRow[]>();
   if (error) throw error;
-  // Names of sets, never their sizes: this says nothing about what is inside one,
-  // so the silence rule at the top of this file still holds for a member.
-  return { collections: (data ?? []).map((c) => ({ id: c.id, label: c.label })) };
+  // Names and colours of sets, never their sizes: a theme says nothing about
+  // what is inside one, so the silence rule at the top of this file still holds.
+  return {
+    collections: (data ?? []).map((c) => ({ id: c.id, label: c.label, accent: c.accent ?? null })),
+  };
 });
+
 
 /**
  * Every finished set in the league, whose it is, and how big it was.
