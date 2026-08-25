@@ -48,6 +48,7 @@ CREATE OR REPLACE FUNCTION public.roll_card_edition(
 LANGUAGE sql
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = public
 AS $$
   SELECT CASE
            WHEN d <   50 THEN 'platinum'

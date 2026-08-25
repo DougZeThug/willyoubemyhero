@@ -109,6 +109,7 @@ RETURNS int
 LANGUAGE sql
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = public
 AS $$
   SELECT COALESCE((ARRAY[100, 40, 20, 10, 5])[public.card_edition_rank(_edition)], 5);
 $$;
