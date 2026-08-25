@@ -414,13 +414,20 @@ function TradePage() {
                       setWant([]);
                     }}
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
+                      "rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition-all active:scale-95",
                       p.id === theirId
-                        ? "border-primary bg-primary/15 text-primary"
-                        : "border-white/10 text-muted-foreground hover:border-primary/40",
+                        ? "relative border border-primary/60 bg-primary/10 text-primary shadow-[0_0_12px_-2px_oklch(0.7_0.2_210/0.4)] ring-1 ring-primary/20"
+                        : "border border-white/10 bg-white/5 shadow-inner text-muted-foreground hover:border-primary/40 hover:text-primary",
                     )}
                   >
-                    {p.name}
+                    {p.id === theirId ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-1 w-1 rounded-full bg-success shadow-[0_0_4px_oklch(0.72_0.22_145)]" />
+                        {p.name}
+                      </span>
+                    ) : (
+                      p.name
+                    )}
                   </button>
                 ))
               )}
