@@ -25,6 +25,17 @@ export type TradeItemTileProps = {
   selected?: boolean;
   /** Rendered dimmed with this caption instead of as a control. */
   blockedLabel?: string;
+  /**
+   * `sm` is the picker strip, where eight of these live side by side. `lg` is a
+   * live offer, which is the loudest thing on the screen and gets a card you can
+   * actually read across a garden.
+   */
+  size?: "sm" | "lg";
+};
+
+const TILE_WIDTH: Record<"sm" | "lg", string> = {
+  sm: "w-[84px]",
+  lg: "w-[132px]",
 };
 
 /**
