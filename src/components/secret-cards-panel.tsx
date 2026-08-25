@@ -1189,9 +1189,9 @@ function sharedValue(values: readonly string[]): string | null {
 /**
  * Foil and border for a whole set.
  *
- * Native selects rather than the swatch strips: this row sits above the tiles
- * and must not read as a card's own control. A set whose cards disagree shows
- * "Mixed" — a real state, so it is selectable-from but never selectable-to.
+ * The same swatch strips the tiles wear, so the colour is on screen at the
+ * moment of choosing. A set whose cards disagree shows "Mixed" with nothing
+ * ticked — a real state, so it is selectable-from but never selectable-to.
  */
 function SetLookRow({
   label,
@@ -1207,48 +1207,27 @@ function SetLookRow({
   onChange: (look: { foil?: string; borderFx?: string }) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-2 rounded border border-white/10 bg-white/[0.03] p-2">
-      <span className="w-full text-[10px] uppercase tracking-widest text-muted-foreground">
+    <div className="flex flex-col gap-2 rounded border border-white/10 bg-white/[0.03] p-2">
+      <span className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
         Whole set
+        {saving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
       </span>
-      <label className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className="sr-only">Foil for {label}</span>
-        {foil && <FoilSwatch foil={foil} />}
-        <select
-          value={foil ?? ""}
-          onChange={(e) => e.target.value && onChange({ foil: e.target.value })}
-          disabled={saving}
-          aria-label={`Foil for every card in ${label}`}
-          className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:h-8 sm:text-xs"
-        >
-          {!foil && <option value="">Foil · Mixed</option>}
-          {SECRET_FOIL_OPTIONS.map((o) => (
-            <option key={o.id} value={o.id}>
-              Foil · {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className="sr-only">Border for {label}</span>
-        <select
-          value={borderFx ?? ""}
-          onChange={(e) => e.target.value && onChange({ borderFx: e.target.value })}
-          disabled={saving}
-          aria-label={`Border animation for every card in ${label}`}
-          className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:h-8 sm:text-xs"
-        >
-          {!borderFx && <option value="">Border · Mixed</option>}
-          {SECRET_BORDER_FX_OPTIONS.map((o) => (
-            <option key={o.id} value={o.id}>
-              Border · {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {saving && (
-        <Loader2 className="mb-3 h-3 w-3 animate-spin text-muted-foreground" aria-hidden />
-      )}
+      <FoilPicker
+        value={foil}
+        cardName={`every card in ${label}`}
+        unsetLabel="Mixed"
+        disabled={saving}
+        onChange={(id) => onChange({ foil: id })}
+      />
+      <BorderFxPicker
+        value={borderFx}
+        foil={foil}
+        cardName={`every card in ${label}`}
+        unsetLabel="Mixed"
+        disabled={saving}
+        onChange={(id) => onChange({ borderFx: id })}
+      />
     </div>
   );
 }
+
