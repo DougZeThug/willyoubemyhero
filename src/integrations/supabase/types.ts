@@ -322,6 +322,42 @@ export type Database = {
           },
         ]
       }
+      card_mints: {
+        Row: {
+          created_at: string
+          event_participant_id: string
+          minted_on: string
+          participant_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_participant_id: string
+          minted_on: string
+          participant_id: string
+        }
+        Update: {
+          created_at?: string
+          event_participant_id?: string
+          minted_on?: string
+          participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_mints_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_mints_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_prompt_runs: {
         Row: {
           created_at: string
