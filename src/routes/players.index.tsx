@@ -325,6 +325,9 @@ function PlayersPage() {
         title: g.id === null ? VAULT_UNSORTED_LABEL : g.label,
         // How many of this set you hold. Never a denominator — see the shelf below.
         meta: g.items.length,
+        // The set's own colour when an admin has given it one, else the shared
+        // secret green — which is what every shelf wore before sets had themes.
+        accent: g.accent ?? SECRET_RARITY.accent,
         items: g.items,
       })),
       // Last by default: the roster is the one shelf you already know by heart,
@@ -665,7 +668,7 @@ function PlayersPage() {
               key={id}
               title={section.title}
               meta={section.meta}
-              accent={section.kind === "secrets" ? SECRET_RARITY.accent : undefined}
+              accent={section.kind === "secrets" ? section.accent : undefined}
               open={!collapsed.has(id)}
               onOpenChange={() => toggle(id)}
               canMoveUp={i > 0}
