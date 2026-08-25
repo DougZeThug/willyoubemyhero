@@ -423,7 +423,11 @@ test.describe("the vault's secret shelf", () => {
       resetsAt: "2026-07-29T04:00:00Z",
     });
     await page.goto("/players");
-    await expect(page.getByRole("link", { name: /a secret is waiting/i })).toBeVisible();
+    // Scoped to the page: the nav's Pack tab wears the same cue and the same
+    // wording, so an unscoped match finds two links and fails on strict mode.
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /a secret is waiting/i }),
+    ).toBeVisible();
   });
 
   test("leaves the pack button alone once it is spent", async ({ page, server }) => {

@@ -406,3 +406,18 @@ export function secretFoil(id: string | null | undefined, borderFx?: string | nu
 export function secretsPulledLabel(n: number): string {
   return `${n} secret${n === 1 ? "" : "s"} pulled`;
 }
+
+/**
+ * Is there a card waiting today?
+ *
+ * Extracted from the vault's pack button so the nav's Pack tab and that button
+ * cannot drift: two places drawing the same cue off two copies of the same
+ * expression is how one of them quietly starts glowing on a spent day.
+ *
+ * Leaks nothing. Every field it reads is already scoped to whoever is asking —
+ * `available` is only ever "there is something", never how much — and a stranger
+ * with no status at all is simply false.
+ */
+export function secretWaiting(status: SecretDayStatus | null | undefined): boolean {
+  return !!status?.claimed && !status.pulledToday && status.available;
+}

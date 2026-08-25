@@ -958,19 +958,42 @@ test.describe("opening a pack", () => {
 });
 
 test.describe("navigation", () => {
-  test("the nav reaches the main pages", async ({ page }) => {
+  /**
+   * Every tab, clicked for real.
+   *
+   * This used to skip any link it could not see, which meant it passed on a nav
+   * that had stopped rendering — and the nav has just been rebuilt around the
+   * cards, so a silently-skipping nav test is worth less than no nav test.
+   *
+   * Scoped to the nav rather than the page: exactly one of the two bars is in
+   * the accessibility tree at a given width (the other is display:none), so this
+   * resolves to one tab in the phone and desktop projects alike, and it does not
+   * collide with the pack screen's back-link, which is also named "Vault".
+   */
+  test("every tab goes where it says", async ({ page }) => {
+    // Six navigations, each landing on a route the dev server compiles for the
+    // first time. That is minutes of work on a cold cache and comfortably past
+    // the default per-test budget — the walk is the point, so buy it the time
+    // rather than shortening it into a test that stops covering the last tabs.
+    test.slow();
     await page.goto("/");
+    const nav = page.getByRole("navigation");
+
     for (const [name, url] of [
-      [/live/i, /\/live/],
-      [/leaderboard/i, /\/leaderboard/],
+      [/^vault$/i, /\/players$/],
+      [/^pack$/i, /\/players\/pack$/],
+      [/^trade$/i, /\/players\/trade$/],
+      [/^board$/i, /\/leaderboard$/],
+      [/^league$/i, /\/league$/],
     ] as const) {
-      const link = page.getByRole("link", { name }).first();
-      if (await link.isVisible().catch(() => false)) {
-        await link.click();
-        await expect(page).toHaveURL(url);
-        await page.goto("/");
-      }
+      await nav.getByRole("link", { name }).click();
+      await expect(page).toHaveURL(url);
     }
+
+    // And the combine screens the tabs gave up are one tap further in. Scoped to
+    // the page so the tile is matched and not some future nav entry.
+    await page.getByRole("main").getByRole("link", { name: /^live/i }).click();
+    await expect(page).toHaveURL(/\/live$/);
   });
 });
 
