@@ -260,7 +260,10 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
         <div className="min-w-0 flex-1">
           <CardStrip items={iGive} lookup={lookup} size={size} />
         </div>
-        <div className="shrink-0 flex flex-col items-center justify-center text-primary" aria-hidden>
+        <div
+          className="shrink-0 flex flex-col items-center justify-center text-primary"
+          aria-hidden
+        >
           <ArrowRight
             className={cn(
               "drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
