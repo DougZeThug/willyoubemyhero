@@ -482,7 +482,6 @@ export const getSecretCollections = createServerFn({ method: "GET" }).handler(as
   };
 });
 
-
 /**
  * Every finished set in the league, whose it is, and how big it was.
  *
@@ -587,9 +586,7 @@ export const updateSecretCollection = createServerFn({ method: "POST" })
         // Null clears the theme; anything outside the preset list is rejected
         // rather than stored, so the column can only ever hold a colour the app
         // knows how to render.
-        accent: z
-          .union([z.enum(SET_ACCENT_IDS as [string, ...string[]]), z.null()])
-          .optional(),
+        accent: z.union([z.enum(SET_ACCENT_IDS as [string, ...string[]]), z.null()]).optional(),
       })
       .parse(d),
   )
@@ -606,7 +603,6 @@ export const updateSecretCollection = createServerFn({ method: "POST" })
     if (data.active !== undefined) patch.active = data.active;
     if (data.accent !== undefined) patch.accent = data.accent;
     if (Object.keys(patch).length === 0) return { ok: true as const };
-
 
     const db = await secrets();
     const { data: row, error } = await db

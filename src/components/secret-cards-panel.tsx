@@ -34,6 +34,8 @@ import {
   type SecretCollection,
   groupBySecretCollection,
   secretCollectionLabel,
+  setAccentColor,
+  SET_ACCENTS,
 } from "@/lib/secret-cards";
 import {
   SecretArtThumb,
@@ -793,80 +795,86 @@ export function SecretCardsPanel() {
                 }
               >
                 <div className="flex items-center gap-2">
-                <Input
-                  defaultValue={s.label}
-                  maxLength={40}
-                  aria-label={`Name for ${s.label}`}
-                  // Uncontrolled: the id never changes, so a rename is just a
-                  // label edit that can settle on blur like weight does.
-                  onBlur={(e) => {
-                    const label = e.target.value.trim();
-                    if (!label || label === s.label) return;
-                    runSetEdit(s.id, label, updateSetFn({ data: { id: s.id, label } }), "Renamed");
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                  }}
-                  className="min-w-0 flex-1"
-                />
-                <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {cardsPerSet.get(s.id) ?? 0}
-                </span>
-                {setBusyId === s.id && (
-                  <Loader2
-                    className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
-                    aria-hidden
+                  <Input
+                    defaultValue={s.label}
+                    maxLength={40}
+                    aria-label={`Name for ${s.label}`}
+                    // Uncontrolled: the id never changes, so a rename is just a
+                    // label edit that can settle on blur like weight does.
+                    onBlur={(e) => {
+                      const label = e.target.value.trim();
+                      if (!label || label === s.label) return;
+                      runSetEdit(
+                        s.id,
+                        label,
+                        updateSetFn({ data: { id: s.id, label } }),
+                        "Renamed",
+                      );
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                    className="min-w-0 flex-1"
                   />
-                )}
-                <button
-                  type="button"
-                  onClick={() => moveSet(i, -1)}
-                  disabled={i === 0 || setBusyId !== null}
-                  aria-label={`Move ${s.label} up`}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveSet(i, 1)}
-                  disabled={i === allSets.length - 1 || setBusyId !== null}
-                  aria-label={`Move ${s.label} down`}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    runSetEdit(
-                      s.id,
-                      s.label,
-                      updateSetFn({ data: { id: s.id, active: !s.active } }),
-                      s.active ? `${s.label} hidden` : `${s.label} back in the list`,
-                    )
-                  }
-                  disabled={setBusyId !== null}
-                  aria-label={s.active ? `Hide ${s.label}` : `Show ${s.label}`}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground"
-                >
-                  {s.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Deleting a set with cards in it would strand them under a
-                    // raw slug, so the server refuses; this is only ever the
-                    // "made a typo, made it twice" case.
-                    if (!confirm(`Delete the "${s.label}" set? Only works if it's empty.`)) return;
-                    runSetEdit(s.id, s.label, deleteSetFn({ data: { id: s.id } }), "Set deleted");
-                  }}
-                  disabled={setBusyId !== null}
-                  aria-label={`Delete ${s.label}`}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground hover:border-destructive/50 hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                  <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {cardsPerSet.get(s.id) ?? 0}
+                  </span>
+                  {setBusyId === s.id && (
+                    <Loader2
+                      className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
+                      aria-hidden
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => moveSet(i, -1)}
+                    disabled={i === 0 || setBusyId !== null}
+                    aria-label={`Move ${s.label} up`}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveSet(i, 1)}
+                    disabled={i === allSets.length - 1 || setBusyId !== null}
+                    aria-label={`Move ${s.label} down`}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      runSetEdit(
+                        s.id,
+                        s.label,
+                        updateSetFn({ data: { id: s.id, active: !s.active } }),
+                        s.active ? `${s.label} hidden` : `${s.label} back in the list`,
+                      )
+                    }
+                    disabled={setBusyId !== null}
+                    aria-label={s.active ? `Hide ${s.label}` : `Show ${s.label}`}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground"
+                  >
+                    {s.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Deleting a set with cards in it would strand them under a
+                      // raw slug, so the server refuses; this is only ever the
+                      // "made a typo, made it twice" case.
+                      if (!confirm(`Delete the "${s.label}" set? Only works if it's empty.`))
+                        return;
+                      runSetEdit(s.id, s.label, deleteSetFn({ data: { id: s.id } }), "Set deleted");
+                    }}
+                    disabled={setBusyId !== null}
+                    aria-label={`Delete ${s.label}`}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground hover:border-destructive/50 hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
                 {/* The set's colour, picked from the fixed palette rather than a
                     free colour input: every other colour in the app is a designed

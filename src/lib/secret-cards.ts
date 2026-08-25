@@ -325,7 +325,6 @@ export function setAccent(
   return setAccentColor(sets.find((c) => c.id === id)?.accent);
 }
 
-
 /**
  * The sets that shipped before sets were data.
  *
