@@ -511,7 +511,11 @@ function Header() {
         <ArrowLeft className="h-3.5 w-3.5" />
         The Vault
       </Link>
-      <h1 className="mt-2 font-display text-3xl font-black uppercase leading-none">Trading Post</h1>
+      {/* Two-tone rather than flat: the trade tab is the social one, and the
+          heading is the only thing on it that gets to shout. */}
+      <h1 className="mt-2 bg-gradient-to-r from-primary via-primary to-warn bg-clip-text font-display text-4xl font-black uppercase leading-none text-transparent">
+        Trading Post
+      </h1>
       <p className="mt-2 text-xs text-muted-foreground">
         Player cards: spares only, you always keep one. Secrets: anything you hold, even your last
         copy. The finish travels with the card.
