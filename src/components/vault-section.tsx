@@ -46,14 +46,14 @@ export function VaultSection({
   rearranging?: boolean;
   children: ReactNode;
 }) {
-  // A themed shelf is a lit panel rather than a hairline box: the set's colour
-  // as a soft wash behind the cards, a border in the same colour, and a glow
+  // A themed shelf is a lit panel rather than a hairline box: one even fill of
+  // the set's colour behind the cards, a border in the same colour, and a glow
   // only while it is open — a page of rolled-up shelves all glowing is noise.
   const themed = !!accent;
   const style = accent
     ? ({
         "--set-accent": accent,
-        background: `radial-gradient(120% 100% at 50% 0%, color-mix(in oklab, ${accent} 12%, transparent) 0%, transparent 70%), var(--gradient-bezel)`,
+        background: `color-mix(in oklab, ${accent} 10%, var(--card))`,
         borderColor: `color-mix(in oklab, ${accent} 35%, transparent)`,
         boxShadow: open
           ? `inset 0 1px 0 oklch(1 0 0 / 6%), 0 0 24px -6px color-mix(in oklab, ${accent} 55%, transparent)`
