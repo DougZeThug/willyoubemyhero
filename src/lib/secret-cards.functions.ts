@@ -18,6 +18,7 @@ import {
   SECRET_BORDER_FX_OPTIONS,
   SECRET_COLLECTION_ID_PATTERN,
   SECRET_FOIL_OPTIONS,
+  SET_ACCENT_IDS,
 } from "./secret-cards";
 import { bestSecretTier, toSecretTier } from "./secret-rarity";
 import { uuid as zuuid } from "./zod-uuid";
