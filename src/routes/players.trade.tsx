@@ -321,15 +321,16 @@ function TradePage() {
       <div className="mx-auto max-w-3xl px-4 py-6">
         <Header />
 
-        <section className="mb-6">
+        <section className="mb-7">
           <SectionTitle
-            icon={<Inbox className="h-3.5 w-3.5" />}
-            label={`Waiting on you (${inbox.length})`}
+            icon={<Inbox className="h-4 w-4" />}
+            label="Waiting on you"
+            count={inbox.length}
           />
           {inbox.length === 0 ? (
             <p className="text-xs text-muted-foreground">Nobody wants your cards. Yet.</p>
           ) : (
-            <div className="space-y-3">
+            <OfferCarousel>
               {inbox.map((offer) => (
                 <TradeOfferCard
                   key={offer.id}
@@ -342,14 +343,14 @@ function TradePage() {
                       <button
                         onClick={() => accept(offer.id)}
                         disabled={pending === offer.id}
-                        className="neon-btn !px-4 !py-2 !text-xs disabled:opacity-50"
+                        className="neon-btn !px-6 !py-2.5 !text-xs disabled:opacity-50"
                       >
                         Accept
                       </button>
                       <button
                         onClick={() => resolve(offer.id, "decline")}
                         disabled={pending === offer.id}
-                        className="rounded-full border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-danger/50 hover:text-danger disabled:opacity-50"
+                        className="rounded-full border border-white/10 px-6 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-danger/50 hover:text-danger disabled:opacity-50"
                       >
                         Decline
                       </button>
@@ -357,17 +358,18 @@ function TradePage() {
                   }
                 />
               ))}
-            </div>
+            </OfferCarousel>
           )}
         </section>
 
         {outbox.length > 0 && (
-          <section className="mb-6">
+          <section className="mb-7">
             <SectionTitle
-              icon={<Send className="h-3.5 w-3.5" />}
-              label={`Out there (${outbox.length})`}
+              icon={<Send className="h-4 w-4" />}
+              label="Out there"
+              count={outbox.length}
             />
-            <div className="space-y-3">
+            <OfferCarousel>
               {outbox.map((offer) => (
                 <TradeOfferCard
                   key={offer.id}
@@ -379,15 +381,16 @@ function TradePage() {
                     <button
                       onClick={() => resolve(offer.id, "cancel")}
                       disabled={pending === offer.id}
-                      className="rounded-full border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-50"
+                      className="rounded-full border border-primary/40 px-6 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                     >
                       Take it back
                     </button>
                   }
                 />
               ))}
-            </div>
-          </section>
+            </OfferCarousel>
+          )}
+        </section>
         )}
 
         {/* ---------- Compose ---------- */}
