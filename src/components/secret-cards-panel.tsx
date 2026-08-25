@@ -859,6 +859,22 @@ export function SecretCardsPanel() {
                   >
                     {s.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
+                  {/* The set's colour, picked from the fixed palette rather than a
+                      free colour input: every other colour in the app is a designed
+                      token, and a set that can be any hue can be an unreadable one. */}
+                  <SetAccentPicker
+                    accent={s.accent}
+                    setLabel={s.label}
+                    disabled={setBusyId !== null}
+                    onPick={(accentId, accentLabel) =>
+                      runSetEdit(
+                        s.id,
+                        s.label,
+                        updateSetFn({ data: { id: s.id, accent: accentId } }),
+                        accentId ? `${s.label} is ${accentLabel}` : `${s.label} untinted`,
+                      )
+                    }
+                  />
                   <button
                     type="button"
                     onClick={() => {
@@ -876,58 +892,7 @@ export function SecretCardsPanel() {
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
-                {/* The set's colour, picked from the fixed palette rather than a
-                    free colour input: every other colour in the app is a designed
-                    token, and a set that can be any hue can be an unreadable one. */}
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="mr-1 text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                    Colour
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      runSetEdit(
-                        s.id,
-                        s.label,
-                        updateSetFn({ data: { id: s.id, accent: null } }),
-                        `${s.label} untinted`,
-                      )
-                    }
-                    disabled={setBusyId !== null}
-                    aria-label={`No colour for ${s.label}`}
-                    aria-pressed={!s.accent}
-                    className={cn(
-                      "h-6 w-6 rounded-full border text-[9px] text-muted-foreground",
-                      !s.accent ? "border-primary ring-2 ring-primary/50" : "border-white/20",
-                    )}
-                  >
-                    ✕
-                  </button>
-                  {SET_ACCENTS.map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() =>
-                        runSetEdit(
-                          s.id,
-                          s.label,
-                          updateSetFn({ data: { id: s.id, accent: a.id } }),
-                          `${s.label} is ${a.label}`,
-                        )
-                      }
-                      disabled={setBusyId !== null}
-                      aria-label={`${a.label} for ${s.label}`}
-                      aria-pressed={s.accent === a.id}
-                      className={cn(
-                        "h-6 w-6 rounded-full border transition-transform",
-                        s.accent === a.id
-                          ? "scale-110 border-white/60 ring-2 ring-white/40"
-                          : "border-white/15",
-                      )}
-                      style={{ background: a.oklch }}
-                    />
-                  ))}
-                </div>
+
               </div>
             ))}
           </div>
