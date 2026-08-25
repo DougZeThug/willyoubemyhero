@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { EDITION_IDS, editionSeed, rollEdition, type Edition } from "./card-edition";
-import { packSeed } from "./pack";
+import { EDITION_IDS, toEdition, type Edition } from "./card-edition";
 import { optionalGuest, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
 import type { CardPullRow, PackOpenRow } from "./secret-cards-db.server";
 import type { CardPullCounts, MyCardStats } from "./card-pulls";
@@ -20,6 +19,17 @@ async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
+
+/** `event_participants.id` → the finish Postgres derived for this member's copy. */
+type CardEditions = Record<string, Edition>;
+
+/**
+ * What `record_card_pulls` answers with.
+ *
+ * Hand-written for the same reason the other RPC shapes are: `Returns: Json` in
+ * the generated types can never narrow to this.
+ */
+type RecordCardPullsResult = { recorded: number; editions: Record<string, string> };
 
 /** Untyped client, for the tables types.ts has not been regenerated for. */
 async function db() {
@@ -66,74 +76,6 @@ export const getCardPullCounts = createServerFn({ method: "GET" })
   });
 
 /**
- * The league days a device could honestly have sealed today's pack on.
- *
- * The pack seed's day is the DEVICE's local date (see packSeed) — the one input
- * this server does not hold. Everyone at the party is on the league's own
- * timezone, and a phone on UTC or a traveller is at most a calendar day out
- * either side, so the league day and its two neighbours cover every honest
- * clock. Around a DST shift two of the three can collapse to the same string;
- * the Set keeps the derivation from checking a day twice.
- */
-function leagueDayCandidates(now = new Date()): string[] {
-  // en-CA formats as YYYY-MM-DD, the exact shape of the client's todayKey().
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return [...new Set([0, -1, 1].map((d) => fmt.format(new Date(now.getTime() + d * 86_400_000))))];
-}
-
-/**
- * Re-derive a member's claimed editions instead of trusting them.
- *
- * An honest client computed every edition from rollEdition(editionSeed(...)) on
- * one of the candidate days, so its claim matches one candidate exactly and is
- * stored as sent. A claim that matches no candidate cannot have come from the
- * deal — it is replaced with the derivation for the league's own today, not
- * rejected: the membership half of the payload is still worth recording (see
- * the handler comment above), and refusing the whole pack over a forged finish
- * would hand a griefer a way to un-record their own cards and retry forever.
- *
- * A claim can also be absent — a phone still holding a bundle from before
- * editions existed — and stays absent: the RPC defaults those rows to standard,
- * and inventing finishes for a client that never rolled any would be a lie in
- * the other direction. Same when no active event is resolvable: the seed's
- * event third would be wrong, so a derivation would be noise, and the claimed
- * value is at worst a self-inflicted stat.
- *
- * Exported for its unit tests; `now` exists so they can pin the day.
- */
-export function deriveEditions(args: {
-  eventId: string | null;
-  participantId: string;
-  ids: string[];
-  claimed: Edition[] | null;
-  now?: Date;
-}): Edition[] | null {
-  const { eventId, participantId, ids, claimed } = args;
-  if (!claimed) return null;
-  if (!eventId) return claimed;
-  const derive = (day: string) => {
-    const seed = packSeed(eventId, day, `m:${participantId}`);
-    return ids.map((id) => rollEdition(editionSeed(seed, id)));
-  };
-  const candidates = leagueDayCandidates(args.now);
-  for (const day of candidates) {
-    const derived = derive(day);
-    if (derived.length === claimed.length && derived.every((e, i) => e === claimed[i])) {
-      return claimed;
-    }
-  }
-  console.warn(
-    `recordCardPulls: claimed editions match no candidate league day for ${participantId}; storing the derived set`,
-  );
-  return derive(candidates[0]);
-}
-
-/**
  * Record that these cards were in this member's pack.
  *
  * The one mutating handler in this app that deliberately does not throw when
@@ -149,30 +91,29 @@ export function deriveEditions(args: {
  * from that table would quietly stop counting once somebody's collection filled up.
  *
  * WHAT THIS DOES NOT VERIFY, deliberately: that the ids are the pack the app
- * actually dealt. Everything derivable server-side now is — the participant, the
- * event, the card count — and the payload is capped at a pack-sized list, but a
- * member posting valid roster ids by hand can still credit themselves cards and a
- * pack-open for today. That was already true of the card half before pack_opens
- * existed, and the ceiling is low: `card_pulls` caps a person at one row per card
- * and `pack_opens` at one row per league day, so the most anyone can manufacture
- * is one phantom pack a day on a stat only they can see.
+ * actually dealt. Everything derivable server-side is — the participant, the
+ * event, the card count, and now the finish — but a member posting valid roster
+ * ids by hand can still credit themselves cards and a pack-open for today.
+ * Closing that properly means re-deriving the deal, which is seeded partly on the
+ * *device's* local date and on the collection it held when it was dealt, neither
+ * of which the server knows. Guessing at either would silently drop genuine packs
+ * on a timezone edge, a worse failure than the one it prevents.
  *
- * Closing it properly means re-deriving the deal server-side, and the deal is
- * seeded partly on the *device's* local date and on the collection it held at the
- * moment it was dealt — neither of which the server knows. Guessing at either
- * would silently drop genuine packs on a timezone edge, which is a worse failure
- * than the one it prevents for a thirteen-person party.
+ * What used to sit here instead was an argument that the ceiling was low — "one
+ * phantom pack a day on a stat only they can see". That stopped being true when
+ * `card_copies` arrived: its once-a-day index is per CARD, so a posted list of
+ * every roster id mints a copy of each, and after the dust ledger every one of
+ * those is currency. So the RPC now rations minting per league day instead of
+ * relying on the ceiling. See the cap in 20260826120000_server_rolled_editions.
  *
- * THE EDITION IS VERIFIED, not trusted. The card ids are a *membership* claim —
- * the ceiling is a phantom pack — but an edition is a *value*, and trading now
- * shows other people's editions, so a forged platinum would reach a second
- * person. Everything a member's edition derives from is available here: the
- * participant comes from the verified token, the event is resolved below, and
- * card-edition.ts is pure client-safe TS. The one input the server lacks is the
- * device's local date, so deriveEditions tries the league day and its two
- * neighbours — see its comment for why a mismatch is replaced rather than
- * rejected. adoptCollection stays client-asserted out of necessity: a guest's
- * packs were sealed on a device id this server never learns.
+ * THE EDITION IS THE SERVER'S, not a claim to check. `record_card_pulls` derives
+ * it from (participant, card, league day) and hands it back, which is why this
+ * returns an `editions` map the pack reveal reads. `data.editions` is still
+ * accepted so a phone mid-rollout keeps recording, and is passed nowhere: the RPC
+ * ignores its own parameter. `adoptCollection` stays client-asserted out of
+ * necessity — a guest's packs were sealed on a device id this server never learns
+ * — and those copies keep `edition_asserted_by = 'client'`, which is what stops
+ * dust paying out on them by edition.
  */
 export const recordCardPulls = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -181,20 +122,13 @@ export const recordCardPulls = createServerFn({ method: "POST" })
         // A pack is three cards. The ceiling is loose enough to survive PACK_SIZE
         // changing and tight enough that nobody can post the roster as one pack.
         eventParticipantIds: z.array(zuuid()).min(1).max(16),
-        // Optional so a phone still holding a bundle from before editions keeps
-        // recording its packs; the RPC defaults those rows to standard.
+        // ACCEPTED AND IGNORED. Kept in the schema so a phone still holding a
+        // bundle from before the server derived finishes keeps validating and
+        // keeps recording its packs; nothing reads the value. The one-to-one
+        // refine that used to guard this is gone with it — the response is keyed
+        // by card now, so there is no positional contract left to misalign.
         editions: z.array(z.enum(EDITION_IDS)).max(16).optional(),
       })
-      // The contract is positional — the RPC zips these two arrays — so a length
-      // mismatch would not fail, it would quietly file each finish against the
-      // wrong card. Rejected rather than truncated for that reason.
-      .refine(
-        (v) => v.editions === undefined || v.editions.length === v.eventParticipantIds.length,
-        {
-          message: "editions must line up one-to-one with eventParticipantIds",
-          path: ["editions"],
-        },
-      )
       .parse(d),
   )
   .handler(async ({ data }) => {
@@ -214,7 +148,8 @@ export const recordCardPulls = createServerFn({ method: "POST" })
     // the claim that moves it (claim_guest_packs).
     if (!me) {
       const guest = optionalGuest();
-      if (!guest) return { ok: true as const, recorded: 0, packsOpened: 0 };
+      if (!guest)
+        return { ok: true as const, recorded: 0, packsOpened: 0, editions: {} as CardEditions };
       const { data: guestPacks } = await secrets.rpc("record_pack_open", {
         _participant_id: null,
         _event_id: activeEvent?.id ?? null,
@@ -225,25 +160,32 @@ export const recordCardPulls = createServerFn({ method: "POST" })
         ok: true as const,
         recorded: 0,
         packsOpened: (guestPacks as number | null) ?? 0,
+        // A guest gets no card rows, so there is no finish to reveal. The pack
+        // shows standards until they claim and adoptCollection files the copies.
+        editions: {} as CardEditions,
       };
     }
 
-    const { data: n, error } = await secrets.rpc("record_card_pulls", {
+    const { data: raw, error } = await secrets.rpc("record_card_pulls", {
       _participant_id: me,
       _event_participant_ids: data.eventParticipantIds,
-      // Verified before storage — see deriveEditions. Null rather than an empty
-      // array when absent: unnest() pads a NULL against the ids and every row
-      // falls to standard, while an empty array would zip to nothing and drop
-      // the pack.
-      _editions: deriveEditions({
-        eventId: activeEvent?.id ?? null,
-        participantId: me,
-        ids: data.eventParticipantIds,
-        claimed: data.editions ?? null,
-      }),
+      // Always null. The parameter still exists so an old client's call resolves,
+      // and the RPC ignores it either way — passing the claim through would be
+      // the client-asserted finish coming back in through the window.
+      _editions: null,
     });
     if (error) throw new Error(error.message);
-    const recorded = (n as number | null) ?? 0;
+
+    const result = (raw as RecordCardPullsResult | null) ?? { recorded: 0, editions: {} };
+    const recorded = result.recorded ?? 0;
+
+    // toEdition rather than a cast: this crosses a jsonb boundary, and the one
+    // rule the rest of the app relies on is that an unrecognised finish renders as
+    // standard instead of reaching a component that has no style for it.
+    const editions: Record<string, Edition> = {};
+    for (const [id, value] of Object.entries(result.editions ?? {})) {
+      editions[id] = toEdition(value);
+    }
 
     // The pack open is keyed on the league day, so this is idempotent however many
     // times a reveal re-fires it. Its own errors are swallowed: the cards are
@@ -263,6 +205,9 @@ export const recordCardPulls = createServerFn({ method: "POST" })
       ok: true as const,
       recorded,
       packsOpened: (packs as number | null) ?? 0,
+      // Keyed by card, because the RPC collapses duplicates and rations the day's
+      // minting — the response has neither the caller's ordering nor its length.
+      editions,
     };
   });
 

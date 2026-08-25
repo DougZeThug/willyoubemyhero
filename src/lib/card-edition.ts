@@ -20,8 +20,6 @@
 // A secret card never carries an edition, the reciprocal of the rule in
 // secret-cards.ts that no earned tier carries the prism edge.
 
-import { seededRng } from "./format";
-
 /**
  * The low rung is `standard`, NOT `base`.
  *
@@ -216,43 +214,30 @@ export function editionRank(edition: string | null | undefined): number {
   return i === -1 ? EDITION_ORDER.length : i;
 }
 
-/**
- * The seed one card's finish is rolled from.
+/*
+ * There is no client-side roll here any more.
  *
- * Composed onto the pack seed rather than replacing it, so a finish is decided by
- * the same three facts the pack is — who you are, which day, which event — and a
- * refresh can no more reroll it than it can redeal the pack.
+ * `editionSeed` and `rollEdition` used to live at this spot and decide a finish
+ * on the phone from the pack seed. Postgres decides it now — see
+ * `roll_card_edition` in 20260826120000_server_rolled_editions.sql — because a
+ * finish stopped being a private stat once dust started paying out by edition.
+ * They are gone rather than merely unused: a roller sitting here is the thing a
+ * later change re-wires by accident, and the whole point of R4a is that this
+ * module renders finishes and never chooses one.
  *
- * Keyed on the CARD, not the slot. dealPack swaps the last slot for a card the
- * baseline does not hold, so a slot-keyed roll would hand the pity card whatever
- * finish slot three happened to draw, and move it again the moment the baseline
- * did.
+ * WEIGHT_BP below stays. It is what `editionOddsLabel` prints on the card back,
+ * and it is the TypeScript side of the mirror a db test pins the SQL ladder
+ * against.
  */
-export function editionSeed(packSeed: string, eventParticipantId: string): string {
-  return `${packSeed}:edition:${eventParticipantId}`;
-}
-
-/** Deterministic. The same seed always yields the same finish, on any device. */
-export function rollEdition(seed: string): Edition {
-  const draw = Math.floor(seededRng(seed)() * BP_TOTAL);
-  let ceiling = 0;
-  for (const edition of EDITION_ORDER) {
-    ceiling += WEIGHT_BP[edition];
-    if (draw < ceiling) return edition;
-  }
-  // Unreachable while the table sums to BP_TOTAL, which a test pins. Falling back
-  // to the common rung rather than throwing: a mistuned table should cost a
-  // badge, not a pack.
-  return "standard";
-}
 
 /**
  * Best wins.
  *
  * A worse finish of a card you already hold is a duplicate, not a downgrade, so
- * the value only ever moves up the ladder. The identical rule runs in Postgres in
- * `record_card_pulls`, because the local collection and the server row have to
- * agree about which copy you own.
+ * the value only ever moves up the ladder. The same rule runs in Postgres in
+ * `resync_card_pull`, which derives `card_pulls.edition` as the best across the
+ * copies you hold — so the local collection and the server row agree about which
+ * copy you own.
  */
 export function bestEdition(a: string | null | undefined, b: string | null | undefined): Edition {
   const winner = editionRank(a) <= editionRank(b) ? a : b;

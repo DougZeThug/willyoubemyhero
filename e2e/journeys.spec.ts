@@ -14,7 +14,7 @@ import {
 // a three-card pack, "assert two packs differ" collides often enough to be flaky;
 // "assert this pack is the one this identity earns" never does.
 import { dealPack, packSeed } from "../src/lib/pack";
-import { editionLabel, editionSeed, rollEdition } from "../src/lib/card-edition";
+import { editionLabel } from "../src/lib/card-edition";
 import { CEREMONY_MS } from "../src/lib/pack-ceremony";
 
 const MEMBER_KEY = "wwbh:member-token";
@@ -739,27 +739,27 @@ test.describe("opening a pack", () => {
     expect(two).not.toEqual(one);
   });
 
-  test("prints the finish the pack actually rolled, and keeps it across a reload", async ({
+  test("prints the finish the server derived, and keeps it across a reload", async ({
     page,
+    server,
   }) => {
-    // Searched for rather than pinned, the same technique the guest-ids test
-    // above uses and for a sharper reason: seven pulls in ten are standard and
-    // print no badge at all, so an arbitrary device id would assert nothing most
-    // days and then fail on the day it drew a gold.
-    const withBadge = Array.from({ length: 200 }, (_, i) => `finish-${i}`)
-      .map((device) => {
-        const seed = packSeed(EVENT_ID, dayKey(), `d:${device}`);
-        const ids = expectedPack(`d:${device}`);
-        const at = ids.findIndex((id) => rollEdition(editionSeed(seed, id)) !== "standard");
-        return { device, at, edition: at < 0 ? null : rollEdition(editionSeed(seed, ids[at])) };
-      })
-      .find((c) => c.at === 0);
-    expect(withBadge, "no device id drew a non-standard first card today").toBeTruthy();
-    const label = editionLabel(withBadge!.edition)!;
+    // Stubbed rather than searched for. This used to hunt through two hundred
+    // device ids for one whose first card rolled non-standard, because the finish
+    // was a pure function of the pack seed and the test could compute it. It is a
+    // server answer now, so the stub simply says what the server said.
+    const device = "finish-device";
+    const ids = expectedPack(`d:${device}`);
+    server.set("recordCardPulls", {
+      ok: true,
+      recorded: ids.length,
+      packsOpened: 1,
+      editions: { [ids[0]]: "gold" },
+    });
+    const label = editionLabel("gold")!;
 
-    await page.addInitScript((device: string) => {
-      localStorage.setItem("wwbh:device-id", device);
-    }, withBadge!.device);
+    await page.addInitScript((d: string) => {
+      localStorage.setItem("wwbh:device-id", d);
+    }, device);
     await page.goto("/players/pack");
     await tearPack(page);
 
@@ -768,10 +768,42 @@ test.describe("opening a pack", () => {
     await standCard(page).click();
     await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
 
-    // The finish is derived, never stored — so a reload has to re-roll it to the
-    // same answer rather than read it back.
+    // The finish is derived from (participant, card, league day) rather than
+    // stored on the device, so a reload has to ask again and be told the same
+    // thing. That idempotence is what the client's deterministic seed used to buy.
     await page.reload();
     await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
+  });
+
+  test("reveals a standard rather than a finish the server has not answered with", async ({
+    page,
+    server,
+  }) => {
+    // The failure the whole round trip is designed around: a card can be turned
+    // over before the record lands. It must show the plainest thing and correct
+    // itself, never a rare nobody has decided on.
+    const device = "slow-finish-device";
+    const ids = expectedPack(`d:${device}`);
+    server.set("recordCardPulls", {
+      ok: true,
+      recorded: ids.length,
+      packsOpened: 1,
+      editions: { [ids[0]]: "gold" },
+    });
+    server.delay("recordCardPulls", 4_000);
+    const label = editionLabel("gold")!;
+
+    await page.addInitScript((d: string) => {
+      localStorage.setItem("wwbh:device-id", d);
+    }, device);
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await standCard(page).click();
+
+    // Turned, and carrying no claim about its finish.
+    await expect(page.getByText(label, { exact: false })).toBeHidden();
+    // Then the answer arrives and the card tells the truth.
+    await expect(page.getByText(label, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
   });
 
   test("puts no finish on a card nobody has packed", async ({ page }) => {
