@@ -170,9 +170,10 @@ export function FoilPicker({ value, onChange, cardName, unsetLabel, disabled }: 
 }
 
 export type BorderFxPickerProps = {
-  value: string;
+  /** Null means "no single value" — nothing is ticked and the caption says so. */
+  value: string | null;
   /** Foil id the row currently wears, so the preview rings are its colours. */
-  foil: string;
+  foil: string | null;
   onChange: (id: string) => void;
   /**
    * Whether these previews may animate.
@@ -185,24 +186,45 @@ export type BorderFxPickerProps = {
    */
   animate?: boolean;
   cardName: string;
+  /** Caption shown in place of a name when `value` is null. */
+  unsetLabel?: string;
+  disabled?: boolean;
 };
 
-export function BorderFxPicker({ value, foil, onChange, animate, cardName }: BorderFxPickerProps) {
-  const selected = SECRET_BORDER_FX_OPTIONS.some((o) => o.id === value) ? value : DEFAULT_BORDER_FX;
+export function BorderFxPicker({
+  value,
+  foil,
+  onChange,
+  animate,
+  cardName,
+  unsetLabel,
+  disabled,
+}: BorderFxPickerProps) {
+  const selected =
+    value == null
+      ? null
+      : SECRET_BORDER_FX_OPTIONS.some((o) => o.id === value)
+        ? value
+        : DEFAULT_BORDER_FX;
   const rarity = secretFoil(foil);
   const group = useId();
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex flex-col gap-1", disabled && "pointer-events-none opacity-60")}>
       <PickerCaption
         caption="Border"
-        value={labelFor(SECRET_BORDER_FX_OPTIONS, selected, DEFAULT_BORDER_FX)}
+        value={
+          selected == null
+            ? (unsetLabel ?? "Mixed")
+            : labelFor(SECRET_BORDER_FX_OPTIONS, selected, DEFAULT_BORDER_FX)
+        }
       />
       <div
         role="radiogroup"
         aria-label={`Border animation for ${cardName}`}
         className="flex flex-wrap items-center gap-1.5"
       >
+
         {SECRET_BORDER_FX_OPTIONS.map((o) => (
           <ChipRadio
             key={o.id}
