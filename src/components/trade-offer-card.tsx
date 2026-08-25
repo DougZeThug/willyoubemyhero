@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
@@ -242,13 +242,26 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
 
       <div className={cn("flex items-start", pending ? "gap-2" : "gap-3")}>
         <Side label="You give" items={iGive} lookup={lookup} size={size} />
-        <ArrowRight
+        <div
           className={cn(
-            "shrink-0 text-primary drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
-            pending ? "mt-20 h-7 w-7" : "mt-6 h-4 w-4 text-muted-foreground",
+            "shrink-0 flex flex-col items-center justify-center text-primary",
+            pending ? "mt-14 gap-1" : "mt-5 gap-0.5",
           )}
           aria-hidden
-        />
+        >
+          <ArrowRight
+            className={cn(
+              "drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
+              pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground",
+            )}
+          />
+          <ArrowLeft
+            className={cn(
+              "drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
+              pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground",
+            )}
+          />
+        </div>
         <Side label="You get" items={iGet} lookup={lookup} size={size} />
       </div>
 
