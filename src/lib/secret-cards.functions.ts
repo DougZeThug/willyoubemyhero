@@ -400,13 +400,14 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
   // Every set, hidden ones included: this is the screen where they are managed.
   const { data: collectionRows } = await db
     .from("secret_collections")
-    .select("id, label, sort_order, active")
+    .select("id, label, accent, sort_order, active")
     .order("sort_order", { ascending: true })
     .order("label", { ascending: true })
     .returns<SecretCollectionRow[]>();
   const collections = (collectionRows ?? []).map((c) => ({
     id: c.id,
     label: c.label,
+    accent: c.accent ?? null,
     sortOrder: c.sort_order,
     active: c.active,
   }));

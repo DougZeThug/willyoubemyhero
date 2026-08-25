@@ -163,10 +163,14 @@ export function SecretCardsPanel() {
   // Every set the admin has authored, in their order. Hidden ones still order
   // and label the cards already filed under them; they just stop being an option.
   const allSets = list.data?.collections ?? [];
-  const sets: SecretCollection[] = allSets.map((c) => ({ id: c.id, label: c.label }));
+  const sets: SecretCollection[] = allSets.map((c) => ({
+    id: c.id,
+    label: c.label,
+    accent: c.accent,
+  }));
   const pickerSets: SecretCollection[] = allSets
     .filter((c) => c.active)
-    .map((c) => ({ id: c.id, label: c.label }));
+    .map((c) => ({ id: c.id, label: c.label, accent: c.accent }));
   const cardsPerSet = new Map<string, number>();
   for (const c of cards)
     if (c.collection) cardsPerSet.set(c.collection, (cardsPerSet.get(c.collection) ?? 0) + 1);
@@ -876,7 +880,21 @@ export function SecretCardsPanel() {
           const key = group.id ?? "";
           const open = expanded.has(key);
           return (
-            <section key={key} className="rounded-lg border border-white/10">
+            <section
+              key={key}
+              className={cn("rounded-lg border", group.accent ? "border" : "border-white/10")}
+              style={
+                group.accent
+                  ? {
+                      background: `radial-gradient(120% 100% at 50% 0%, color-mix(in oklab, ${group.accent} 12%, transparent) 0%, transparent 70%), var(--gradient-bezel)`,
+                      borderColor: `color-mix(in oklab, ${group.accent} 35%, transparent)`,
+                      boxShadow: open
+                        ? `0 0 24px -6px color-mix(in oklab, ${group.accent} 55%, transparent)`
+                        : undefined,
+                    }
+                  : undefined
+              }
+            >
               <button
                 type="button"
                 onClick={() =>
@@ -890,7 +908,10 @@ export function SecretCardsPanel() {
                 aria-expanded={open}
                 className="flex min-h-11 w-full items-center justify-between gap-2 px-3 text-left"
               >
-                <span className="truncate font-display text-xs font-black uppercase tracking-[0.25em] text-primary">
+                <span
+                  className="truncate font-display text-xs font-black uppercase tracking-[0.25em] text-primary"
+                  style={group.accent ? { color: group.accent } : undefined}
+                >
                   {group.label}
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
