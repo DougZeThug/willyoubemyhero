@@ -1,18 +1,7 @@
 import { Gift, Loader2, Pencil } from "lucide-react";
-import {
-  BORDER_FX_FALLBACK,
-  BorderFxPicker,
-  CompactLookSelect,
-  FOIL_FALLBACK,
-  FoilPicker,
-  FoilSwatch,
-} from "@/components/secret-look-picker";
-import {
-  SECRET_BORDER_FX_OPTIONS,
-  SECRET_FOIL_OPTIONS,
-  type SecretCollection,
-  secretCollectionLabel,
-} from "@/lib/secret-cards";
+import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
+import { type SecretCollection, secretCollectionLabel } from "@/lib/secret-cards";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -190,29 +179,9 @@ export function SecretCardTile({
           </span>
         </label>
 
-        {/* Compact selects on a phone, the real swatch strips from sm: up. */}
-        <div className="sm:hidden">
-          <CompactLookSelect
-            caption="Foil"
-            value={card.foil}
-            options={SECRET_FOIL_OPTIONS}
-            fallback={FOIL_FALLBACK}
-            ariaLabel={`Color effect for ${card.name}`}
-            onChange={(foil) => onSaveLook({ foil })}
-            swatch={<FoilSwatch foil={card.foil} />}
-          />
-        </div>
-        <div className="sm:hidden">
-          <CompactLookSelect
-            caption="Border"
-            value={card.borderFx}
-            options={SECRET_BORDER_FX_OPTIONS}
-            fallback={BORDER_FX_FALLBACK}
-            ariaLabel={`Border animation for ${card.name}`}
-            onChange={(borderFx) => onSaveLook({ borderFx })}
-          />
-        </div>
-        <div className="hidden sm:flex sm:flex-col sm:gap-2">
+        {/* The swatch strips at every width: a native picker on a phone is a
+            list of names, and "Nebula" is not a colour until you have seen it. */}
+        <div className="flex flex-col gap-2">
           <FoilPicker
             value={card.foil}
             cardName={card.name}

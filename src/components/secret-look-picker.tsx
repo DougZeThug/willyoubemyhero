@@ -93,22 +93,34 @@ function ChipRadio({
 }
 
 export type FoilPickerProps = {
-  value: string;
+  /** Null means "no single value" — nothing is ticked and the caption says so. */
+  value: string | null;
   onChange: (id: string) => void;
-  /** Card name, so two rows' strips have distinct accessible names. */
+  /** Card (or set) name, so two strips have distinct accessible names. */
   cardName: string;
+  /** Caption shown in place of a name when `value` is null. */
+  unsetLabel?: string;
+  disabled?: boolean;
 };
 
-export function FoilPicker({ value, onChange, cardName }: FoilPickerProps) {
-  const selected = SECRET_FOIL_OPTIONS.some((o) => o.id === value) ? value : DEFAULT_FOIL;
+export function FoilPicker({ value, onChange, cardName, unsetLabel, disabled }: FoilPickerProps) {
+  const selected =
+    value == null ? null : SECRET_FOIL_OPTIONS.some((o) => o.id === value) ? value : DEFAULT_FOIL;
   // Radios group by `name`, so two cards sharing one would behave as a single
   // thirteen-way choice across both rows — picking Toxic on Zucchini would
   // silently deselect Dragon's foil.
   const group = useId();
 
   return (
-    <div className="flex flex-col gap-1">
-      <PickerCaption caption="Foil" value={labelFor(SECRET_FOIL_OPTIONS, selected, DEFAULT_FOIL)} />
+    <div className={cn("flex flex-col gap-1", disabled && "pointer-events-none opacity-60")}>
+      <PickerCaption
+        caption="Foil"
+        value={
+          selected == null
+            ? (unsetLabel ?? "Mixed")
+            : labelFor(SECRET_FOIL_OPTIONS, selected, DEFAULT_FOIL)
+        }
+      />
       <div
         role="radiogroup"
         aria-label={`Color effect for ${cardName}`}
@@ -153,9 +165,10 @@ export function FoilPicker({ value, onChange, cardName }: FoilPickerProps) {
 }
 
 export type BorderFxPickerProps = {
-  value: string;
+  /** Null means "no single value" — nothing is ticked and the caption says so. */
+  value: string | null;
   /** Foil id the row currently wears, so the preview rings are its colours. */
-  foil: string;
+  foil: string | null;
   onChange: (id: string) => void;
   /**
    * Whether these previews may animate.
@@ -168,18 +181,38 @@ export type BorderFxPickerProps = {
    */
   animate?: boolean;
   cardName: string;
+  /** Caption shown in place of a name when `value` is null. */
+  unsetLabel?: string;
+  disabled?: boolean;
 };
 
-export function BorderFxPicker({ value, foil, onChange, animate, cardName }: BorderFxPickerProps) {
-  const selected = SECRET_BORDER_FX_OPTIONS.some((o) => o.id === value) ? value : DEFAULT_BORDER_FX;
+export function BorderFxPicker({
+  value,
+  foil,
+  onChange,
+  animate,
+  cardName,
+  unsetLabel,
+  disabled,
+}: BorderFxPickerProps) {
+  const selected =
+    value == null
+      ? null
+      : SECRET_BORDER_FX_OPTIONS.some((o) => o.id === value)
+        ? value
+        : DEFAULT_BORDER_FX;
   const rarity = secretFoil(foil);
   const group = useId();
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex flex-col gap-1", disabled && "pointer-events-none opacity-60")}>
       <PickerCaption
         caption="Border"
-        value={labelFor(SECRET_BORDER_FX_OPTIONS, selected, DEFAULT_BORDER_FX)}
+        value={
+          selected == null
+            ? (unsetLabel ?? "Mixed")
+            : labelFor(SECRET_BORDER_FX_OPTIONS, selected, DEFAULT_BORDER_FX)
+        }
       />
       <div
         role="radiogroup"
