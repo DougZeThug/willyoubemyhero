@@ -52,7 +52,10 @@ export function TradeItemTile({
   onClick,
   selected,
   blockedLabel,
+  size = "sm",
 }: TradeItemTileProps) {
+  const width = TILE_WIDTH[size];
+  const big = size === "lg";
   const roster = item.kind === "roster" ? lookup(item.eventParticipantId) : null;
   const tier = item.kind === "secret" ? secretTierStyle(item.tier) : null;
   const name = item.kind === "roster" ? (roster?.name ?? "—") : item.name;
