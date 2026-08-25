@@ -205,6 +205,8 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
   const iGive = iAmProposer ? offer.proposerGives : offer.recipientGives;
   const iGet = iAmProposer ? offer.recipientGives : offer.proposerGives;
   const pending = offer.status === "pending";
+  const accepted = offer.status === "accepted";
+  const rejected = offer.status === "declined" || offer.status === "cancelled" || offer.status === "voided";
 
   // A live offer is the loudest thing on the screen: ringed, glowing, big cards.
   // A settled one is a receipt, so it stays the quiet bezel it always was.
@@ -214,7 +216,13 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
     <article
       className={cn(
         "hud-bezel rounded-xl p-4",
-        pending ? "hud-glow border-2 border-primary/70" : "border border-white/10 p-3",
+        pending
+          ? "hud-glow border-2 border-primary/70"
+          : accepted
+            ? "hud-glow border-2 border-success/70"
+            : rejected
+              ? "hud-glow border-2 border-destructive/70"
+              : "border border-white/10 p-3",
       )}
     >
       <div className="mb-1 flex items-baseline justify-between gap-2">
