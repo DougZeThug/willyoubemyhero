@@ -482,22 +482,28 @@ function TradePage() {
         {(feed.data ?? []).length > 0 && (
           <section>
             <SectionTitle label="Around the league" />
-            <ul className="space-y-1.5">
-              {(feed.data ?? []).map((t) => (
-                <li key={t.id} className="text-[11px] text-muted-foreground">
-                  <span className="font-bold uppercase tracking-wide text-foreground">
-                    {nameOf(t.proposerId)}
-                  </span>{" "}
-                  sent {tradeSummaryLabel(t.proposerGave)} to{" "}
-                  <span className="font-bold uppercase tracking-wide text-foreground">
-                    {nameOf(t.recipientId)}
-                  </span>{" "}
-                  for {tradeSummaryLabel(t.recipientGave)}
-                </li>
-              ))}
-            </ul>
+            <div className="hud-bezel hud-glow max-h-72 overflow-y-auto rounded-lg border border-primary/30">
+              <ul className="divide-y divide-white/10">
+                {(feed.data ?? []).map((t) => (
+                  <li key={t.id} className="px-3 py-2.5 text-[11px] leading-relaxed text-foreground">
+                    <span className="font-display font-black uppercase tracking-wide">
+                      {nameOf(t.proposerId)}
+                    </span>{" "}
+                    <span className="text-muted-foreground">sent</span>{" "}
+                    <SummaryText items={t.proposerGave} />{" "}
+                    <span className="text-muted-foreground">to</span>{" "}
+                    <span className="font-display font-black uppercase tracking-wide">
+                      {nameOf(t.recipientId)}
+                    </span>{" "}
+                    <span className="text-muted-foreground">for</span>{" "}
+                    <SummaryText items={t.recipientGave} />
+                  </li>
+                ))}
+              </ul>
+            </div>
           </section>
         )}
+
       </div>
     </div>
   );
