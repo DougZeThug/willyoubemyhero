@@ -10,7 +10,19 @@ import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
 import { MILL_BY_EDITION, MILL_CLIENT_FLAT, DUPE_SECRET_CREDIT, DUST_PRICES } from "../../src/lib/dust"; // prettier-ignore
 
 afterAll(closeDb);
-beforeEach(seedEvent);
+beforeEach(async () => {
+  await seedEvent();
+  // Dust ships switched OFF — 20260828120000 defaults events.dust_enabled to
+  // false, which is what makes deploying it a no-op. Every test below is about
+  // what the economy does once somebody turns it on, so the fixture turns it on;
+  // the "while the switch is off" block at the bottom is the other half.
+  await sql("UPDATE public.events SET dust_enabled = true");
+});
+
+/** Put the switch back where production has it. */
+async function switchOff() {
+  await sql("UPDATE public.events SET dust_enabled = false");
+}
 
 const GUEST = "99999999-9999-4999-8999-999999999999";
 
@@ -652,5 +664,102 @@ describe("reroll_copy_edition", () => {
       [IDS.alice, cardId],
     );
     expect(derived.edition).toBe(copies.best);
+  });
+});
+
+describe("while the switch is off", () => {
+  // The whole economy behind one flag, checked in SQL rather than only in the
+  // handlers, because that is where the money moves. A client that skipped the
+  // check still gets refused here.
+  const REQ = "cccccccc-0000-4000-8000-000000000001";
+
+  it("says so rather than burning a spare", async () => {
+    const { spareId } = await twoCopies();
+    await switchOff();
+    expect(await mill(spareId)).toEqual({ ok: false, reason: "disabled" });
+    // Refused before it touched anything: the copy is still there.
+    const [row] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.card_copies WHERE id = $1",
+      [spareId],
+    );
+    expect(row.n).toBe(1);
+    expect(await balance()).toBe(0);
+  });
+
+  it("says so rather than selling a pull", async () => {
+    await seedSecret("a-card");
+    await credit(DUST_PRICES.bonusPull);
+    await switchOff();
+    const [row] = await sql<{ buy_bonus_secret_pull: { ok: boolean; reason: string } }>(
+      "SELECT public.buy_bonus_secret_pull($1, $2, $3)",
+      [IDS.alice, IDS.event, REQ],
+    );
+    expect(row.buy_bonus_secret_pull).toEqual({ ok: false, reason: "disabled" });
+    // Nothing bought and nothing spent.
+    expect(await sql("SELECT count(*)::int AS n FROM public.secret_card_pulls")).toEqual([
+      { n: 0 },
+    ]);
+    expect(await balance()).toBe(DUST_PRICES.bonusPull);
+  });
+
+  it("says so rather than re-rolling a finish", async () => {
+    const { spareId } = await twoCopies("gold", "server");
+    await credit(DUST_PRICES.reroll);
+    await switchOff();
+    const [row] = await sql<{ reroll_copy_edition: { ok: boolean; reason: string } }>(
+      "SELECT public.reroll_copy_edition($1, $2, $3)",
+      [IDS.alice, spareId, REQ],
+    );
+    expect(row.reroll_copy_edition).toEqual({ ok: false, reason: "disabled" });
+    const [row2] = await sql<{ edition: string }>(
+      "SELECT edition FROM public.card_copies WHERE id = $1",
+      [spareId],
+    );
+    expect(row2.edition).toBe("gold");
+    expect(await balance()).toBe(DUST_PRICES.reroll);
+  });
+
+  it("pays nothing at all for a duplicate secret", async () => {
+    // The decision behind the switch: no ledger row while it is off. A balance
+    // built out of history nobody knew was being scored — during a stretch when
+    // burning was unavailable — would be lopsided towards whoever pulled most.
+    await seedSecret("only-card");
+    await pullSecret(IDS.alice);
+    await rewindDay(1);
+    await switchOff();
+
+    const dupe = await pullSecret(IDS.alice);
+    expect(dupe.duplicate).toBe(true);
+    expect(dupe.dust).toBe(0);
+    expect(await sql("SELECT count(*)::int AS n FROM public.dust_ledger")).toEqual([{ n: 0 }]);
+    expect(await balance()).toBe(0);
+  });
+
+  it("leaves the pull itself working, switch or no switch", async () => {
+    // The economy is off, not the game. A dupe still lands, still upgrades a
+    // tier, still counts — it simply pays nothing.
+    await seedSecret("only-card");
+    await switchOff();
+    const first = await pullSecret(IDS.alice);
+    expect(first.duplicate).toBe(false);
+    expect(first.pullId).toBeTruthy();
+  });
+
+  it("is off by default, which is what makes deploying it a no-op", async () => {
+    // seedEvent inserts a plain event and the beforeEach above switches it on;
+    // this asserts the column's own default rather than the fixture's choice.
+    const [row] = await sql<{ dust_enabled: boolean }>(
+      `INSERT INTO public.events (name, year, active) VALUES ('Defaults', 2027, false)
+       RETURNING dust_enabled`,
+    );
+    expect(row.dust_enabled).toBe(false);
+  });
+
+  it("reads off the ACTIVE event, and calls no active event off", async () => {
+    // dust_ledger carries no event id — a balance is a fact about a person, not
+    // about a combine — so there is one answer rather than one per event.
+    await sql("UPDATE public.events SET active = false");
+    const [row] = await sql<{ dust_enabled: boolean }>("SELECT public.dust_enabled()");
+    expect(row.dust_enabled).toBe(false);
   });
 });

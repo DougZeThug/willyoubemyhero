@@ -37,6 +37,9 @@ export type DustLedgerRow = {
  * raises instead, which rolls the debit back with it.
  */
 export type DustFailure =
+  // The commissioner's switch is off. Not an error and not the player's doing —
+  // the whole economy is simply not live yet.
+  | "disabled"
   | "not_found"
   | "not_yours"
   | "last_copy"

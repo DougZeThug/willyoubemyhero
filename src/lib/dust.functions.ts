@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { requireMember } from "./require-auth.server";
+import { requireAdmin, requireMember } from "./require-auth.server";
 import type { BuyBonusPullResult, MillCardCopyResult, RerollEditionResult } from "./dust-db.server";
 import { uuid as zuuid } from "./zod-uuid";
 
@@ -156,4 +156,34 @@ export const rerollCopyEdition = createServerFn({ method: "POST" })
       eventParticipantId: result.eventParticipantId,
       balance: result.balance,
     };
+  });
+
+/**
+ * The commissioner's switch for the whole economy.
+ *
+ * Its own function rather than a field on `updateEvent`, for two reasons. The
+ * generated types do not know `dust_enabled` yet, so the typed client rejects it
+ * and this needs the same untyped shim the rest of the feature uses. And a
+ * feature switch reads better owned by the feature than buried among the event's
+ * lock flags.
+ *
+ * `requireAdmin(eventId)` rather than `requireMember()`, unlike everything else
+ * in this file — this is the one dust call a player must never make.
+ *
+ * Postgres is what actually enforces the switch: every dust RPC calls
+ * `dust_enabled()` before it takes a lock, so a client that ignored the flag is
+ * still refused. This only decides what the switch says.
+ */
+export const setDustEnabled = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), enabled: z.boolean() }).parse(d))
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    noStore();
+    const sb = await db();
+    const { error } = await sb
+      .from("events")
+      .update({ dust_enabled: data.enabled })
+      .eq("id", data.eventId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const, enabled: data.enabled };
   });

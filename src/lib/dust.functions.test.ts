@@ -8,7 +8,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { callServerFn, memberHeaders } from "@/test/server-fn";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
-import { signMemberToken } from "@/lib/session.server";
+import { signAdminToken, signMemberToken } from "@/lib/session.server";
+import { adminHeaders } from "@/test/server-fn";
 
 let mock = createSupabaseMock();
 
@@ -22,6 +23,7 @@ const ME = "11111111-1111-4111-8111-111111111111";
 const THEM = "22222222-2222-4222-8222-222222222222";
 const COPY = "33333333-3333-4333-8333-333333333333";
 const REQ = "44444444-4444-4444-8444-444444444444";
+const EVENT = "55555555-5555-4555-8555-555555555555";
 
 function withDb(responses: SupabaseResponses = {}) {
   mock = createSupabaseMock(responses);
@@ -218,5 +220,76 @@ describe("rerollCopyEdition", () => {
       headers: asMe(),
     });
     expect(res).toEqual({ ok: false, reason: "staked", balance: undefined });
+  });
+});
+
+describe("the disabled reason", () => {
+  // The commissioner's switch is enforced in Postgres — every dust RPC checks
+  // dust_enabled() before it takes a lock — so what these handlers owe is
+  // passing the refusal through as something the sheet can say, rather than
+  // swallowing it into a generic failure.
+  it("comes back from a mill instead of a thrown error", async () => {
+    withDb({ "rpc.mill_card_copy": { data: { ok: false, reason: "disabled" } } });
+    const { millCardCopy } = await import("./dust.functions");
+    const res = await callServerFn<{ ok: boolean; reason: string }>(millCardCopy, {
+      data: { cardCopyId: COPY },
+      headers: asMe(),
+    });
+    expect(res).toEqual({ ok: false, reason: "disabled" });
+  });
+
+  it("comes back from a purchase too", async () => {
+    withDb({ "rpc.buy_bonus_secret_pull": { data: { ok: false, reason: "disabled" } } });
+    const { buyBonusSecretPull } = await import("./dust.functions");
+    const res = await callServerFn<{ ok: boolean; reason: string }>(buyBonusSecretPull, {
+      data: { requestId: REQ },
+      headers: asMe(),
+    });
+    expect(res).toMatchObject({ ok: false, reason: "disabled" });
+  });
+});
+
+describe("setDustEnabled", () => {
+  const asAdmin = () => adminHeaders(signAdminToken(EVENT).token);
+
+  it("refuses a member — this is the one dust call a player must never make", async () => {
+    const { setDustEnabled } = await import("./dust.functions");
+    await expect(
+      callServerFn(setDustEnabled, { data: { eventId: EVENT, enabled: true }, headers: asMe() }),
+    ).rejects.toThrow();
+  });
+
+  it("refuses an admin token for a different event", async () => {
+    const other = "66666666-6666-4666-8666-666666666666";
+    const { setDustEnabled } = await import("./dust.functions");
+    await expect(
+      callServerFn(setDustEnabled, {
+        data: { eventId: EVENT, enabled: true },
+        headers: adminHeaders(signAdminToken(other).token),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("flips the flag on the event the token is for", async () => {
+    withDb({ "events.update": { data: null } });
+    const { setDustEnabled } = await import("./dust.functions");
+    const res = await callServerFn<{ ok: boolean; enabled: boolean }>(setDustEnabled, {
+      data: { eventId: EVENT, enabled: true },
+      headers: asAdmin(),
+    });
+    expect(res).toEqual({ ok: true, enabled: true });
+    const [call] = mock.callsFor("events", "update");
+    expect(call.payload).toEqual({ dust_enabled: true });
+    expect(mock.eqValue(call, "id")).toBe(EVENT);
+  });
+
+  it("turns it off again", async () => {
+    withDb({ "events.update": { data: null } });
+    const { setDustEnabled } = await import("./dust.functions");
+    await callServerFn(setDustEnabled, {
+      data: { eventId: EVENT, enabled: false },
+      headers: asAdmin(),
+    });
+    expect(mock.callsFor("events", "update")[0].payload).toEqual({ dust_enabled: false });
   });
 });

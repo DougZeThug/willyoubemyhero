@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { EDITION_ORDER, editionRank } from "./card-edition";
 import {
+  dustLive,
   DUPE_SECRET_CREDIT,
   DUST_PRICES,
   MILL_BY_EDITION,
@@ -76,5 +77,30 @@ describe("the prices", () => {
     // The rate the whole earn side is tuned to: a daily player who keeps drawing
     // duplicates still gets somewhere.
     expect(DUPE_SECRET_CREDIT * 6).toBeGreaterThanOrEqual(DUST_PRICES.bonusPull);
+  });
+});
+
+describe("dustLive", () => {
+  // The switch decides whether the chip and the shop render at all. Postgres is
+  // what stops anything being spent, so the only cost of getting this wrong is a
+  // button that answers "not yet" — but it has to default to hiding, because the
+  // reason the switch exists is that the feature is not ready to be seen.
+  it("is on only when the event says so", () => {
+    expect(dustLive({ dust_enabled: true })).toBe(true);
+    expect(dustLive({ dust_enabled: false })).toBe(false);
+  });
+
+  it("treats an event that has not answered yet as off", () => {
+    // The vault renders before the event query resolves, and a chip that appears
+    // and then vanishes is worse than one that arrives a beat late.
+    expect(dustLive(null)).toBe(false);
+    expect(dustLive(undefined)).toBe(false);
+  });
+
+  it("treats an event that has never heard of the column as off", () => {
+    // Deploying the migration is a no-op for a client running the old bundle,
+    // and a client running the new bundle against the old view sees nothing.
+    expect(dustLive({ name: "Draft Combine" })).toBe(false);
+    expect(dustLive({ dust_enabled: null })).toBe(false);
   });
 });

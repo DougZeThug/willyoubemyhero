@@ -17,6 +17,7 @@ import { useMyCollection } from "@/hooks/use-my-collection";
 import { useDustBalance } from "@/hooks/use-dust";
 import { DustChip } from "@/components/dust-chip";
 import { DustShop } from "@/components/dust-shop";
+import { dustLive } from "@/lib/dust";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
 import { VaultSection } from "@/components/vault-section";
@@ -98,8 +99,11 @@ function PlayersPage() {
   const member = useMemberSession();
   // Members only: dust_ledger is keyed on a participant, so a guest has no
   // balance to show and the hook stays disabled rather than asking and being
-  // refused.
-  const dust = useDustBalance(member?.participantId);
+  // refused. And only while the commissioner has the economy switched on —
+  // asking for a balance nobody can spend is a round trip for a chip that is
+  // not going to render.
+  const dustOn = dustLive(event);
+  const dust = useDustBalance(dustOn ? member?.participantId : null);
   const [shopOpen, setShopOpen] = useState(false);
   // The shop lists spares by card id, and the bundle is the only place a name
   // lives. Passed in rather than re-fetched there: this page already holds it.
@@ -617,7 +621,9 @@ function PlayersPage() {
                 <h1 className="font-display text-3xl font-black uppercase leading-none">
                   The Vault
                 </h1>
-                <DustChip balance={dust.data?.balance} onClick={() => setShopOpen(true)} />
+                {dustOn && (
+                  <DustChip balance={dust.data?.balance} onClick={() => setShopOpen(true)} />
+                )}
               </div>
               {/* The collected count waits for `ready`. It used to be read straight
                   off IndexedDB, which had been inflated to the whole roster by the
@@ -778,15 +784,19 @@ function PlayersPage() {
         })}
       </div>
 
-      <DustShop
-        open={shopOpen}
-        onOpenChange={setShopOpen}
-        balance={dust.data?.balance}
-        participantId={member?.participantId}
-        actor={actor}
-        eventId={event?.id}
-        nameFor={nameFor}
-      />
+      {/* Not merely hidden: unmounted, so the shop's own spares query never
+          fires while the economy is off. */}
+      {dustOn && (
+        <DustShop
+          open={shopOpen}
+          onOpenChange={setShopOpen}
+          balance={dust.data?.balance}
+          participantId={member?.participantId}
+          actor={actor}
+          eventId={event?.id}
+          nameFor={nameFor}
+        />
+      )}
     </div>
   );
 }

@@ -14,6 +14,26 @@
 import { EDITION_ORDER, type Edition } from "./card-edition";
 
 /**
+ * Whether the dust economy is switched on, read off the active event.
+ *
+ * The commissioner's switch (`events.dust_enabled`, 20260828120000). Postgres
+ * enforces it — every dust RPC refuses while it is off, and nothing accrues —
+ * so this is only about whether to render the chip and the shop at all. A stale
+ * `true` here costs a button that answers "not yet"; it cannot spend anything.
+ *
+ * Takes `unknown` and narrows here, because `dust_enabled` is not in the
+ * generated event type yet: `src/integrations/supabase/types.ts` is
+ * `supabase gen types` output and must not be hand-edited. Declaring the
+ * parameter as `{ dust_enabled?: boolean }` does not work either — an all-
+ * optional type triggers TypeScript's weak-type check and rejects an event that
+ * has none of its properties. So the cast lives here, once, rather than at every
+ * call site. It stops being needed the next time those types are regenerated.
+ */
+export function dustLive(event: unknown): boolean {
+  return !!(event as { dust_enabled?: boolean | null } | null | undefined)?.dust_enabled;
+}
+
+/**
  * What a duplicate secret pays.
  *
  * The dupe was the one moment in the day that felt like nothing — the code called
