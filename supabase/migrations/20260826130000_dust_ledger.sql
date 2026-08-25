@@ -561,8 +561,17 @@ BEGIN
   -- No floor tier. A bought pull buys a pull; the rarity floors stay something
   -- a streak earns.
   _pull := public.pull_bonus_secret_card(_participant_id, NULL, _event_id, NULL);
+  -- RAISED, NOT RETURNED, and the difference is 150 dust. The debit is already
+  -- filed by this point, and a plpgsql RETURN commits the transaction it is in —
+  -- so answering softly here would take the payment and hand over nothing. The
+  -- exception rolls the debit back with it.
+  --
+  -- Only reachable as a race: the catalogue guard above already answers the
+  -- ordinary empty-pool case softly, before any money moves. Getting here means
+  -- the last card was retired in between, which is a genuine "should not happen"
+  -- and is worth surfacing as one.
   IF _pull IS NULL THEN
-    RETURN jsonb_build_object('ok', false, 'reason', 'unavailable');
+    RAISE EXCEPTION 'No secret card available to buy';
   END IF;
 
   _out := jsonb_build_object('ok', true, 'price', _price,

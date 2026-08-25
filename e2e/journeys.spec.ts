@@ -747,15 +747,20 @@ test.describe("opening a pack", () => {
     // device ids for one whose first card rolled non-standard, because the finish
     // was a pure function of the pack seed and the test could compute it. It is a
     // server answer now, so the stub simply says what the server said.
+    // PLATINUM, not gold, and that is not arbitrary: card-rarity.ts labels the
+    // podium tier "Gold" as well, so getByText("Gold") matches a second-place
+    // card's rarity badge and has nothing to do with its finish. Platinum,
+    // silver and bronze are the three finish labels no rarity label collides
+    // with.
     const device = "finish-device";
     const ids = expectedPack(`d:${device}`);
     server.set("recordCardPulls", {
       ok: true,
       recorded: ids.length,
       packsOpened: 1,
-      editions: { [ids[0]]: "gold" },
+      editions: { [ids[0]]: "platinum" },
     });
-    const label = editionLabel("gold")!;
+    const label = editionLabel("platinum")!;
 
     await page.addInitScript((d: string) => {
       localStorage.setItem("wwbh:device-id", d);
@@ -782,16 +787,24 @@ test.describe("opening a pack", () => {
     // The failure the whole round trip is designed around: a card can be turned
     // over before the record lands. It must show the plainest thing and correct
     // itself, never a rare nobody has decided on.
+    //
+    // Failed rather than merely slow, because a delay races the tear ceremony —
+    // which takes long enough that the answer usually beats the first tap, and a
+    // test that has to lose that race is a test that flakes when the ceremony is
+    // retimed. The route retries on its own (0/4s/8s), so recovering mid-flight
+    // exercises the real path.
+    // Platinum for the same reason as the test above: "Gold" is also a rarity
+    // label, so it would match a podium card's badge whatever the finish is.
     const device = "slow-finish-device";
     const ids = expectedPack(`d:${device}`);
     server.set("recordCardPulls", {
       ok: true,
       recorded: ids.length,
       packsOpened: 1,
-      editions: { [ids[0]]: "gold" },
+      editions: { [ids[0]]: "platinum" },
     });
-    server.delay("recordCardPulls", 4_000);
-    const label = editionLabel("gold")!;
+    server.fail("recordCardPulls", "offline at the tear");
+    const label = editionLabel("platinum")!;
 
     await page.addInitScript((d: string) => {
       localStorage.setItem("wwbh:device-id", d);
@@ -802,8 +815,11 @@ test.describe("opening a pack", () => {
 
     // Turned, and carrying no claim about its finish.
     await expect(page.getByText(label, { exact: false })).toBeHidden();
-    // Then the answer arrives and the card tells the truth.
-    await expect(page.getByText(label, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
+
+    // Then the network comes back, the retry lands, and the card tells the truth
+    // without anybody touching it.
+    server.recover("recordCardPulls");
+    await expect(page.getByText(label, { exact: false }).first()).toBeVisible({ timeout: 30_000 });
   });
 
   test("puts no finish on a card nobody has packed", async ({ page }) => {
