@@ -1,18 +1,7 @@
 import { Gift, Loader2, Pencil } from "lucide-react";
-import {
-  BORDER_FX_FALLBACK,
-  BorderFxPicker,
-  CompactLookSelect,
-  FOIL_FALLBACK,
-  FoilPicker,
-  FoilSwatch,
-} from "@/components/secret-look-picker";
-import {
-  SECRET_BORDER_FX_OPTIONS,
-  SECRET_FOIL_OPTIONS,
-  type SecretCollection,
-  secretCollectionLabel,
-} from "@/lib/secret-cards";
+import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
+import { type SecretCollection, secretCollectionLabel } from "@/lib/secret-cards";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
