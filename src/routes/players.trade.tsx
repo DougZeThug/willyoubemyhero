@@ -389,8 +389,7 @@ function TradePage() {
                 />
               ))}
             </OfferCarousel>
-          )}
-        </section>
+          </section>
         )}
 
         {/* ---------- Compose ---------- */}
