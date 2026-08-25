@@ -573,7 +573,7 @@ export const createSecretCollection = createServerFn({ method: "POST" })
     return { ok: true as const, id, label: data.label };
   });
 
-/** Rename, reorder or hide a set. The id is never touched — rows point at it. */
+/** Rename, recolour, reorder or hide a set. The id is never touched — rows point at it. */
 export const updateSecretCollection = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
@@ -582,16 +582,29 @@ export const updateSecretCollection = createServerFn({ method: "POST" })
         label: collectionLabel.optional(),
         sortOrder: z.number().int().min(0).max(100_000).optional(),
         active: z.boolean().optional(),
+        // Null clears the theme; anything outside the preset list is rejected
+        // rather than stored, so the column can only ever hold a colour the app
+        // knows how to render.
+        accent: z
+          .union([z.enum(SET_ACCENT_IDS as [string, ...string[]]), z.null()])
+          .optional(),
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
-    const patch: { label?: string; sort_order?: number; active?: boolean } = {};
+    const patch: {
+      label?: string;
+      sort_order?: number;
+      active?: boolean;
+      accent?: string | null;
+    } = {};
     if (data.label !== undefined) patch.label = data.label;
     if (data.sortOrder !== undefined) patch.sort_order = data.sortOrder;
     if (data.active !== undefined) patch.active = data.active;
+    if (data.accent !== undefined) patch.accent = data.accent;
     if (Object.keys(patch).length === 0) return { ok: true as const };
+
 
     const db = await secrets();
     const { data: row, error } = await db
