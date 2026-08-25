@@ -18,6 +18,7 @@ import {
   SECRET_BORDER_FX_OPTIONS,
   SECRET_COLLECTION_ID_PATTERN,
   SECRET_FOIL_OPTIONS,
+  SET_ACCENT_IDS,
 } from "./secret-cards";
 import { bestSecretTier, toSecretTier } from "./secret-rarity";
 import { uuid as zuuid } from "./zod-uuid";
@@ -399,13 +400,14 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
   // Every set, hidden ones included: this is the screen where they are managed.
   const { data: collectionRows } = await db
     .from("secret_collections")
-    .select("id, label, sort_order, active")
+    .select("id, label, accent, sort_order, active")
     .order("sort_order", { ascending: true })
     .order("label", { ascending: true })
     .returns<SecretCollectionRow[]>();
   const collections = (collectionRows ?? []).map((c) => ({
     id: c.id,
     label: c.label,
+    accent: c.accent ?? null,
     sortOrder: c.sort_order,
     active: c.active,
   }));
@@ -467,15 +469,17 @@ export const getSecretCollections = createServerFn({ method: "GET" }).handler(as
   const db = await secrets();
   const { data, error } = await db
     .from("secret_collections")
-    .select("id, label, sort_order, active")
+    .select("id, label, accent, sort_order, active")
     .eq("active", true)
     .order("sort_order", { ascending: true })
     .order("label", { ascending: true })
     .returns<SecretCollectionRow[]>();
   if (error) throw error;
-  // Names of sets, never their sizes: this says nothing about what is inside one,
-  // so the silence rule at the top of this file still holds for a member.
-  return { collections: (data ?? []).map((c) => ({ id: c.id, label: c.label })) };
+  // Names and colours of sets, never their sizes: a theme says nothing about
+  // what is inside one, so the silence rule at the top of this file still holds.
+  return {
+    collections: (data ?? []).map((c) => ({ id: c.id, label: c.label, accent: c.accent ?? null })),
+  };
 });
 
 /**
@@ -570,7 +574,7 @@ export const createSecretCollection = createServerFn({ method: "POST" })
     return { ok: true as const, id, label: data.label };
   });
 
-/** Rename, reorder or hide a set. The id is never touched — rows point at it. */
+/** Rename, recolour, reorder or hide a set. The id is never touched — rows point at it. */
 export const updateSecretCollection = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
@@ -579,15 +583,25 @@ export const updateSecretCollection = createServerFn({ method: "POST" })
         label: collectionLabel.optional(),
         sortOrder: z.number().int().min(0).max(100_000).optional(),
         active: z.boolean().optional(),
+        // Null clears the theme; anything outside the preset list is rejected
+        // rather than stored, so the column can only ever hold a colour the app
+        // knows how to render.
+        accent: z.union([z.enum(SET_ACCENT_IDS as [string, ...string[]]), z.null()]).optional(),
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
-    const patch: { label?: string; sort_order?: number; active?: boolean } = {};
+    const patch: {
+      label?: string;
+      sort_order?: number;
+      active?: boolean;
+      accent?: string | null;
+    } = {};
     if (data.label !== undefined) patch.label = data.label;
     if (data.sortOrder !== undefined) patch.sort_order = data.sortOrder;
     if (data.active !== undefined) patch.active = data.active;
+    if (data.accent !== undefined) patch.accent = data.accent;
     if (Object.keys(patch).length === 0) return { ok: true as const };
 
     const db = await secrets();

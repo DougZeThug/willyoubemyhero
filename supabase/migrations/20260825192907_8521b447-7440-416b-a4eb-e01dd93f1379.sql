@@ -1,0 +1,1 @@
+ALTER TABLE public.secret_collections ADD COLUMN IF NOT EXISTS accent text;

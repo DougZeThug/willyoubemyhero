@@ -46,6 +46,8 @@ export type SecretCardRow = {
 export type SecretCollectionRow = {
   id: string;
   label: string;
+  /** A SET_ACCENTS preset id, or null for no theme. */
+  accent: string | null;
   sort_order: number;
   active: boolean;
   created_at: string;

@@ -276,8 +276,54 @@ export const SECRET_BORDER_FX_OPTIONS = [
   { id: "steady", label: "Steady" },
 ] as const;
 
-/** One set, as the admin authored it. */
-export type SecretCollection = { id: string; label: string };
+/**
+ * One set, as the admin authored it.
+ *
+ * `accent` is a preset id from SET_ACCENTS, not a colour: the palette can be
+ * retuned without rewriting rows, and an id retired from the list degrades to
+ * "no theme" rather than to broken CSS. Null/undefined means untinted.
+ */
+export type SecretCollection = { id: string; label: string; accent?: string | null };
+
+/**
+ * The colours a set can wear.
+ *
+ * Ids are stored in `secret_collections.accent`, so they are add-only for the
+ * same reason foil ids and award category ids are. The values are oklch to match
+ * every other colour in this codebase, and each is picked bright enough to read
+ * as a border and a glow against the near-black field.
+ */
+export const SET_ACCENTS = [
+  { id: "cyan", label: "Cyan", oklch: "oklch(0.82 0.14 210)" },
+  { id: "green", label: "Green", oklch: "oklch(0.78 0.19 150)" },
+  { id: "gold", label: "Gold", oklch: "oklch(0.84 0.17 88)" },
+  { id: "orange", label: "Orange", oklch: "oklch(0.76 0.18 55)" },
+  { id: "red", label: "Red", oklch: "oklch(0.68 0.21 25)" },
+  { id: "rose", label: "Rose", oklch: "oklch(0.76 0.16 5)" },
+  { id: "magenta", label: "Magenta", oklch: "oklch(0.72 0.24 330)" },
+  { id: "violet", label: "Violet", oklch: "oklch(0.68 0.2 295)" },
+  { id: "blue", label: "Blue", oklch: "oklch(0.7 0.18 260)" },
+  { id: "teal", label: "Teal", oklch: "oklch(0.78 0.13 185)" },
+] as const;
+
+export type SetAccentId = (typeof SET_ACCENTS)[number]["id"];
+
+export const SET_ACCENT_IDS = SET_ACCENTS.map((a) => a.id) as readonly string[];
+
+/** The colour for a stored accent id, or null when there is no theme. */
+export function setAccentColor(id: string | null | undefined): string | null {
+  if (!id) return null;
+  return SET_ACCENTS.find((a) => a.id === id)?.oklch ?? null;
+}
+
+/** The colour a set wears, looked up by set id. Null for unsorted or untinted. */
+export function setAccent(
+  id: string | null | undefined,
+  sets: readonly SecretCollection[] = SECRET_COLLECTIONS,
+): string | null {
+  if (!id) return null;
+  return setAccentColor(sets.find((c) => c.id === id)?.accent);
+}
 
 /**
  * The sets that shipped before sets were data.
@@ -347,7 +393,7 @@ export function secretCollectionLabel(
 export function groupBySecretCollection<T extends { collection?: string | null }>(
   items: readonly T[],
   sets: readonly SecretCollection[] = SECRET_COLLECTIONS,
-): { id: string | null; label: string; items: T[] }[] {
+): { id: string | null; label: string; accent: string | null; items: T[] }[] {
   const groups = new Map<string | null, T[]>();
   for (const item of items) {
     // `||`, not `??`: the column is unconstrained text, so a row can hold "" as
@@ -361,11 +407,11 @@ export function groupBySecretCollection<T extends { collection?: string | null }
     if (bucket) bucket.push(item);
     else groups.set(key, [item]);
   }
-  const ordered: { id: string | null; label: string; items: T[] }[] = [];
+  const ordered: { id: string | null; label: string; accent: string | null; items: T[] }[] = [];
   for (const c of sets) {
     const items = groups.get(c.id);
     if (items) {
-      ordered.push({ id: c.id, label: c.label, items });
+      ordered.push({ id: c.id, label: c.label, accent: setAccentColor(c.accent), items });
       groups.delete(c.id);
     }
   }
@@ -373,8 +419,10 @@ export function groupBySecretCollection<T extends { collection?: string | null }
   const unsorted = groups.get(null);
   groups.delete(null);
   for (const [id, items] of groups)
-    ordered.push({ id, label: secretCollectionLabel(id, sets), items });
-  if (unsorted) ordered.push({ id: null, label: UNSORTED_COLLECTION_LABEL, items: unsorted });
+    ordered.push({ id, label: secretCollectionLabel(id, sets), accent: null, items });
+  if (unsorted)
+    ordered.push({ id: null, label: UNSORTED_COLLECTION_LABEL, accent: null, items: unsorted });
+
   return ordered;
 }
 

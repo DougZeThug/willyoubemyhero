@@ -1383,6 +1383,7 @@ export type Database = {
       }
       secret_collections: {
         Row: {
+          accent: string | null
           active: boolean
           created_at: string
           id: string
@@ -1391,6 +1392,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          accent?: string | null
           active?: boolean
           created_at?: string
           id: string
@@ -1399,6 +1401,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          accent?: string | null
           active?: boolean
           created_at?: string
           id?: string

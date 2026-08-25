@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -46,9 +46,30 @@ export function VaultSection({
   rearranging?: boolean;
   children: ReactNode;
 }) {
+  // A themed shelf is a lit panel rather than a hairline box: the set's colour
+  // as a soft wash behind the cards, a border in the same colour, and a glow
+  // only while it is open — a page of rolled-up shelves all glowing is noise.
+  const themed = !!accent;
+  const style = accent
+    ? ({
+        "--set-accent": accent,
+        background: `radial-gradient(120% 100% at 50% 0%, color-mix(in oklab, ${accent} 12%, transparent) 0%, transparent 70%), var(--gradient-bezel)`,
+        borderColor: `color-mix(in oklab, ${accent} 35%, transparent)`,
+        boxShadow: open
+          ? `inset 0 1px 0 oklch(1 0 0 / 6%), 0 0 24px -6px color-mix(in oklab, ${accent} 55%, transparent)`
+          : "inset 0 1px 0 oklch(1 0 0 / 6%)",
+      } as CSSProperties)
+    : undefined;
+
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} asChild>
-      <section className="mb-3 rounded-lg border border-white/10 last:mb-0">
+      <section
+        className={cn(
+          "mb-3 rounded-lg border last:mb-0 transition-shadow",
+          themed ? "border" : "border-white/10",
+        )}
+        style={style}
+      >
         {/* The move buttons are siblings of the trigger, never inside it: nested,
             every tap to reorder would also roll the shelf up or down. */}
         <div className="flex items-center pl-3 pr-1.5">
@@ -64,7 +85,10 @@ export function VaultSection({
             </h2>
             <span className="flex shrink-0 items-center gap-2">
               {meta != null && (
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                <span
+                  className="text-[10px] uppercase tracking-widest text-muted-foreground"
+                  style={accent ? { color: accent, opacity: 0.8 } : undefined}
+                >
                   {meta}
                 </span>
               )}
@@ -75,9 +99,11 @@ export function VaultSection({
                   open && "rotate-180",
                   rearranging && "opacity-30",
                 )}
+                style={accent ? { color: accent } : undefined}
               />
             </span>
           </CollapsibleTrigger>
+
           {rearranging && (
             // A divider and real space, so the arrows read as their own control
             // group rather than as more header.
