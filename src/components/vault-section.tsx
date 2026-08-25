@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -58,7 +58,7 @@ export function VaultSection({
         boxShadow: open
           ? `inset 0 1px 0 oklch(1 0 0 / 6%), 0 0 24px -6px color-mix(in oklab, ${accent} 55%, transparent)`
           : "inset 0 1px 0 oklch(1 0 0 / 6%)",
-      } as React.CSSProperties)
+      } as CSSProperties)
     : undefined;
 
   return (
