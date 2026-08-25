@@ -6,13 +6,22 @@ import type { SecretTier } from "./secret-rarity";
 /**
  * How a completed trade is described in the public feed.
  *
- * This is the shape of `trades.proposer_gave` / `recipient_gave`, and the
- * redaction is the point: a roster item names its card because that card is
- * public, and a secret item names nothing at all because the `trades` table is
- * anon-readable and published to realtime. Widening this type means widening a
- * leak — see the column comments in 20260817120000_card_trading.sql.
+ * This is the shape of `trades.proposer_gave` / `recipient_gave`. A roster item
+ * names its card because that card is public. A secret item now names its card
+ * too — the league asked the feed to say which secret moved, and that was a
+ * deliberate widening of the old kind-only redaction: a NAME, for a card that
+ * actually changed hands, and nothing else. Art, flavour, foil and tier stay
+ * server-only, and an untraded card still appears nowhere, so the catalogue is
+ * not enumerable from this table. Do not widen it further — see the column
+ * comments in 20260825140000_trade_feed_secret_names.sql.
+ *
+ * Both fields are optional because rows written before that migration, and any
+ * whose card row has since gone, carry neither.
  */
-export type TradeSummaryItem = { kind: "roster"; eventParticipantId: string } | { kind: "secret" };
+export type TradeSummaryItem =
+  | { kind: "roster"; eventParticipantId: string }
+  | { kind: "secret"; secretCardId?: string; name?: string };
+
 
 /**
  * The broadcast event name a trade nudge is sent under.
