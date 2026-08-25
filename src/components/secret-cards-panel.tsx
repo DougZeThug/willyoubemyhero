@@ -27,7 +27,7 @@ import {
 } from "@/lib/secret-cards.functions";
 import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
-import { BorderFxPicker, FoilPicker, FoilSwatch } from "@/components/secret-look-picker";
+import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
 import {
   SECRET_BORDER_FX_OPTIONS,
   SECRET_FOIL_OPTIONS,
