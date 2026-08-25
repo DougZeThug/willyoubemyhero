@@ -321,15 +321,16 @@ function TradePage() {
       <div className="mx-auto max-w-3xl px-4 py-6">
         <Header />
 
-        <section className="mb-6">
+        <section className="mb-7">
           <SectionTitle
-            icon={<Inbox className="h-3.5 w-3.5" />}
-            label={`Waiting on you (${inbox.length})`}
+            icon={<Inbox className="h-4 w-4" />}
+            label="Waiting on you"
+            count={inbox.length}
           />
           {inbox.length === 0 ? (
             <p className="text-xs text-muted-foreground">Nobody wants your cards. Yet.</p>
           ) : (
-            <div className="space-y-3">
+            <OfferCarousel>
               {inbox.map((offer) => (
                 <TradeOfferCard
                   key={offer.id}
@@ -342,14 +343,14 @@ function TradePage() {
                       <button
                         onClick={() => accept(offer.id)}
                         disabled={pending === offer.id}
-                        className="neon-btn !px-4 !py-2 !text-xs disabled:opacity-50"
+                        className="neon-btn !px-6 !py-2.5 !text-xs disabled:opacity-50"
                       >
                         Accept
                       </button>
                       <button
                         onClick={() => resolve(offer.id, "decline")}
                         disabled={pending === offer.id}
-                        className="rounded-full border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-danger/50 hover:text-danger disabled:opacity-50"
+                        className="rounded-full border border-white/10 px-6 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-danger/50 hover:text-danger disabled:opacity-50"
                       >
                         Decline
                       </button>
@@ -357,17 +358,18 @@ function TradePage() {
                   }
                 />
               ))}
-            </div>
+            </OfferCarousel>
           )}
         </section>
 
         {outbox.length > 0 && (
-          <section className="mb-6">
+          <section className="mb-7">
             <SectionTitle
-              icon={<Send className="h-3.5 w-3.5" />}
-              label={`Out there (${outbox.length})`}
+              icon={<Send className="h-4 w-4" />}
+              label="Out there"
+              count={outbox.length}
             />
-            <div className="space-y-3">
+            <OfferCarousel>
               {outbox.map((offer) => (
                 <TradeOfferCard
                   key={offer.id}
@@ -379,14 +381,14 @@ function TradePage() {
                     <button
                       onClick={() => resolve(offer.id, "cancel")}
                       disabled={pending === offer.id}
-                      className="rounded-full border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-50"
+                      className="rounded-full border border-primary/40 px-6 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                     >
                       Take it back
                     </button>
                   }
                 />
               ))}
-            </div>
+            </OfferCarousel>
           </section>
         )}
 
@@ -511,7 +513,11 @@ function Header() {
         <ArrowLeft className="h-3.5 w-3.5" />
         The Vault
       </Link>
-      <h1 className="mt-2 font-display text-3xl font-black uppercase leading-none">Trading Post</h1>
+      {/* Two-tone rather than flat: the trade tab is the social one, and the
+          heading is the only thing on it that gets to shout. */}
+      <h1 className="mt-2 bg-gradient-to-r from-primary via-primary to-warn bg-clip-text font-display text-4xl font-black uppercase leading-none text-transparent">
+        Trading Post
+      </h1>
       <p className="mt-2 text-xs text-muted-foreground">
         Player cards: spares only, you always keep one. Secrets: anything you hold, even your last
         copy. The finish travels with the card.
@@ -520,11 +526,64 @@ function Header() {
   );
 }
 
-function SectionTitle({ icon, label }: { icon?: React.ReactNode; label: string }) {
+function SectionTitle({
+  icon,
+  label,
+  count,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  count?: number;
+}) {
   return (
-    <div className="mb-2 flex items-center gap-1.5 text-primary">
+    <div className="mb-2 flex items-center gap-2 text-primary">
       {icon}
-      <h2 className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">{label}</h2>
+      <h2 className="font-display text-[11px] font-bold uppercase tracking-[0.3em]">{label}</h2>
+      {count !== undefined && (
+        <span className="rounded-full bg-primary px-2 py-0.5 font-display text-[10px] font-black text-background">
+          {count}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One offer at a time, swiped.
+ *
+ * A vertical stack of full-size offers buries the second one below the fold on a
+ * phone, which is where this screen actually gets used. Scroll-snap rather than a
+ * carousel library: the browser already does the physics.
+ */
+function OfferCarousel({ children }: { children: React.ReactNode[] }) {
+  const [active, setActive] = useState(0);
+  if (children.length === 1) return <>{children[0]}</>;
+  return (
+    <div>
+      <div
+        className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setActive(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+        }}
+      >
+        {children.map((child, i) => (
+          <div key={i} className="w-full shrink-0 snap-center">
+            {child}
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-center gap-1.5">
+        {children.map((_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-1.5 w-1.5 rounded-full transition-colors",
+              i === active ? "bg-primary" : "bg-white/25",
+            )}
+          />
+        ))}
+      </div>
     </div>
   );
 }

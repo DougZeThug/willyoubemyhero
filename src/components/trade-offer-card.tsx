@@ -25,6 +25,17 @@ export type TradeItemTileProps = {
   selected?: boolean;
   /** Rendered dimmed with this caption instead of as a control. */
   blockedLabel?: string;
+  /**
+   * `sm` is the picker strip, where eight of these live side by side. `lg` is a
+   * live offer, which is the loudest thing on the screen and gets a card you can
+   * actually read across a garden.
+   */
+  size?: "sm" | "lg";
+};
+
+const TILE_WIDTH: Record<"sm" | "lg", string> = {
+  sm: "w-[84px]",
+  lg: "w-[132px]",
 };
 
 /**
@@ -41,7 +52,10 @@ export function TradeItemTile({
   onClick,
   selected,
   blockedLabel,
+  size = "sm",
 }: TradeItemTileProps) {
+  const width = TILE_WIDTH[size];
+  const big = size === "lg";
   const roster = item.kind === "roster" ? lookup(item.eventParticipantId) : null;
   const tier = item.kind === "secret" ? secretTierStyle(item.tier) : null;
   const name = item.kind === "roster" ? (roster?.name ?? "—") : item.name;
@@ -58,13 +72,18 @@ export function TradeItemTile({
         name={name}
         rarity={item.kind === "roster" ? (roster?.rarity ?? rarityStyle("base")) : SECRET_RARITY}
         edition={item.kind === "roster" ? item.edition : undefined}
-        // Subtle throughout: these are thumbnails in a list, and a full-strength
-        // foil on eight of them at once is noise rather than shine.
-        intensity="subtle"
+        // Subtle in a picker strip, where eight foils at once are noise. A live
+        // offer is one card a side, so it gets the real shine.
+        intensity={big ? "full" : "subtle"}
         interactive={false}
       />
-      <div className="mt-1.5 text-center">
-        <div className="truncate font-display text-[11px] font-black uppercase tracking-wide">
+      <div className={cn("text-center", big ? "mt-2" : "mt-1.5")}>
+        <div
+          className={cn(
+            "truncate font-display font-black uppercase tracking-wide",
+            big ? "text-[13px]" : "text-[11px]",
+          )}
+        >
           {name}
         </div>
         {tier && (
@@ -101,7 +120,7 @@ export function TradeItemTile({
   // from the picker reads as data loss, which is what people actually report.
   if (blockedLabel) {
     return (
-      <div className="w-[84px] shrink-0 opacity-40 grayscale" aria-disabled="true">
+      <div className={cn(width, "shrink-0 opacity-40 grayscale")} aria-disabled="true">
         {body}
         <div className="mt-0.5 text-center text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
           {blockedLabel}
@@ -110,14 +129,15 @@ export function TradeItemTile({
     );
   }
 
-  if (!onClick) return <div className="w-[84px] shrink-0">{body}</div>;
+  if (!onClick) return <div className={cn(width, "shrink-0")}>{body}</div>;
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        "w-[84px] shrink-0 rounded-md p-1 text-left transition-all focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        width,
+        "shrink-0 rounded-md p-1 text-left transition-all focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         selected ? "bg-primary/15 ring-2 ring-primary" : "hover:bg-white/[0.04]",
       )}
     >
@@ -130,14 +150,22 @@ function Side({
   label,
   items,
   lookup,
+  size,
 }: {
   label: string;
   items: TradeItemView[];
   lookup: RosterCardLookup;
+  size: "sm" | "lg";
 }) {
+  const big = size === "lg";
   return (
     <div className="min-w-0 flex-1">
-      <div className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+      <div
+        className={cn(
+          "mb-1.5 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
+          big && "text-center text-[10px]",
+        )}
+      >
         {label}
       </div>
       {items.length === 0 ? (
@@ -146,12 +174,13 @@ function Side({
         // side can arrive empty and must still render as something.
         <p className="text-[11px] text-muted-foreground">Nothing left on this side.</p>
       ) : (
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className={cn("flex gap-2 overflow-x-auto pb-1", big && "justify-center")}>
           {items.map((item) => (
             <TradeItemTile
               key={item.kind === "secret" ? item.pullId : item.copyId}
               item={item}
               lookup={lookup}
+              size={size}
             />
           ))}
         </div>
@@ -177,10 +206,24 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
   const iGet = iAmProposer ? offer.recipientGives : offer.proposerGives;
   const pending = offer.status === "pending";
 
+  // A live offer is the loudest thing on the screen: ringed, glowing, big cards.
+  // A settled one is a receipt, so it stays the quiet bezel it always was.
+  const size = pending ? "lg" : "sm";
+
   return (
-    <article className="hud-bezel rounded-lg border border-white/10 p-3">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h3 className="min-w-0 truncate font-display text-sm font-black uppercase tracking-wide">
+    <article
+      className={cn(
+        "hud-bezel rounded-xl p-4",
+        pending ? "hud-glow border-2 border-primary/70" : "border border-white/10 p-3",
+      )}
+    >
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <h3
+          className={cn(
+            "min-w-0 truncate font-display font-black uppercase tracking-wide",
+            pending ? "text-xl" : "text-sm",
+          )}
+        >
           {iAmProposer ? `You → ${nameOf(theirId)}` : `${nameOf(theirId)} → You`}
         </h3>
         {!pending && (
@@ -193,17 +236,29 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
       {/* The one-line version, which is also what the public feed shows. It is
           above the tiles rather than below because on a phone, in a garden, it is
           usually the only part anyone reads. */}
-      <p className="mb-2.5 text-[11px] text-muted-foreground">
+      <p className={cn("mb-3 text-muted-foreground", pending ? "text-sm" : "text-[11px]")}>
         {tradeItemsLabel(iGive)} for {tradeItemsLabel(iGet)}
       </p>
 
-      <div className="flex items-start gap-3">
-        <Side label="You give" items={iGive} lookup={lookup} />
-        <ArrowRight className="mt-6 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        <Side label="You get" items={iGet} lookup={lookup} />
+      <div className={cn("flex items-start", pending ? "gap-2" : "gap-3")}>
+        <Side label="You give" items={iGive} lookup={lookup} size={size} />
+        <ArrowRight
+          className={cn(
+            "shrink-0 text-primary drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
+            pending ? "mt-20 h-7 w-7" : "mt-6 h-4 w-4 text-muted-foreground",
+          )}
+          aria-hidden
+        />
+        <Side label="You get" items={iGet} lookup={lookup} size={size} />
       </div>
 
-      {actions && <div className="mt-3 flex flex-wrap gap-2">{actions}</div>}
+      {actions && (
+        <div
+          className={cn("mt-4 flex flex-wrap gap-2", pending ? "justify-center" : "justify-start")}
+        >
+          {actions}
+        </div>
+      )}
     </article>
   );
 }
