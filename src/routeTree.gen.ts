@@ -17,6 +17,7 @@ import { Route as AwardsRouteImport } from './routes/awards'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
+import { Route as LeagueRouteImport } from './routes/league'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as OrderRouteImport } from './routes/order'
@@ -26,6 +27,7 @@ import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } fr
 import { Route as PlayersIndexRouteImport } from './routes/players.index'
 import { Route as PlayersIdRouteImport } from './routes/players.$id'
 import { Route as PlayersPackRouteImport } from './routes/players.pack'
+import { Route as PlayersShopRouteImport } from './routes/players.shop'
 import { Route as PlayersTradeRouteImport } from './routes/players.trade'
 import { Route as RecapSlugRouteImport } from './routes/recap.$slug'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
@@ -68,6 +70,11 @@ const DraftRoute = DraftRouteImport.update({
 const LeaderboardRoute = LeaderboardRouteImport.update({
   id: '/leaderboard',
   path: '/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeagueRoute = LeagueRouteImport.update({
+  id: '/league',
+  path: '/league',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LiveRoute = LiveRouteImport.update({
@@ -117,6 +124,11 @@ const PlayersPackRoute = PlayersPackRouteImport.update({
   path: '/players/pack',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlayersShopRoute = PlayersShopRouteImport.update({
+  id: '/players/shop',
+  path: '/players/shop',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlayersTradeRoute = PlayersTradeRouteImport.update({
   id: '/players/trade',
   path: '/players/trade',
@@ -143,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/league': typeof LeagueRoute
   '/live': typeof LiveRoute
   '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
@@ -151,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/players/$id': typeof PlayersIdRoute
   '/players/pack': typeof PlayersPackRoute
+  '/players/shop': typeof PlayersShopRoute
   '/players/trade': typeof PlayersTradeRoute
   '/recap/$slug': typeof RecapSlugRoute
   '/players/': typeof PlayersIndexRoute
@@ -165,6 +179,7 @@ export interface FileRoutesByTo {
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/league': typeof LeagueRoute
   '/live': typeof LiveRoute
   '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
@@ -173,6 +188,7 @@ export interface FileRoutesByTo {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/players/$id': typeof PlayersIdRoute
   '/players/pack': typeof PlayersPackRoute
+  '/players/shop': typeof PlayersShopRoute
   '/players/trade': typeof PlayersTradeRoute
   '/recap/$slug': typeof RecapSlugRoute
   '/players': typeof PlayersIndexRoute
@@ -188,6 +204,7 @@ export interface FileRoutesById {
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/league': typeof LeagueRoute
   '/live': typeof LiveRoute
   '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
@@ -196,6 +213,7 @@ export interface FileRoutesById {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/players/$id': typeof PlayersIdRoute
   '/players/pack': typeof PlayersPackRoute
+  '/players/shop': typeof PlayersShopRoute
   '/players/trade': typeof PlayersTradeRoute
   '/recap/$slug': typeof RecapSlugRoute
   '/players/': typeof PlayersIndexRoute
@@ -212,6 +230,7 @@ export interface FileRouteTypes {
     | '/claim'
     | '/draft'
     | '/leaderboard'
+    | '/league'
     | '/live'
     | '/mcp'
     | '/order'
@@ -220,6 +239,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/players/$id'
     | '/players/pack'
+    | '/players/shop'
     | '/players/trade'
     | '/recap/$slug'
     | '/players/'
@@ -234,6 +254,7 @@ export interface FileRouteTypes {
     | '/claim'
     | '/draft'
     | '/leaderboard'
+    | '/league'
     | '/live'
     | '/mcp'
     | '/order'
@@ -242,6 +263,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/players/$id'
     | '/players/pack'
+    | '/players/shop'
     | '/players/trade'
     | '/recap/$slug'
     | '/players'
@@ -256,6 +278,7 @@ export interface FileRouteTypes {
     | '/claim'
     | '/draft'
     | '/leaderboard'
+    | '/league'
     | '/live'
     | '/mcp'
     | '/order'
@@ -264,6 +287,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/players/$id'
     | '/players/pack'
+    | '/players/shop'
     | '/players/trade'
     | '/recap/$slug'
     | '/players/'
@@ -279,6 +303,7 @@ export interface RootRouteChildren {
   ClaimRoute: typeof ClaimRoute
   DraftRoute: typeof DraftRoute
   LeaderboardRoute: typeof LeaderboardRoute
+  LeagueRoute: typeof LeagueRoute
   LiveRoute: typeof LiveRoute
   McpRoute: typeof McpRoute
   OrderRoute: typeof OrderRoute
@@ -287,6 +312,7 @@ export interface RootRouteChildren {
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   PlayersIdRoute: typeof PlayersIdRoute
   PlayersPackRoute: typeof PlayersPackRoute
+  PlayersShopRoute: typeof PlayersShopRoute
   PlayersTradeRoute: typeof PlayersTradeRoute
   RecapSlugRoute: typeof RecapSlugRoute
   PlayersIndexRoute: typeof PlayersIndexRoute
@@ -349,6 +375,13 @@ declare module '@tanstack/react-router' {
       path: '/leaderboard'
       fullPath: '/leaderboard'
       preLoaderRoute: typeof LeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/league': {
+      id: '/league'
+      path: '/league'
+      fullPath: '/league'
+      preLoaderRoute: typeof LeagueRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/live': {
@@ -414,6 +447,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayersPackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/players/shop': {
+      id: '/players/shop'
+      path: '/players/shop'
+      fullPath: '/players/shop'
+      preLoaderRoute: typeof PlayersShopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/players/trade': {
       id: '/players/trade'
       path: '/players/trade'
@@ -447,6 +487,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClaimRoute: ClaimRoute,
   DraftRoute: DraftRoute,
   LeaderboardRoute: LeaderboardRoute,
+  LeagueRoute: LeagueRoute,
   LiveRoute: LiveRoute,
   McpRoute: McpRoute,
   OrderRoute: OrderRoute,
@@ -456,6 +497,7 @@ const rootRouteChildren: RootRouteChildren = {
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
   PlayersIdRoute: PlayersIdRoute,
   PlayersPackRoute: PlayersPackRoute,
+  PlayersShopRoute: PlayersShopRoute,
   PlayersTradeRoute: PlayersTradeRoute,
   RecapSlugRoute: RecapSlugRoute,
   PlayersIndexRoute: PlayersIndexRoute,

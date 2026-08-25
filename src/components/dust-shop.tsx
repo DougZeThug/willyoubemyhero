@@ -1,16 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { editionStyle, toEdition } from "@/lib/card-edition";
@@ -25,32 +17,35 @@ import type { TradeSpares } from "@/lib/trades";
 /**
  * What dust buys.
  *
- * Deliberately small: one thing to buy, and a table explaining where dust comes
- * from. The mill itself lives next to the spares on the trade screen, because
- * that is the only place a copy id exists to burn.
+ * Three sinks and a price table: a bonus pull, the mill, and a re-roll. This was
+ * a sheet behind the vault's dust chip until it grew all three, which is a
+ * screen — /players/shop renders it now, and gets a nav tab whenever the
+ * commissioner has the economy switched on.
+ *
+ * Still a prop-driven panel rather than the route itself. Everything below is
+ * cache bookkeeping whose keys are spelled somewhere else, and getting one wrong
+ * fails silently — the mutation succeeds, the toast fires, and the screen keeps
+ * showing the old world. dust-shop.test.tsx pins every one of those keys, and it
+ * can only do that against something that takes its data as arguments.
  *
  * NO TOTAL CROSSES THE WIRE HERE, the same rule the rest of the app keeps. The
  * prices are constants this bundle already holds, and the balance is the only
  * number fetched — nothing says how big the secret set is or what anybody else
  * has got.
  */
-export function DustShop({
-  open,
-  onOpenChange,
+export function DustShopPanel({
   balance,
   participantId,
   actor,
   eventId,
   nameFor,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   balance: number | undefined;
   participantId: string | null | undefined;
   /**
    * `m:<participantId>`, the form the secret queries are keyed on.
    *
-   * Taken as a prop rather than rebuilt here: the vault already holds it from
+   * Taken as a prop rather than rebuilt here: the route already holds it from
    * useSecretActor(), and a second place that knows how to spell an actor is a
    * second place that can spell it wrong — which is exactly what went wrong when
    * this invalidated on the bare participant id and matched nothing.
@@ -99,19 +94,17 @@ export function DustShop({
       }
       setRequestId(crypto.randomUUID());
       toast("Pull bought — check your secrets");
-      onOpenChange(false);
     },
     onError: () => toast("Could not buy that just now"),
   });
 
-  // Fetched only once the sheet is open. Nothing about the vault needs this, and
-  // a spares query on every vault render would be a round trip for a panel most
-  // visits never open.
   const sparesFn = useServerFn(getTradeSpares);
   const spares = useQuery({
     queryKey: ["dust-spares", participantId],
     queryFn: () => sparesFn({ data: { participantId: participantId! } }) as Promise<TradeSpares>,
-    enabled: open && !!participantId,
+    // This used to wait on the sheet being open. Being on the screen is that
+    // intent now, so the only gate left is having somebody to ask about.
+    enabled: !!participantId,
     staleTime: 15_000,
     retry: false,
   });
@@ -212,158 +205,142 @@ export function DustShop({
   const canReroll = (balance ?? 0) >= DUST_PRICES.reroll;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2 font-display uppercase">
-            <Sparkles className="h-5 w-5 text-primary" aria-hidden />
-            Dust
-          </SheetTitle>
-          <SheetDescription>
-            {balance == null ? "Counting…" : `You have ${balance.toLocaleString()}.`}
-          </SheetDescription>
-        </SheetHeader>
+    <div className="space-y-6">
+      <section className="rounded-lg border border-border p-4">
+        <h2 className="font-display text-sm font-bold uppercase tracking-wide">
+          Bonus secret pull
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          One extra pull, right now. It does not touch tomorrow&apos;s free one.
+        </p>
+        <Button
+          className="mt-3 w-full"
+          disabled={!canAfford || buy.isPending}
+          onClick={() => buy.mutate()}
+        >
+          {buy.isPending ? "Pulling…" : `Buy for ${DUST_PRICES.bonusPull}`}
+        </Button>
+        {!canAfford && balance != null && (
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            {DUST_PRICES.bonusPull - balance} more to go
+          </p>
+        )}
+      </section>
 
-        <div className="mt-6 space-y-6">
-          <section className="rounded-lg border border-border p-4">
-            <h3 className="font-display text-sm font-bold uppercase tracking-wide">
-              Bonus secret pull
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              One extra pull, right now. It does not touch tomorrow&apos;s free one.
-            </p>
-            <Button
-              className="mt-3 w-full"
-              disabled={!canAfford || buy.isPending}
-              onClick={() => buy.mutate()}
-            >
-              {buy.isPending ? "Pulling…" : `Buy for ${DUST_PRICES.bonusPull}`}
-            </Button>
-            {!canAfford && balance != null && (
-              <p className="mt-2 text-center text-xs text-muted-foreground">
-                {DUST_PRICES.bonusPull - balance} more to go
-              </p>
-            )}
-          </section>
-
-          <section className="rounded-lg border border-border p-4">
-            <h3 className="font-display text-sm font-bold uppercase tracking-wide">Burn a spare</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Only cards you hold two or more of, and never the one you pulled today. You always
-              keep one.
-            </p>
-            {spares.isLoading ? (
-              <p className="mt-3 text-xs text-muted-foreground">Counting spares…</p>
-            ) : burnable.length === 0 ? (
-              <p className="mt-3 text-xs text-muted-foreground">No spares yet.</p>
-            ) : (
-              <ul className="mt-3 space-y-1.5">
-                {burnable.map((r) => {
-                  const style = editionStyle(r.edition);
-                  const worth = millValue(r.edition, r.assertedBy);
-                  return (
-                    <li key={r.copyId} className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate text-xs">
-                        <span className="font-bold">{nameFor(r.eventParticipantId)}</span>
-                        {style.label && (
-                          <span className="ml-1.5" style={{ color: style.accent }}>
-                            {style.label}
-                          </span>
-                        )}
+      <section className="rounded-lg border border-border p-4">
+        <h2 className="font-display text-sm font-bold uppercase tracking-wide">Burn a spare</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Only cards you hold two or more of, and never the one you pulled today. You always keep
+          one.
+        </p>
+        {spares.isLoading ? (
+          <p className="mt-3 text-xs text-muted-foreground">Counting spares…</p>
+        ) : burnable.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">No spares yet.</p>
+        ) : (
+          <ul className="mt-3 space-y-1.5">
+            {burnable.map((r) => {
+              const style = editionStyle(r.edition);
+              const worth = millValue(r.edition, r.assertedBy);
+              return (
+                <li key={r.copyId} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-xs">
+                    <span className="font-bold">{nameFor(r.eventParticipantId)}</span>
+                    {style.label && (
+                      <span className="ml-1.5" style={{ color: style.accent }}>
+                        {style.label}
                       </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0"
-                        disabled={mill.isPending}
-                        onClick={() => {
-                          setBurning(r.copyId);
-                          mill.mutate(r.copyId);
-                        }}
-                      >
-                        {burning === r.copyId && mill.isPending ? "…" : `Burn +${worth}`}
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          <section className="rounded-lg border border-border p-4">
-            <h3 className="font-display text-sm font-bold uppercase tracking-wide">
-              Settle a finish
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Roll a card&apos;s finish again for {DUST_PRICES.reroll}. Any card you hold, including
-              your only one — and it can go down.
-            </p>
-            {spares.isLoading ? (
-              <p className="mt-3 text-xs text-muted-foreground">Counting cards…</p>
-            ) : rerollable.length === 0 ? (
-              <p className="mt-3 text-xs text-muted-foreground">No cards yet.</p>
-            ) : (
-              <ul className="mt-3 space-y-1.5">
-                {rerollable.map((r) => {
-                  const style = editionStyle(r.edition);
-                  return (
-                    <li key={r.copyId} className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate text-xs">
-                        <span className="font-bold">{nameFor(r.eventParticipantId)}</span>
-                        {style.label && (
-                          <span className="ml-1.5" style={{ color: style.accent }}>
-                            {style.label}
-                          </span>
-                        )}
-                        {r.assertedBy !== "server" && (
-                          <span className="ml-1.5 text-muted-foreground">unsettled</span>
-                        )}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0"
-                        disabled={!canReroll || reroll.isPending}
-                        onClick={() => {
-                          setRolling(r.copyId);
-                          reroll.mutate(r.copyId);
-                        }}
-                      >
-                        {rolling === r.copyId && reroll.isPending
-                          ? "…"
-                          : `Re-roll ${DUST_PRICES.reroll}`}
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          <section className="rounded-lg border border-border p-4">
-            <h3 className="font-display text-sm font-bold uppercase tracking-wide">
-              Where dust comes from
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              A duplicate secret pays 25. Burning a spare pays by its finish:
-            </p>
-            <ul className="mt-3 space-y-1">
-              {MILL_LADDER.map(({ edition, value }) => (
-                <li key={edition} className="flex items-center justify-between text-xs">
-                  <span style={{ color: editionStyle(edition).accent }}>
-                    {editionStyle(edition).label}
+                    )}
                   </span>
-                  <span className="font-mono">{value}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={mill.isPending}
+                    onClick={() => {
+                      setBurning(r.copyId);
+                      mill.mutate(r.copyId);
+                    }}
+                  >
+                    {burning === r.copyId && mill.isPending ? "…" : `Burn +${worth}`}
+                  </Button>
                 </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Cards from before finishes were settled server-side pay a flat {MILL_CLIENT_FLAT},
-              whatever they say on them. Settling one above fixes that.
-            </p>
-          </section>
-        </div>
-      </SheetContent>
-    </Sheet>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-border p-4">
+        <h2 className="font-display text-sm font-bold uppercase tracking-wide">Settle a finish</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Roll a card&apos;s finish again for {DUST_PRICES.reroll}. Any card you hold, including
+          your only one — and it can go down.
+        </p>
+        {spares.isLoading ? (
+          <p className="mt-3 text-xs text-muted-foreground">Counting cards…</p>
+        ) : rerollable.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">No cards yet.</p>
+        ) : (
+          <ul className="mt-3 space-y-1.5">
+            {rerollable.map((r) => {
+              const style = editionStyle(r.edition);
+              return (
+                <li key={r.copyId} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-xs">
+                    <span className="font-bold">{nameFor(r.eventParticipantId)}</span>
+                    {style.label && (
+                      <span className="ml-1.5" style={{ color: style.accent }}>
+                        {style.label}
+                      </span>
+                    )}
+                    {r.assertedBy !== "server" && (
+                      <span className="ml-1.5 text-muted-foreground">unsettled</span>
+                    )}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={!canReroll || reroll.isPending}
+                    onClick={() => {
+                      setRolling(r.copyId);
+                      reroll.mutate(r.copyId);
+                    }}
+                  >
+                    {rolling === r.copyId && reroll.isPending
+                      ? "…"
+                      : `Re-roll ${DUST_PRICES.reroll}`}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-border p-4">
+        <h2 className="font-display text-sm font-bold uppercase tracking-wide">
+          Where dust comes from
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          A duplicate secret pays 25. Burning a spare pays by its finish:
+        </p>
+        <ul className="mt-3 space-y-1">
+          {MILL_LADDER.map(({ edition, value }) => (
+            <li key={edition} className="flex items-center justify-between text-xs">
+              <span style={{ color: editionStyle(edition).accent }}>
+                {editionStyle(edition).label}
+              </span>
+              <span className="font-mono">{value}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Cards from before finishes were settled server-side pay a flat {MILL_CLIENT_FLAT},
+          whatever they say on them. Settling one above fixes that.
+        </p>
+      </section>
+    </div>
   );
 }

@@ -293,11 +293,19 @@ test.describe("the daily secret", () => {
   }) => {
     await asMember(page);
     withSecret(server);
-    const statusAnswered = page.waitForResponse(
-      (r) => r.url().includes("/_serverFn/") && serverFnName(r.url()).includes("getSecretStatus"),
+    // Both, not just the status. The nav asks for the day's status on every
+    // screen now, so that answer can land before the route has even asked for
+    // the event — waiting on it alone stopped meaning "the pack has what it
+    // needs" and started tearing the pack into a half-loaded screen.
+    const ready = Promise.all(
+      ["getSecretStatus", "getEventBundle"].map((fn) =>
+        page.waitForResponse(
+          (r) => r.url().includes("/_serverFn/") && serverFnName(r.url()).includes(fn),
+        ),
+      ),
     );
     await page.goto("/players/pack");
-    await statusAnswered;
+    await ready;
     await page.waitForTimeout(100);
     await tearPack(page);
 
@@ -423,7 +431,11 @@ test.describe("the vault's secret shelf", () => {
       resetsAt: "2026-07-29T04:00:00Z",
     });
     await page.goto("/players");
-    await expect(page.getByRole("link", { name: /a secret is waiting/i })).toBeVisible();
+    // Scoped to the page: the nav's Pack tab wears the same cue and the same
+    // wording, so an unscoped match finds two links and fails on strict mode.
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /a secret is waiting/i }),
+    ).toBeVisible();
   });
 
   test("leaves the pack button alone once it is spent", async ({ page, server }) => {

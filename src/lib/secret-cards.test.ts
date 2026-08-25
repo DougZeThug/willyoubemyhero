@@ -10,8 +10,10 @@ import {
   SECRET_RARITY,
   secretFoil,
   secretsPulledLabel,
+  secretWaiting,
   SECRET_REASON,
   UNSORTED_COLLECTION_LABEL,
+  type SecretDayStatus,
 } from "./secret-cards";
 
 const RARITY_TIERS: RarityTier[] = [
@@ -302,5 +304,45 @@ describe("groupBySecretCollection", () => {
       "gazebos",
       UNSORTED_COLLECTION_LABEL,
     ]);
+  });
+});
+
+describe("secretWaiting", () => {
+  function status(over: Partial<SecretDayStatus> = {}): SecretDayStatus {
+    return {
+      claimed: true,
+      day: "2026-07-28",
+      pulledToday: false,
+      pulled: 1,
+      available: true,
+      resetsAt: "2026-07-29T04:00:00Z",
+      ...over,
+    };
+  }
+
+  it("says yes on an unspent day", () => {
+    expect(secretWaiting(status())).toBe(true);
+  });
+
+  it("says no once the day is spent", () => {
+    expect(secretWaiting(status({ pulledToday: true }))).toBe(false);
+  });
+
+  it("says no when there is nothing to pull", () => {
+    expect(secretWaiting(status({ available: false }))).toBe(false);
+  });
+
+  it("says no to somebody who has not claimed", () => {
+    // A stranger is told nothing about the set, so the cue must not appear for
+    // them either — a glowing tab is itself a statement that something exists.
+    expect(secretWaiting(status({ claimed: false }))).toBe(false);
+  });
+
+  it("says no while the answer is still in the air", () => {
+    // The nav mounts this on every screen, so the loading frame is the common
+    // case and a cue that flashes on before the server has answered is a lie
+    // most of the time it is told.
+    expect(secretWaiting(undefined)).toBe(false);
+    expect(secretWaiting(null)).toBe(false);
   });
 });

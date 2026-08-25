@@ -329,10 +329,13 @@ test.describe("trading post", () => {
     await expect(page.getByText(/sent a secret to/i)).toBeHidden();
   });
 
-  test("the vault links here", async ({ page, server }) => {
+  test("the nav links here", async ({ page, server }) => {
     void server;
     await page.goto("/players");
-    const trade = page.getByRole("link", { name: /^trade$/i });
+    // Scoped to the nav rather than the page. Exactly one of the two bars is in
+    // the accessibility tree at a given width — the other is display:none — so
+    // this resolves to one tab in the phone and desktop projects alike.
+    const trade = page.getByRole("navigation").getByRole("link", { name: /^trade$/i });
     await expect(trade).toBeVisible();
     await trade.click();
     await expect(page).toHaveTitle(/Trading Post/i);

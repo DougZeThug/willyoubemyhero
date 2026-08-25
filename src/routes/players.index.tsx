@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Users, Shuffle, PackageOpen, Layers, Award, ArrowLeftRight, Check, UserRoundCheck, ArrowUpDown, Medal } from "lucide-react"; // prettier-ignore
+import { Shuffle, Layers, Check, ArrowUpDown, Medal } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -13,19 +13,19 @@ import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useTradeBadge } from "@/hooks/use-trade-badge";
+import { useStreakStatus } from "@/hooks/use-streak";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { useDustBalance } from "@/hooks/use-dust";
-import { DustChip } from "@/components/dust-chip";
-import { DustShop } from "@/components/dust-shop";
 import { dustLive } from "@/lib/dust";
-import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
+import { packedByLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
 import { VaultSection } from "@/components/vault-section";
+import { VaultHero } from "@/components/vault-hero";
 import { FavouriteButton } from "@/components/favourite-button";
 import {
   groupBySecretCollection,
   secretFoil,
-  secretsPulledLabel,
+  secretWaiting,
   SECRET_RARITY,
   VAULT_UNSORTED_LABEL,
   type OwnedSecret,
@@ -55,12 +55,12 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/players/")({
   head: () => ({
     meta: [
-      { title: "The Vault — Will YOU Be My Hero? Draft Combine" },
+      { title: "The Vault — Will YOU Be My Hero?" },
       {
         name: "description",
-        content: "Every combine athlete's trading card. Tilt them, flip them, collect the set.",
+        content: "Every card you hold. Tilt them, flip them, collect the set.",
       },
-      { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — The Vault" },
+      { property: "og:title", content: "Will YOU Be My Hero? — The Vault" },
       { property: "og:description", content: "Every athlete, every card." },
     ],
   }),
@@ -104,14 +104,6 @@ function PlayersPage() {
   // not going to render.
   const dustOn = dustLive(event);
   const dust = useDustBalance(dustOn ? member?.participantId : null);
-  const [shopOpen, setShopOpen] = useState(false);
-  // The shop lists spares by card id, and the bundle is the only place a name
-  // lives. Passed in rather than re-fetched there: this page already holds it.
-  const nameFor = useCallback(
-    (eventParticipantId: string) =>
-      bundle?.participants.find((p) => p.id === eventParticipantId)?.participant?.name ?? "—",
-    [bundle],
-  );
   // A guest holds secrets too, so the shelf follows whoever this device is
   // pulling as. No session is minted here — that happens on the pack screen,
   // where a card is actually at stake; the vault only ever reads.
@@ -141,6 +133,11 @@ function PlayersPage() {
     [allTrophies.data, member?.participantId],
   );
   const secretStatus = useSecretStatus(actor);
+  // Off the actor rather than the member, same as the secrets above: a guest
+  // builds a real streak too, and claim_guest_packs carries it over when they
+  // finally put a name to the phone. StreakStatus is a Streak with the milestone
+  // ladder bolted on, which is more than the header needs and costs nothing.
+  const streak = useStreakStatus(actor).data ?? null;
   const pullCounts = useCardPullCounts(event?.id ?? null);
   // An index rather than the card itself: the sheet swipes between secrets, so it
   // needs to know where in the shelf the open one sits.
@@ -229,10 +226,11 @@ function PlayersPage() {
   }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked, collected]);
 
   const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
-  // Same dot the nav carries, on the control that actually goes there. A member
-  // who is already on this screen should not have to read the nav to find out.
+  // The hero turns this into an "Offer waiting" pill, and only above zero. The
+  // Trade tab carries the same news permanently, but its dot is easy to miss
+  // under a thumb on the screen you are already looking at.
   const tradeUnread = useTradeBadge();
-  const secretWaiting = !!secretStatus.data?.claimed && !secretStatus.data.pulledToday && secretStatus.data.available; // prettier-ignore
+  const packWaiting = secretWaiting(secretStatus.data);
 
   const ownedSecrets = useMemo(() => secrets.data?.cards ?? [], [secrets.data]);
   const { ids: favouriteIds, isFavourite, toggle: toggleFavourite } = useVaultFavourites();
@@ -608,111 +606,21 @@ function PlayersPage() {
             handset and nobody can trade with them until they name themselves.
             The vault is where they land, so it is where the prompt belongs. */}
         <CollectorSignupGate className="mb-5" />
-        <div className="mb-5 border-b border-primary/20 pb-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-primary">
-                <Users className="h-5 w-5" />
-                <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
-                  Roster
-                </span>
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
-                <h1 className="font-display text-3xl font-black uppercase leading-none">
-                  The Vault
-                </h1>
-                {dustOn && (
-                  <DustChip balance={dust.data?.balance} onClick={() => setShopOpen(true)} />
-                )}
-              </div>
-              {/* The collected count waits for `ready`. It used to be read straight
-                  off IndexedDB, which had been inflated to the whole roster by the
-                  old collect-on-sight behaviour — rendering it early would show
-                  that number for a frame before it snapped down to the real one. */}
-              <p className="mt-2 text-xs text-muted-foreground">
-                {withCards} of {rows.length} cards printed
-                {mine.ready && mine.collectedCount > 0 && ` · ${mine.collectedCount} collected`}
-              </p>
-              {mine.ready && packsOpenedLabel(mine.packsOpened) && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {packsOpenedLabel(mine.packsOpened)}
-                </p>
-              )}
-              {/* Only ever rendered above zero. "0 secrets pulled" would announce
-                  that a set exists at all, which is the one thing withheld — and
-                  `?? 0` keeps a zero from flashing during the loading frame. */}
-              {(secrets.data?.pulled ?? 0) > 0 && (
-                <p className="mt-1 text-xs font-bold" style={{ color: SECRET_RARITY.accent }}>
-                  {secretsPulledLabel(secrets.data!.pulled)}
-                </p>
-              )}
-              {!member && wasMember && (
-                <p className="mt-2 max-w-xs text-[11px] leading-snug text-muted-foreground">
-                  Your secrets are on your name, not on this phone. Claim again to get them back.
-                </p>
-              )}
-              {!member && (
-                <Link
-                  to="/claim"
-                  className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-primary hover:underline"
-                >
-                  <UserRoundCheck className="h-3.5 w-3.5" />
-                  Claim your player
-                </Link>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                to="/awards"
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-              >
-                <Award className="h-3.5 w-3.5" />
-                Awards
-              </Link>
-              {/* Shown to everyone, including guests: the screen behind it
-                  explains that trading needs a claimed player, which is a better
-                  answer than a button that is not there. */}
-              <Link
-                to="/players/trade"
-                aria-label={tradeUnread > 0 ? "Trade — an offer is waiting" : undefined} // prettier-ignore
-                className={cn(
-                  "relative inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.25em] transition-colors",
-                  tradeUnread > 0
-                    ? "border-primary/50 text-primary"
-                    : "border-white/10 text-muted-foreground hover:border-primary/50 hover:text-primary",
-                )}
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5" />
-                Trade
-                {tradeUnread > 0 && (
-                  <span
-                    aria-hidden
-                    className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]"
-                  />
-                )}
-              </Link>
-              {/* The daily loop's alarm clock. Nothing else brings anyone back on
-                  a random Tuesday. Leaks nothing: a guest, and a member who has
-                  already pulled today, both see the button exactly as it was. */}
-              <Link
-                to="/players/pack"
-                className={cn("neon-btn relative !px-4 !py-2 !text-xs", secretWaiting && "ring-2")}
-                style={secretWaiting ? { ["--tw-ring-color" as string]: SECRET_RARITY.border } : undefined} // prettier-ignore
-                aria-label={secretWaiting ? "Open today's pack — a secret is waiting" : "Open today's pack"} // prettier-ignore
-              >
-                <PackageOpen className="h-4 w-4" />
-                Open Pack
-                {secretWaiting && (
-                  <span
-                    aria-hidden
-                    className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full"
-                    style={{ background: SECRET_RARITY.border }}
-                  />
-                )}
-              </Link>
-            </div>
-          </div>
-        </div>
+        <VaultHero
+          printed={withCards}
+          rosterSize={rows.length}
+          ready={mine.ready}
+          collectedCount={mine.collectedCount}
+          packsOpened={mine.packsOpened}
+          secretsPulled={secrets.data?.pulled ?? 0}
+          dustOn={dustOn}
+          dustBalance={dust.data?.balance}
+          isMember={!!member}
+          wasMember={wasMember}
+          streak={streak}
+          packWaiting={packWaiting}
+          tradeUnread={tradeUnread}
+        />
 
         <SecretCardSheet
           cards={visibleSecrets}
@@ -783,20 +691,6 @@ function PlayersPage() {
           );
         })}
       </div>
-
-      {/* Not merely hidden: unmounted, so the shop's own spares query never
-          fires while the economy is off. */}
-      {dustOn && (
-        <DustShop
-          open={shopOpen}
-          onOpenChange={setShopOpen}
-          balance={dust.data?.balance}
-          participantId={member?.participantId}
-          actor={actor}
-          eventId={event?.id}
-          nameFor={nameFor}
-        />
-      )}
     </div>
   );
 }
