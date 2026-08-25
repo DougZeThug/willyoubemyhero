@@ -28,6 +28,7 @@ import {
 import { encodeUploadImage } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
+import { SetAccentPicker } from "@/components/set-accent-picker";
 import {
   SECRET_BORDER_FX_OPTIONS,
   SECRET_FOIL_OPTIONS,
@@ -35,8 +36,8 @@ import {
   groupBySecretCollection,
   secretCollectionLabel,
   setAccentColor,
-  SET_ACCENTS,
 } from "@/lib/secret-cards";
+
 import {
   SecretArtThumb,
   SecretCardTile,
