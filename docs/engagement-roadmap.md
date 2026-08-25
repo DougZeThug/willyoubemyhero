@@ -21,9 +21,11 @@ RPCs, and the append-only award categories.
 
 - Guards, not RLS: `requireAdmin` / `requireMember` / `requireActor` first line
   of every mutating handler; participant ids come from the verified token.
-- **Editions are client-asserted** (`card-pulls.functions.ts`): an edition never
-  enters a number a second person sees without server re-derivation. Secret
-  tiers ARE server-rolled (`roll_secret_tier`) and trustworthy.
+- **Editions are server-derived** since R4a (`roll_card_edition`), alongside
+  secret tiers (`roll_secret_tier`). A `'pull'` copy's finish is Postgres's own;
+  `adopt` and commissioner `grant` copies stay client-asserted and are marked
+  `edition_asserted_by = 'client'`. Anything that PAYS BY edition trusts only
+  `'server'` rows.
 - **No response carries a total** — the secret set size never leaks;
   denominators are client-side roster data. One designed exception in R3.
 - No secret card id in a member-facing request parameter.
@@ -36,7 +38,7 @@ RPCs, and the append-only award categories.
 
 ---
 
-## R1 — "Show up every day" (~5 dev-days, one small migration)
+## R1 — "Show up every day" — 1a SHIPPED
 
 ### 1a. Pack streaks + milestone rewards (M)
 
@@ -134,7 +136,7 @@ created_at)` — **no secret_card_id column and no edition column** (editions
   `src/lib/awards.ts` — append, never rename. Voting and card-back badges ride
   the existing award pipeline. Zero new plumbing.
 
-## R3 — "Set completion & scarcity" (~5 dev-days, two migrations)
+## R3 — "Set completion & scarcity" — 3a SHIPPED
 
 ### 3a. Completion trophies (M–L)
 
@@ -166,45 +168,68 @@ available_until date`; extend `pull_secret_card`'s candidate WHERE with the
 - Recommended: windowed cards **count** toward completion (trading and bonus
   pulls are the catch-up path) — flagged as an open question below.
 
-## R4 — "Dupe economy I: dust" (~8–9 dev-days; the riskiest release)
+## R4 — "Dupe economy I: dust" — SHIPPED
 
-### 4a. Server-side edition re-derivation (M) — prerequisite
+### 4a. Server-side edition derivation — shipped
 
-- Implements the future work named in the comments in
-  `card-pulls.functions.ts` and `trades.functions.ts`: `record_card_pulls`
-  rolls editions server-side (bp ladder mirrored into SQL like
-  `roll_secret_tier`: 50/350/800/1800/7000) and returns them; the client
-  `editions` param stays accepted-and-ignored so old phones keep working.
-- Add `card_copies.edition_asserted_by client|server DEFAULT 'client'`, set
-  `'server'` on new pulls. Anything that _pays by_ edition trusts only
-  `'server'` rows.
-- `players.pack.tsx` reveals editions from the `recordCardPulls` response.
-  Failed-record fallback: reveal `standard` with a quiet retry — never a
-  locally-rolled rare the server won't honor.
+- `record_card_pulls` derives the finish from (participant, card, league day) and
+  returns a map keyed by card. The `editions` parameter stays accepted and
+  ignored, so a phone mid-rollout keeps recording.
+- **Derived, not rolled**, which the spec got wrong. A `random()` roll is
+  idempotent only while a conflicting row exists to collide with, and R4 ships
+  two supported ways to remove that row: `mill_card_copy` deletes the copy and
+  `accept_trade_offer` clears its `acquired_on`. Either turns "record the pack
+  again" into a fresh draw, and the mill route _pays you_ to do it — strictly
+  better than paying 50 dust to re-roll. Seeded on the triple, the answer
+  survives a retry, a mill and a re-mint alike.
+- The conflict clause inverted with it: **the stored finish wins** where a
+  `card_edition_rank` best-of used to. With the server deciding, keeping the
+  better of repeated draws lets a member on the retry loop ratchet to platinum.
+- `card_copies.edition_asserted_by client|server DEFAULT 'client'`, no backfill.
+- `players.pack.tsx` reveals from the response and falls back to `standard`,
+  staying silent on the shine and the confetti until a finish is known.
+  `rollEdition`/`editionSeed` are deleted rather than left unused.
+- Also added a **daily mint cap** (6). The endpoint tolerates hand-posted roster
+  ids on the argument that the worst case was a phantom pack on a private stat;
+  `card_copies` made that false — its once-a-day index is per CARD — and dust
+  would have made every extra copy currency.
+- **The cap counts `card_mints`, not held copies** (`20260827120000`). Counting
+  copies was a bypass: `accept_trade_offer` re-parents a row, sets
+  `source = 'trade'` and nulls `acquired_on`, so trading today's copy away handed
+  the slot back _and_ took the row out of the partial unique index. Two members
+  with duplicates could swap, both re-mint, and both burn what they received, on
+  a loop. A cap over mutable ownership is one that anything moving a copy
+  reopens — R5's `craft_up_copies` would reopen it again — so the budget lives in
+  an append-only row per card per member per league day.
 
-### 4b. Dust ledger + earn + sinks (L)
+### 4b. Dust ledger + earn + sinks — shipped
 
-- New **server-only** `token_ledger (id identity, participant_id, delta int
-CHECK <> 0, reason IN ('dupe_secret','mill_copy','buy_secret_pull',
-'reroll_edition','milestone','bounty','admin_adjust') — append-only, ref
-uuid, detail jsonb, created_at)`. Balance = `sum(delta)` under the
-  participant row lock; no denormalized balance to drift.
-- Earn: a duplicate secret pull auto-credits **+25** inside `pull_secret_card`
-  (the dupe sting becomes the earn moment); new RPC `mill_card_copy` (lock
-  participant + copy, verify spare-ness by the `trade_item_is_spare` rule,
-  DELETE the copy, credit — flat +5 for `'client'`-asserted copies,
-  edition-scaled 5/10/20/40/100 only for `'server'` rows, which kills the
-  self-asserted-platinum exploit). Milling never touches `card_pulls`
-  ("Packed by N" counts pulls-ever).
-- Sinks: `buy_bonus_secret_pull` (**150** ≈ one bonus pull a week for a daily
-  player) and `reroll_copy_edition` (**50**; server-roll, set
-  `edition_asserted_by='server'` — re-rolls converge the fleet to trusted
-  rows). All RPCs SECURITY DEFINER, service_role-only, `accept_trade_offer`
-  lock discipline.
-- New `src/lib/tokens.ts` (constants; a unit test asserts the TS↔SQL mirror) +
-  `src/lib/tokens.functions.ts`. UI: dust chip on vault + trade headers;
-  `dust-shop.tsx` sheet; mill affordance on spares; "+25 dust" on the dupe
-  moment.
+- **`dust_ledger`**, not the `token_ledger` this spec named: `src/lib` already
+  means auth when it says token. Server-only, append-only, `participant_id NOT
+NULL`. Balance is `sum(delta)` under the participant row lock; no stored total.
+- **Members only.** `card_copies` is keyed on a participant, so milling and
+  re-rolling are already unreachable for a guest and a guest balance would be
+  earnable and barely spendable. Dust starts at the claim.
+- Earn: +25 on a duplicate secret inside `pull_secret_card` and
+  `pull_bonus_secret_card`; `mill_card_copy` pays 5/10/20/40/100 for a
+  `'server'` finish and a flat 5 for a `'client'` one.
+- **Milling does resync `card_pulls`**, against what this spec said. "Packed by
+  N" is the ROW count (one per person per card), not `pull_count`, and the spare
+  rule guarantees a copy survives — so the public number cannot move. Skipping
+  the resync would leave `pull_count` overstating until an unrelated trade
+  corrected it, and the vault would offer a burn for a copy that is not there.
+- Mill also refuses a copy **staked on a pending offer** (`trade_has_both_sides`
+  only catches a side reaching zero, so an offer that merely shrinks passes every
+  accept-time check) and **today's own pull** (milling it frees a mint-cap slot
+  and clears the once-a-day key, which reopens the mint-and-mill loop).
+- Sinks: `buy_bonus_secret_pull` (150) and `reroll_copy_edition` (50). The
+  re-roll **replaces** rather than taking the better — a best-of would make 50
+  dust a risk-free ratchet and the league would converge on platinum. Both take a
+  caller-minted `requestId`, because a lost response on a purchase is the worst
+  bug here and nothing else about the call is unique enough to key on.
+- Repaired on the way past: `pull_bonus_secret_card` never called
+  `award_collection_trophy` — it was split out before trophies existed — so a
+  streak milestone that completed a set had been minting nothing since R1.
 
 ## R5 — "Dupe economy II" (~5–6 dev-days; bounties are the cut-first stretch)
 
@@ -216,14 +241,17 @@ uuid, detail jsonb, created_at)`. Balance = `sum(delta)` under the
   construction. Forge ceremony in the vault.
 - **5b. Edition pity (M, depends on 4a):** server-only `edition_pity
 (participant_id PK, standards_in_a_row int, updated_at)` maintained inside
-  the server-side roll; at **18** consecutive standards (~6 all-standard packs)
-  force bronze+ and reset. Invisible — no client surface. Secret-tier pity
+  the server-side derivation; at **18** consecutive standards (~6 all-standard
+  packs) force bronze+ and reset. The room for this is already there:
+  `record_card_pulls` returns the STORED finish rather than re-deriving it, so a
+  floor applied on first insert survives every retry. Invisible — no client surface. Secret-tier pity
   needs no prerequisite and can ship in any release.
 - **5c. Daily bounties (M, stretch):** server-only `bounty_claims
 (participant_id, day, bounty_id, PK all three)`; definitions as an
   append-only TS list in `src/lib/bounties.ts`, rotated deterministically by
   league day; claims verified against existing ledgers (`pack_opens`, `trades`,
-  `flexes`), small dust credit (+5..10).
+  `flexes`), small dust credit (+5..10) — the `'bounty'` reason is already in
+  `dust_ledger`'s CHECK, so this needs no vocabulary migration.
 
 ## Verification per release
 
@@ -244,11 +272,17 @@ e2e is advisory.
   - `completed_collection` in the response; same via trade-accept and grant;
     window boundaries in `pull_secret_card`; existing `secret-cards.test.ts`
     stays green untouched.
-- **R4:** DB — no negative balance under two concurrent buys; mill rejects
-  last-copy; a bought pull bypasses the daily index while the free pull still
-  can't double; server editions returned and client-passed ones ignored;
-  trade-accept vs spend lock-order test. Unit — TS/SQL price mirror. E2E —
-  pack journey green with stubbed edition responses.
+- **R4 (done):** `tests/db/dust.test.ts` — no negative balance under two
+  concurrent buys, driven from separate connections; mill rejects last-copy,
+  today's own pull and a staked copy; flat-vs-by-edition payout; a bought pull
+  bypasses the daily index while the free pull still cannot double; both request
+  ids replay; and the trade-and-re-mint loop, driven end to end.
+  `tests/db/card-pulls.test.ts` — a retry returns the same finishes, a card whose
+  copy is gone is not re-minted, client-passed editions ignored, the mint cap,
+  and the SQL ladder pinned against
+  `EDITION_WEIGHTS_BP`. Unit — the mill ladder and price relationships in
+  `src/lib/dust.test.ts`. E2E — the finish is stubbed rather than predicted now,
+  plus a spec for the reveal arriving before the record does.
 - **R5:** DB — craft consumes exactly 3 / platinum cap / mixed-card rejection /
   CHECK migration replays; pity forces bronze+ at threshold.
 
@@ -262,5 +296,7 @@ e2e is advisory.
 3. **Guest streaks (R1):** real streaks live on unclaimed guest ids (the known
    stranded-guest-secrets issue); the streak UI is a natural "claim your
    player" nudge surface — lean in?
-4. **Edition reveal round-trip (R4):** the reveal depends on the record
-   response; sign off on the reveal-standard-and-retry fallback.
+4. ~~**Edition reveal round-trip (R4):**~~ answered — reveal `standard` with a
+   quiet retry, and stay silent on the shine and the confetti until the finish is
+   actually known. An undersell corrects itself; an oversell is the thing R4a
+   exists to prevent.

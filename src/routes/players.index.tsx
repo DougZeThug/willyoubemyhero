@@ -14,6 +14,10 @@ import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useTradeBadge } from "@/hooks/use-trade-badge";
 import { useMyCollection } from "@/hooks/use-my-collection";
+import { useDustBalance } from "@/hooks/use-dust";
+import { DustChip } from "@/components/dust-chip";
+import { DustShop } from "@/components/dust-shop";
+import { dustLive } from "@/lib/dust";
 import { packedByLabel, packsOpenedLabel } from "@/lib/card-pulls";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
 import { VaultSection } from "@/components/vault-section";
@@ -93,6 +97,21 @@ function PlayersPage() {
   const [sort, setSort] = useState<SortKey>("name");
   const [shuffleSeed, setShuffleSeed] = useState(0);
   const member = useMemberSession();
+  // Members only: dust_ledger is keyed on a participant, so a guest has no
+  // balance to show and the hook stays disabled rather than asking and being
+  // refused. And only while the commissioner has the economy switched on —
+  // asking for a balance nobody can spend is a round trip for a chip that is
+  // not going to render.
+  const dustOn = dustLive(event);
+  const dust = useDustBalance(dustOn ? member?.participantId : null);
+  const [shopOpen, setShopOpen] = useState(false);
+  // The shop lists spares by card id, and the bundle is the only place a name
+  // lives. Passed in rather than re-fetched there: this page already holds it.
+  const nameFor = useCallback(
+    (eventParticipantId: string) =>
+      bundle?.participants.find((p) => p.id === eventParticipantId)?.participant?.name ?? "—",
+    [bundle],
+  );
   // A guest holds secrets too, so the shelf follows whoever this device is
   // pulling as. No session is minted here — that happens on the pack screen,
   // where a card is actually at stake; the vault only ever reads.
@@ -598,9 +617,14 @@ function PlayersPage() {
                   Roster
                 </span>
               </div>
-              <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">
-                The Vault
-              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h1 className="font-display text-3xl font-black uppercase leading-none">
+                  The Vault
+                </h1>
+                {dustOn && (
+                  <DustChip balance={dust.data?.balance} onClick={() => setShopOpen(true)} />
+                )}
+              </div>
               {/* The collected count waits for `ready`. It used to be read straight
                   off IndexedDB, which had been inflated to the whole roster by the
                   old collect-on-sight behaviour — rendering it early would show
@@ -759,6 +783,20 @@ function PlayersPage() {
           );
         })}
       </div>
+
+      {/* Not merely hidden: unmounted, so the shop's own spares query never
+          fires while the economy is off. */}
+      {dustOn && (
+        <DustShop
+          open={shopOpen}
+          onOpenChange={setShopOpen}
+          balance={dust.data?.balance}
+          participantId={member?.participantId}
+          actor={actor}
+          eventId={event?.id}
+          nameFor={nameFor}
+        />
+      )}
     </div>
   );
 }

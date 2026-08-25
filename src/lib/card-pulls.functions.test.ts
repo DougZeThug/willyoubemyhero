@@ -8,8 +8,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
 import { callServerFn, memberHeaders } from "@/test/server-fn";
 import { signMemberToken } from "./session.server";
-import { EDITION_IDS, editionSeed, rollEdition, type Edition } from "./card-edition";
-import { packSeed } from "./pack";
 
 let mock = createSupabaseMock();
 
@@ -44,11 +42,15 @@ describe("recordCardPulls", () => {
     // so a throw would be an invisible console error rather than anything a
     // person could act on.
     const { recordCardPulls } = await import("./card-pulls.functions");
-    const res = await callServerFn<{ ok: boolean; recorded: number; packsOpened: number }>(
-      recordCardPulls,
-      { data: { eventParticipantIds: [CARD_A] } },
-    );
-    expect(res).toEqual({ ok: true, recorded: 0, packsOpened: 0 });
+    const res = await callServerFn<{
+      ok: boolean;
+      recorded: number;
+      packsOpened: number;
+      editions: Record<string, string>;
+    }>(recordCardPulls, { data: { eventParticipantIds: [CARD_A] } });
+    // No finishes either: card_copies is keyed on a participant, so a guest's
+    // pack reveals standards until they claim and adoptCollection files it.
+    expect(res).toEqual({ ok: true, recorded: 0, packsOpened: 0, editions: {} });
     expect(mock.client.rpc).not.toHaveBeenCalled();
   });
 
@@ -57,7 +59,7 @@ describe("recordCardPulls", () => {
     // counting packs from that table would stop counting the moment somebody's
     // collection filled up. The pack open is its own record.
     withDb({
-      "rpc.record_card_pulls": { data: 2 },
+      "rpc.record_card_pulls": { data: { recorded: 2, editions: {} } },
       "rpc.record_pack_open": { data: 4 },
       "events.select": { data: { id: EVENT_ID } },
     });
@@ -81,7 +83,7 @@ describe("recordCardPulls", () => {
     // pack screen fires this the moment the wrapper comes off — frequently null
     // on a resumed pack, with the latch stopping any retry.
     withDb({
-      "rpc.record_card_pulls": { data: 1 },
+      "rpc.record_card_pulls": { data: { recorded: 1, editions: {} } },
       "rpc.record_pack_open": { data: 1 },
       "events.select": { data: { id: EVENT_ID } },
     });
@@ -98,7 +100,7 @@ describe("recordCardPulls", () => {
     // Otherwise a caller posts sixteen ids and stores a pack of sixteen. The RPC
     // returns how many rows it actually touched, which is the honest number.
     withDb({
-      "rpc.record_card_pulls": { data: 1 },
+      "rpc.record_card_pulls": { data: { recorded: 1, editions: {} } },
       "rpc.record_pack_open": { data: 1 },
       "events.select": { data: { id: EVENT_ID } },
     });
@@ -122,79 +124,61 @@ describe("recordCardPulls", () => {
     ).rejects.toThrow();
   });
 
-  it("stores a forged edition's derivation, never the forgery", async () => {
-    // The seed inputs are all server-known for a member (the day within ±1),
-    // so a claimed set that matches no candidate day cannot have come from the
-    // deal. The rpc must receive the derived set — this is what keeps a forged
-    // platinum out of every number a second person can see.
+  it("ignores the finishes the payload claims", async () => {
+    // The premise of the server-side derivation. A phone can send whatever it
+    // likes; the RPC derives its own from (participant, card, league day) and this
+    // handler must not hand the claim on — passing it through would be the
+    // client-asserted finish coming back in through the window.
     withDb({
-      "rpc.record_card_pulls": { data: 2 },
+      "rpc.record_card_pulls": { data: { recorded: 2, editions: {} } },
       "rpc.record_pack_open": { data: 1 },
       "events.select": { data: { id: EVENT_ID } },
     });
     const { recordCardPulls } = await import("./card-pulls.functions");
-    const ids = [CARD_A, CARD_B];
-    // Candidate days computed the same way the handler computes them, taken
-    // both before and after the call so a midnight tick between the two cannot
-    // flake the assertion.
-    const days = (now: Date) => {
-      const fmt = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "America/New_York",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
-      return [0, -1, 1].map((d) => fmt.format(new Date(now.getTime() + d * 86_400_000)));
-    };
-    const derive = (day: string) =>
-      ids.map((id) => rollEdition(editionSeed(packSeed(EVENT_ID, day, `m:${ME}`), id)));
-    const before = days(new Date());
-    // An edition no candidate day rolls for the first card — five finishes and
-    // at most three candidates guarantees one exists.
-    const taken = new Set(before.map((d) => derive(d)[0]));
-    const forged = [EDITION_IDS.find((e) => !taken.has(e))!, derive(before[0])[1]];
-
     await callServerFn(recordCardPulls, {
-      data: { eventParticipantIds: ids, editions: forged },
+      data: { eventParticipantIds: [CARD_A, CARD_B], editions: ["platinum", "gold"] },
       headers: asMe(),
     });
-    const after = days(new Date());
     const call = mock.client.rpc.mock.calls.find((c) => c[0] === "record_card_pulls");
-    const stored = (call?.[1] as { _editions: string[] })._editions;
-    expect(stored).not.toEqual(forged);
-    expect([derive(before[0]), derive(after[0])]).toContainEqual(stored);
+    expect(call?.[1]).toMatchObject({ _editions: null });
   });
 
-  it("stores an honest edition claim exactly as sent", async () => {
-    // Built with the same primitives the real deal uses, on the league's own
-    // clock — even if NY midnight ticks mid-test, yesterday is still inside
-    // the candidate window, so the claim stays honest and stays stored.
+  it("reveals the finishes the server derived, keyed by card", async () => {
     withDb({
-      "rpc.record_card_pulls": { data: 2 },
+      "rpc.record_card_pulls": {
+        data: { recorded: 2, editions: { [CARD_A]: "gold", [CARD_B]: "standard" } },
+      },
       "rpc.record_pack_open": { data: 1 },
-      "events.select": { data: { id: EVENT_ID } },
     });
     const { recordCardPulls } = await import("./card-pulls.functions");
-    const ids = [CARD_A, CARD_B];
-    const day = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/New_York",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
-    const claimed = ids.map((id) =>
-      rollEdition(editionSeed(packSeed(EVENT_ID, day, `m:${ME}`), id)),
-    );
-    await callServerFn(recordCardPulls, {
-      data: { eventParticipantIds: ids, editions: claimed },
+    const res = await callServerFn<{ editions: Record<string, string> }>(recordCardPulls, {
+      data: { eventParticipantIds: [CARD_A, CARD_B] },
       headers: asMe(),
     });
-    const call = mock.client.rpc.mock.calls.find((c) => c[0] === "record_card_pulls");
-    expect((call?.[1] as { _editions: string[] })._editions).toEqual(claimed);
+    expect(res.editions).toEqual({ [CARD_A]: "gold", [CARD_B]: "standard" });
+  });
+
+  it("renders a finish it does not recognise as standard", async () => {
+    // The value crosses a jsonb boundary, so nothing upstream constrains it. A
+    // rung the ladder has never heard of must not reach a component with no style
+    // for it — the same fallback card-edition.ts applies everywhere else.
+    withDb({
+      "rpc.record_card_pulls": { data: { recorded: 1, editions: { [CARD_A]: "mythic" } } },
+      "rpc.record_pack_open": { data: 1 },
+    });
+    const { recordCardPulls } = await import("./card-pulls.functions");
+    const res = await callServerFn<{ editions: Record<string, string> }>(recordCardPulls, {
+      data: { eventParticipantIds: [CARD_A] },
+      headers: asMe(),
+    });
+    expect(res.editions[CARD_A]).toBe("standard");
   });
 
   it("credits the pack to the token holder, whatever the payload claims", async () => {
-    withDb({ "rpc.record_card_pulls": { data: 1 }, "rpc.record_pack_open": { data: 1 } });
+    withDb({
+      "rpc.record_card_pulls": { data: { recorded: 1, editions: {} } },
+      "rpc.record_pack_open": { data: 1 },
+    });
     const { recordCardPulls } = await import("./card-pulls.functions");
     await callServerFn(recordCardPulls, {
       data: { eventParticipantIds: [CARD_A], participantId: THEM },
@@ -205,7 +189,7 @@ describe("recordCardPulls", () => {
   });
 
   it("credits the token holder, never a caller-supplied id", async () => {
-    withDb({ "rpc.record_card_pulls": { data: 2 } });
+    withDb({ "rpc.record_card_pulls": { data: { recorded: 2, editions: {} } } });
     const { recordCardPulls } = await import("./card-pulls.functions");
     await callServerFn(recordCardPulls, {
       data: { eventParticipantIds: [CARD_A, CARD_B], participantId: THEM },
@@ -218,27 +202,11 @@ describe("recordCardPulls", () => {
     });
   });
 
-  it("passes the finishes positionally, lined up with the cards", async () => {
-    // The RPC zips the two arrays, so the order here IS the mapping. An exact
-    // assertion rather than a shape one: a reordering would still match a
-    // toMatchObject and would file every finish against the wrong card.
-    withDb({ "rpc.record_card_pulls": { data: 2 } });
-    const { recordCardPulls } = await import("./card-pulls.functions");
-    await callServerFn(recordCardPulls, {
-      data: { eventParticipantIds: [CARD_A, CARD_B], editions: ["platinum", "standard"] },
-      headers: asMe(),
-    });
-    expect(mock.client.rpc).toHaveBeenCalledWith("record_card_pulls", {
-      _participant_id: ME,
-      _event_participant_ids: [CARD_A, CARD_B],
-      _editions: ["platinum", "standard"],
-    });
-  });
-
-  it("sends null, not an empty array, when the caller names no finishes", async () => {
-    // unnest() pads a NULL against the ids and every row falls to standard. An
-    // empty array would zip to nothing and drop the whole pack.
-    withDb({ "rpc.record_card_pulls": { data: 1 } });
+  it("always sends null for the ignored editions parameter", async () => {
+    // The parameter survives only so an old client's call still resolves. Null
+    // rather than an empty array because that is what the RPC's DEFAULT is, and
+    // sending a value at all would invite somebody to start reading it again.
+    withDb({ "rpc.record_card_pulls": { data: { recorded: 1, editions: {} } } });
     const { recordCardPulls } = await import("./card-pulls.functions");
     await callServerFn(recordCardPulls, {
       data: { eventParticipantIds: [CARD_A] },
@@ -246,18 +214,6 @@ describe("recordCardPulls", () => {
     });
     const call = mock.client.rpc.mock.calls.find((c) => c[0] === "record_card_pulls");
     expect(call?.[1]).toMatchObject({ _editions: null });
-  });
-
-  it("refuses finishes that do not line up one-to-one with the cards", async () => {
-    // A mismatch would not fail in Postgres, it would silently misattribute —
-    // unnest pads the short side with NULL — so it has to be caught here.
-    const { recordCardPulls } = await import("./card-pulls.functions");
-    await expect(
-      callServerFn(recordCardPulls, {
-        data: { eventParticipantIds: [CARD_A, CARD_B], editions: ["gold"] },
-        headers: asMe(),
-      }),
-    ).rejects.toThrow();
   });
 
   it("refuses a finish outside the ladder", async () => {
@@ -275,7 +231,7 @@ describe("recordCardPulls", () => {
   it("goes through the RPC rather than inserting rows itself", async () => {
     // The one-row-per-person-per-card rule is a composite primary key. A handler
     // inserting directly would be racing it.
-    withDb({ "rpc.record_card_pulls": { data: 1 } });
+    withDb({ "rpc.record_card_pulls": { data: { recorded: 1, editions: {} } } });
     const { recordCardPulls } = await import("./card-pulls.functions");
     await callServerFn(recordCardPulls, {
       data: { eventParticipantIds: [CARD_A] },
@@ -502,46 +458,5 @@ describe("getMyCardStats", () => {
       cards: unknown[];
     }>(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
     expect(res).toEqual({ packsOpened: 0, firstPackOn: null, lastPackOn: null, cards: [] });
-  });
-});
-
-describe("deriveEditions", () => {
-  // Pinned mid-afternoon in New York, well clear of both midnights: the
-  // candidate days are exactly the 24th and its two neighbours.
-  const NOW = new Date("2026-08-24T18:00:00Z");
-  const IDS = [CARD_A, CARD_B];
-  const derive = (day: string) =>
-    IDS.map((id) => rollEdition(editionSeed(packSeed(EVENT_ID, day, `m:${ME}`), id)));
-
-  async function run(claimed: Edition[] | null, eventId: string | null = EVENT_ID) {
-    const { deriveEditions } = await import("./card-pulls.functions");
-    return deriveEditions({ eventId, participantId: ME, ids: IDS, claimed, now: NOW });
-  }
-
-  it("accepts a claim rolled on the league's own day", async () => {
-    const claimed = derive("2026-08-24");
-    expect(await run(claimed)).toEqual(claimed);
-  });
-
-  it("accepts a claim rolled a day either side — a UTC phone is not a forger", async () => {
-    expect(await run(derive("2026-08-23"))).toEqual(derive("2026-08-23"));
-    expect(await run(derive("2026-08-25"))).toEqual(derive("2026-08-25"));
-  });
-
-  it("replaces a claim no candidate day could have rolled", async () => {
-    const taken = new Set(["2026-08-23", "2026-08-24", "2026-08-25"].map((d) => derive(d)[0]));
-    const forged = [EDITION_IDS.find((e) => !taken.has(e))!, derive("2026-08-24")[1]];
-    expect(await run(forged)).toEqual(derive("2026-08-24"));
-  });
-
-  it("leaves an absent claim absent, for phones from before editions", async () => {
-    expect(await run(null)).toBeNull();
-  });
-
-  it("passes the claim through when no event is resolvable", async () => {
-    // The seed's event third would be wrong, so a derivation would be noise —
-    // and the claimed value is at worst a self-inflicted stat.
-    const claimed: Edition[] = ["platinum", "standard"];
-    expect(await run(claimed, null)).toEqual(claimed);
   });
 });

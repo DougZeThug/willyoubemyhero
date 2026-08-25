@@ -283,10 +283,13 @@ test.describe("trading post", () => {
     await expect(dog).not.toContainText(/last copy/i);
   });
 
-  test("names no secret card in the public feed", async ({ page, server }) => {
-    // The feed is built from the redacted jsonb summary, so there is nothing here
-    // to leak — this is the browser-side statement of that, sitting next to the
-    // db assertion that the summary carries no secret_card_id.
+  test("falls back to counting a secret the summary could not name", async ({ page, server }) => {
+    // The fallback branch, not the rule. The summary DOES name secrets — the
+    // league asked to read which one moved — but trades settled before that
+    // widening carry `{kind:"secret"}` and nothing else, and they stay in the
+    // feed forever. This used to be called "names no secret card in the public
+    // feed", which described the world before 20260825000127 and went on passing
+    // while 20260825120000 silently reverted the naming in SQL.
     await signIn(page);
     server.set("getTradeFeed", [
       {
@@ -302,6 +305,28 @@ test.describe("trading post", () => {
     await page.goto("/players/trade");
     await expect(page.getByText(/sent a secret to/i)).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/gary/i);
+  });
+
+  test("names the secret that moved, when the summary carries one", async ({ page, server }) => {
+    // The browser half of what 20260827130000 restored. The db half is in
+    // tests/db/trades.test.ts, against the stored jsonb; this is the statement
+    // that the name actually reaches a reader.
+    await signIn(page);
+    server.set("getTradeFeed", [
+      {
+        id: "t1",
+        proposerId: ME.pid,
+        recipientId: THEM.pid,
+        proposerGave: [{ kind: "secret", secretCardId: "sc-1", name: "Gary the Grill" }],
+        recipientGave: [{ kind: "roster", eventParticipantId: THEM.ep }],
+        executedAt: "2026-08-17T10:00:00Z",
+      },
+    ]);
+
+    await page.goto("/players/trade");
+    await expect(page.getByText(/gary the grill/i).first()).toBeVisible();
+    // And the nameless wording stays out of the way when there is a name.
+    await expect(page.getByText(/sent a secret to/i)).toBeHidden();
   });
 
   test("the vault links here", async ({ page, server }) => {

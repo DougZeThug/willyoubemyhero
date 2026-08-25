@@ -28,10 +28,12 @@ import { SecretCardsPanel } from "@/components/secret-cards-panel";
 import { CardPromptStudio } from "@/components/card-prompt-studio";
 import { MemberCodesPanel, AwardsAdminPanel } from "@/components/member-admin-panel";
 import { CardGrantPanel } from "@/components/card-grant-panel";
+import { DustAdminPanel } from "@/components/dust-admin-panel";
 import { OwnershipAuditPanel } from "@/components/ownership-audit-panel";
 import { StationsPanel } from "@/components/stations-panel";
 import { ResultsAdminPanel } from "@/components/results-admin-panel";
 import { AdminSection } from "@/components/admin-section";
+import { dustLive } from "@/lib/dust";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
@@ -618,6 +620,7 @@ function StartCard({
 function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: string }) {
   const { event, bundle } = useEventBundle();
   const awardsLocked = event?.awards_locked;
+  const dustOn = dustLive(event);
   const photos = useEventPhotoUrls(eventId);
   const cards = useEventCardUrls(eventId);
   const qc = useQueryClient();
@@ -799,6 +802,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       <MemberCodesPanel eventId={eventId} />
       <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
       <CardGrantPanel eventId={eventId} />
+      <DustAdminPanel eventId={eventId} enabled={dustOn} />
       <OwnershipAuditPanel eventId={eventId} />
       <StationsPanel eventId={eventId} />
       <ResultsAdminPanel eventId={eventId} />

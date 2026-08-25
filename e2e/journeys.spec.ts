@@ -14,7 +14,7 @@ import {
 // a three-card pack, "assert two packs differ" collides often enough to be flaky;
 // "assert this pack is the one this identity earns" never does.
 import { dealPack, packSeed } from "../src/lib/pack";
-import { editionLabel, editionSeed, rollEdition } from "../src/lib/card-edition";
+import { editionLabel } from "../src/lib/card-edition";
 import { CEREMONY_MS } from "../src/lib/pack-ceremony";
 
 const MEMBER_KEY = "wwbh:member-token";
@@ -739,27 +739,32 @@ test.describe("opening a pack", () => {
     expect(two).not.toEqual(one);
   });
 
-  test("prints the finish the pack actually rolled, and keeps it across a reload", async ({
+  test("prints the finish the server derived, and keeps it across a reload", async ({
     page,
+    server,
   }) => {
-    // Searched for rather than pinned, the same technique the guest-ids test
-    // above uses and for a sharper reason: seven pulls in ten are standard and
-    // print no badge at all, so an arbitrary device id would assert nothing most
-    // days and then fail on the day it drew a gold.
-    const withBadge = Array.from({ length: 200 }, (_, i) => `finish-${i}`)
-      .map((device) => {
-        const seed = packSeed(EVENT_ID, dayKey(), `d:${device}`);
-        const ids = expectedPack(`d:${device}`);
-        const at = ids.findIndex((id) => rollEdition(editionSeed(seed, id)) !== "standard");
-        return { device, at, edition: at < 0 ? null : rollEdition(editionSeed(seed, ids[at])) };
-      })
-      .find((c) => c.at === 0);
-    expect(withBadge, "no device id drew a non-standard first card today").toBeTruthy();
-    const label = editionLabel(withBadge!.edition)!;
+    // Stubbed rather than searched for. This used to hunt through two hundred
+    // device ids for one whose first card rolled non-standard, because the finish
+    // was a pure function of the pack seed and the test could compute it. It is a
+    // server answer now, so the stub simply says what the server said.
+    // PLATINUM, not gold, and that is not arbitrary: card-rarity.ts labels the
+    // podium tier "Gold" as well, so getByText("Gold") matches a second-place
+    // card's rarity badge and has nothing to do with its finish. Platinum,
+    // silver and bronze are the three finish labels no rarity label collides
+    // with.
+    const device = "finish-device";
+    const ids = expectedPack(`d:${device}`);
+    server.set("recordCardPulls", {
+      ok: true,
+      recorded: ids.length,
+      packsOpened: 1,
+      editions: { [ids[0]]: "platinum" },
+    });
+    const label = editionLabel("platinum")!;
 
-    await page.addInitScript((device: string) => {
-      localStorage.setItem("wwbh:device-id", device);
-    }, withBadge!.device);
+    await page.addInitScript((d: string) => {
+      localStorage.setItem("wwbh:device-id", d);
+    }, device);
     await page.goto("/players/pack");
     await tearPack(page);
 
@@ -768,10 +773,115 @@ test.describe("opening a pack", () => {
     await standCard(page).click();
     await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
 
-    // The finish is derived, never stored — so a reload has to re-roll it to the
-    // same answer rather than read it back.
+    // The finish is derived from (participant, card, league day) rather than
+    // stored on the device, so a reload has to ask again and be told the same
+    // thing. That idempotence is what the client's deterministic seed used to buy.
     await page.reload();
     await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
+  });
+
+  test("reveals a standard rather than a finish the server has not answered with", async ({
+    page,
+    server,
+  }) => {
+    // The failure the whole round trip is designed around: a card can be turned
+    // over before the record lands. It must show the plainest thing and correct
+    // itself, never a rare nobody has decided on.
+    //
+    // Failed rather than merely slow, because a delay races the tear ceremony —
+    // which takes long enough that the answer usually beats the first tap, and a
+    // test that has to lose that race is a test that flakes when the ceremony is
+    // retimed. The route retries on its own (0/4s/8s), so recovering mid-flight
+    // exercises the real path.
+    // Platinum for the same reason as the test above: "Gold" is also a rarity
+    // label, so it would match a podium card's badge whatever the finish is.
+    const device = "slow-finish-device";
+    const ids = expectedPack(`d:${device}`);
+    server.set("recordCardPulls", {
+      ok: true,
+      recorded: ids.length,
+      packsOpened: 1,
+      editions: { [ids[0]]: "platinum" },
+    });
+    server.fail("recordCardPulls", "offline at the tear");
+    const label = editionLabel("platinum")!;
+
+    await page.addInitScript((d: string) => {
+      localStorage.setItem("wwbh:device-id", d);
+    }, device);
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await standCard(page).click();
+
+    // Turned, and carrying no claim about its finish.
+    await expect(page.getByText(label, { exact: false })).toBeHidden();
+
+    // Then the network comes back, the retry lands, and the card tells the truth
+    // without anybody touching it.
+    server.recover("recordCardPulls");
+    await expect(page.getByText(label, { exact: false }).first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("records the new day's pack when a tab is left open across midnight", async ({
+    page,
+    server,
+  }) => {
+    // A phone in a garden stays open overnight. The actor does not change, and
+    // the effect that re-arms the pack used to key on the actor alone — so the
+    // record latch stayed set and the new day's pack was never filed at all,
+    // while the previous day's edition map survived to shine on a card the server
+    // had granted nothing for.
+    //
+    // The wall clock is moved with setFixedTime rather than clock.install(): the
+    // reveal ceremony runs on real timers and animations, and faking those to
+    // move a date would be testing the fake.
+    const device = "midnight-device";
+    const ids = expectedPack(`d:${device}`);
+    server.set("recordCardPulls", {
+      ok: true,
+      recorded: ids.length,
+      packsOpened: 1,
+      editions: { [ids[0]]: "platinum" },
+    });
+    const label = editionLabel("platinum")!;
+
+    await page.addInitScript((d: string) => {
+      localStorage.setItem("wwbh:device-id", d);
+    }, device);
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await standCard(page).click();
+    await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
+
+    const before = server.calls.filter((c) => c.includes("recordCardPulls")).length;
+    expect(before).toBeGreaterThan(0);
+
+    // Tomorrow, and a visibility flip — the same signal a phone waking up sends,
+    // and the one the route polls the date on.
+    const tomorrow = new Date(Date.now() + 26 * 60 * 60 * 1000);
+    await page.clock.setFixedTime(tomorrow);
+
+    // Dispatched on a poll rather than once. The route refuses to re-seal a pack
+    // out from under a reveal — `revealingRef` is still set while a platinum's
+    // celebration plays — so a single nudge lands too early and is correctly
+    // ignored. Waiting for the seal is waiting for that guard to clear.
+    await expect
+      .poll(
+        async () => {
+          await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+          return page.getByText(label, { exact: false }).count();
+        },
+        { timeout: 25_000 },
+      )
+      .toBe(0);
+
+    // A fresh pack, sealed again, and the day's record actually fires for it.
+    await tearPack(page);
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("recordCardPulls")).length, {
+        timeout: 20_000,
+      })
+      .toBeGreaterThan(before);
   });
 
   test("puts no finish on a card nobody has packed", async ({ page }) => {

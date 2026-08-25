@@ -19,11 +19,25 @@ async function cardIds(): Promise<string[]> {
 }
 
 async function record(participantId: string, ids: string[], editions: string[] | null = null) {
-  const [row] = await sql<{ record_card_pulls: number }>(
-    "SELECT public.record_card_pulls($1, $2, $3)",
-    [participantId, ids, editions],
+  const [row] = await sql<{
+    record_card_pulls: { recorded: number; editions: Record<string, string> };
+  }>("SELECT public.record_card_pulls($1, $2, $3)", [participantId, ids, editions]);
+  return row.record_card_pulls.recorded;
+}
+
+/**
+ * The finish Postgres will derive for this copy.
+ *
+ * Cast to the league's own day explicitly: record_card_pulls runs under
+ * SET timezone = 'America/New_York' while this session is UTC, and for five hours
+ * either side of midnight the two disagree about what day it is.
+ */
+async function derivedEdition(participantId: string, ep: string) {
+  const [row] = await sql<{ e: string }>(
+    `SELECT public.roll_card_edition($1, $2, (now() AT TIME ZONE 'America/New_York')::date) AS e`,
+    [participantId, ep],
   );
-  return row.record_card_pulls;
+  return row.e;
 }
 
 async function copies(participantId: string, ep: string) {
@@ -46,16 +60,26 @@ async function derived(participantId: string, ep: string) {
 /** Move a pull copy back in time, which is the only way to fake a later day. */
 async function rewindCopies(days: number) {
   await sql("UPDATE public.card_copies SET acquired_on = acquired_on - $1::int WHERE source = 'pull'", [days]); // prettier-ignore
+  // card_mints as well, or "a later day" never arrives: record_card_pulls asks
+  // that table whether this card was already minted today, so a rewind that left
+  // it alone would report every seeded copy as still being today's.
+  await sql("UPDATE public.card_mints SET minted_on = minted_on - $1::int", [days]);
 }
 
 describe("card_copies", () => {
-  it("mints one copy per card in a pack", async () => {
+  it("mints one copy per card in a pack, on the server's own finish", async () => {
     const ids = await cardIds();
     await record(IDS.alice, ids, ["gold", "standard", "platinum"]);
     expect(await copies(IDS.alice, ids[0])).toEqual([
-      { edition: "gold", acquired_on: expect.anything(), source: "pull" },
+      {
+        edition: await derivedEdition(IDS.alice, ids[0]),
+        acquired_on: expect.anything(),
+        source: "pull",
+      },
     ]);
-    expect((await copies(IDS.alice, ids[2]))[0].edition).toBe("platinum");
+    expect((await copies(IDS.alice, ids[2]))[0].edition).toBe(
+      await derivedEdition(IDS.alice, ids[2]),
+    );
   });
 
   it("mints no second copy for a replay of the same day", async () => {
@@ -76,31 +100,30 @@ describe("card_copies", () => {
     expect((await derived(IDS.alice, ids[0])).pull_count).toBe(2);
   });
 
-  it("upgrades the day's own copy rather than adding one", async () => {
-    // A replay carrying a better finish is still a replay. Best wins on the copy
-    // itself, so the derived row and the copy can never disagree about it.
+  it("leaves the day's own copy alone on a replay, whatever it claims", async () => {
+    // A replay carrying a better finish used to upgrade the copy, which was right
+    // while the finish was a claim about a roll that had happened on the phone.
+    // With the server deciding, an upgrade-on-replay is a ratchet: the client
+    // records a pack up to three times a cycle and re-arms on 'online'.
     const ids = await cardIds();
     await record(IDS.alice, [ids[0]], ["bronze"]);
     await record(IDS.alice, [ids[0]], ["platinum"]);
     const rows = await copies(IDS.alice, ids[0]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].edition).toBe("platinum");
-    expect((await derived(IDS.alice, ids[0])).edition).toBe("platinum");
-  });
-
-  it("never demotes the day's own copy", async () => {
-    const ids = await cardIds();
-    await record(IDS.alice, [ids[0]], ["platinum"]);
-    await record(IDS.alice, [ids[0]], ["standard"]);
-    expect((await copies(IDS.alice, ids[0]))[0].edition).toBe("platinum");
+    expect(rows[0].edition).toBe(await derivedEdition(IDS.alice, ids[0]));
+    expect((await derived(IDS.alice, ids[0])).edition).toBe(rows[0].edition);
   });
 
   it("keeps two people's copies of one card apart", async () => {
+    // Same card, same day, different people — and the derivation is keyed on the
+    // participant, so the two finishes are independent.
     const ids = await cardIds();
-    await record(IDS.alice, [ids[0]], ["platinum"]);
-    await record(IDS.bob, [ids[0]], ["standard"]);
-    expect((await copies(IDS.alice, ids[0]))[0].edition).toBe("platinum");
-    expect((await copies(IDS.bob, ids[0]))[0].edition).toBe("standard");
+    await record(IDS.alice, [ids[0]]);
+    await record(IDS.bob, [ids[0]]);
+    expect((await copies(IDS.alice, ids[0]))[0].edition).toBe(
+      await derivedEdition(IDS.alice, ids[0]),
+    );
+    expect((await copies(IDS.bob, ids[0]))[0].edition).toBe(await derivedEdition(IDS.bob, ids[0]));
   });
 
   it("refuses a second same-day pull copy inserted directly", async () => {

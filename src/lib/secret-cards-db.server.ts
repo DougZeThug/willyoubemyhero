@@ -77,6 +77,15 @@ export type PullSecretCardResult = {
   tier: string;
   fresh: boolean;
   /**
+   * Dust this pull just paid, or null.
+   *
+   * 25 on a duplicate, 0 on a fresh card, and NULL on the `fresh: false` returns
+   * — those describe a pull that already happened and already paid, and repeating
+   * the number would have the ceremony announce it twice. Always 0 for a guest:
+   * dust_ledger is keyed on a participant.
+   */
+  dust: number | null;
+  /**
    * The set this pull just finished, or null — which is every pull but one.
    *
    * The single place in this feature a set SIZE crosses the wire, and it only

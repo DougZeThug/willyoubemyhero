@@ -976,10 +976,17 @@ describe("accept_trade_offer — lifecycle", () => {
     expect(await sql("SELECT count(*)::int AS n FROM public.trades")).toEqual([{ n: 1 }]);
   });
 
-  it("records the trade publicly, naming no secret card and no finish", async () => {
-    // The leak this table would otherwise be: `trades` is anon-readable AND
-    // published to realtime. A secret_card_id hands the catalogue to every phone
-    // in the garden; an edition publishes a client-asserted value league-wide.
+  it("names the secret that moved, and still publishes no finish", async () => {
+    // THE ASSERTION WHOSE ABSENCE LET THE FEED REGRESS. 20260825000127 widened
+    // this deliberately — the league asked to read which secret changed hands —
+    // and 20260825120000 re-created accept_trade_offer from a copy that predated
+    // it, silently putting "a secret" back. This test asserted the pre-widening
+    // shape, so it went green against the revert and nobody noticed.
+    //
+    // What must still never appear: an edition. `trades` is anon-readable AND
+    // realtime-published, and what finish somebody handed over is between the two
+    // people in the trade. A name is the whole of the widening — no art path, no
+    // tier, and nothing at all about a card nobody has traded.
     const { bobCard, bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
@@ -1007,14 +1014,15 @@ describe("accept_trade_offer — lifecycle", () => {
     expect(row.proposer_id).toBe(IDS.alice);
     expect(row.recipient_id).toBe(IDS.bob);
     expect(row.event_id).toBe(IDS.event);
-    expect(row.proposer_gave).toEqual([{ kind: "secret" }]);
+    expect(row.proposer_gave).toEqual([
+      { kind: "secret", secretCardId: card, name: "Gary the Grill" },
+    ]);
     // The CARD, resolved from the copy — and nothing about the copy itself.
     expect(row.recipient_gave).toEqual([{ kind: "roster", eventParticipantId: bobCard }]);
 
     const blob = JSON.stringify(row.proposer_gave) + JSON.stringify(row.recipient_gave);
-    expect(blob).not.toContain(card);
+    // The pull row's id is not the card's, and it is nobody else's business.
     expect(blob).not.toContain(spare);
-    expect(blob).not.toContain("secret_card_id");
     expect(blob).not.toContain("platinum");
     expect(blob).not.toContain("edition");
     expect(blob).not.toContain(bobCopies[0]);

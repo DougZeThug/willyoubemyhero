@@ -47,7 +47,8 @@ import {
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { usePackIdentity } from "@/lib/device-id";
 import { dealPack, packSeed, packStage, resumeCursor, type SecretSlot } from "@/lib/pack";
-import { editionCelebrates, editionSeed, rollEdition, type Edition } from "@/lib/card-edition";
+import { editionCelebrates, type Edition } from "@/lib/card-edition";
+import { dustBalanceKey } from "@/hooks/use-dust";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
@@ -226,6 +227,9 @@ function PackPage() {
   const status = useSecretStatus(actor);
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
+  // What the pull just paid, held for the reveal caption. Null means nothing to
+  // say — a fresh card, a guest, or a re-read of a pull that already paid.
+  const [secretDust, setSecretDust] = useState<number | null>(null);
   const [secretRevealed, setSecretRevealed] = useState(false);
   /**
    * The set this pull just finished, held until the card has been turned over.
@@ -461,35 +465,22 @@ function PackPage() {
     return dealtIds.map((id) => all.find((p) => p.id === id)).filter((p) => p != null);
   }, [bundle, dealtIds, nextPack]);
 
-  // The finish on each card in the pack, by card id.
+  // The finish on each card in the pack, by card id — as decided by Postgres.
   //
-  // Nothing about this is stored. It is a pure function of the pack seed and the
-  // card id, so a resumed pack re-derives the identical finishes — unlike the
-  // dealt ids, which have to be stored because the last slot depends on what was
-  // uncollected at the moment the pack was opened.
+  // This used to be a pure function of the pack seed: the device rolled every
+  // finish from rollEdition(editionSeed(...)) and a resumed pack re-derived the
+  // identical set. It is a server answer now, because a finish stopped being a
+  // private stat the moment dust started paying out by edition
+  // (20260826120000_server_rolled_editions.sql). `record_card_pulls` derives it
+  // from (participant, card, league day) and hands back a map, which is what the
+  // recording effect below fills this in from.
   //
-  // Keyed off the ids rather than off `pack`, and that is load-bearing rather
-  // than tidy: `pack` resolves ids against the bundle, so on a cold load of an
-  // already-torn pack it is empty until the bundle arrives. The recording effect
-  // below fires as soon as the member is known and latches, so an editions map
-  // that waited for the bundle would have recorded a pack of standards.
-  //
-  // Waits for the EVENT and not merely for a seed. `packSeed` substitutes
-  // "no-event" until the bundle query answers, and the identity behind the other
-  // two thirds comes out of localStorage — so on a cold load there is a real
-  // window where the seed is fully formed, entirely wrong, and *truthy*, which a
-  // presence check would sail straight past. Rolling there would show one set of
-  // finishes, record them, latch, and then re-roll to a different set the moment
-  // the event landed. Nothing is lost by waiting: `pack` resolves its ids against
-  // the same bundle, so the stand renders nothing at all during that window.
-  const editions = useMemo(() => {
-    const out: Record<string, Edition> = {};
-    if (!seed || !event?.id) return out;
-    for (const id of dealtIds ?? nextPack.map((p) => p.id)) {
-      out[id] = rollEdition(editionSeed(seed, id));
-    }
-    return out;
-  }, [dealtIds, nextPack, seed, event?.id]);
+  // Empty until that response lands, and `revealAt` falls back to standard for
+  // anything missing. That is the deliberate trade: reveal the plainest thing and
+  // correct it, never a locally-rolled rare the server will not honour. The RPC
+  // derives rather than rolls, so the same pack answers the same way on every
+  // retry — which is what the seed's determinism used to buy.
+  const [editions, setEditions] = useState<Record<string, Edition>>({});
 
   const torn = dealtIds != null;
   const reduced = usePrefersReducedMotion();
@@ -546,6 +537,12 @@ function PackPage() {
     const ep = pack[i];
     if (!ep) return;
     const rarity = rarities.get(ep.id) ?? rarityStyle("base");
+    // KNOWN, not just non-null. A card turned before the record response lands
+    // reads as standard, and the cues below have to stay silent for it: a shine
+    // or a burst fired off the fallback is a promise about a finish nobody has
+    // decided yet. The card itself still updates when the answer arrives — the
+    // map is state — and the summary shows it with the shine it earned.
+    const known = Object.hasOwn(editions, ep.id);
     const edition = editions[ep.id] ?? "standard";
     const isHit = i === pack.length - 1;
 
@@ -563,8 +560,8 @@ function PackPage() {
       playReveal(rarity.tier);
       // A second cue over the chime, not a chime of its own — the tier and the
       // finish are separate facts and the ear should hear them that way. Silent
-      // below gold.
-      playEditionShine(edition);
+      // below gold, and silent for a finish the server has not answered with yet.
+      if (known) playEditionShine(edition);
       // A migrated pack turns cards that were already pulled. Writing here would
       // charge somebody a second pull for a ceremony they were given, not asked
       // for. See replayedRef.
@@ -592,7 +589,11 @@ function PackPage() {
       // The finish can carry a card the tier never would: a 0.5% platinum on a
       // base card is the whole point of the ladder, and it stops the garden the
       // same way a podium does.
-      if (rarity.tier === "champion" || rarity.tier === "podium" || editionCelebrates(edition)) {
+      if (
+        rarity.tier === "champion" ||
+        rarity.tier === "podium" ||
+        (known && editionCelebrates(edition))
+      ) {
         await celebrate(rarity, edition);
       }
     } finally {
@@ -633,6 +634,12 @@ function PackPage() {
         if (res.ok) {
           setSecret(res.card);
           setSecretDuplicate(res.duplicate);
+          setSecretDust(res.dust && res.dust > 0 ? res.dust : null);
+          // The balance moved, and the vault's chip is the only thing that shows
+          // it. Members only — a guest has no ledger to invalidate.
+          if (res.dust) {
+            void qc.invalidateQueries({ queryKey: dustBalanceKey(me?.participantId) });
+          }
           setSecretUnavailable(false);
           // A card minted just now has never been seen, whatever the device's
           // stored reveal state says — local midnight and league midnight can
@@ -733,10 +740,9 @@ function PackPage() {
   useEffect(() => {
     const pid = me?.participantId;
     // The event gates this alongside the rest, not just the seed. A seed built
-    // before the bundle answers carries "no-event" and rolls a different set of
-    // finishes — and the latch below would make that set permanent for the day
-    // while the screen went on to show the corrected one. Waiting costs nothing:
-    // the effect re-runs when the event lands.
+    // before the bundle answers carries "no-event", so the ids in hand are a pack
+    // dealt against nothing — and the latch below would make that pack permanent
+    // for the day. Waiting costs nothing: the effect re-runs when the event lands.
     if (!torn || !dealtIds?.length || !actor || !seed || !event?.id) return;
     if (recordedForRef.current === actor) return;
     recordedForRef.current = actor;
@@ -770,14 +776,16 @@ function PackPage() {
           // pack reaches here before the event query has answered, so passing it
           // from the client stamped a null and the latch above stopped it ever
           // being retried.
-          // Positional: the RPC zips the two arrays, so this map must stay keyed
-          // off `ids` in its own order and never be built independently.
-          await record({
-            data: {
-              eventParticipantIds: ids,
-              editions: ids.map((id) => editions[id] ?? "standard"),
-            },
-          });
+          // No finishes are sent. The RPC derives its own and ignores the
+          // parameter; the map it answers with is the only edition this screen
+          // shows. Applied before the invalidations so the reveal has it as
+          // early as possible — the cards are usually still face down here.
+          const res = await record({ data: { eventParticipantIds: ids } });
+          // The phone can have changed hands during the request, and these
+          // finishes belong to the actor that asked for them.
+          if (recordActorRef.current === actor && res?.editions) {
+            setEditions((prev) => ({ ...prev, ...res.editions }));
+          }
           await Promise.all([
             qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
             // The pack open is what advances the streak, for a guest as much as
@@ -795,15 +803,20 @@ function PackPage() {
       // not clear the latch the next member's run has taken.
       if (recordedForRef.current === actor) recordedForRef.current = null;
     })();
-  }, [torn, dealtIds, actor, me?.participantId, record, qc, event?.id, seed, editions, recordWake]);
+    // `editions` is deliberately absent: this effect WRITES it, and depending on
+    // what it sets would re-run it against its own result.
+  }, [torn, dealtIds, actor, me?.participantId, record, qc, event?.id, seed, recordWake]);
 
   // A phone changing hands mid-party is a real thing in this league. Re-arm the
   // latch when the member changes so the next person gets their own card.
   useEffect(() => {
     pullFiredRef.current = false;
     recordedForRef.current = null;
+    // Finishes belong to the member they were derived for.
+    setEditions({});
     setSecret(null);
     setSecretRevealed(false);
+    setSecretDust(null);
     setSecretFailed(false);
     setSecretUnavailable(false);
     // The next person's milestones are their own, and a reveal left on screen
@@ -814,6 +827,27 @@ function PackPage() {
     setClaimError(null);
     setMilestoneReveal(null);
   }, [actor]);
+
+  // And re-arm the pack half when the DAY turns, which the effect above cannot
+  // see: a tab left open overnight keeps the same actor, so nothing here used to
+  // run at all.
+  //
+  // Two things were wrong with that. The latch stayed set to `actor`, so the
+  // record effect returned at its guard for the rest of the new day — the pack
+  // was never filed, the streak never advanced for it, and none of the counts
+  // were invalidated. And `editions` still held yesterday's map, so a card in
+  // both packs rendered with yesterday's finish AND passed the `known` check,
+  // firing the shine and the burst for a finish the server had not granted. That
+  // is exactly what `known` exists to prevent.
+  //
+  // Its own effect rather than more deps on the one above, because this app runs
+  // on two clocks on purpose: the pack rolls over on the device's local day and
+  // the secret drop on the server's league day (see serverDayRef below). Folding
+  // them together would re-arm the secret on the wrong signal.
+  useEffect(() => {
+    recordedForRef.current = null;
+    setEditions({});
+  }, [dayKey]);
 
   // The drop rolls over on the *server's* day, not this device's. Guarded on the
   // first observed value, or this would clobber the secretRevealed that the
@@ -1279,6 +1313,7 @@ function PackPage() {
               secretRarity={secretRarity}
               secretRevealed={secretRevealed}
               secretDuplicate={secretDuplicate}
+              secretDust={secretDust}
               secretPeeking={secretPeeking}
               peeking={peeking}
               busy={autoRunning}

@@ -55,6 +55,12 @@ export type CardCopyRow = {
   event_participant_id: string;
   /** Unconstrained text, exactly like card_pulls.edition — ids live in card-edition.ts. */
   edition: string;
+  /**
+   * Who decided this copy's finish. `'server'` means roll_card_edition() did;
+   * `'client'` means a phone or a commissioner named it. Only server rows pay by
+   * edition when milled — see 20260826120000.
+   */
+  edition_asserted_by: "client" | "server";
   /** The league day this copy was pulled on. Null once it has been traded. */
   acquired_on: string | null;
   source: "pull" | "trade" | "backfill";

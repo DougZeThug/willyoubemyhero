@@ -170,7 +170,10 @@ export const DEFAULT_RESPONSES: Responses = {
   // Empty by default, so packedByLabel renders nothing and no existing spec
   // has to know this feature exists.
   getCardPullCounts: {},
-  recordCardPulls: { ok: true, recorded: 0 },
+  // `editions` is the map the pack reveal reads — keyed by event_participant_id,
+  // filled in by the server. Empty by default so every existing spec reveals
+  // standards and none of them has to know a finish can arrive late.
+  recordCardPulls: { ok: true, recorded: 0, packsOpened: 0, editions: {} },
   // Trading. Empty by default for the same reason: /players/trade renders its
   // "nobody wants your cards yet" state and the vault's Trade pill leads
   // somewhere harmless. None of these three keys is a substring of another or of
