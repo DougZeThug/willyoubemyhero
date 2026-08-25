@@ -193,6 +193,14 @@ available_until date`; extend `pull_secret_card`'s candidate WHERE with the
   ids on the argument that the worst case was a phantom pack on a private stat;
   `card_copies` made that false — its once-a-day index is per CARD — and dust
   would have made every extra copy currency.
+- **The cap counts `card_mints`, not held copies** (`20260827120000`). Counting
+  copies was a bypass: `accept_trade_offer` re-parents a row, sets
+  `source = 'trade'` and nulls `acquired_on`, so trading today's copy away handed
+  the slot back _and_ took the row out of the partial unique index. Two members
+  with duplicates could swap, both re-mint, and both burn what they received, on
+  a loop. A cap over mutable ownership is one that anything moving a copy
+  reopens — R5's `craft_up_copies` would reopen it again — so the budget lives in
+  an append-only row per card per member per league day.
 
 ### 4b. Dust ledger + earn + sinks — shipped
 
@@ -268,9 +276,10 @@ e2e is advisory.
   concurrent buys, driven from separate connections; mill rejects last-copy,
   today's own pull and a staked copy; flat-vs-by-edition payout; a bought pull
   bypasses the daily index while the free pull still cannot double; both request
-  ids replay. `tests/db/card-pulls.test.ts` — a retry returns the same finishes,
-  a re-mint after the copy is deleted returns the same finish, client-passed
-  editions ignored, the mint cap, and the SQL ladder pinned against
+  ids replay; and the trade-and-re-mint loop, driven end to end.
+  `tests/db/card-pulls.test.ts` — a retry returns the same finishes, a card whose
+  copy is gone is not re-minted, client-passed editions ignored, the mint cap,
+  and the SQL ladder pinned against
   `EDITION_WEIGHTS_BP`. Unit — the mill ladder and price relationships in
   `src/lib/dust.test.ts`. E2E — the finish is stubbed rather than predicted now,
   plus a spec for the reveal arriving before the record does.
