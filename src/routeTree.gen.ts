@@ -17,6 +17,7 @@ import { Route as AwardsRouteImport } from './routes/awards'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
+import { Route as LeagueRouteImport } from './routes/league'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as OrderRouteImport } from './routes/order'
@@ -68,6 +69,11 @@ const DraftRoute = DraftRouteImport.update({
 const LeaderboardRoute = LeaderboardRouteImport.update({
   id: '/leaderboard',
   path: '/leaderboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeagueRoute = LeagueRouteImport.update({
+  id: '/league',
+  path: '/league',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LiveRoute = LiveRouteImport.update({
@@ -143,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/league': typeof LeagueRoute
   '/live': typeof LiveRoute
   '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/league': typeof LeagueRoute
   '/live': typeof LiveRoute
   '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/claim': typeof ClaimRoute
   '/draft': typeof DraftRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/league': typeof LeagueRoute
   '/live': typeof LiveRoute
   '/mcp': typeof McpRoute
   '/order': typeof OrderRoute
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
     | '/claim'
     | '/draft'
     | '/leaderboard'
+    | '/league'
     | '/live'
     | '/mcp'
     | '/order'
@@ -234,6 +244,7 @@ export interface FileRouteTypes {
     | '/claim'
     | '/draft'
     | '/leaderboard'
+    | '/league'
     | '/live'
     | '/mcp'
     | '/order'
@@ -256,6 +267,7 @@ export interface FileRouteTypes {
     | '/claim'
     | '/draft'
     | '/leaderboard'
+    | '/league'
     | '/live'
     | '/mcp'
     | '/order'
@@ -279,6 +291,7 @@ export interface RootRouteChildren {
   ClaimRoute: typeof ClaimRoute
   DraftRoute: typeof DraftRoute
   LeaderboardRoute: typeof LeaderboardRoute
+  LeagueRoute: typeof LeagueRoute
   LiveRoute: typeof LiveRoute
   McpRoute: typeof McpRoute
   OrderRoute: typeof OrderRoute
@@ -349,6 +362,13 @@ declare module '@tanstack/react-router' {
       path: '/leaderboard'
       fullPath: '/leaderboard'
       preLoaderRoute: typeof LeaderboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/league': {
+      id: '/league'
+      path: '/league'
+      fullPath: '/league'
+      preLoaderRoute: typeof LeagueRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/live': {
@@ -447,6 +467,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClaimRoute: ClaimRoute,
   DraftRoute: DraftRoute,
   LeaderboardRoute: LeaderboardRoute,
+  LeagueRoute: LeagueRoute,
   LiveRoute: LiveRoute,
   McpRoute: McpRoute,
   OrderRoute: OrderRoute,
