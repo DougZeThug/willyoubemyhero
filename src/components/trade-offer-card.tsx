@@ -146,45 +146,30 @@ export function TradeItemTile({
   );
 }
 
-function Side({
-  label,
+function CardStrip({
   items,
   lookup,
   size,
 }: {
-  label: string;
   items: TradeItemView[];
   lookup: RosterCardLookup;
   size: "sm" | "lg";
 }) {
-  const big = size === "lg";
+  if (items.length === 0) {
+    // An item whose card has since been deleted is dropped on the way out, so a
+    // side can arrive empty and must still render as something.
+    return <p className="text-[11px] text-muted-foreground">Nothing left on this side.</p>;
+  }
   return (
-    <div className="min-w-0 flex-1">
-      <div
-        className={cn(
-          "mb-1.5 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
-          big && "text-center text-[10px]",
-        )}
-      >
-        {label}
-      </div>
-      {items.length === 0 ? (
-        // Not reachable through the RPC, which refuses an empty side — but an
-        // item whose card has since been deleted is dropped on the way out, so a
-        // side can arrive empty and must still render as something.
-        <p className="text-[11px] text-muted-foreground">Nothing left on this side.</p>
-      ) : (
-        <div className={cn("flex gap-2 overflow-x-auto pb-1", big && "justify-center")}>
-          {items.map((item) => (
-            <TradeItemTile
-              key={item.kind === "secret" ? item.pullId : item.copyId}
-              item={item}
-              lookup={lookup}
-              size={size}
-            />
-          ))}
-        </div>
-      )}
+    <div className={cn("flex gap-2 overflow-x-auto pb-1", size === "lg" && "justify-center")}>
+      {items.map((item) => (
+        <TradeItemTile
+          key={item.kind === "secret" ? item.pullId : item.copyId}
+          item={item}
+          lookup={lookup}
+          size={size}
+        />
+      ))}
     </div>
   );
 }
@@ -249,13 +234,34 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
         {tradeItemsLabel(iGive)} for {tradeItemsLabel(iGet)}
       </p>
 
-      <div className={cn("flex items-start", pending ? "gap-2" : "gap-3")}>
-        <Side label="You give" items={iGive} lookup={lookup} size={size} />
+      {/* Labels sit in their own row so the cards and arrows can be perfectly
+          centered vertically in the row below them. */}
+      <div className={cn("mb-2 flex", pending ? "gap-2" : "gap-3")}>
         <div
           className={cn(
-            "shrink-0 flex flex-col items-center justify-center text-primary",
-            pending ? "mt-14 gap-1" : "mt-5 gap-0.5",
+            "min-w-0 flex-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
+            pending ? "text-center text-[10px]" : "text-left",
           )}
+        >
+          You give
+        </div>
+        <div className="shrink-0 w-8" aria-hidden />
+        <div
+          className={cn(
+            "min-w-0 flex-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
+            pending ? "text-center text-[10px]" : "text-left",
+          )}
+        >
+          You get
+        </div>
+      </div>
+
+      <div className={cn("flex items-center", pending ? "gap-2" : "gap-3")}>
+        <div className="min-w-0 flex-1">
+          <CardStrip items={iGive} lookup={lookup} size={size} />
+        </div>
+        <div
+          className="shrink-0 flex flex-col items-center justify-center text-primary"
           aria-hidden
         >
           <ArrowRight
@@ -271,7 +277,9 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
             )}
           />
         </div>
-        <Side label="You get" items={iGet} lookup={lookup} size={size} />
+        <div className="min-w-0 flex-1">
+          <CardStrip items={iGet} lookup={lookup} size={size} />
+        </div>
       </div>
 
       {actions && (
