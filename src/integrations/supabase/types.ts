@@ -896,6 +896,7 @@ export type Database = {
           created_at: string
           draft_locked: boolean
           draft_size: number
+          dust_enabled: boolean
           event_date: string | null
           id: string
           location: string | null
@@ -917,6 +918,7 @@ export type Database = {
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
+          dust_enabled?: boolean
           event_date?: string | null
           id?: string
           location?: string | null
@@ -938,6 +940,7 @@ export type Database = {
           created_at?: string
           draft_locked?: boolean
           draft_size?: number
+          dust_enabled?: boolean
           event_date?: string | null
           id?: string
           location?: string | null
@@ -1790,6 +1793,7 @@ export type Database = {
           created_at: string | null
           draft_locked: boolean | null
           draft_size: number | null
+          dust_enabled: boolean | null
           event_date: string | null
           id: string | null
           location: string | null
@@ -1808,6 +1812,7 @@ export type Database = {
           created_at?: string | null
           draft_locked?: boolean | null
           draft_size?: number | null
+          dust_enabled?: boolean | null
           event_date?: string | null
           id?: string | null
           location?: string | null
@@ -1826,6 +1831,7 @@ export type Database = {
           created_at?: string | null
           draft_locked?: boolean | null
           draft_size?: number | null
+          dust_enabled?: boolean | null
           event_date?: string | null
           id?: string | null
           location?: string | null
@@ -1918,6 +1924,7 @@ export type Database = {
         Returns: Json
       }
       dust_balance: { Args: { _participant_id: string }; Returns: number }
+      dust_enabled: { Args: never; Returns: boolean }
       grant_card_copy: {
         Args: {
           _edition?: string
