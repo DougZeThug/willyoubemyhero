@@ -528,6 +528,7 @@ export function SecretCardsPanel() {
       icon={<EyeOff className="h-4 w-4 shrink-0" />}
       title="Secret Cards"
       meta={`${cards.length} in the set`}
+      defaultOpen
     >
       <p className="text-[11px] leading-snug text-muted-foreground">
         Secret cards belong to the league, not to one combine. Upload once and they keep turning up
