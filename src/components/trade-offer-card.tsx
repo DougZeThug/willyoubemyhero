@@ -234,15 +234,33 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
         {tradeItemsLabel(iGive)} for {tradeItemsLabel(iGet)}
       </p>
 
-      <div className={cn("flex items-start", pending ? "gap-2" : "gap-3")}>
-        <Side label="You give" items={iGive} lookup={lookup} size={size} />
+      {/* Labels sit in their own row so the cards and arrows can be perfectly
+          centered vertically in the row below them. */}
+      <div className={cn("mb-2 flex", pending ? "gap-2" : "gap-3")}>
         <div
           className={cn(
-            "shrink-0 flex flex-col items-center justify-center text-primary",
-            pending ? "mt-14 gap-1" : "mt-5 gap-0.5",
+            "min-w-0 flex-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
+            pending ? "text-center text-[10px]" : "text-left",
           )}
-          aria-hidden
         >
+          You give
+        </div>
+        <div className="shrink-0 w-8" aria-hidden />
+        <div
+          className={cn(
+            "min-w-0 flex-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
+            pending ? "text-center text-[10px]" : "text-left",
+          )}
+        >
+          You get
+        </div>
+      </div>
+
+      <div className={cn("flex items-center", pending ? "gap-2" : "gap-3")}>
+        <div className="min-w-0 flex-1">
+          <CardStrip items={iGive} lookup={lookup} size={size} />
+        </div>
+        <div className="shrink-0 flex flex-col items-center justify-center text-primary" aria-hidden>
           <ArrowRight
             className={cn(
               "drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
@@ -256,7 +274,9 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
             )}
           />
         </div>
-        <Side label="You get" items={iGet} lookup={lookup} size={size} />
+        <div className="min-w-0 flex-1">
+          <CardStrip items={iGet} lookup={lookup} size={size} />
+        </div>
       </div>
 
       {actions && (
