@@ -178,8 +178,8 @@ export function SiteNav() {
 
 /**
  * The "something is waiting" dot, same 2.5 units and same placement language as
- * the secret-card dot on the pack button in players.index.tsx. Never carries
- * the count: the number is not the point, and a numeral at this size is a smudge.
+ * the secret-card dot on the pack button in vault-hero.tsx. Never carries the
+ * count: the number is not the point, and a numeral at this size is a smudge.
  *
  * `color` so the pack's dot can wear the secret set's own edge rather than the
  * app's cyan — two cues in one bar reading as the same thing is worse than one.
