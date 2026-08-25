@@ -12,10 +12,11 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { dustBalanceKey } from "@/hooks/use-dust";
+import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { editionStyle } from "@/lib/card-edition";
 import { DUST_PRICES, MILL_LADDER, MILL_CLIENT_FLAT } from "@/lib/dust";
 import { buyBonusSecretPull } from "@/lib/dust.functions";
-import { secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
 import { millCardCopy } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
 import { millValue } from "@/lib/dust";
@@ -39,6 +40,7 @@ export function DustShop({
   onOpenChange,
   balance,
   participantId,
+  actor,
   eventId,
   nameFor,
 }: {
@@ -46,6 +48,15 @@ export function DustShop({
   onOpenChange: (open: boolean) => void;
   balance: number | undefined;
   participantId: string | null | undefined;
+  /**
+   * `m:<participantId>`, the form the secret queries are keyed on.
+   *
+   * Taken as a prop rather than rebuilt here: the vault already holds it from
+   * useSecretActor(), and a second place that knows how to spell an actor is a
+   * second place that can spell it wrong — which is exactly what went wrong when
+   * this invalidated on the bare participant id and matched nothing.
+   */
+  actor: string | null;
   eventId: string | null | undefined;
   /** `event_participants.id` → the name on the card. */
   nameFor: (eventParticipantId: string) => string;
@@ -73,8 +84,20 @@ export function DustShop({
       // rather than refetched — dust_ledger is not published to realtime and a
       // round trip here would show a stale number behind the ceremony.
       qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
-      // The pull is filed as granted, so the daily secret's own status changed.
-      void qc.invalidateQueries({ queryKey: secretStatusKey(participantId) });
+      // KEYED ON THE ACTOR, both of them. These two queries are registered as
+      // ["daily-secret", "m:<uuid>"] and ["my-secrets", "m:<uuid>"], so a bare
+      // participant id matches nothing at all and the purchase closed on "check
+      // your secrets" with the card still missing. useMySecrets holds a
+      // five-minute staleTime, so it was the one that stayed wrong longest.
+      void qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+      void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
+      // A bought pull is a real pull: buy_bonus_secret_pull delegates to
+      // pull_bonus_secret_card, which mints the row and awards the trophy. Buying
+      // the card that finishes a set is the best moment this feature has, so the
+      // shelf should not wait on a realtime event to notice.
+      if (res.pull?.completedCollection) {
+        void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
+      }
       setRequestId(crypto.randomUUID());
       toast("Pull bought — check your secrets");
       onOpenChange(false);

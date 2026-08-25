@@ -783,6 +783,7 @@ function PlayersPage() {
         onOpenChange={setShopOpen}
         balance={dust.data?.balance}
         participantId={member?.participantId}
+        actor={actor}
         eventId={event?.id}
         nameFor={nameFor}
       />
