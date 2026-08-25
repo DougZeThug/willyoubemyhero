@@ -637,6 +637,44 @@ export type Database = {
           },
         ]
       }
+      dust_ledger: {
+        Row: {
+          created_at: string
+          delta: number
+          detail: Json | null
+          id: number
+          participant_id: string
+          reason: string
+          ref: string | null
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          detail?: Json | null
+          id?: never
+          participant_id: string
+          reason: string
+          ref?: string | null
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          detail?: Json | null
+          id?: never
+          participant_id?: string
+          reason?: string
+          ref?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dust_ledger_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_archive_snapshots: {
         Row: {
           created_at: string
@@ -1790,6 +1828,14 @@ export type Database = {
         Returns: Json
       }
       backfill_collection_trophies: { Args: never; Returns: number }
+      buy_bonus_secret_pull: {
+        Args: {
+          _event_id: string
+          _participant_id: string
+          _request_id: string
+        }
+        Returns: Json
+      }
       card_edition_rank: { Args: { _edition: string }; Returns: number }
       cast_award_vote: {
         Args: {
@@ -1835,6 +1881,7 @@ export type Database = {
         }
         Returns: Json
       }
+      dust_balance: { Args: { _participant_id: string }; Returns: number }
       grant_card_copy: {
         Args: {
           _edition?: string
@@ -1863,6 +1910,11 @@ export type Database = {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number
       }
+      mill_card_copy: {
+        Args: { _card_copy_id: string; _participant_id: string }
+        Returns: Json
+      }
+      mill_value: { Args: { _edition: string }; Returns: number }
       pull_bonus_secret_card: {
         Args: {
           _event_id: string
@@ -1894,6 +1946,14 @@ export type Database = {
         Returns: number
       }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
+      reroll_copy_edition: {
+        Args: {
+          _card_copy_id: string
+          _participant_id: string
+          _request_id: string
+        }
+        Returns: Json
+      }
       resync_card_pull: {
         Args: { _event_participant_id: string; _participant_id: string }
         Returns: undefined
