@@ -59,7 +59,7 @@ describe("tradeItemsLabel", () => {
         lastCopy: true,
       },
     ];
-    expect(tradeItemsLabel(items)).toBe("1 card + a secret");
+    expect(tradeItemsLabel(items)).toBe("1 card + Gary the Grill");
   });
 });
 
