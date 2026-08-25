@@ -146,45 +146,30 @@ export function TradeItemTile({
   );
 }
 
-function Side({
-  label,
+function CardStrip({
   items,
   lookup,
   size,
 }: {
-  label: string;
   items: TradeItemView[];
   lookup: RosterCardLookup;
   size: "sm" | "lg";
 }) {
-  const big = size === "lg";
+  if (items.length === 0) {
+    // An item whose card has since been deleted is dropped on the way out, so a
+    // side can arrive empty and must still render as something.
+    return <p className="text-[11px] text-muted-foreground">Nothing left on this side.</p>;
+  }
   return (
-    <div className="min-w-0 flex-1">
-      <div
-        className={cn(
-          "mb-1.5 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
-          big && "text-center text-[10px]",
-        )}
-      >
-        {label}
-      </div>
-      {items.length === 0 ? (
-        // Not reachable through the RPC, which refuses an empty side — but an
-        // item whose card has since been deleted is dropped on the way out, so a
-        // side can arrive empty and must still render as something.
-        <p className="text-[11px] text-muted-foreground">Nothing left on this side.</p>
-      ) : (
-        <div className={cn("flex gap-2 overflow-x-auto pb-1", big && "justify-center")}>
-          {items.map((item) => (
-            <TradeItemTile
-              key={item.kind === "secret" ? item.pullId : item.copyId}
-              item={item}
-              lookup={lookup}
-              size={size}
-            />
-          ))}
-        </div>
-      )}
+    <div className={cn("flex gap-2 overflow-x-auto pb-1", size === "lg" && "justify-center")}>
+      {items.map((item) => (
+        <TradeItemTile
+          key={item.kind === "secret" ? item.pullId : item.copyId}
+          item={item}
+          lookup={lookup}
+          size={size}
+        />
+      ))}
     </div>
   );
 }
