@@ -379,16 +379,27 @@ export type SecretCollection = { id: string; label: string; accent?: string | nu
  */
 export const SET_ACCENTS = [
   { id: "cyan", label: "Cyan", oklch: "oklch(0.82 0.14 210)" },
-  { id: "green", label: "Green", oklch: "oklch(0.78 0.19 150)" },
-  { id: "gold", label: "Gold", oklch: "oklch(0.84 0.17 88)" },
-  { id: "orange", label: "Orange", oklch: "oklch(0.76 0.18 55)" },
-  { id: "red", label: "Red", oklch: "oklch(0.68 0.21 25)" },
-  { id: "rose", label: "Rose", oklch: "oklch(0.76 0.16 5)" },
-  { id: "magenta", label: "Magenta", oklch: "oklch(0.72 0.24 330)" },
-  { id: "violet", label: "Violet", oklch: "oklch(0.68 0.2 295)" },
+  { id: "azure", label: "Azure", oklch: "oklch(0.78 0.14 235)" },
   { id: "blue", label: "Blue", oklch: "oklch(0.7 0.18 260)" },
+  { id: "indigo", label: "Indigo", oklch: "oklch(0.62 0.18 275)" },
+  { id: "violet", label: "Violet", oklch: "oklch(0.68 0.2 295)" },
+  { id: "purple", label: "Purple", oklch: "oklch(0.6 0.21 310)" },
+  { id: "magenta", label: "Magenta", oklch: "oklch(0.72 0.24 330)" },
+  { id: "pink", label: "Pink", oklch: "oklch(0.8 0.14 350)" },
+  { id: "rose", label: "Rose", oklch: "oklch(0.76 0.16 5)" },
+  { id: "crimson", label: "Crimson", oklch: "oklch(0.6 0.2 15)" },
+  { id: "red", label: "Red", oklch: "oklch(0.68 0.21 25)" },
+  { id: "ember", label: "Ember", oklch: "oklch(0.66 0.17 40)" },
+  { id: "orange", label: "Orange", oklch: "oklch(0.76 0.18 55)" },
+  { id: "amber", label: "Amber", oklch: "oklch(0.8 0.16 72)" },
+  { id: "gold", label: "Gold", oklch: "oklch(0.84 0.17 88)" },
+  { id: "lime", label: "Lime", oklch: "oklch(0.85 0.19 125)" },
+  { id: "green", label: "Green", oklch: "oklch(0.78 0.19 150)" },
+  { id: "mint", label: "Mint", oklch: "oklch(0.86 0.13 165)" },
   { id: "teal", label: "Teal", oklch: "oklch(0.78 0.13 185)" },
+  { id: "slate", label: "Slate", oklch: "oklch(0.72 0.03 250)" },
 ] as const;
+
 
 export type SetAccentId = (typeof SET_ACCENTS)[number]["id"];
 
