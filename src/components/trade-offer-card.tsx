@@ -129,14 +129,15 @@ export function TradeItemTile({
     );
   }
 
-  if (!onClick) return <div className="w-[84px] shrink-0">{body}</div>;
+  if (!onClick) return <div className={cn(width, "shrink-0")}>{body}</div>;
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        "w-[84px] shrink-0 rounded-md p-1 text-left transition-all focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        width,
+        "shrink-0 rounded-md p-1 text-left transition-all focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         selected ? "bg-primary/15 ring-2 ring-primary" : "hover:bg-white/[0.04]",
       )}
     >
