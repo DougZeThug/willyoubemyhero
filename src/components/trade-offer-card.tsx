@@ -206,7 +206,8 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
   const iGet = iAmProposer ? offer.recipientGives : offer.proposerGives;
   const pending = offer.status === "pending";
   const accepted = offer.status === "accepted";
-  const rejected = offer.status === "declined" || offer.status === "cancelled" || offer.status === "voided";
+  const rejected =
+    offer.status === "declined" || offer.status === "cancelled" || offer.status === "voided";
 
   // A live offer is the loudest thing on the screen: ringed, glowing, big cards.
   // A settled one is a receipt, so it stays the quiet bezel it always was.
