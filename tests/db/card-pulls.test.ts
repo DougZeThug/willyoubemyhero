@@ -67,7 +67,13 @@ async function recordLegacy(participantId: string, ids: string[]): Promise<numbe
  */
 async function rewindDay(days = 1) {
   await sql("UPDATE public.card_pulls SET last_pulled_at = last_pulled_at - make_interval(days => $1)", [days]); // prettier-ignore
-  await sql("UPDATE public.card_copies SET acquired_on = acquired_on - $1::int WHERE source = 'pull'", [days]); // prettier-ignore
+  await sql(
+    "UPDATE public.card_copies SET acquired_on = acquired_on - $1::int WHERE source = 'pull'",
+    [days],
+  ); // prettier-ignore  // card_mints as well, or "a later day" never arrives: record_card_pulls asks
+  // that table whether this card was already minted today, so a rewind that left
+  // it alone would report every seeded copy as still being today's.
+  await sql("UPDATE public.card_mints SET minted_on = minted_on - $1::int", [days]);
 }
 
 async function editionOf(eventParticipantId: string): Promise<string> {
@@ -377,17 +383,26 @@ describe("record_card_pulls editions", () => {
     expect(await rowCount()).toBe(3);
   });
 
-  it("re-mints the same finish after the copy is gone", async () => {
-    // The reason the finish is DERIVED and not rolled. mill_card_copy deletes a
-    // copy and accept_trade_offer clears its acquired_on, so the row a random()
-    // roll relies on colliding with can be made to disappear on demand — and
-    // after the dust migration the mill route pays you to do it. Derivation makes
-    // the conflicting row irrelevant.
+  it("mints nothing more once the day's mint is on file, even if the copy goes", async () => {
+    // This used to assert the opposite — that deleting the copy and recording
+    // again re-minted the SAME finish, which the derivation guaranteed. Deriving
+    // rather than rolling is still what makes the finish stable (pinned in the
+    // roll_card_edition describe above), but 20260827120000 stopped the re-mint
+    // happening at all: the mint is recorded in card_mints, which nothing that
+    // moves or destroys a copy can edit. That is what closes the trade-and-remint
+    // loop; tests/db/dust.test.ts drives it end to end.
     const ids = await cardIds();
-    const before = await recordFull(IDS.alice, [ids[0]]);
+    await recordFull(IDS.alice, [ids[0]]);
     await sql("DELETE FROM public.card_copies WHERE participant_id = $1", [IDS.alice]);
+
     const after = await recordFull(IDS.alice, [ids[0]]);
-    expect(after.editions[ids[0]]).toBe(before.editions[ids[0]]);
+    expect(after.recorded).toBe(0);
+    expect(after.editions[ids[0]]).toBeUndefined();
+    const [mints] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.card_mints WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(mints.n).toBe(1);
   });
 
   it("marks what it derived as server-asserted", async () => {

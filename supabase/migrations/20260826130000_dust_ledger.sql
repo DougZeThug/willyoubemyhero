@@ -414,13 +414,13 @@ BEGIN
    FOR UPDATE;
   IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_yours'); END IF;
 
-  -- TODAY'S OWN PULL IS NOT A SPARE YET, and this is a security rule rather than
-  -- a product one — the same sentence trade_item_is_spare's secret branch already
-  -- carries, for a different reason. Milling today's copy clears its key on
-  -- card_copies_one_pull_per_day AND frees a slot in record_card_pulls' daily mint
-  -- cap, so the pack could be recorded again to mint a replacement and the copy
-  -- milled again, for dust, forever. Yesterday's copy mills freely: re-minting
-  -- that card spends one of today's six mints like any other.
+  -- TODAY'S OWN PULL IS NOT A SPARE YET, the same sentence trade_item_is_spare's
+  -- secret branch carries. It was written here as a security rule, on the grounds
+  -- that milling today's copy frees a slot in record_card_pulls' daily mint cap.
+  -- 20260827120000 took that job away: the cap counts card_mints rows now, and a
+  -- mint row outlives the copy it minted, so nothing this function does can buy
+  -- one back. What is left is a product rule, and a good one — a card pulled an
+  -- hour ago is not yet a spare. Tomorrow it burns like any other.
   IF _copy.source = 'pull' AND _copy.acquired_on = current_date THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'too_fresh');
   END IF;

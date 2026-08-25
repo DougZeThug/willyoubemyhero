@@ -60,6 +60,10 @@ async function derived(participantId: string, ep: string) {
 /** Move a pull copy back in time, which is the only way to fake a later day. */
 async function rewindCopies(days: number) {
   await sql("UPDATE public.card_copies SET acquired_on = acquired_on - $1::int WHERE source = 'pull'", [days]); // prettier-ignore
+  // card_mints as well, or "a later day" never arrives: record_card_pulls asks
+  // that table whether this card was already minted today, so a rewind that left
+  // it alone would report every seeded copy as still being today's.
+  await sql("UPDATE public.card_mints SET minted_on = minted_on - $1::int", [days]);
 }
 
 describe("card_copies", () => {

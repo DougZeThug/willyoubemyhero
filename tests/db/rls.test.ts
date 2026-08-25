@@ -67,6 +67,8 @@ const SERVER_ONLY = [
   // Strictly worse than card_pulls: the same private collection, one row per copy,
   // with the finish on each.
   "public.card_copies",
+  // The same private collection again, as a dated history of what was packed.
+  "public.card_mints",
   // Unlike card_pulls there is no public aggregate over this at all — a pack
   // count is shown to the person it belongs to and to nobody else.
   "public.pack_opens",
@@ -318,6 +320,19 @@ describe("server-only tables", () => {
     expect(visible === null || visible === 0).toBe(true);
   });
 
+  it("keeps the record of what somebody minted out of anon's reach", async () => {
+    // The it.each above passes vacuously against an empty table, so the posture
+    // is only really asserted with a row in it.
+    await sql(
+      `INSERT INTO public.card_mints (participant_id, minted_on, event_participant_id)
+       SELECT $1, current_date, id FROM public.event_participants LIMIT 1`,
+      [IDS.carol],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.card_mints")).toEqual([{ n: 1 }]);
+    const visible = await visibleRows("anon", "public.card_mints");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
   it("keeps somebody's dust out of anon's reach", async () => {
     // The it.each above passes vacuously against an empty table, so the posture
     // is only really asserted with a row in it.
@@ -424,6 +439,11 @@ describe("anon has no write grant anywhere", () => {
     // second one on the unique index — which `isDenied` counts as a denial and
     // would pass without ever reaching the grant.
     ["credit itself dust", `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, 9999, 'admin_adjust')`, [IDS.carol]], // prettier-ignore
+    // Bob rather than Carol: the read test above already filed (carol, today) for
+    // the first roster card, and a primary-key collision would make `isDenied`
+    // pass without ever reaching the grant.
+    ["forge itself a mint record", `INSERT INTO public.card_mints (participant_id, minted_on, event_participant_id) SELECT $1, current_date, id FROM public.event_participants LIMIT 1`, [IDS.bob]], // prettier-ignore
+    ["erase a mint record", `DELETE FROM public.card_mints`, []], // prettier-ignore
     ["spend nobody's dust but its own", `UPDATE public.dust_ledger SET delta = 9999`, []], // prettier-ignore
     // The whole swap runs inside accept_trade_offer as service_role. Reaching the
     // status column directly would take both people's cards out of the loop.

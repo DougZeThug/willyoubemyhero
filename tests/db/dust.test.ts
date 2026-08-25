@@ -57,7 +57,13 @@ async function pullSecret(participantId: string | null, guestId: string | null =
 /** Pretend every pull and copy on file happened `days` ago. */
 async function rewindDay(days = 1) {
   await sql("UPDATE public.secret_card_pulls SET pulled_on = pulled_on - $1::int", [days]);
-  await sql("UPDATE public.card_copies SET acquired_on = acquired_on - $1::int WHERE source = 'pull'", [days]); // prettier-ignore
+  await sql(
+    "UPDATE public.card_copies SET acquired_on = acquired_on - $1::int WHERE source = 'pull'",
+    [days],
+  ); // prettier-ignore  // card_mints as well, or "a later day" never arrives: record_card_pulls asks
+  // that table whether this card was already minted today, so a rewind that left
+  // it alone would report every seeded copy as still being today's.
+  await sql("UPDATE public.card_mints SET minted_on = minted_on - $1::int", [days]);
 }
 
 /** Two copies of one card, the older one millable. Returns the spare's id. */
@@ -86,6 +92,16 @@ async function mill(copyId: string, participantId = IDS.alice): Promise<MillResu
     copyId,
   ]);
   return row.mill_card_copy;
+}
+
+/** create_trade_offer refuses to send an offer to anybody unclaimed. */
+async function claimMember(participantId: string) {
+  await sql(
+    `INSERT INTO public.member_codes (participant_id, code_salt, code_hash, claimed_at)
+     VALUES ($1, 'salt', 'hash', now())
+     ON CONFLICT (participant_id) DO UPDATE SET claimed_at = now()`,
+    [participantId],
+  );
 }
 
 async function credit(amount: number, participantId = IDS.alice) {
@@ -196,6 +212,126 @@ describe("the dupe credit", () => {
     expect(dupe.duplicate).toBe(true);
     expect(dupe.dust).toBe(0);
     expect(await sql("SELECT count(*)::int AS n FROM public.dust_ledger")).toEqual([{ n: 0 }]);
+  });
+});
+
+describe("the daily mint cap", () => {
+  // The cap used to count copies the member currently held today, and every term
+  // of that predicate is mutable: accept_trade_offer re-parents the row, sets
+  // source = 'trade' and nulls acquired_on, all at once. Trading today's copy
+  // away handed the slot back AND took the row out of the partial unique index,
+  // so the same pack could be recorded again for a replacement — and the copy the
+  // counterparty received escaped mill_card_copy's freshness guard, still priced
+  // at the full server rate. Two members with duplicates could swap, re-mint and
+  // burn on a loop. card_mints is what makes the budget unspendable.
+  async function record(participantId: string, ids: string[]) {
+    const [row] = await sql<{
+      record_card_pulls: { recorded: number; editions: Record<string, string> };
+    }>("SELECT public.record_card_pulls($1, $2, NULL)", [participantId, ids]);
+    return row.record_card_pulls;
+  }
+
+  async function mintCount(participantId = IDS.alice) {
+    const [row] = await sql<{ n: number }>(
+      `SELECT count(*)::int AS n FROM public.card_mints
+        WHERE participant_id = $1 AND minted_on = ${NY}`,
+      [participantId],
+    );
+    return row.n;
+  }
+
+  async function copyCount(participantId: string, ep: string) {
+    const [row] = await sql<{ n: number }>(
+      `SELECT count(*)::int AS n FROM public.card_copies
+        WHERE participant_id = $1 AND event_participant_id = $2`,
+      [participantId, ep],
+    );
+    return row.n;
+  }
+
+  it("does not hand the slot back when the copy is traded away", async () => {
+    // THE EXPLOIT, as a test.
+    const ids = await cardIds();
+    await claimMember(IDS.alice);
+    await claimMember(IDS.bob);
+
+    // Alice needs a second copy of the card so the spare rule lets her stake it,
+    // and Bob needs a spare of his own — create_trade_offer refuses a one-sided
+    // offer.
+    await sql(
+      `INSERT INTO public.card_copies (participant_id, event_participant_id, source)
+       VALUES ($1, $2, 'backfill'), ($3, $4, 'backfill'), ($3, $4, 'backfill')`,
+      [IDS.alice, ids[0], IDS.bob, ids[1]],
+    );
+    await sql("SELECT public.resync_card_pull($1, $2)", [IDS.bob, ids[1]]);
+    await record(IDS.alice, [ids[0]]);
+    expect(await mintCount()).toBe(1);
+
+    const [today] = await sql<{ id: string }>(
+      `SELECT id FROM public.card_copies
+        WHERE participant_id = $1 AND source = 'pull' AND acquired_on = ${NY}`,
+      [IDS.alice],
+    );
+    const [bobSpare] = await sql<{ id: string }>(
+      `SELECT id FROM public.card_copies WHERE participant_id = $1 LIMIT 1`,
+      [IDS.bob],
+    );
+
+    const offer = await sql<{ create_trade_offer: { ok: boolean; offerId: string } }>(
+      "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [
+        IDS.alice,
+        IDS.bob,
+        IDS.event,
+        JSON.stringify([{ kind: "roster", cardCopyId: today.id }]),
+        JSON.stringify([{ kind: "roster", cardCopyId: bobSpare.id }]),
+      ],
+    );
+    const offerId = offer[0].create_trade_offer.offerId;
+    await sql("SELECT public.accept_trade_offer($1, $2)", [offerId, IDS.bob]);
+
+    // The copy is Bob's now, so nothing of Alice's is left marked as today's pull.
+    expect(await copyCount(IDS.bob, ids[0])).toBe(1);
+
+    // And the re-record mints nothing: the mint row outlived the copy.
+    const again = await record(IDS.alice, [ids[0]]);
+    expect(await mintCount()).toBe(1);
+    expect(await copyCount(IDS.alice, ids[0])).toBe(1);
+    // Alice no longer holds a today-pull copy of it, so it is absent from the
+    // answer rather than reported as a card she owns.
+    expect(again.editions[ids[0]]).toBeUndefined();
+  });
+
+  it("does not hand the slot back when the copy is milled", async () => {
+    const ids = await cardIds();
+    await sql(
+      `INSERT INTO public.card_copies (participant_id, event_participant_id, acquired_on, source)
+       VALUES ($1, $2, ${NY} - 1, 'pull')`,
+      [IDS.alice, ids[0]],
+    );
+    await record(IDS.alice, [ids[0]]);
+    const [today] = await sql<{ id: string }>(
+      `SELECT id FROM public.card_copies
+        WHERE participant_id = $1 AND source = 'pull' AND acquired_on = ${NY}`,
+      [IDS.alice],
+    );
+    // too_fresh blocks this one directly, but prove the budget holds even if a
+    // future sink ever consumes a same-day copy some other way.
+    await sql("DELETE FROM public.card_copies WHERE id = $1", [today.id]);
+
+    await record(IDS.alice, [ids[0]]);
+    expect(await mintCount()).toBe(1);
+  });
+
+  it("still answers a plain retry with the finishes it already filed", async () => {
+    // The property the old ON CONFLICT DO UPDATE trick was protecting. It is the
+    // read-back at the end of the RPC that provides it now.
+    const ids = await cardIds();
+    const first = await record(IDS.alice, ids);
+    for (let i = 0; i < 4; i++) {
+      expect((await record(IDS.alice, ids)).editions).toEqual(first.editions);
+    }
+    expect(await mintCount()).toBe(ids.length);
   });
 });
 
