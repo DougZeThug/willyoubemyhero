@@ -38,7 +38,6 @@ describe("tradeSummaryLabel", () => {
     expect(tradeSummaryLabel([rosterItem("a"), secretItem("Zucchini")])).toBe("1 card + Zucchini");
   });
 
-
   it("has something to say about an empty side", () => {
     // Not reachable through the RPC, which refuses an empty side — but this
     // renders a jsonb column, and a blank string in the feed would read as a bug.

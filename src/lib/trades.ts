@@ -22,7 +22,6 @@ export type TradeSummaryItem =
   | { kind: "roster"; eventParticipantId: string }
   | { kind: "secret"; secretCardId?: string; name?: string };
 
-
 /**
  * The broadcast event name a trade nudge is sent under.
  *
@@ -193,7 +192,6 @@ export function tradeItemsLabel(items: readonly TradeItemView[]): string {
     ) satisfies TradeSummaryItem[],
   );
 }
-
 
 /**
  * The league's timezone, which decides where a day ends.
