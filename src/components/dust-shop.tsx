@@ -13,13 +13,12 @@ import {
 } from "@/components/ui/sheet";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
-import { editionStyle } from "@/lib/card-edition";
-import { DUST_PRICES, MILL_LADDER, MILL_CLIENT_FLAT } from "@/lib/dust";
+import { editionStyle, toEdition } from "@/lib/card-edition";
+import { DUST_PRICES, MILL_LADDER, MILL_CLIENT_FLAT, millValue } from "@/lib/dust";
 import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
-import { millCardCopy } from "@/lib/dust.functions";
+import { millCardCopy, rerollCopyEdition } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
-import { millValue } from "@/lib/dust";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import type { TradeSpares } from "@/lib/trades";
 
@@ -156,7 +155,61 @@ export function DustShop({
     onSettled: () => setBurning(null),
   });
 
+  // Every copy, not just the spares: reroll_copy_edition has no spare rule, and a
+  // card you hold once is the one most worth settling. Unsettled finishes lead,
+  // because that is what the section is for.
+  const rerollable = useMemo(
+    () =>
+      [...(spares.data?.ownedRoster ?? [])].sort(
+        (a, b) =>
+          Number(a.assertedBy === "server") - Number(b.assertedBy === "server") ||
+          nameFor(a.eventParticipantId).localeCompare(nameFor(b.eventParticipantId)),
+      ),
+    [spares.data, nameFor],
+  );
+
+  const rerollFn = useServerFn(rerollCopyEdition);
+  const [rolling, setRolling] = useState<string | null>(null);
+  // One id per tap, same rule as the purchase: the RPC answers a repeat with the
+  // roll it already sold rather than charging twice for it.
+  const [rerollIds, setRerollIds] = useState<Record<string, string>>({});
+  const reroll = useMutation({
+    mutationFn: (copyId: string) => {
+      const requestId = rerollIds[copyId] ?? crypto.randomUUID();
+      setRerollIds((prev) => ({ ...prev, [copyId]: requestId }));
+      return rerollFn({ data: { cardCopyId: copyId, requestId } });
+    },
+    onSuccess: (res, copyId) => {
+      if (!res.ok) {
+        toast(
+          res.reason === "insufficient"
+            ? `Not enough dust — a re-roll is ${DUST_PRICES.reroll}`
+            : res.reason === "staked"
+              ? "That one is on an open offer"
+              : "Could not re-roll that one",
+        );
+        return;
+      }
+      qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
+      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
+      // A fresh id, so the next tap on this card is a new gamble rather than a
+      // replay of the one just paid for.
+      setRerollIds((prev) => ({ ...prev, [copyId]: crypto.randomUUID() }));
+      // Both ends, because it can go down — saying only the new one would read as
+      // a win every time.
+      toast(
+        `${editionStyle(toEdition(res.from)).label ?? "Standard"} → ${
+          editionStyle(toEdition(res.to)).label ?? "Standard"
+        }`,
+      );
+    },
+    onError: () => toast("Could not re-roll that one"),
+    onSettled: () => setRolling(null),
+  });
+
   const canAfford = (balance ?? 0) >= DUST_PRICES.bonusPull;
+  const canReroll = (balance ?? 0) >= DUST_PRICES.reroll;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -239,6 +292,56 @@ export function DustShop({
 
           <section className="rounded-lg border border-border p-4">
             <h3 className="font-display text-sm font-bold uppercase tracking-wide">
+              Settle a finish
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Roll a card&apos;s finish again for {DUST_PRICES.reroll}. Any card you hold, including
+              your only one — and it can go down.
+            </p>
+            {spares.isLoading ? (
+              <p className="mt-3 text-xs text-muted-foreground">Counting cards…</p>
+            ) : rerollable.length === 0 ? (
+              <p className="mt-3 text-xs text-muted-foreground">No cards yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-1.5">
+                {rerollable.map((r) => {
+                  const style = editionStyle(r.edition);
+                  return (
+                    <li key={r.copyId} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-xs">
+                        <span className="font-bold">{nameFor(r.eventParticipantId)}</span>
+                        {style.label && (
+                          <span className="ml-1.5" style={{ color: style.accent }}>
+                            {style.label}
+                          </span>
+                        )}
+                        {r.assertedBy !== "server" && (
+                          <span className="ml-1.5 text-muted-foreground">unsettled</span>
+                        )}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        disabled={!canReroll || reroll.isPending}
+                        onClick={() => {
+                          setRolling(r.copyId);
+                          reroll.mutate(r.copyId);
+                        }}
+                      >
+                        {rolling === r.copyId && reroll.isPending
+                          ? "…"
+                          : `Re-roll ${DUST_PRICES.reroll}`}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-lg border border-border p-4">
+            <h3 className="font-display text-sm font-bold uppercase tracking-wide">
               Where dust comes from
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -255,8 +358,8 @@ export function DustShop({
               ))}
             </ul>
             <p className="mt-3 text-xs text-muted-foreground">
-              Cards from before finishes were settled server-side pay a flat {MILL_CLIENT_FLAT}.
-              Re-rolling one for {DUST_PRICES.reroll} settles it — and can send it either way.
+              Cards from before finishes were settled server-side pay a flat {MILL_CLIENT_FLAT},
+              whatever they say on them. Settling one above fixes that.
             </p>
           </section>
         </div>

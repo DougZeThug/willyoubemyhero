@@ -21,6 +21,7 @@ const EVENT = "22222222-2222-4222-8222-222222222222";
 
 const buyFn = vi.hoisted(() => vi.fn());
 const millFn = vi.hoisted(() => vi.fn());
+const rerollFn = vi.hoisted(() => vi.fn());
 const sparesFn = vi.hoisted(() => vi.fn());
 
 // The server functions are replaced by sentinels so useServerFn can tell which
@@ -37,7 +38,9 @@ vi.mock("@/lib/trades.functions", () => ({ getTradeSpares: "fn:spares" }));
 vi.mock("@tanstack/react-start", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-start")>()),
   useServerFn: (fn: unknown) =>
-    ({ "fn:buy": buyFn, "fn:mill": millFn, "fn:spares": sparesFn })[fn as string] ?? buyFn,
+    ({ "fn:buy": buyFn, "fn:mill": millFn, "fn:reroll": rerollFn, "fn:spares": sparesFn })[
+      fn as string
+    ] ?? buyFn,
 }));
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
@@ -70,7 +73,13 @@ const keys = (invalidate: Invalidate) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  sparesFn.mockResolvedValue({ participantId: ME, roster: [], secrets: [], blocked: [] });
+  sparesFn.mockResolvedValue({
+    participantId: ME,
+    ownedRoster: [],
+    roster: [],
+    secrets: [],
+    blocked: [],
+  });
 });
 
 describe("buying a pull", () => {
@@ -151,5 +160,82 @@ describe("buying a pull", () => {
     await waitFor(() => expect(buyFn).toHaveBeenCalled());
     expect(keys(invalidate)).not.toContain(JSON.stringify(secretStatusKey(ACTOR)));
     expect(client.getQueryData(dustBalanceKey(ME))).toBeUndefined();
+  });
+});
+
+describe("re-rolling a finish", () => {
+  const ONLY_COPY = "55555555-5555-4555-8555-555555555555";
+
+  function withOneCard() {
+    // Held once, so it is absent from `roster` — and present in `ownedRoster`,
+    // which is the whole reason that field exists.
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [
+        {
+          copyId: ONLY_COPY,
+          eventParticipantId: "ep-1",
+          edition: "gold",
+          assertedBy: "client",
+        },
+      ],
+      roster: [],
+      secrets: [],
+      blocked: [],
+    });
+  }
+
+  it("offers a card you hold only one of, which cannot be burned", async () => {
+    withOneCard();
+    renderShop();
+    // The burn list is spares only and stays empty; the re-roll list is not.
+    expect(await screen.findByRole("button", { name: /re-roll/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /burn/i })).toBeNull();
+  });
+
+  it("sends a fresh request id per tap, so one gamble is never replayed", async () => {
+    withOneCard();
+    rerollFn.mockResolvedValue({
+      ok: true,
+      price: DUST_PRICES.reroll,
+      from: "gold",
+      to: "standard",
+      eventParticipantId: "ep-1",
+      balance: 0,
+    });
+    renderShop();
+
+    await userEvent.click(await screen.findByRole("button", { name: /re-roll/i }));
+    await waitFor(() => expect(rerollFn).toHaveBeenCalledTimes(1));
+    await userEvent.click(await screen.findByRole("button", { name: /re-roll/i }));
+    await waitFor(() => expect(rerollFn).toHaveBeenCalledTimes(2));
+
+    const ids = rerollFn.mock.calls.map(
+      (c) => (c[0] as { data: { requestId: string } }).data.requestId,
+    );
+    expect(ids[0]).not.toBe(ids[1]);
+    // And both name the copy, which is the half the RPC actually acts on.
+    for (const c of rerollFn.mock.calls) {
+      expect((c[0] as { data: { cardCopyId: string } }).data.cardCopyId).toBe(ONLY_COPY);
+    }
+  });
+
+  it("refreshes the copy lists once a roll lands", async () => {
+    withOneCard();
+    rerollFn.mockResolvedValue({
+      ok: true,
+      price: DUST_PRICES.reroll,
+      from: "gold",
+      to: "platinum",
+      eventParticipantId: "ep-1",
+      balance: 10,
+    });
+    const { invalidate, client } = renderShop();
+
+    await userEvent.click(await screen.findByRole("button", { name: /re-roll/i }));
+
+    await waitFor(() => expect(rerollFn).toHaveBeenCalled());
+    expect(keys(invalidate)).toContain(JSON.stringify(["dust-spares", ME]));
+    expect(client.getQueryData(dustBalanceKey(ME))).toEqual({ balance: 10 });
   });
 });

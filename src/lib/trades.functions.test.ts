@@ -94,6 +94,43 @@ describe("getTradeSpares", () => {
     ]);
   });
 
+  it("lists every copy you hold in ownedRoster, single ones included", async () => {
+    // `roster` is the tradeable subset and milling needs that same subset, but a
+    // re-roll has no spare rule — and the card most worth settling is the one you
+    // hold once, which `roster` omits by design.
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }, { id: CARD_B }] },
+      "card_copies.select": {
+        data: [
+          { id: COPY_1, event_participant_id: CARD_A, edition: "platinum", edition_asserted_by: "server" }, // prettier-ignore
+          { id: COPY_2, event_participant_id: CARD_A, edition: "standard", edition_asserted_by: "server" }, // prettier-ignore
+          { id: COPY_3, event_participant_id: CARD_B, edition: "gold", edition_asserted_by: "client" }, // prettier-ignore
+        ],
+      },
+    });
+    const res = await spares(ME, asMe());
+    expect(res.roster.map((r) => r.copyId).sort()).toEqual([COPY_1, COPY_2].sort());
+    expect(res.ownedRoster.map((r) => r.copyId).sort()).toEqual([COPY_1, COPY_2, COPY_3].sort());
+    // And it carries the provenance, which is what the shop labels "unsettled".
+    expect(res.ownedRoster.find((r) => r.copyId === COPY_3)?.assertedBy).toBe("client");
+  });
+
+  it("keeps ownedRoster to yourself, the same as blocked", async () => {
+    // What somebody else holds one of is collection detail an offer screen has no
+    // reason to publish.
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "card_copies.select": {
+        data: [
+          { id: COPY_1, event_participant_id: CARD_A, edition: "gold", edition_asserted_by: "server" }, // prettier-ignore
+        ],
+      },
+    });
+    const res = await spares(THEM, asMe());
+    expect(res.ownedRoster).toEqual([]);
+    expect(res.blocked).toEqual([]);
+  });
+
   it("reports a copy with no server-decided finish as client-asserted", async () => {
     // Dust pays by edition and only for a finish Postgres derived, so the burn
     // affordance cannot quote an honest number without this. Anything that is not
@@ -263,6 +300,7 @@ describe("getTradeSpares", () => {
     withDb({ "events.select": { data: null } });
     expect(await spares(ME, asMe())).toEqual({
       participantId: ME,
+      ownedRoster: [],
       roster: [],
       secrets: [],
       blocked: [],

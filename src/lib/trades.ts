@@ -145,6 +145,18 @@ export type TradeSpares = {
   secrets: SecretSpare[];
   /** Populated only when you are looking at yourself. */
   blocked: BlockedSpare[];
+  /**
+   * Every roster copy you hold, spares and only-copies alike. Yourself only.
+   *
+   * `roster` above is the tradeable subset, and milling needs that same subset —
+   * but re-rolling a finish deliberately has no spare rule (`reroll_copy_edition`
+   * takes your only copy quite happily), and the card most worth settling is
+   * precisely the one you hold once. This is the list the dust shop re-rolls
+   * from; `blocked` cannot serve it because a TradeItemView carries no
+   * provenance, and widening that would change what the trade screen shows about
+   * the other side.
+   */
+  ownedRoster: RosterSpare[];
 };
 
 export type TradeFeedEntry = {

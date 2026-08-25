@@ -183,6 +183,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
 
     const empty: TradeSpares = {
       participantId: data.participantId,
+      ownedRoster: [],
       roster: [],
       secrets: [],
       blocked: [],
@@ -301,21 +302,30 @@ export const getTradeSpares = createServerFn({ method: "GET" })
         ]
       : [];
 
+    /** One RosterSpare per copy, whatever the size of the holding it came from. */
+    const asSpare = (
+      r: Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">,
+    ) => ({
+      copyId: r.id,
+      eventParticipantId: r.event_participant_id,
+      edition: toEdition(r.edition),
+      // Anything that is not literally 'server' is treated as untrusted, the
+      // same direction the SQL errs in: a provenance nobody has taught this
+      // about should under-promise rather than over-promise a payout.
+      assertedBy: r.edition_asserted_by === "server" ? ("server" as const) : ("client" as const),
+    });
+
     return {
       participantId: data.participantId,
+      // Yourself only, exactly like `blocked`: what somebody else holds one of is
+      // collection detail an offer screen has no reason to publish. The dust shop
+      // re-rolls from this, and a re-roll has no spare rule — the card most worth
+      // settling is the one you hold once.
+      ownedRoster: mine ? [...byCard.values()].flat().map(asSpare) : [],
       roster: [...byCard.values()]
         .filter((list) => list.length >= 2)
         .flat()
-        .map((r) => ({
-          copyId: r.id,
-          eventParticipantId: r.event_participant_id,
-          edition: toEdition(r.edition),
-          // Anything that is not literally 'server' is treated as untrusted, the
-          // same direction the SQL errs in: a provenance nobody has taught this
-          // about should under-promise rather than over-promise a payout.
-          assertedBy:
-            r.edition_asserted_by === "server" ? ("server" as const) : ("client" as const),
-        })),
+        .map(asSpare),
       secrets: stakeable.map((r) => secrets.get(r.id)!).filter(Boolean),
       blocked,
     };
