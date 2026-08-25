@@ -828,6 +828,27 @@ function PackPage() {
     setMilestoneReveal(null);
   }, [actor]);
 
+  // And re-arm the pack half when the DAY turns, which the effect above cannot
+  // see: a tab left open overnight keeps the same actor, so nothing here used to
+  // run at all.
+  //
+  // Two things were wrong with that. The latch stayed set to `actor`, so the
+  // record effect returned at its guard for the rest of the new day — the pack
+  // was never filed, the streak never advanced for it, and none of the counts
+  // were invalidated. And `editions` still held yesterday's map, so a card in
+  // both packs rendered with yesterday's finish AND passed the `known` check,
+  // firing the shine and the burst for a finish the server had not granted. That
+  // is exactly what `known` exists to prevent.
+  //
+  // Its own effect rather than more deps on the one above, because this app runs
+  // on two clocks on purpose: the pack rolls over on the device's local day and
+  // the secret drop on the server's league day (see serverDayRef below). Folding
+  // them together would re-arm the secret on the wrong signal.
+  useEffect(() => {
+    recordedForRef.current = null;
+    setEditions({});
+  }, [dayKey]);
+
   // The drop rolls over on the *server's* day, not this device's. Guarded on the
   // first observed value, or this would clobber the secretRevealed that the
   // resume effect has just restored from IndexedDB.

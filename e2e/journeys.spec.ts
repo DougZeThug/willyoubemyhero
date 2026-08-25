@@ -822,6 +822,68 @@ test.describe("opening a pack", () => {
     await expect(page.getByText(label, { exact: false }).first()).toBeVisible({ timeout: 30_000 });
   });
 
+  test("records the new day's pack when a tab is left open across midnight", async ({
+    page,
+    server,
+  }) => {
+    // A phone in a garden stays open overnight. The actor does not change, and
+    // the effect that re-arms the pack used to key on the actor alone — so the
+    // record latch stayed set and the new day's pack was never filed at all,
+    // while the previous day's edition map survived to shine on a card the server
+    // had granted nothing for.
+    //
+    // The wall clock is moved with setFixedTime rather than clock.install(): the
+    // reveal ceremony runs on real timers and animations, and faking those to
+    // move a date would be testing the fake.
+    const device = "midnight-device";
+    const ids = expectedPack(`d:${device}`);
+    server.set("recordCardPulls", {
+      ok: true,
+      recorded: ids.length,
+      packsOpened: 1,
+      editions: { [ids[0]]: "platinum" },
+    });
+    const label = editionLabel("platinum")!;
+
+    await page.addInitScript((d: string) => {
+      localStorage.setItem("wwbh:device-id", d);
+    }, device);
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await standCard(page).click();
+    await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
+
+    const before = server.calls.filter((c) => c.includes("recordCardPulls")).length;
+    expect(before).toBeGreaterThan(0);
+
+    // Tomorrow, and a visibility flip — the same signal a phone waking up sends,
+    // and the one the route polls the date on.
+    const tomorrow = new Date(Date.now() + 26 * 60 * 60 * 1000);
+    await page.clock.setFixedTime(tomorrow);
+
+    // Dispatched on a poll rather than once. The route refuses to re-seal a pack
+    // out from under a reveal — `revealingRef` is still set while a platinum's
+    // celebration plays — so a single nudge lands too early and is correctly
+    // ignored. Waiting for the seal is waiting for that guard to clear.
+    await expect
+      .poll(
+        async () => {
+          await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+          return page.getByText(label, { exact: false }).count();
+        },
+        { timeout: 25_000 },
+      )
+      .toBe(0);
+
+    // A fresh pack, sealed again, and the day's record actually fires for it.
+    await tearPack(page);
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("recordCardPulls")).length, {
+        timeout: 20_000,
+      })
+      .toBeGreaterThan(before);
+  });
+
   test("puts no finish on a card nobody has packed", async ({ page }) => {
     // The vault, where every slot is face-down until it is pulled. A frame on one
     // would give away the best thing about a card before the pack containing it
