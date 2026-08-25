@@ -153,16 +153,24 @@ export function offerStatusLabel(status: string): string {
 }
 
 /**
- * "2 cards + a secret" — what one side handed over, from the redacted summary.
+ * "2 cards + Tucker" — what one side handed over, from the public summary.
  *
- * Reads off `kind` alone, which is all the public feed carries for a secret.
+ * Secrets are named now: accept_trade_offer records the card's name, because the
+ * league wanted the feed to say which secret moved. `name` stays OPTIONAL rather
+ * than required — trades settled before that widening carry `{kind:"secret"}` and
+ * nothing else, and a summary whose card row has since gone still arrives nameless
+ * — so the count wording ("a secret" / "2 secrets") is the fallback rather than
+ * dead code. Roster items are still counted, never named: naming them would mean
+ * resolving an event_participant_id, which this pure function cannot do.
  */
 export function tradeSummaryLabel(items: readonly TradeSummaryItem[]): string {
   const roster = items.filter((i) => i.kind === "roster").length;
-  const secrets = items.length - roster;
+  const named = items.flatMap((i) => (i.kind === "secret" && i.name ? [i.name] : []));
+  const nameless = items.length - roster - named.length;
   const parts: string[] = [];
   if (roster > 0) parts.push(`${roster} card${roster === 1 ? "" : "s"}`);
-  if (secrets > 0) parts.push(secrets === 1 ? "a secret" : `${secrets} secrets`);
+  parts.push(...named);
+  if (nameless > 0) parts.push(nameless === 1 ? "a secret" : `${nameless} secrets`);
   return parts.length ? parts.join(" + ") : "nothing";
 }
 
@@ -172,10 +180,11 @@ export function tradeItemsLabel(items: readonly TradeItemView[]): string {
     items.map((i) =>
       i.kind === "roster"
         ? ({ kind: "roster", eventParticipantId: i.eventParticipantId } as const)
-        : ({ kind: "secret" } as const),
+        : ({ kind: "secret", name: i.name } as const),
     ) satisfies TradeSummaryItem[],
   );
 }
+
 
 /**
  * The league's timezone, which decides where a day ends.
