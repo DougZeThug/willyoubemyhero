@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
