@@ -293,11 +293,19 @@ test.describe("the daily secret", () => {
   }) => {
     await asMember(page);
     withSecret(server);
-    const statusAnswered = page.waitForResponse(
-      (r) => r.url().includes("/_serverFn/") && serverFnName(r.url()).includes("getSecretStatus"),
+    // Both, not just the status. The nav asks for the day's status on every
+    // screen now, so that answer can land before the route has even asked for
+    // the event — waiting on it alone stopped meaning "the pack has what it
+    // needs" and started tearing the pack into a half-loaded screen.
+    const ready = Promise.all(
+      ["getSecretStatus", "getEventBundle"].map((fn) =>
+        page.waitForResponse(
+          (r) => r.url().includes("/_serverFn/") && serverFnName(r.url()).includes(fn),
+        ),
+      ),
     );
     await page.goto("/players/pack");
-    await statusAnswered;
+    await ready;
     await page.waitForTimeout(100);
     await tearPack(page);
 
