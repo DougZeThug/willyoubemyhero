@@ -777,17 +777,15 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="md:col-span-2">
+        <SecretCardsPanel />
+      </div>
+
+      <div className="md:col-span-2">
         <CardBulkUpload eventId={eventId} targets={bulkTargets} />
       </div>
 
       <div className="md:col-span-2">
         <UniversalCardBack eventId={eventId} />
-      </div>
-
-      {/* No eventId: these rows are league-wide, and the panel resolves the
-          current combine server-side to authorize. */}
-      <div className="md:col-span-2">
-        <SecretCardsPanel />
       </div>
 
       <div className="md:col-span-2">
@@ -798,6 +796,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
           photoUrls={photos.data}
         />
       </div>
+
 
       <MemberCodesPanel eventId={eventId} />
       <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
