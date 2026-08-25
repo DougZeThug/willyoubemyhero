@@ -206,20 +206,26 @@ export const getTradeSpares = createServerFn({ method: "GET" })
         ? trades
             .from("card_copies")
             // THE EDITION IS IN THIS RESPONSE, and that is a deliberate widening
-            // rather than an oversight. It is still a client-asserted value
-            // (card-pulls.functions.ts:96-105) being read by somebody who is not
-            // its owner — but you cannot choose which copy to hand over, or judge
-            // which one you are being offered, without seeing the finish on it.
-            // The exposure is inherent to per-copy trading. What closes it
-            // properly is re-deriving the edition server-side when a pack is
-            // recorded, which is a separate change.
+            // rather than an oversight: you cannot choose which copy to hand over,
+            // or judge which one you are being offered, without seeing the finish
+            // on it. The exposure is inherent to per-copy trading.
+            //
+            // It used to carry a caveat that the value was only a client's claim.
+            // It is not, any more — 20260826120000 moved the derivation into
+            // `record_card_pulls`, so a `'pull'` copy's finish is Postgres's own.
+            // `edition_asserted_by` rides along because dust pays by edition and
+            // only for a server-decided one, so the burn affordance has to be able
+            // to quote the honest number; `adopt` and commissioner `grant` copies
+            // stay `'client'` and pay the flat floor.
             //
             // It stays out of the PUBLIC record either way: see the summary
             // builder in accept_trade_offer.
-            .select("id, event_participant_id, edition")
+            .select("id, event_participant_id, edition, edition_asserted_by")
             .eq("participant_id", data.participantId)
             .in("event_participant_id", ids)
-            .returns<Pick<CardCopyRow, "id" | "event_participant_id" | "edition">[]>()
+            .returns<
+              Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">[]
+            >()
         : { data: [], error: null },
       // EVERY copy, duplicate or not. A secret you own one of is still yours to
       // give — unlike a roster card there is no public count riding on you keeping
@@ -259,7 +265,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     // enforced across the whole offer by trade_leaves_a_copy, not by this list.
     const byCard = new Map<
       string,
-      Pick<CardCopyRow, "id" | "event_participant_id" | "edition">[]
+      Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">[]
     >();
     for (const row of allCopies ?? []) {
       const list = byCard.get(row.event_participant_id) ?? [];
@@ -304,6 +310,11 @@ export const getTradeSpares = createServerFn({ method: "GET" })
           copyId: r.id,
           eventParticipantId: r.event_participant_id,
           edition: toEdition(r.edition),
+          // Anything that is not literally 'server' is treated as untrusted, the
+          // same direction the SQL errs in: a provenance nobody has taught this
+          // about should under-promise rather than over-promise a payout.
+          assertedBy:
+            r.edition_asserted_by === "server" ? ("server" as const) : ("client" as const),
         })),
       secrets: stakeable.map((r) => secrets.get(r.id)!).filter(Boolean),
       blocked,

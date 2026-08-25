@@ -93,6 +93,15 @@ export type RosterSpare = {
   copyId: string;
   eventParticipantId: string;
   edition: Edition;
+  /**
+   * Who decided this copy's finish — `card_copies.edition_asserted_by`.
+   *
+   * Here because dust pays by edition and only for a finish Postgres derived, so
+   * a burn affordance cannot quote an honest number without it. Not a leak on top
+   * of `edition`, which is already in this response: it says how the finish was
+   * arrived at, not anything further about the card or its owner.
+   */
+  assertedBy: "client" | "server";
 };
 
 /**

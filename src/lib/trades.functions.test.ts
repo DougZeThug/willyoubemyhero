@@ -80,24 +80,42 @@ describe("getTradeSpares", () => {
       "event_participants.select": { data: [{ id: CARD_A }, { id: CARD_B }] },
       "card_copies.select": {
         data: [
-          { id: COPY_1, event_participant_id: CARD_A, edition: "platinum" },
-          { id: COPY_2, event_participant_id: CARD_A, edition: "standard" },
+          { id: COPY_1, event_participant_id: CARD_A, edition: "platinum", edition_asserted_by: "server" }, // prettier-ignore
+          { id: COPY_2, event_participant_id: CARD_A, edition: "standard", edition_asserted_by: "server" }, // prettier-ignore
           // Only one of CARD_B: not a spare, so it must not appear at all.
-          { id: COPY_3, event_participant_id: CARD_B, edition: "gold" },
+          { id: COPY_3, event_participant_id: CARD_B, edition: "gold", edition_asserted_by: "server" }, // prettier-ignore
         ],
       },
     });
     const res = await spares(ME, asMe());
     expect(res.roster).toEqual([
-      { copyId: COPY_1, eventParticipantId: CARD_A, edition: "platinum" },
-      { copyId: COPY_2, eventParticipantId: CARD_A, edition: "standard" },
+      { copyId: COPY_1, eventParticipantId: CARD_A, edition: "platinum", assertedBy: "server" },
+      { copyId: COPY_2, eventParticipantId: CARD_A, edition: "standard", assertedBy: "server" },
     ]);
   });
 
+  it("reports a copy with no server-decided finish as client-asserted", async () => {
+    // Dust pays by edition and only for a finish Postgres derived, so the burn
+    // affordance cannot quote an honest number without this. Anything that is not
+    // literally 'server' is untrusted — under-promising is the safe direction.
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "card_copies.select": {
+        data: [
+          { id: COPY_1, event_participant_id: CARD_A, edition: "platinum", edition_asserted_by: "client" }, // prettier-ignore
+          { id: COPY_2, event_participant_id: CARD_A, edition: "standard", edition_asserted_by: null }, // prettier-ignore
+        ],
+      },
+    });
+    const res = await spares(ME, asMe());
+    expect(res.roster.map((r) => r.assertedBy)).toEqual(["client", "client"]);
+  });
+
   it("carries the finish on each copy, which it deliberately did not before", async () => {
-    // A widening, recorded here on purpose. The edition is client-asserted and
-    // this response is read by somebody who is not its owner — but you cannot
-    // choose which copy to give, or judge which one you are offered, without it.
+    // A widening, recorded here on purpose. This response is read by somebody who
+    // is not the copy's owner — but you cannot choose which copy to give, or judge
+    // which one you are offered, without seeing the finish on it. (It is no longer
+    // a client's claim either: 20260826120000 moved the derivation into Postgres.)
     // What must still never carry a finish is the PUBLIC record; that is asserted
     // in tests/db/trades.test.ts against the real jsonb.
     withDb({

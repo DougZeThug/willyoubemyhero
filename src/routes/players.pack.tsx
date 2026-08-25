@@ -48,6 +48,7 @@ import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { usePackIdentity } from "@/lib/device-id";
 import { dealPack, packSeed, packStage, resumeCursor, type SecretSlot } from "@/lib/pack";
 import { editionCelebrates, type Edition } from "@/lib/card-edition";
+import { dustBalanceKey } from "@/hooks/use-dust";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
@@ -226,6 +227,9 @@ function PackPage() {
   const status = useSecretStatus(actor);
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
+  // What the pull just paid, held for the reveal caption. Null means nothing to
+  // say — a fresh card, a guest, or a re-read of a pull that already paid.
+  const [secretDust, setSecretDust] = useState<number | null>(null);
   const [secretRevealed, setSecretRevealed] = useState(false);
   /**
    * The set this pull just finished, held until the card has been turned over.
@@ -630,6 +634,12 @@ function PackPage() {
         if (res.ok) {
           setSecret(res.card);
           setSecretDuplicate(res.duplicate);
+          setSecretDust(res.dust && res.dust > 0 ? res.dust : null);
+          // The balance moved, and the vault's chip is the only thing that shows
+          // it. Members only — a guest has no ledger to invalidate.
+          if (res.dust) {
+            void qc.invalidateQueries({ queryKey: dustBalanceKey(me?.participantId) });
+          }
           setSecretUnavailable(false);
           // A card minted just now has never been seen, whatever the device's
           // stored reveal state says — local midnight and league midnight can
@@ -806,6 +816,7 @@ function PackPage() {
     setEditions({});
     setSecret(null);
     setSecretRevealed(false);
+    setSecretDust(null);
     setSecretFailed(false);
     setSecretUnavailable(false);
     // The next person's milestones are their own, and a reveal left on screen
@@ -1281,6 +1292,7 @@ function PackPage() {
               secretRarity={secretRarity}
               secretRevealed={secretRevealed}
               secretDuplicate={secretDuplicate}
+              secretDust={secretDust}
               secretPeeking={secretPeeking}
               peeking={peeking}
               busy={autoRunning}

@@ -81,6 +81,10 @@ const SERVER_ONLY = [
   // completed trade is public, and only in its redacted form.
   "public.trade_offers",
   "public.trade_offer_items",
+  // A balance is a proxy for how deep somebody's collection is, and every row's
+  // ref points at a secret_card_pulls or card_copies id — so this leaks the
+  // secret ledger sideways as well as saying what everybody is spending.
+  "public.dust_ledger",
 ];
 
 describe("public reads", () => {
@@ -314,6 +318,19 @@ describe("server-only tables", () => {
     expect(visible === null || visible === 0).toBe(true);
   });
 
+  it("keeps somebody's dust out of anon's reach", async () => {
+    // The it.each above passes vacuously against an empty table, so the posture
+    // is only really asserted with a row in it.
+    await sql(
+      `INSERT INTO public.dust_ledger (participant_id, delta, reason)
+       VALUES ($1, 25, 'dupe_secret')`,
+      [IDS.alice],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.dust_ledger")).toEqual([{ n: 1 }]);
+    const visible = await visibleRows("anon", "public.dust_ledger");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
   it("keeps a pending offer, and the cards staked on it, between the two people in it", async () => {
     // Seeded through the owner, so there is genuinely something to leak — the
     // `visible === null || visible === 0` idiom passes vacuously against an empty
@@ -402,6 +419,12 @@ describe("anon has no write grant anywhere", () => {
     ["stake a card on an offer", `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, card_copy_id) VALUES ($1, 'proposer', 'roster', $2)`, [OFFER_ID, COPY_ID]], // prettier-ignore
     ["mint itself a platinum copy", `INSERT INTO public.card_copies (participant_id, event_participant_id, edition) SELECT $1, id, 'platinum' FROM public.event_participants LIMIT 1`, [IDS.alice]], // prettier-ignore
     ["upgrade the finish on a copy", `UPDATE public.card_copies SET edition = 'platinum'`, []], // prettier-ignore
+    // Carol rather than Alice: the read test above already filed a dupe_secret
+    // row for Alice with a null ref, and dust_ledger_earn_once would refuse a
+    // second one on the unique index — which `isDenied` counts as a denial and
+    // would pass without ever reaching the grant.
+    ["credit itself dust", `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, 9999, 'admin_adjust')`, [IDS.carol]], // prettier-ignore
+    ["spend nobody's dust but its own", `UPDATE public.dust_ledger SET delta = 9999`, []], // prettier-ignore
     // The whole swap runs inside accept_trade_offer as service_role. Reaching the
     // status column directly would take both people's cards out of the loop.
     ["accept somebody else's offer", `UPDATE public.trade_offers SET status = 'accepted'`, []], // prettier-ignore

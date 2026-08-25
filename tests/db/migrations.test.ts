@@ -23,6 +23,7 @@ const EXPECTED_TABLES = [
   "card_reactions",
   "collection_trophies",
   "draft_selections",
+  "dust_ledger",
   "event_archive_snapshots",
   "event_participants",
   "event_secrets",
@@ -312,6 +313,11 @@ describe("migrations", () => {
     // Everything the card_pulls line above says, per copy and with the finish on
     // each — strictly the worse leak of the two.
     expect(published).not.toContain("card_copies");
+    // A dust balance is a proxy for how deep somebody's collection is, and every
+    // row's ref points at a secret_card_pulls or card_copies id — so publishing
+    // this leaks the secret ledger sideways AND gives every phone a live feed of
+    // who is about to buy a pull.
+    expect(published).not.toContain("dust_ledger");
   });
 
   it("enforces one pack_opens row per person per league day, which is what makes a row count a pack count", async () => {

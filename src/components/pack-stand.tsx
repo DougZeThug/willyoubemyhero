@@ -136,6 +136,7 @@ export function PackStand({
   secretRarity,
   secretRevealed,
   secretDuplicate,
+  secretDust,
   secretPeeking,
   peeking,
   busy,
@@ -169,6 +170,14 @@ export function PackStand({
   secretRarity: Rarity;
   secretRevealed: boolean;
   secretDuplicate: boolean;
+  /**
+   * Dust this pull paid, or null for nothing to say.
+   *
+   * Null rather than zero on a re-read of a pull that already paid: the credit
+   * happened once, and announcing it again every time the card is looked at
+   * would make the number meaningless.
+   */
+  secretDust: number | null;
   secretPeeking: boolean;
   peeking: boolean;
   /** True while "Reveal all" is driving, so a tap cannot cut across it. */
@@ -954,6 +963,13 @@ export function PackStand({
                     {secretDuplicate
                       ? "Already yours — this one's just showing off"
                       : secretTierCaption(secret?.tier)}
+                  </div>
+                ) : null}
+                {onSecret && secretDust ? (
+                  // The point of the dupe economy, said at the only moment it
+                  // lands: the sting is now the payout.
+                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
+                    +{secretDust} dust
                   </div>
                 ) : (
                   <>
