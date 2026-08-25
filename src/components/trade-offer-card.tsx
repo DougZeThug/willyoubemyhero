@@ -35,7 +35,7 @@ export type TradeItemTileProps = {
 
 const TILE_WIDTH: Record<"sm" | "lg", string> = {
   sm: "w-[84px]",
-  lg: "w-[132px]",
+  lg: "w-[110px]",
 };
 
 /**
