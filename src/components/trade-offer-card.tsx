@@ -120,7 +120,7 @@ export function TradeItemTile({
   // from the picker reads as data loss, which is what people actually report.
   if (blockedLabel) {
     return (
-      <div className="w-[84px] shrink-0 opacity-40 grayscale" aria-disabled="true">
+      <div className={cn(width, "shrink-0 opacity-40 grayscale")} aria-disabled="true">
         {body}
         <div className="mt-0.5 text-center text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
           {blockedLabel}
