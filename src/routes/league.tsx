@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Award, BarChart3, ClipboardList, ListOrdered, Radio, Settings, Trophy } from "lucide-react"; // prettier-ignore
+import { Settings, Trophy } from "lucide-react";
+import { LEAGUE_LINKS } from "@/lib/league";
 
 export const Route = createFileRoute("/league")({
   head: () => ({
@@ -15,26 +16,6 @@ export const Route = createFileRoute("/league")({
   }),
   component: LeaguePage,
 });
-
-/**
- * The combine screens, one tap off the nav rather than three tabs of it.
- *
- * Exported so a test can assert the destinations without standing a router up:
- * these five are the only way to reach /live, /order, /draft, /awards and
- * /analytics now that the nav belongs to the cards, and a hub that quietly stops
- * linking one of them strands a whole screen.
- *
- * Analytics carries the recap archive rather than the archive getting a tile of
- * its own — it already lives on that page and a second door to one room reads as
- * two rooms.
- */
-export const LEAGUE_LINKS = [
-  { to: "/live", label: "Live", icon: Radio, blurb: "Race-day timing" },
-  { to: "/order", label: "Order", icon: ListOrdered, blurb: "Running order" },
-  { to: "/draft", label: "Draft", icon: ClipboardList, blurb: "Pick selection" },
-  { to: "/awards", label: "Awards", icon: Award, blurb: "League superlatives" },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, blurb: "Stats and the recap archive" },
-] as const;
 
 /**
  * Deliberately fetches nothing.
