@@ -555,6 +555,28 @@ function SectionTitle({
 }
 
 /**
+ * The feed's summary, with the traded card named in the accent colour.
+ *
+ * `tradeSummaryLabel` already decides the wording; this only splits its result
+ * on the separator so each named piece can be lit up rather than reading as one
+ * grey run of text.
+ */
+function SummaryText({ items }: { items: Parameters<typeof tradeSummaryLabel>[0] }) {
+  const parts = tradeSummaryLabel(items).split(" + ");
+  return (
+    <>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && <span className="text-muted-foreground"> + </span>}
+          <span className="font-semibold text-primary">{part}</span>
+        </span>
+      ))}
+    </>
+  );
+}
+
+
+/**
  * One offer at a time, swiped.
  *
  * A vertical stack of full-size offers buries the second one below the fold on a
