@@ -8,6 +8,24 @@ It supersedes `LOVABLE_MIGRATION_PROMPT.md` in one place — that file still con
 the two-argument `record_card_pulls`, which this replaces. **Apply this one after
 it, never before, and never re-paste that file afterwards.**
 
+> **This file describes the schema as of migration `20260813120000`, and is
+> superseded in one place.** `record_card_pulls` below returns `int` and keeps
+> the better of repeated draws. `20260826120000_server_rolled_editions.sql` drops
+> it again and recreates it as `(uuid, uuid[], text[]) RETURNS jsonb` — a
+> return-type change is something `CREATE OR REPLACE` cannot do — because the
+> finish is now Postgres's to derive from `(participant, card, league day)`, not
+> a claim a client makes.
+>
+> So do not re-paste section 2 against a project that already has the
+> server-rolled migration applied. The `CREATE OR REPLACE` here fails loudly
+> (`cannot change return type of existing function`); the temptation to `DROP`
+> the existing function and re-run is the silent regression — you lose the
+> daily mint cap and the "stored finish wins" rule that stops a retry loop
+> ratcheting to platinum. `tests/db/migrations.test.ts` asserts only the
+> parameter list, not the return type, so it would catch an overload but not
+> a replacement — only after the fact either way. This file is still correct
+> for a project that has not had the server-rolled migration applied.
+
 ---
 
 ## 1. Read this first — what must NOT change
