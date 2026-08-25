@@ -206,10 +206,24 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
   const iGet = iAmProposer ? offer.recipientGives : offer.proposerGives;
   const pending = offer.status === "pending";
 
+  // A live offer is the loudest thing on the screen: ringed, glowing, big cards.
+  // A settled one is a receipt, so it stays the quiet bezel it always was.
+  const size = pending ? "lg" : "sm";
+
   return (
-    <article className="hud-bezel rounded-lg border border-white/10 p-3">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h3 className="min-w-0 truncate font-display text-sm font-black uppercase tracking-wide">
+    <article
+      className={cn(
+        "hud-bezel rounded-xl p-4",
+        pending ? "hud-glow border-2 border-primary/70" : "border border-white/10 p-3",
+      )}
+    >
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <h3
+          className={cn(
+            "min-w-0 truncate font-display font-black uppercase tracking-wide",
+            pending ? "text-xl" : "text-sm",
+          )}
+        >
           {iAmProposer ? `You → ${nameOf(theirId)}` : `${nameOf(theirId)} → You`}
         </h3>
         {!pending && (
@@ -222,17 +236,29 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
       {/* The one-line version, which is also what the public feed shows. It is
           above the tiles rather than below because on a phone, in a garden, it is
           usually the only part anyone reads. */}
-      <p className="mb-2.5 text-[11px] text-muted-foreground">
+      <p className={cn("mb-3 text-muted-foreground", pending ? "text-sm" : "text-[11px]")}>
         {tradeItemsLabel(iGive)} for {tradeItemsLabel(iGet)}
       </p>
 
-      <div className="flex items-start gap-3">
-        <Side label="You give" items={iGive} lookup={lookup} />
-        <ArrowRight className="mt-6 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        <Side label="You get" items={iGet} lookup={lookup} />
+      <div className={cn("flex items-start", pending ? "gap-2" : "gap-3")}>
+        <Side label="You give" items={iGive} lookup={lookup} size={size} />
+        <ArrowRight
+          className={cn(
+            "shrink-0 text-primary drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
+            pending ? "mt-20 h-7 w-7" : "mt-6 h-4 w-4 text-muted-foreground",
+          )}
+          aria-hidden
+        />
+        <Side label="You get" items={iGet} lookup={lookup} size={size} />
       </div>
 
-      {actions && <div className="mt-3 flex flex-wrap gap-2">{actions}</div>}
+      {actions && (
+        <div
+          className={cn("mt-4 flex flex-wrap gap-2", pending ? "justify-center" : "justify-start")}
+        >
+          {actions}
+        </div>
+      )}
     </article>
   );
 }
