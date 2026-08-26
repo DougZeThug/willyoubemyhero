@@ -347,6 +347,7 @@ export const SECRET_FOIL_OPTIONS = [
   { id: "jade", label: "Jade" },
   { id: "toxic", label: "Toxic" },
   { id: "citrine", label: "Citrine" },
+  { id: "royalGold", label: "Royal Gold" },
   { id: "ember", label: "Ember" },
   { id: "sunset", label: "Sunset" },
   { id: "crimson", label: "Crimson" },
