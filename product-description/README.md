@@ -194,6 +194,7 @@ bug-triage.md                    suspected defects collected from every document
 
 verification/
   README.md                      how to run a pass and record results
+  scripted/                      the automated partial pass, and its config
   foundations.md                 FND checklist
   cards.md                       VLT checklist
   trading.md                     TRD checklist

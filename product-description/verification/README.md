@@ -91,8 +91,18 @@ trusting it.
 
 `e2e/fixtures.ts` intercepts the app's server-function calls in the browser and
 answers them from fixed data, so Playwright can drive every screen without
-touching Supabase. `bun run test:e2e` runs the existing specs; the same fixture
-can be pointed at any screen.
+touching Supabase. [`scripted/`](scripted/) holds a pass built on it — nineteen
+items covering routing, the nav rules, the League hub, the dust switch, all six
+favourites claims and three gated or empty states. Run it with:
+
+```
+bunx playwright test --config=product-description/verification/scripted/playwright.config.ts
+```
+
+It has its own config so it never joins `bun run test:e2e` and never gates CI.
+It starts the dev server itself and points every Supabase variable at a dead
+address, so a request that escaped the stub would fail loudly rather than reach
+the live project.
 
 **What a scripted pass can check:** routing, which screen renders, what is on it,
 empty states, nav rules and which tab lights, what is written to `localStorage`
@@ -112,18 +122,38 @@ proves the handler works rather than proving the pack opens under a thumb.
 
 ## Results so far
 
-A scripted pass was run against the stubbed app on the commit above. It is
-recorded in the Result column of the items it covered, each annotated
-`scripted`.
+One scripted pass, against the stubbed app at commit `b46f330`, on an iPhone 13
+viewport. **19 items, 19 passed, 0 failed.** They are marked
+`pass (scripted)` in the Result columns of
+[foundations.md](foundations.md) and [cards.md](cards.md), and nowhere else.
 
-What that pass covered: that every route renders, which tab lights for each path,
-the League hub's five tiles, the empty and gated states on screens that have
-them, and the per-device storage keys that back favourites and the vault's shelf
-order.
+What it established:
 
-What it did not cover, and what remains entirely unrun: every item needing real
-data, a second device, a second person, realtime, sound, motion, the gyroscope,
-the camera roll, race day, or a phone. That is the majority of every checklist in
-this directory.
+- The root path redirects to the vault.
+- Exactly one tab lights on each of the five bottom-bar paths, and it is the
+  right one — including the longest-prefix rule that keeps `/players/pack` off
+  the Vault tab.
+- The League hub links to all five of Live, Order, Draft, Awards and Analytics.
+- The Shop tab is absent while dust is off and present while it is on.
+- All six favourites claims: the label wording and its pressed state, the storage
+  key and its shape, appending rather than prepending, the shelf appearing and
+  disappearing whole, and junk under the key reading as an empty shelf.
+- The trading post and the admin console show their gates rather than their
+  contents to a device with no token.
+- A combine with no roster, and one whose roster failed to load, are both
+  distinguished from a finished field — the failure that made the live screen
+  congratulate nobody.
 
-**No document is marked `verified`.** Nothing here has been watched on a phone.
+One thing was found while building the pass rather than by an item in it: **the
+active navigation tab carries no `aria-current`**, and is conveyed by a colour
+class alone. The probe written for it found nothing, and reading
+`src/components/site-nav.tsx` confirmed there is none. It is filed as part of
+[B-30](../bug-triage.md#b-30-accessibility-gaps-across-the-app).
+
+What the pass did **not** cover, and what remains entirely unrun: everything
+needing real data, a second device, a second person, realtime, sound, motion, the
+gyroscope, race day, or an actual phone in a hand. That is the large majority of
+every checklist in this directory.
+
+**No document is marked `verified`.** Nothing here has been watched on a phone,
+and a scripted pass is not grounds for marking one.
