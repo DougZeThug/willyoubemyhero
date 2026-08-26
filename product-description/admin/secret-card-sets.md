@@ -17,20 +17,20 @@ says so before it does it, and the database enforces it whatever the panel
 intended.
 
 What a secret card *is* — its look, its prism edge, the level rolled per copy —
-belongs to [the card](../foundations/the-card.md#what-a-secret-card-is). How one
+belongs to [the card](../foundations/the-card.md#what-a-secret-card-is); how one
 arrives in a pack belongs to [the daily secret](../cards/the-daily-secret.md).
 
 ## The simple case
 
-You unlock the console, and Secret Cards is the first panel on it, already open.
-It says how many cards are in the set and reminds you that they belong to the
+You unlock the console and Secret Cards is the first panel on it, already open,
+saying how many cards are in the set and reminding you that they belong to the
 league rather than to this combine.
 
-You drop twelve images onto the dashed box. Each filename becomes a card name —
-`gary-the-grill.webp` arrives as "Gary The Grill" — and each lands as a staged
-row with a preview, an editable name, an empty wording line and a set picker
-already set to whatever you chose in "Add to". You type twelve one-line jokes,
-tap "Add 12 to the set", and they are uploaded and filed.
+You drop twelve images on the dashed box. Each filename becomes a card name —
+`gary-the-grill.webp` arrives as "Gary The Grill" — and each lands as a staged row
+with a preview, an editable name, an empty wording line and a set picker already
+set to whatever you chose in "Add to". You type twelve one-line jokes, tap "Add 12
+to the set", and they are uploaded and filed.
 
 Below that, the cards are grouped into collapsible sections, one per set, in the
 order you arranged them, with the unsorted pile last. Open one and a "Whole set"
@@ -97,13 +97,12 @@ are released rather than leaked.
 
 ### The tap that starts something
 
-The panel has an unusual number of first writes, because most of its controls
-save the moment you touch them rather than behind a Save button.
+The panel has an unusual number of first writes, because most of its controls save
+the moment you touch them rather than behind a Save button.
 
 - **"Add N to the set."** Each image is downscaled and re-encoded in your browser
-  before it leaves — 1600px on the long edge, WebP where the browser can — and
-  the batch is sent as one request, up to forty cards. Each card's row is
-  inserted first and its art uploaded second.
+  first — 1600px on the long edge, WebP where the browser can — and the batch goes
+  as one request of up to forty cards, each card's row inserted before its art.
 - **A foil or a border chip.** Picking one *is* the intent, so it saves on
   change. Arrow keys walk the strip and fire a save per step; the saves are
   chained per card so the row settles on the last key you pressed rather than on
@@ -141,12 +140,11 @@ sent.
 The catalogue is re-read after every write, so the panel always redraws from the
 server rather than from what it hoped it wrote.
 
-Uploads report per card. All twelve landing says "12 added to the set"; any that
-failed says how many, and — because each row is inserted before its art — a card
-whose upload failed survives as a row with **no art**, flagged "No art · not in
-packs". That card is invisible to the daily pull until you replace its art, which
-is the safe direction to fail: an artless card must never burn somebody's
-once-a-day pull on a blank.
+Uploads report per card: all twelve landing says "12 added to the set", any that
+failed says how many. Because each row is inserted before its art, a card whose
+upload failed survives as a row with **no art**, flagged "No art · not in packs",
+invisible to the daily pull until you replace it — the safe direction to fail,
+since an artless card must never burn somebody's once-a-day pull on a blank.
 
 Removing settles two ways and the toast says which. If **nobody has pulled it**,
 the row and its art file are both deleted: "Removed from the set." If **somebody
@@ -187,18 +185,18 @@ holding their own phone, and finds out there.
 
 ## Interactions with other systems
 
-**Who you have to be.** The commissioner. Every handler here is guarded against
-the *active event's* admin token, resolved server-side rather than taken from the
+**Who you have to be.** The commissioner. Every handler here is guarded against the
+*active event's* admin token, resolved server-side rather than taken from the
 request, so last year's PIN left in an open tab cannot edit this year's set. What
-that guard is not: any holder of the current event's shared PIN can rewrite or
-retire the league's permanent collection, including cards authored years earlier.
-For a thirteen-person league that is the intended blast radius.
+that guard is not: any holder of the current PIN can rewrite or retire the
+league's permanent collection, cards authored years earlier included. For a
+thirteen-person league that is the intended blast radius.
 
-**Realtime.** Nothing about the catalogue is broadcast, and that is deliberate:
-publishing the secret tables would stream the set to every connected phone. The
-one exception is a *completed set*, which is published — a trophy is meant to be
-lore, and it is the only channel that can reach a recipient standing somewhere
-else in the garden when the commissioner grants them their last card. See
+**Realtime.** Nothing about the catalogue is broadcast, deliberately: publishing
+the secret tables would stream the set to every connected phone. The one exception
+is a *completed set*, which is published — a trophy is meant to be lore, and it is
+the only channel that reaches a recipient standing somewhere else in the garden
+when the commissioner grants them their last card. See
 [collection trophies](../cards/collection-trophies.md).
 
 **Offline and reconnection.** The panel renders from cache with the radio off, art

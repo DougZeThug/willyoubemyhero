@@ -45,6 +45,22 @@ granted admin. Runs the clock, edits results, manages the roster, creates secret
 cards and flips the *dust switch*. These documents say "commissioner" for the
 person and "admin screen" for the place.
 
+**Collector.** A signed-in account that is not a combine athlete. A collector is
+tradeable and *reachable* but is never issued a paper code and can never be
+claimed — they sign in instead. The roster picker on the claim screen lists them
+apart for exactly that reason.
+
+**Member code.** Six characters on a slip of paper, one per player, issued by the
+commissioner. The alphabet drops every pair people confuse — no O, I, L, Z, S or
+B — because codes are read off paper and typed on a phone. Only a salted hash is
+stored, so the plaintext is shown to the commissioner exactly once. A code stays
+valid after the first claim on purpose: people get new phones.
+
+**Reachable.** The app's own test for who can be sent a trade offer: somebody who
+has claimed a code, or signed into an account. An unreachable player is on the
+roster but has no device that could answer, so offering them a trade would be a
+message into a void.
+
 **Actor.** Whoever is asking, member or guest, for the paths that accept either —
 the daily secret and its status. A member token always wins over a guest token on
 the same device, so a person who played as a guest and then claimed a player
@@ -90,8 +106,9 @@ a pack finish.
 *unsorted* and shows under the heading "Secrets" in the vault.
 
 **Card back.** The reverse of a card: the tier's reason line, the pull odds for a
-special finish, the date first pulled, award badges, and — on a secret — how many
-people have found it.
+special finish, the date first pulled, and — on a secret — how many people have
+found it. Award badges are **not** on the back; they print under the card on a
+player's own page.
 
 ## The collection
 
@@ -115,6 +132,24 @@ dealt. The pack's last slot prefers a card the baseline lacks — which is the o
 mechanism by which a set ever completes — and it is a snapshot rather than the
 live collection so the pack cannot shift under you as you reveal it.
 
+**Shelf.** One section of the vault: Favourites, Complete, a secret set, or the
+Roster. Shelves can be reordered and rolled up, per device. A shelf with nothing
+in it is absent rather than empty.
+
+**Locked.** A roster card this device has never pulled. It renders face-down, has
+no star, and shows no finish — there is no copy of it to describe. The link to
+its page survives the lock, because that page is where somebody finds out what
+they are missing.
+
+**Trophy.** What a finished set leaves behind: a plaque on its own shelf, a badge,
+and a pill on the set. Minted in the same breath as the card that finished it,
+and celebrated only once.
+
+**Adopt.** What the device does at an identity transition: uploading the roster
+cards it holds locally so they land on the name rather than the handset. Secrets
+move server-side during the claim; roster cards are adopted, because they were
+never on the server for a guest.
+
 **Starred.** A card you have marked. Starred cards pin to the top of the vault
 and carry a mark on every grid they appear in. It is per-device state that costs
 nothing and tells nobody.
@@ -137,7 +172,10 @@ a time, and hands over to the columns when you walk off the end of it.
 **Tear.** The drag across the sealed wrapper that opens a pack. It commits at
 60% of a travel worth 80% of the pack's width; short of that it springs back.
 
-**Ceremony.** The sequence from a committed tear to the final columns:
+**Ceremony.** Any full-screen moment the app takes the device for: a pack
+opening, a milestone's bonus secret, a set closing. Every one of them raises
+*presentation mode*. Unqualified, it means the pack's: the sequence from a
+committed tear to the final columns,
 `sealed` → `opening` (the rip finishing, the cards leaving the pack) →
 `revealing` (one card at a time on the stand) → `complete` (the columns). The
 grid is the destination, never a stage — showing the final layout while cards are
@@ -146,6 +184,10 @@ still face-down spends the payoff before it is earned.
 **Daily secret.** The fourth slot: one secret card a day, per actor, decided and
 recorded by the server. It never stalls the ceremony — only a secret that is
 actually coming holds the stand.
+
+**Milestone.** A rung on the streak ladder that pays a reward. Every milestone
+pays a bonus secret, some with a level floor. The rungs are stored, so one may be
+added but never renumbered.
 
 **Streak.** The run of consecutive league days you opened a pack on. It is not
 stored; it is a walk over the pack records, which is why it survives the guest to
@@ -169,12 +211,41 @@ legendary 120, epic 60, rare 30, common 15 — the roster ladder times three.
 reroll of a copy's finish for 50. A reroll can go down; a best-of would make it a
 risk-free ratchet.
 
+**Balance.** How much dust you hold, shown as a chip in the chrome. It is the
+server's number; nothing on the device decides it.
+
+**Unsettled finish.** A copy whose edition the server did not decide — pulled
+before finishes moved to Postgres, or asserted by a commissioner. It mills at the
+flat floor however rare it claims to be, and a *reroll* repairs it.
+
+**Reroll.** Paying to roll a copy's finish again. It can go down. A best-of would
+make it a risk-free ratchet and the whole league would converge on platinum.
+
+**Staked.** A copy committed to a pending offer or an active listing. A staked
+copy cannot be milled, sold or rerolled until it comes free.
+
 **The marketplace.** Member-to-member selling for dust. A price between 1 and
-9999, at most 20 active listings each.
+9999, at most 20 active listings each — not an economic rule, but the only shape
+of denial-of-service a marketplace for thirteen people has.
+
+**Listing.** One card on the marketplace at a price its owner set.
+
+**The stall.** Your own listings, live and settled. The only place a sale of
+yours is ever visible.
 
 **Trade.** A member-to-member swap of cards for cards, with no dust involved. An
 offer names what the proposer gives and what they want, and waits until the other
 side answers.
+
+**Offer status.** Where an offer stands. *Pending* — waiting for an answer.
+*Done* — accepted, and the cards have moved. *Declined* — somebody said no.
+*Pulled* — the proposer withdrew it. *Expired* — nobody answered and the cards
+moved out from under it. Declined and expired are different facts and the screen
+says which.
+
+**Nudge.** A contentless broadcast that lights a dot. It carries no payload at
+all — it says only that something changed, and the screen asks for the detail
+itself.
 
 **The feed.** The public record of completed trades. A roster item names its
 card, because that card is public. A secret item names its card too, and nothing
@@ -186,8 +257,12 @@ appears nowhere, so the catalogue cannot be enumerated from the feed.
 **Event.** One year's combine. One is active at a time, and almost every screen
 reads the same bundle of it: participants, runs, splits, penalties and stations.
 
-**Participant.** A person on the roster for an event. Their `participation_status`
-is `queued`, `running`, `finished` or `scratched`.
+**Participant.** A person on the roster for an event, and their status on the
+day. The app writes four: **waiting** (the default, and the word players see on
+the running order), **running**, **finished** and **scratched**. The schema
+allows a wider vocabulary an archived combine may still carry — `up_next`,
+`on_deck`, `delayed`, `absent`, `dq`, `dnp`, `rerun_pending` — and anything in
+the out-of-contention family is treated as such wherever tiers are decided.
 
 **Run.** One timed attempt at the course. A run has splits, penalties, and an
 official time; only an *official* run counts for a tier or the board.
@@ -204,8 +279,10 @@ across the event wears the `penaltyBox` tier.
 **Official time.** The number a card's claim to a tier rests on. Times are
 milliseconds everywhere in this app and are formatted only at the edge.
 
-**On the clock.** The participant currently running, and the moment their clock
-started.
+**On the clock.** Two different things, and the app says it both ways on screen.
+On race day it is the participant currently running, and the moment the
+commissioner started their clock. On the draft screen it is whoever is choosing
+the next pick. These documents always say which.
 
 **Draft pick.** A selection made on the draft screen, in order. The last one can
 be undone.

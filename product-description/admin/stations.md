@@ -79,20 +79,18 @@ with the sheet; a half-typed batch of renames is discarded when you tap Cancel.
 There are four, and they commit different amounts:
 
 - **Save, in the sheet.** One write. A blank name is refused on the device before
-  anything leaves it — "A station needs a name" — because a nameless obstacle is
-  a blank button on the console on race day.
+  anything leaves it — a nameless obstacle is a blank button on race day.
 - **Save all names**, in the bulk rename. One write **per changed row**, sent one
-  after another. Rows you did not touch are not sent at all. If every field is
-  unchanged the batch closes silently rather than writing thirteen identical
-  rows.
+  after another; untouched rows are not sent at all, and a batch with no changes
+  closes silently rather than rewriting thirteen identical rows.
 - **An arrow**, while rearranging. **Two** writes: the two stations swap their
-  order values outright. Every other row keeps the number it had, so repeated
+  order values outright, every other row keeps the number it had, so repeated
   taps walk a station up the list one place at a time whatever the numbers were
   seeded as.
-- **Delete**, behind the bin in the sheet. The device checks first: a station
+- **Delete**, behind the bin in the sheet. The device checks first — a station
   with any split or penalty against it never sends the request, and you get
   "*Sprint* has recorded times — switch it to inactive instead". Otherwise a
-  browser confirm box asks once, and the row goes.
+  browser confirm asks once and the row goes.
 
 The penalty field is typed in **seconds** and stored in milliseconds like every
 other time in this app; see
@@ -162,8 +160,8 @@ one again. Nothing warns; it simply looks as though the station did not move.
 
 **Who you have to be.** The commissioner, holding an admin token for this event.
 Both writes put `requireAdmin` on their first line, and every write in this app
-runs with row-level security bypassed, so that guard is the whole of the
-protection. See [getting in](getting-in.md) and
+runs with row-level security bypassed, so that guard is the whole protection. See
+[getting in](getting-in.md) and
 [identity and sessions](../foundations/identity-and-sessions.md).
 
 **Realtime.** None for stations. Runs, splits, penalties, participants and draft
@@ -173,14 +171,12 @@ instantly. The commissioner's own panel refetches after each save, which is why
 it feels live there and nowhere else.
 
 **Offline and reconnection.** The panel renders from the cached bundle with the
-radio off, and every button is still there. Nothing can be saved: each tap fails
-with a network error and the list keeps its old values. Reconnection brings the
-truth back on the next poll.
+radio off and every button is still there. Nothing saves: each tap fails with a
+network error and the list keeps its old values until the next poll.
 
-**Optimistic updates and rollback.** Nothing here is optimistic, deliberately.
-The list you see is the list the server last returned, so there is nothing to
-roll back — a failed save leaves the old name on screen because the new one was
-never drawn.
+**Optimistic updates and rollback.** Nothing here is optimistic, deliberately. The
+list is whatever the server last returned, so there is nothing to roll back — a
+failed save leaves the old name on screen because the new one was never drawn.
 
 **The card economy.** Stations feed it only through tiers. The fastest split at
 any one station earns its owner the `stationKing` tier, so deleting a station
@@ -194,10 +190,9 @@ sheet sliding up and a chevron rotating.
 **Notifications and badges.** None. No dot on the nav reflects anything about
 stations, and no player is told when one is renamed.
 
-**Sharing.** Station names travel wherever a card does — a card exported as an
-image carries the ladder with the short labels baked in, and a recap archived
-after a rename carries the new names. An image exported *before* a rename keeps
-the old ones forever.
+**Sharing.** Station names travel wherever a card does: an exported image carries
+the ladder with its short labels baked in, and a recap archived after a rename
+carries the new names. An image exported *before* a rename keeps the old ones.
 
 **The second device.** Two consoles on two phones is the normal race-day setup,
 one timing and one fixing, and the station list is the one part of it where that
@@ -212,23 +207,22 @@ in. The bin is labelled "Delete station" rather than by its icon.
 ## Edge cases
 
 - **A station with recorded times.** The delete is refused on the device with a
-  named toast, and the sheet prints a line explaining why. The Active switch is
-  the offered alternative: it drops the station from the timing console and
-  keeps every split ever recorded against it.
-- **The block is only on the device.** The server's delete handler checks that
-  you are an admin and nothing else, and the database is set to *cascade* splits
-  away with the station rather than to refuse. The rule that protects finished
-  runs lives in one screen, not in the database. See "Open questions".
-- **A bundle that could not read the splits table.** The panel decides which
-  stations are load-bearing from the splits and penalties in the bundle, and a
-  failed read of that table arrives as an empty list rather than an error. The
-  delete would then be armed on a station that does have times.
-- **Retiring a station leaves an empty ladder row.** The station ladder on a card
-  back is built from every station in the event, active or not, so a station
-  switched off before anyone ran it prints a row with a dash in it on every card.
-- **"Record a split here" changes nothing.** The switch is saved and read back
-  faithfully, but no screen consults it: the timing console draws a split button
-  for every *active* station regardless. See "Open questions".
+  named toast and the sheet prints a line explaining why. The Active switch is the
+  offered alternative: it drops the station from the timing console and keeps
+  every split ever recorded against it.
+- **The block is only on the device.** The delete handler checks that you are an
+  admin and nothing else, and the database is set to *cascade* splits away with
+  the station rather than refuse. The rule that protects finished runs lives in
+  one screen. See "Open questions".
+- **A bundle that could not read the splits table** arrives as an empty list
+  rather than an error, so the delete would be armed on a station that does have
+  times.
+- **Retiring a station leaves an empty ladder row.** The ladder on a card back is
+  built from every station in the event, active or not, so a station switched off
+  before anyone ran it prints a dash on every card.
+- **"Record a split here" changes nothing.** The switch saves and reads back
+  faithfully, but no screen consults it: the console draws a split button for
+  every *active* station regardless. See "Open questions".
 - **Two stations with the same name.** Allowed; the console tells them apart by
   position. A station with no short name shows a dash in the admin list, falls
   back to its full name on the card ladder, and to "#" and its order number on

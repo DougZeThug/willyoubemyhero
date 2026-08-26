@@ -80,14 +80,14 @@ list arriving, not the tap.
 
 ### While it runs
 
-An offer arriving is delivered by a poke at a private topic — a message that
+An offer arriving is delivered by a *nudge*: a broadcast on a private topic that
 carries *nothing at all*. It means "something of yours moved, go and ask
 properly", and asking properly means the same guarded request the screen always
 used. Nothing about the offer travels over the wire; the topic is derived from
 your participant id and the server's own secret, so nobody can work out anybody
 else's.
 
-> Technical note: the same poke covers four things — offers, marketplace
+> Technical note: the same nudge covers four things — offers, marketplace
 > listings, your own stall and your dust balance — rather than minting a second
 > topic. A sale moves your dust when you were not the one who tapped anything,
 > and there is no payload to tell the two apart, so all four are refreshed on
@@ -133,7 +133,7 @@ is deliberate: a screen somebody is enjoying is not a screen to interrupt.
 | Navigating away inside the app | The dot travels with you; it is on the bar, not on the screen. | Same. |
 | Reload | The dot is recomputed from the server's list and the phone's seen-list. It comes back exactly as it was. | Stays clear, because the seen-list is on the phone. |
 | Backgrounded | The topic subscription may drop. Coming back refetches on focus, so a dot that should have appeared appears then. | Same. |
-| Network lost mid-request | The trade dot holds its last value rather than clearing — it is a comparison, and one side of it simply stops updating. The secret dot goes quiet on a failed fetch. | No effect. |
+| Network lost mid-request | Both dots hold whatever they last knew: a failed refetch leaves the previous answer in place rather than clearing it. A dot that should have appeared while you were offline does not. | No effect. |
 | The request fails or times out | A failed offers read does not retry: an expired member token should surface the claim prompt, not three retries on the way to it. | No effect. |
 | The token expires or is cleared | The trade dot disappears along with the inbox. The secret dot disappears with the identity. | Same. The seen-list stays on the phone and is still correct if the same person claims again. |
 | Changed by someone else | This is how the trade dot appears at all. | An offer accepted or withdrawn elsewhere removes it from your inbox, and the dot goes out on its own. |
@@ -158,7 +158,7 @@ memory rather than re-read, so a browser that refuses to store still clears the
 dot for that page load. The dot comes back on the next reload, which is the
 honest cost.
 
-**The card economy.** A marketplace sale pokes the same topic, so your dust
+**The card economy.** A marketplace sale sends the same nudge, so your dust
 balance updates on a screen you were not looking at. There is no dust badge.
 
 **Motion and sound.** Nothing here makes a sound, animates or buzzes. A dot
@@ -194,8 +194,9 @@ you find out the next time you reach the tab.
 - **The two dots are different colours.** The pack's wears the secret set's own
   edge rather than the app's cyan, because two cues in one bar reading as the
   same thing is worse than one.
-- **A dropped poke is slow, not broken.** The server never blocks a trade waiting
-  for one, gives up after two seconds, and logs nothing but a status code.
+- **A dropped nudge is slow, not broken.** The server never blocks a trade
+  waiting for one, gives up after two seconds, and logs nothing but a status
+  code.
 - **A toast can land on top of a ceremony**, because toasts are rendered outside
   presentation mode.
 - **No dot for anything else.** Not for a completed trade, not for dust, not for

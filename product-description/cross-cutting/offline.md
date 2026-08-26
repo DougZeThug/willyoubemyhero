@@ -153,9 +153,10 @@ to wait on. Confetti is fetched on demand the first time something is won, so th
 very first celebration on a cold offline device is silent visually and audible
 anyway.
 
-**Notifications and badges.** The secret dot needs a fetch and so goes quiet
-offline. The trade dot is a comparison between a server list and a local one, so
-it holds its last value rather than clearing.
+**Notifications and badges.** Both dots freeze at whatever they last knew. A
+failed refetch leaves the previous answer in place, so a dot neither appears nor
+clears while the connection is down. On a cold offline start neither can be
+computed at all, so both are absent.
 
 **Sharing.** An export needs the artwork, and the artwork is signed storage URLs
 that expire after an hour. Offline, or on a stale URL, the image rasterises blank

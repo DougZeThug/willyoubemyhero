@@ -181,6 +181,8 @@ a shine that might be wrong.
 Nothing else in the economy makes a sound; milling, selling and buying are silent
 by design.
 
+**Motion and sound.** This document.
+
 **Notifications and badges.** Silent. No dot ever chimes or buzzes. See
 [notifications and badges](notifications-and-badges.md).
 

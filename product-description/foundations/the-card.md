@@ -126,8 +126,10 @@ one thing the whole feature keeps back.
 
 Turning a card over shows what the front cannot: the reason line for the tier,
 the pull odds for a special finish ("0.5% pull"), the date you first pulled it,
-any award badges the holder has won, and — on a secret — how many people have
-found that card.
+and — on a secret — how many people have found that card.
+
+Award badges are not on the back. They print under the card on a player's own
+page; see [a player card](../cards/a-player-card.md).
 
 The odds line is derived from the same table that produced the roll, so the copy
 on the back of a card cannot drift from the rate that actually made it.

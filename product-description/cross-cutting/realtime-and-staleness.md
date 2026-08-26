@@ -102,8 +102,8 @@ nobody.
 - **A finished set.** A trophy row appearing is the notification — see
   [collection trophies](../cards/collection-trophies.md) — which is how a set
   closed by an admin grant or by the far side of a trade still gets its ceremony.
-- **An offer waiting for you**, by a different route: a payload-free poke at a
-  private topic, described in [notifications and badges](notifications-and-badges.md).
+- **An offer waiting for you**, by a different route: a *nudge*, described in
+  [notifications and badges](notifications-and-badges.md).
 
 ## What does not
 
@@ -113,8 +113,8 @@ nobody.
   drop. See [the daily secret](../cards/the-daily-secret.md).
 - **Your card counts and your collection.** Refreshed when a trade lands or when
   you come back to the tab, never pushed.
-- **Your dust balance**, except when a marketplace sale moves it, which pokes the
-  same private topic an offer does. See [dust](../dust/dust.md).
+- **Your dust balance**, except when a marketplace sale moves it, which sends the
+  same nudge an offer does. See [dust](../dust/dust.md).
 - **Your streak** and today's pack. Both are read when the screen opens.
 - **The event's own settings**, including the dust switch, which is fetched with
   a one-minute freshness window rather than watched.
@@ -123,7 +123,7 @@ nobody.
 
 | Modifier | At arrival | Changed during |
 | --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The combine feed is public and identical for everyone. Only a member has a private topic to be poked on, so only a member gets live offers, sales and dust. | Claiming a player starts a topic subscription that a guest never had. Signing out drops it. |
+| Who you are (guest · member · account · commissioner) | The combine feed is public and identical for everyone. Only a member has a private topic to be nudged on, so only a member gets live offers, sales and dust. | Claiming a player starts a topic subscription that a guest never had. Signing out drops it. |
 | The event's state (before the combine · running · finished) | Before and after the combine almost nothing changes, so the feed is quiet and its health is invisible. | Race day is the only time any of this is load-bearing, which is also the only time the signal is bad. |
 | Dust switched on or off | No effect on what arrives. | Flipping it reflows the nav on every phone within a minute, because the event is refetched rather than pushed. |
 | The device (phone · desktop · reduced motion · presentation mode) | No effect. A hidden tab does not poll. | A screen under presentation mode still refetches; the ceremony simply covers it. |
@@ -145,7 +145,7 @@ nobody.
 
 ## Interactions with other systems
 
-**Who you have to be.** Nobody, to watch the combine. A member, to be poked
+**Who you have to be.** Nobody, to watch the combine. A member, to be nudged
 about anything private — the topic is derived from your participant id and the
 server's secret, and a guest has no such thing.
 
@@ -161,7 +161,7 @@ optimistically own that behavior themselves, and a live change landing mid-write
 is described in their own documents.
 
 **The card economy.** A trade landing refreshes both collections. A marketplace
-sale pokes the seller, who did not tap anything. Milling and buying refresh only
+sale nudges the seller, who did not tap anything. Milling and buying refresh only
 the phone that did them.
 
 **Motion and sound.** None. A live update never animates and never chimes; the
@@ -199,9 +199,9 @@ set's ceremony is the one place in this area that announces itself politely.
   refetch on every event's watchers. With one active combine this is invisible.
 - **Recovery costs an extra read.** Coming back from degraded refetches even if
   nothing changed, which is the price of not knowing what was missed.
-- **Joining a topic is itself a refetch**, for the same reason: whatever settled
-  between the first read and the subscription landing was broadcast to a listener
-  that did not exist yet.
+- **Joining a nudge topic is itself a refetch**, for the same reason: whatever
+  settled between the first read and the subscription landing was broadcast to a
+  listener that did not exist yet.
 - **Two tabs, two channels.** They do not share. Nothing is wrong with that; it
   is one extra socket per tab.
 

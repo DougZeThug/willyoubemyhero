@@ -11,21 +11,20 @@ in trades?" — and repairs the commonest cause of it in one tap.
 
 None of the three is part of race day. All three exist because a phone-first app
 with no login has two ways to lose track of who owns what: a pack opened before
-the device knew who was holding it, and a player nobody can send an offer to.
+the device knew who was holding it, and a player no offer can reach.
 
 ## The simple case
 
 Somebody says their cards have gone. You open the console and scroll to Card
-Ownership Audit. Its header already says "3 loose". You tap the Loose tab, see
+Ownership Audit; its header already says "3 loose". You tap the Loose tab, see
 three devices with the dates they were last seen and a few card names each, and
 recognise one — "Gary the Grill, Reggie, Two Pints" is exactly the set they were
-bragging about last week. You tap it, pick their name from "Belongs to…", tap
-Attach, confirm, and the cards move onto their name for good. A toast says how
-many secrets they now hold.
+bragging about last week. Tap it, pick their name from "Belongs to…", tap Attach,
+confirm, and the cards move onto their name for good.
 
 If it is a roster card rather than a secret, Give a Card is the tool: pick the
-player, pick the card, pick the finish, confirm. The toast tells you how many
-copies they hold afterwards.
+player, pick the card, pick the finish, confirm. The toast says how many copies
+they hold afterwards.
 
 And when the league is ready for the economy — usually not on day one — the Dust
 panel is one button. It says "Turn dust on", tells you what will happen, and does
@@ -61,10 +60,11 @@ knows no history: it cannot tell you what somebody already holds, only offer to
 add to it.
 
 **The audit** makes its own request, cached for thirty seconds, and does real
-work: it counts every roster copy and every secret pull in the league, groups
-them by owner, works out which players can be reached by an offer at all, and
-collects every device holding cards that belong to nobody. The header says "N
-loose" or "all filed" before you open it.
+work: it counts every roster copy and every secret pull in the league, groups them
+by owner, works out which players are *reachable*, and collects every device
+holding cards that belong to nobody. The header says "N loose" or "all filed"
+before you open it. Anyone on the list who is a *collector* rather than an athlete
+is marked as one, in the Holdings rows and in the "Belongs to…" picker.
 
 Three numbers per player come back, and the third is the interesting one:
 **Cards** is every roster copy they hold, **Secret** is every secret, and
@@ -90,49 +90,45 @@ will happen rather than asking "are you sure":
   the finish, because the two dropdowns above it look identical.
 - **Attach** — "Move this device's cards onto *Alice*? This can't be undone."
 
-The attach is the one genuinely irreversible action on this page, and it is the
-only one whose confirm says so. It runs the same three steps a real claim runs,
-in the same order: the device's secrets move first, then its pack history, then
-the streak milestones those packs already paid — that order is what stops a
-rescued device from re-earning milestones somebody already collected. If a
-signed-in account is sitting on that device without a player of its own, its link
-is repaired at the same time, or it would go on acting as a stranger on its next
-visit and strand every new pull the same way.
+The attach is the one genuinely irreversible action here, and the only one whose
+confirm says so. It runs the same three steps a real claim runs, in the same
+order: the device's secrets, then its pack history, then the *milestones* those
+packs already paid — that order is what stops a rescued device from re-earning
+milestones somebody already collected. If a signed-in account is sitting on that
+device with no player of its own, its link is repaired at the same time, or it
+would go on acting as a stranger and strand every new pull the same way.
 
 ### While it runs
 
-Each panel disables only its own control. Dust says "Working…", the grant says
-"Giving…", and the attach row says "Moving…" while its neighbours stay
-interactive.
-
-Nothing is optimistic. The dust panel does not flip its label until the write has
-come back; the audit does not remove a device from the list until the move has
+Each panel disables only its own control: Dust says "Working…", the grant says
+"Giving…", the attach row says "Moving…", and their neighbours stay interactive.
+Nothing is optimistic — the dust panel does not flip its label until the write has
+come back, and the audit does not drop a device from the list until the move has
 landed.
 
 ### It settles
 
-**Dust** re-reads the active event, which is the one thing every screen in the
-app consults to decide whether the Shop tab exists. The toast says "Dust is live"
-or "Dust is off". On other people's phones the bottom bar reflows from five
-columns to six the next time they read the event — see
+**Dust** re-reads the active event, which is the one thing every screen consults
+to decide whether the Shop tab exists, and toasts "Dust is live" or "Dust is off".
+On other phones the bottom bar reflows from five columns to six the next time they
+read the event — see
 [the event](../foundations/the-event.md#the-events-own-settings) and
 [navigation and screens](../foundations/navigation-and-screens.md).
 
 **A grant** answers with the total: "*Alice* now holds 3 × *Bob*". The copy is
-filed as a grant rather than a pull, so it is distinguishable from a real pull
+filed as a grant rather than a *pull*, so it is distinguishable from a real one
 forever and never occupies anybody's one pull a day — but the public "packed by"
-count on that card moves exactly as a real pull would, because the point is to
-put the collection back the way it was.
+count moves exactly as a real pull would, because the point is to put the
+collection back the way it was.
 
-**An attach** says how many secrets that player now holds and collapses the
-device row. It then invalidates *everything* on the page rather than one query,
-because a move of this size touches the roster, the trading surfaces and the
-audit at once.
+**An attach** says how many secrets that player now holds and collapses the device
+row, then invalidates *everything* on the page rather than one query, because a
+move this size touches the roster, the trading surfaces and the audit at once.
 
-Failures are toasts. Dust says "Could not change that"; the other two carry the
-server's own words. Nothing is left half-applied by a failed grant — the copy is
-inserted inside one database call — but a failed attach can be, because it is
-three calls in sequence and only the ones before the failure have run.
+Failures are toasts: Dust says "Could not change that", the other two carry the
+server's own words. A failed grant leaves nothing half-applied — the copy goes in
+inside one database call — but a failed attach can, because it is three calls in
+sequence and only the ones before the failure have run.
 
 ## Modifiers
 
@@ -172,12 +168,12 @@ read their collection; an attach reaches nobody but the commissioner, though its
 effects are visible immediately to the person it rescued.
 
 **Offline and reconnection.** All three render from cache with the radio off and
-none of them can write. The audit in particular is a large read, so on a poor
-connection it can sit on "Counting collections…" for a while.
+none can write. The audit is a large read, so on a poor connection it can sit on
+"Counting collections…" for a while.
 
-**Optimistic updates and rollback.** Nothing is optimistic and nothing rolls back
-— every panel waits for the server and then re-reads. The attach is the exception
-worth knowing about: it is not a transaction, so a failure part-way leaves the
+**Optimistic updates and rollback.** Nothing is optimistic and nothing rolls back:
+every panel waits for the server and then re-reads. The attach is the exception
+worth knowing about — it is not a transaction, so a failure part-way leaves the
 steps already taken taken.
 
 **The card economy.** The dust switch is the economy's on/off, and while it is
@@ -206,9 +202,8 @@ finds nothing left to move.
 
 **Accessibility.** Every dropdown carries a real label — "Player", "Card",
 "Finish", "Belongs to…" — and the audit's tabs are buttons with their counts
-inside them rather than beside them, so a screen reader reads "Loose 3" as one
-control. The three-column stat pills each name their own number. The confirms are
-the browser's, so they behave the way the platform's dialogs do.
+inside them, so a screen reader reads "Loose 3" as one control. Each stat pill
+names its own number, and the confirms are the browser's own dialogs.
 
 ## What "loose" actually means
 
@@ -224,11 +219,10 @@ last seen, and up to four card names so the commissioner can match it to whoever
 is complaining. A device with a signed-in account on it but no player is flagged
 "account", because that is the case that will keep happening until it is fixed.
 
-The "Can't trade" tab is the other half: players who never claimed a paper code
-and never signed in. They exist on the roster, they may hold cards, and no offer
-can reach them, so they never appear as a trade partner. Nothing on this tab is
-repairable from here — the fix is a member code, on
-[the roster](the-roster.md).
+The "Can't trade" tab is the other half: players who are not *reachable* — no
+claimed *member code*, no account. They exist on the roster, they may hold cards,
+and they never appear as a trade partner. Nothing here is repairable from this
+panel; the fix is a member code, on [the roster](the-roster.md).
 
 ## Edge cases
 
@@ -242,7 +236,7 @@ repairable from here — the fix is a member code, on
 - **The finish is chosen, the tier is not.** The five finishes are offered in a
   dropdown; what tier the card wears is whatever the course earned and is not
   touched here. See [the card](../foundations/the-card.md).
-- **Granting to a player nobody can reach** works. The copy is filed against
+- **Granting to a player who is not reachable** works. The copy is filed against
   their name and waits there until they claim a code.
 - **Attaching a device whose cards the player already holds** folds the duplicates
   in rather than doubling them, because it runs the same code the claim path
@@ -272,7 +266,7 @@ repairable from here — the fix is a member code, on
   persisted tier strings are read as an override wherever one exists, and no
   screen read for this document sets one. Either the control lives somewhere not
   covered here or it does not exist yet; worth confirming before treating "the
-  commissioner can override a tier" as reachable.
+  commissioner can override a tier" as something anyone can actually do.
 - Whether the Shop tab really appears on a player's bottom bar without a reload
   after the switch flips was read from the shared event query, not watched on a
   second phone.
