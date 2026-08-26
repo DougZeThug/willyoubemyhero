@@ -286,7 +286,7 @@ Status is one of `not started`, `drafted`, or `verified`.
 | foundations/navigation-and-screens.md | not started |
 | foundations/the-event.md | not started |
 | foundations/time-and-the-clock.md | not started |
-| cards/favourites.md | not started |
+| cards/favourites.md | drafted |
 | cards/the-vault.md | not started |
 | cards/a-player-card.md | not started |
 | cards/the-stand.md | not started |
