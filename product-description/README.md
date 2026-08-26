@@ -287,49 +287,49 @@ Status is one of `not started`, `drafted`, or `verified`.
 | foundations/the-event.md | drafted |
 | foundations/time-and-the-clock.md | drafted |
 | cards/favourites.md | drafted |
-| cards/the-vault.md | not started |
-| cards/a-player-card.md | not started |
+| cards/the-vault.md | drafted |
+| cards/a-player-card.md | drafted |
 | cards/the-sealed-pack.md | drafted |
 | cards/opening-a-pack.md | drafted |
 | cards/what-you-pulled.md | drafted |
 | cards/the-daily-secret.md | drafted |
-| cards/secret-sets.md | not started |
-| cards/looking-closer.md | not started |
-| cards/comparing-cards.md | not started |
-| cards/collection-trophies.md | not started |
-| cards/pack-streaks.md | not started |
-| trading/the-trading-post.md | not started |
-| trading/making-an-offer.md | not started |
-| trading/answering-an-offer.md | not started |
-| trading/the-trade-feed.md | not started |
-| dust/dust.md | not started |
-| dust/milling-and-selling.md | not started |
-| dust/the-shop.md | not started |
-| dust/the-marketplace.md | not started |
-| combine/the-leaderboard.md | not started |
-| combine/live-timing.md | not started |
-| combine/the-running-order.md | not started |
-| combine/the-draft.md | not started |
-| combine/the-awards.md | not started |
-| combine/analytics-and-the-archive.md | not started |
-| combine/the-recap.md | not started |
-| combine/the-tv-board.md | not started |
-| admin/getting-in.md | not started |
-| admin/running-the-clock.md | not started |
-| admin/editing-a-result.md | not started |
-| admin/the-roster.md | not started |
-| admin/stations.md | not started |
-| admin/secret-card-sets.md | not started |
-| admin/card-artwork.md | not started |
-| admin/dust-and-ownership.md | not started |
-| accounts/signing-in.md | not started |
-| accounts/claiming-your-player.md | not started |
-| accounts/keeping-your-cards.md | not started |
-| cross-cutting/realtime-and-staleness.md | not started |
-| cross-cutting/offline.md | not started |
-| cross-cutting/motion-and-sound.md | not started |
-| cross-cutting/notifications-and-badges.md | not started |
-| cross-cutting/sharing.md | not started |
+| cards/secret-sets.md | drafted |
+| cards/looking-closer.md | drafted |
+| cards/comparing-cards.md | drafted |
+| cards/collection-trophies.md | drafted |
+| cards/pack-streaks.md | drafted |
+| trading/the-trading-post.md | drafted |
+| trading/making-an-offer.md | drafted |
+| trading/answering-an-offer.md | drafted |
+| trading/the-trade-feed.md | drafted |
+| dust/dust.md | drafted |
+| dust/milling-and-selling.md | drafted |
+| dust/the-shop.md | drafted |
+| dust/the-marketplace.md | drafted |
+| combine/the-leaderboard.md | drafted |
+| combine/live-timing.md | drafted |
+| combine/the-running-order.md | drafted |
+| combine/the-draft.md | drafted |
+| combine/the-awards.md | drafted |
+| combine/analytics-and-the-archive.md | drafted |
+| combine/the-recap.md | drafted |
+| combine/the-tv-board.md | drafted |
+| admin/getting-in.md | drafted |
+| admin/running-the-clock.md | drafted |
+| admin/editing-a-result.md | drafted |
+| admin/the-roster.md | drafted |
+| admin/stations.md | drafted |
+| admin/secret-card-sets.md | drafted |
+| admin/card-artwork.md | drafted |
+| admin/dust-and-ownership.md | drafted |
+| accounts/signing-in.md | drafted |
+| accounts/claiming-your-player.md | drafted |
+| accounts/keeping-your-cards.md | drafted |
+| cross-cutting/realtime-and-staleness.md | drafted |
+| cross-cutting/offline.md | drafted |
+| cross-cutting/motion-and-sound.md | drafted |
+| cross-cutting/notifications-and-badges.md | drafted |
+| cross-cutting/sharing.md | drafted |
 | cross-cutting/accessibility.md | not started |
 
 ## Reference
