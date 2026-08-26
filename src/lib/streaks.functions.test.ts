@@ -53,7 +53,6 @@ function daysEndingToday(n: number) {
   return out;
 }
 
-
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "test-session-secret");
   withDb();
