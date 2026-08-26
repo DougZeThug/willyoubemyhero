@@ -72,6 +72,10 @@ const SERVER_ONLY = [
   // Unlike card_pulls there is no public aggregate over this at all — a pack
   // count is shown to the person it belongs to and to nobody else.
   "public.pack_opens",
+  // trade_offers' leak with a price on it: what somebody holds, and what they
+  // will part with it for. Readable would also make the whole shelf scrapeable
+  // by anyone with the publishable key rather than a claimed member.
+  "public.market_listings",
   // What somebody collected for showing up, which names the run they were on and
   // the pull it bought them. Readable means the secret ledger leaks sideways.
   "public.streak_milestone_claims",
@@ -346,6 +350,35 @@ describe("server-only tables", () => {
     expect(visible === null || visible === 0).toBe(true);
   });
 
+  it("keeps a card on the market between the members who can see the shelf", async () => {
+    // The it.each above passes vacuously against an empty table, so the posture
+    // is only really asserted with a row in it. Seeded through the owner, and
+    // through real copies, so there is genuinely something to leak.
+    //
+    // TWO copies of one card, and only the first is listed. seedEvent runs once
+    // for this file, so these rows are still here when the write tests below run —
+    // and one of them needs a copy with no active listing on it, or its INSERT
+    // collides on market_listings_one_active_copy and `isDenied` passes without
+    // ever reaching the grant. Two copies is also what listing one actually
+    // requires, so this is the honest shape rather than a convenience.
+    await sql(
+      `INSERT INTO public.card_copies (participant_id, event_participant_id, edition, source)
+       SELECT $1, ep.id, e.edition, 'trade'
+         FROM (SELECT id FROM public.event_participants ORDER BY running_order LIMIT 1) ep,
+              (VALUES ('gold'), ('standard')) AS e(edition)`,
+      [IDS.alice],
+    );
+    await sql(
+      `INSERT INTO public.market_listings (event_id, seller_id, kind, card_copy_id, price)
+       SELECT $1, $2, 'roster', id, 200
+         FROM public.card_copies WHERE participant_id = $2 AND edition = 'gold'`,
+      [IDS.event, IDS.alice],
+    );
+    expect(await sql("SELECT count(*)::int AS n FROM public.market_listings")).toEqual([{ n: 1 }]);
+    const visible = await visibleRows("anon", "public.market_listings");
+    expect(visible === null || visible === 0).toBe(true);
+  });
+
   it("keeps a pending offer, and the cards staked on it, between the two people in it", async () => {
     // Seeded through the owner, so there is genuinely something to leak — the
     // `visible === null || visible === 0` idiom passes vacuously against an empty
@@ -445,6 +478,12 @@ describe("anon has no write grant anywhere", () => {
     ["forge itself a mint record", `INSERT INTO public.card_mints (participant_id, minted_on, event_participant_id) SELECT $1, current_date, id FROM public.event_participants LIMIT 1`, [IDS.bob]], // prettier-ignore
     ["erase a mint record", `DELETE FROM public.card_mints`, []], // prettier-ignore
     ["spend nobody's dust but its own", `UPDATE public.dust_ledger SET delta = 9999`, []], // prettier-ignore
+    // The UNLISTED copy, deliberately: the read test above already shelved Alice's
+    // gold one, and colliding on market_listings_one_active_copy would make
+    // `isDenied` pass without ever reaching the grant. Same trap as the mint
+    // record two lines up.
+    ["shelve somebody else's card", `INSERT INTO public.market_listings (seller_id, kind, card_copy_id, price) SELECT $1, 'roster', cc.id, 1 FROM public.card_copies cc WHERE NOT EXISTS (SELECT 1 FROM public.market_listings l WHERE l.card_copy_id = cc.id) LIMIT 1`, [IDS.bob]], // prettier-ignore
+    ["mark a listing sold without paying for it", `UPDATE public.market_listings SET status = 'sold'`, []], // prettier-ignore
     // The whole swap runs inside accept_trade_offer as service_role. Reaching the
     // status column directly would take both people's cards out of the loop.
     ["accept somebody else's offer", `UPDATE public.trade_offers SET status = 'accepted'`, []], // prettier-ignore
