@@ -287,15 +287,7 @@ function HolderRow({ p }: { p: OwnershipRow }) {
   );
 }
 
-function Stat({
-  label,
-  value,
-  muted,
-}: {
-  label: string;
-  value: number | string;
-  muted?: boolean;
-}) {
+function Stat({ label, value, muted }: { label: string; value: number | string; muted?: boolean }) {
   return (
     <span
       className={cn(
