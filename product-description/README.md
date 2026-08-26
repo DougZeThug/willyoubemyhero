@@ -281,7 +281,7 @@ Status is one of `not started`, `drafted`, or `verified`.
 | ----------------------------------------- | ------- |
 | glossary.md                               | drafted |
 | bug-triage.md                             | drafted |
-| verification/ (8 checklists, 1080 items)  | drafted |
+| verification/ (8 checklists, 1164 items)  | drafted |
 | foundations/identity-and-sessions.md      | drafted |
 | foundations/the-card.md                   | drafted |
 | foundations/the-collection.md             | drafted |

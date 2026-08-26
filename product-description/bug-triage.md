@@ -13,7 +13,7 @@ were confirmed by the scripted pass described in
 ## Summary
 
 Around sixty suspected defects were raised across the fifty-one documents. After
-merging by root cause they come to **42 entries**: 7 high, 31 medium, and 4 low
+merging by root cause they come to **43 entries**: 7 high, 32 medium, and 4 low
 (three of which are clusters of small slips).
 
 Two clusters account for most of the high entries. The first is **writes that
@@ -566,19 +566,25 @@ screen rather than in the handler that cascades.
 - **Raised by:** [sharing](cross-cutting/sharing.md#open-questions-and-verification),
   [the leaderboard](combine/the-leaderboard.md#open-questions-and-verification).
 
-### B-34: Eight screens subscribe to the live feed and never say when it is down
+### B-34: Seven screens subscribe to the live feed and never say when it is down
 
 - **Where the user meets it:** Anywhere the feed goes degraded outside the five
   screens that show a banner.
 - **What happens / what was expected:** The vault, the pack, the trading post,
-  the shop, a player's card, analytics, the **admin console** and the **TV
-  board** all watch the same event channel and none of them surfaces its health.
-  The two that matter most are the console, where a commissioner is timing a
-  run, and the TV board, which is unattended in front of the party. Expected:
-  the same banner the leaderboard, live, awards, draft and order screens show.
+  the shop, a player's card, analytics and the **admin console** all watch the
+  same event channel and none of them surfaces its health. The console is the
+  one that matters — it is where a commissioner times a run, and a frozen screen
+  there with no signal is the failure the health states were added for.
+  Expected: the same banner the other screens show.
 - **Why (from the code):** `FeedDegradedBanner` in
-  `src/components/feed-state.tsx` is used by five route files only, though every
-  screen listed above calls `useEventBundle`.
+  `src/components/feed-state.tsx` is imported by five route files, and
+  `src/routes/tv.tsx:61` renders an equivalent banner of its own from
+  `realtimeDegraded`. The seven listed above call `useEventBundle` and read
+  neither.
+  > The TV board was in this entry's first draft, on the strength of the import
+  > list alone. It rolls its own banner, which the import list does not show —
+  > a reminder that "which files import the component" is not the same question
+  > as "which screens tell the user".
 - **Severity:** `medium`. A frozen screen with no signal is the exact failure the
   health states were added for.
 - **Decision needed:** `fix`.
@@ -595,6 +601,36 @@ screen rather than in the handler that cascades.
 - **Severity:** `medium`. This app is shared by link constantly.
 - **Decision needed:** `fix`.
 - **Raised by:** [sharing](cross-cutting/sharing.md#open-questions-and-verification).
+
+### B-43: The board and the tier rules disagree about who is ranked
+
+- **Where the user meets it:** The leaderboard, whenever the combine has a tie, a
+  scratched athlete with a recorded run, or anybody re-timed.
+- **What happens / what was expected:** Three symptoms of one cause — the board
+  ranks _official runs_ while tiers rank _athletes in contention_.
+  - A dead heat is numbered 1 and 2 by position in the list, while both athletes
+    wear the champion tier. The card and the board contradict each other on the
+    same screen.
+  - An athlete who is scratched or disqualified still holds a place on the board
+    if they have an official run, though the tier rules put them out of
+    contention for everything.
+  - An athlete re-timed appears twice, because every official run becomes a row.
+    Expected: the board agrees with the cards.
+- **Reproduce:** Record two identical official times; separately, mark an athlete
+  with an official run as scratched; separately, save a second official run for
+  one athlete. Open the leaderboard each time.
+- **Why (from the code):** `src/routes/leaderboard.tsx:40-48` maps every official
+  run to a row, filters only on `is_official`, never groups by participant, never
+  consults `participation_status`, and takes the place from the rendered index.
+  `rarityMap` in `src/lib/card-rarity.ts` does all three of those things —
+  best-run-per-athlete, an out-of-contention set, and a place computed by
+  counting everyone strictly faster.
+- **Severity:** `medium`. Wrong on the screen a card's whole claim to a tier
+  rests on, and self-contradicting where a tier badge sits beside a place.
+- **Decision needed:** `fix`. The rules already exist in `card-rarity.ts`; the
+  board should use them rather than a second, looser set.
+- **Status:** Confirmed by reading both, side by side.
+- **Raised by:** [the leaderboard](combine/the-leaderboard.md#open-questions-and-verification).
 
 ### B-36: Six admin writes authorize against one event and write to any
 

@@ -124,7 +124,7 @@ proves the handler works rather than proving the pack opens under a thumb.
 
 One scripted pass, against the stubbed app at commit `b46f330`, on an iPhone 13
 viewport. **19 items, 19 passed, 0 failed.** They are marked
-`pass (scripted)` in the Result columns of
+`pass (scripted)` across eleven rows in
 [foundations.md](foundations.md) and [cards.md](cards.md), and nowhere else.
 
 What it established:
