@@ -281,11 +281,11 @@ Status is one of `not started`, `drafted`, or `verified`.
 | bug-triage.md | not started |
 | verification/ (8 checklists) | not started |
 | foundations/identity-and-sessions.md | drafted |
-| foundations/the-card.md | not started |
-| foundations/the-collection.md | not started |
-| foundations/navigation-and-screens.md | not started |
-| foundations/the-event.md | not started |
-| foundations/time-and-the-clock.md | not started |
+| foundations/the-card.md | drafted |
+| foundations/the-collection.md | drafted |
+| foundations/navigation-and-screens.md | drafted |
+| foundations/the-event.md | drafted |
+| foundations/time-and-the-clock.md | drafted |
 | cards/favourites.md | drafted |
 | cards/the-vault.md | not started |
 | cards/a-player-card.md | not started |
