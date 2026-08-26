@@ -78,11 +78,11 @@ type Invalidate = { mock: { calls: [{ queryKey: unknown }][] } };
 const keys = (invalidate: Invalidate) =>
   invalidate.mock.calls.map((c) => JSON.stringify(c[0].queryKey));
 
-function renderPanel(balance = 500) {
+function renderPanel(balance = 500, dustOn = true) {
   const { wrapper, client } = createQueryWrapper();
   const invalidate = vi.spyOn(client, "invalidateQueries") as unknown as Invalidate;
   const Wrapper = wrapper;
-  render(
+  const { container } = render(
     <Wrapper>
       <MarketPanel
         balance={balance}
@@ -93,10 +93,11 @@ function renderPanel(balance = 500) {
         nameOf={(id) => (id === THEM ? "Bob Bison" : "Someone")}
         lookup={() => ({ name: "Alice Ace", frontUrl: null, rarity: rarityStyle("base") })}
         backUrl={null}
+        dustOn={dustOn}
       />
     </Wrapper>,
   );
-  return { client, invalidate };
+  return { client, invalidate, container };
 }
 
 const rosterListing = {
@@ -330,5 +331,58 @@ describe("the settled half of a stall", () => {
     // took your card.
     expect(await screen.findByText("to Bob Bison")).toBeInTheDocument();
     expect(await screen.findByText(/^sold$/i)).toBeInTheDocument();
+  });
+});
+
+describe("while the commissioner has dust switched off", () => {
+  const myListing = {
+    ...rosterListing,
+    sellerId: ME,
+    status: "active" as const,
+    buyerId: null,
+    resolvedAt: null,
+  };
+
+  it("still offers the way to take a listing back down", async () => {
+    // THE AFFORDANCE cancel_market_listing's design depends on. It is the one RPC
+    // in the feature deliberately built without a dust_enabled() gate, so that
+    // switching the economy off mid-party cannot strand somebody's cards on a
+    // shelf they can no longer reach — and hiding this panel wholesale made that
+    // promise a lie.
+    stallFn.mockResolvedValue({ active: [myListing], recent: [] });
+    cancelFn.mockResolvedValue({ ok: true });
+    renderPanel(500, false);
+
+    await userEvent.click(await screen.findByRole("button", { name: /take down/i }));
+    await waitFor(() => expect(cancelFn).toHaveBeenCalledWith({ data: { listingId: LISTING } }));
+  });
+
+  it("shows no shelf and no way to list something new", async () => {
+    // Both would answer `disabled` from Postgres, so offering either is a button
+    // that exists only to say no.
+    stallFn.mockResolvedValue({ active: [myListing], recent: [] });
+    renderPanel(500, false);
+
+    await screen.findByRole("button", { name: /take down/i });
+    expect(screen.queryByRole("button", { name: /buy/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /list a card/i })).not.toBeInTheDocument();
+  });
+
+  it("asks for neither the shelf nor the spares", async () => {
+    stallFn.mockResolvedValue({ active: [myListing], recent: [] });
+    renderPanel(500, false);
+    await screen.findByRole("button", { name: /take down/i });
+    expect(browseFn).not.toHaveBeenCalled();
+    expect(sparesFn).not.toHaveBeenCalled();
+  });
+
+  it("renders nothing at all when there is nothing to rescue", async () => {
+    // Which is every case but the one above. The route's "not switched on yet"
+    // line already says what the screen is; a second empty panel under it would
+    // be noise.
+    stallFn.mockResolvedValue({ active: [], recent: [] });
+    const { container } = renderPanel(500, false);
+    await waitFor(() => expect(stallFn).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 });

@@ -303,6 +303,46 @@ test.describe("the marketplace", () => {
     server.set("getActiveEvent", withDust(false));
     await page.goto("/players/shop");
     await expect(page.getByText(/has not switched dust on yet/i)).toBeVisible();
-    await expect(page.locator("section", { hasText: /the market/i })).toHaveCount(0);
+    // By HEADING rather than by section text: the stall's own copy while dust is
+    // off says "the market is shut", so a hasText filter matches the very section
+    // it is meant to prove absent.
+    await expect(page.getByRole("heading", { name: /^the market$/i })).toHaveCount(0);
+    // And nothing on the shelf means nothing to rescue, so no stall either.
+    await expect(page.getByRole("heading", { name: /^your stall$/i })).toHaveCount(0);
+  });
+
+  test("still lets a seller take a card back down after dust is switched off", async ({
+    page,
+    server,
+  }) => {
+    // cancel_market_listing is the one RPC in the feature deliberately built with
+    // no dust_enabled() gate, so a commissioner flipping the switch mid-party
+    // cannot strand somebody's cards on a shelf they can no longer reach. This is
+    // the screen honouring that: the stall survives the switch even though the
+    // market and the listing flow do not.
+    await asMember(page);
+    server.set("getActiveEvent", withDust(false));
+    server.set("getMyStall", {
+      active: [
+        {
+          id: LISTING,
+          sellerId: "p-alice",
+          price: 120,
+          createdAt: "2026-08-30T00:00:00Z",
+          item: { kind: "roster", eventParticipantId: BUNDLE.participants[0].id, edition: "gold" },
+          status: "active",
+          buyerId: null,
+          resolvedAt: null,
+        },
+      ],
+      recent: [],
+    });
+    await page.goto("/players/shop");
+
+    await expect(page.getByRole("heading", { name: /^your stall$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /take down/i })).toBeVisible();
+    // The two things that would only answer `disabled` are gone.
+    await expect(page.getByRole("heading", { name: /^the market$/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /list a card/i })).toHaveCount(0);
   });
 });

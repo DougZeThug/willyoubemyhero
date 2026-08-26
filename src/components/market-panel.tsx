@@ -58,6 +58,18 @@ export type MarketPanelProps = {
   lookup: RosterCardLookup;
   /** The event's universal back, for a concealed tile. */
   backUrl: ImageUrlSet | string | null;
+  /**
+   * The commissioner's switch. False renders the STALL ALONE — no shelf, no
+   * listing flow — and nothing at all if there is nothing on it.
+   *
+   * Not simply "hide the whole panel", which is what this did and what made
+   * `cancel_market_listing`'s promise a lie. That RPC is the one in the feature
+   * deliberately built without a dust_enabled() gate, precisely so switching the
+   * economy off mid-party cannot strand somebody's cards on a shelf they can no
+   * longer reach — and the screen has to offer the way back for that to mean
+   * anything.
+   */
+  dustOn: boolean;
 };
 
 /**
@@ -108,9 +120,13 @@ export function MarketPanel({
   nameOf,
   lookup,
   backUrl,
+  dustOn,
 }: MarketPanelProps) {
   const qc = useQueryClient();
-  const market = useMarketListings(participantId);
+  // The shelf is unreachable while the switch is off — every buy would answer
+  // `disabled` — so it is not asked for. The stall is, because taking a listing
+  // down still works.
+  const market = useMarketListings(dustOn ? participantId : null);
   const stall = useMyStall(participantId);
 
   const buyFn = useServerFn(buyMarketListing);
@@ -122,7 +138,7 @@ export function MarketPanel({
   const spares = useQuery({
     queryKey: ["dust-spares", participantId],
     queryFn: () => sparesFn({ data: { participantId } }) as Promise<TradeSpares>,
-    enabled: !!participantId,
+    enabled: dustOn && !!participantId,
     staleTime: 15_000,
     retry: false,
   });
@@ -293,72 +309,80 @@ export function MarketPanel({
     putUp.mutate({ item: staged.item, price: asking });
   }
 
+  // With the economy off and nothing on the shelf there is nothing to say, and the
+  // route's "not switched on yet" line says it already. Below every hook, because
+  // an early return above one would change the hook order between renders.
+  if (!dustOn && active.length === 0) return null;
+
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-border p-4">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide">The market</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Cards other people have put up. The price is theirs to set, and the dust goes straight to
-          them.
-        </p>
+      {dustOn && (
+        <section className="rounded-lg border border-border p-4">
+          <h2 className="font-display text-sm font-bold uppercase tracking-wide">The market</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Cards other people have put up. The price is theirs to set, and the dust goes straight
+            to them.
+          </p>
 
-        {market.isLoading ? (
-          <p className="mt-3 text-xs text-muted-foreground">Reading the shelf…</p>
-        ) : listings.length === 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground">Nothing for sale right now.</p>
-        ) : (
-          <ul className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {listings.map((listing) => {
-              const meta = itemMeta(listing.item);
-              const broke = balance != null && balance < listing.price;
-              const busy = buying === listing.id && buy.isPending;
-              return (
-                <li key={listing.id} className="flex flex-col items-center gap-1.5">
-                  <TradeItemTile
-                    item={asTileItem(listing)}
-                    lookup={lookup}
-                    size="sm"
-                    concealed={listing.item.kind === "secret" && listing.item.concealed}
-                    backUrl={backUrl}
-                  />
-                  <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                    {nameOf(listing.sellerId)}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    // Said on the button rather than discovered on tap: the RPC
-                    // would refuse this anyway, and being told the price you
-                    // cannot meet is more use than a toast that says no.
-                    disabled={broke || busy}
-                    onClick={() => {
-                      setBuying(listing.id);
-                      buy.mutate(listing);
-                    }}
-                  >
-                    {busy ? "…" : broke ? `${listing.price} dust` : `Buy · ${listing.price}`}
-                  </Button>
-                  {meta.label && (
-                    <span
-                      className="text-[9px] font-bold uppercase tracking-[0.2em]"
-                      style={{ color: meta.accent }}
-                    >
-                      {meta.label}
+          {market.isLoading ? (
+            <p className="mt-3 text-xs text-muted-foreground">Reading the shelf…</p>
+          ) : listings.length === 0 ? (
+            <p className="mt-3 text-xs text-muted-foreground">Nothing for sale right now.</p>
+          ) : (
+            <ul className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {listings.map((listing) => {
+                const meta = itemMeta(listing.item);
+                const broke = balance != null && balance < listing.price;
+                const busy = buying === listing.id && buy.isPending;
+                return (
+                  <li key={listing.id} className="flex flex-col items-center gap-1.5">
+                    <TradeItemTile
+                      item={asTileItem(listing)}
+                      lookup={lookup}
+                      size="sm"
+                      concealed={listing.item.kind === "secret" && listing.item.concealed}
+                      backUrl={backUrl}
+                    />
+                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                      {nameOf(listing.sellerId)}
                     </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      // Said on the button rather than discovered on tap: the RPC
+                      // would refuse this anyway, and being told the price you
+                      // cannot meet is more use than a toast that says no.
+                      disabled={broke || busy}
+                      onClick={() => {
+                        setBuying(listing.id);
+                        buy.mutate(listing);
+                      }}
+                    >
+                      {busy ? "…" : broke ? `${listing.price} dust` : `Buy · ${listing.price}`}
+                    </Button>
+                    {meta.label && (
+                      <span
+                        className="text-[9px] font-bold uppercase tracking-[0.2em]"
+                        style={{ color: meta.accent }}
+                      >
+                        {meta.label}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="rounded-lg border border-border p-4">
         <h2 className="font-display text-sm font-bold uppercase tracking-wide">Your stall</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Spares only, and a roster card always leaves you one. A sale is between you and the buyer
-          — nobody else is told.
+          {dustOn
+            ? "Spares only, and a roster card always leaves you one. A sale is between you and the buyer — nobody else is told."
+            : "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."}
         </p>
 
         {stall.isLoading ? (
@@ -387,17 +411,19 @@ export function MarketPanel({
           </ul>
         )}
 
-        <Button
-          className="mt-3 w-full"
-          disabled={spares.isLoading}
-          onClick={() => {
-            setStaged(null);
-            setPrice("");
-            setPicking(true);
-          }}
-        >
-          List a card
-        </Button>
+        {dustOn && (
+          <Button
+            className="mt-3 w-full"
+            disabled={spares.isLoading}
+            onClick={() => {
+              setStaged(null);
+              setPrice("");
+              setPicking(true);
+            }}
+          >
+            List a card
+          </Button>
+        )}
 
         {recent.length > 0 && (
           <>
@@ -421,81 +447,84 @@ export function MarketPanel({
         )}
       </section>
 
-      <Drawer open={picking} onOpenChange={setPicking}>
-        <DrawerContent className="max-h-[85dvh]">
-          <DrawerHeader>
-            <DrawerTitle className="font-display text-sm font-bold uppercase tracking-wide">
-              List a card
-            </DrawerTitle>
-            <DrawerDescription className="text-xs">
-              Pick a spare, then name your price.
-            </DrawerDescription>
-          </DrawerHeader>
+      {dustOn && (
+        <Drawer open={picking} onOpenChange={setPicking}>
+          <DrawerContent className="max-h-[85dvh]">
+            <DrawerHeader>
+              <DrawerTitle className="font-display text-sm font-bold uppercase tracking-wide">
+                List a card
+              </DrawerTitle>
+              <DrawerDescription className="text-xs">
+                Pick a spare, then name your price.
+              </DrawerDescription>
+            </DrawerHeader>
 
-          <div className="overflow-y-auto px-4 pb-6">
-            {sellable.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Nothing spare to sell yet. Roster cards need a second copy; any secret will do.
-              </p>
-            ) : (
-              <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                {sellable.map((entry) => {
-                  const key = entry.item.kind === "roster" ? entry.item.copyId : entry.item.pullId;
-                  const chosen =
+            <div className="overflow-y-auto px-4 pb-6">
+              {sellable.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nothing spare to sell yet. Roster cards need a second copy; any secret will do.
+                </p>
+              ) : (
+                <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                  {sellable.map((entry) => {
+                    const key =
+                      entry.item.kind === "roster" ? entry.item.copyId : entry.item.pullId;
+                    const chosen =
                     staged != null &&
                     (staged.item.kind === "roster" ? staged.item.copyId : staged.item.pullId) === key; // prettier-ignore
-                  return (
-                    <li key={key}>
-                      <TradeItemTile
-                        item={entry.item}
-                        lookup={lookup}
-                        size="sm"
-                        selected={chosen}
-                        onClick={() => stage(entry)}
-                        backUrl={backUrl}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                    return (
+                      <li key={key}>
+                        <TradeItemTile
+                          item={entry.item}
+                          lookup={lookup}
+                          size="sm"
+                          selected={chosen}
+                          onClick={() => stage(entry)}
+                          backUrl={backUrl}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
 
-            {staged && (
-              <div className="mt-4 space-y-2 border-t border-border pt-4">
-                <label
-                  htmlFor="market-price"
-                  className="block font-display text-[11px] font-bold uppercase tracking-[0.3em] text-muted-foreground"
-                >
-                  Your price
-                </label>
-                <Input
-                  id="market-price"
-                  type="number"
-                  inputMode="numeric"
-                  min={MARKET_PRICE_MIN}
-                  max={MARKET_PRICE_MAX}
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className="font-mono"
-                />
-                {/* A hint, never a rule. Undercutting the mill is a legitimate
+              {staged && (
+                <div className="mt-4 space-y-2 border-t border-border pt-4">
+                  <label
+                    htmlFor="market-price"
+                    className="block font-display text-[11px] font-bold uppercase tracking-[0.3em] text-muted-foreground"
+                  >
+                    Your price
+                  </label>
+                  <Input
+                    id="market-price"
+                    type="number"
+                    inputMode="numeric"
+                    min={MARKET_PRICE_MIN}
+                    max={MARKET_PRICE_MAX}
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="font-mono"
+                  />
+                  {/* A hint, never a rule. Undercutting the mill is a legitimate
                     thing to do for a card you would rather see in somebody's
                     collection than burn. */}
-                <p className="text-xs text-muted-foreground">
-                  The house would pay <span className="font-mono">{staged.floor}</span>.
-                </p>
-                <Button
-                  className="w-full"
-                  disabled={!priceOk || putUp.isPending}
-                  onClick={confirmList}
-                >
-                  {putUp.isPending ? "…" : priceOk ? `List for ${asking}` : "Name a price"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </DrawerContent>
-      </Drawer>
+                  <p className="text-xs text-muted-foreground">
+                    The house would pay <span className="font-mono">{staged.floor}</span>.
+                  </p>
+                  <Button
+                    className="w-full"
+                    disabled={!priceOk || putUp.isPending}
+                    onClick={confirmList}
+                  >
+                    {putUp.isPending ? "…" : priceOk ? `List for ${asking}` : "Name a price"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
     </div>
   );
 }

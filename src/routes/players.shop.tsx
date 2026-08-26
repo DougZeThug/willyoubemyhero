@@ -84,7 +84,9 @@ function ShopPage() {
     queryKey: ["claim-roster"],
     queryFn: () => rosterFn(),
     staleTime: 5 * 60_000,
-    enabled: dustOn && !!participantId,
+    // Not gated on the switch: the stall still renders while dust is off, and a
+    // sold listing there names the person who bought it.
+    enabled: !!participantId,
   });
 
   const nameOf = useCallback(
@@ -133,14 +135,39 @@ function ShopPage() {
 
         {/* The tab disappears when dust is off, but a bookmark does not — and a
             404 on a screen that worked yesterday reads as a broken app rather
-            than a switch somebody flipped. */}
+            than a switch somebody flipped.
+
+            THE STALL SURVIVES THE SWITCH, and that is not decoration: the
+            commissioner can turn the economy off with cards still on the shelf,
+            and cancel_market_listing is deliberately the one RPC in the feature
+            with no dust_enabled() gate so those cards are never stranded. This
+            branch is what makes that reachable. MarketPanel renders the stall
+            alone here — no shelf, no listing flow — and nothing at all when there
+            is nothing on it, which is every case but this one. */}
         {!dustOn ? (
-          <p className="text-sm text-muted-foreground">
-            Nothing to spend and nothing to earn until it is.{" "}
-            <Link to="/players" className="font-bold text-primary hover:underline">
-              Back to the vault
-            </Link>
-          </p>
+          <>
+            <p className="text-sm text-muted-foreground">
+              Nothing to spend and nothing to earn until it is.{" "}
+              <Link to="/players" className="font-bold text-primary hover:underline">
+                Back to the vault
+              </Link>
+            </p>
+            {participantId && (
+              <div className="mt-6">
+                <MarketPanel
+                  balance={dust.data?.balance}
+                  participantId={participantId}
+                  actor={actor}
+                  eventId={event?.id ?? null}
+                  nameFor={nameFor}
+                  nameOf={nameOf}
+                  lookup={lookup}
+                  backUrl={cardBack.data?.urls ?? null}
+                  dustOn={false}
+                />
+              </div>
+            )}
+          </>
         ) : !participantId ? (
           <p className="text-sm text-muted-foreground">
             Dust is banked against your name rather than this phone, so it needs a claimed player.{" "}
@@ -159,6 +186,7 @@ function ShopPage() {
               nameOf={nameOf}
               lookup={lookup}
               backUrl={cardBack.data?.urls ?? null}
+              dustOn
             />
             <DustShopPanel
               balance={dust.data?.balance}

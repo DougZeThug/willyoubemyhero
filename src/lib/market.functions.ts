@@ -95,6 +95,14 @@ async function activeEventId(): Promise<string | null> {
   return data?.id ?? null;
 }
 
+/**
+ * How many settled listings the stall carries. The same number, for the same
+ * reason, as `RECENT_LIMIT` in trades.functions.ts: capped rather than paged,
+ * because this is a strip under a live list and the whole league is thirteen
+ * people.
+ */
+const RECENT_LIMIT = 10;
+
 const LISTING_COLS =
   "id, event_id, seller_id, kind, card_copy_id, secret_pull_id, price, status, buyer_id, created_at, resolved_at";
 
@@ -259,21 +267,49 @@ export const getMarketListings = createServerFn({ method: "GET" }).handler(
  * `trades` and reaches no feed, so this list is the ONLY place you will ever see
  * that somebody bought your card, or that a listing expired because you traded the
  * copy away. Capped at ten, the cap `getMyTradeOffers` uses for the same list.
+ *
+ * TWO QUERIES, AND THE CAP IS IN THE SECOND ONE RATHER THAN AFTER THE HYDRATION.
+ * A settled listing is never deleted, and cancel-then-relist is two taps, so the
+ * history of one member grows without bound — while `active` is bounded by
+ * MARKET_MAX_ACTIVE. Reading the lot and slicing to ten afterwards would leave
+ * `hydrate` below expanding every listing anybody had ever made into an `.in(...)`
+ * of copy and pull ids, on every visit to this screen, forever: slower every
+ * week, and eventually a PostgREST URL long enough to fail — which would take the
+ * ACTIVE half of the stall down with it, on the one screen a seller uses to take
+ * a card back. getMyTradeOffers caps before it expands its items for the same
+ * reason; this had drifted from it.
+ *
+ * Ordered by `resolved_at` in SQL rather than by `created_at` and re-sorted here,
+ * because "what settled lately" is a question about when it settled.
  */
 export const getMyStall = createServerFn({ method: "GET" }).handler(async (): Promise<MyStall> => {
   const me = await requireMember();
   noStore();
   const sb = await db();
 
-  const { data, error } = await sb
-    .from("market_listings")
-    .select(LISTING_COLS)
-    .eq("seller_id", me)
-    .order("created_at", { ascending: false })
-    .returns<MarketListingRow[]>();
+  const [{ data: live, error }, { data: settled, error: settledError }] = await Promise.all([
+    sb
+      .from("market_listings")
+      .select(LISTING_COLS)
+      .eq("seller_id", me)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .returns<MarketListingRow[]>(),
+    sb
+      .from("market_listings")
+      .select(LISTING_COLS)
+      .eq("seller_id", me)
+      .neq("status", "active")
+      .order("resolved_at", { ascending: false })
+      .limit(RECENT_LIMIT)
+      .returns<MarketListingRow[]>(),
+  ]);
   if (error) throw new Error(error.message);
+  if (settledError) throw new Error(settledError.message);
 
-  const rows = data ?? [];
+  // At most MARKET_MAX_ACTIVE + RECENT_LIMIT rows reach the hydration below,
+  // whatever the member's history looks like.
+  const rows = [...(live ?? []), ...(settled ?? [])];
   // Everything on this list is the caller's own, so nothing is concealed from
   // them — but a secret they LISTED and no longer own (it sold) is no longer in
   // their holdings, and the tile would go face-down on the one screen that has to
@@ -297,12 +333,12 @@ export const getMyStall = createServerFn({ method: "GET" }).handler(async (): Pr
     ];
   });
 
+  // Split by status rather than by which query a row came from, so a listing that
+  // settled between the two reads above lands in `recent` rather than showing as
+  // live with a dead Take down button on it.
   return {
     active: hydrated.filter((l) => l.status === "active"),
-    recent: hydrated
-      .filter((l) => l.status !== "active")
-      .sort((a, b) => (b.resolvedAt ?? "").localeCompare(a.resolvedAt ?? ""))
-      .slice(0, 10),
+    recent: hydrated.filter((l) => l.status !== "active"),
   };
 });
 

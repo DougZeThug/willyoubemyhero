@@ -219,8 +219,65 @@ describe("getMyStall", () => {
     withDb({ "market_listings.select": { data: [] } });
     const { getMyStall } = await import("./market.functions");
     await callServerFn(getMyStall, { headers: asMe() });
-    const [call] = mock.callsFor("market_listings", "select");
-    expect(mock.eqValue(call, "seller_id")).toBe(ME);
+    for (const call of mock.callsFor("market_listings", "select")) {
+      expect(mock.eqValue(call, "seller_id")).toBe(ME);
+    }
+  });
+
+  it("caps the settled half in SQL rather than after hydrating it", async () => {
+    // A settled listing is never deleted and cancel-then-relist is two taps, so
+    // one member's history grows without bound. Reading the lot and slicing to
+    // ten afterwards would expand every listing they had ever made into an
+    // `.in(...)` of copy and pull ids on every visit — slower every week, and
+    // eventually a URL long enough to fail, which would take the ACTIVE half of
+    // the stall down with it. getMyTradeOffers caps before it expands its items
+    // for the same reason; this had drifted from it.
+    withDb({ "market_listings.select": { data: [] } });
+    const { getMyStall } = await import("./market.functions");
+    await callServerFn(getMyStall, { headers: asMe() });
+
+    const calls = mock.callsFor("market_listings", "select");
+    expect(calls).toHaveLength(2);
+    expect(calls.some((c) => mock.eqValue(c, "status") === "active")).toBe(true);
+
+    const settled = calls.find((c) =>
+      c.filters.some((f) => f.method === "neq" && f.args[0] === "status"),
+    );
+    expect(settled?.filters).toContainEqual({ method: "limit", args: [10] });
+    // Ordered by when it settled, which is the question that list asks — not by
+    // when it was created and re-sorted in JavaScript afterwards.
+    expect(settled?.filters).toContainEqual({
+      method: "order",
+      args: ["resolved_at", { ascending: false }],
+    });
+  });
+
+  it("hydrates only the rows it will actually return", async () => {
+    // The property the cap exists for: whatever the history looks like, the
+    // expansion below it is bounded.
+    const row = (id: string, status: string) => ({
+      id,
+      event_id: EVENT,
+      seller_id: ME,
+      kind: "roster",
+      card_copy_id: `copy-${id}`,
+      secret_pull_id: null,
+      price: 40,
+      status,
+      buyer_id: null,
+      created_at: "2026-08-30T00:00:00Z",
+      resolved_at: "2026-08-30T01:00:00Z",
+    });
+    withDb({
+      "market_listings.select": [{ data: [row("a", "active")] }, { data: [row("b", "sold")] }],
+      "card_copies.select": { data: [] },
+      "secret_card_pulls.select": { data: [] },
+    });
+    const { getMyStall } = await import("./market.functions");
+    await callServerFn(getMyStall, { headers: asMe() });
+
+    const [copies] = mock.callsFor("card_copies", "select");
+    expect(copies.filters).toContainEqual({ method: "in", args: ["id", ["copy-a", "copy-b"]] });
   });
 
   it("splits what is up from what settled, and says who bought it", async () => {
@@ -239,13 +296,14 @@ describe("getMyStall", () => {
       created_at: "2026-08-30T00:00:00Z",
       resolved_at: resolved,
     });
+    // A queue rather than one answer: the active and settled halves are two
+    // separate queries now, and a single response would serve both and duplicate
+    // every row.
     withDb({
-      "market_listings.select": {
-        data: [
-          row(LISTING, "active", null, null),
-          row(EVENT, "sold", "2026-08-30T01:00:00Z", THEM),
-        ],
-      },
+      "market_listings.select": [
+        { data: [row(LISTING, "active", null, null)] },
+        { data: [row(EVENT, "sold", "2026-08-30T01:00:00Z", THEM)] },
+      ],
       "card_copies.select": { data: [{ id: COPY, event_participant_id: "ep", edition: "gold" }] },
       "secret_card_pulls.select": { data: [] },
     });
