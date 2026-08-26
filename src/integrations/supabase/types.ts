@@ -955,6 +955,91 @@ export type Database = {
         }
         Relationships: []
       }
+      market_listings: {
+        Row: {
+          buyer_id: string | null
+          card_copy_id: string | null
+          created_at: string
+          event_id: string | null
+          id: string
+          kind: string
+          price: number
+          resolved_at: string | null
+          secret_pull_id: string | null
+          seller_id: string
+          status: string
+        }
+        Insert: {
+          buyer_id?: string | null
+          card_copy_id?: string | null
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          kind: string
+          price: number
+          resolved_at?: string | null
+          secret_pull_id?: string | null
+          seller_id: string
+          status?: string
+        }
+        Update: {
+          buyer_id?: string | null
+          card_copy_id?: string | null
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          kind?: string
+          price?: number
+          resolved_at?: string | null
+          secret_pull_id?: string | null
+          seller_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_listings_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_listings_card_copy_id_fkey"
+            columns: ["card_copy_id"]
+            isOneToOne: false
+            referencedRelation: "card_copies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_listings_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_listings_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_listings_secret_pull_id_fkey"
+            columns: ["secret_pull_id"]
+            isOneToOne: false
+            referencedRelation: "secret_card_pulls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_listings_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_codes: {
         Row: {
           claim_count: number
@@ -1881,6 +1966,18 @@ export type Database = {
         }
         Returns: Json
       }
+      buy_market_listing: {
+        Args: {
+          _listing_id: string
+          _participant_id: string
+          _request_id: string
+        }
+        Returns: Json
+      }
+      cancel_market_listing: {
+        Args: { _listing_id: string; _participant_id: string }
+        Returns: Json
+      }
       card_edition_rank: { Args: { _edition: string }; Returns: number }
       cast_award_vote: {
         Args: {
@@ -1941,6 +2038,16 @@ export type Database = {
           _event_id: string
           _participant_id: string
           _secret_card_id: string
+        }
+        Returns: Json
+      }
+      list_card_for_dust: {
+        Args: {
+          _card_copy_id: string
+          _kind: string
+          _participant_id: string
+          _price: number
+          _secret_pull_id: string
         }
         Returns: Json
       }
@@ -2023,6 +2130,10 @@ export type Database = {
         Returns: Json
       }
       secret_tier_rank: { Args: { _tier: string }; Returns: number }
+      sell_secret_card: {
+        Args: { _participant_id: string; _secret_pull_id: string }
+        Returns: Json
+      }
       streak_runs: {
         Args: { _guest_id: string; _participant_id: string }
         Returns: {
