@@ -273,6 +273,19 @@ const SECRET_FOILS: Record<string, Rarity> = {
     accent: "oklch(0.87 0.15 95)",
     pattern: "prismatic",
   },
+  royalGold: {
+    ...SECRET_RARITY,
+    // The explicitly rich gold option: bright gold into a cool champagne so the
+    // second stop does not compound with warm artwork the way a gold→amber pair
+    // would. High sparkle and prismatic bands give it the slow specular luster
+    // that reads as metal rather than as yellow paint.
+    holoA: "oklch(0.85 0.15 85)",
+    holoB: "oklch(0.9 0.07 215)",
+    border: "oklch(0.83 0.14 85)",
+    accent: "oklch(0.83 0.14 85)",
+    pattern: "prismatic",
+    sparkle: 0.95,
+  },
   sandstorm: {
     ...SECRET_RARITY,
     // Copper's drier neighbour — lower chroma still, matte, so the two read
