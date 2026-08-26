@@ -210,9 +210,9 @@ NULL`. Balance is `sum(delta)` under the participant row lock; no stored total.
 - **Members only.** `card_copies` is keyed on a participant, so milling and
   re-rolling are already unreachable for a guest and a guest balance would be
   earnable and barely spendable. Dust starts at the claim.
-- Earn: +25 on a duplicate secret inside `pull_secret_card` and
-  `pull_bonus_secret_card`; `mill_card_copy` pays 5/10/20/40/100 for a
-  `'server'` finish and a flat 5 for a `'client'` one.
+- Earn: `sell_secret_card` pays 15/30/60/120/300 by secret tier (any held
+  secret copy); `mill_card_copy` pays 5/10/20/40/100 for a `'server'`
+  finish and a flat 5 for a `'client'` one.
 - **Milling does resync `card_pulls`**, against what this spec said. "Packed by
   N" is the ROW count (one per person per card), not `pull_count`, and the spare
   rule guarantees a copy survives — so the public number cannot move. Skipping
