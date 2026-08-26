@@ -78,7 +78,9 @@ angle underneath it.
 Reduced motion silences the ceremony entirely. The pack still opens and the cards
 are still dealt; only the production is skipped.
 
-## The reveal stand
+## The interaction, event by event
+
+The unit here is one card's turn on the stand.
 
 ```mermaid
 stateDiagram-v2
@@ -91,6 +93,57 @@ stateDiagram-v2
     faceUp --> [*] : Next past the end
     secret --> [*] : Next past the end
 ```
+
+### Arrive
+
+The ceremony hands over a deck on the stand's mark, and the stand mounts its
+first card face-down on that same mark. Arriving at a pack you already tore skips
+all of that and lands you on the card you were looking at — including one you had
+turned but not pressed Next on.
+
+Which card is on the stand, and how many are left, is decided here. A secret that
+is genuinely coming adds a step to the end of the run; one that is not does not,
+so the stand never promises a card that will not arrive.
+
+### Leave without acting
+
+Nothing is recorded by looking. A card that is face-down stays face-down, the
+position is already written, and coming back resumes exactly here.
+
+The cards themselves are a different matter: the pack was dealt at the rip and
+the pulls were recorded then, so leaving without turning anything does not give
+the cards back. See [the sealed pack](the-sealed-pack.md#the-tap-that-starts-something).
+
+### The tap that starts something
+
+Tapping the face-down card. Everything about that card's turn is decided at that
+instant: which chime will play, whether the confetti fires, and whether a second
+cue rides over the top of the first for a special finish.
+
+The tap is latched synchronously rather than through state, because neither a
+second tap in the same tick nor a tap during the hold that follows is visible in
+the revealed list yet.
+
+### While it runs
+
+The card holds face-down on a glowing edge for a beat before it turns. That hold
+is load-bearing rather than decorative — see below — and for the whole of it the
+card is still tappable, which used to be enough to run the entire sequence twice
+over one card.
+
+Nothing else on the screen is disabled. The Skip control is still there, and the
+nav bars are faded and inert because a ceremony has the device.
+
+### It settles
+
+The card turns, the chime plays, and the pull is written into this device's
+collection. The cursor does **not** move: a card you have not looked at yet is
+not a card you are done with, so the run waits for Next.
+
+If the server has not yet answered with this card's finish, the card settles as
+Standard and corrects itself silently when the answer lands.
+
+## The reveal stand
 
 **The cursor advances only when you say so.** Revealing a card does not move it
 on, because a card you have not looked at yet is not a card you are done with.

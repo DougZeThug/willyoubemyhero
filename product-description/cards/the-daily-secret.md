@@ -23,6 +23,65 @@ and under it the level of *your* copy — Mythic, Legendary, Epic, Rare or Commo
 
 Tomorrow there is another. Not before.
 
+## The interaction, event by event
+
+```mermaid
+stateDiagram-v2
+    [*] --> hidden : no fourth slot to show
+    [*] --> gated : this device has no identity that can pull
+    [*] --> pending : the tear fires the pull
+    pending --> sealed : the server answers (commit: the day's pull is recorded)
+    pending --> failed : the wait runs out
+    failed --> pending : retry (re-reads the day's pull, never re-rolls)
+    sealed --> open : the card is turned
+    open --> [*] : the run walks off the end
+```
+
+### Arrive
+
+Opening the pack screen asks a pure read: is there a card waiting today. It never
+spends the drop, because reaching this screen is one mis-tap away from the vault.
+The answer decides whether the Pack tab wears a dot and whether the fan will fly
+three cards or four.
+
+A device with no identity at all is answered too, with everything false, so the
+screen can render before a guest session exists.
+
+### Leave without acting
+
+Nothing is spent. The status query writes nothing, and a pack left sealed leaves
+the day's secret untouched and still available.
+
+### The tap that starts something
+
+The tear, not a tap on the slot. Committing the rip fires the pull — from an
+effect watching the torn pack rather than from inside the tear, which is what
+catches the first-timer who tears, meets the claim gate, goes and claims, and
+comes back to a pack the tear will never run over again.
+
+At that instant the day's card is decided, by Postgres, from an identity taken
+from a verified token. Nothing about it is chosen on the phone.
+
+### While it runs
+
+A pulsing card back on the fourth slot, and a short ceiling on the wait. The
+ceremony is playing over the top of it, which is deliberate: firing at the rip
+buys the round trip the ceremony's whole run as a head start.
+
+The rest of the pack is unaffected. The three roster cards reveal normally
+whatever the fourth slot is doing, because the secret must never be able to stall
+the sequence.
+
+### It settles
+
+The card is recorded against your identity, server-side, and the slot goes from
+pending to sealed. It is yours from that moment whether or not you have looked at
+it — turning it over is theatre, and the pull already happened.
+
+On failure the slot shows a retry inline rather than a toast, because this is a
+screen somebody is enjoying. A row may have landed anyway, which is exactly why
+the retry re-reads rather than re-rolls.
+
 ## What decides it
 
 The pull takes **no input at all**. Whoever is asking comes from a verified token

@@ -100,6 +100,18 @@ simply finds more of them.
 
 ## The interaction, event by event
 
+```mermaid
+stateDiagram-v2
+    [*] --> queuedUp : on the roster, not yet called
+    queuedUp --> onTheClock : the commissioner puts them on the clock
+    onTheClock --> running : Start (commit: a wall-clock anchor, on the device)
+    running --> running : a split, a penalty
+    running --> paused : Pause (a pair of instants, not an accumulated total)
+    paused --> running : Resume
+    running --> finished : Finish (commit: the run, its splits and its penalties)
+    finished --> finished : an edit moves the time, and every split after it
+```
+
 The clock's own interaction belongs to [running the clock](../admin/running-the-clock.md).
 What this document owns is what happens to the *numbers* through those phases.
 

@@ -33,6 +33,54 @@ A secret card looks like nothing else: a rainbow prism edge around an opaque
 chrome bezel, green-into-magenta foil in a rosette pattern, and a label under it
 naming the level of your copy — Mythic, Legendary, Epic, Rare or Common.
 
+## The interaction, event by event
+
+A card is not an interaction; it is what interactions are about. What follows is
+the life of one card's *appearance* through the same five phases, so this
+document sits beside the others rather than outside them.
+
+```mermaid
+stateDiagram-v2
+    [*] --> base : no official run exists yet
+    base --> earned : an official time lands (champion, podium, station king)
+    base --> penaltyBox : most penalty time across the event
+    base --> dnf : scratched, disqualified, did not play, absent
+    earned --> earned : somebody faster finishes — the tier is recomputed
+    earned --> dnf : the run is disqualified
+    base --> overridden : a stored tier is set (honoured, but see B-38)
+    earned --> overridden : the same
+```
+
+### Arrive
+
+Every screen that draws a card computes its tier from the event it is watching,
+in one pass over the whole roster. Before any official run exists, every roster
+card is `base`. Your copy's finish and level come from elsewhere — the device's
+collection, or the server's record of what you hold.
+
+### Leave without acting
+
+Nothing is recorded. Looking at a card writes nothing, tells nobody, and does not
+count as having seen it.
+
+### The tap that starts something
+
+Nothing here. A card's tier is never something a player does; it is something an
+athlete did. What a *tap* on a card does belongs to
+[a player card](../cards/a-player-card.md) and [looking closer](../cards/looking-closer.md).
+
+### While it runs
+
+A live combine is the interesting case. Results land, tiers are recomputed, and
+cards redraw in place — including one currently face-up on the reveal stand. The
+change is not animated; the card simply becomes what it now is.
+
+### It settles
+
+When the combine is over the tiers stop moving. A finish and a level never move
+at all after the pull, except that a better finish of the same card replaces a
+worse one.
+
 ## What a tier is
 
 A tier is what a player did on the course. Nothing about it is random.
