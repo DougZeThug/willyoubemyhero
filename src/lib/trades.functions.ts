@@ -374,9 +374,9 @@ export const getTradeSpares = createServerFn({ method: "GET" })
         .flat()
         .map(asSpare),
       secrets: stakeable
-      .map((r) => secrets.get(r.id)!)
-      .filter(Boolean)
-      .map((sp) => (mine ? { ...sp, viewerOwns: true } : sp)),
+        .map((r) => secrets.get(r.id)!)
+        .filter(Boolean)
+        .map((sp) => (mine ? { ...sp, viewerOwns: true } : sp)),
       blocked,
     };
   });

@@ -79,7 +79,6 @@ export type TradeItemView =
       viewerOwns?: boolean;
     };
 
-
 export type TradeOfferView = {
   id: string;
   status: TradeOfferStatus;
