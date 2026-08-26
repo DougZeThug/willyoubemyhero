@@ -130,8 +130,9 @@ different packs.
 pack's day is the device's local date, because nothing is at stake in it; the
 daily secret's day comes from Postgres, because something is.
 
-**The stand.** The screen the pack arrives on, and the place a card is shown
-alone before it joins the columns.
+**The stand.** Where one card is shown alone, face-down, and turned over. The
+reveal stand owns the screen for the whole of the *revealing* stage, one card at
+a time, and hands over to the columns when you walk off the end of it.
 
 **Tear.** The drag across the sealed wrapper that opens a pack. It commits at
 60% of a travel worth 80% of the pack's width; short of that it springs back.

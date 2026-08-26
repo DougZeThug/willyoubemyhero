@@ -215,8 +215,8 @@ cards/
   favourites.md                  starring a card (pilot)
   the-vault.md                   the collection screen and how it sorts
   a-player-card.md               one roster card, its back, and what it says
-  the-stand.md                   arriving at the pack, the sealed wrapper, the tear
-  opening-a-pack.md              the reveal, one card at a time
+  the-sealed-pack.md             arriving at the pack, the wrapper, and the tear
+  opening-a-pack.md              the ceremony and the reveal stand, one card at a time
   what-you-pulled.md             the summary columns and what they offer
   the-daily-secret.md            the fourth slot and the once-a-day rule
   secret-sets.md                 collections, unsorted secrets, and how a set reads
@@ -289,10 +289,10 @@ Status is one of `not started`, `drafted`, or `verified`.
 | cards/favourites.md | drafted |
 | cards/the-vault.md | not started |
 | cards/a-player-card.md | not started |
-| cards/the-stand.md | not started |
-| cards/opening-a-pack.md | not started |
-| cards/what-you-pulled.md | not started |
-| cards/the-daily-secret.md | not started |
+| cards/the-sealed-pack.md | drafted |
+| cards/opening-a-pack.md | drafted |
+| cards/what-you-pulled.md | drafted |
+| cards/the-daily-secret.md | drafted |
 | cards/secret-sets.md | not started |
 | cards/looking-closer.md | not started |
 | cards/comparing-cards.md | not started |

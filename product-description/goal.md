@@ -105,7 +105,7 @@ the user would expect.
   edited moves every split after it.
 - **Six tier strings, six award ids and the streak rungs are persisted** and may
   be added to but never renamed or renumbered.
-- **Which document owns which pack state:** `cards/the-stand.md` owns `sealed`
+- **Which document owns which pack state:** `cards/the-sealed-pack.md` owns `sealed`
   and the tear; `cards/opening-a-pack.md` owns `opening` and `revealing`;
   `cards/what-you-pulled.md` owns `complete`; `cards/the-daily-secret.md` owns
   the fourth slot in every state, and links rather than restating the ceremony.
@@ -114,7 +114,7 @@ the user would expect.
 
 1. `cards/favourites.md` as the pilot, then `foundations/` in the order the
    README lists them. Everything else links to these.
-2. The pack: `cards/the-stand.md`, `cards/opening-a-pack.md`,
+2. The pack: `cards/the-sealed-pack.md`, `cards/opening-a-pack.md`,
    `cards/what-you-pulled.md`, `cards/the-daily-secret.md`. Read
    `src/routes/players.pack.tsx`, `src/lib/pack.ts`, `src/lib/pack-ceremony.ts`,
    `src/lib/pack-tear.ts`, `src/lib/stand-phase.ts` and the pack components in
