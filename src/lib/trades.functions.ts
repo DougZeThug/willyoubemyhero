@@ -332,6 +332,8 @@ export const getTradeSpares = createServerFn({ method: "GET" })
                 copyId: r.id,
                 eventParticipantId: r.event_participant_id,
                 edition: toEdition(r.edition),
+                // Your own card, so nothing to conceal.
+                viewerOwns: true,
               },
               reason: "only-copy",
             })),
@@ -340,7 +342,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
             .map((r) => secrets.get(r.id))
             .filter((s): s is SecretSpare => !!s)
             .map<BlockedSpare>((s) => ({
-              item: { kind: "secret", ...s },
+              item: { kind: "secret", ...s, viewerOwns: true },
               reason: "todays-pull",
             })),
         ]
