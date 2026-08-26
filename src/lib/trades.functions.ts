@@ -132,6 +132,8 @@ async function hydrateSecrets(
   rows: Pick<SecretPullRow, "id" | "secret_card_id" | "tier">[],
   /** Pull ids whose owner holds no other copy of that card. */
   lastCopyIds: ReadonlySet<string> = new Set(),
+  /** Secret card ids the VIEWER already holds a copy of — drives face-down art. */
+  viewerCardIds: ReadonlySet<string> = new Set(),
 ): Promise<Map<string, SecretSpare>> {
   const out = new Map<string, SecretSpare>();
   if (rows.length === 0) return out;
@@ -156,10 +158,41 @@ async function hydrateSecrets(
         artUrl: await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb),
         tier: toSecretTier(row.tier),
         lastCopy: lastCopyIds.has(row.id),
+        viewerOwns: viewerCardIds.has(row.secret_card_id),
       });
     }),
   );
   return out;
+}
+
+/**
+ * What the person holding the phone already has, as two id sets.
+ *
+ * Only ever used to decide whether a card on the OTHER side of the table can show
+ * its art: a card you already own is nothing to spoil, one you do not renders
+ * face-down. Both queries are scoped to the caller's own rows, so this adds no
+ * exposure of anybody else's collection.
+ */
+async function viewerHoldings(
+  me: string,
+): Promise<{ roster: ReadonlySet<string>; secrets: ReadonlySet<string> }> {
+  const sb = await db();
+  const [{ data: copies }, { data: pulls }] = await Promise.all([
+    sb
+      .from("card_copies")
+      .select("event_participant_id")
+      .eq("participant_id", me)
+      .returns<Pick<CardCopyRow, "event_participant_id">[]>(),
+    sb
+      .from("secret_card_pulls")
+      .select("secret_card_id")
+      .eq("participant_id", me)
+      .returns<Pick<SecretPullRow, "secret_card_id">[]>(),
+  ]);
+  return {
+    roster: new Set((copies ?? []).map((r) => r.event_participant_id)),
+    secrets: new Set((pulls ?? []).map((r) => r.secret_card_id)),
+  };
 }
 
 /**
