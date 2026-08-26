@@ -28,7 +28,7 @@ soft glow while it is open — and carries a small number on the right, which is
 how many of that set are on this shelf.
 
 You tap a card. It opens big in the middle of the screen: the art, the name, the
-flavour line the commissioner wrote, and under it the level of *your* copy in its
+flavour line the commissioner wrote, and under it the level of _your_ copy in its
 own colour. Swipe and you are on the next secret you own. Tap the card and it
 turns over.
 
@@ -53,7 +53,7 @@ whatever the set was called. Cards do not fall off the page because an admin
 tidied up. See [secret card sets](../admin/secret-card-sets.md) for the authoring
 side.
 
-A card in no set is *unsorted*. The admin panel calls that pile "Unsorted",
+A card in no set is _unsorted_. The admin panel calls that pile "Unsorted",
 because filing is work only the commissioner can do. Your vault calls it
 "Secrets", because on your own shelf "Unsorted" reads as though you left your
 cards in a mess.
@@ -87,7 +87,7 @@ newer set can briefly head itself with its raw identity before settling to its
 name.
 
 > Technical note: the set list is fetched by every device that opens the vault
-> and is not gated on holding anything, so the *names* of the active sets travel
+> and is not gated on holding anything, so the _names_ of the active sets travel
 > to a phone that owns none of them. They never become headings — a set is drawn
 > only if a card you hold is filed into it — and nothing in that response says
 > how big a set is, which is the property the feature actually protects.
@@ -127,12 +127,12 @@ its first appears at the end of the run.
 
 The heading is the name and a count of what you hold. There is no "of", no
 progress bar, no silhouettes of cards you have not found, and no empty slots. An
-unpulled secret is not *missing* — it is unknown, and the page says nothing about
+unpulled secret is not _missing_ — it is unknown, and the page says nothing about
 it.
 
 The card sheet keeps the same rule. It shows the level of your copy and that
 level's pull rate, the date you first pulled it, "Pulled ×3" if you hold spares,
-and how many *people* have found the card — never how many cards there are. The
+and how many _people_ have found the card — never how many cards there are. The
 back prints the card's name, its flavour line, its level and odds, and either the
 date you pulled it or, on a card from a set you have finished, a "Set complete"
 mark in its place.
@@ -143,27 +143,27 @@ you their phone is the intended channel and the only one.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The shelves follow whoever this device is pulling as. A guest holds secrets and gets shelves for them; a member's shelves follow their name onto any phone. A device with neither identity has no secrets and so no shelves at all. The commissioner's vault is an ordinary member's — the admin view of the same sets is a different screen. | Claiming a player moves everything the guest pulled onto the participant, so the same cards regroup under a new name. A set the guest had already finished banks its trophy at that moment. |
-| The event's state (before the combine · running · finished) | No effect. Sets are league-wide and permanent: they are not scoped to a combine and do not reset with one. | No effect. |
-| Dust switched on or off | No effect. A spare secret is worth dust only when somebody sells it — see [milling and selling](../dust/milling-and-selling.md). | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Two cards across on a phone, three or four wider. Tiles carry the set's foil but no tilt and no zoom; the sheet is where a card can be pinched and turned. Under presentation mode the whole vault is inert. | Reduced motion stills the foil and the prism edge. Rolling a shelf up drops the cards inside it entirely, which is what stops a page of shelves running a tilt each. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                                                    | Changed during                                                                                                                                                                              |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | The shelves follow whoever this device is pulling as. A guest holds secrets and gets shelves for them; a member's shelves follow their name onto any phone. A device with neither identity has no secrets and so no shelves at all. The commissioner's vault is an ordinary member's — the admin view of the same sets is a different screen. | Claiming a player moves everything the guest pulled onto the participant, so the same cards regroup under a new name. A set the guest had already finished banks its trophy at that moment. |
+| The event's state (before the combine · running · finished)       | No effect. Sets are league-wide and permanent: they are not scoped to a combine and do not reset with one.                                                                                                                                                                                                                                    | No effect.                                                                                                                                                                                  |
+| Dust switched on or off                                           | No effect. A spare secret is worth dust only when somebody sells it — see [milling and selling](../dust/milling-and-selling.md).                                                                                                                                                                                                              | No effect.                                                                                                                                                                                  |
+| The device (phone · desktop · reduced motion · presentation mode) | Two cards across on a phone, three or four wider. Tiles carry the set's foil but no tilt and no zoom; the sheet is where a card can be pinched and turned. Under presentation mode the whole vault is inert.                                                                                                                                  | Reduced motion stills the foil and the prism edge. Rolling a shelf up drops the cards inside it entirely, which is what stops a page of shelves running a tilt each.                        |
 
 ## Cancel and interrupt
 
-| Event | Before the tap | After the tap |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | The sheet closes onto the shelf it opened from, at the same scroll position. Nothing was written, so there is nothing to undo. |
-| Navigating away inside the app | No effect. | No effect. The shelves are rebuilt from cache on return. |
-| Reload | No effect. | No effect on the sets. Which card was open is not remembered; the shelf is. |
-| Backgrounded | No effect; nothing is in flight. On return the card list refetches if it has gone stale. | An open sheet is still open, showing the same card. |
-| Network lost mid-request | The shelves render from whatever the cache holds. With nothing cached there are no secret shelves at all, and the roster alone. | A cached card stays readable; its art may not load. |
-| The request fails or times out | No secret shelves appear, and no error either. An absent shelf and a shelf you own nothing from look the same — which is exactly what the feature already promises. A failed set-name read leaves the shelves labelled from the four that shipped. | No effect. |
-| The token expires or is cleared | Every secret shelf disappears together, because the cards were fetched against an identity that has just gone away. A member who has claimed before sees a line saying their secrets are on their name and not on this phone. | An open sheet empties with the list behind it. |
-| Changed by someone else | A commissioner renaming a set changes the heading on the next fetch; retiring one leaves your cards under its old name. Retiring a *card* removes it from future pulls and never from your shelf. | Same, and a refetch while the sheet is open can move the card under it — see the edge cases. |
-| A second tab or device | The other tab reads the same cards. A second *device* shares the cards and none of the shelf arrangement. | Same. |
-| Reduced motion or presentation mode changes | No effect on the shelves. | The foil stops moving; the sheet stays open. |
+| Event                                       | Before the tap                                                                                                                                                                                                                                     | After the tap                                                                                                                  |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Back, or closing a sheet                    | Nothing to cancel.                                                                                                                                                                                                                                 | The sheet closes onto the shelf it opened from, at the same scroll position. Nothing was written, so there is nothing to undo. |
+| Navigating away inside the app              | No effect.                                                                                                                                                                                                                                         | No effect. The shelves are rebuilt from cache on return.                                                                       |
+| Reload                                      | No effect.                                                                                                                                                                                                                                         | No effect on the sets. Which card was open is not remembered; the shelf is.                                                    |
+| Backgrounded                                | No effect; nothing is in flight. On return the card list refetches if it has gone stale.                                                                                                                                                           | An open sheet is still open, showing the same card.                                                                            |
+| Network lost mid-request                    | The shelves render from whatever the cache holds. With nothing cached there are no secret shelves at all, and the roster alone.                                                                                                                    | A cached card stays readable; its art may not load.                                                                            |
+| The request fails or times out              | No secret shelves appear, and no error either. An absent shelf and a shelf you own nothing from look the same — which is exactly what the feature already promises. A failed set-name read leaves the shelves labelled from the four that shipped. | No effect.                                                                                                                     |
+| The token expires or is cleared             | Every secret shelf disappears together, because the cards were fetched against an identity that has just gone away. A member who has claimed before sees a line saying their secrets are on their name and not on this phone.                      | An open sheet empties with the list behind it.                                                                                 |
+| Changed by someone else                     | A commissioner renaming a set changes the heading on the next fetch; retiring one leaves your cards under its old name. Retiring a _card_ removes it from future pulls and never from your shelf.                                                  | Same, and a refetch while the sheet is open can move the card under it — see the edge cases.                                   |
+| A second tab or device                      | The other tab reads the same cards. A second _device_ shares the cards and none of the shelf arrangement.                                                                                                                                          | Same.                                                                                                                          |
+| Reduced motion or presentation mode changes | No effect on the shelves.                                                                                                                                                                                                                          | The foil stops moving; the sheet stays open.                                                                                   |
 
 Nothing about a set is ever left half-done. The grouping is recomputed whole from
 the cards you hold every time either read changes, so there is no partial state
@@ -220,7 +220,7 @@ what exists. The shelf headings themselves are covered in
   They used to be two shelves with the same heading, and because the vault
   derives a shelf's identity from the group they collided — the second pile's
   cards vanished off the page entirely.
-- **A set you have pinned every card of.** No shelf. A pinned card *moves* to
+- **A set you have pinned every card of.** No shelf. A pinned card _moves_ to
   Favourites rather than appearing twice, so the shelf it came from empties and
   drops out. It returns the moment one card is unpinned.
 - **A rolled-up set.** Its cards are still in the sheet's swipe, so swiping past

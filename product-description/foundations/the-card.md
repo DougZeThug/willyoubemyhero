@@ -2,8 +2,8 @@
 
 ## Summary
 
-Everything in this app is a card. There are two kinds — *roster cards*, which are
-people on the combine roster, and *secret cards*, which are admin-curated art
+Everything in this app is a card. There are two kinds — _roster cards_, which are
+people on the combine roster, and _secret cards_, which are admin-curated art
 that is not a person — and three independent axes decide how any one of them
 looks and what it is worth. This document owns those axes. Every other document
 uses their words and links here.
@@ -36,7 +36,7 @@ naming the level of your copy — Mythic, Legendary, Epic, Rare or Common.
 ## The interaction, event by event
 
 A card is not an interaction; it is what interactions are about. What follows is
-the life of one card's *appearance* through the same five phases, so this
+the life of one card's _appearance_ through the same five phases, so this
 document sits beside the others rather than outside them.
 
 ```mermaid
@@ -66,7 +66,7 @@ count as having seen it.
 ### The tap that starts something
 
 Nothing here. A card's tier is never something a player does; it is something an
-athlete did. What a *tap* on a card does belongs to
+athlete did. What a _tap_ on a card does belongs to
 [a player card](../cards/a-player-card.md) and [looking closer](../cards/looking-closer.md).
 
 ### While it runs
@@ -85,14 +85,14 @@ worse one.
 
 A tier is what a player did on the course. Nothing about it is random.
 
-| Tier | Label | What earned it |
-| --- | --- | --- |
-| `champion` | 1 of 1 | Fastest official time |
-| `podium` | Gold | Top three finish |
-| `stationKing` | Station King | Fastest at a station |
-| `penaltyBox` | Penalty Box | Most penalty time |
-| `dnf` | DNF | Did not finish |
-| `base` | Base | Combine athlete |
+| Tier          | Label        | What earned it        |
+| ------------- | ------------ | --------------------- |
+| `champion`    | 1 of 1       | Fastest official time |
+| `podium`      | Gold         | Top three finish      |
+| `stationKing` | Station King | Fastest at a station  |
+| `penaltyBox`  | Penalty Box  | Most penalty time     |
+| `dnf`         | DNF          | Did not finish        |
+| `base`        | Base         | Combine athlete       |
 
 Tiers are computed from the live event rather than stored, so a card upgrades
 itself mid-combine the moment somebody takes the lead — the screen is watching
@@ -120,13 +120,13 @@ never be renamed: renaming one orphans every card already wearing it.
 
 An edition is the finish on one copy of a roster card, rolled when you pull it.
 
-| Edition | Pull rate | Milled for |
-| --- | --- | --- |
-| Platinum | 0.5% | 100 dust |
-| Gold | 3.5% | 40 dust |
-| Silver | 8% | 20 dust |
-| Bronze | 18% | 10 dust |
-| Standard | 70% | 5 dust |
+| Edition  | Pull rate | Milled for |
+| -------- | --------- | ---------- |
+| Platinum | 0.5%      | 100 dust   |
+| Gold     | 3.5%      | 40 dust    |
+| Silver   | 8%        | 20 dust    |
+| Bronze   | 18%       | 10 dust    |
+| Standard | 70%       | 5 dust     |
 
 Postgres decides the roll, not the phone. It used to be decided on the device
 from the pack seed, and that stopped being acceptable the moment a finish started
@@ -165,7 +165,7 @@ Two things describe it:
   Common 70%. Unlike an edition, a secret always prints its level, because the
   level is the new fact the card is announcing.
 
-A secret is filed into a *set*, or into none, in which case it shows under
+A secret is filed into a _set_, or into none, in which case it shows under
 "Secrets". See [secret sets](../cards/secret-sets.md).
 
 **How many secret cards exist is withheld.** No screen and no server response
@@ -192,31 +192,31 @@ place there. See [time and the clock](time-and-the-clock.md).
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Tiers and looks are the same for everybody. What differs is which copies you hold, and therefore which editions and levels you see. A guest can hold secrets but never a roster copy. | A claim brings a guest's secrets onto their name; the cards look identical afterwards. |
-| The event's state (before the combine · running · finished) | Before any official run exists every roster card is `base`. | Cards upgrade themselves mid-combine as results land. Nothing about the card is animated on the change; it simply redraws. |
-| Dust switched on or off | No effect on how a card looks. It decides whether the card's finish is worth anything. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | The resting sheen and the platinum animation are only drawn at hero size, never in a grid of thirty. Reduced motion drops the animated layers. | No effect on the card's identity. |
+| Modifier                                                          | At arrival                                                                                                                                                                            | Changed during                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Tiers and looks are the same for everybody. What differs is which copies you hold, and therefore which editions and levels you see. A guest can hold secrets but never a roster copy. | A claim brings a guest's secrets onto their name; the cards look identical afterwards.                                     |
+| The event's state (before the combine · running · finished)       | Before any official run exists every roster card is `base`.                                                                                                                           | Cards upgrade themselves mid-combine as results land. Nothing about the card is animated on the change; it simply redraws. |
+| Dust switched on or off                                           | No effect on how a card looks. It decides whether the card's finish is worth anything.                                                                                                | No effect.                                                                                                                 |
+| The device (phone · desktop · reduced motion · presentation mode) | The resting sheen and the platinum animation are only drawn at hero size, never in a grid of thirty. Reduced motion drops the animated layers.                                        | No effect on the card's identity.                                                                                          |
 
 ## Cancel and interrupt
 
 Cards are not an interaction; they are what interactions are about. The rows
-below say what happens to the *display* of a card when each event occurs, so the
+below say what happens to the _display_ of a card when each event occurs, so the
 documents that do describe interactions can link here instead of repeating it.
 
-| Event | Effect |
-| --- | --- |
-| Back, or closing a sheet | None. |
-| Navigating away inside the app | None. Tier data is cached and shared between screens. |
-| Reload | Tiers are recomputed from the event; editions and levels are re-read from the device and the server. |
-| Backgrounded | Idle animation stops and resumes. |
-| Network lost mid-request | Cards already on screen keep their tier. A tier that would have changed does not. |
-| The request fails or times out | Same: the card holds its last known tier rather than falling back to base. |
-| The token expires or is cleared | A roster card is public and still renders. Your copies stop resolving, so finishes disappear from the badges. |
-| Changed by someone else | A result landing anywhere in the combine can change any card's tier, live, without a refresh. |
-| A second tab or device | Tiers agree everywhere. Editions agree wherever the server can name you. |
-| Reduced motion or presentation mode changes | The idle sheen and the prism animation start or stop. Colours and badges never change. |
+| Event                                       | Effect                                                                                                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | None.                                                                                                         |
+| Navigating away inside the app              | None. Tier data is cached and shared between screens.                                                         |
+| Reload                                      | Tiers are recomputed from the event; editions and levels are re-read from the device and the server.          |
+| Backgrounded                                | Idle animation stops and resumes.                                                                             |
+| Network lost mid-request                    | Cards already on screen keep their tier. A tier that would have changed does not.                             |
+| The request fails or times out              | Same: the card holds its last known tier rather than falling back to base.                                    |
+| The token expires or is cleared             | A roster card is public and still renders. Your copies stop resolving, so finishes disappear from the badges. |
+| Changed by someone else                     | A result landing anywhere in the combine can change any card's tier, live, without a refresh.                 |
+| A second tab or device                      | Tiers agree everywhere. Editions agree wherever the server can name you.                                      |
+| Reduced motion or presentation mode changes | The idle sheen and the prism animation start or stop. Colours and badges never change.                        |
 
 ## Interactions with other systems
 
@@ -254,7 +254,7 @@ technology.
 
 - **A champion and a base card once looked alike at a glance.** Colour alone was
   never enough to separate two tiers — both swept one rainbow band, just in
-  different hues — which is why each tier now wears a distinct foil *pattern*.
+  different hues — which is why each tier now wears a distinct foil _pattern_.
 - **A gold finish on a podium card** would once have read "Gold · Gold". It
   cannot happen now: a special finish takes the headline and the tier drops to
   the line under it, so the two labels are never side by side.

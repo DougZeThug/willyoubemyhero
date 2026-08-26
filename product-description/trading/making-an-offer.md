@@ -8,7 +8,7 @@ between one and four of theirs on the other, and send it. Nothing moves and
 nothing is reserved — the cards stay in both collections, fully usable, until
 somebody presses Accept.
 
-The one rule the whole feature hangs off is that only a *spare* can be staked. A
+The one rule the whole feature hangs off is that only a _spare_ can be staked. A
 roster card needs a second copy behind it, so you always keep one of everybody.
 A secret needs no such thing: any copy you hold is yours to give, including your
 last one.
@@ -25,7 +25,7 @@ either strip and it lifts into a ring; the counter in the heading goes up. Tap i
 again and it drops out.
 
 Both strips lead with secrets, rarest copy first, because that is what anybody
-opening this panel is scrolling for. Roster cards follow, one tile per *copy* —
+opening this panel is scrolling for. Roster cards follow, one tile per _copy_ —
 your gold Alice and your standard Alice are two separate tiles, because which one
 you hand over is a choice and the finish travels with the card.
 
@@ -130,27 +130,27 @@ you can fix it and send again.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A member composes. A guest never reaches this panel — see [the Trading Post](the-trading-post.md#arrive). An account holder who has named themselves is a member for every purpose here, including being offered to. A commissioner is whatever else they are; the console grants no trading powers. | A member token expiring mid-compose leaves the staged cards on screen and fails the send. Claiming a player mid-visit opens the panel with your own spares in it. |
-| The event's state (before the combine · running · finished) | Decides what exists to stake. Outside an active combine both strips are empty for everybody, so nothing can be composed at all. | A card's tier changing under you redraws its tile; the copy staked is still the copy staked. |
-| Dust switched on or off | No effect. A trade is cards for cards and never touches a balance. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Both strips scroll sideways under a thumb; tiles are small and close together, and the finish under each one is the only way to tell two copies of a card apart. | No effect on composing. Presentation mode is never raised by this panel. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                           | Changed during                                                                                                                                                    |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A member composes. A guest never reaches this panel — see [the Trading Post](the-trading-post.md#arrive). An account holder who has named themselves is a member for every purpose here, including being offered to. A commissioner is whatever else they are; the console grants no trading powers. | A member token expiring mid-compose leaves the staged cards on screen and fails the send. Claiming a player mid-visit opens the panel with your own spares in it. |
+| The event's state (before the combine · running · finished)       | Decides what exists to stake. Outside an active combine both strips are empty for everybody, so nothing can be composed at all.                                                                                                                                                                      | A card's tier changing under you redraws its tile; the copy staked is still the copy staked.                                                                      |
+| Dust switched on or off                                           | No effect. A trade is cards for cards and never touches a balance.                                                                                                                                                                                                                                   | No effect.                                                                                                                                                        |
+| The device (phone · desktop · reduced motion · presentation mode) | Both strips scroll sideways under a thumb; tiles are small and close together, and the finish under each one is the only way to tell two copies of a card apart.                                                                                                                                     | No effect on composing. Presentation mode is never raised by this panel.                                                                                          |
 
 ## Cancel and interrupt
 
-| Event | Before Send | After Send |
-| --- | --- | --- |
-| Back, or closing a sheet | Everything staged is lost. No warning, because nothing was held. | The offer is already on the table. Taking it back is a separate, deliberate act. |
-| Navigating away inside the app | Same. Staged cards do not survive a tab change. | Same. The offer stands and the other person can answer it. |
-| Reload | Everything staged is lost, including the person you had picked. | The offer comes back in "Out there", because it lives on the server. |
-| Backgrounded | The staged selection survives a lock screen as long as the page is not discarded. | No effect. The offer is written. |
-| Network lost mid-request | Nothing to lose; the picker itself was drawn from data already fetched. | The offer may have landed. The screen shows a failure and the refetch afterwards is what says whether it did — check "Out there" before sending it twice. |
-| The request fails or times out | Not applicable. | A toast with the server's own wording — "you have to keep a copy of every card you trade", "that player has not claimed their card yet". Staged cards are left alone. |
-| The token expires or is cleared | The panel is replaced by the gate; staged cards go with it. | The offer already exists and is unaffected. Answering it later needs a token again. |
-| Changed by someone else | A card you were about to stake can be traded, milled or sold out from under you. The strips refresh on window focus and on any completed trade, so the tile usually disappears; if you are quick enough to send anyway, the offer is refused. | Nothing invalidates a pending offer at the moment the world moves. It is re-checked when somebody presses Accept, and fails then. |
-| A second tab or device | Each has its own staged selection; they share nothing. | Both show the offer in "Out there". |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before Send                                                                                                                                                                                                                                   | After Send                                                                                                                                                            |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Everything staged is lost. No warning, because nothing was held.                                                                                                                                                                              | The offer is already on the table. Taking it back is a separate, deliberate act.                                                                                      |
+| Navigating away inside the app              | Same. Staged cards do not survive a tab change.                                                                                                                                                                                               | Same. The offer stands and the other person can answer it.                                                                                                            |
+| Reload                                      | Everything staged is lost, including the person you had picked.                                                                                                                                                                               | The offer comes back in "Out there", because it lives on the server.                                                                                                  |
+| Backgrounded                                | The staged selection survives a lock screen as long as the page is not discarded.                                                                                                                                                             | No effect. The offer is written.                                                                                                                                      |
+| Network lost mid-request                    | Nothing to lose; the picker itself was drawn from data already fetched.                                                                                                                                                                       | The offer may have landed. The screen shows a failure and the refetch afterwards is what says whether it did — check "Out there" before sending it twice.             |
+| The request fails or times out              | Not applicable.                                                                                                                                                                                                                               | A toast with the server's own wording — "you have to keep a copy of every card you trade", "that player has not claimed their card yet". Staged cards are left alone. |
+| The token expires or is cleared             | The panel is replaced by the gate; staged cards go with it.                                                                                                                                                                                   | The offer already exists and is unaffected. Answering it later needs a token again.                                                                                   |
+| Changed by someone else                     | A card you were about to stake can be traded, milled or sold out from under you. The strips refresh on window focus and on any completed trade, so the tile usually disappears; if you are quick enough to send anyway, the offer is refused. | Nothing invalidates a pending offer at the moment the world moves. It is re-checked when somebody presses Accept, and fails then.                                     |
+| A second tab or device                      | Each has its own staged selection; they share nothing.                                                                                                                                                                                        | Both show the offer in "Out there".                                                                                                                                   |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                                                                                                                    | No effect.                                                                                                                                                            |
 
 ## Interactions with other systems
 
@@ -176,7 +176,7 @@ the server has written it, not before.
 while an offer naming a copy is pending, that copy cannot be milled, sold or
 re-rolled — destroying it would silently shrink an offer somebody has already
 read and is about to accept. Listing it on
-[the marketplace](../dust/the-marketplace.md) *is* allowed, because a listing
+[the marketplace](../dust/the-marketplace.md) _is_ allowed, because a listing
 only promises. Whichever settles first wins, and the other fails cleanly.
 
 **Motion and sound.** None while composing. A staged tile lifts into a ring and

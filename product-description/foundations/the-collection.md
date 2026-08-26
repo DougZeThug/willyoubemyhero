@@ -5,8 +5,8 @@
 Your collection is every card you hold. It lives in two places at once — an
 IndexedDB database on the device, and rows in Postgres for anyone the server can
 name — and which of the two is authoritative depends on what kind of card it is
-and who you are. This document owns what "owning a card" means, what a *copy* and
-a *spare* are, and where the truth lives.
+and who you are. This document owns what "owning a card" means, what a _copy_ and
+a _spare_ are, and where the truth lives.
 
 The short version: **secrets are the server's, roster cards are the device's**,
 and claiming a player or signing in is what reconciles the two.
@@ -22,27 +22,27 @@ The fourth slot is a secret, and that one is written to Postgres against your
 identity, not to the phone. It follows you to a new handset; the roster cards do
 not, until you claim a player or sign in.
 
-Pull a card you already hold and you get a *copy*. The count goes up. If the new
+Pull a card you already hold and you get a _copy_. The count goes up. If the new
 copy wears a better finish, the card starts showing the better one; if it wears a
-worse one, nothing visible changes. Either way you now hold a *spare*, which is
+worse one, nothing visible changes. Either way you now hold a _spare_, which is
 the thing trading, the marketplace and the mill all operate on.
 
 ## Where a collection lives
 
-| What | Stored on the device | Stored on the server |
-| --- | --- | --- |
-| Roster cards you hold | Yes — the card database, keyed by card | Only for a member, in card rows |
-| Which finish each copy wears | Yes, best-of | Yes, derived best-of across copies |
-| Secret cards you hold | No | Yes, against your member or guest identity |
-| The level of a secret copy | No | Yes |
-| Today's pack and how far through it you are | Yes | The fact that you opened a pack, for the streak |
-| Whether today's secret has been turned over | A flag only | Which secret it is |
-| Starred cards | Yes | No |
-| Vault shelf order | Yes | No |
+| What                                        | Stored on the device                   | Stored on the server                            |
+| ------------------------------------------- | -------------------------------------- | ----------------------------------------------- |
+| Roster cards you hold                       | Yes — the card database, keyed by card | Only for a member, in card rows                 |
+| Which finish each copy wears                | Yes, best-of                           | Yes, derived best-of across copies              |
+| Secret cards you hold                       | No                                     | Yes, against your member or guest identity      |
+| The level of a secret copy                  | No                                     | Yes                                             |
+| Today's pack and how far through it you are | Yes                                    | The fact that you opened a pack, for the streak |
+| Whether today's secret has been turned over | A flag only                            | Which secret it is                              |
+| Starred cards                               | Yes                                    | No                                              |
+| Vault shelf order                           | Yes                                    | No                                              |
 
 The split is deliberate rather than incidental. A guest cannot be granted a
 roster card at all — a roster card must belong to a person on the roster — so for
-a guest the device *is* the collection. A secret can belong to a guest, so it is
+a guest the device _is_ the collection. A secret can belong to a guest, so it is
 kept where a new phone can find it.
 
 > Technical note: the pack's day is the device's local date and the daily
@@ -117,27 +117,27 @@ actually sees during these.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A guest's collection is the device's. A member's is the device's plus the server's. An account holder's follows them between devices. The commissioner's own collection is an ordinary member's. | Claiming merges the two halves in place, without the user doing anything. |
-| The event's state | A card is held against an event's roster. A card held against a previous combine does not resolve on the current one. | No effect. |
-| Dust switched on or off | Decides whether spares can be turned into anything. | Flipping it off leaves spares held and unspendable. |
-| The device (phone · desktop · reduced motion · presentation mode) | A blocked or full storage quota reads as an empty collection. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                       | Changed during                                                            |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A guest's collection is the device's. A member's is the device's plus the server's. An account holder's follows them between devices. The commissioner's own collection is an ordinary member's. | Claiming merges the two halves in place, without the user doing anything. |
+| The event's state                                                 | A card is held against an event's roster. A card held against a previous combine does not resolve on the current one.                                                                            | No effect.                                                                |
+| Dust switched on or off                                           | Decides whether spares can be turned into anything.                                                                                                                                              | Flipping it off leaves spares held and unspendable.                       |
+| The device (phone · desktop · reduced motion · presentation mode) | A blocked or full storage quota reads as an empty collection.                                                                                                                                    | No effect.                                                                |
 
 ## Cancel and interrupt
 
-| Event | Before the card is committed | After |
-| --- | --- | --- |
-| Back, or closing a sheet | The card is not yours. A pack half-revealed keeps its place and can be resumed. | The card is yours. Nothing about leaving a screen gives it back. |
-| Navigating away inside the app | Same. | Same. |
-| Reload | A pack resumes exactly where it was, including which card the stand was on. | No effect. |
-| Backgrounded | No effect; the pack's position is written as it goes. | No effect. |
-| Network lost mid-request | A local write lands anyway. A server write may not, and the screen says so. | A committed card stays committed. |
-| The request fails or times out | The card is not granted and the screen reports it. | No effect. |
-| The token expires or is cleared | The server half of the collection stops resolving; the device half still renders. | Same. Nothing is deleted. |
-| Changed by someone else | A trade completing elsewhere can remove a card between the screen loading and the action landing; the server refuses and the screen refreshes. | The vault redraws without it. |
-| A second tab or device | Two tabs share the device's database. A second device shares only the server's half. | Same. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the card is committed                                                                                                                   | After                                                            |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Back, or closing a sheet                    | The card is not yours. A pack half-revealed keeps its place and can be resumed.                                                                | The card is yours. Nothing about leaving a screen gives it back. |
+| Navigating away inside the app              | Same.                                                                                                                                          | Same.                                                            |
+| Reload                                      | A pack resumes exactly where it was, including which card the stand was on.                                                                    | No effect.                                                       |
+| Backgrounded                                | No effect; the pack's position is written as it goes.                                                                                          | No effect.                                                       |
+| Network lost mid-request                    | A local write lands anyway. A server write may not, and the screen says so.                                                                    | A committed card stays committed.                                |
+| The request fails or times out              | The card is not granted and the screen reports it.                                                                                             | No effect.                                                       |
+| The token expires or is cleared             | The server half of the collection stops resolving; the device half still renders.                                                              | Same. Nothing is deleted.                                        |
+| Changed by someone else                     | A trade completing elsewhere can remove a card between the screen loading and the action landing; the server refuses and the screen refreshes. | The vault redraws without it.                                    |
+| A second tab or device                      | Two tabs share the device's database. A second device shares only the server's half.                                                           | Same.                                                            |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                     | No effect.                                                       |
 
 ## Interactions with other systems
 

@@ -6,7 +6,7 @@ Finishing a secret set is the one moment in the app where a set's size is said
 out loud. Every other surface goes out of its way not to: no shelf carries a
 denominator, no card back carries a serial, and a set you own nothing from is not
 drawn at all. A **trophy** is the designed exception, because there the number
-*is* the prize — "you have all nine" means nothing if you never learn there were
+_is_ the prize — "you have all nine" means nothing if you never learn there were
 nine.
 
 A trophy is minted in the same breath as the card that finished the set, by the
@@ -23,7 +23,7 @@ a Pets card you did not have. It turns over, the confetti goes up, and you look
 at it for a second.
 
 Then the screen goes gold. A medal springs in, and under it "Set complete" and
-"Pets". A number climbs from nothing to nine, and settles: *9 cards, all of them.*
+"Pets". A number climbs from nothing to nine, and settles: _9 cards, all of them._
 One button, reading "Every one". You tap it and you are back on the pack summary,
 where you were.
 
@@ -153,7 +153,7 @@ because a set is not a card and drawing it as one puts a fourteenth thing on a
 shelf of thirteen. The plaque prints the medal, the set's name, the size, and the
 date it was finished. A backfilled trophy prints no date at all: nothing in the
 data records when a given person acquired a given card, and a traded card keeps
-the date the *giver* pulled it, so the app would rather say nothing than state a
+the date the _giver_ pulled it, so the app would rather say nothing than state a
 day it cannot support — or have eight people appear to finish the same afternoon.
 
 ## Told about it somewhere else
@@ -177,32 +177,32 @@ worse than one somebody scrolled past.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A guest holds no trophies: the shelf is absent, the card backs say nothing, and no ceremony can fire. A member sees their own shelf and everybody's pills. An account changes nothing here. The commissioner sees the same as a member, plus, when a grant of theirs finishes somebody's set, a line in their own confirmation saying so — their copy of a ceremony they cannot watch. | Claiming a player banks every set the guest had already finished, in one sweep, at the moment their pulls become theirs. |
-| The event's state (before the combine · running · finished) | No effect. Sets and trophies are league-wide and permanent, and a trophy earned out of season is an ordinary trophy. | No effect. |
-| Dust switched on or off | No effect. Finishing a set pays a trophy and nothing else — no dust, no card, no discount. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | The ceremony is full-screen at any width. Reduced motion skips the medal's spring and goes straight to the number, and drops the count-up. | The nav fades out under the ceremony and comes back when it is dismissed. A ceremony can open over any screen, including one already presenting. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                                                                                             | Changed during                                                                                                                                   |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Who you are (guest · member · account · commissioner)             | A guest holds no trophies: the shelf is absent, the card backs say nothing, and no ceremony can fire. A member sees their own shelf and everybody's pills. An account changes nothing here. The commissioner sees the same as a member, plus, when a grant of theirs finishes somebody's set, a line in their own confirmation saying so — their copy of a ceremony they cannot watch. | Claiming a player banks every set the guest had already finished, in one sweep, at the moment their pulls become theirs.                         |
+| The event's state (before the combine · running · finished)       | No effect. Sets and trophies are league-wide and permanent, and a trophy earned out of season is an ordinary trophy.                                                                                                                                                                                                                                                                   | No effect.                                                                                                                                       |
+| Dust switched on or off                                           | No effect. Finishing a set pays a trophy and nothing else — no dust, no card, no discount.                                                                                                                                                                                                                                                                                             | No effect.                                                                                                                                       |
+| The device (phone · desktop · reduced motion · presentation mode) | The ceremony is full-screen at any width. Reduced motion skips the medal's spring and goes straight to the number, and drops the count-up.                                                                                                                                                                                                                                             | The nav fades out under the ceremony and comes back when it is dismissed. A ceremony can open over any screen, including one already presenting. |
 
 ## Cancel and interrupt
 
-| Event | Before the last card lands | After it has landed |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | The trophy is already permanent. Backing out of the ceremony ends it; it will not play again, because the phone marked it shown before it opened. |
-| Navigating away inside the app | No effect. | Same. The shelf, the badge and the pill are all there when you get to them. |
-| Reload | No effect. | The trophy survives; the ceremony does not. A reload during it is the same as dismissing it. |
-| Backgrounded | No effect. | The two beats are on timers, so a backgrounded ceremony may be at its end when you look again. Nothing is lost. |
-| Network lost mid-request | The card that would have finished the set never arrives, so nothing is finished. | The trophy landed with the card, in one step. There is no state where you hold the last card and have no trophy. |
-| The request fails or times out | Same — no card, no trophy. | If the response carrying the completion is lost after the write, the watcher finds the trophy on the next read and plays the ceremony late rather than never. |
-| The token expires or is cleared | No effect on trophies already earned; they belong to the name, not the device. | The shelf empties along with the rest of the collection until a token comes back. The trophy row is untouched. |
-| Changed by someone else | A commissioner granting you your last card finishes the set from their phone; you find out through the watcher. A trade partner accepting does the same. | A commissioner adding a card to a set you have finished does not take the trophy away, and does not fire anything again. |
-| A second tab or device | Both read the same public list. | The phone's note of what it has celebrated is per device, so a second phone can play a ceremony for a set the first one already showed. Two tabs on one phone share the note and do not double up. |
-| Reduced motion or presentation mode changes | No effect. | The preference is read once when the ceremony opens, so flipping it mid-ceremony changes nothing until the next one. |
+| Event                                       | Before the last card lands                                                                                                                               | After it has landed                                                                                                                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel.                                                                                                                                       | The trophy is already permanent. Backing out of the ceremony ends it; it will not play again, because the phone marked it shown before it opened.                                                  |
+| Navigating away inside the app              | No effect.                                                                                                                                               | Same. The shelf, the badge and the pill are all there when you get to them.                                                                                                                        |
+| Reload                                      | No effect.                                                                                                                                               | The trophy survives; the ceremony does not. A reload during it is the same as dismissing it.                                                                                                       |
+| Backgrounded                                | No effect.                                                                                                                                               | The two beats are on timers, so a backgrounded ceremony may be at its end when you look again. Nothing is lost.                                                                                    |
+| Network lost mid-request                    | The card that would have finished the set never arrives, so nothing is finished.                                                                         | The trophy landed with the card, in one step. There is no state where you hold the last card and have no trophy.                                                                                   |
+| The request fails or times out              | Same — no card, no trophy.                                                                                                                               | If the response carrying the completion is lost after the write, the watcher finds the trophy on the next read and plays the ceremony late rather than never.                                      |
+| The token expires or is cleared             | No effect on trophies already earned; they belong to the name, not the device.                                                                           | The shelf empties along with the rest of the collection until a token comes back. The trophy row is untouched.                                                                                     |
+| Changed by someone else                     | A commissioner granting you your last card finishes the set from their phone; you find out through the watcher. A trade partner accepting does the same. | A commissioner adding a card to a set you have finished does not take the trophy away, and does not fire anything again.                                                                           |
+| A second tab or device                      | Both read the same public list.                                                                                                                          | The phone's note of what it has celebrated is per device, so a second phone can play a ceremony for a set the first one already showed. Two tabs on one phone share the note and do not double up. |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                               | The preference is read once when the ceremony opens, so flipping it mid-ceremony changes nothing until the next one.                                                                               |
 
 ## Interactions with other systems
 
-**Who you have to be.** To *hold* a trophy, somebody with a name on the roster —
-a [member](../foundations/identity-and-sessions.md). To *read* the list, nobody at all: it is public, and other people's
+**Who you have to be.** To _hold_ a trophy, somebody with a name on the roster —
+a [member](../foundations/identity-and-sessions.md). To _read_ the list, nobody at all: it is public, and other people's
 finished sets showing up on their player pages is most of the point. The write is
 not a screen's to make; it happens inside the database call that hands over a
 card.
@@ -230,7 +230,7 @@ trophy records what you did and not what you still hold.
 the duration. Each fires once per ceremony; a queue of two plays two, rather than
 the second arriving silent.
 
-**Notifications and badges.** No dot anywhere. The ceremony *is* the
+**Notifications and badges.** No dot anywhere. The ceremony _is_ the
 notification, and the shelf is the record of it. The badge on a card back is the
 only persistent mark, and it is a word rather than a count.
 

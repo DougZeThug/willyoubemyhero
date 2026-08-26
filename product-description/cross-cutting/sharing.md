@@ -29,7 +29,7 @@ result, splits and all.
 ## What is in each image
 
 **A card.** The tier's colour frames it, and the finish's metal is printed
-*inside* that frame, exactly as the card wears it — a special finish takes the
+_inside_ that frame, exactly as the card wears it — a special finish takes the
 headline badge and the tier drops to the line under it, following the same rule
 as everywhere else. Where there is no art, the player's initials fill the frame.
 
@@ -132,27 +132,27 @@ this app arrives in a chat as text.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | No effect. Sharing needs no identity and no guard — there is no server call in it. Anybody can export any unlocked card. | No effect. |
-| The event's state (before the combine · running · finished) | Decides what the image says. Before any official run the time and rank print as dashes; during, an exported card can be out of date within a minute. | An image is a snapshot. A card whose tier upgrades after the export does not update the picture you sent. |
-| Dust switched on or off | No effect. Nothing about dust or a card's value appears in any image. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | A phone gets the system share sheet; a desktop browser almost always gets a download instead. Neither is announced. | No effect. Rendering is not animated and makes no sound. |
+| Modifier                                                          | At arrival                                                                                                                                           | Changed during                                                                                            |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | No effect. Sharing needs no identity and no guard — there is no server call in it. Anybody can export any unlocked card.                             | No effect.                                                                                                |
+| The event's state (before the combine · running · finished)       | Decides what the image says. Before any official run the time and rank print as dashes; during, an exported card can be out of date within a minute. | An image is a snapshot. A card whose tier upgrades after the export does not update the picture you sent. |
+| Dust switched on or off                                           | No effect. Nothing about dust or a card's value appears in any image.                                                                                | No effect.                                                                                                |
+| The device (phone · desktop · reduced motion · presentation mode) | A phone gets the system share sheet; a desktop browser almost always gets a download instead. Neither is announced.                                  | No effect. Rendering is not animated and makes no sound.                                                  |
 
 ## Cancel and interrupt
 
-| Event | Before the render starts | While it is rendering |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | The render carries on in a page that is going away; the share sheet may still appear over the next screen. Dismissing the sheet is indistinguishable from sending. |
-| Navigating away inside the app | No effect. | The off-screen composite unmounts with the screen. A render already under way finishes against a node that has gone, which is one of the ways a share fails silently. |
-| Reload | No effect. | The render is gone. Nothing is left half-written; there is nothing to write. |
-| Backgrounded | No effect. | Rasterising may stall until the tab is looked at again. The button stays on "Rendering…" for as long as that takes. |
-| Network lost mid-request | The artwork may already be loaded, in which case a share still works. | A card page refreshes its artwork addresses first, so a dead connection fails there — with a message on a player card and in silence on the other two. |
-| The request fails or times out | Not applicable. | Same as above: the player card names it, the pack and the leaderboard do not. |
-| The token expires or is cleared | No effect. Sharing needs no token. | No effect. |
-| Changed by someone else | A tier that changed a moment ago is in the image if the screen had it. | The image is whatever the screen held when the snapshot was taken. |
-| A second tab or device | Independent. | Independent. |
-| Reduced motion or presentation mode changes | No effect. | No effect. Nothing about sharing is animated. |
+| Event                                       | Before the render starts                                               | While it is rendering                                                                                                                                                 |
+| ------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel.                                                     | The render carries on in a page that is going away; the share sheet may still appear over the next screen. Dismissing the sheet is indistinguishable from sending.    |
+| Navigating away inside the app              | No effect.                                                             | The off-screen composite unmounts with the screen. A render already under way finishes against a node that has gone, which is one of the ways a share fails silently. |
+| Reload                                      | No effect.                                                             | The render is gone. Nothing is left half-written; there is nothing to write.                                                                                          |
+| Backgrounded                                | No effect.                                                             | Rasterising may stall until the tab is looked at again. The button stays on "Rendering…" for as long as that takes.                                                   |
+| Network lost mid-request                    | The artwork may already be loaded, in which case a share still works.  | A card page refreshes its artwork addresses first, so a dead connection fails there — with a message on a player card and in silence on the other two.                |
+| The request fails or times out              | Not applicable.                                                        | Same as above: the player card names it, the pack and the leaderboard do not.                                                                                         |
+| The token expires or is cleared             | No effect. Sharing needs no token.                                     | No effect.                                                                                                                                                            |
+| Changed by someone else                     | A tier that changed a moment ago is in the image if the screen had it. | The image is whatever the screen held when the snapshot was taken.                                                                                                    |
+| A second tab or device                      | Independent.                                                           | Independent.                                                                                                                                                          |
+| Reduced motion or presentation mode changes | No effect.                                                             | No effect. Nothing about sharing is animated.                                                                                                                         |
 
 ## Interactions with other systems
 

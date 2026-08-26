@@ -5,13 +5,13 @@
 Somewhere in the garden the commissioner is handing out slips of paper. Each one
 carries a name and six characters. Typing those six characters into the claim
 screen is what turns a phone from an anonymous visitor into a person on the
-roster: it trades the code for a *member token*, and from that moment the device
+roster: it trades the code for a _member token_, and from that moment the device
 can trade, vote on superlatives, use the marketplace and hold roster cards on a
 name rather than on a handset.
 
 The screen is `/claim`. It is the only place a paper code is ever typed, and it
 is the only way onto the roster — no password, no email, and nothing to remember
-afterwards. What the code proves is *which player you are*, so the league can see
+afterwards. What the code proves is _which player you are_, so the league can see
 who reacted and who voted. See
 [identity and sessions](../foundations/identity-and-sessions.md) for what the
 token it issues is and how long it lasts.
@@ -63,11 +63,11 @@ stateDiagram-v2
 ### Arrive
 
 The roster loads from the server: every active participant, in name order, with a
-tick beside anybody whose code has already been redeemed. *Collectors* — people
+tick beside anybody whose code has already been redeemed. _Collectors_ — people
 who signed in to trade but never ran the course — are filtered out, because there
 is no paper code to type for them.
 
-Which players have been *issued* a code is not shown. The tick means redeemed,
+Which players have been _issued_ a code is not shown. The tick means redeemed,
 not issued, and nothing on the screen distinguishes a player the commissioner has
 never printed a slip for from one whose slip is still in a pocket.
 
@@ -123,7 +123,7 @@ On a wrong code the toast says "That code doesn't match", the field empties, and
 the name you picked stays selected so the only thing to redo is the typing.
 
 A lockout says something different — "Too many tries for this player — wait a few
-minutes." — and the distinction is deliberate: during a lockout the *right* code
+minutes." — and the distinction is deliberate: during a lockout the _right_ code
 fails too, and "doesn't match" would read as a misprinted slip and send somebody
 back to the commissioner for a code that was fine.
 
@@ -132,27 +132,27 @@ to "Could not claim".
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The load-bearing axis. A guest sees the picker and the field, and claiming carries their pulls across. A member sees no form at all, only their name and a way to sign out on this device. An account holder sees the same form, and a successful claim additionally binds the player to the account. A commissioner claims like anybody else; the console is a separate door. | Claiming is itself the change. A member token appearing mid-visit replaces the form with the claimed card. |
-| The event's state (before the combine · running · finished) | No effect. The roster here is the league's list of people, not an event's entry list, so the screen works before, during and after a combine. | A player added or deactivated by the commissioner appears or disappears on the next refetch rather than immediately; the list is held for a minute. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Built for a thumb: a two-column grid of tap targets and one large centred field with autocorrect, autocapitalisation and spellcheck turned off so a phone keyboard cannot help the code into something else. Under presentation mode the page is inert. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                                                                                     | Changed during                                                                                                                                      |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | The load-bearing axis. A guest sees the picker and the field, and claiming carries their pulls across. A member sees no form at all, only their name and a way to sign out on this device. An account holder sees the same form, and a successful claim additionally binds the player to the account. A commissioner claims like anybody else; the console is a separate door. | Claiming is itself the change. A member token appearing mid-visit replaces the form with the claimed card.                                          |
+| The event's state (before the combine · running · finished)       | No effect. The roster here is the league's list of people, not an event's entry list, so the screen works before, during and after a combine.                                                                                                                                                                                                                                  | A player added or deactivated by the commissioner appears or disappears on the next refetch rather than immediately; the list is held for a minute. |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                                                                                                                                                                                                     | No effect.                                                                                                                                          |
+| The device (phone · desktop · reduced motion · presentation mode) | Built for a thumb: a two-column grid of tap targets and one large centred field with autocorrect, autocapitalisation and spellcheck turned off so a phone keyboard cannot help the code into something else. Under presentation mode the page is inert.                                                                                                                        | No effect.                                                                                                                                          |
 
 ## Cancel and interrupt
 
-| Event | Before Claim | After the token is stored |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing is stored. Attempts already spent still count against the limiter. | No effect; the token is on the device and you are already on the vault. |
-| Navigating away inside the app | Same: nothing stored, the attempt count stands. | The token travels with you and every screen redraws as a member. |
-| Reload | The picked name and the typed code are gone; the roster is fetched again. | The token survives — it is in the browser's storage, not in memory. |
-| Backgrounded | An in-flight claim may fail and need retrying. | No effect. Expiry is wall-clock, so the 90 days run while the app is closed. |
-| Network lost mid-request | No token arrives. The attempt may or may not have been counted; the limiter is incremented before the code is compared. | No effect. |
-| The request fails or times out | The toast names it and the form stands. A limiter that is itself down fails open rather than locking the party out. | No effect on the claim. The card upload and the account binding are both allowed to fail silently after it. |
-| The token expires or is cleared | Not applicable. | After 90 days, or a sign-out, the screen offers the form again. The same code still works. |
-| Changed by someone else | The commissioner rotating your code between the roster loading and your tap invalidates the slip in your hand; the answer is the generic one. | A rotated code does not revoke a token already issued from it. That session runs until it expires. |
-| A second tab or device | Both tabs show the same roster. Attempts from both count against the same limit. | A token stored in one tab is picked up by the others. A second device must claim for itself, or sign in. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before Claim                                                                                                                                  | After the token is stored                                                                                   |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing is stored. Attempts already spent still count against the limiter.                                                                    | No effect; the token is on the device and you are already on the vault.                                     |
+| Navigating away inside the app              | Same: nothing stored, the attempt count stands.                                                                                               | The token travels with you and every screen redraws as a member.                                            |
+| Reload                                      | The picked name and the typed code are gone; the roster is fetched again.                                                                     | The token survives — it is in the browser's storage, not in memory.                                         |
+| Backgrounded                                | An in-flight claim may fail and need retrying.                                                                                                | No effect. Expiry is wall-clock, so the 90 days run while the app is closed.                                |
+| Network lost mid-request                    | No token arrives. The attempt may or may not have been counted; the limiter is incremented before the code is compared.                       | No effect.                                                                                                  |
+| The request fails or times out              | The toast names it and the form stands. A limiter that is itself down fails open rather than locking the party out.                           | No effect on the claim. The card upload and the account binding are both allowed to fail silently after it. |
+| The token expires or is cleared             | Not applicable.                                                                                                                               | After 90 days, or a sign-out, the screen offers the form again. The same code still works.                  |
+| Changed by someone else                     | The commissioner rotating your code between the roster loading and your tap invalidates the slip in your hand; the answer is the generic one. | A rotated code does not revoke a token already issued from it. That session runs until it expires.          |
+| A second tab or device                      | Both tabs show the same roster. Attempts from both count against the same limit.                                                              | A token stored in one tab is picked up by the others. A second device must claim for itself, or sign in.    |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                    | No effect.                                                                                                  |
 
 ## Interactions with other systems
 

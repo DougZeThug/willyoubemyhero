@@ -63,7 +63,7 @@ three are answered from caches the screen you are on has usually already filled,
 so the bar costs no extra round trip on most pages.
 
 The trade dot needs a list of what this device has already seen, which lives on
-the phone. That list is read *after* the first paint, so on the very first frame
+the phone. That list is read _after_ the first paint, so on the very first frame
 nothing is marked seen and the dot may appear and then go out — the same
 hydration dance every device preference in this app does.
 
@@ -80,8 +80,8 @@ list arriving, not the tap.
 
 ### While it runs
 
-An offer arriving is delivered by a *nudge*: a broadcast on a private topic that
-carries *nothing at all*. It means "something of yours moved, go and ask
+An offer arriving is delivered by a _nudge_: a broadcast on a private topic that
+carries _nothing at all_. It means "something of yours moved, go and ask
 properly", and asking properly means the same guarded request the screen always
 used. Nothing about the offer travels over the wire; the topic is derived from
 your participant id and the server's own secret, so nobody can work out anybody
@@ -118,27 +118,27 @@ is deliberate: a screen somebody is enjoying is not a screen to interrupt.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Only a member can have a trade dot; a guest has no inbox and no private topic. Both a guest and a member can have a secret dot, because both can hold secrets. The commissioner sees the same two dots as anybody, plus almost every toast in the app. | Claiming a player starts the topic subscription and the dot becomes possible. Signing out drops it and the dot goes quiet. |
-| The event's state (before the combine · running · finished) | No effect on either dot. | No effect. |
-| Dust switched on or off | No effect on the dots. It changes the bar from five columns to six, so both dots move sideways. | The bar reflows live under the thumb. |
-| The device (phone · desktop · reduced motion · presentation mode) | Both dots are drawn on the phone's bottom bar and on the desktop top bar, identically. Under presentation mode the whole bar is faded and inert, dots included. | Neither dot animates, chimes or buzzes under any setting. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                             | Changed during                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Only a member can have a trade dot; a guest has no inbox and no private topic. Both a guest and a member can have a secret dot, because both can hold secrets. The commissioner sees the same two dots as anybody, plus almost every toast in the app. | Claiming a player starts the topic subscription and the dot becomes possible. Signing out drops it and the dot goes quiet. |
+| The event's state (before the combine · running · finished)       | No effect on either dot.                                                                                                                                                                                                                               | No effect.                                                                                                                 |
+| Dust switched on or off                                           | No effect on the dots. It changes the bar from five columns to six, so both dots move sideways.                                                                                                                                                        | The bar reflows live under the thumb.                                                                                      |
+| The device (phone · desktop · reduced motion · presentation mode) | Both dots are drawn on the phone's bottom bar and on the desktop top bar, identically. Under presentation mode the whole bar is faded and inert, dots included.                                                                                        | Neither dot animates, chimes or buzzes under any setting.                                                                  |
 
 ## Cancel and interrupt
 
-| Event | Before the dot is cleared | After it is cleared |
-| --- | --- | --- |
-| Back, or closing a sheet | No effect; the dot is not a screen. | No effect — clearing already happened when the list rendered. |
-| Navigating away inside the app | The dot travels with you; it is on the bar, not on the screen. | Same. |
-| Reload | The dot is recomputed from the server's list and the phone's seen-list. It comes back exactly as it was. | Stays clear, because the seen-list is on the phone. |
-| Backgrounded | The topic subscription may drop. Coming back refetches on focus, so a dot that should have appeared appears then. | Same. |
-| Network lost mid-request | Both dots hold whatever they last knew: a failed refetch leaves the previous answer in place rather than clearing it. A dot that should have appeared while you were offline does not. | No effect. |
-| The request fails or times out | A failed offers read does not retry: an expired member token should surface the claim prompt, not three retries on the way to it. | No effect. |
-| The token expires or is cleared | The trade dot disappears along with the inbox. The secret dot disappears with the identity. | Same. The seen-list stays on the phone and is still correct if the same person claims again. |
-| Changed by someone else | This is how the trade dot appears at all. | An offer accepted or withdrawn elsewhere removes it from your inbox, and the dot goes out on its own. |
-| A second tab or device | Two tabs on one phone share the seen-list: clearing the dot in one clears it in the other. Two *devices* do not — reading an offer on your phone leaves the dot on the tablet indoors. | Same. This is a deliberate trade rather than an oversight: cross-device unread would need a table, a write path and a merge rule. |
-| Reduced motion or presentation mode changes | The bar fades out and becomes inert; the dots go with it. | Same. |
+| Event                                       | Before the dot is cleared                                                                                                                                                              | After it is cleared                                                                                                               |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | No effect; the dot is not a screen.                                                                                                                                                    | No effect — clearing already happened when the list rendered.                                                                     |
+| Navigating away inside the app              | The dot travels with you; it is on the bar, not on the screen.                                                                                                                         | Same.                                                                                                                             |
+| Reload                                      | The dot is recomputed from the server's list and the phone's seen-list. It comes back exactly as it was.                                                                               | Stays clear, because the seen-list is on the phone.                                                                               |
+| Backgrounded                                | The topic subscription may drop. Coming back refetches on focus, so a dot that should have appeared appears then.                                                                      | Same.                                                                                                                             |
+| Network lost mid-request                    | Both dots hold whatever they last knew: a failed refetch leaves the previous answer in place rather than clearing it. A dot that should have appeared while you were offline does not. | No effect.                                                                                                                        |
+| The request fails or times out              | A failed offers read does not retry: an expired member token should surface the claim prompt, not three retries on the way to it.                                                      | No effect.                                                                                                                        |
+| The token expires or is cleared             | The trade dot disappears along with the inbox. The secret dot disappears with the identity.                                                                                            | Same. The seen-list stays on the phone and is still correct if the same person claims again.                                      |
+| Changed by someone else                     | This is how the trade dot appears at all.                                                                                                                                              | An offer accepted or withdrawn elsewhere removes it from your inbox, and the dot goes out on its own.                             |
+| A second tab or device                      | Two tabs on one phone share the seen-list: clearing the dot in one clears it in the other. Two _devices_ do not — reading an offer on your phone leaves the dot on the tablet indoors. | Same. This is a deliberate trade rather than an oversight: cross-device unread would need a table, a write path and a merge rule. |
+| Reduced motion or presentation mode changes | The bar fades out and becomes inert; the dots go with it.                                                                                                                              | Same.                                                                                                                             |
 
 ## Interactions with other systems
 
@@ -169,12 +169,12 @@ appears; that is all.
 **Sharing.** Nothing about a dot is shared or exported.
 
 **The second device.** Server-side facts — is there an offer, is there a secret —
-are the same on both. The *unread* half is per device, so the trade dot can be
+are the same on both. The _unread_ half is per device, so the trade dot can be
 lit on one phone and clear on another.
 
 **Accessibility.** Each badge names its own thing rather than sharing a generic
 "something is waiting": the tab's own label becomes "Trade — a trade offer is
-waiting" or "Pack — a secret is waiting", so a screen reader user is told *what*
+waiting" or "Pack — a secret is waiting", so a screen reader user is told _what_
 without having to go and look. The dot itself is hidden from assistive
 technology, because the wording carries the whole message. Neither dot is a live
 region, so an offer arriving while you are reading elsewhere is not announced —

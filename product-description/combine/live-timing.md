@@ -34,7 +34,7 @@ tally beside it has moved from 4/13 to 5/13.
 ## The clock the crowd watches
 
 The ring is **not** the official time and never becomes it. It counts from the
-moment the commissioner put somebody *on the clock*, which is usually a beat
+moment the commissioner put somebody _on the clock_, which is usually a beat
 before they tap start, so it reads slightly ahead of the number that ends up in
 the record. That gap is expected rather than a fault, and it exists so the big
 screen counts up from something real rather than from whenever the browser
@@ -61,12 +61,12 @@ why.
 That last case is the one this screen is careful about, because four different
 situations used to look identical and it congratulated all of them:
 
-| What is actually true | What the screen says |
-| --- | --- |
-| The roster could not be read | "Couldn't read the roster just now — retrying." |
-| There is no roster yet | "No roster yet. The commissioner sets the field." |
-| Everybody has run | "Every athlete is done. Nice work." |
-| There are athletes still to go | "Nobody on the clock right now." |
+| What is actually true          | What the screen says                              |
+| ------------------------------ | ------------------------------------------------- |
+| The roster could not be read   | "Couldn't read the roster just now — retrying."   |
+| There is no roster yet         | "No roster yet. The commissioner sets the field." |
+| Everybody has run              | "Every athlete is done. Nice work."               |
+| There are athletes still to go | "Nobody on the clock right now."                  |
 
 "Every athlete is done" is only true when there was a field to be done in the
 first place. Before the very first fetch returned, this screen used to print it
@@ -128,7 +128,7 @@ are navigation — an athlete's name, a name in the top five — and dismissing 
 celebration, which affects only that phone and only for the four seconds the
 overlay would otherwise have run.
 
-Everything that *does* write here — start, split, pause, finish, reset — is
+Everything that _does_ write here — start, split, pause, finish, reset — is
 behind the commissioner's controls, which render nothing at all without a valid
 admin token for this combine. See
 [running the clock](../admin/running-the-clock.md).
@@ -172,27 +172,27 @@ same few seconds.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A guest, a member and an account holder see exactly the same screen. A commissioner holding an unexpired admin token for *this* combine additionally gets the timing bar under the ring, and the ring switches to the run they are timing. | An admin token expiring, being cleared, or being minted mid-visit adds or removes the timing bar within a minute without a reload. Nothing a spectator sees changes. |
-| The event's state (before the combine · running · finished) | The load-bearing row. Before it, the ring is on standby and the screen names which kind of nothing it is looking at. During, it is the point of the screen. After, it congratulates the field. | Every transition arrives live. The screen is never reloaded between phases and never needs to be. |
-| Dust switched on or off | No effect. | No effect beyond the bottom bar reflowing underneath. |
-| The device (phone · desktop · reduced motion · presentation mode) | The ring is a fixed 340 pixels whatever the screen; on a desktop the layout widens around it rather than the ring growing. Reduced motion removes the confetti from celebrations and nothing else. | Turning reduced motion on mid-combine takes effect from the next finish, not the one on screen. This screen never enters presentation mode; the big-screen version of it is [the TV board](the-tv-board.md). |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                 | Changed during                                                                                                                                                                                               |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Who you are (guest · member · account · commissioner)             | A guest, a member and an account holder see exactly the same screen. A commissioner holding an unexpired admin token for _this_ combine additionally gets the timing bar under the ring, and the ring switches to the run they are timing. | An admin token expiring, being cleared, or being minted mid-visit adds or removes the timing bar within a minute without a reload. Nothing a spectator sees changes.                                         |
+| The event's state (before the combine · running · finished)       | The load-bearing row. Before it, the ring is on standby and the screen names which kind of nothing it is looking at. During, it is the point of the screen. After, it congratulates the field.                                             | Every transition arrives live. The screen is never reloaded between phases and never needs to be.                                                                                                            |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                                                                 | No effect beyond the bottom bar reflowing underneath.                                                                                                                                                        |
+| The device (phone · desktop · reduced motion · presentation mode) | The ring is a fixed 340 pixels whatever the screen; on a desktop the layout widens around it rather than the ring growing. Reduced motion removes the confetti from celebrations and nothing else.                                         | Turning reduced motion on mid-combine takes effect from the next finish, not the one on screen. This screen never enters presentation mode; the big-screen version of it is [the TV board](the-tv-board.md). |
 
 ## Cancel and interrupt
 
-| Event | Watching | While a celebration holds the screen |
-| --- | --- | --- |
-| Back, or closing a sheet | Leaves the screen. Nothing to cancel. | Tapping the overlay dismisses it. A back gesture leaves the screen and the celebration with it. |
-| Navigating away inside the app | No effect; nothing is in flight. Coming back re-reads the combine. | The celebration is gone and does not resume. Coming back re-marks every official run as seen, so it will not replay. |
-| Reload | The screen rebuilds from scratch: two requests, then the ring. | The celebration is lost and will not fire again — a reload re-establishes the "already seen" baseline. |
-| Backgrounded | The ring stops animating while the tab is hidden and jumps to the correct time on return, because it counts from a stamp rather than accumulating. The live channel may drop; the banner says so. | The four-second timer may not run while hidden, so a celebration can still be on screen when you come back to the phone. Tapping clears it. |
-| Network lost mid-request | Whatever was last drawn stays drawn and stops updating. The ring keeps counting — it needs no network, only the stamp it already has. | No effect. The celebration is entirely local. |
-| The request fails or times out | If nothing had loaded, "Can't reach the combine" with a Try again button. If the screen had already drawn, the degraded banner appears over live-looking but stale content. | No effect. |
-| The token expires or is cleared | For a spectator, no effect — this screen needs no token. A commissioner's expiring token removes the timing bar and reverts the ring to the crowd's clock. | Same. |
-| Changed by someone else, arriving over realtime | The normal case, not an exception. A run starting, finishing, being edited or being reset arrives within a beat and redraws everything: the ring, the name, the top five, the tally. | A finish arriving during a celebration replaces it, and the new finisher gets their own full four seconds. |
-| A second tab or device | Every device watching sees the same thing, within its own clock skew. Two tabs share one connection per browser. | Each device runs its own celebration and dismisses it independently. Dismissing on your phone does not dismiss it on the TV. |
-| Reduced motion or presentation mode changing | Takes effect at the next celebration. | The celebration on screen keeps the confetti it already started. |
+| Event                                           | Watching                                                                                                                                                                                          | While a celebration holds the screen                                                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                        | Leaves the screen. Nothing to cancel.                                                                                                                                                             | Tapping the overlay dismisses it. A back gesture leaves the screen and the celebration with it.                                             |
+| Navigating away inside the app                  | No effect; nothing is in flight. Coming back re-reads the combine.                                                                                                                                | The celebration is gone and does not resume. Coming back re-marks every official run as seen, so it will not replay.                        |
+| Reload                                          | The screen rebuilds from scratch: two requests, then the ring.                                                                                                                                    | The celebration is lost and will not fire again — a reload re-establishes the "already seen" baseline.                                      |
+| Backgrounded                                    | The ring stops animating while the tab is hidden and jumps to the correct time on return, because it counts from a stamp rather than accumulating. The live channel may drop; the banner says so. | The four-second timer may not run while hidden, so a celebration can still be on screen when you come back to the phone. Tapping clears it. |
+| Network lost mid-request                        | Whatever was last drawn stays drawn and stops updating. The ring keeps counting — it needs no network, only the stamp it already has.                                                             | No effect. The celebration is entirely local.                                                                                               |
+| The request fails or times out                  | If nothing had loaded, "Can't reach the combine" with a Try again button. If the screen had already drawn, the degraded banner appears over live-looking but stale content.                       | No effect.                                                                                                                                  |
+| The token expires or is cleared                 | For a spectator, no effect — this screen needs no token. A commissioner's expiring token removes the timing bar and reverts the ring to the crowd's clock.                                        | Same.                                                                                                                                       |
+| Changed by someone else, arriving over realtime | The normal case, not an exception. A run starting, finishing, being edited or being reset arrives within a beat and redraws everything: the ring, the name, the top five, the tally.              | A finish arriving during a celebration replaces it, and the new finisher gets their own full four seconds.                                  |
+| A second tab or device                          | Every device watching sees the same thing, within its own clock skew. Two tabs share one connection per browser.                                                                                  | Each device runs its own celebration and dismisses it independently. Dismissing on your phone does not dismiss it on the TV.                |
+| Reduced motion or presentation mode changing    | Takes effect at the next celebration.                                                                                                                                                             | The celebration on screen keeps the confetti it already started.                                                                            |
 
 Nothing here can be interrupted into a bad state, because nothing on it is a
 transaction. The worst any of these produces is a missed celebration.
@@ -253,7 +253,7 @@ has changed.
   clock skew on the phone, not a stalled run.
 - **An unreadable stamp** — corrupt or missing — holds the ring at zero and drops
   the "Unofficial" label, while the athlete's name is still shown.
-- **An official run with no time** sorts to the *top* of the top five with an em
+- **An official run with no time** sorts to the _top_ of the top five with an em
   dash where its time should be. The leaderboard sorts the same run to the
   bottom.
 - **Athletes out of contention appear in the top five.** Somebody scratched or
@@ -265,7 +265,7 @@ has changed.
   while people are still queueing.
 - **A status the live app never writes.** The archive vocabulary also holds
   disqualified, did-not-play and absent. Picking who is up next only skips
-  *finished* and *scratched*, so an athlete carrying one of the others sits in
+  _finished_ and _scratched_, so an athlete carrying one of the others sits in
   the ring as "Up Next" indefinitely.
 
 ## Open questions and verification

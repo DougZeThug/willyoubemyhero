@@ -41,8 +41,8 @@ experience, not the implementation.
   only when the mechanism changes what the user would expect.
 - Use sentence case for headings.
 - Name the vocabulary consistently. The [glossary](glossary.md) is the source of
-  truth for terms like *tier*, *edition*, *level*, *spare*, *pull*, *league day*,
-  *member*, *guest* and *commissioner*.
+  truth for terms like _tier_, _edition_, _level_, _spare_, _pull_, _league day_,
+  _member_, _guest_ and _commissioner_.
 - Every document ends with the commit of this repo it was verified against and a
   list of open questions.
 - When a behavior is surprising, say so and say why it is that way if the reason
@@ -75,12 +75,12 @@ comparable and nothing is skipped.
 4. **Modifiers.** A table of the variant axis, and what each does when set at
    arrival and when it changes during the interaction:
 
-   | Modifier | At arrival | Changed during |
-   | --- | --- | --- |
-   | Who you are (guest · member · account · commissioner) | | |
-   | The event's state (before the combine · running · finished) | | |
-   | Dust switched on or off | | |
-   | The device (phone · desktop · reduced motion · presentation mode) | | |
+   | Modifier                                                          | At arrival | Changed during |
+   | ----------------------------------------------------------------- | ---------- | -------------- |
+   | Who you are (guest · member · account · commissioner)             |            |                |
+   | The event's state (before the combine · running · finished)       |            |                |
+   | Dust switched on or off                                           |            |                |
+   | The device (phone · desktop · reduced motion · presentation mode) |            |                |
 
 5. **Cancel and interrupt.** The same checklist in every document, in this order:
    - Back, or closing a sheet
@@ -96,6 +96,7 @@ comparable and nothing is skipped.
 
    Every cell filled, even when the answer is "no effect". The columns are the
    phases before and after the first write.
+
 6. **Interactions with other systems.** One bold-led paragraph per concern, in
    this order in every document: **Who you have to be.** **Realtime.**
    **Offline and reconnection.** **Optimistic updates and rollback.** **The card
@@ -162,7 +163,7 @@ Progress is tracked in the [coverage table](#coverage) below.
   description lives inside the repo it describes, so a footer that moved with
   every commit would say nothing; it is pinned deliberately and updated
   deliberately.
-- **`src/components/ui/**` is excluded.** Unmodified shadcn primitives. Where one
+- **`src/components/ui/**` is excluded.\*\* Unmodified shadcn primitives. Where one
   of them shapes an interaction — a sheet that closes on a swipe, a dropdown that
   traps focus — that behavior is described in the document for the feature that
   uses it, not in a document of its own.
@@ -276,62 +277,62 @@ cross-cutting/
 
 Status is one of `not started`, `drafted`, or `verified`.
 
-| Document | Status |
-| --- | --- |
-| glossary.md | drafted |
-| bug-triage.md | drafted |
-| verification/ (8 checklists) | not started |
-| foundations/identity-and-sessions.md | drafted |
-| foundations/the-card.md | drafted |
-| foundations/the-collection.md | drafted |
-| foundations/navigation-and-screens.md | drafted |
-| foundations/the-event.md | drafted |
-| foundations/time-and-the-clock.md | drafted |
-| cards/favourites.md | drafted |
-| cards/the-vault.md | drafted |
-| cards/a-player-card.md | drafted |
-| cards/the-sealed-pack.md | drafted |
-| cards/opening-a-pack.md | drafted |
-| cards/what-you-pulled.md | drafted |
-| cards/the-daily-secret.md | drafted |
-| cards/secret-sets.md | drafted |
-| cards/looking-closer.md | drafted |
-| cards/comparing-cards.md | drafted |
-| cards/collection-trophies.md | drafted |
-| cards/pack-streaks.md | drafted |
-| trading/the-trading-post.md | drafted |
-| trading/making-an-offer.md | drafted |
-| trading/answering-an-offer.md | drafted |
-| trading/the-trade-feed.md | drafted |
-| dust/dust.md | drafted |
-| dust/milling-and-selling.md | drafted |
-| dust/the-shop.md | drafted |
-| dust/the-marketplace.md | drafted |
-| combine/the-leaderboard.md | drafted |
-| combine/live-timing.md | drafted |
-| combine/the-running-order.md | drafted |
-| combine/the-draft.md | drafted |
-| combine/the-awards.md | drafted |
-| combine/analytics-and-the-archive.md | drafted |
-| combine/the-recap.md | drafted |
-| combine/the-tv-board.md | drafted |
-| admin/getting-in.md | drafted |
-| admin/running-the-clock.md | drafted |
-| admin/editing-a-result.md | drafted |
-| admin/the-roster.md | drafted |
-| admin/stations.md | drafted |
-| admin/secret-card-sets.md | drafted |
-| admin/card-artwork.md | drafted |
-| admin/dust-and-ownership.md | drafted |
-| accounts/signing-in.md | drafted |
-| accounts/claiming-your-player.md | drafted |
-| accounts/keeping-your-cards.md | drafted |
-| cross-cutting/realtime-and-staleness.md | drafted |
-| cross-cutting/offline.md | drafted |
-| cross-cutting/motion-and-sound.md | drafted |
+| Document                                  | Status  |
+| ----------------------------------------- | ------- |
+| glossary.md                               | drafted |
+| bug-triage.md                             | drafted |
+| verification/ (8 checklists, 1080 items)  | drafted |
+| foundations/identity-and-sessions.md      | drafted |
+| foundations/the-card.md                   | drafted |
+| foundations/the-collection.md             | drafted |
+| foundations/navigation-and-screens.md     | drafted |
+| foundations/the-event.md                  | drafted |
+| foundations/time-and-the-clock.md         | drafted |
+| cards/favourites.md                       | drafted |
+| cards/the-vault.md                        | drafted |
+| cards/a-player-card.md                    | drafted |
+| cards/the-sealed-pack.md                  | drafted |
+| cards/opening-a-pack.md                   | drafted |
+| cards/what-you-pulled.md                  | drafted |
+| cards/the-daily-secret.md                 | drafted |
+| cards/secret-sets.md                      | drafted |
+| cards/looking-closer.md                   | drafted |
+| cards/comparing-cards.md                  | drafted |
+| cards/collection-trophies.md              | drafted |
+| cards/pack-streaks.md                     | drafted |
+| trading/the-trading-post.md               | drafted |
+| trading/making-an-offer.md                | drafted |
+| trading/answering-an-offer.md             | drafted |
+| trading/the-trade-feed.md                 | drafted |
+| dust/dust.md                              | drafted |
+| dust/milling-and-selling.md               | drafted |
+| dust/the-shop.md                          | drafted |
+| dust/the-marketplace.md                   | drafted |
+| combine/the-leaderboard.md                | drafted |
+| combine/live-timing.md                    | drafted |
+| combine/the-running-order.md              | drafted |
+| combine/the-draft.md                      | drafted |
+| combine/the-awards.md                     | drafted |
+| combine/analytics-and-the-archive.md      | drafted |
+| combine/the-recap.md                      | drafted |
+| combine/the-tv-board.md                   | drafted |
+| admin/getting-in.md                       | drafted |
+| admin/running-the-clock.md                | drafted |
+| admin/editing-a-result.md                 | drafted |
+| admin/the-roster.md                       | drafted |
+| admin/stations.md                         | drafted |
+| admin/secret-card-sets.md                 | drafted |
+| admin/card-artwork.md                     | drafted |
+| admin/dust-and-ownership.md               | drafted |
+| accounts/signing-in.md                    | drafted |
+| accounts/claiming-your-player.md          | drafted |
+| accounts/keeping-your-cards.md            | drafted |
+| cross-cutting/realtime-and-staleness.md   | drafted |
+| cross-cutting/offline.md                  | drafted |
+| cross-cutting/motion-and-sound.md         | drafted |
 | cross-cutting/notifications-and-badges.md | drafted |
-| cross-cutting/sharing.md | drafted |
-| cross-cutting/accessibility.md | drafted |
+| cross-cutting/sharing.md                  | drafted |
+| cross-cutting/accessibility.md            | drafted |
 
 ## Reference
 

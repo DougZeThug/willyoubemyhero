@@ -22,31 +22,31 @@ ladder but never renumbered.
 
 You open a pack on Monday, and again on Tuesday. On Wednesday the pack screen's
 header carries a small flame with a 3 beside it, and under "Today's Pack" it says
-*Day 3 — streak alive.*
+_Day 3 — streak alive._
 
 You rip the pack, walk the cards, and the summary at the end has a new block in
 it: a flame, "Day 3", and a button reading **Claim Three Days**. You tap it. The
 screen goes dark, the flame swells, a number climbs to 3, and a card lands
 face-down and turns over. It is a secret you did not have. One button — "Nice" —
-and you are back on the summary, where the block now says *Streak alive. Come
-back tomorrow.* and, under it, *Day 7 pays Rare or better.*
+and you are back on the summary, where the block now says _Streak alive. Come
+back tomorrow._ and, under it, _Day 7 pays Rare or better._
 
 Miss a day and the flame reads the same number for one more day, with the line
-changed to *open today's pack to keep it alive*. Miss two and it is gone.
+changed to _open today's pack to keep it alive_. Miss two and it is gone.
 
 ## What a streak is
 
 The walk counts back from the last day you opened a pack, one calendar day at a
 time, and stops at the first gap.
 
-**Yesterday still counts.** A run whose last pack was yesterday is alive but *at
-risk*, which is the whole asymmetry the feature turns on — it is what earns the
+**Yesterday still counts.** A run whose last pack was yesterday is alive but _at
+risk_, which is the whole asymmetry the feature turns on — it is what earns the
 line asking you to open today's pack, and what makes that line mean something. A
 run whose last pack was the day before yesterday is gone.
 
 The day in question is the league's, decided in the database, not your phone's.
 The pack you are offered rolls over on the device's local date, because nothing
-is at stake in which pack a handset is dealt; the day it is *recorded* against is
+is at stake in which pack a handset is dealt; the day it is _recorded_ against is
 the league's, because a streak is something you own. See
 [league days](../foundations/time-and-the-clock.md#league-days).
 
@@ -57,13 +57,13 @@ start of a chore.
 
 ## The ladder
 
-| Rung | What it pays |
-| --- | --- |
-| Day 3 | A bonus secret, on the house. No floor — the plain rate. |
-| Day 7 | A bonus secret, Rare or better. |
-| Day 14 | A bonus secret, Epic or better. |
-| Day 30 | A bonus secret, Legendary or better. |
-| Day 100 | A bonus secret, Mythic, guaranteed. |
+| Rung    | What it pays                                             |
+| ------- | -------------------------------------------------------- |
+| Day 3   | A bonus secret, on the house. No floor — the plain rate. |
+| Day 7   | A bonus secret, Rare or better.                          |
+| Day 14  | A bonus secret, Epic or better.                          |
+| Day 30  | A bonus secret, Legendary or better.                     |
+| Day 100 | A bonus secret, Mythic, guaranteed.                      |
 
 Every rung pays exactly one card, and every rung pays a **secret** rather than a
 roster card. That is not a preference: a roster card has to belong to somebody on
@@ -80,8 +80,8 @@ four days while a clean thirty paid four in thirty. Breaking your own streak on
 purpose strictly beat keeping it. Now farming day 3 farms commons, and the thirty
 nobody broke is the only route to a guaranteed legendary.
 
-That promise is printed one rung ahead of wherever you are standing — *Day 7 pays
-Rare or better.* — because a ladder nobody can see is not a reason to come back.
+That promise is printed one rung ahead of wherever you are standing — _Day 7 pays
+Rare or better._ — because a ladder nobody can see is not a reason to come back.
 
 ## The interaction, event by event
 
@@ -140,8 +140,8 @@ password. A milestone buys a permanent collection card, and a device-local guest
 identity is one cleared browser away from taking it with them, so the reward is
 tied to something that survives the handset. A guest with an account can claim; a
 member without one cannot. Without an account the block reads **Sign in to
-claim**, and under it *Three Days is waiting. An account keeps it on every phone
-you play from.* See [signing in](../accounts/signing-in.md).
+claim**, and under it _Three Days is waiting. An account keeps it on every phone
+you play from._ See [signing in](../accounts/signing-in.md).
 
 > Technical note: the account check runs in the server handler and again inside
 > Postgres, and the identity it checks comes off the verified token rather than
@@ -155,7 +155,7 @@ summary stays live.
 
 Then the reveal takes the screen. The flame grows and a number counts up to the
 run's length over about a second, with the rung's promise printed under it —
-*Legendary or better* — because under a card this rung guaranteed, the card's own
+_Legendary or better_ — because under a card this rung guaranteed, the card's own
 base odds would be the odds of the thing that did not happen. Then the card
 arrives face-down, holds for a beat, and turns onto its art.
 
@@ -170,44 +170,44 @@ database call, so there is no state where one landed and another did not — a
 payout that fails takes its claim with it.
 
 The block on the summary moves on to the next thing it has to say: another rung
-if you have one waiting, otherwise *Streak alive. Come back tomorrow.* and the
+if you have one waiting, otherwise _Streak alive. Come back tomorrow._ and the
 promise of the rung above.
 
 The bonus never costs you the day's free pull. It is recorded as a granted card
 rather than a daily one, so the fourth slot is still there.
 
 Failures are said on the button and never in a toast — a toast announces your
-reward to whoever is glancing at the phone over your shoulder. *Already collected
-— it's in your vault.* is the one a real person hits, by tapping twice on a bad
+reward to whoever is glancing at the phone over your shoulder. _Already collected
+— it's in your vault._ is the one a real person hits, by tapping twice on a bad
 connection, and it means the card is already theirs.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A guest builds a real streak and sees the flame, the line and the block; so does a member. Neither can cash a rung until they have an account, and that is still durability rather than a permission level — the guard on the claim reads the same guest or member token as everything else, and the account is a condition on the reward, because a card has to survive the handset. The commissioner's streak is an ordinary member's. | Claiming a player carries the days across, so the flame does not move. Signing up turns the sign-in prompt into a Claim button. |
-| The event's state (before the combine · running · finished) | No effect on the streak. The active event is stamped on a claim for flavour only, and a streak out of season is fine. | No effect. |
-| Dust switched on or off | No effect. A milestone pays a card, never dust, and a duplicate credits nothing at the moment it lands. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | The flame sits in a header row that keeps its height when the pack tears, so nothing slides on the frame the rip is meant to own. Reduced motion skips the count-up and puts the card straight on screen. | The reveal takes the whole screen and fades the nav out under it. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                                                                                                                                               | Changed during                                                                                                                  |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A guest builds a real streak and sees the flame, the line and the block; so does a member. Neither can cash a rung until they have an account, and that is still durability rather than a permission level — the guard on the claim reads the same guest or member token as everything else, and the account is a condition on the reward, because a card has to survive the handset. The commissioner's streak is an ordinary member's. | Claiming a player carries the days across, so the flame does not move. Signing up turns the sign-in prompt into a Claim button. |
+| The event's state (before the combine · running · finished)       | No effect on the streak. The active event is stamped on a claim for flavour only, and a streak out of season is fine.                                                                                                                                                                                                                                                                                                                    | No effect.                                                                                                                      |
+| Dust switched on or off                                           | No effect. A milestone pays a card, never dust, and a duplicate credits nothing at the moment it lands.                                                                                                                                                                                                                                                                                                                                  | No effect.                                                                                                                      |
+| The device (phone · desktop · reduced motion · presentation mode) | The flame sits in a header row that keeps its height when the pack tears, so nothing slides on the frame the rip is meant to own. Reduced motion skips the count-up and puts the card straight on screen.                                                                                                                                                                                                                                | The reveal takes the whole screen and fades the nav out under it.                                                               |
 
 ## Cancel and interrupt
 
-| Event | Before Claim | After Claim |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel; the rung stays claimable. | The card is already yours. Dismissing the reveal ends it and does not undo it. |
-| Navigating away inside the app | Same. The block is where you left it. | Same. The card is in your vault. |
-| Reload | The streak is refetched. Nothing was pending. | The reveal does not come back — a reload during it is the same as dismissing it. The card is unaffected. |
-| Backgrounded | No effect. On return the streak refetches on focus. | The reveal's beats are on timers, so it may be waiting at its end. Nothing is lost. |
-| Network lost mid-request | The button says *No signal. Tap to try again.* Nothing was written. | A claim whose answer never came back may still have landed. Tapping again returns *Already collected — it's in your vault.* rather than paying twice. |
-| The request fails or times out | The reason is printed under the button: the streak is not there yet, there is nothing to give out right now, or sign in first. None is a failure worth retrying differently. | Same. |
-| The token expires or is cleared | The flame goes blank and the block disappears, rather than the screen retrying behind a spinner. The days are still recorded against the identity. | The card belongs to the identity that claimed it, not to the device. |
-| Changed by someone else | Nobody else can affect your streak. A commissioner retiring a secret card removes it from what a milestone can pay, never from anybody's vault. | Same. |
-| A second tab or device | Both read the same streak. | Both tabs see the same claim; only one of them pays. Two connections racing the same rung produce one claim and one card. |
-| Reduced motion or presentation mode changes | No effect. | The preference is read when the reveal opens, so flipping it mid-reveal changes nothing until the next one. |
+| Event                                       | Before Claim                                                                                                                                                                 | After Claim                                                                                                                                           |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel; the rung stays claimable.                                                                                                                                 | The card is already yours. Dismissing the reveal ends it and does not undo it.                                                                        |
+| Navigating away inside the app              | Same. The block is where you left it.                                                                                                                                        | Same. The card is in your vault.                                                                                                                      |
+| Reload                                      | The streak is refetched. Nothing was pending.                                                                                                                                | The reveal does not come back — a reload during it is the same as dismissing it. The card is unaffected.                                              |
+| Backgrounded                                | No effect. On return the streak refetches on focus.                                                                                                                          | The reveal's beats are on timers, so it may be waiting at its end. Nothing is lost.                                                                   |
+| Network lost mid-request                    | The button says _No signal. Tap to try again._ Nothing was written.                                                                                                          | A claim whose answer never came back may still have landed. Tapping again returns _Already collected — it's in your vault._ rather than paying twice. |
+| The request fails or times out              | The reason is printed under the button: the streak is not there yet, there is nothing to give out right now, or sign in first. None is a failure worth retrying differently. | Same.                                                                                                                                                 |
+| The token expires or is cleared             | The flame goes blank and the block disappears, rather than the screen retrying behind a spinner. The days are still recorded against the identity.                           | The card belongs to the identity that claimed it, not to the device.                                                                                  |
+| Changed by someone else                     | Nobody else can affect your streak. A commissioner retiring a secret card removes it from what a milestone can pay, never from anybody's vault.                              | Same.                                                                                                                                                 |
+| A second tab or device                      | Both read the same streak.                                                                                                                                                   | Both tabs see the same claim; only one of them pays. Two connections racing the same rung produce one claim and one card.                             |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                                                   | The preference is read when the reveal opens, so flipping it mid-reveal changes nothing until the next one.                                           |
 
 ## Interactions with other systems
 
-**Who you have to be.** Anybody the server can name to *have* a streak — a
+**Who you have to be.** Anybody the server can name to _have_ a streak — a
 member, or a guest with a signed identity. To cash one, that same identity has to
 have an account behind it. The identity is taken from the verified token in both
 directions; there is no parameter for it anywhere, and the account check is made
@@ -271,8 +271,8 @@ and its failure text sits next to it rather than arriving as a toast.
   was rebuilt is genuinely a new run. Claims are keyed to the run's first day.
 - **A guest history merged in behind an existing run.** Claiming a player can
   push a run's first day backwards. A rung already paid on that run stays paid.
-- **Nothing in the catalogue to give.** *Nothing to give out right now. Try again
-  in a bit.* No claim is filed and nothing is spent, so the rung is still there
+- **Nothing in the catalogue to give.** _Nothing to give out right now. Try again
+  in a bit._ No claim is filed and nothing is spent, so the rung is still there
   when there is something to pay it with.
 - **A capstone that can only be a duplicate.** It still rolls mythic, and a
   duplicate that rolled better upgrades the copy in the vault.

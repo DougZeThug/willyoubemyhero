@@ -47,7 +47,7 @@ do, alongside the claim screen and the admin console.
 
 The app does have a mechanism for a screen claiming the whole device. A screen
 playing something cinematic raises a flag; the top bar and the bottom bar fade to
-nothing and become *inert* — faded and unreachable rather than unmounted, because
+nothing and become _inert_ — faded and unreachable rather than unmounted, because
 unmounting the header reflows every page under it and the flag flips
 mid-ceremony. Exactly one thing uses it today: the pack ceremony.
 
@@ -123,27 +123,27 @@ complete" state. The board simply becomes the result.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | No effect. Everything on the board is public and identical for everybody. The commissioner sees no extra controls here; the clock is run from [the admin screens](../admin/running-the-clock.md) on a phone. | No effect. |
-| The event's state (before the combine · running · finished) | This is the axis the board exists for. Before the first official time it shows its empty panel; during, it reorders as people finish; after, it holds the final order. | Changes arrive live and in place. Nothing needs reloading between phases. |
-| Dust switched on or off | No effect on the board. The bottom bar showing underneath it gains or loses the Shop tab. | No effect beyond that reflow. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                           | Changed during                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | No effect. Everything on the board is public and identical for everybody. The commissioner sees no extra controls here; the clock is run from [the admin screens](../admin/running-the-clock.md) on a phone.                                                                                         | No effect.                                                                                                                                                                                                                                      |
+| The event's state (before the combine · running · finished)       | This is the axis the board exists for. Before the first official time it shows its empty panel; during, it reorders as people finish; after, it holds the final order.                                                                                                                               | Changes arrive live and in place. Nothing needs reloading between phases.                                                                                                                                                                       |
+| Dust switched on or off                                           | No effect on the board. The bottom bar showing underneath it gains or loses the Shop tab.                                                                                                                                                                                                            | No effect beyond that reflow.                                                                                                                                                                                                                   |
 | The device (phone · desktop · reduced motion · presentation mode) | Everything is sized for distance and none of it scales to the screen: the same two columns and the same enormous type appear on a phone, where the board is cramped and mostly unusable. Nothing on the board animates, so reduced motion changes nothing. The board never raises presentation mode. | If the browser driving the television is signed in as a member and a set completes, the trophy ceremony takes the whole screen — including this one — because that ceremony lives above every route. It hands the screen back when it finishes. |
 
 ## Cancel and interrupt
 
-| Event | Before any press | After a press |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | "Try again" cannot be cancelled; it is one request and it either answers or fails again. |
-| Navigating away inside the app | No effect. Following a player's name is the only way it happens from here. | No effect. |
-| Reload | The bundle and the artwork are fetched again from scratch. On a fresh browser this means the big "Reading the combine…" state for a moment. | Same. |
-| Backgrounded | A television does not background, but a laptop that sleeps will. The live feed drops and the polling underneath it pauses while the tab is hidden. | Same. Waking the machine refetches and the board catches up. |
-| Network lost mid-request | The board keeps its last numbers and puts the banner up. It does not blank. | Same. |
-| The request fails or times out | With nothing cached, the whole screen becomes "Can't reach the combine" and a button. With something cached, a banner. | Same. |
-| The token expires or is cleared | No effect. The board reads no token of any kind. | No effect. |
-| Changed by someone else | The normal case. Every change to the combine is somebody else's, and the board is built for it. | Same. |
-| A second tab or device | Two televisions show the same board within a beat of each other. | Same. |
-| Reduced motion or presentation mode changes | No effect on the board itself. | A ceremony raised elsewhere in the app on the same browser fades the board's own chrome out and dims the board behind it. |
+| Event                                       | Before any press                                                                                                                                   | After a press                                                                                                             |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel.                                                                                                                                 | "Try again" cannot be cancelled; it is one request and it either answers or fails again.                                  |
+| Navigating away inside the app              | No effect. Following a player's name is the only way it happens from here.                                                                         | No effect.                                                                                                                |
+| Reload                                      | The bundle and the artwork are fetched again from scratch. On a fresh browser this means the big "Reading the combine…" state for a moment.        | Same.                                                                                                                     |
+| Backgrounded                                | A television does not background, but a laptop that sleeps will. The live feed drops and the polling underneath it pauses while the tab is hidden. | Same. Waking the machine refetches and the board catches up.                                                              |
+| Network lost mid-request                    | The board keeps its last numbers and puts the banner up. It does not blank.                                                                        | Same.                                                                                                                     |
+| The request fails or times out              | With nothing cached, the whole screen becomes "Can't reach the combine" and a button. With something cached, a banner.                             | Same.                                                                                                                     |
+| The token expires or is cleared             | No effect. The board reads no token of any kind.                                                                                                   | No effect.                                                                                                                |
+| Changed by someone else                     | The normal case. Every change to the combine is somebody else's, and the board is built for it.                                                    | Same.                                                                                                                     |
+| A second tab or device                      | Two televisions show the same board within a beat of each other.                                                                                   | Same.                                                                                                                     |
+| Reduced motion or presentation mode changes | No effect on the board itself.                                                                                                                     | A ceremony raised elsewhere in the app on the same browser fades the board's own chrome out and dims the board behind it. |
 
 ## Interactions with other systems
 
@@ -186,7 +186,7 @@ link, which is fine on a laptop and pointless on a television.
 
 ## Edge cases
 
-- **An official run with no time recorded** sorts to the *top* of the board and
+- **An official run with no time recorded** sorts to the _top_ of the board and
   prints a dash where the time should be, so an incomplete run can appear to be
   leading.
 - **A run whose player is not on the roster** draws a row with a dash for a name

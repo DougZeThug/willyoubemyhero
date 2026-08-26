@@ -6,15 +6,15 @@ claim at a time.
 
 ## What is here
 
-| File | Covers |
-| --- | --- |
-| [foundations.md](foundations.md) | `foundations/*` — prefix `FND` |
-| [cards.md](cards.md) | `cards/*` — prefix `VLT` |
-| [trading.md](trading.md) | `trading/*` — prefix `TRD` |
-| [dust.md](dust.md) | `dust/*` — prefix `DST` |
-| [combine.md](combine.md) | `combine/*` — prefix `CMB` |
-| [admin.md](admin.md) | `admin/*` — prefix `ADM` |
-| [accounts.md](accounts.md) | `accounts/*` — prefix `ACC` |
+| File                                 | Covers                           |
+| ------------------------------------ | -------------------------------- |
+| [foundations.md](foundations.md)     | `foundations/*` — prefix `FND`   |
+| [cards.md](cards.md)                 | `cards/*` — prefix `VLT`         |
+| [trading.md](trading.md)             | `trading/*` — prefix `TRD`       |
+| [dust.md](dust.md)                   | `dust/*` — prefix `DST`          |
+| [combine.md](combine.md)             | `combine/*` — prefix `CMB`       |
+| [admin.md](admin.md)                 | `admin/*` — prefix `ADM`         |
+| [accounts.md](accounts.md)           | `accounts/*` — prefix `ACC`      |
 | [cross-cutting.md](cross-cutting.md) | `cross-cutting/*` — prefix `XCT` |
 
 Each file has one table per document. Each row is an item with a stable ID, a

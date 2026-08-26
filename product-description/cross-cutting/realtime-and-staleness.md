@@ -40,7 +40,7 @@ already has it open, it joins that rather than opening a second, and is told the
 current health immediately — so arriving on a degraded page shows the banner on
 the first frame instead of pretending everything is fine for a second.
 
-Health starts at *connecting*, which is deliberately not the same as degraded. If
+Health starts at _connecting_, which is deliberately not the same as degraded. If
 it were, every page load would flash an offline banner before the socket had had
 a chance to answer.
 
@@ -102,7 +102,7 @@ nobody.
 - **A finished set.** A trophy row appearing is the notification — see
   [collection trophies](../cards/collection-trophies.md) — which is how a set
   closed by an admin grant or by the far side of a trade still gets its ceremony.
-- **An offer waiting for you**, by a different route: a *nudge*, described in
+- **An offer waiting for you**, by a different route: a _nudge_, described in
   [notifications and badges](notifications-and-badges.md).
 
 ## What does not
@@ -121,27 +121,27 @@ nobody.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The combine feed is public and identical for everyone. Only a member has a private topic to be nudged on, so only a member gets live offers, sales and dust. | Claiming a player starts a topic subscription that a guest never had. Signing out drops it. |
-| The event's state (before the combine · running · finished) | Before and after the combine almost nothing changes, so the feed is quiet and its health is invisible. | Race day is the only time any of this is load-bearing, which is also the only time the signal is bad. |
-| Dust switched on or off | No effect on what arrives. | Flipping it reflows the nav on every phone within a minute, because the event is refetched rather than pushed. |
-| The device (phone · desktop · reduced motion · presentation mode) | No effect. A hidden tab does not poll. | A screen under presentation mode still refetches; the ceremony simply covers it. |
+| Modifier                                                          | At arrival                                                                                                                                                   | Changed during                                                                                                 |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | The combine feed is public and identical for everyone. Only a member has a private topic to be nudged on, so only a member gets live offers, sales and dust. | Claiming a player starts a topic subscription that a guest never had. Signing out drops it.                    |
+| The event's state (before the combine · running · finished)       | Before and after the combine almost nothing changes, so the feed is quiet and its health is invisible.                                                       | Race day is the only time any of this is load-bearing, which is also the only time the signal is bad.          |
+| Dust switched on or off                                           | No effect on what arrives.                                                                                                                                   | Flipping it reflows the nav on every phone within a minute, because the event is refetched rather than pushed. |
+| The device (phone · desktop · reduced motion · presentation mode) | No effect. A hidden tab does not poll.                                                                                                                       | A screen under presentation mode still refetches; the ceremony simply covers it.                               |
 
 ## Cancel and interrupt
 
-| Event | Before a change arrives | After it arrives |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel; watching writes nothing. | The refreshed data is already in the cache and is there when you return. |
-| Navigating away inside the app | The channel is held through a short grace period rather than closed, so a fast tab-to-tab costs no reconnect. | The new screen shares the same cache and sees the change without asking again. |
-| Reload | Everything in memory is gone; both requests are made from scratch and the channel is opened fresh. | Same. |
-| Backgrounded | The poll stops while the tab is hidden and the socket may drop. | Coming back refetches on focus, so a phone out of a pocket gets the current picture before you have finished looking at it. |
-| Network lost mid-request | The health state goes degraded, the banner appears on the five screens that carry it, and the last-fetched picture stays on screen. | Cached data stays; it simply stops updating. Nothing is wiped to an empty state. |
-| The request fails or times out | A whole-request failure shows "Can't reach the combine" with a **Try again**. A single table failing is named rather than silently rendered as empty. | Same. The wording says "Nothing is lost — this screen is read-only". |
-| The token expires or is cleared | No effect on the combine feed, which needs no token. A member's private topic stops being subscribed, so offers and sales fall back to focus refetch. | Same. |
-| Changed by someone else | This is the normal case, not an exception. Every combine screen is built for it. | The screen refetches and redraws. |
-| A second tab or device | Each browser holds its own channel and its own poll; both see the same changes. Two tabs on one phone each keep their own copy. | Same. |
-| Reduced motion or presentation mode changes | No effect on delivery. | No effect. A change landing mid-ceremony is applied to the screen underneath it. |
+| Event                                       | Before a change arrives                                                                                                                               | After it arrives                                                                                                            |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel; watching writes nothing.                                                                                                           | The refreshed data is already in the cache and is there when you return.                                                    |
+| Navigating away inside the app              | The channel is held through a short grace period rather than closed, so a fast tab-to-tab costs no reconnect.                                         | The new screen shares the same cache and sees the change without asking again.                                              |
+| Reload                                      | Everything in memory is gone; both requests are made from scratch and the channel is opened fresh.                                                    | Same.                                                                                                                       |
+| Backgrounded                                | The poll stops while the tab is hidden and the socket may drop.                                                                                       | Coming back refetches on focus, so a phone out of a pocket gets the current picture before you have finished looking at it. |
+| Network lost mid-request                    | The health state goes degraded, the banner appears on the five screens that carry it, and the last-fetched picture stays on screen.                   | Cached data stays; it simply stops updating. Nothing is wiped to an empty state.                                            |
+| The request fails or times out              | A whole-request failure shows "Can't reach the combine" with a **Try again**. A single table failing is named rather than silently rendered as empty. | Same. The wording says "Nothing is lost — this screen is read-only".                                                        |
+| The token expires or is cleared             | No effect on the combine feed, which needs no token. A member's private topic stops being subscribed, so offers and sales fall back to focus refetch. | Same.                                                                                                                       |
+| Changed by someone else                     | This is the normal case, not an exception. Every combine screen is built for it.                                                                      | The screen refetches and redraws.                                                                                           |
+| A second tab or device                      | Each browser holds its own channel and its own poll; both see the same changes. Two tabs on one phone each keep their own copy.                       | Same.                                                                                                                       |
+| Reduced motion or presentation mode changes | No effect on delivery.                                                                                                                                | No effect. A change landing mid-ceremony is applied to the screen underneath it.                                            |
 
 ## Interactions with other systems
 

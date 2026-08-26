@@ -68,7 +68,7 @@ wants the event joins the same one rather than opening its own.
 
 Three health states, and the difference matters to what the user sees:
 
-- **Connecting** — before the socket has answered. Deliberately *not* treated as
+- **Connecting** — before the socket has answered. Deliberately _not_ treated as
   degraded, because counting it would flash an offline banner on every page load.
 - **Live** — changes arrive as they happen. A slow poll runs underneath as a
   backstop, once every fifteen seconds, one timer per event rather than one per
@@ -123,7 +123,7 @@ one of them is guarded by an admin token bound to this event.
 
 A commissioner's write lands in the database, the live channel notices, and every
 device watching that event refetches. There is no per-item push: the screen is
-told that *something* changed and asks for the picture again.
+told that _something_ changed and asks for the picture again.
 
 ### It settles
 
@@ -133,27 +133,27 @@ reordering itself as people finish.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The bundle is public and identical for everyone. Only the commissioner can change it. | Claiming or signing in does not change what the bundle contains. |
-| The event's state (before the combine · running · finished) | This axis *is* the bundle's content. Before any official run every card is base and the board is empty; during, both change live; after, everything settles. | Changes arrive live; no screen needs reloading between phases. |
-| Dust switched on or off | Read off the event, so it arrives with everything else. | Flipping it reflows the nav and enables or disables every dust screen. |
-| The device (phone · desktop · reduced motion · presentation mode) | No effect on the data. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                   | Changed during                                                         |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | The bundle is public and identical for everyone. Only the commissioner can change it.                                                                        | Claiming or signing in does not change what the bundle contains.       |
+| The event's state (before the combine · running · finished)       | This axis _is_ the bundle's content. Before any official run every card is base and the board is empty; during, both change live; after, everything settles. | Changes arrive live; no screen needs reloading between phases.         |
+| Dust switched on or off                                           | Read off the event, so it arrives with everything else.                                                                                                      | Flipping it reflows the nav and enables or disables every dust screen. |
+| The device (phone · desktop · reduced motion · presentation mode) | No effect on the data.                                                                                                                                       | No effect.                                                             |
 
 ## Cancel and interrupt
 
-| Event | Before a change lands | After |
-| --- | --- | --- |
-| Back, or closing a sheet | No effect; reading the event writes nothing. | No effect. |
-| Navigating away inside the app | The channel is held through a grace period rather than closed. | The new screen shares the same channel and cache. |
-| Reload | Both requests are made again from scratch. | Same. |
-| Backgrounded | Realtime may drop; the health state goes degraded and a banner appears on return. | Regaining focus refetches the bundle. |
-| Network lost mid-request | The bundle fails and the screen shows its error state. | Cached data stays on screen; it simply stops updating. |
-| The request fails or times out | A per-table failure is named in the bundle; a whole-request failure surfaces as the screen's error. | Same. |
-| The token expires or is cleared | No effect. The bundle needs no token. | A commissioner's writes start refusing, which is what the console shows. |
-| Changed by someone else | This is the normal case, not an exception: a live combine changes constantly and every screen is built for it. | The screen refetches and redraws. |
-| A second tab or device | Each browser holds its own channel; every device sees the same changes. | Same. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before a change lands                                                                                          | After                                                                    |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Back, or closing a sheet                    | No effect; reading the event writes nothing.                                                                   | No effect.                                                               |
+| Navigating away inside the app              | The channel is held through a grace period rather than closed.                                                 | The new screen shares the same channel and cache.                        |
+| Reload                                      | Both requests are made again from scratch.                                                                     | Same.                                                                    |
+| Backgrounded                                | Realtime may drop; the health state goes degraded and a banner appears on return.                              | Regaining focus refetches the bundle.                                    |
+| Network lost mid-request                    | The bundle fails and the screen shows its error state.                                                         | Cached data stays on screen; it simply stops updating.                   |
+| The request fails or times out              | A per-table failure is named in the bundle; a whole-request failure surfaces as the screen's error.            | Same.                                                                    |
+| The token expires or is cleared             | No effect. The bundle needs no token.                                                                          | A commissioner's writes start refusing, which is what the console shows. |
+| Changed by someone else                     | This is the normal case, not an exception: a live combine changes constantly and every screen is built for it. | The screen refetches and redraws.                                        |
+| A second tab or device                      | Each browser holds its own channel; every device sees the same changes.                                        | Same.                                                                    |
+| Reduced motion or presentation mode changes | No effect.                                                                                                     | No effect.                                                               |
 
 ## Interactions with other systems
 

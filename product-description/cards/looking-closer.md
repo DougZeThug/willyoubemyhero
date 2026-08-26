@@ -36,13 +36,13 @@ dragging pans the magnified art instead. Double tap and you are back at 1x.
 The card and the magnifier around it are two separate things, and they divide the
 screen by state rather than by area.
 
-| At 1x | Magnified |
-| --- | --- |
-| The card leans under a finger or a mouse | The card is flat and inert |
-| A drag tilts and does not scroll the page | A drag pans the card |
+| At 1x                                          | Magnified                           |
+| ---------------------------------------------- | ----------------------------------- |
+| The card leans under a finger or a mouse       | The card is flat and inert          |
+| A drag tilts and does not scroll the page      | A drag pans the card                |
 | A fast horizontal swipe steps to the next card | A drag is a pan and never navigates |
-| A tap turns the card over | A tap still turns the card over |
-| A double tap magnifies to 2.4x | A double tap returns to 1x |
+| A tap turns the card over                      | A tap still turns the card over     |
+| A double tap magnifies to 2.4x                 | A double tap returns to 1x          |
 
 > Technical note: the hero card claims the entire touch gesture — the page will
 > not scroll while a finger is on it. That is not tuning, it is the only option:
@@ -142,27 +142,27 @@ the screen resets everything.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | No effect. Handling a card asks for no identity. What identity decides is whether there is a face-up card to handle — a card you have not pulled has no magnifier around it at all, because there is nothing to pinch. | No effect. |
-| The event's state (before the combine · running · finished) | The tier decides the foil pattern, the bezel, the resting crawl and the chime, so a card's behaviour changes as its tier does. | A tier changing mid-combine redraws the card without interrupting a gesture in progress. |
-| Dust switched on or off | No effect. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                                                                          | Changed during                                                                                                                                                         |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | No effect. Handling a card asks for no identity. What identity decides is whether there is a face-up card to handle — a card you have not pulled has no magnifier around it at all, because there is nothing to pinch.                                                                                                                                              | No effect.                                                                                                                                                             |
+| The event's state (before the combine · running · finished)       | The tier decides the foil pattern, the bezel, the resting crawl and the chime, so a card's behaviour changes as its tier does.                                                                                                                                                                                                                                      | A tier changing mid-combine redraws the card without interrupting a gesture in progress.                                                                               |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                                                                                                                                                                                          | No effect.                                                                                                                                                             |
 | The device (phone · desktop · reduced motion · presentation mode) | On a mouse, hover alone tilts and there is no permission prompt anywhere. On a phone the card must be touched, and a thumb's travel is amplified because a thumb wiggles a centimetre where a mouse sweeps the whole card. Reduced motion switches off the tilt, the resting crawl, the foil bloom and the turn's animation — a card still changes face, instantly. | Reduced motion is a live subscription: flipping the OS setting while a card is on screen takes effect immediately, and does not itself count as the card turning over. |
 
 ## Cancel and interrupt
 
-| Event | Before anything is stored | After |
-| --- | --- | --- |
-| Back, or closing a sheet | The card eases home. Nothing is lost, because nothing was held. | Not applicable — nothing about handling a card is stored. |
-| Navigating away inside the app | The zoom and the face reset. Tilt survives, because it belongs to the page rather than to the card. | Same. |
-| Reload | Everything resets: flat, face up, 1x, Tilt off. On a phone the motion permission itself is remembered by the browser, so turning Tilt back on may not prompt again. | Same. |
-| Backgrounded | The card stops receiving orientation events and any animation pauses. It resumes where it was. | Same. |
-| Network lost mid-request | No effect. None of these gestures makes a request. A card whose art never arrived shows the player's initials and still tilts, zooms and turns. | No effect. |
-| The request fails or times out | Not applicable. Where the artwork itself fails, the card steps down through smaller renditions before giving up, so a stalled fetch is usually invisible. | Not applicable. |
-| The token expires or is cleared | No effect on the gestures. A member's card can become a face-down slot underneath them, which removes the magnifier because there is nothing to look at. | Not applicable. |
-| Changed by someone else | A tier arriving over realtime restyles the card mid-gesture. It does not interrupt a drag, a pinch or a turn. | Not applicable. |
-| A second tab or device | Nothing is shared. Two tabs handle their own cards independently; the sound setting is the only thing that crosses between them. | Not applicable. |
-| Reduced motion or presentation mode changes | Reduced motion switching on mid-drag stops the card responding and it stays where the last frame put it until released. A ceremony taking the screen leaves the card as it was underneath. | Not applicable. |
+| Event                                       | Before anything is stored                                                                                                                                                                  | After                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| Back, or closing a sheet                    | The card eases home. Nothing is lost, because nothing was held.                                                                                                                            | Not applicable — nothing about handling a card is stored. |
+| Navigating away inside the app              | The zoom and the face reset. Tilt survives, because it belongs to the page rather than to the card.                                                                                        | Same.                                                     |
+| Reload                                      | Everything resets: flat, face up, 1x, Tilt off. On a phone the motion permission itself is remembered by the browser, so turning Tilt back on may not prompt again.                        | Same.                                                     |
+| Backgrounded                                | The card stops receiving orientation events and any animation pauses. It resumes where it was.                                                                                             | Same.                                                     |
+| Network lost mid-request                    | No effect. None of these gestures makes a request. A card whose art never arrived shows the player's initials and still tilts, zooms and turns.                                            | No effect.                                                |
+| The request fails or times out              | Not applicable. Where the artwork itself fails, the card steps down through smaller renditions before giving up, so a stalled fetch is usually invisible.                                  | Not applicable.                                           |
+| The token expires or is cleared             | No effect on the gestures. A member's card can become a face-down slot underneath them, which removes the magnifier because there is nothing to look at.                                   | Not applicable.                                           |
+| Changed by someone else                     | A tier arriving over realtime restyles the card mid-gesture. It does not interrupt a drag, a pinch or a turn.                                                                              | Not applicable.                                           |
+| A second tab or device                      | Nothing is shared. Two tabs handle their own cards independently; the sound setting is the only thing that crosses between them.                                                           | Not applicable.                                           |
+| Reduced motion or presentation mode changes | Reduced motion switching on mid-drag stops the card responding and it stays where the last frame put it until released. A ceremony taking the screen leaves the card as it was underneath. | Not applicable.                                           |
 
 ## Interactions with other systems
 

@@ -5,7 +5,7 @@
 Thirteen names is the whole app. The roster panel on
 [the console](getting-in.md) is where those names are added, taken out of the
 field, put back in, dropped altogether, and — separately — handed the paper codes
-that turn a person on a list into a *member* with a phone of their own.
+that turn a person on a list into a _member_ with a phone of their own.
 
 Two panels, two very different risks. The roster panel is forgiving: a person
 taken out of the field keeps their card, their page and their history, and can be
@@ -23,7 +23,7 @@ header keeps a running count: "12 in · 1 out".
 
 **Taking somebody out.** Each row carries a button reading **In** or **Out**,
 which says where that person currently stands rather than what the tap will do.
-Tapping it flips them. Out means *scratched* — struck through in the list, gone
+Tapping it flips them. Out means _scratched_ — struck through in the list, gone
 from the field, off the leaderboard, out of contention for every tier. The
 person, their card and their page are untouched either way, and the opposite tap
 brings them straight back.
@@ -82,7 +82,7 @@ Five taps write, and they are not equally reversible.
 **Add to event** creates the person and then attaches them to this event at the
 end of the running order. Two writes, in that order.
 
-**The In/Out button** flips one athlete between *scratched* and the queue. It is
+**The In/Out button** flips one athlete between _scratched_ and the queue. It is
 a single field, and the opposite tap puts it back.
 
 **The bin icon** asks first — "Remove NAME from this event?" — and then does one
@@ -133,27 +133,27 @@ per-player Issue buttons are not reachable until the page is left and returned t
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Commissioner only, with a token bound to this event. Every write here refuses a token naming a different combine. Nobody else can see the panels at all, and the codes are never returned to any other reader. | A token expiring closes the console back to [the gate](getting-in.md). An issued list already on screen goes with it. |
-| The event's state (before the combine · running · finished) | Before the combine this is the setup screen. Mid-combine the same controls work, and the timing console's queue follows them live. | Adding somebody mid-combine puts them at the end of the running order, and they appear in the queue immediately. Scratching the athlete currently on the clock removes them from the queue but does not stop a run in progress. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Panels are collapsed on a phone and always open on desktop. The issued list scrolls inside its own box on a phone. | No effect on the writes. Copying to the clipboard depends on the browser allowing it, which is the one device-shaped failure here. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                     | Changed during                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Commissioner only, with a token bound to this event. Every write here refuses a token naming a different combine. Nobody else can see the panels at all, and the codes are never returned to any other reader. | A token expiring closes the console back to [the gate](getting-in.md). An issued list already on screen goes with it.                                                                                                           |
+| The event's state (before the combine · running · finished)       | Before the combine this is the setup screen. Mid-combine the same controls work, and the timing console's queue follows them live.                                                                             | Adding somebody mid-combine puts them at the end of the running order, and they appear in the queue immediately. Scratching the athlete currently on the clock removes them from the queue but does not stop a run in progress. |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                                     | No effect.                                                                                                                                                                                                                      |
+| The device (phone · desktop · reduced motion · presentation mode) | Panels are collapsed on a phone and always open on desktop. The issued list scrolls inside its own box on a phone.                                                                                             | No effect on the writes. Copying to the clipboard depends on the browser allowing it, which is the one device-shaped failure here.                                                                                              |
 
 ## Cancel and interrupt
 
-| Event | Before the tap | After the tap |
-| --- | --- | --- |
-| Back, or closing a sheet | The confirmation dialog cancels cleanly and writes nothing. | Nothing to undo. In/Out is reversed by tapping again; a code is not reversible at all. |
-| Navigating away inside the app | Nothing typed into the Add boxes survives, and nothing is written. | The roster change stands. **An issued code list is gone**, and the codes it showed are already the live ones. |
-| Reload | Same: the boxes empty, nothing written. | Same. The roster is re-read from the league; the code list is not, because it was never stored. |
-| Backgrounded | No effect. | No effect on the league. A phone that discards the tab while an issued list is on screen loses it exactly as a reload would. |
-| Network lost mid-request | Nothing is written and the panel says it could not. | For adding a player, the two writes are separate: the person may exist without being attached to the event. For issuing, part of the roster may have been rotated — see the edge cases. |
-| The request fails or times out | The panel raises the reason as a toast and leaves the boxes as they were. | Same. A failed issue reports "Could not generate codes" and shows no codes, whether or not any were written. |
-| The token expires or is cleared | The console falls back to the gate; nothing is written. | The change already made stands. |
-| Changed by someone else | Another commissioner's roster edit arrives over realtime and redraws the list. | Same. There is no locking: two people editing one roster is last-write-wins, per field. |
-| A second tab or device | Both show the same roster. | A roster change appears in the other tab. **An issued code list does not** — it exists only on the tab that issued it. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the tap                                                                 | After the tap                                                                                                                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | The confirmation dialog cancels cleanly and writes nothing.                    | Nothing to undo. In/Out is reversed by tapping again; a code is not reversible at all.                                                                                                  |
+| Navigating away inside the app              | Nothing typed into the Add boxes survives, and nothing is written.             | The roster change stands. **An issued code list is gone**, and the codes it showed are already the live ones.                                                                           |
+| Reload                                      | Same: the boxes empty, nothing written.                                        | Same. The roster is re-read from the league; the code list is not, because it was never stored.                                                                                         |
+| Backgrounded                                | No effect.                                                                     | No effect on the league. A phone that discards the tab while an issued list is on screen loses it exactly as a reload would.                                                            |
+| Network lost mid-request                    | Nothing is written and the panel says it could not.                            | For adding a player, the two writes are separate: the person may exist without being attached to the event. For issuing, part of the roster may have been rotated — see the edge cases. |
+| The request fails or times out              | The panel raises the reason as a toast and leaves the boxes as they were.      | Same. A failed issue reports "Could not generate codes" and shows no codes, whether or not any were written.                                                                            |
+| The token expires or is cleared             | The console falls back to the gate; nothing is written.                        | The change already made stands.                                                                                                                                                         |
+| Changed by someone else                     | Another commissioner's roster edit arrives over realtime and redraws the list. | Same. There is no locking: two people editing one roster is last-write-wins, per field.                                                                                                 |
+| A second tab or device                      | Both show the same roster.                                                     | A roster change appears in the other tab. **An issued code list does not** — it exists only on the tab that issued it.                                                                  |
+| Reduced motion or presentation mode changes | No effect.                                                                     | No effect.                                                                                                                                                                              |
 
 Read the second column of the Navigating away and Reload rows together: they are
 the same hazard said twice, and it is the only place in this app where an

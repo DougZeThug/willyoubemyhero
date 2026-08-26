@@ -2,7 +2,7 @@
 
 ## Summary
 
-A *station* is one obstacle on the course, and the list of them is the spine of a
+A _station_ is one obstacle on the course, and the list of them is the spine of a
 run: their order is the order of the split buttons on the timing console, their
 short labels are what a card back prints down the "vs. the field" ladder, and
 their penalty amounts are the one-tap buttons a timekeeper hits when somebody
@@ -89,7 +89,7 @@ There are four, and they commit different amounts:
   seeded as.
 - **Delete**, behind the bin in the sheet. The device checks first — a station
   with any split or penalty against it never sends the request, and you get
-  "*Sprint* has recorded times — switch it to inactive instead". Otherwise a
+  "_Sprint_ has recorded times — switch it to inactive instead". Otherwise a
   browser confirm asks once and the row goes.
 
 The penalty field is typed in **seconds** and stored in milliseconds like every
@@ -108,7 +108,7 @@ else that landed while the sheet was open.
 
 A bulk rename is the one case where the window is long enough to matter. The rows
 are written one at a time, so a failure halfway leaves the earlier renames saved.
-The message names the station that stopped the batch — "*Tire Flip* did not
+The message names the station that stopped the batch — "_Tire Flip_ did not
 save" — rather than reporting a count, because the useful question afterwards is
 which one to retry.
 
@@ -129,27 +129,27 @@ changes. The commonest one on an admin screen is "Admin PIN required" — the
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Commissioner only. Everybody else is stopped at the door: `/admin` shows the PIN gate, not a console with a disabled panel, so a member never sees the station list at all. What they do see is the *result* — station names on the timing bar, on the leaderboard and down the ladder on every card back. | The console re-locks within a minute of the token expiring — the page checks on a timer — and reverts whole to the PIN gate rather than disabling the panel in place. Any sheet open at the time goes with it. |
-| The event's state (before the combine · running · finished) | The panel is identical in all three. Before any run exists there is no warning strip and every station can still be deleted. Once a run has been recorded the strip appears and stations start becoming undeletable one at a time, as splits land on them. | A split recorded during your visit disarms that station's delete on the next refetch — up to 15 seconds later, because station data is not carried by realtime. |
-| Dust switched on or off | No effect. Stations are combine machinery and touch nothing in the economy. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | On a phone the panel is collapsed until tapped and the edit sheet is a full-height bottom sheet; on desktop the panel is always open. Every control clears the 44px thumb target. Presentation mode does not apply — nothing on the console is cinematic. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                 | Changed during                                                                                                                                                                                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Commissioner only. Everybody else is stopped at the door: `/admin` shows the PIN gate, not a console with a disabled panel, so a member never sees the station list at all. What they do see is the _result_ — station names on the timing bar, on the leaderboard and down the ladder on every card back. | The console re-locks within a minute of the token expiring — the page checks on a timer — and reverts whole to the PIN gate rather than disabling the panel in place. Any sheet open at the time goes with it. |
+| The event's state (before the combine · running · finished)       | The panel is identical in all three. Before any run exists there is no warning strip and every station can still be deleted. Once a run has been recorded the strip appears and stations start becoming undeletable one at a time, as splits land on them.                                                 | A split recorded during your visit disarms that station's delete on the next refetch — up to 15 seconds later, because station data is not carried by realtime.                                                |
+| Dust switched on or off                                           | No effect. Stations are combine machinery and touch nothing in the economy.                                                                                                                                                                                                                                | No effect.                                                                                                                                                                                                     |
+| The device (phone · desktop · reduced motion · presentation mode) | On a phone the panel is collapsed until tapped and the edit sheet is a full-height bottom sheet; on desktop the panel is always open. Every control clears the 44px thumb target. Presentation mode does not apply — nothing on the console is cinematic.                                                  | No effect.                                                                                                                                                                                                     |
 
 ## Cancel and interrupt
 
-| Event | Before the first write | After it |
-| --- | --- | --- |
-| Back, or closing a sheet | The draft is discarded whole. A swipe down, a tap outside, or the system back gesture all close the sheet and nothing is kept. | Nothing to undo. A saved rename is saved; the way back is to type the old name and save again. A deleted station is gone. |
-| Navigating away inside the app | Nothing recorded. The panel rebuilds from the cached bundle when you come back, with the sheet closed and the batch cleared. | The write already landed. Leaving mid-batch abandons the rows not yet sent, and the ones already sent stay saved. |
-| Reload | Everything staged is lost — the sheet, the rename drafts, the rearrange mode. The list itself is re-read from the server. | Saved rows survive; unsent ones do not. |
-| Backgrounded | No effect; nothing is in flight and no timer is running. | An in-flight save keeps going. Coming back re-reads the bundle on focus, so the list is correct even if the toast was missed. |
-| Network lost mid-request | Nothing was sent. | The write may still have landed. The panel shows an error and the old list, and the correction is to look at the list after it refetches rather than to retry blind — a repeated rename is harmless, a repeated *swap* puts the station back where it started. |
-| The request fails or times out | Not applicable. | A red toast with the server's message. Nothing on screen changes, so the list is briefly showing the old value for a row that may or may not have been written. The next refetch settles it. |
-| The token expires or is cleared | For up to a minute after expiry the panel is still drawn and every control still looks live — the page re-checks the token once a minute. Tapping Save in that window produces "Admin PIN required". | Same, and worse in the middle of a bulk rename: the rows sent before expiry are saved and the rest fail one after another. Re-entering the PIN restores the console; the batch has to be started again. |
-| Changed by someone else | A second commissioner's edits arrive on the next bundle refetch — up to 15 seconds, because the stations table is not published to realtime. Until then you are editing from a stale list. | Last write wins, silently. Two people renaming the same station keep whichever save arrived second; there is no conflict warning. |
-| A second tab or device | Both show the same list, both up to 15 seconds behind each other. | The reorder is the dangerous one: two devices swapping different pairs can interleave into an order neither intended, and nothing detects it. Reorder from one device. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the first write                                                                                                                                                                               | After it                                                                                                                                                                                                                                                       |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | The draft is discarded whole. A swipe down, a tap outside, or the system back gesture all close the sheet and nothing is kept.                                                                       | Nothing to undo. A saved rename is saved; the way back is to type the old name and save again. A deleted station is gone.                                                                                                                                      |
+| Navigating away inside the app              | Nothing recorded. The panel rebuilds from the cached bundle when you come back, with the sheet closed and the batch cleared.                                                                         | The write already landed. Leaving mid-batch abandons the rows not yet sent, and the ones already sent stay saved.                                                                                                                                              |
+| Reload                                      | Everything staged is lost — the sheet, the rename drafts, the rearrange mode. The list itself is re-read from the server.                                                                            | Saved rows survive; unsent ones do not.                                                                                                                                                                                                                        |
+| Backgrounded                                | No effect; nothing is in flight and no timer is running.                                                                                                                                             | An in-flight save keeps going. Coming back re-reads the bundle on focus, so the list is correct even if the toast was missed.                                                                                                                                  |
+| Network lost mid-request                    | Nothing was sent.                                                                                                                                                                                    | The write may still have landed. The panel shows an error and the old list, and the correction is to look at the list after it refetches rather than to retry blind — a repeated rename is harmless, a repeated _swap_ puts the station back where it started. |
+| The request fails or times out              | Not applicable.                                                                                                                                                                                      | A red toast with the server's message. Nothing on screen changes, so the list is briefly showing the old value for a row that may or may not have been written. The next refetch settles it.                                                                   |
+| The token expires or is cleared             | For up to a minute after expiry the panel is still drawn and every control still looks live — the page re-checks the token once a minute. Tapping Save in that window produces "Admin PIN required". | Same, and worse in the middle of a bulk rename: the rows sent before expiry are saved and the rest fail one after another. Re-entering the PIN restores the console; the batch has to be started again.                                                        |
+| Changed by someone else                     | A second commissioner's edits arrive on the next bundle refetch — up to 15 seconds, because the stations table is not published to realtime. Until then you are editing from a stale list.           | Last write wins, silently. Two people renaming the same station keep whichever save arrived second; there is no conflict warning.                                                                                                                              |
+| A second tab or device                      | Both show the same list, both up to 15 seconds behind each other.                                                                                                                                    | The reorder is the dangerous one: two devices swapping different pairs can interleave into an order neither intended, and nothing detects it. Reorder from one device.                                                                                         |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                                                                           | No effect.                                                                                                                                                                                                                                                     |
 
 The reorder is the only action here that is two writes with no transaction around
 them. If the first lands and the second does not, both stations end up holding
@@ -192,7 +192,7 @@ stations, and no player is told when one is renamed.
 
 **Sharing.** Station names travel wherever a card does: an exported image carries
 the ladder with its short labels baked in, and a recap archived after a rename
-carries the new names. An image exported *before* a rename keeps the old ones.
+carries the new names. An image exported _before_ a rename keeps the old ones.
 
 **The second device.** Two consoles on two phones is the normal race-day setup,
 one timing and one fixing, and the station list is the one part of it where that
@@ -211,7 +211,7 @@ in. The bin is labelled "Delete station" rather than by its icon.
   offered alternative: it drops the station from the timing console and keeps
   every split ever recorded against it.
 - **The block is only on the device.** The delete handler checks that you are an
-  admin and nothing else, and the database is set to *cascade* splits away with
+  admin and nothing else, and the database is set to _cascade_ splits away with
   the station rather than refuse. The rule that protects finished runs lives in
   one screen. See "Open questions".
 - **A bundle that could not read the splits table** arrives as an empty list
@@ -222,7 +222,7 @@ in. The bin is labelled "Delete station" rather than by its icon.
   before anyone ran it prints a dash on every card.
 - **"Record a split here" changes nothing.** The switch saves and reads back
   faithfully, but no screen consults it: the console draws a split button for
-  every *active* station regardless. See "Open questions".
+  every _active_ station regardless. See "Open questions".
 - **Two stations with the same name.** Allowed; the console tells them apart by
   position. A station with no short name shows a dash in the admin list, falls
   back to its full name on the card ladder, and to "#" and its order number on

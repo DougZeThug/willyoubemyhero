@@ -33,50 +33,50 @@ admin handlers check the caller against one event and then write a row belonging
 to any, and a station delete's "this has recorded times" check lives in the
 screen rather than in the handler that cascades.
 
-| ID | Title | Severity | Area | Decision needed |
-| --- | --- | --- | --- | --- |
-| B-01 | A partial code rotation destroys paper codes irrecoverably | high | admin | fix |
-| B-02 | Issued codes are shown once and held only in page state | high | admin | fix |
-| B-03 | Claiming a second player on one account fails silently and says "Welcome" | high | accounts | fix |
-| B-04 | The account screen is unreachable the moment its link settles | high | accounts | fix |
-| B-05 | An official run with no time sorts to the top on three screens | high | combine | fix |
-| B-06 | Reordering the running order reports a success it did not have | high | admin | fix |
-| B-07 | A guest who claims mid-day is re-dealt today's pack | high | accounts | product call |
-| B-08 | A shared head-to-head link does not open the comparison | medium | cards | fix |
-| B-09 | Analytics has no loading, error or degraded state | medium | combine | fix |
-| B-10 | The trade screen's set-complete ceremony leaves the nav reachable | medium | trading | fix |
-| B-11 | Milling a spare leaves it offerable on the Trading Post | medium | dust | fix |
-| B-12 | Award winners arrive up to a minute before the lock does | medium | combine | fix |
-| B-13 | A guest who finishes a set never sees its ceremony | medium | cards | fix |
-| B-14 | The claim screen's copy contradicts what claiming does | medium | accounts | product call |
-| B-15 | "Sign out on this device" undoes itself on the next reload | medium | accounts | fix |
-| B-16 | Adding a player is two unlinked writes | medium | admin | fix |
-| B-17 | The draft's undo reports a success it did not have | medium | combine | fix |
-| B-18 | The crowd's clock is formatted unlike every other time in the app | medium | combine | fix |
-| B-19 | The live screen loses a finish, and can call the field done early | medium | combine | fix |
-| B-20 | Turning a full-size card over is silent | medium | cards | fix |
-| B-21 | Tilt reports success on hardware with no gyroscope | medium | cards | fix |
-| B-22 | The timing console's Start can fail without saying so | medium | admin | fix |
-| B-23 | Two commissioners editing one result overwrite each other silently | medium | admin | product call |
-| B-24 | The marketplace renders a blank space where a seller's stall belongs | medium | dust | fix |
-| B-25 | The secret sheet swipes through shelves that are rolled up | medium | cards | fix |
-| B-26 | The signed-out trading gate pushes a code-holder to create an account | medium | trading | fix |
-| B-27 | The draft and running-order locks cannot be set from anywhere | medium | combine | product call |
-| B-28 | A failed splits read makes the awards panel claim the votes were unreadable | medium | combine | fix |
-| B-29 | Three ways a shared card image can come out wrong | medium | cross-cutting | fix |
-| B-34 | Eight screens subscribe to the live feed and never say when it is down | medium | cross-cutting | fix |
-| B-35 | Every link preview is a large-image card with no image | medium | cross-cutting | fix |
-| B-36 | Six admin writes authorize against one event and write to any | medium | admin | fix |
-| B-37 | Deleting a station takes finished runs' splits with it | medium | admin | fix |
-| B-38 | The tier override is honoured everywhere and reachable from nowhere | medium | cards | product call |
-| B-39 | Grants are not idempotent and cannot be undone | medium | admin | fix |
-| B-40 | Rescuing a device's cards is three writes with no transaction | medium | admin | fix |
-| B-41 | "Record a split here" saves, reads back, and does nothing | medium | admin | fix |
-| B-42 | A retired secret card cannot be brought back | medium | admin | fix |
-| B-30 | Accessibility gaps across the app | low | cross-cutting | fix |
-| B-31 | Small rendering and copy slips | low | — | fix |
-| B-32 | The compare picker dresses an unpacked card in its real tier | low | cards | product call |
-| B-33 | Out of season, trading closes silently — including for secrets | low | trading | product call |
+| ID   | Title                                                                       | Severity | Area          | Decision needed |
+| ---- | --------------------------------------------------------------------------- | -------- | ------------- | --------------- |
+| B-01 | A partial code rotation destroys paper codes irrecoverably                  | high     | admin         | fix             |
+| B-02 | Issued codes are shown once and held only in page state                     | high     | admin         | fix             |
+| B-03 | Claiming a second player on one account fails silently and says "Welcome"   | high     | accounts      | fix             |
+| B-04 | The account screen is unreachable the moment its link settles               | high     | accounts      | fix             |
+| B-05 | An official run with no time sorts to the top on three screens              | high     | combine       | fix             |
+| B-06 | Reordering the running order reports a success it did not have              | high     | admin         | fix             |
+| B-07 | A guest who claims mid-day is re-dealt today's pack                         | high     | accounts      | product call    |
+| B-08 | A shared head-to-head link does not open the comparison                     | medium   | cards         | fix             |
+| B-09 | Analytics has no loading, error or degraded state                           | medium   | combine       | fix             |
+| B-10 | The trade screen's set-complete ceremony leaves the nav reachable           | medium   | trading       | fix             |
+| B-11 | Milling a spare leaves it offerable on the Trading Post                     | medium   | dust          | fix             |
+| B-12 | Award winners arrive up to a minute before the lock does                    | medium   | combine       | fix             |
+| B-13 | A guest who finishes a set never sees its ceremony                          | medium   | cards         | fix             |
+| B-14 | The claim screen's copy contradicts what claiming does                      | medium   | accounts      | product call    |
+| B-15 | "Sign out on this device" undoes itself on the next reload                  | medium   | accounts      | fix             |
+| B-16 | Adding a player is two unlinked writes                                      | medium   | admin         | fix             |
+| B-17 | The draft's undo reports a success it did not have                          | medium   | combine       | fix             |
+| B-18 | The crowd's clock is formatted unlike every other time in the app           | medium   | combine       | fix             |
+| B-19 | The live screen loses a finish, and can call the field done early           | medium   | combine       | fix             |
+| B-20 | Turning a full-size card over is silent                                     | medium   | cards         | fix             |
+| B-21 | Tilt reports success on hardware with no gyroscope                          | medium   | cards         | fix             |
+| B-22 | The timing console's Start can fail without saying so                       | medium   | admin         | fix             |
+| B-23 | Two commissioners editing one result overwrite each other silently          | medium   | admin         | product call    |
+| B-24 | The marketplace renders a blank space where a seller's stall belongs        | medium   | dust          | fix             |
+| B-25 | The secret sheet swipes through shelves that are rolled up                  | medium   | cards         | fix             |
+| B-26 | The signed-out trading gate pushes a code-holder to create an account       | medium   | trading       | fix             |
+| B-27 | The draft and running-order locks cannot be set from anywhere               | medium   | combine       | product call    |
+| B-28 | A failed splits read makes the awards panel claim the votes were unreadable | medium   | combine       | fix             |
+| B-29 | Three ways a shared card image can come out wrong                           | medium   | cross-cutting | fix             |
+| B-34 | Eight screens subscribe to the live feed and never say when it is down      | medium   | cross-cutting | fix             |
+| B-35 | Every link preview is a large-image card with no image                      | medium   | cross-cutting | fix             |
+| B-36 | Six admin writes authorize against one event and write to any               | medium   | admin         | fix             |
+| B-37 | Deleting a station takes finished runs' splits with it                      | medium   | admin         | fix             |
+| B-38 | The tier override is honoured everywhere and reachable from nowhere         | medium   | cards         | product call    |
+| B-39 | Grants are not idempotent and cannot be undone                              | medium   | admin         | fix             |
+| B-40 | Rescuing a device's cards is three writes with no transaction               | medium   | admin         | fix             |
+| B-41 | "Record a split here" saves, reads back, and does nothing                   | medium   | admin         | fix             |
+| B-42 | A retired secret card cannot be brought back                                | medium   | admin         | fix             |
+| B-30 | Accessibility gaps across the app                                           | low      | cross-cutting | fix             |
+| B-31 | Small rendering and copy slips                                              | low      | —             | fix             |
+| B-32 | The compare picker dresses an unpacked card in its real tier                | low      | cards         | product call    |
+| B-33 | Out of season, trading closes silently — including for secrets              | low      | trading       | product call    |
 
 ## High
 
@@ -129,7 +129,7 @@ screen rather than in the handler that cascades.
   a player, types another player's code on the claim screen.
 - **What happens / what was expected:** The claim succeeds on the device and the
   screen says "Welcome, {name}". The account is **not** re-linked — the refusal
-  is deliberate — so the next phone that signs in gets the *old* player back,
+  is deliberate — so the next phone that signs in gets the _old_ player back,
   with nothing anywhere having said the link was refused. Expected: the screen
   says the account is already linked to somebody else, and what to do about it.
 - **Reproduce:** Sign in, claim player A, then claim player B's code on the same
@@ -138,7 +138,7 @@ screen rather than in the handler that cascades.
   throws `"This account is already linked to another player"` on purpose, with a
   comment explaining that re-binding would drag every other device onto the new
   player. `src/routes/claim.tsx` wraps the call in a bare `try {} catch {}` whose
-  comment covers a *transient* failure — "the claim stands; signing in again
+  comment covers a _transient_ failure — "the claim stands; signing in again
   re-runs the adoption" — and swallows the permanent refusal identically.
 - **Severity:** `high`. Silently does something different from what the screen
   confirmed.
@@ -180,7 +180,7 @@ screen rather than in the handler that cascades.
   `src/routes/recap.$slug.tsx:63` sort with `(a.official_time_ms ?? 0)`, which
   puts null first. `src/routes/leaderboard.tsx:47`, `src/routes/draft.tsx:60` and
   `src/routes/analytics.tsx:62` use `?? Infinity`, which puts it last. Analytics
-  additionally feeds `Infinity` to `formatTime` when *every* run is null, which
+  additionally feeds `Infinity` to `formatTime` when _every_ run is null, which
   prints `NaN.NaN`.
 - **Severity:** `high`. The big screen in front of the party shows the wrong
   winner, and this is exactly the state a live combine passes through.
@@ -366,7 +366,7 @@ screen rather than in the handler that cascades.
 
 - **Where the user meets it:** The commissioner adds somebody to the roster.
 - **What happens / what was expected:** A failure between the two writes leaves a
-  person created but not on the roster. Retyping the name creates a *second*
+  person created but not on the roster. Retyping the name creates a _second_
   person, because the form never matches an existing one.
 - **Why (from the code):** `src/routes/admin.tsx` calls `upsertParticipant` and
   then `addParticipantToEvent` as separate operations.
@@ -536,7 +536,7 @@ screen rather than in the handler that cascades.
 - **Where the user meets it:** Any moment the event bundle partially fails.
 - **What happens / what was expected:** The awards screen chooses between
   "Couldn't read the votes just now" and "No votes cast" using the failure list
-  from the *event bundle*, which has nothing to do with votes. A failed splits or
+  from the _event bundle_, which has nothing to do with votes. A failed splits or
   penalties read therefore claims the votes were unreadable.
 - **Why (from the code):** `src/routes/awards.tsx` reads `failedTables` from
   `useEventBundle`.
@@ -549,7 +549,7 @@ screen rather than in the handler that cascades.
 - **Where the user meets it:** Sharing a result card or a pack.
 - **What happens / what was expected:** The exporter waits a fixed 100ms for the
   offscreen node before rasterising, and cache-busts the artwork URL by appending
-  a query parameter to a *signed* Supabase URL — either can produce a shared card
+  a query parameter to a _signed_ Supabase URL — either can produce a shared card
   showing initials where a face should be. Separately, splits on the exported
   card render in the bundle's return order, which is unordered, and are keyed by
   station name, so two identically-named stations collide and one is dropped.

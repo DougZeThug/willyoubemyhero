@@ -116,30 +116,30 @@ It arrived settled. The state it is in is the state it will be in next year.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | No effect. The page is public and identical for everybody, including somebody who has never opened the app. Only the commissioner can *create* one, and that happens on a different screen. | No effect. Claiming a player or unlocking the console mid-visit changes nothing on the page. |
-| The event's state (before the combine · running · finished) | No effect. A recap is not attached to the active event and does not consult it. Archiving a combine that is still running simply captures it mid-flight. | No effect. The live combine can start, finish or be re-run underneath and the recap will not move. |
-| Dust switched on or off | No effect on the page. The bottom bar under it gains or loses the Shop tab like everywhere else. | No effect beyond that reflow. |
-| The device (phone · desktop · reduced motion · presentation mode) | Two plain lists at one width, centred on a wide screen. Nothing animates, so reduced motion has nothing to turn off. The page runs to the edges of the screen with no side gutter. | No effect. No ceremony ever takes this screen. |
+| Modifier                                                          | At arrival                                                                                                                                                                                  | Changed during                                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | No effect. The page is public and identical for everybody, including somebody who has never opened the app. Only the commissioner can _create_ one, and that happens on a different screen. | No effect. Claiming a player or unlocking the console mid-visit changes nothing on the page.       |
+| The event's state (before the combine · running · finished)       | No effect. A recap is not attached to the active event and does not consult it. Archiving a combine that is still running simply captures it mid-flight.                                    | No effect. The live combine can start, finish or be re-run underneath and the recap will not move. |
+| Dust switched on or off                                           | No effect on the page. The bottom bar under it gains or loses the Shop tab like everywhere else.                                                                                            | No effect beyond that reflow.                                                                      |
+| The device (phone · desktop · reduced motion · presentation mode) | Two plain lists at one width, centred on a wide screen. Nothing animates, so reduced motion has nothing to turn off. The page runs to the edges of the screen with no side gutter.          | No effect. No ceremony ever takes this screen.                                                     |
 
 Every axis in this table is inert, which is the point: a recap that read
 differently depending on who opened it would not be a record.
 
 ## Cancel and interrupt
 
-| Event | Before the page is drawn | After it is drawn |
-| --- | --- | --- |
-| Back, or closing a sheet | The navigation is abandoned and nothing is left behind. | No effect. Nothing to undo. |
-| Navigating away inside the app | Same. | No effect. |
-| Reload | The slug is looked up again from scratch and gives the same answer. | Same. |
-| Backgrounded | An in-flight page load may need to be retried by the browser. | No effect. Nothing is running, so nothing drifts. |
-| Network lost mid-request | The page does not load; the browser's own failure is what the user sees. | No effect. The page is already complete and needs nothing further. |
-| The request fails or times out | "Recap failed to load." — no retry button, no reason. Reloading is the only recovery. | Not applicable. |
-| The token expires or is cleared | No effect. No token is read on this page. | No effect. |
-| Changed by someone else | Not possible. A snapshot is written once and never edited by anything in the app. | Not possible. |
-| A second tab or device | Both get the same page. There is nothing per-device to disagree about. | Same. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the page is drawn                                                              | After it is drawn                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Back, or closing a sheet                    | The navigation is abandoned and nothing is left behind.                               | No effect. Nothing to undo.                                        |
+| Navigating away inside the app              | Same.                                                                                 | No effect.                                                         |
+| Reload                                      | The slug is looked up again from scratch and gives the same answer.                   | Same.                                                              |
+| Backgrounded                                | An in-flight page load may need to be retried by the browser.                         | No effect. Nothing is running, so nothing drifts.                  |
+| Network lost mid-request                    | The page does not load; the browser's own failure is what the user sees.              | No effect. The page is already complete and needs nothing further. |
+| The request fails or times out              | "Recap failed to load." — no retry button, no reason. Reloading is the only recovery. | Not applicable.                                                    |
+| The token expires or is cleared             | No effect. No token is read on this page.                                             | No effect.                                                         |
+| Changed by someone else                     | Not possible. A snapshot is written once and never edited by anything in the app.     | Not possible.                                                      |
+| A second tab or device                      | Both get the same page. There is nothing per-device to disagree about.                | Same.                                                              |
+| Reduced motion or presentation mode changes | No effect.                                                                            | No effect.                                                         |
 
 ## Interactions with other systems
 
@@ -165,7 +165,7 @@ dust, and archiving a combine neither grants nor destroys anything.
 **Notifications and badges.** None. Archiving a combine puts no dot on anybody's
 nav and sends nothing to anybody's phone.
 
-**Sharing.** This *is* the sharing surface for a combine. The URL carries no
+**Sharing.** This _is_ the sharing surface for a combine. The URL carries no
 token and no identity, the page states the event's name and year in its title and
 link preview, and it works for somebody who has never opened the app. See
 [sharing](../cross-cutting/sharing.md).
@@ -185,7 +185,7 @@ are numbers rather than icons, and no meaning is carried by colour alone.
   URL.
 - **A slug that is gibberish** and a slug that was correct but has since been
   removed are the same page. Nothing distinguishes them.
-- **An official run with no time recorded** sorts to the *top* of the leaderboard
+- **An official run with no time recorded** sorts to the _top_ of the leaderboard
   and prints a dash where the time should be, so an incomplete run can appear to
   have won.
 - **A combine with no official runs** shows the "Final Leaderboard" heading over

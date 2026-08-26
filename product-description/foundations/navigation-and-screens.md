@@ -55,7 +55,7 @@ Five tiles: Live (race-day timing), Order (running order), Draft (pick
 selection), Awards (league superlatives) and Analytics (stats and the recap
 archive).
 
-These five are the *only* way into those screens from inside the app. A tile
+These five are the _only_ way into those screens from inside the app. A tile
 quietly dropped from the hub strands a whole screen at a URL nobody can reach —
 which is the one failure a hub is worst at showing you.
 
@@ -116,33 +116,33 @@ and both bars fade to nothing and become inert. They are faded and disabled
 rather than unmounted, because unmounting the header reflows every page under it
 and the flag flips mid-ceremony.
 
-Fading *out* is part of the ceremony taking the screen; coming back is not. The
+Fading _out_ is part of the ceremony taking the screen; coming back is not. The
 bars become reachable again the instant the flag clears, because a 300ms fade-in
 would leave the nav tappable and focusable while it was still invisible.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The tabs are the same for everybody. The account menu changes: sign in or sign out, claim a player, and an admin entry. Gated screens are reachable and state their gate rather than being hidden. | Signing in or claiming redraws the account menu in place. |
-| The event's state | No effect on the bar. The League tiles all exist whether or not a combine is running; each screen says what it has. | No effect. |
-| Dust switched on or off | Decides whether the Shop tab exists — five columns or six. | The bar reflows live if the switch is flipped while somebody is looking at it. |
-| The device (phone · desktop · reduced motion · presentation mode) | The bar is designed for a thumb and is the same on desktop. Presentation mode fades and disables both bars. | Reduced motion removes the fade; the bars still become inert. |
+| Modifier                                                          | At arrival                                                                                                                                                                                         | Changed during                                                                 |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Who you are (guest · member · account · commissioner)             | The tabs are the same for everybody. The account menu changes: sign in or sign out, claim a player, and an admin entry. Gated screens are reachable and state their gate rather than being hidden. | Signing in or claiming redraws the account menu in place.                      |
+| The event's state                                                 | No effect on the bar. The League tiles all exist whether or not a combine is running; each screen says what it has.                                                                                | No effect.                                                                     |
+| Dust switched on or off                                           | Decides whether the Shop tab exists — five columns or six.                                                                                                                                         | The bar reflows live if the switch is flipped while somebody is looking at it. |
+| The device (phone · desktop · reduced motion · presentation mode) | The bar is designed for a thumb and is the same on desktop. Presentation mode fades and disables both bars.                                                                                        | Reduced motion removes the fade; the bars still become inert.                  |
 
 ## Cancel and interrupt
 
-| Event | Before navigating | While the new screen loads |
-| --- | --- | --- |
-| Back, or closing a sheet | Returns to the previous screen. No prompt, because nothing is ever unsaved. | Back during a load lands on the previous screen; the abandoned request is discarded. |
-| Navigating away inside the app | This is the interaction. | Tapping a second tab supersedes the first. |
-| Reload | The current URL is what comes back. | Same. |
-| Backgrounded | No effect. | The load resumes on return. |
-| Network lost mid-request | Navigation still works — it is client-side. | The screen shows its own error or empty state. |
-| The request fails or times out | No effect on navigation. | Each screen reports its own failure; the shell does not. |
-| The token expires or is cleared | The account menu changes and gated screens start showing their gate. | Same. |
-| Changed by someone else | A trade arriving lights a dot on the Trade tab wherever you are. | Same. |
-| A second tab or device | Independent. Each browser tab has its own navigation. | Same. |
-| Reduced motion or presentation mode changes | A ceremony starting fades the bars out under you. | Same. |
+| Event                                       | Before navigating                                                           | While the new screen loads                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Back, or closing a sheet                    | Returns to the previous screen. No prompt, because nothing is ever unsaved. | Back during a load lands on the previous screen; the abandoned request is discarded. |
+| Navigating away inside the app              | This is the interaction.                                                    | Tapping a second tab supersedes the first.                                           |
+| Reload                                      | The current URL is what comes back.                                         | Same.                                                                                |
+| Backgrounded                                | No effect.                                                                  | The load resumes on return.                                                          |
+| Network lost mid-request                    | Navigation still works — it is client-side.                                 | The screen shows its own error or empty state.                                       |
+| The request fails or times out              | No effect on navigation.                                                    | Each screen reports its own failure; the shell does not.                             |
+| The token expires or is cleared             | The account menu changes and gated screens start showing their gate.        | Same.                                                                                |
+| Changed by someone else                     | A trade arriving lights a dot on the Trade tab wherever you are.            | Same.                                                                                |
+| A second tab or device                      | Independent. Each browser tab has its own navigation.                       | Same.                                                                                |
+| Reduced motion or presentation mode changes | A ceremony starting fades the bars out under you.                           | Same.                                                                                |
 
 ## Interactions with other systems
 

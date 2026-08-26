@@ -5,7 +5,7 @@
 This document gathers what the rest of the description establishes about who can
 use this app and how, and it is worth more for what it admits than for what it
 claims. The good parts are real and deliberate: toggles report their state on the
-control you just operated, badges say what is waiting rather than that *something*
+control you just operated, badges say what is waiting rather than that _something_
 is, a card announces its player and its tier as one thing, and chrome that has
 been dimmed to nothing is made genuinely unreachable rather than merely invisible.
 
@@ -50,14 +50,14 @@ Next control. Right arrow steps forward, and nothing says so.
   "press to flip" appended when there is a back, rather than as a pile of
   decorative fragments. The foil, the glare, the sparkle and the prism edge are
   all hidden.
-- **A locked slot says what it is.** "*Name* — not packed yet", as one image,
+- **A locked slot says what it is.** "_Name_ — not packed yet", as one image,
   rather than eighteen unlabelled backs.
 - **The face-down cards flying out of the pack are hidden entirely**, so the
   ceremony does not fill the page with unlabelled buttons.
 - **Failures are words.** The degraded feed banner is text beside its icon, and
   the two error cards name what failed and offer a retry.
 - **Colour is never the only cue.** Tier and finish are text on the badge as well
-  as colour on the frame; the two nav dots differ in colour *and* in wording.
+  as colour on the frame; the two nav dots differ in colour _and_ in wording.
 - **Reduced motion is honoured live**, everywhere, and flipping it mid-ceremony
   cuts to the end rather than freezing. See [motion and sound](motion-and-sound.md).
 
@@ -122,27 +122,27 @@ polite live region, and the ceremony is a dialog labelled with the set's name.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The same controls for everybody. Gated screens explain their gate in text rather than disappearing, which is the accessible choice and also the discoverable one. | Claiming or signing in redraws the account menu in place; nothing announces it beyond the toast that follows. |
-| The event's state (before the combine · running · finished) | Changes what the numbers say, not how they are read. Times, ranks and tiers are text throughout. | A tier upgrading mid-combine changes a card's spoken title the next time it is read. Nothing announces it. |
-| Dust switched on or off | Adds a sixth tab, reachable and labelled like the other five. | The bar gains a tab under the reader's cursor. Not announced. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                             | Changed during                                                                                                          |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | The same controls for everybody. Gated screens explain their gate in text rather than disappearing, which is the accessible choice and also the discoverable one.                                                      | Claiming or signing in redraws the account menu in place; nothing announces it beyond the toast that follows.           |
+| The event's state (before the combine · running · finished)       | Changes what the numbers say, not how they are read. Times, ranks and tiers are text throughout.                                                                                                                       | A tier upgrading mid-combine changes a card's spoken title the next time it is read. Nothing announces it.              |
+| Dust switched on or off                                           | Adds a sixth tab, reachable and labelled like the other five.                                                                                                                                                          | The bar gains a tab under the reader's cursor. Not announced.                                                           |
 | The device (phone · desktop · reduced motion · presentation mode) | This is the axis that matters most. Reduced motion silences audio and haptics as well as motion, so somebody who wants a still screen and audible feedback cannot have both. Presentation mode makes the chrome inert. | Reduced motion applies immediately. Presentation mode is raised by a ceremony and cannot be turned off from outside it. |
 
 ## Cancel and interrupt
 
-| Event | Before a ceremony claims the screen | While it holds it |
-| --- | --- | --- |
-| Back, or closing a sheet | Focus returns to the previous screen; there is no prompt, because nothing is ever unsaved. | Presentation mode is released on the way out, so the bars are not left inert on every screen after it. This is a real bug that was fixed; leaving them inert would have been unrecoverable. |
-| Navigating away inside the app | Focus is not managed across route changes; the new screen starts wherever the browser leaves it. | Same as back. |
-| Reload | The page starts from the top. | Nothing replays. A pack resumes at its saved position with no announcement of where that is. |
-| Backgrounded | No effect. | Timers stall; the sequence resumes where it was. Sound scheduled ahead of time still plays. |
-| Network lost mid-request | Nothing announces it. Five combine screens show a banner that a reader will only find by going to look. | The ceremony carries on. A failed fourth slot shows a labelled retry rather than a silent gap. |
-| The request fails or times out | The two failure cards are text with a named retry. Two of the three share buttons say nothing at all. | Same. |
-| The token expires or is cleared | Controls disappear and gates appear, silently. A screen quietly loses an ability it had a moment ago. | Same. |
-| Changed by someone else | Never announced. A tier changing, an offer arriving, a trade landing and a set closing all redraw the page under the reader with no live region between them — except the set, which gets a ceremony. | Same. |
-| A second tab or device | No effect. | No effect. |
-| Reduced motion or presentation mode changes | Applies at once. | Reduced motion turning on cuts the ceremony to its end, which is the right behavior and is not announced either. |
+| Event                                       | Before a ceremony claims the screen                                                                                                                                                                   | While it holds it                                                                                                                                                                           |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Focus returns to the previous screen; there is no prompt, because nothing is ever unsaved.                                                                                                            | Presentation mode is released on the way out, so the bars are not left inert on every screen after it. This is a real bug that was fixed; leaving them inert would have been unrecoverable. |
+| Navigating away inside the app              | Focus is not managed across route changes; the new screen starts wherever the browser leaves it.                                                                                                      | Same as back.                                                                                                                                                                               |
+| Reload                                      | The page starts from the top.                                                                                                                                                                         | Nothing replays. A pack resumes at its saved position with no announcement of where that is.                                                                                                |
+| Backgrounded                                | No effect.                                                                                                                                                                                            | Timers stall; the sequence resumes where it was. Sound scheduled ahead of time still plays.                                                                                                 |
+| Network lost mid-request                    | Nothing announces it. Five combine screens show a banner that a reader will only find by going to look.                                                                                               | The ceremony carries on. A failed fourth slot shows a labelled retry rather than a silent gap.                                                                                              |
+| The request fails or times out              | The two failure cards are text with a named retry. Two of the three share buttons say nothing at all.                                                                                                 | Same.                                                                                                                                                                                       |
+| The token expires or is cleared             | Controls disappear and gates appear, silently. A screen quietly loses an ability it had a moment ago.                                                                                                 | Same.                                                                                                                                                                                       |
+| Changed by someone else                     | Never announced. A tier changing, an offer arriving, a trade landing and a set closing all redraw the page under the reader with no live region between them — except the set, which gets a ceremony. | Same.                                                                                                                                                                                       |
+| A second tab or device                      | No effect.                                                                                                                                                                                            | No effect.                                                                                                                                                                                  |
+| Reduced motion or presentation mode changes | Applies at once.                                                                                                                                                                                      | Reduced motion turning on cuts the ceremony to its end, which is the right behavior and is not announced either.                                                                            |
 
 ## Interactions with other systems
 

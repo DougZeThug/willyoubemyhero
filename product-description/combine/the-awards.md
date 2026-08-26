@@ -46,7 +46,7 @@ ballot ever cast, and every award ever published. Renaming one orphans both: the
 votes cast under the old id stop matching the category they were cast in, and the
 winner published under it loses the badge they won.
 
-For the user this means nothing at all. No screen shows an id, and the *label* on
+For the user this means nothing at all. No screen shows an id, and the _label_ on
 the page can be reworded freely: the label is passed in fresh every time voting
 closes, so retitling "Weakest Link" to something kinder changes the heading and
 the published award name and breaks nothing.
@@ -58,7 +58,7 @@ but a category that turns out to be a bad joke cannot be swapped for a better on
 fail when somebody edits an id, and its message says to add one instead.
 
 > Technical note: the ids live in `src/lib/awards.ts` and are persisted in
-> `award_votes.category` and `awards.award_type`. The published *name* is not
+> `award_votes.category` and `awards.award_type`. The published _name_ is not
 > derived from the id — it is the label the app passes in at the moment of
 > closing — which is what makes relabelling free and renaming fatal.
 
@@ -133,7 +133,7 @@ decided at that instant, inside a single transaction in Postgres:
 
 Who you are is never taken from the page: the voter is read from the signed
 member token on the request, which is why there is no version of this screen
-where you choose who you are voting *as*.
+where you choose who you are voting _as_.
 
 ### While it runs
 
@@ -156,30 +156,30 @@ open). Nothing needs rolling back — nothing was applied before the answer came
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A member sees a live ballot. A guest sees the same six panels with every tile at half opacity and a line above them: "Claim your player to vote", linking to [the claim screen](../accounts/claiming-your-player.md). An account holder is a member or a guest and gets whichever they are. The commissioner votes as an ordinary member here; the tally lives in the console, not on this page. | Claiming a player mid-visit lights every tile at once, without a reload — the member token is watched rather than read once. Losing the token has the reverse effect: the tiles go dead where they stand. |
-| The event's state (before the combine · running · finished) | No effect. Voting is open from the moment the event exists, including before anybody has run; the phase of the combine is not what gates it, the commissioner's lock is. | No effect. A card upgrading its tier mid-combine does not touch a ballot. |
-| Dust switched on or off | No effect. Nothing here is bought, sold or paid for. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Two tiles per row on a phone, three from tablet width up. Nothing animates beyond a colour change, so reduced motion changes nothing. This screen never raises [presentation mode](../foundations/navigation-and-screens.md#presentation-mode). | No effect. If a trophy ceremony takes the screen over this page, the ballot underneath is inert until it finishes and untouched afterwards. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                                                                                                       | Changed during                                                                                                                                                                                            |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A member sees a live ballot. A guest sees the same six panels with every tile at half opacity and a line above them: "Claim your player to vote", linking to [the claim screen](../accounts/claiming-your-player.md). An account holder is a member or a guest and gets whichever they are. The commissioner votes as an ordinary member here; the tally lives in the console, not on this page. | Claiming a player mid-visit lights every tile at once, without a reload — the member token is watched rather than read once. Losing the token has the reverse effect: the tiles go dead where they stand. |
+| The event's state (before the combine · running · finished)       | No effect. Voting is open from the moment the event exists, including before anybody has run; the phase of the combine is not what gates it, the commissioner's lock is.                                                                                                                                                                                                                         | No effect. A card upgrading its tier mid-combine does not touch a ballot.                                                                                                                                 |
+| Dust switched on or off                                           | No effect. Nothing here is bought, sold or paid for.                                                                                                                                                                                                                                                                                                                                             | No effect.                                                                                                                                                                                                |
+| The device (phone · desktop · reduced motion · presentation mode) | Two tiles per row on a phone, three from tablet width up. Nothing animates beyond a colour change, so reduced motion changes nothing. This screen never raises [presentation mode](../foundations/navigation-and-screens.md#presentation-mode).                                                                                                                                                  | No effect. If a trophy ceremony takes the screen over this page, the ballot underneath is inert until it finishes and untouched afterwards.                                                               |
 
 The identity axis is the only one that does anything, and it does all of it: the
 difference between a ballot and a poster is one token.
 
 ## Cancel and interrupt
 
-| Event | Before the tap | After the tap |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel; nothing was started. | No effect. The vote is already in the database. Voting again is the only way to change it, and it is not called undo. |
-| Navigating away inside the app | No effect. Nothing is held on the screen. | The request is already on its way and lands regardless. You will not see the toast. |
-| Reload | No effect. The ballot is re-read from the server and comes back as it was. | The vote survives — it is a row in Postgres, not device state. |
-| Backgrounded | No effect. | No effect; a request already sent completes without the page watching. |
-| Network lost mid-request | No effect. There is nothing in flight. | The write may have landed anyway. The toast says it failed; reloading shows the truth. Casting the same vote twice is harmless — it replaces itself. |
-| The request fails or times out | Not applicable. | The toast carries the reason and the tile does not light. Nothing partial is left behind: the vote is one transaction and either happened or did not. |
-| The token expires or is cleared | The tiles are dead and the claim prompt is showing before you touch anything. | The next tap is refused with "Claim your player first". Votes already cast stay cast — they belong to the participant, not to the token. |
-| Changed by someone else | The commissioner closing voting turns this screen into the results page, and the winners arrive live. The lock itself can lag; see the edge cases. | A vote in flight when voting closes is either counted or refused, never silently dropped. That is the whole reason the count runs inside a row lock. |
-| A second tab or device | Both read the same ballot from the server, so they agree on arrival. | A vote cast in one tab does not push to the other. The second tab shows the old choice until it refetches — thirty seconds of staleness, or a reload. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the tap                                                                                                                                     | After the tap                                                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel; nothing was started.                                                                                                            | No effect. The vote is already in the database. Voting again is the only way to change it, and it is not called undo.                                 |
+| Navigating away inside the app              | No effect. Nothing is held on the screen.                                                                                                          | The request is already on its way and lands regardless. You will not see the toast.                                                                   |
+| Reload                                      | No effect. The ballot is re-read from the server and comes back as it was.                                                                         | The vote survives — it is a row in Postgres, not device state.                                                                                        |
+| Backgrounded                                | No effect.                                                                                                                                         | No effect; a request already sent completes without the page watching.                                                                                |
+| Network lost mid-request                    | No effect. There is nothing in flight.                                                                                                             | The write may have landed anyway. The toast says it failed; reloading shows the truth. Casting the same vote twice is harmless — it replaces itself.  |
+| The request fails or times out              | Not applicable.                                                                                                                                    | The toast carries the reason and the tile does not light. Nothing partial is left behind: the vote is one transaction and either happened or did not. |
+| The token expires or is cleared             | The tiles are dead and the claim prompt is showing before you touch anything.                                                                      | The next tap is refused with "Claim your player first". Votes already cast stay cast — they belong to the participant, not to the token.              |
+| Changed by someone else                     | The commissioner closing voting turns this screen into the results page, and the winners arrive live. The lock itself can lag; see the edge cases. | A vote in flight when voting closes is either counted or refused, never silently dropped. That is the whole reason the count runs inside a row lock.  |
+| A second tab or device                      | Both read the same ballot from the server, so they agree on arrival.                                                                               | A vote cast in one tab does not push to the other. The second tab shows the old choice until it refetches — thirty seconds of staleness, or a reload. |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                         | No effect.                                                                                                                                            |
 
 Nothing here can be left half-done. There is no draft ballot and no multi-step
 submission: one tap, one transaction, one row.
@@ -249,7 +249,7 @@ colour, which is a gap: nothing announces the selected state on the button.
 - **A winner who has left the roster** shows as "Someone", and the pill points
   nowhere useful.
 - **"Couldn't read the votes just now."** A closed category with no winner says
-  this instead of "No votes cast." whenever *any* table in the event bundle
+  this instead of "No votes cast." whenever _any_ table in the event bundle
   failed to read, including tables with nothing to do with awards.
 - **Closing twice** republishes from scratch rather than doubling up, and
   reopening keeps the ballots.

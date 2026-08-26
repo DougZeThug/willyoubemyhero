@@ -54,7 +54,7 @@ stateDiagram-v2
 
 The sheet re-reads the run from the league every time it is opened, so a
 half-typed correction abandoned an hour ago can never overwrite a newer result.
-It takes the athlete's *official* run, falling back to their most recent one so a
+It takes the athlete's _official_ run, falling back to their most recent one so a
 run saved before official runs were marked is still editable.
 
 Course time is seeded with the run's recorded time before penalties. Each station
@@ -133,27 +133,27 @@ is gone and a penalty removed from the list is gone.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Commissioner only, with a token bound to this event. Nobody else sees the Results panel, and the write refuses a token naming a different combine even if the run id is right. | A token expiring mid-edit leaves the sheet open and typed; the save then fails and says so. Nothing typed is lost. |
-| The event's state (before the combine · running · finished) | Before any run exists every row offers Add time. Stations are read live, so a station added since the run was timed appears as an empty box. | A run finishing elsewhere while the sheet is open does not re-seed it — the sheet re-reads only on open. Saving then writes over the newer result. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | A bottom sheet capped at most of the screen and scrolled internally, with numeric keypads on every time box. On desktop it is the same sheet. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                     | Changed during                                                                                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Commissioner only, with a token bound to this event. Nobody else sees the Results panel, and the write refuses a token naming a different combine even if the run id is right. | A token expiring mid-edit leaves the sheet open and typed; the save then fails and says so. Nothing typed is lost.                                 |
+| The event's state (before the combine · running · finished)       | Before any run exists every row offers Add time. Stations are read live, so a station added since the run was timed appears as an empty box.                                   | A run finishing elsewhere while the sheet is open does not re-seed it — the sheet re-reads only on open. Saving then writes over the newer result. |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                     | No effect.                                                                                                                                         |
+| The device (phone · desktop · reduced motion · presentation mode) | A bottom sheet capped at most of the screen and scrolled internally, with numeric keypads on every time box. On desktop it is the same sheet.                                  | No effect.                                                                                                                                         |
 
 ## Cancel and interrupt
 
-| Event | Before Save | After Save |
-| --- | --- | --- |
-| Back, or closing a sheet | The sheet closes and everything typed is discarded. Re-opening it seeds from the league again. | Nothing to undo. The correction is a new set of numbers, and putting the old ones back means typing them. |
-| Navigating away inside the app | Same — the draft is discarded with the sheet. | The result stands and every screen shows it. |
-| Reload | Everything typed is gone. Nothing was written. | The result stands. |
-| Backgrounded | The draft survives in the page as long as the page does. A phone that discards the tab loses it. | No effect. |
-| Network lost mid-request | Nothing typed is lost; the save fails and the sheet reports it. | **The write may have landed.** The sheet reports a failure it did not hear an answer to, and re-opening it shows whether it did. |
-| The request fails or times out | The sheet stays open with a red line under the official time, and the same tap retries. | No effect. |
-| The token expires or is cleared | The save refuses. On the admin screen the whole console falls back to [the gate](getting-in.md) as soon as the token is noticed to have gone. | No effect. |
-| Changed by someone else | The sheet does not re-seed while it is open, so an edit arriving over realtime is not reflected in the boxes. Saving overwrites it. | An edit made elsewhere arrives live and replaces what you just wrote. Last write wins, with no warning either way. |
-| A second tab or device | Two sheets can hold two different drafts of the same run. | Whichever saves last is the result. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before Save                                                                                                                                   | After Save                                                                                                                       |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | The sheet closes and everything typed is discarded. Re-opening it seeds from the league again.                                                | Nothing to undo. The correction is a new set of numbers, and putting the old ones back means typing them.                        |
+| Navigating away inside the app              | Same — the draft is discarded with the sheet.                                                                                                 | The result stands and every screen shows it.                                                                                     |
+| Reload                                      | Everything typed is gone. Nothing was written.                                                                                                | The result stands.                                                                                                               |
+| Backgrounded                                | The draft survives in the page as long as the page does. A phone that discards the tab loses it.                                              | No effect.                                                                                                                       |
+| Network lost mid-request                    | Nothing typed is lost; the save fails and the sheet reports it.                                                                               | **The write may have landed.** The sheet reports a failure it did not hear an answer to, and re-opening it shows whether it did. |
+| The request fails or times out              | The sheet stays open with a red line under the official time, and the same tap retries.                                                       | No effect.                                                                                                                       |
+| The token expires or is cleared             | The save refuses. On the admin screen the whole console falls back to [the gate](getting-in.md) as soon as the token is noticed to have gone. | No effect.                                                                                                                       |
+| Changed by someone else                     | The sheet does not re-seed while it is open, so an edit arriving over realtime is not reflected in the boxes. Saving overwrites it.           | An edit made elsewhere arrives live and replaces what you just wrote. Last write wins, with no warning either way.               |
+| A second tab or device                      | Two sheets can hold two different drafts of the same run.                                                                                     | Whichever saves last is the result.                                                                                              |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                    | No effect.                                                                                                                       |
 
 The row worth dwelling on is **Changed by someone else**. The sheet's refusal to
 re-seed while open is deliberate — retyping under a thumb mid-correction would be
@@ -193,7 +193,7 @@ that is — the board, a card exported as an image — through the ordinary path
 **The second device.** No coordination at all. See the interrupt table.
 
 **Accessibility.** Every box is labelled with its station's name, the running
-clock beside it is text, and an unreadable value is marked by a red border *and*
+clock beside it is text, and an unreadable value is marked by a red border _and_
 by the Save button going unavailable rather than by colour alone. The penalty
 rows carry labelled controls for their station, their amount and their removal.
 
@@ -236,7 +236,7 @@ rows carry labelled controls for their station, their amount and their removal.
 - The claim that two commissioners editing the same result silently overwrite
   each other was read from the write path and the sheet's seeding rule; it has
   not been staged on two devices.
-- Whether a station added to the course *after* a run was timed appears in the
+- Whether a station added to the course _after_ a run was timed appears in the
   sheet as an empty box was inferred from the station list being read live rather
   than from the run.
 - Assumption: nothing else writes `raw_time_ms` or `penalty_ms` for an existing

@@ -2,14 +2,14 @@
 
 ## Summary
 
-The fourth slot in a pack is not a roster card. It is one *secret card* a league
+The fourth slot in a pack is not a roster card. It is one _secret card_ a league
 day — art an admin uploaded that is not a person on the roster — and it is the
 only thing in the app that is genuinely once-a-day, decided by the server, and
 gone until tomorrow.
 
 This document owns the fourth slot in every state it can be in. The theatre of
 handing the stand over to it belongs to [opening a pack](opening-a-pack.md); what
-a secret card *is* belongs to [the card](../foundations/the-card.md#what-a-secret-card-is).
+a secret card _is_ belongs to [the card](../foundations/the-card.md#what-a-secret-card-is).
 
 ## The simple case
 
@@ -19,7 +19,7 @@ press Next on the last one, the pack says it is complete, then very obviously is
 not, and the fourth card arrives on the bare stand.
 
 You turn it. It is a secret: a rainbow prism edge, a foil the commissioner chose,
-and under it the level of *your* copy — Mythic, Legendary, Epic, Rare or Common.
+and under it the level of _your_ copy — Mythic, Legendary, Epic, Rare or Common.
 
 Tomorrow there is another. Not before.
 
@@ -106,16 +106,16 @@ behind it and nothing at stake, and a secret has both.
 
 ## The states of the fourth slot
 
-| State | What it means | What the user sees |
-| --- | --- | --- |
-| hidden | Nothing to show | No fourth slot |
-| gated | The device has no identity that can pull | An invitation to claim a player |
-| pending | The pull is in flight | A pulsing card back |
-| failed | The pull did not complete | A retry, inline |
-| sealed | A card is waiting to be turned | A face-down card |
-| open | It has been turned over | The card |
+| State   | What it means                            | What the user sees              |
+| ------- | ---------------------------------------- | ------------------------------- |
+| hidden  | Nothing to show                          | No fourth slot                  |
+| gated   | The device has no identity that can pull | An invitation to claim a player |
+| pending | The pull is in flight                    | A pulsing card back             |
+| failed  | The pull did not complete                | A retry, inline                 |
+| sealed  | A card is waiting to be turned           | A face-down card                |
+| open    | It has been turned over                  | The card                        |
 
-Only a card that is *actually coming* holds the reveal stand — sealed, pending,
+Only a card that is _actually coming_ holds the reveal stand — sealed, pending,
 or one just turned over and still being looked at. A guest with no identity, a
 failed pull and an empty set all fall through to the columns, where the slot
 still shows its gate or its retry exactly as it would have.
@@ -132,7 +132,7 @@ shows a dot is a pure read for exactly this reason.
 Not on tapping the card either: an unbounded round trip racing the face-down hold
 would either stall or lie.
 
-It is fired by the *tear*, and specifically from an effect watching the torn pack
+It is fired by the _tear_, and specifically from an effect watching the torn pack
 rather than from inside the tear itself. That last distinction catches the
 commonest first-timer path: a guest tears the pack, meets the claim gate, goes to
 claim a player, and comes back to the same already-torn pack — where the tear
@@ -157,27 +157,27 @@ leave every value the pull depends on unchanged, so nothing would re-run.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A member pulls against their name; a guest against a server-minted identity; a device with neither sees the claim gate. A member's secrets follow them to a new phone, a guest's follow the token. | Claiming mid-pack moves everything the guest pulled onto the participant — secrets, packs, and the streak milestones those packs already paid. |
-| The event's state | The pull stamps the active event for flavour only. A pull out of season is fine; no active event is not an error. | No effect. |
-| Dust switched on or off | A duplicate pull credits nothing either way. Its worth is realised only when somebody sells it. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Reduced motion collapses the beats in the handover but never skips the handover itself. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                         | Changed during                                                                                                                                 |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A member pulls against their name; a guest against a server-minted identity; a device with neither sees the claim gate. A member's secrets follow them to a new phone, a guest's follow the token. | Claiming mid-pack moves everything the guest pulled onto the participant — secrets, packs, and the streak milestones those packs already paid. |
+| The event's state                                                 | The pull stamps the active event for flavour only. A pull out of season is fine; no active event is not an error.                                                                                  | No effect.                                                                                                                                     |
+| Dust switched on or off                                           | A duplicate pull credits nothing either way. Its worth is realised only when somebody sells it.                                                                                                    | No effect.                                                                                                                                     |
+| The device (phone · desktop · reduced motion · presentation mode) | Reduced motion collapses the beats in the handover but never skips the handover itself.                                                                                                            | No effect.                                                                                                                                     |
 
 ## Cancel and interrupt
 
-| Event | Before the card is turned | After |
-| --- | --- | --- |
-| Back, or closing a sheet | The pull has already landed server-side; the card is yours whether or not you have looked at it. Returning shows it sealed. | The card is in your vault. |
-| Navigating away inside the app | Same. | Same. |
-| Reload | Resumes with the card sealed on the stand, because an unturned secret is re-read rather than re-rolled. | The cursor is put past the end — that card has been seen, and re-running its ceremony on every reload would turn the payoff into a toll. |
-| Backgrounded | An in-flight pull may time out and offer a retry. | No effect. |
-| Network lost mid-request | The slot shows its retry. A row may have landed anyway; the retry returns the same card. | No effect. |
-| The request fails or times out | Retry, inline. Never a toast — this is a screen somebody is enjoying. | No effect. |
-| The token expires or is cleared | The slot falls back to its gate. | The card stays in the vault it was pulled into; it belongs to the identity, not the device. |
-| Changed by someone else | A commissioner retiring a card removes it from future pulls, never from anybody's vault. | Same. |
-| A second tab or device | Both tabs ask; both get the same card. The pull is idempotent within a league day. | Same. |
-| Reduced motion or presentation mode changes | No effect on the pull. | No effect. |
+| Event                                       | Before the card is turned                                                                                                   | After                                                                                                                                    |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | The pull has already landed server-side; the card is yours whether or not you have looked at it. Returning shows it sealed. | The card is in your vault.                                                                                                               |
+| Navigating away inside the app              | Same.                                                                                                                       | Same.                                                                                                                                    |
+| Reload                                      | Resumes with the card sealed on the stand, because an unturned secret is re-read rather than re-rolled.                     | The cursor is put past the end — that card has been seen, and re-running its ceremony on every reload would turn the payoff into a toll. |
+| Backgrounded                                | An in-flight pull may time out and offer a retry.                                                                           | No effect.                                                                                                                               |
+| Network lost mid-request                    | The slot shows its retry. A row may have landed anyway; the retry returns the same card.                                    | No effect.                                                                                                                               |
+| The request fails or times out              | Retry, inline. Never a toast — this is a screen somebody is enjoying.                                                       | No effect.                                                                                                                               |
+| The token expires or is cleared             | The slot falls back to its gate.                                                                                            | The card stays in the vault it was pulled into; it belongs to the identity, not the device.                                              |
+| Changed by someone else                     | A commissioner retiring a card removes it from future pulls, never from anybody's vault.                                    | Same.                                                                                                                                    |
+| A second tab or device                      | Both tabs ask; both get the same card. The pull is idempotent within a league day.                                          | Same.                                                                                                                                    |
+| Reduced motion or presentation mode changes | No effect on the pull.                                                                                                      | No effect.                                                                                                                               |
 
 A card minted just now has never been seen, whatever the device's stored reveal
 state says — local midnight and league midnight can be hours apart, so a resumed
@@ -227,7 +227,7 @@ response carries a set size, and a shelf shows how many of a set you hold withou
 a denominator. A set you own nothing from does not appear at all, because an
 empty heading leaks the shape of what you have not pulled yet.
 
-There is exactly one exception, and it is narrow: a pull that has just *finished*
+There is exactly one exception, and it is narrow: a pull that has just _finished_
 a set says so. On every other pull — which is all but one in a season — that
 field is empty.
 

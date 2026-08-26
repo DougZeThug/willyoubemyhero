@@ -6,7 +6,7 @@ The Trading Post is the third tab on the bottom bar and the only screen in the
 app where two people's collections change at once. It has two live sides —
 offers waiting on you, and offers you have put out — with a panel between them
 for building a new one, a strip of receipts under that, and the league's public
-record at the bottom. Everything on it is *member* business: a device with no
+record at the bottom. Everything on it is _member_ business: a device with no
 claimed player is shown a door rather than an empty inbox.
 
 This document owns the screen. The three things you can do on it have documents
@@ -66,7 +66,7 @@ Three doors, depending on what the device holds:
 
 - **A member token.** Straight in.
 - **An account, but no player.** A short form asking you to name yourself. You
-  are a *collector*: nobody is ever going to hand you a paper code, and until you
+  are a _collector_: nobody is ever going to hand you a paper code, and until you
   are named no offer can reach you. Naming yourself mints a member identity on
   the spot and the screen opens behind it.
 - **Neither.** The app sends you to the account screen, replacing this page
@@ -87,7 +87,7 @@ looking straight at the thing it points to would be worse than no dot at all.
 Nothing reaches the server. No view is counted, no offer is marked read
 anywhere anybody else can see, and neither side learns that you looked.
 
-The one thing that *is* recorded is the dot going out, and it is recorded on the
+The one thing that _is_ recorded is the dot going out, and it is recorded on the
 device rather than on you. Backing out of the screen having decided nothing still
 leaves the Trade tab clean until the next offer arrives.
 
@@ -127,34 +127,34 @@ landed.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The axis this screen turns on. A member gets the whole screen. An account holder who is not on the roster gets the name prompt. A guest with neither is sent to the account screen. A commissioner gets nothing extra — the console has no trading powers, and a commissioner who has not claimed a player cannot trade. | Claiming a player or naming yourself opens the screen in place, without a reload. A member token expiring closes it the same way. |
-| The event's state (before the combine · running · finished) | No effect on the layout. It decides what there is to trade: outside an active combine there are no spares at all and no feed, so both strips read "No spares to trade" for everybody. | A card's tier changing mid-combine — somebody taking the lead — redraws the faces on every tile here, because this screen holds the combine's live channel like any other. |
-| Dust switched on or off | No effect. Trading costs nothing and pays nothing. The bar underneath grows a Shop tab, which is the only visible difference. | No effect. The bar reflows under the screen; the screen does not move. |
-| The device (phone · desktop · reduced motion · presentation mode) | Built for a thumb: offers are full width and swiped one at a time, and both card strips scroll sideways. Desktop gets the same layout in a wider column. | Reduced motion silences the flourish a completed trade earns. Presentation mode is only ever entered here by a set closing, which is a full-screen moment of its own. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                               | Changed during                                                                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | The axis this screen turns on. A member gets the whole screen. An account holder who is not on the roster gets the name prompt. A guest with neither is sent to the account screen. A commissioner gets nothing extra — the console has no trading powers, and a commissioner who has not claimed a player cannot trade. | Claiming a player or naming yourself opens the screen in place, without a reload. A member token expiring closes it the same way.                                          |
+| The event's state (before the combine · running · finished)       | No effect on the layout. It decides what there is to trade: outside an active combine there are no spares at all and no feed, so both strips read "No spares to trade" for everybody.                                                                                                                                    | A card's tier changing mid-combine — somebody taking the lead — redraws the faces on every tile here, because this screen holds the combine's live channel like any other. |
+| Dust switched on or off                                           | No effect. Trading costs nothing and pays nothing. The bar underneath grows a Shop tab, which is the only visible difference.                                                                                                                                                                                            | No effect. The bar reflows under the screen; the screen does not move.                                                                                                     |
+| The device (phone · desktop · reduced motion · presentation mode) | Built for a thumb: offers are full width and swiped one at a time, and both card strips scroll sideways. Desktop gets the same layout in a wider column.                                                                                                                                                                 | Reduced motion silences the flourish a completed trade earns. Presentation mode is only ever entered here by a set closing, which is a full-screen moment of its own.      |
 
 ## Cancel and interrupt
 
-| Event | Before the first write | After it |
-| --- | --- | --- |
-| Back, or closing a sheet | Everything staged is lost. Nothing is confirmed and nothing is warned about, because nothing was ever held. | The write is already gone to the server. Leaving does not stop it and does not undo it. |
-| Navigating away inside the app | Same: staged cards are dropped and the counterparty selection with them. | The refresh that follows the write may land on a screen that is no longer mounted; the caches are updated regardless, so coming back shows the settled state. |
-| Reload | Everything staged is lost. The inbox, outbox and feed come back from the server. The dot stays clear — that is on the device. | Same. The offer's new status is what the server holds, so a reload is a safe way to find out what actually happened. |
-| Backgrounded | No effect. Coming back refetches the offers, which is how a locked phone catches up. | An in-flight write continues on the server whether or not the phone is watching. |
-| Network lost mid-request | Nothing is in flight. The screen keeps drawing whatever it already loaded. | The important question, and the answer is that it may well have landed. The screen shows a failure; the refetch afterwards is what tells you the truth. |
-| The request fails or times out | Not applicable. | A toast carrying the server's own sentence. Staged cards are left staged so the send can be tried again. |
-| The token expires or is cleared | The gate takes over: the screen becomes the name prompt or the account screen, mid-visit. | The action fails rather than retrying — a member read here is set not to retry precisely so an expiry surfaces the door rather than three doomed attempts. |
-| Changed by someone else | An offer arriving nudges this device and the inbox refetches; a trade completing anywhere redraws the feed and both spares strips. | Same, and it is how the other side of your trade finds out. |
-| A second tab or device | Both show the same offers. Each keeps its own dot. | A trade accepted on one is visible on the other within a nudge or a window focus. |
-| Reduced motion or presentation mode changes | No effect. | A set closing takes the whole screen for its ceremony; the trade itself is already done underneath it. |
+| Event                                       | Before the first write                                                                                                             | After it                                                                                                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Everything staged is lost. Nothing is confirmed and nothing is warned about, because nothing was ever held.                        | The write is already gone to the server. Leaving does not stop it and does not undo it.                                                                       |
+| Navigating away inside the app              | Same: staged cards are dropped and the counterparty selection with them.                                                           | The refresh that follows the write may land on a screen that is no longer mounted; the caches are updated regardless, so coming back shows the settled state. |
+| Reload                                      | Everything staged is lost. The inbox, outbox and feed come back from the server. The dot stays clear — that is on the device.      | Same. The offer's new status is what the server holds, so a reload is a safe way to find out what actually happened.                                          |
+| Backgrounded                                | No effect. Coming back refetches the offers, which is how a locked phone catches up.                                               | An in-flight write continues on the server whether or not the phone is watching.                                                                              |
+| Network lost mid-request                    | Nothing is in flight. The screen keeps drawing whatever it already loaded.                                                         | The important question, and the answer is that it may well have landed. The screen shows a failure; the refetch afterwards is what tells you the truth.       |
+| The request fails or times out              | Not applicable.                                                                                                                    | A toast carrying the server's own sentence. Staged cards are left staged so the send can be tried again.                                                      |
+| The token expires or is cleared             | The gate takes over: the screen becomes the name prompt or the account screen, mid-visit.                                          | The action fails rather than retrying — a member read here is set not to retry precisely so an expiry surfaces the door rather than three doomed attempts.    |
+| Changed by someone else                     | An offer arriving nudges this device and the inbox refetches; a trade completing anywhere redraws the feed and both spares strips. | Same, and it is how the other side of your trade finds out.                                                                                                   |
+| A second tab or device                      | Both show the same offers. Each keeps its own dot.                                                                                 | A trade accepted on one is visible on the other within a nudge or a window focus.                                                                             |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                         | A set closing takes the whole screen for its ceremony; the trade itself is already done underneath it.                                                        |
 
 ## Interactions with other systems
 
 **Who you have to be.** A member. Every write and every private read on this
 screen begins with the same guard, and the participant id it works with comes
 from the verified token rather than from anything the phone sent. The one id a
-request legitimately carries is the *other* person's, and even that is re-checked
+request legitimately carries is the _other_ person's, and even that is re-checked
 in the database against who actually owns what. Every write here runs with full
 database privileges and bypasses row-level security, so that guard is the only
 thing between the request and the tables.
@@ -163,7 +163,7 @@ thing between the request and the tables.
 faces current. The completed-trades table is published, so a trade landing
 anywhere redraws the feed and refreshes collections — including on the phones of
 people who were not in it, whose public pull counts have genuinely moved. Pending
-offers are *not* published and never will be: publishing that table would make it
+offers are _not_ published and never will be: publishing that table would make it
 readable by anyone, and an offer names cards both parties hold. What arrives
 instead is a contentless nudge on a topic only you can be told; see
 [notifications and badges](../cross-cutting/notifications-and-badges.md).

@@ -10,8 +10,8 @@ turn off, and the one rule that governs the whole area: **reduced motion
 silences the ceremony, but it never skips a handover that is correctness rather
 than choreography.**
 
-There are two independent switches. The system's *reduced motion* preference,
-which the app reads live and which silences everything. And a *sound* toggle that
+There are two independent switches. The system's _reduced motion_ preference,
+which the app reads live and which silences everything. And a _sound_ toggle that
 belongs to the device, which mutes the audio and deliberately leaves the haptics
 alone.
 
@@ -79,17 +79,17 @@ motion), whether it makes a sound (mute), and whether the screen is claimed.
 ### While it runs
 
 **Presentation mode** is the flag a screen raises while it is playing something
-cinematic. Both bars fade to nothing and become *inert* — not unmounted, because
+cinematic. Both bars fade to nothing and become _inert_ — not unmounted, because
 unmounting the header reflows every page under it, and the flag flips mid-
 ceremony. The room behind the scene is a dark wash and a vignette, so the card
 sits in a pool of light rather than on a flat rectangle.
 
-Fading *out* is part of the ceremony taking the screen. Coming back is not: the
+Fading _out_ is part of the ceremony taking the screen. Coming back is not: the
 bars become reachable again the instant the flag clears, because a fade-in would
 leave the nav tappable and focusable while it was still invisible.
 
 **Loudness follows the tier**, on a scale that is deliberately not the vault's
-ranking. A champion lights the room fully; a penalty-box card is *funnier* than a
+ranking. A champion lights the room fully; a penalty-box card is _funnier_ than a
 base card and gets more colour than its rank deserves; a DNF is the quietest
 thing on the scale, because the card is meant to read as the power being cut. A
 rare finish adds to that rather than scaling it, so a platinum base card lands
@@ -111,7 +111,7 @@ no reason at all to stop the handset tapping back.
 different sizes: an outward pulse from behind a card that lands (light, not
 paper); a proper burst for a champion, a podium or a good enough finish; two
 shots fired inward from the bottom corners for a secret, which reads as the card
-being *framed*; and, for a finished set, a gold curtain falling across the whole
+being _framed_; and, for a finished set, a gold curtain falling across the whole
 screen for a second and a half — the only gesture in the app that outlasts the
 moment it belongs to.
 
@@ -138,27 +138,27 @@ in silence.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | No effect. Every identity gets the same ceremony, and a guest's pack is as loud as anybody's. | No effect. |
-| The event's state (before the combine · running · finished) | Changes which tier a card wears and therefore which chime and how bright the room gets. Before any official run everything is base, so the whole app is quieter. | A card whose tier upgrades mid-combine will chime differently the next time it is revealed. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | This axis *is* the document. A device with no vibration motor loses the haptics silently. Safari suspends audio until a gesture, so the first sound after unmuting is the one that unlocks it. | Reduced motion flipping mid-ceremony cuts to the end rather than freezing where it stands: half a production is worse than none. |
+| Modifier                                                          | At arrival                                                                                                                                                                                     | Changed during                                                                                                                   |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | No effect. Every identity gets the same ceremony, and a guest's pack is as loud as anybody's.                                                                                                  | No effect.                                                                                                                       |
+| The event's state (before the combine · running · finished)       | Changes which tier a card wears and therefore which chime and how bright the room gets. Before any official run everything is base, so the whole app is quieter.                               | A card whose tier upgrades mid-combine will chime differently the next time it is revealed.                                      |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                     | No effect.                                                                                                                       |
+| The device (phone · desktop · reduced motion · presentation mode) | This axis _is_ the document. A device with no vibration motor loses the haptics silently. Safari suspends audio until a gesture, so the first sound after unmuting is the one that unlocks it. | Reduced motion flipping mid-ceremony cuts to the end rather than freezing where it stands: half a production is worse than none. |
 
 ## Cancel and interrupt
 
-| Event | Before the ceremony starts | While it is playing |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | Presentation mode is released on the way out, so the bars do not stay faded and inert on every screen after it. Sounds already queued still play out. |
-| Navigating away inside the app | No effect. | Same as back. Timers are cleared with the screen; a ceremony that outlived it would call back into a route that has moved on. |
-| Reload | The mute preference is restored before anything can be tapped. | The ceremony is gone. The pack resumes where it was, without replaying the rip. |
-| Backgrounded | No effect. | Sound scheduled ahead of time still plays on the audio clock, which keeps running when timers are throttled — which is why a rip is six crinkles rather than one coalesced smack. Visuals stall. |
-| Network lost mid-request | No effect. Sound needs no connection. | No effect on the ceremony. The fourth slot may fail; the ceremony does not stall waiting for it. |
-| The request fails or times out | No effect. | The stand shows the failed slot and a retry rather than a silent gap. |
-| The token expires or is cleared | No effect; neither switch needs a token. | No effect. |
-| Changed by someone else | No effect. | A live update lands on the screen underneath; nothing about the ceremony reacts to it. |
-| A second tab or device | The mute flag is shared between tabs on one device — flipping it in one catches the other up, so a tab cannot show "muted" while it keeps making noise. Two devices share nothing. | Independent. |
-| Reduced motion or presentation mode changes | Applies immediately: the next gesture gets the reduced path. | Reduced motion turning on cuts the ceremony to its end. Presentation mode is owned by the ceremony and cannot be changed from outside. |
+| Event                                       | Before the ceremony starts                                                                                                                                                         | While it is playing                                                                                                                                                                              |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Back, or closing a sheet                    | Nothing to cancel.                                                                                                                                                                 | Presentation mode is released on the way out, so the bars do not stay faded and inert on every screen after it. Sounds already queued still play out.                                            |
+| Navigating away inside the app              | No effect.                                                                                                                                                                         | Same as back. Timers are cleared with the screen; a ceremony that outlived it would call back into a route that has moved on.                                                                    |
+| Reload                                      | The mute preference is restored before anything can be tapped.                                                                                                                     | The ceremony is gone. The pack resumes where it was, without replaying the rip.                                                                                                                  |
+| Backgrounded                                | No effect.                                                                                                                                                                         | Sound scheduled ahead of time still plays on the audio clock, which keeps running when timers are throttled — which is why a rip is six crinkles rather than one coalesced smack. Visuals stall. |
+| Network lost mid-request                    | No effect. Sound needs no connection.                                                                                                                                              | No effect on the ceremony. The fourth slot may fail; the ceremony does not stall waiting for it.                                                                                                 |
+| The request fails or times out              | No effect.                                                                                                                                                                         | The stand shows the failed slot and a retry rather than a silent gap.                                                                                                                            |
+| The token expires or is cleared             | No effect; neither switch needs a token.                                                                                                                                           | No effect.                                                                                                                                                                                       |
+| Changed by someone else                     | No effect.                                                                                                                                                                         | A live update lands on the screen underneath; nothing about the ceremony reacts to it.                                                                                                           |
+| A second tab or device                      | The mute flag is shared between tabs on one device — flipping it in one catches the other up, so a tab cannot show "muted" while it keeps making noise. Two devices share nothing. | Independent.                                                                                                                                                                                     |
+| Reduced motion or presentation mode changes | Applies immediately: the next gesture gets the reduced path.                                                                                                                       | Reduced motion turning on cuts the ceremony to its end. Presentation mode is owned by the ceremony and cannot be changed from outside.                                                           |
 
 ## Interactions with other systems
 

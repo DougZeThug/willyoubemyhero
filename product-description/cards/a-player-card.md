@@ -41,7 +41,7 @@ a finish is luck rather than something somebody did on the course. See
 line is dropped; there is not enough screen for a third row of chrome above the
 card.
 
-**The slab.** An acrylic case with a label bar: whether *you* hold the card and
+**The slab.** An acrylic case with a label bar: whether _you_ hold the card and
 in what finish on the left, the event and its year in the middle, and the serial
 — the player's running order over the roster size, which is the number printed on
 the physical card — on the right. At the foot, in a muted line of its own, how
@@ -97,7 +97,7 @@ Whether the card is locked waits on the collection, and an unsettled collection
 counts as locked — face-down going face-up is a reveal, and the reverse is a
 leak. A locked page keeps the slab, the badge, the name, the numbers, the
 breakdown, the strip and the social; it swaps the card for a face-down slot
-wearing the *event's* universal back — never the player's own, which would be
+wearing the _event's_ universal back — never the player's own, which would be
 half the reveal printed on the thing hiding it — and adds a button reading "Rip a
 pack to see this card".
 
@@ -150,27 +150,27 @@ another card, which always arrives face up.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A guest sees the cards this handset has pulled and nothing the server could add — their collection is the device. A member's is the device reconciled against the server, so a card pulled on another phone unlocks here too. Your own pack stats appear only on your own card. The commissioner gets no extra controls. | Claiming a player uploads this handset's cards onto the name, and a page locked because the server had not vouched for the card can unlock. Nothing animates the change; it redraws. |
-| The event's state (before the combine · running · finished) | Before any official run the badge says "Base · Combine athlete", the time and rank are em dashes, and "Vs. the field" is absent. | A result landing anywhere in the combine can change this card's tier live: the badge, the page tint, the slab, the bars and the confetti colours all follow. The chime does not replay. |
-| Dust switched on or off | No effect on this page. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | On a phone the settings fold behind an overflow button and the chevrons either side of the card are gone — six chips wrapped to three rows and pushed the stats off the fold. Wider, all six chips sit on one line and the chevrons appear. Reduced motion drops the confetti, the count-ups and the tilt. | A set finishing elsewhere can take the screen for a trophy ceremony over this page. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                                               | Changed during                                                                                                                                                                          |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A guest sees the cards this handset has pulled and nothing the server could add — their collection is the device. A member's is the device reconciled against the server, so a card pulled on another phone unlocks here too. Your own pack stats appear only on your own card. The commissioner gets no extra controls. | Claiming a player uploads this handset's cards onto the name, and a page locked because the server had not vouched for the card can unlock. Nothing animates the change; it redraws.    |
+| The event's state (before the combine · running · finished)       | Before any official run the badge says "Base · Combine athlete", the time and rank are em dashes, and "Vs. the field" is absent.                                                                                                                                                                                         | A result landing anywhere in the combine can change this card's tier live: the badge, the page tint, the slab, the bars and the confetti colours all follow. The chime does not replay. |
+| Dust switched on or off                                           | No effect on this page.                                                                                                                                                                                                                                                                                                  | No effect.                                                                                                                                                                              |
+| The device (phone · desktop · reduced motion · presentation mode) | On a phone the settings fold behind an overflow button and the chevrons either side of the card are gone — six chips wrapped to three rows and pushed the stats off the fold. Wider, all six chips sit on one line and the chevrons appear. Reduced motion drops the confetti, the count-ups and the tilt.               | A set finishing elsewhere can take the screen for a trophy ceremony over this page.                                                                                                     |
 
 ## Cancel and interrupt
 
-| Event | Before a write | After |
-| --- | --- | --- |
-| Back, or closing a sheet | Returns to the vault, or closes the compare drawer. Nothing is lost. | A pin is already stored; a comment is already posted. |
-| Navigating away inside the app | No effect. The flip state and the zoom are not remembered. | Same. |
-| Reload | Lands on the same card, front face, at 1x, with Tilt off. A `?vs=` in the URL survives but the drawer does not reopen. | A stored pin and a posted comment survive. |
-| Backgrounded | No effect. On return the bundle, the pull counts and the trophies refetch on focus. Any card tilt eases home. | An in-flight comment may fail and can be retried. |
-| Network lost mid-request | Card art already fetched keeps rendering; art that was not falls back to the player's initials. A share cannot refresh its URLs and fails with a message. | A comment that landed stays posted. |
-| The request fails or times out | The page keeps its last known tier rather than falling back to base. A failed collection read leaves the device's own cards showing. | A failed reaction is rolled back to what the server holds. |
-| The token expires or is cleared | A member's copies stop resolving, so a page that showed a finish becomes a face-down slot again. The tier, time and rank are public and stay. | No effect on anything already written. |
-| Changed by someone else | Reactions, comments and tier changes arrive live. A trade completing can take the card out of your collection and lock the page under you. | Same. |
-| A second tab or device | Both show the same card. A pin made in another tab arrives; one made on another device does not. | Same. |
-| Reduced motion or presentation mode changes | The count-ups stop rolling, the tilt goes dead and the confetti stops. Colours, badges and numbers never change. | Same. |
+| Event                                       | Before a write                                                                                                                                            | After                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Back, or closing a sheet                    | Returns to the vault, or closes the compare drawer. Nothing is lost.                                                                                      | A pin is already stored; a comment is already posted.      |
+| Navigating away inside the app              | No effect. The flip state and the zoom are not remembered.                                                                                                | Same.                                                      |
+| Reload                                      | Lands on the same card, front face, at 1x, with Tilt off. A `?vs=` in the URL survives but the drawer does not reopen.                                    | A stored pin and a posted comment survive.                 |
+| Backgrounded                                | No effect. On return the bundle, the pull counts and the trophies refetch on focus. Any card tilt eases home.                                             | An in-flight comment may fail and can be retried.          |
+| Network lost mid-request                    | Card art already fetched keeps rendering; art that was not falls back to the player's initials. A share cannot refresh its URLs and fails with a message. | A comment that landed stays posted.                        |
+| The request fails or times out              | The page keeps its last known tier rather than falling back to base. A failed collection read leaves the device's own cards showing.                      | A failed reaction is rolled back to what the server holds. |
+| The token expires or is cleared             | A member's copies stop resolving, so a page that showed a finish becomes a face-down slot again. The tier, time and rank are public and stay.             | No effect on anything already written.                     |
+| Changed by someone else                     | Reactions, comments and tier changes arrive live. A trade completing can take the card out of your collection and lock the page under you.                | Same.                                                      |
+| A second tab or device                      | Both show the same card. A pin made in another tab arrives; one made on another device does not.                                                          | Same.                                                      |
+| Reduced motion or presentation mode changes | The count-ups stop rolling, the tilt goes dead and the confetti stops. Colours, badges and numbers never change.                                          | Same.                                                      |
 
 ## Interactions with other systems
 
@@ -193,7 +193,7 @@ thing that needs the network and says so when it fails.
 immediately and settle against the server's count.
 
 **The card economy.** The slab's plate is the one place on this page that talks
-about *your copy* — the count and the finish — and it wears the finish's colour
+about _your copy_ — the count and the finish — and it wears the finish's colour
 rather than the tier's, because the two axes never merge.
 
 **Motion and sound.** The tier chooses the chime on landing and the finish

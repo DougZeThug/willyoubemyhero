@@ -6,12 +6,12 @@ words, it means exactly this.
 ## The app and its surfaces
 
 **The app.** Will YOU Be My Hero?, a phone-first party app for one friend group's
-annual fantasy draft combine. Two halves that share a roster: the *combine*,
-which happens on one day a year, and the *collection*, which is every other day
+annual fantasy draft combine. Two halves that share a roster: the _combine_,
+which happens on one day a year, and the _collection_, which is every other day
 of it.
 
 **Screen.** One route. The bottom bar reaches six of them directly; the rest are
-one tap further, behind the *League hub* or the account menu.
+one tap further, behind the _League hub_ or the account menu.
 
 **The League hub.** The `/league` screen, a page of five tiles — Live, Order,
 Draft, Awards, Analytics — and the only way into those screens from inside the
@@ -25,12 +25,12 @@ not unmounted, because unmounting the header reflows the page under it. See
 ## The people
 
 **Guest.** Somebody using the app with no player attached to them. The device
-holds a server-minted *guest token*, good for 90 days. A guest can open a pack,
-pull the *daily secret*, build a *streak* and star cards. A guest cannot be
+holds a server-minted _guest token_, good for 90 days. A guest can open a pack,
+pull the _daily secret_, build a _streak_ and star cards. A guest cannot be
 granted a roster card, trade, or vote.
 
-**Member.** Somebody who has *claimed a player* with a code handed out on paper.
-The device holds a *member token*, good for 90 days, which carries the
+**Member.** Somebody who has _claimed a player_ with a code handed out on paper.
+The device holds a _member token_, good for 90 days, which carries the
 participant id inside its signed payload. Membership is what unlocks trading,
 voting, the marketplace and any card tied to a person on the roster.
 
@@ -39,14 +39,14 @@ password. The account survives the device: signing in on a second phone brings
 the collection with it. An account is not a fourth level of permission — every
 guard still reads the guest or member token — it is durability.
 
-**Commissioner.** The admin. Holds an *admin token*, good for 12 hours, issued
+**Commissioner.** The admin. Holds an _admin token_, good for 12 hours, issued
 against a PIN for one event or derived from a signed-in account that has been
 granted admin. Runs the clock, edits results, manages the roster, creates secret
-cards and flips the *dust switch*. These documents say "commissioner" for the
+cards and flips the _dust switch_. These documents say "commissioner" for the
 person and "admin screen" for the place.
 
 **Collector.** A signed-in account that is not a combine athlete. A collector is
-tradeable and *reachable* but is never issued a paper code and can never be
+tradeable and _reachable_ but is never issued a paper code and can never be
 claimed — they sign in instead. The roster picker on the claim screen lists them
 apart for exactly that reason.
 
@@ -69,7 +69,7 @@ never ends up with their history split across two identities.
 ## The cards
 
 **Roster card.** A trading card of a person on the combine roster. Every roster
-card is browsable by everyone; what varies is which *copies* you hold.
+card is browsable by everyone; what varies is which _copies_ you hold.
 
 **Secret card.** Admin-curated art that is not a person, pulled and never
 derived. Secret cards sit on their own shelf in the vault, never sorted against
@@ -84,7 +84,7 @@ penalty time taken), `dnf` (did not finish), and `base` (everyone else). Nothing
 about a tier is random, and a card upgrades itself mid-event the moment someone
 takes the lead. A commissioner can override one.
 
-**Edition.** The finish on one *copy* of a roster card, rolled by Postgres when
+**Edition.** The finish on one _copy_ of a roster card, rolled by Postgres when
 it is pulled: `platinum` (0.5%), `gold` (3.5%), `silver` (8%), `bronze` (18%),
 `standard` (70%). The deliberate opposite of a tier — a tier is earned and is the
 same on every phone, an edition is luck and belongs to one person's copy. Two
@@ -93,17 +93,17 @@ standard finish prints no badge at all. Best wins: pulling a worse finish of a
 card you already hold is a duplicate, not a downgrade.
 
 **Look.** A secret card's foil and prism edge, chosen by the commissioner rather
-than rolled. The *prism edge* — an opaque rainbow bezel that survives being
+than rolled. The _prism edge_ — an opaque rainbow bezel that survives being
 looked at in a garden — is the invariant that marks a secret across every foil,
 and no earned tier may carry it.
 
-**Level.** How good your *copy* of a secret card is, rolled by Postgres per copy:
+**Level.** How good your _copy_ of a secret card is, rolled by Postgres per copy:
 `mythic` (0.5%), `legendary` (3.5%), `epic` (8%), `rare` (18%), `common` (70%).
 The third axis, kept in its own vocabulary so a secret can never be mistaken for
 a pack finish.
 
 **Set.** A named collection a secret card is filed into. A secret with no set is
-*unsorted* and shows under the heading "Secrets" in the vault.
+_unsorted_ and shows under the heading "Secrets" in the vault.
 
 **Card back.** The reverse of a card: the tier's reason line, the pull odds for a
 special finish, the date first pulled, and — on a secret — how many people have
@@ -112,14 +112,14 @@ player's own page.
 
 ## The collection
 
-**Pull.** One card arriving in your collection from a pack, a *milestone*, a
+**Pull.** One card arriving in your collection from a pack, a _milestone_, a
 purchase or a trade. The word covers the act and the record of it.
 
 **Copy.** One instance of a card that you hold, with its own edition or level.
 Copies are counted; a card you hold three copies of shows a count.
 
 **Spare.** A copy beyond the first of a card you already hold. Spares are what
-the marketplace lists, what trading moves without cost, and what *milling* turns
+the marketplace lists, what trading moves without cost, and what _milling_ turns
 into dust.
 
 **Collection.** Everything you hold. It lives in two places at once: an IndexedDB
@@ -156,8 +156,8 @@ nothing and tells nobody.
 
 ## The pack
 
-**Pack.** Three roster cards dealt once per *league day*, plus a fourth slot for
-the *daily secret*. The three come from a seeded shuffle keyed to the event, the
+**Pack.** Three roster cards dealt once per _league day_, plus a fourth slot for
+the _daily secret_. The three come from a seeded shuffle keyed to the event, the
 day and your identity, so refreshing cannot reroll them and two people get
 different packs.
 
@@ -166,7 +166,7 @@ pack's day is the device's local date, because nothing is at stake in it; the
 daily secret's day comes from Postgres, because something is.
 
 **The stand.** Where one card is shown alone, face-down, and turned over. The
-reveal stand owns the screen for the whole of the *revealing* stage, one card at
+reveal stand owns the screen for the whole of the _revealing_ stage, one card at
 a time, and hands over to the columns when you walk off the end of it.
 
 **Tear.** The drag across the sealed wrapper that opens a pack. It commits at
@@ -174,7 +174,7 @@ a time, and hands over to the columns when you walk off the end of it.
 
 **Ceremony.** Any full-screen moment the app takes the device for: a pack
 opening, a milestone's bonus secret, a set closing. Every one of them raises
-*presentation mode*. Unqualified, it means the pack's: the sequence from a
+_presentation mode_. Unqualified, it means the pack's: the sequence from a
 committed tear to the final columns,
 `sealed` → `opening` (the rip finishing, the cards leaving the pack) →
 `revealing` (one card at a time on the stand) → `complete` (the columns). The
@@ -216,7 +216,7 @@ server's number; nothing on the device decides it.
 
 **Unsettled finish.** A copy whose edition the server did not decide — pulled
 before finishes moved to Postgres, or asserted by a commissioner. It mills at the
-flat floor however rare it claims to be, and a *reroll* repairs it.
+flat floor however rare it claims to be, and a _reroll_ repairs it.
 
 **Reroll.** Paying to roll a copy's finish again. It can go down. A best-of would
 make it a risk-free ratchet and the whole league would converge on platinum.
@@ -237,9 +237,9 @@ yours is ever visible.
 offer names what the proposer gives and what they want, and waits until the other
 side answers.
 
-**Offer status.** Where an offer stands. *Pending* — waiting for an answer.
-*Done* — accepted, and the cards have moved. *Declined* — somebody said no.
-*Pulled* — the proposer withdrew it. *Expired* — nobody answered and the cards
+**Offer status.** Where an offer stands. _Pending_ — waiting for an answer.
+_Done_ — accepted, and the cards have moved. _Declined_ — somebody said no.
+_Pulled_ — the proposer withdrew it. _Expired_ — nobody answered and the cards
 moved out from under it. Declined and expired are different facts and the screen
 says which.
 
@@ -258,9 +258,9 @@ appears nowhere, so the catalogue cannot be enumerated from the feed.
 reads the same bundle of it: participants, runs, splits, penalties and stations.
 
 **Feed health.** How the live event feed is doing, in three states.
-*Connecting* — before the socket has answered, and deliberately not treated as a
-failure, or a banner would flash on every page load. *Live* — changes arrive as
-they happen. *Degraded* — the socket is down and the screens are being polled
+_Connecting_ — before the socket has answered, and deliberately not treated as a
+failure, or a banner would flash on every page load. _Live_ — changes arrive as
+they happen. _Degraded_ — the socket is down and the screens are being polled
 instead, more often. Five screens show a banner while degraded; the rest do not.
 
 **Toast.** The transient message that slides in at the top of the screen. Used
@@ -276,7 +276,7 @@ allows a wider vocabulary an archived combine may still carry — `up_next`,
 the out-of-contention family is treated as such wherever tiers are decided.
 
 **Run.** One timed attempt at the course. A run has splits, penalties, and an
-official time; only an *official* run counts for a tier or the board.
+official time; only an _official_ run counts for a tier or the board.
 
 **Station.** One obstacle on the course. Stations are named, ordered, and can be
 added, renamed and removed by the commissioner.

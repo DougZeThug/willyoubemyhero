@@ -6,7 +6,7 @@ The commissioner's console is one screen behind one gate, and the gate has two
 doors. The first is a four-digit event PIN typed on the phone that is about to
 run the clock. The second opens on its own: an account that is on the admin list
 walks straight through without typing anything. Either door hands the device an
-*admin token* good for twelve hours and bound to one event, and everything the
+_admin token_ good for twelve hours and bound to one event, and everything the
 console can do follows from holding it.
 
 This document owns the gate. The token itself — its lifetime, its shape, and why
@@ -52,7 +52,7 @@ screens you get.
 
 The active event is fetched first. Until it lands the page says "Loading…" and
 neither door is offered, because both are about a specific combine and there is
-nothing yet to be admin *of*.
+nothing yet to be admin _of_.
 
 The device's stored admin token is read next, and checked on the phone for shape
 and expiry. A token that is malformed or out of date is not merely ignored — it
@@ -85,7 +85,7 @@ at four. The fourth digit submits the form by itself. On a phone held in one
 hand while somebody else is mid-run, a submit button that has to be found is a
 button that gets missed.
 
-Ten attempts per event per ten minutes. The count is keyed to the *event*, not
+Ten attempts per event per ten minutes. The count is keyed to the _event_, not
 to the phone doing the guessing, so a stranger hammering the gate closes the gate
 for everybody rather than learning anything about it. The attempt is counted
 before the PIN is compared, so a guess that never gets an answer still counts.
@@ -112,7 +112,7 @@ the server cannot find says exactly the same thing, so the gate cannot be used t
 find out which combines exist.
 
 A locked gate says something different on purpose: "Too many tries — the gate is
-resting. Give it a few minutes." During a lockout even the *right* PIN bounces,
+resting. Give it a few minutes." During a lockout even the _right_ PIN bounces,
 and a message reading "incorrect" would send the commissioner hunting for a PIN
 they are already holding.
 
@@ -122,12 +122,12 @@ from scratch as a spectator's.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Guests and members get the PIN card; nothing about the gate reads their token. An account holder gets the account door tried for them first, and passes through it only if that account is on the admin list. A device already holding a valid admin token skips the gate entirely. | An account arriving while the gate is on screen — signed in here or in another tab — is noticed, and the account door is tried at that moment. Claiming a player changes nothing here. |
-| The event's state (before the combine · running · finished) | No effect on the gate. There has to *be* an active event: with none, the screen never gets past "Loading…". | An event ending does not close the console. A *different* combine becoming active does: the token names one event, and the screen falls back to the PIN card. |
-| Dust switched on or off | No effect. The switch is something the console holds, not something that guards it. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | The box opens the numeric keypad and masks what is typed, so a PIN read over a shoulder is four dots. On desktop the same card is centred and narrow. | No effect. Nothing about the gate animates. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                          | Changed during                                                                                                                                                                         |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Guests and members get the PIN card; nothing about the gate reads their token. An account holder gets the account door tried for them first, and passes through it only if that account is on the admin list. A device already holding a valid admin token skips the gate entirely. | An account arriving while the gate is on screen — signed in here or in another tab — is noticed, and the account door is tried at that moment. Claiming a player changes nothing here. |
+| The event's state (before the combine · running · finished)       | No effect on the gate. There has to _be_ an active event: with none, the screen never gets past "Loading…".                                                                                                                                                                         | An event ending does not close the console. A _different_ combine becoming active does: the token names one event, and the screen falls back to the PIN card.                          |
+| Dust switched on or off                                           | No effect. The switch is something the console holds, not something that guards it.                                                                                                                                                                                                 | No effect.                                                                                                                                                                             |
+| The device (phone · desktop · reduced motion · presentation mode) | The box opens the numeric keypad and masks what is typed, so a PIN read over a shoulder is four dots. On desktop the same card is centred and narrow.                                                                                                                               | No effect. Nothing about the gate animates.                                                                                                                                            |
 
 The only modifier with real force is the first, and its shape is deliberate: the
 PIN is what a phone that has never seen this app before uses, and the account is
@@ -135,18 +135,18 @@ what the person who runs the combine every year uses.
 
 ## Cancel and interrupt
 
-| Event | Before the token is stored | After it is stored |
-| --- | --- | --- |
-| Back, or closing a sheet | The gate closes and nothing is stored. Attempts already spent stay spent. | No effect. The token is on the device, not on the screen. |
-| Navigating away inside the app | Same: nothing stored, the count stands. | The console is still unlocked when you come back, and every other screen already knows — the commissioner's controls appear on the Live page too. |
-| Reload | Nothing stored, nothing typed survives. | The token survives; it lives in the browser's storage. The console draws straight away with no gate in between. |
-| Backgrounded | An in-flight check may fail and need retyping. | No effect while it is away. The twelve hours are wall-clock, so they pass with the phone in a pocket. |
-| Network lost mid-request | No token. The attempt may or may not have been counted — the counter is bumped before the PIN is compared. | No effect on the token. Every write it guards fails until the connection is back. |
-| The request fails or times out | The card says "Could not verify PIN" and the box is left as it was. A limiter that is itself broken lets the attempt through rather than locking the party out of its own console. | No effect. |
-| The token expires or is cleared | Not applicable. | The console re-checks itself every minute, so a session that goes cold while nobody is touching the phone replaces itself with the PIN card without a reload. The Lock button does the same thing immediately. |
-| Changed by someone else | Another commissioner unlocking their own phone changes nothing here; a token is per-device. Rotating the PIN takes effect on the next attempt. | An admin token already issued keeps working until it expires, even if the PIN behind it has been changed. |
-| A second tab or device | Both tabs show the gate. Attempts from both count against the same ten. | A token stored in one tab is picked up by the others on the same phone within moments. A second *device* shares nothing and must unlock for itself. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the token is stored                                                                                                                                                         | After it is stored                                                                                                                                                                                             |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | The gate closes and nothing is stored. Attempts already spent stay spent.                                                                                                          | No effect. The token is on the device, not on the screen.                                                                                                                                                      |
+| Navigating away inside the app              | Same: nothing stored, the count stands.                                                                                                                                            | The console is still unlocked when you come back, and every other screen already knows — the commissioner's controls appear on the Live page too.                                                              |
+| Reload                                      | Nothing stored, nothing typed survives.                                                                                                                                            | The token survives; it lives in the browser's storage. The console draws straight away with no gate in between.                                                                                                |
+| Backgrounded                                | An in-flight check may fail and need retyping.                                                                                                                                     | No effect while it is away. The twelve hours are wall-clock, so they pass with the phone in a pocket.                                                                                                          |
+| Network lost mid-request                    | No token. The attempt may or may not have been counted — the counter is bumped before the PIN is compared.                                                                         | No effect on the token. Every write it guards fails until the connection is back.                                                                                                                              |
+| The request fails or times out              | The card says "Could not verify PIN" and the box is left as it was. A limiter that is itself broken lets the attempt through rather than locking the party out of its own console. | No effect.                                                                                                                                                                                                     |
+| The token expires or is cleared             | Not applicable.                                                                                                                                                                    | The console re-checks itself every minute, so a session that goes cold while nobody is touching the phone replaces itself with the PIN card without a reload. The Lock button does the same thing immediately. |
+| Changed by someone else                     | Another commissioner unlocking their own phone changes nothing here; a token is per-device. Rotating the PIN takes effect on the next attempt.                                     | An admin token already issued keeps working until it expires, even if the PIN behind it has been changed.                                                                                                      |
+| A second tab or device                      | Both tabs show the gate. Attempts from both count against the same ten.                                                                                                            | A token stored in one tab is picked up by the others on the same phone within moments. A second _device_ shares nothing and must unlock for itself.                                                            |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                                                         | No effect.                                                                                                                                                                                                     |
 
 Nothing here is ever half-done. The token is written whole or not at all, and
 every state the gate can be in is legible from the screen: a box, a spinner, or
@@ -161,7 +161,7 @@ everyone else. It sits in the account menu rather than the bottom bar precisely
 because it is PIN-gated: the worst a curious member finds is a prompt. Past the
 gate, every write in the console runs with full database privileges and bypasses
 row-level security, and the guard on the first line of each handler is the only
-thing between a request and the database. That guard also checks the *event*: an
+thing between a request and the database. That guard also checks the _event_: an
 admin token names one combine, and a write that names a different one is refused
 however valid the signature is.
 

@@ -34,17 +34,17 @@ times.
 Nine phases, about four seconds in total, and the rule the table is built on is
 that **every phase has something that is changing**.
 
-| Phase | What is happening |
-| --- | --- |
-| anticipate | The pack takes the strain — a squash, before anything comes apart |
-| seam | The seam lights and builds; the tear line is under tension, not yet open |
-| rip | The rip finishes travelling on its own, from wherever the finger stopped |
-| peel | The strip breaks into shards and tumbles away; light escapes the mouth |
-| launch | Cards rise out of the mouth, still stacked |
-| fan | They spread into an arc hovering in front of the viewer |
-| hold | A beat where nothing moves, so the fan can be looked at |
-| handoff | They square up into a deck on the stand's mark |
-| done | Off the end — the stand owns the screen |
+| Phase      | What is happening                                                        |
+| ---------- | ------------------------------------------------------------------------ |
+| anticipate | The pack takes the strain — a squash, before anything comes apart        |
+| seam       | The seam lights and builds; the tear line is under tension, not yet open |
+| rip        | The rip finishes travelling on its own, from wherever the finger stopped |
+| peel       | The strip breaks into shards and tumbles away; light escapes the mouth   |
+| launch     | Cards rise out of the mouth, still stacked                               |
+| fan        | They spread into an arc hovering in front of the viewer                  |
+| hold       | A beat where nothing moves, so the fan can be looked at                  |
+| handoff    | They square up into a deck on the stand's mark                           |
+| done       | Off the end — the stand owns the screen                                  |
 
 > Technical note: the ceremony exists because the tear used to commit at 60% of
 > the drag and unmount the wrapper on that same frame, so the strip never
@@ -60,7 +60,7 @@ shorter one hands the stand a deck that is still moving, which is a visible jump
 on the one frame both are on screen.
 
 The cards come out in two stages rather than one long move from inside the pack
-to the spread fan: cards that come *out* and then *open* read as a pack being
+to the spread fan: cards that come _out_ and then _open_ read as a pack being
 emptied, where a single move reads as a fan that happened to start small.
 
 The fan's spread is a total rather than a per-card step, so a fan holding four
@@ -186,7 +186,7 @@ own the stage.
 2. **The glitch.** One flicker, and the purple coming up. The moment the pack
    stops being over.
 3. **Clearing.** The roster card leaves. Nothing of the secret is on screen yet,
-   and this phase ends when the card has *actually* unmounted rather than on a
+   and this phase ends when the card has _actually_ unmounted rather than on a
    timer.
 4. **Empty.** A bare stage, for a beat. The pause is the point.
 5. **The secret.** It owns the stage.
@@ -201,37 +201,37 @@ handover, and the roster card is cleared off the stage either way.
 > each other during render, and it put the last roster card on screen over the
 > secret in two different ways — once because the state lagged the cursor by a
 > commit, and once because it replayed every time the secret's own status
-> changed, which happens *while* the cursor is parked on it. Both are impossible
+> changed, which happens _while_ the cursor is parked on it. Both are impossible
 > now by construction: every event that is not a legal move is a no-op, and there
 > is no state in which both cards are on the stage.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A guest reveals the same three roster cards. The fourth slot may show a claim gate instead of a card. | A guest who claims mid-pack returns to the same torn pack and can then pull the secret. |
-| The event's state | The tiers on the revealed cards are whatever the event says right now. | A result landing mid-reveal can change a card's tier while you are looking at it. |
-| Dust switched on or off | No effect on the reveal. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                               | Changed during                                                                                      |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A guest reveals the same three roster cards. The fourth slot may show a claim gate instead of a card.                                                                                                                    | A guest who claims mid-pack returns to the same torn pack and can then pull the secret.             |
+| The event's state                                                 | The tiers on the revealed cards are whatever the event says right now.                                                                                                                                                   | A result landing mid-reveal can change a card's tier while you are looking at it.                   |
+| Dust switched on or off                                           | No effect on the reveal.                                                                                                                                                                                                 | No effect.                                                                                          |
 | The device (phone · desktop · reduced motion · presentation mode) | Reduced motion skips the ceremony outright and collapses the two beats in the handover that exist only to be watched. The screen enters presentation mode for the whole of this, so both nav bars fade and become inert. | Turning reduced motion on mid-sequence does not restart anything; it takes effect at the next beat. |
 
-Reduced motion does not collapse the *transitions* in the handover, only the
+Reduced motion does not collapse the _transitions_ in the handover, only the
 pauses. The roster card is still cleared before the secret mounts, because that
 is correctness rather than choreography.
 
 ## Cancel and interrupt
 
-| Event | During the ceremony | On the stand |
-| --- | --- | --- |
-| Back, or closing a sheet | The cards are already dealt. Returning resumes on the first unturned card. | Returning lands on the card you were on, including one you had turned but not pressed Next on. |
-| Navigating away inside the app | Same. | Same. The position is written as it goes. |
-| Reload | The ceremony does not replay. You land on the card you were on. | Same. |
-| Backgrounded | The ceremony's clock keeps running; you may return past it. | A card mid-hold completes. The handover has a deadlock breaker behind it for exactly this case. |
-| Network lost mid-request | The cards are dealt locally and reveal normally; their finishes fall back to Standard. | Same. The secret slot shows its own failure. |
-| The request fails or times out | The recording may not have landed. Turning cards still works; the finishes stay Standard. | Same. |
-| The token expires or is cleared | No effect on cards already dealt. | The secret's gate may appear where a card would have been. |
-| Changed by someone else | A tier can change under a card mid-reveal. | Same. |
-| A second tab or device | Both tabs read the same stored pack. The second does not replay the ceremony. | The position written by one tab is what the other resumes from. |
-| Reduced motion or presentation mode changes | Turning reduced motion on does not stop a ceremony already playing. | Takes effect at the next beat. |
+| Event                                       | During the ceremony                                                                       | On the stand                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | The cards are already dealt. Returning resumes on the first unturned card.                | Returning lands on the card you were on, including one you had turned but not pressed Next on.  |
+| Navigating away inside the app              | Same.                                                                                     | Same. The position is written as it goes.                                                       |
+| Reload                                      | The ceremony does not replay. You land on the card you were on.                           | Same.                                                                                           |
+| Backgrounded                                | The ceremony's clock keeps running; you may return past it.                               | A card mid-hold completes. The handover has a deadlock breaker behind it for exactly this case. |
+| Network lost mid-request                    | The cards are dealt locally and reveal normally; their finishes fall back to Standard.    | Same. The secret slot shows its own failure.                                                    |
+| The request fails or times out              | The recording may not have landed. Turning cards still works; the finishes stay Standard. | Same.                                                                                           |
+| The token expires or is cleared             | No effect on cards already dealt.                                                         | The secret's gate may appear where a card would have been.                                      |
+| Changed by someone else                     | A tier can change under a card mid-reveal.                                                | Same.                                                                                           |
+| A second tab or device                      | Both tabs read the same stored pack. The second does not replay the ceremony.             | The position written by one tab is what the other resumes from.                                 |
+| Reduced motion or presentation mode changes | Turning reduced motion on does not stop a ceremony already playing.                       | Takes effect at the next beat.                                                                  |
 
 Nothing here can lose a card. The revealed set is written as each card turns, and
 the position is written with it, so every interrupt resumes rather than restarts.
@@ -263,7 +263,7 @@ if the roll was good enough.
 change it.
 
 **Notifications and badges.** Completing a set during a pack raises a trophy, and
-it is deliberately held until the card has been turned over — you see *which*
+it is deliberately held until the card has been turned over — you see _which_
 card it was, and only then find out it was the last one.
 
 **Sharing.** The summary can be shared, not the reveal.

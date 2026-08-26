@@ -3,8 +3,8 @@
 ## Summary
 
 There are two ways to turn a card you hold into dust, and they are deliberately
-different. *Milling* burns a spare roster copy and pays by the **edition** on it;
-*selling* hands a secret copy over and pays by the **level** on it. Both live as
+different. _Milling_ burns a spare roster copy and pays by the **edition** on it;
+_selling_ hands a secret copy over and pays by the **level** on it. Both live as
 counters on [the shop](the-shop.md) screen, both are a single tap, and neither
 can be undone.
 
@@ -111,13 +111,13 @@ rule guarantees a copy survives, so your claim on the card survives with it.
 
 On refusal, nothing at all is touched and the reason is a sentence:
 
-| What happened | What it says |
-| --- | --- |
-| It is your only copy of a roster card | "That is your only copy" |
-| It is a roster copy you pulled today | "Today's card — it can be burned tomorrow" |
-| It is a secret you pulled today | "Today's pull — it can be sold tomorrow" |
+| What happened                              | What it says                                  |
+| ------------------------------------------ | --------------------------------------------- |
+| It is your only copy of a roster card      | "That is your only copy"                      |
+| It is a roster copy you pulled today       | "Today's card — it can be burned tomorrow"    |
+| It is a secret you pulled today            | "Today's pull — it can be sold tomorrow"      |
 | It is staked on a pending offer, or listed | "That one is on an open offer or up for sale" |
-| Dust is switched off | The screen never offers the counter at all |
+| Dust is switched off                       | The screen never offers the counter at all    |
 
 ## Why an unsettled finish pays the floor rather than being refused
 
@@ -148,27 +148,27 @@ exactly that reason. See [the shop](the-shop.md).
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Members only. A guest holds secrets and no roster copies, has no balance, and never reaches this screen with a counter on it. An account holder is a member here. A commissioner mills and sells as themselves; the admin console has no shortcut into either. | Claiming a player brings a guest's secrets onto their name, and those copies become sellable from that moment. |
-| The event's state (before the combine · running · finished) | No effect on either payout. What a copy is worth comes from the finish rolled onto it, never from the tier the player earned — a platinum DNF pays 100 and a base champion pays 5. | A tier changing mid-combine changes how the card looks and nothing about what it is worth. |
-| Dust switched on or off | Off, neither counter is on the screen and neither call would be accepted. On, both appear with their ladders printed. | Flipping it off mid-session leaves your spares held and unspendable; the balance you had is kept. |
-| The device (phone · desktop · reduced motion · presentation mode) | Rows are a name, a colour word and a button, sized for a thumb. Nothing about either list is animated. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                     | Changed during                                                                                                 |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Members only. A guest holds secrets and no roster copies, has no balance, and never reaches this screen with a counter on it. An account holder is a member here. A commissioner mills and sells as themselves; the admin console has no shortcut into either. | Claiming a player brings a guest's secrets onto their name, and those copies become sellable from that moment. |
+| The event's state (before the combine · running · finished)       | No effect on either payout. What a copy is worth comes from the finish rolled onto it, never from the tier the player earned — a platinum DNF pays 100 and a base champion pays 5.                                                                             | A tier changing mid-combine changes how the card looks and nothing about what it is worth.                     |
+| Dust switched on or off                                           | Off, neither counter is on the screen and neither call would be accepted. On, both appear with their ladders printed.                                                                                                                                          | Flipping it off mid-session leaves your spares held and unspendable; the balance you had is kept.              |
+| The device (phone · desktop · reduced motion · presentation mode) | Rows are a name, a colour word and a button, sized for a thumb. Nothing about either list is animated.                                                                                                                                                         | No effect.                                                                                                     |
 
 ## Cancel and interrupt
 
-| Event | Before the tap | After the tap |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. The confirm on a last secret copy is a real cancel: dismiss it and nothing is sent. | Nothing to undo. The copy is gone and the dust is banked. |
-| Navigating away inside the app | No effect. | The call has already left; the answer lands in the cache and the balance is correct wherever you go. |
-| Reload | No effect. | The copy is gone and the balance is what the server says. The screen is rebuilt from that. |
-| Backgrounded | No effect. | The write completes or fails on its own. The lists and the balance are re-read on the next focus. |
-| Network lost mid-request | Nothing was in flight. | The toast says it could not be done. Whether it landed is settled by the balance on the next look — a mill is keyed to the copy it consumed, so it cannot be paid twice however many times it is retried. |
-| The request fails or times out | Not applicable. | "Could not burn that one" or "Could not sell that one". Nothing partial: either the copy is deleted and the dust is filed, or neither. |
-| The token expires or is cleared | The counters stop being drawn, because no balance can be asked for. | The write already carried a valid token or was refused outright. Nothing half-finished survives the expiry. |
-| Changed by someone else | Somebody accepting a trade that takes your second copy away makes a listed row stale; the tap is then refused as your only copy. | A copy that left by another route between the tap and the answer is refused rather than double-spent. |
-| A second tab or device | Both show the same lists. | The other tab's list is stale until its next focus, and a tap on a milled copy is refused with a reason rather than paying twice. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the tap                                                                                                                   | After the tap                                                                                                                                                                                             |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel. The confirm on a last secret copy is a real cancel: dismiss it and nothing is sent.                           | Nothing to undo. The copy is gone and the dust is banked.                                                                                                                                                 |
+| Navigating away inside the app              | No effect.                                                                                                                       | The call has already left; the answer lands in the cache and the balance is correct wherever you go.                                                                                                      |
+| Reload                                      | No effect.                                                                                                                       | The copy is gone and the balance is what the server says. The screen is rebuilt from that.                                                                                                                |
+| Backgrounded                                | No effect.                                                                                                                       | The write completes or fails on its own. The lists and the balance are re-read on the next focus.                                                                                                         |
+| Network lost mid-request                    | Nothing was in flight.                                                                                                           | The toast says it could not be done. Whether it landed is settled by the balance on the next look — a mill is keyed to the copy it consumed, so it cannot be paid twice however many times it is retried. |
+| The request fails or times out              | Not applicable.                                                                                                                  | "Could not burn that one" or "Could not sell that one". Nothing partial: either the copy is deleted and the dust is filed, or neither.                                                                    |
+| The token expires or is cleared             | The counters stop being drawn, because no balance can be asked for.                                                              | The write already carried a valid token or was refused outright. Nothing half-finished survives the expiry.                                                                                               |
+| Changed by someone else                     | Somebody accepting a trade that takes your second copy away makes a listed row stale; the tap is then refused as your only copy. | A copy that left by another route between the tap and the answer is refused rather than double-spent.                                                                                                     |
+| A second tab or device                      | Both show the same lists.                                                                                                        | The other tab's list is stale until its next focus, and a tap on a milled copy is refused with a reason rather than paying twice.                                                                         |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                       | No effect.                                                                                                                                                                                                |
 
 ## Interactions with other systems
 

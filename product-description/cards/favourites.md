@@ -11,7 +11,7 @@ The control is a star in the top-right corner of a card tile in
 [the vault](the-vault.md), on roster tiles and secret tiles alike. The same
 toggle appears on [a player card](a-player-card.md) as a chip reading "Pin" or
 "Pinned" in that page's secondary settings. A filled star means pinned. The star
-is not drawn at all on a *locked* card — a slot you have not opened yet — because
+is not drawn at all on a _locked_ card — a slot you have not opened yet — because
 there is no copy to pin and nothing to show on the shelf.
 
 ## The simple case
@@ -46,7 +46,7 @@ The vault is drawn from two sources at once, and the pinned shelf is built from
 the intersection. The list of pinned ids is read from the device; the cards
 themselves come from the event roster and from the secrets you own.
 
-The list is read *after* the first paint, never during it. On the first frame the
+The list is read _after_ the first paint, never during it. On the first frame the
 vault renders as though nothing is pinned, and the shelf appears a moment later.
 
 > Technical note: the server has no access to the device's storage, so reading
@@ -73,7 +73,7 @@ is the shelf that was already there.
 
 The tap on the star is the whole write. What is decided at that instant:
 
-- The card is appended to the *end* of the list, not the front. The shelf reads
+- The card is appended to the _end_ of the list, not the front. The shelf reads
   in the order you built it, so a card you pinned weeks ago is not shoved down
   the page every time you pin another.
 - Only the id is stored. Never the edition the card is wearing — a trade can take
@@ -110,12 +110,12 @@ ignores the tap is not.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | No effect. Favourites are per-device and ask for no identity. A guest, a member and the commissioner all get the same star on the same tiles. | No effect. Claiming a player or signing in neither carries pins across nor clears them; they belong to the browser. |
-| The event's state (before the combine · running · finished) | No effect on the control. It changes which cards exist to pin, and a pinned card from a previous combine simply does not resolve. | A card whose tier upgrades mid-combine keeps its pin; the shelf redraws it at its new tier. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | The star is dimmed rather than hidden-until-hover, because hover does not exist on the phone this is played on and a control you cannot find is not one. Under presentation mode the whole vault is inert. | No effect on the pin itself. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                 | Changed during                                                                                                      |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | No effect. Favourites are per-device and ask for no identity. A guest, a member and the commissioner all get the same star on the same tiles.                                                              | No effect. Claiming a player or signing in neither carries pins across nor clears them; they belong to the browser. |
+| The event's state (before the combine · running · finished)       | No effect on the control. It changes which cards exist to pin, and a pinned card from a previous combine simply does not resolve.                                                                          | A card whose tier upgrades mid-combine keeps its pin; the shelf redraws it at its new tier.                         |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                                 | No effect.                                                                                                          |
+| The device (phone · desktop · reduced motion · presentation mode) | The star is dimmed rather than hidden-until-hover, because hover does not exist on the phone this is played on and a control you cannot find is not one. Under presentation mode the whole vault is inert. | No effect on the pin itself.                                                                                        |
 
 Changing who you are mid-session is the only one of these with a trap in it, and
 the answer is that there is no trap: pins are keyed to nothing but the browser,
@@ -123,18 +123,18 @@ so signing in on a second phone gives you your collection without your shelf.
 
 ## Cancel and interrupt
 
-| Event | Before the tap | After the tap |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | Nothing to undo — the write already happened. Tapping the star again is the only way back, and it is not called undo. |
-| Navigating away inside the app | No effect. | The pin is already written. The star is filled when you return. |
-| Reload | No effect. | The pin survives, unless storage was refused, in which case it is gone. |
-| Backgrounded | No effect. | No effect; nothing was in flight. |
-| Network lost mid-request | No effect. There is no request. | No effect. Pinning works with the radio off. |
-| The request fails or times out | Not applicable. | Not applicable. |
-| The token expires or is cleared | No effect. Favourites need no token. | No effect. Signing out leaves the shelf exactly as it was. |
-| Changed by someone else | A card traded away between the list being read and the grid being drawn resolves to nothing and is skipped. | A card traded away *after* pinning stops appearing on the shelf. The id stays stored, so the pin returns if the card ever comes back. |
-| A second tab or device | The other tab's pins are read on arrival. | A pin made in another tab arrives and redraws this one. A second *device* shares nothing. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the tap                                                                                              | After the tap                                                                                                                         |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel.                                                                                          | Nothing to undo — the write already happened. Tapping the star again is the only way back, and it is not called undo.                 |
+| Navigating away inside the app              | No effect.                                                                                                  | The pin is already written. The star is filled when you return.                                                                       |
+| Reload                                      | No effect.                                                                                                  | The pin survives, unless storage was refused, in which case it is gone.                                                               |
+| Backgrounded                                | No effect.                                                                                                  | No effect; nothing was in flight.                                                                                                     |
+| Network lost mid-request                    | No effect. There is no request.                                                                             | No effect. Pinning works with the radio off.                                                                                          |
+| The request fails or times out              | Not applicable.                                                                                             | Not applicable.                                                                                                                       |
+| The token expires or is cleared             | No effect. Favourites need no token.                                                                        | No effect. Signing out leaves the shelf exactly as it was.                                                                            |
+| Changed by someone else                     | A card traded away between the list being read and the grid being drawn resolves to nothing and is skipped. | A card traded away _after_ pinning stops appearing on the shelf. The id stays stored, so the pin returns if the card ever comes back. |
+| A second tab or device                      | The other tab's pins are read on arrival.                                                                   | A pin made in another tab arrives and redraws this one. A second _device_ shares nothing.                                             |
+| Reduced motion or presentation mode changes | No effect.                                                                                                  | No effect.                                                                                                                            |
 
 After any of these the user is still on the vault, still looking at the same
 shelf. Nothing about favourites is ever left half-done, because there is no half:

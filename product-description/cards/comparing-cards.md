@@ -66,7 +66,7 @@ stateDiagram-v2
 The drawer opens closed, always. It never opens itself, not even when the page
 was reached from a link that already names a comparison.
 
-What it opens *into* depends on the address. With no comparison set, or one
+What it opens _into_ depends on the address. With no comparison set, or one
 naming somebody who is not on this roster, it opens on the picker. With a valid
 one it opens straight on the head-to-head, already filled in.
 
@@ -109,27 +109,27 @@ affordance have to agree.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | No effect on the content — times, ranks and splits are public. Identity only decides whether the card underneath is face-up, and therefore whether Compare can be tapped at all. A guest who has pulled the card on this phone can compare from it; one who has not, cannot. | Claiming a player can unlock the page underneath and with it the chip. |
-| The event's state (before the combine · running · finished) | Before any official run both panes read "—:—" and "No official run", and there are no station rows to draw. During the combine the drawer shows whatever has been recorded so far. | The drawer is live: a result landing anywhere in the combine changes the times, the ranks, which side is bold and which stations count as won, without the drawer closing or being reopened. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | A sheet from the bottom of the screen on every width, at most 85% of the height, with the body scrolling inside it. The picker is two names across on a phone, three wider. | Reduced motion shortens the drawer's own entrance; the content does not animate at all. A ceremony taking the screen sits over the drawer. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                   | Changed during                                                                                                                                                                               |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | No effect on the content — times, ranks and splits are public. Identity only decides whether the card underneath is face-up, and therefore whether Compare can be tapped at all. A guest who has pulled the card on this phone can compare from it; one who has not, cannot. | Claiming a player can unlock the page underneath and with it the chip.                                                                                                                       |
+| The event's state (before the combine · running · finished)       | Before any official run both panes read "—:—" and "No official run", and there are no station rows to draw. During the combine the drawer shows whatever has been recorded so far.                                                                                           | The drawer is live: a result landing anywhere in the combine changes the times, the ranks, which side is bold and which stations count as won, without the drawer closing or being reopened. |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                                                                                                   | No effect.                                                                                                                                                                                   |
+| The device (phone · desktop · reduced motion · presentation mode) | A sheet from the bottom of the screen on every width, at most 85% of the height, with the body scrolling inside it. The picker is two names across on a phone, three wider.                                                                                                  | Reduced motion shortens the drawer's own entrance; the content does not animate at all. A ceremony taking the screen sits over the drawer.                                                   |
 
 ## Cancel and interrupt
 
-| Event | Before a name is picked | After |
-| --- | --- | --- |
-| Back, or closing a sheet | The drawer closes and the address is untouched. | The drawer closes and the comparison stays in the address. Back does not walk backwards through the names you tried — picking replaces rather than stacks — so it leaves the page. |
-| Navigating away inside the app | The drawer goes with the page. | Same. The comparison is lost with the address unless the link was copied. |
-| Reload | The drawer is closed on the way back, on the picker. | The drawer is closed on the way back, and reopens on the head-to-head because the comparison is in the address. |
-| Backgrounded | No effect; nothing is in flight. On return the event bundle refetches on focus and the numbers may move. | Same. |
-| Network lost mid-request | No effect. Nothing here makes a request. | No effect. |
-| The request fails or times out | Not applicable. A stale bundle shows stale times rather than an error. | Not applicable. |
-| The token expires or is cleared | No effect on the drawer. The card underneath can become face-down, which closes it. | Same. |
-| Changed by someone else | A result landing redraws the picker's tier colours. | A result landing redraws both panes and every row live, including which side is bold. |
-| A second tab or device | Nothing is shared. Two tabs hold two independent comparisons. | Same, unless the link was copied and opened on the other device. |
-| Reduced motion or presentation mode changes | No effect on the content. | No effect on the content. |
+| Event                                       | Before a name is picked                                                                                  | After                                                                                                                                                                              |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | The drawer closes and the address is untouched.                                                          | The drawer closes and the comparison stays in the address. Back does not walk backwards through the names you tried — picking replaces rather than stacks — so it leaves the page. |
+| Navigating away inside the app              | The drawer goes with the page.                                                                           | Same. The comparison is lost with the address unless the link was copied.                                                                                                          |
+| Reload                                      | The drawer is closed on the way back, on the picker.                                                     | The drawer is closed on the way back, and reopens on the head-to-head because the comparison is in the address.                                                                    |
+| Backgrounded                                | No effect; nothing is in flight. On return the event bundle refetches on focus and the numbers may move. | Same.                                                                                                                                                                              |
+| Network lost mid-request                    | No effect. Nothing here makes a request.                                                                 | No effect.                                                                                                                                                                         |
+| The request fails or times out              | Not applicable. A stale bundle shows stale times rather than an error.                                   | Not applicable.                                                                                                                                                                    |
+| The token expires or is cleared             | No effect on the drawer. The card underneath can become face-down, which closes it.                      | Same.                                                                                                                                                                              |
+| Changed by someone else                     | A result landing redraws the picker's tier colours.                                                      | A result landing redraws both panes and every row live, including which side is bold.                                                                                              |
+| A second tab or device                      | Nothing is shared. Two tabs hold two independent comparisons.                                            | Same, unless the link was copied and opened on the other device.                                                                                                                   |
+| Reduced motion or presentation mode changes | No effect on the content.                                                                                | No effect on the content.                                                                                                                                                          |
 
 ## Interactions with other systems
 

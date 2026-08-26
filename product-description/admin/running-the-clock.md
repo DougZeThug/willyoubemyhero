@@ -12,7 +12,7 @@ the time away.
 The console lives on [the admin screen](getting-in.md), and a stripped-down copy
 of it is docked under the crowd's clock on the Live page so the commissioner can
 time a run from the same screen everyone else is watching. Both drive the same
-single run. What the numbers *mean* — official time, splits, penalties, the two
+single run. What the numbers _mean_ — official time, splits, penalties, the two
 clocks — belongs to
 [time and the clock](../foundations/time-and-the-clock.md).
 
@@ -83,7 +83,7 @@ Clearing it is another. Neither starts the timer, and neither produces a run.
 ### The tap that starts something
 
 Start. At that instant the run is stamped with a wall-clock moment, given an
-identifier of its own, and written to the phone *before* anything is sent
+identifier of its own, and written to the phone _before_ anything is sent
 anywhere. Only then does the league get told the athlete is running, and if that
 message fails it is dropped without comment — the run is what matters, and it is
 already safe.
@@ -109,7 +109,7 @@ split removes the most recent one and only the most recent one.
 
 **A penalty** is the chip under a station, which appears only for stations that
 carry an amount, and adds that amount with the station's name as the reason. Each
-tap adds another. They stack up in a list under the stations, and they are *not*
+tap adds another. They stack up in a list under the stations, and they are _not_
 added to the clock on screen: the clock shows the course time, and the penalty is
 added when the run is totalled.
 
@@ -150,27 +150,27 @@ their time and warns there is no undo, because nobody runs the course twice.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Only a commissioner sees any of this. Without a valid admin token for the active event the admin screen shows [the gate](getting-in.md) and the Live page's timing bar renders nothing at all — not a disabled version, nothing. | A token expiring mid-run does not stop the clock: timing is local. It stops the *save*, which then reports the expiry by name and waits for a retry. |
-| The event's state (before the combine · running · finished) | An empty roster shows "No athletes left in the queue" and Start is disabled. With no stations set up there is nothing to split against, and a run is still perfectly timeable. | Somebody added to the roster mid-combine appears at the end of the queue. An athlete scratched while on the clock leaves the queue but the run in progress continues. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Phone-first throughout: the controls are thumb-sized, the console's panels collapse, and the clock is sized for arm's length. On desktop the panels are always open. | Reduced motion does not slow the clock — it is a number, not an animation — but it silences the finish celebration on the crowd screens. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                       | Changed during                                                                                                                                                        |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Only a commissioner sees any of this. Without a valid admin token for the active event the admin screen shows [the gate](getting-in.md) and the Live page's timing bar renders nothing at all — not a disabled version, nothing. | A token expiring mid-run does not stop the clock: timing is local. It stops the _save_, which then reports the expiry by name and waits for a retry.                  |
+| The event's state (before the combine · running · finished)       | An empty roster shows "No athletes left in the queue" and Start is disabled. With no stations set up there is nothing to split against, and a run is still perfectly timeable.                                                   | Somebody added to the roster mid-combine appears at the end of the queue. An athlete scratched while on the clock leaves the queue but the run in progress continues. |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                                                       | No effect.                                                                                                                                                            |
+| The device (phone · desktop · reduced motion · presentation mode) | Phone-first throughout: the controls are thumb-sized, the console's panels collapse, and the clock is sized for arm's length. On desktop the panels are always open.                                                             | Reduced motion does not slow the clock — it is a number, not an animation — but it silences the finish celebration on the crowd screens.                              |
 
 ## Cancel and interrupt
 
-| Event | Before Start | After Start |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | Nothing is cancelled. The run is on the phone and the console picks it up again on return. |
-| Navigating away inside the app | The queue selection is forgotten; nothing else. | The run continues. Moving between the admin screen and the Live page hands the same run between the two consoles. |
-| Reload | Nothing lost — the queue is rebuilt from the league. | **The run survives and the clock is correct.** It is recomputed from the stored wall-clock anchor, so a phone that reloads mid-race resumes at the right number rather than at zero. A run stopped but not yet saved comes back stopped, with its Retry button. |
-| Backgrounded | No effect. | **The clock keeps time.** Elapsed time is recomputed from the anchor rather than accumulated by a timer, so a screen that locked for two minutes comes back reading two minutes further on. Splits taken during that window are impossible, which is a limit of the human rather than the app. |
-| Network lost mid-request | Putting somebody on the clock fails and the strip reports it; nothing else needs the network. | Timing is unaffected. Finish fails, the console says the run is safe on this phone, and Retry is there for when signal comes back. |
-| The request fails or times out | "On the clock" reports the reason and the strip stays as it was. | The run stays stopped and unsaved with its reason on screen. Retry re-sends the same record. Discard is the only other way out. Note that the status write *at Start* is dropped silently, so a failure there leaves the crowd's clock stopped while the run is real. |
-| The token expires or is cleared | The console is replaced by the gate. Anything already stored on the phone is untouched. | The clock keeps running, because it is local. The save refuses with "Your admin session expired — re-enter the PIN on the Admin tab, then retry", and the run waits. |
-| Changed by someone else | The queue redraws as statuses arrive. Somebody else putting a different athlete on the clock replaces the strip. | Another commissioner saving a run for the same athlete does not disturb this one; the two runs are separate rows. A combine reset elsewhere wipes this phone's run too, and the console drops it rather than keep timing something that no longer exists. |
-| A second tab or device | Both show the same queue. | **The run belongs to the device that started it.** A second phone shows no run and would happily start its own for the same athlete. Two consoles timing one athlete is not prevented, and the last save wins. |
-| Reduced motion or presentation mode changes | No effect. | No effect on timing. The crowd's finish celebration is what changes. |
+| Event                                       | Before Start                                                                                                     | After Start                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel.                                                                                               | Nothing is cancelled. The run is on the phone and the console picks it up again on return.                                                                                                                                                                                                     |
+| Navigating away inside the app              | The queue selection is forgotten; nothing else.                                                                  | The run continues. Moving between the admin screen and the Live page hands the same run between the two consoles.                                                                                                                                                                              |
+| Reload                                      | Nothing lost — the queue is rebuilt from the league.                                                             | **The run survives and the clock is correct.** It is recomputed from the stored wall-clock anchor, so a phone that reloads mid-race resumes at the right number rather than at zero. A run stopped but not yet saved comes back stopped, with its Retry button.                                |
+| Backgrounded                                | No effect.                                                                                                       | **The clock keeps time.** Elapsed time is recomputed from the anchor rather than accumulated by a timer, so a screen that locked for two minutes comes back reading two minutes further on. Splits taken during that window are impossible, which is a limit of the human rather than the app. |
+| Network lost mid-request                    | Putting somebody on the clock fails and the strip reports it; nothing else needs the network.                    | Timing is unaffected. Finish fails, the console says the run is safe on this phone, and Retry is there for when signal comes back.                                                                                                                                                             |
+| The request fails or times out              | "On the clock" reports the reason and the strip stays as it was.                                                 | The run stays stopped and unsaved with its reason on screen. Retry re-sends the same record. Discard is the only other way out. Note that the status write _at Start_ is dropped silently, so a failure there leaves the crowd's clock stopped while the run is real.                          |
+| The token expires or is cleared             | The console is replaced by the gate. Anything already stored on the phone is untouched.                          | The clock keeps running, because it is local. The save refuses with "Your admin session expired — re-enter the PIN on the Admin tab, then retry", and the run waits.                                                                                                                           |
+| Changed by someone else                     | The queue redraws as statuses arrive. Somebody else putting a different athlete on the clock replaces the strip. | Another commissioner saving a run for the same athlete does not disturb this one; the two runs are separate rows. A combine reset elsewhere wipes this phone's run too, and the console drops it rather than keep timing something that no longer exists.                                      |
+| A second tab or device                      | Both show the same queue.                                                                                        | **The run belongs to the device that started it.** A second phone shows no run and would happily start its own for the same athlete. Two consoles timing one athlete is not prevented, and the last save wins.                                                                                 |
+| Reduced motion or presentation mode changes | No effect.                                                                                                       | No effect on timing. The crowd's finish celebration is what changes.                                                                                                                                                                                                                           |
 
 The two rows that carry the design are Reload and Backgrounded. A phone in a
 garden reloads, gets locked, gets answered, gets put in a pocket, and the entire
@@ -185,8 +185,8 @@ row-level security, so the guard on the first line of each handler is the only
 check there is — and it refuses a token that names a different combine.
 
 **Realtime.** The save reaches every device watching over the event channel: the
-board reorders, cards re-tier, the finish celebration fires. The run *in
-progress* is not broadcast. What spectators see mid-run is the crowd's unofficial
+board reorders, cards re-tier, the finish celebration fires. The run _in
+progress_ is not broadcast. What spectators see mid-run is the crowd's unofficial
 clock counting from the moment the athlete was put on the clock; only the
 commissioner's own Live view swaps that for the real run.
 

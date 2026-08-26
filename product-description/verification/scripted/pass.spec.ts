@@ -32,10 +32,7 @@ async function seedCollection(page: Page) {
           const tx = db.transaction("collected", "readwrite");
           const store = tx.objectStore("collected");
           for (const id of eps) {
-            store.put(
-              { eventParticipantId: id, pulledAt: Date.now(), count: 1, tier: "base" },
-              id,
-            );
+            store.put({ eventParticipantId: id, pulledAt: Date.now(), count: 1, tier: "base" }, id);
           }
           tx.oncomplete = () => resolve();
           tx.onerror = () => resolve();
@@ -144,7 +141,10 @@ test("VLT-F5 unpinning removes the shelf entirely rather than emptying it", asyn
   const star = page.getByRole("button", { name: /^Pin .+ to the top$/ }).first();
   await star.click();
   await expect(page.getByRole("heading", { name: /^favourites$/i }).first()).toBeVisible();
-  await page.getByRole("button", { name: /^Unpin .+ from the top$/ }).first().click();
+  await page
+    .getByRole("button", { name: /^Unpin .+ from the top$/ })
+    .first()
+    .click();
   await expect(page.getByRole("heading", { name: /^favourites$/i })).toHaveCount(0);
 });
 
@@ -172,7 +172,13 @@ test("ADM-G1 the admin console shows its gate rather than its contents", async (
 
 test("CMB-E1 a combine with no roster does not congratulate anybody", async ({ page, server }) => {
   server.set("getEventBundle", {
-    event: null, participants: [], stations: [], runs: [], splits: [], penalties: [], drafts: [],
+    event: null,
+    participants: [],
+    stations: [],
+    runs: [],
+    splits: [],
+    penalties: [],
+    drafts: [],
   });
   await page.goto("/live");
   await expect(page.locator("body")).not.toBeEmpty();

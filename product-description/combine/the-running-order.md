@@ -32,9 +32,9 @@ and the crowd screen never has to skip a number.
 
 The number is the athlete's place in the order, not their bib and not their
 finishing position. The badge on the right is the athlete's status, printed as
-the database holds it: *waiting*, *running*, *finished*, *scratched*. A running
+the database holds it: _waiting_, _running_, _finished_, _scratched_. A running
 athlete's badge is solid; a finished one is tinted; a scratched one is red.
-Anything else the schema allows — *up next*, *delayed*, *absent* — would print
+Anything else the schema allows — _up next_, _delayed_, _absent_ — would print
 here verbatim with its underscores turned into spaces, because the badge shows
 the stored word rather than a translation of it.
 
@@ -54,7 +54,7 @@ Three ways the order changes, and all three are the commissioner's:
 There is no drag-to-reorder anywhere in the app, and no way for a member to
 swap themselves up the list. The button is not what protects the order: every
 write goes through a handler whose first line demands an unexpired admin token
-bound to *this* combine, so a request forged without one is refused whether or
+bound to _this_ combine, so a request forged without one is refused whether or
 not any button was on screen.
 
 The button also disappears when the combine's order is locked. Nothing in the
@@ -110,7 +110,7 @@ a clean run with no gaps whatever they were before.
 ### While it runs
 
 The button reads "Shuffling…" and is disabled. The list underneath still shows
-the *old* order: nothing is optimistic here, and the screen does not move until
+the _old_ order: nothing is optimistic here, and the screen does not move until
 the server has answered.
 
 Two writes go out in sequence. The first renumbers every row. The second records
@@ -133,27 +133,27 @@ the toast still says it failed. See [edge cases](#edge-cases).
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Guests, members and account holders get the same read-only list. Only a commissioner holding an unexpired admin token for the active combine sees Re-randomize. Claiming a player or signing in changes nothing here. | An admin token being minted, cleared or expiring makes the button appear or vanish within a minute, with no reload. A shuffle already in flight completes regardless: the request was authorised when it left. |
-| The event's state (before the combine · running · finished) | The load-bearing row. Before the combine this is the screen the league actually looks at. While it runs, one row is lit and the statuses change under you. After it, the list is a record of who ran in what order. | Nothing stops a re-randomization mid-combine or after it. Athletes who have already finished are shuffled along with everybody else and simply get new numbers they will never use. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Identical on both, at a narrower maximum width than the board. No animation beyond a colour transition on the running row. | No effect. This screen never enters presentation mode. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                            | Changed during                                                                                                                                                                                                 |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Guests, members and account holders get the same read-only list. Only a commissioner holding an unexpired admin token for the active combine sees Re-randomize. Claiming a player or signing in changes nothing here. | An admin token being minted, cleared or expiring makes the button appear or vanish within a minute, with no reload. A shuffle already in flight completes regardless: the request was authorised when it left. |
+| The event's state (before the combine · running · finished)       | The load-bearing row. Before the combine this is the screen the league actually looks at. While it runs, one row is lit and the statuses change under you. After it, the list is a record of who ran in what order.   | Nothing stops a re-randomization mid-combine or after it. Athletes who have already finished are shuffled along with everybody else and simply get new numbers they will never use.                            |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                                            | No effect.                                                                                                                                                                                                     |
+| The device (phone · desktop · reduced motion · presentation mode) | Identical on both, at a narrower maximum width than the board. No animation beyond a colour transition on the running row.                                                                                            | No effect. This screen never enters presentation mode.                                                                                                                                                         |
 
 ## Cancel and interrupt
 
-| Event | Before Re-randomize | After it |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | Nothing to undo. The order has been rewritten and there is no undo control; the only way back is another draw, which will not reproduce the old one. |
-| Navigating away inside the app | No effect. | The writes are already on their way and complete without the screen. The toast is lost; the new order is not. |
-| Reload | The list is fetched again from scratch. | Same. The new order is what comes back. |
-| Backgrounded | No effect. Returning to the tab refetches. | The request continues. On return the list shows the new order, though the toast may have gone unseen. |
-| Network lost mid-request | The list keeps its last values and stops updating. | The important question: **the renumbering may have landed anyway**. Each row is written separately, so a connection dying mid-write can leave some athletes renumbered and others not. The screen will show whatever the next refetch reads. |
-| The request fails or times out | The screen shows "Can't reach the combine" with a Try again button if nothing had loaded, or the degraded banner over stale rows if it had. | A red toast with the reason. The button comes back. Whether anything was written depends on which of the two writes failed. |
-| The token expires or is cleared | The button vanishes. The list is unaffected. | A request that left with a valid token completes. The next one is refused by the server with an error toast, which is the commissioner's signal to sign in again. |
-| Changed by someone else, arriving over realtime | The normal case. A status changing, an athlete being added, a run starting — all redraw this list within a beat, with no refresh. | A second commissioner's draw arriving mid-shuffle is the one genuine hazard: both drew from the same starting list, and the last write wins field by field rather than as a whole. |
-| A second tab or device | Both show the same list. | Both redraw. A commissioner with the screen open twice can fire two draws in quick succession; the second one's "previous order" is whatever it last read, which may not be what is in the database. |
-| Reduced motion or presentation mode changing | No effect. | No effect. |
+| Event                                           | Before Re-randomize                                                                                                                         | After it                                                                                                                                                                                                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                        | Nothing to cancel.                                                                                                                          | Nothing to undo. The order has been rewritten and there is no undo control; the only way back is another draw, which will not reproduce the old one.                                                                                         |
+| Navigating away inside the app                  | No effect.                                                                                                                                  | The writes are already on their way and complete without the screen. The toast is lost; the new order is not.                                                                                                                                |
+| Reload                                          | The list is fetched again from scratch.                                                                                                     | Same. The new order is what comes back.                                                                                                                                                                                                      |
+| Backgrounded                                    | No effect. Returning to the tab refetches.                                                                                                  | The request continues. On return the list shows the new order, though the toast may have gone unseen.                                                                                                                                        |
+| Network lost mid-request                        | The list keeps its last values and stops updating.                                                                                          | The important question: **the renumbering may have landed anyway**. Each row is written separately, so a connection dying mid-write can leave some athletes renumbered and others not. The screen will show whatever the next refetch reads. |
+| The request fails or times out                  | The screen shows "Can't reach the combine" with a Try again button if nothing had loaded, or the degraded banner over stale rows if it had. | A red toast with the reason. The button comes back. Whether anything was written depends on which of the two writes failed.                                                                                                                  |
+| The token expires or is cleared                 | The button vanishes. The list is unaffected.                                                                                                | A request that left with a valid token completes. The next one is refused by the server with an error toast, which is the commissioner's signal to sign in again.                                                                            |
+| Changed by someone else, arriving over realtime | The normal case. A status changing, an athlete being added, a run starting — all redraw this list within a beat, with no refresh.           | A second commissioner's draw arriving mid-shuffle is the one genuine hazard: both drew from the same starting list, and the last write wins field by field rather than as a whole.                                                           |
+| A second tab or device                          | Both show the same list.                                                                                                                    | Both redraw. A commissioner with the screen open twice can fire two draws in quick succession; the second one's "previous order" is whatever it last read, which may not be what is in the database.                                         |
+| Reduced motion or presentation mode changing    | No effect.                                                                                                                                  | No effect.                                                                                                                                                                                                                                   |
 
 ## Interactions with other systems
 
@@ -162,7 +162,7 @@ admin token bound to this combine, to write — enforced on the first line of bo
 handlers, not by the button.
 
 **Realtime.** The list subscribes to the combine's live channel and redraws on
-any roster change. The one thing that does *not* arrive live is the order lock,
+any roster change. The one thing that does _not_ arrive live is the order lock,
 which lives on the combine's own record and is only re-read when the screen
 refetches for another reason.
 

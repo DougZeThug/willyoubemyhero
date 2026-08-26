@@ -119,14 +119,14 @@ path is where it is caught.
 
 Refusals are sentences on both sides:
 
-| Buying | Listing |
-| --- | --- |
-| "Somebody got there first" | "You would have none left" |
-| "That card had already moved" | "Today's pull is not a spare yet" |
-| "Not enough dust for that one" | "Take it off the market first" |
-| "That one's yours" | "That one is already up" |
-| "Dust is switched off" | "Your stall is full — take something down first" |
-| | "That price is out of range" |
+| Buying                         | Listing                                          |
+| ------------------------------ | ------------------------------------------------ |
+| "Somebody got there first"     | "You would have none left"                       |
+| "That card had already moved"  | "Today's pull is not a spare yet"                |
+| "Not enough dust for that one" | "Take it off the market first"                   |
+| "That one's yours"             | "That one is already up"                         |
+| "Dust is switched off"         | "Your stall is full — take something down first" |
+|                                | "That price is out of range"                     |
 
 ## Why the floor of 1 is load-bearing
 
@@ -135,7 +135,7 @@ refused because a price of nought would break a sale halfway through.
 
 Dust movements are recorded one row per movement, and a separate rule refuses a
 movement of zero — a row that says nothing and still has to be summed. A
-zero-price sale would reach that rule *after* the card had already changed hands
+zero-price sale would reach that rule _after_ the card had already changed hands
 and fail there, inside a transaction that had already moved somebody's card. So
 the floor is checked three times on the way in — the price box, the handler and
 the shelf's own rule — each of them saying no before anything moves. That a
@@ -170,27 +170,27 @@ unlistable.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Members only, on both sides. A guest has no balance to pay with and no roster copies to sell, and is offered the claim instead. An account holder is a member here. The commissioner buys and sells as themselves; nothing about a listing is privileged. | Claiming a player turns the explanation into the real screen on the next read, and a guest's secrets become listable from that moment. |
-| The event's state (before the combine · running · finished) | No effect. A listing carries the event it was made at as flavour only, and a sale can happen out of season. | A tier changing mid-combine changes the face on a tile and nothing about its price. |
-| Dust switched on or off | Off: no market, no listing flow, and your stall drawn alone if anything is on it. On: the full screen. | Flipping it off mid-visit shuts the market and the listing drawer but deliberately leaves Take down working, so nobody's cards are stranded on a shelf they can no longer reach. |
-| The device (phone · desktop · reduced motion · presentation mode) | The market is a two-column tile grid on a phone and wider on a desktop, because you are buying a picture. Your stall is rows, because there you already know what you own and the numbers are the point. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                | Changed during                                                                                                                                                                   |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Members only, on both sides. A guest has no balance to pay with and no roster copies to sell, and is offered the claim instead. An account holder is a member here. The commissioner buys and sells as themselves; nothing about a listing is privileged. | Claiming a player turns the explanation into the real screen on the next read, and a guest's secrets become listable from that moment.                                           |
+| The event's state (before the combine · running · finished)       | No effect. A listing carries the event it was made at as flavour only, and a sale can happen out of season.                                                                                                                                               | A tier changing mid-combine changes the face on a tile and nothing about its price.                                                                                              |
+| Dust switched on or off                                           | Off: no market, no listing flow, and your stall drawn alone if anything is on it. On: the full screen.                                                                                                                                                    | Flipping it off mid-visit shuts the market and the listing drawer but deliberately leaves Take down working, so nobody's cards are stranded on a shelf they can no longer reach. |
+| The device (phone · desktop · reduced motion · presentation mode) | The market is a two-column tile grid on a phone and wider on a desktop, because you are buying a picture. Your stall is rows, because there you already know what you own and the numbers are the point.                                                  | No effect.                                                                                                                                                                       |
 
 ## Cancel and interrupt
 
-| Event | Before the first write | After it |
-| --- | --- | --- |
-| Back, or closing a sheet | Closing the listing drawer abandons the staged card and the typed price. Nothing was reserved. | Nothing to undo on a sale. A listing can be taken down; a completed purchase cannot. |
-| Navigating away inside the app | No effect. | The call has left and its answer lands in the cache. |
-| Reload | No effect. The staged card and price are lost; nothing else is. | The world is rebuilt from the server: the shelf, the stall and the balance. |
-| Backgrounded | No effect. The shelf and the stall are re-read on the next focus. | The write completes or fails on its own. A sale that happened while the phone was in a pocket shows up in the stall on the next focus. |
-| Network lost mid-request | Nothing was in flight. | Buying holds its tap id rather than rotating it, so a retry is answered with the sale it already made rather than a second one. Listing needs no id: the card itself is the key, and a retry says "That one is already up". |
-| The request fails or times out | Not applicable. | A toast. Nothing partial: the dust and the card move in one transaction or neither does. |
-| The token expires or is cleared | The screen falls back to the claim explanation on the next read. Listings already up stay up. | The write carried a valid token or was refused. A stall you can no longer see is not a stall that stopped existing. |
-| Changed by someone else | Somebody buying the tile you were looking at, or a seller taking it down: the tap is refused and the shelf is refreshed. | A second buyer on the same listing loses cleanly with "Somebody got there first". Exactly one of two simultaneous buys succeeds. |
-| A second tab or device | Both show the same shelf and stall. | The other is stale until its next focus or poke. A tap on a sold tile is refused, never double-charged. |
-| Reduced motion or presentation mode changes | No effect. | No effect. Nothing here animates. |
+| Event                                       | Before the first write                                                                                                   | After it                                                                                                                                                                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Closing the listing drawer abandons the staged card and the typed price. Nothing was reserved.                           | Nothing to undo on a sale. A listing can be taken down; a completed purchase cannot.                                                                                                                                        |
+| Navigating away inside the app              | No effect.                                                                                                               | The call has left and its answer lands in the cache.                                                                                                                                                                        |
+| Reload                                      | No effect. The staged card and price are lost; nothing else is.                                                          | The world is rebuilt from the server: the shelf, the stall and the balance.                                                                                                                                                 |
+| Backgrounded                                | No effect. The shelf and the stall are re-read on the next focus.                                                        | The write completes or fails on its own. A sale that happened while the phone was in a pocket shows up in the stall on the next focus.                                                                                      |
+| Network lost mid-request                    | Nothing was in flight.                                                                                                   | Buying holds its tap id rather than rotating it, so a retry is answered with the sale it already made rather than a second one. Listing needs no id: the card itself is the key, and a retry says "That one is already up". |
+| The request fails or times out              | Not applicable.                                                                                                          | A toast. Nothing partial: the dust and the card move in one transaction or neither does.                                                                                                                                    |
+| The token expires or is cleared             | The screen falls back to the claim explanation on the next read. Listings already up stay up.                            | The write carried a valid token or was refused. A stall you can no longer see is not a stall that stopped existing.                                                                                                         |
+| Changed by someone else                     | Somebody buying the tile you were looking at, or a seller taking it down: the tap is refused and the shelf is refreshed. | A second buyer on the same listing loses cleanly with "Somebody got there first". Exactly one of two simultaneous buys succeeds.                                                                                            |
+| A second tab or device                      | Both show the same shelf and stall.                                                                                      | The other is stale until its next focus or poke. A tap on a sold tile is refused, never double-charged.                                                                                                                     |
+| Reduced motion or presentation mode changes | No effect.                                                                                                               | No effect. Nothing here animates.                                                                                                                                                                                           |
 
 ## Interactions with other systems
 

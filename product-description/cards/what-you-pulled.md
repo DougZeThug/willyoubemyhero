@@ -26,12 +26,12 @@ is finished; there is nothing left to turn.
 
 ## Why it exists
 
-The sequence used to *stop* rather than finish. The last card was turned and the
+The sequence used to _stop_ rather than finish. The last card was turned and the
 screen simply became a grid, with the fourth slot underneath and a link back to
 the vault. Everything built up over the previous thirty seconds was spent, and
 nothing collected it.
 
-Laying every pull out at once is only allowed *here*, after each has been earned
+Laying every pull out at once is only allowed _here_, after each has been earned
 one at a time. The same layout shown earlier would spend the payoff before it was
 earned — which is the same reason the grid is a destination and never a stage.
 
@@ -112,27 +112,27 @@ an error somebody has to dismiss on a screen they are enjoying.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | A guest sees the same three cards and either a secret or the claim invitation in the fourth slot. Cashing a milestone requires an account, so the button says so rather than failing. | Claiming a player mid-screen replaces the invitation with the slot's real state. |
-| The event's state | The tiers shown are live and can change while the screen is open. | A result landing re-draws a card's tier here as anywhere else. |
-| Dust switched on or off | No effect on this screen. A duplicate credits nothing at pull time either way. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | The layout is built for a phone. Reduced motion removes the entrance animation, not the layout. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                            | Changed during                                                                   |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A guest sees the same three cards and either a secret or the claim invitation in the fourth slot. Cashing a milestone requires an account, so the button says so rather than failing. | Claiming a player mid-screen replaces the invitation with the slot's real state. |
+| The event's state                                                 | The tiers shown are live and can change while the screen is open.                                                                                                                     | A result landing re-draws a card's tier here as anywhere else.                   |
+| Dust switched on or off                                           | No effect on this screen. A duplicate credits nothing at pull time either way.                                                                                                        | No effect.                                                                       |
+| The device (phone · desktop · reduced motion · presentation mode) | The layout is built for a phone. Reduced motion removes the entrance animation, not the layout.                                                                                       | No effect.                                                                       |
 
 ## Cancel and interrupt
 
-| Event | Before claiming or sharing | After |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing is lost. The pack is finished and this screen is what you return to today. | A claimed milestone is claimed. |
-| Navigating away inside the app | Same. | Same. |
-| Reload | Lands back here. | Same. |
-| Backgrounded | An in-flight claim may fail and can be retried. | No effect. |
-| Network lost mid-request | Sharing still works — it is produced on the device. Claiming does not. | A claim that landed is paid. |
-| The request fails or times out | The claim button returns; the share button returns silently. | No effect. |
-| The token expires or is cleared | The milestone button stops being offered. | A reward already paid stays paid. |
-| Changed by someone else | A tier can change under a card here. | Same. |
-| A second tab or device | Both show the same finished pack. A milestone claimed in one is not offered in the other after a refresh. | Same. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before claiming or sharing                                                                                | After                             |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Back, or closing a sheet                    | Nothing is lost. The pack is finished and this screen is what you return to today.                        | A claimed milestone is claimed.   |
+| Navigating away inside the app              | Same.                                                                                                     | Same.                             |
+| Reload                                      | Lands back here.                                                                                          | Same.                             |
+| Backgrounded                                | An in-flight claim may fail and can be retried.                                                           | No effect.                        |
+| Network lost mid-request                    | Sharing still works — it is produced on the device. Claiming does not.                                    | A claim that landed is paid.      |
+| The request fails or times out              | The claim button returns; the share button returns silently.                                              | No effect.                        |
+| The token expires or is cleared             | The milestone button stops being offered.                                                                 | A reward already paid stays paid. |
+| Changed by someone else                     | A tier can change under a card here.                                                                      | Same.                             |
+| A second tab or device                      | Both show the same finished pack. A milestone claimed in one is not offered in the other after a refresh. | Same.                             |
+| Reduced motion or presentation mode changes | No effect.                                                                                                | No effect.                        |
 
 ## Interactions with other systems
 

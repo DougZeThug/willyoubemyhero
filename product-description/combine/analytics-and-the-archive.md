@@ -35,7 +35,7 @@ later voided, and the run that decided a tier all pull the same average.
 
 A station nobody has reached yet is drawn anyway, as a pair of flat bars at zero,
 because the chart is built from the course rather than from the results. A
-station with splits but no *segment* times behaves the same way and drags its own
+station with splits but no _segment_ times behaves the same way and drags its own
 average toward zero, which reads on the chart as an obstacle everybody flew
 through.
 
@@ -121,27 +121,27 @@ readout.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | No effect. The whole page is public and identical for everybody; nothing is personalised, and your own best time is not marked. | No effect. Claiming a player or unlocking the console changes nothing on this screen. |
-| The event's state (before the combine · running · finished) | This is the axis that matters. Before any run both charts are empty and the archive may hold last year's. During, both charts move. After, they settle. | Changes arrive live. A commissioner correcting a split moves both bars for that station under you. |
-| Dust switched on or off | No effect on the page. It changes the bottom bar from five columns to six underneath it. | No effect beyond that reflow. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                 | Changed during                                                                                                       |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | No effect. The whole page is public and identical for everybody; nothing is personalised, and your own best time is not marked.                                                                                                                                                            | No effect. Claiming a player or unlocking the console changes nothing on this screen.                                |
+| The event's state (before the combine · running · finished)       | This is the axis that matters. Before any run both charts are empty and the archive may hold last year's. During, both charts move. After, they settle.                                                                                                                                    | Changes arrive live. A commissioner correcting a split moves both bars for that station under you.                   |
+| Dust switched on or off                                           | No effect on the page. It changes the bottom bar from five columns to six underneath it.                                                                                                                                                                                                   | No effect beyond that reflow.                                                                                        |
 | The device (phone · desktop · reduced motion · presentation mode) | The chart is a fixed height and the station names are drawn at a fixed size, so a course with many stations crowds its own axis on a phone. The tooltip is tap-to-open rather than hover. The page runs to the edges of the screen, with no side gutter — unlike the other League screens. | No effect. Nothing here animates, so reduced motion has nothing to turn off, and no ceremony ever takes this screen. |
 
 ## Cancel and interrupt
 
-| Event | Before any tap | After a tap |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel. | Nothing to undo. A tooltip closes; a recap you opened is a page you can come back from. |
-| Navigating away inside the app | No effect. The bundle stays cached and the live channel is held through its grace period. | No effect. |
-| Reload | Both reads happen again. The archive list is served from cache for a minute. | Same. |
-| Backgrounded | The live feed may drop. Nothing on this screen says so, and the charts silently stop moving until it recovers. | Same. Regaining focus refetches the bundle. |
-| Network lost mid-request | The charts show their empty text as though there were no data. | No effect; nothing was in flight. |
-| The request fails or times out | Identical to having no data: "No split data yet.", "No official finishes yet.", "No archived events yet." | No effect. |
-| The token expires or is cleared | No effect. This screen needs no token of any kind. | No effect. |
-| Changed by someone else | This is the normal case: a live combine changes constantly and the charts follow it. | Same. |
-| A second tab or device | Every device computes the same charts from the same bundle and agrees. | Same. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before any tap                                                                                                 | After a tap                                                                             |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel.                                                                                             | Nothing to undo. A tooltip closes; a recap you opened is a page you can come back from. |
+| Navigating away inside the app              | No effect. The bundle stays cached and the live channel is held through its grace period.                      | No effect.                                                                              |
+| Reload                                      | Both reads happen again. The archive list is served from cache for a minute.                                   | Same.                                                                                   |
+| Backgrounded                                | The live feed may drop. Nothing on this screen says so, and the charts silently stop moving until it recovers. | Same. Regaining focus refetches the bundle.                                             |
+| Network lost mid-request                    | The charts show their empty text as though there were no data.                                                 | No effect; nothing was in flight.                                                       |
+| The request fails or times out              | Identical to having no data: "No split data yet.", "No official finishes yet.", "No archived events yet."      | No effect.                                                                              |
+| The token expires or is cleared             | No effect. This screen needs no token of any kind.                                                             | No effect.                                                                              |
+| Changed by someone else                     | This is the normal case: a live combine changes constantly and the charts follow it.                           | Same.                                                                                   |
+| A second tab or device                      | Every device computes the same charts from the same bundle and agrees.                                         | Same.                                                                                   |
+| Reduced motion or presentation mode changes | No effect.                                                                                                     | No effect.                                                                              |
 
 ## Interactions with other systems
 

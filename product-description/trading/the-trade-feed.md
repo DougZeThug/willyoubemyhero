@@ -8,7 +8,7 @@ leaves out is more carefully decided than what it says.
 
 It names the two people. It counts the roster cards each of them handed over. It
 names the secret cards by name — and that is the widest the record has ever been
-allowed to get. No art, no flavour text, no *look*, no *level*, no finish, and
+allowed to get. No art, no flavour text, no _look_, no _level_, no finish, and
 nothing whatsoever about a card nobody has traded. The set of secrets that exist
 is the one number this app withholds everywhere, and a public record of trades is
 the obvious place for it to leak out. It does not.
@@ -27,15 +27,15 @@ text. Newest at the top.
 That is the entire feature. Nothing on the line is tappable, nothing expands, and
 there is no way to ask it for more.
 
-| What a line carries | What it never carries |
-| --- | --- |
-| Who proposed and who accepted | Which copy, of the several either of them might hold |
-| How many roster cards each side gave | The finish on any of them — platinum, gold, or standard |
+| What a line carries                        | What it never carries                                   |
+| ------------------------------------------ | ------------------------------------------------------- |
+| Who proposed and who accepted              | Which copy, of the several either of them might hold    |
+| How many roster cards each side gave       | The finish on any of them — platinum, gold, or standard |
 | The name of each secret that changed hands | A secret's art, flavour, look or the level of that copy |
-| The order it happened in — newest first | Any trace of a card nobody has traded |
+| The order it happened in — newest first    | Any trace of a card nobody has traded                   |
 
 The inversion in that table is worth saying out loud, because it reads backwards:
-the *public* card is counted and the *secret* one is named. A roster card is
+the _public_ card is counted and the _secret_ one is named. A roster card is
 public data anybody can already browse, and it is counted only because the
 sentence is assembled without the roster in front of it — turning a card's
 identity into a person's name is a lookup this particular piece of writing cannot
@@ -105,27 +105,27 @@ trade completes, and never updated.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The feed itself asks for nobody. What it says is identical for everybody who can see it, including the two people in the trade — they read the same redacted line as the rest of the league, and see the detail on their own receipt instead. Only a member reaches the screen. | No effect. Claiming a player or signing in changes nothing about a line. |
-| The event's state (before the combine · running · finished) | Scoped to the active combine. Trades from a previous year do not appear, and outside an active combine the panel is absent entirely. | A combine ending does not clear the feed; a *new* one becoming active empties it, because it is asking about a different event. |
-| Dust switched on or off | No effect. Marketplace sales are not trades and never appear here. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | A short scrolling panel, sized so it cannot push the rest of the screen off a phone. | No motion of any kind, so reduced motion changes nothing. Under presentation mode the whole screen is inert. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                      | Changed during                                                                                                                  |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | The feed itself asks for nobody. What it says is identical for everybody who can see it, including the two people in the trade — they read the same redacted line as the rest of the league, and see the detail on their own receipt instead. Only a member reaches the screen. | No effect. Claiming a player or signing in changes nothing about a line.                                                        |
+| The event's state (before the combine · running · finished)       | Scoped to the active combine. Trades from a previous year do not appear, and outside an active combine the panel is absent entirely.                                                                                                                                            | A combine ending does not clear the feed; a _new_ one becoming active empties it, because it is asking about a different event. |
+| Dust switched on or off                                           | No effect. Marketplace sales are not trades and never appear here.                                                                                                                                                                                                              | No effect.                                                                                                                      |
+| The device (phone · desktop · reduced motion · presentation mode) | A short scrolling panel, sized so it cannot push the rest of the screen off a phone.                                                                                                                                                                                            | No motion of any kind, so reduced motion changes nothing. Under presentation mode the whole screen is inert.                    |
 
 ## Cancel and interrupt
 
-| Event | Before a trade lands | After it lands |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing to cancel; the feed is a list. | The line is already written. There is no way for either party to withdraw or amend it. |
-| Navigating away inside the app | No effect. | The line is on the server; it is there when you come back. |
-| Reload | The same list comes back. | The same list comes back with the new line on it. |
-| Backgrounded | No effect. | A phone that was asleep gets the new lines on its next window focus even if the live channel dropped. |
-| Network lost mid-request | The panel keeps showing whatever it last loaded, or is absent if it never loaded. | Nothing new arrives until the connection returns; then the whole list is re-read rather than patched. |
-| The request fails or times out | The panel is absent rather than showing an error. A league with no trades and a league whose feed failed look the same. | Same. |
-| The token expires or is cleared | No effect on the feed, which needs no token — but the screen around it does, so it disappears behind the gate. | Same. |
-| Changed by someone else | This is the only way the feed ever changes. Somebody else's accept is what writes a line. | Another trade lands under the first one. |
-| A second tab or device | Identical on both. There is nothing per-device about it. | Both redraw. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before a trade lands                                                                                                    | After it lands                                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing to cancel; the feed is a list.                                                                                  | The line is already written. There is no way for either party to withdraw or amend it.                |
+| Navigating away inside the app              | No effect.                                                                                                              | The line is on the server; it is there when you come back.                                            |
+| Reload                                      | The same list comes back.                                                                                               | The same list comes back with the new line on it.                                                     |
+| Backgrounded                                | No effect.                                                                                                              | A phone that was asleep gets the new lines on its next window focus even if the live channel dropped. |
+| Network lost mid-request                    | The panel keeps showing whatever it last loaded, or is absent if it never loaded.                                       | Nothing new arrives until the connection returns; then the whole list is re-read rather than patched. |
+| The request fails or times out              | The panel is absent rather than showing an error. A league with no trades and a league whose feed failed look the same. | Same.                                                                                                 |
+| The token expires or is cleared             | No effect on the feed, which needs no token — but the screen around it does, so it disappears behind the gate.          | Same.                                                                                                 |
+| Changed by someone else                     | This is the only way the feed ever changes. Somebody else's accept is what writes a line.                               | Another trade lands under the first one.                                                              |
+| A second tab or device                      | Identical on both. There is nothing per-device about it.                                                                | Both redraw.                                                                                          |
+| Reduced motion or presentation mode changes | No effect.                                                                                                              | No effect.                                                                                            |
 
 ## Interactions with other systems
 

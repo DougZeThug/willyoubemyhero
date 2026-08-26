@@ -61,9 +61,9 @@ add to it.
 
 **The audit** makes its own request, cached for thirty seconds, and does real
 work: it counts every roster copy and every secret pull in the league, groups them
-by owner, works out which players are *reachable*, and collects every device
+by owner, works out which players are _reachable_, and collects every device
 holding cards that belong to nobody. The header says "N loose" or "all filed"
-before you open it. Anyone on the list who is a *collector* rather than an athlete
+before you open it. Anyone on the list who is a _collector_ rather than an athlete
 is marked as one, in the Holdings rows and in the "Belongs to…" picker.
 
 Three numbers per player come back, and the third is the interesting one:
@@ -86,13 +86,13 @@ will happen rather than asking "are you sure":
 - **Turning dust on** — "Secrets become sellable … and the shop appears for
   everyone." **Turning it off** — "The chip and shop disappear and nothing
   accrues while it is off. Balances already earned are kept."
-- **Give card** — "Give *Alice* a *platinum* *Bob* card?", naming both people and
+- **Give card** — "Give _Alice_ a _platinum_ _Bob_ card?", naming both people and
   the finish, because the two dropdowns above it look identical.
-- **Attach** — "Move this device's cards onto *Alice*? This can't be undone."
+- **Attach** — "Move this device's cards onto _Alice_? This can't be undone."
 
 The attach is the one genuinely irreversible action here, and the only one whose
 confirm says so. It runs the same three steps a real claim runs, in the same
-order: the device's secrets, then its pack history, then the *milestones* those
+order: the device's secrets, then its pack history, then the _milestones_ those
 packs already paid — that order is what stops a rescued device from re-earning
 milestones somebody already collected. If a signed-in account is sitting on that
 device with no player of its own, its link is repaired at the same time, or it
@@ -115,14 +115,14 @@ read the event — see
 [the event](../foundations/the-event.md#the-events-own-settings) and
 [navigation and screens](../foundations/navigation-and-screens.md).
 
-**A grant** answers with the total: "*Alice* now holds 3 × *Bob*". The copy is
-filed as a grant rather than a *pull*, so it is distinguishable from a real one
+**A grant** answers with the total: "_Alice_ now holds 3 × _Bob_". The copy is
+filed as a grant rather than a _pull_, so it is distinguishable from a real one
 forever and never occupies anybody's one pull a day — but the public "packed by"
 count moves exactly as a real pull would, because the point is to put the
 collection back the way it was.
 
 **An attach** says how many secrets that player now holds and collapses the device
-row, then invalidates *everything* on the page rather than one query, because a
+row, then invalidates _everything_ on the page rather than one query, because a
 move this size touches the roster, the trading surfaces and the audit at once.
 
 Failures are toasts: Dust says "Could not change that", the other two carry the
@@ -132,27 +132,27 @@ sequence and only the ones before the failure have run.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Commissioner only, all three. A member who opens `/admin` meets the PIN gate rather than a console with three greyed-out panels, so nobody but the commissioner ever sees another person's holdings, another device's card names, or the dust switch. | The page reverts to the PIN gate, mid-dropdown if necessary. Nothing selected is kept. |
-| The event's state (before the combine · running · finished) | Identical in all three. The audit counts collections, which have nothing to do with whether anybody has run. Give a Card lists the roster whether or not it has raced. | No effect. |
-| Dust switched on or off | This is the axis for one of the three panels and irrelevant to the other two. While it is off the panel's own body text explains what turning it on would do; grants and attaches behave identically either way. | Flipping it mid-session changes what every player's bottom bar looks like within one read of the event. It changes nothing about a grant, which pays no dust in either state. |
-| The device (phone · desktop · reduced motion · presentation mode) | On a phone all three panels start collapsed, the audit's three lists hide behind a segmented control rather than stacking into a wall of scroll, and the attach controls stay folded until a device is tapped. Confirms are the browser's own dialogs, so they look like the OS rather than the app. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                                                           | Changed during                                                                                                                                                                |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | Commissioner only, all three. A member who opens `/admin` meets the PIN gate rather than a console with three greyed-out panels, so nobody but the commissioner ever sees another person's holdings, another device's card names, or the dust switch.                                                | The page reverts to the PIN gate, mid-dropdown if necessary. Nothing selected is kept.                                                                                        |
+| The event's state (before the combine · running · finished)       | Identical in all three. The audit counts collections, which have nothing to do with whether anybody has run. Give a Card lists the roster whether or not it has raced.                                                                                                                               | No effect.                                                                                                                                                                    |
+| Dust switched on or off                                           | This is the axis for one of the three panels and irrelevant to the other two. While it is off the panel's own body text explains what turning it on would do; grants and attaches behave identically either way.                                                                                     | Flipping it mid-session changes what every player's bottom bar looks like within one read of the event. It changes nothing about a grant, which pays no dust in either state. |
+| The device (phone · desktop · reduced motion · presentation mode) | On a phone all three panels start collapsed, the audit's three lists hide behind a segmented control rather than stacking into a wall of scroll, and the attach controls stay folded until a device is tapped. Confirms are the browser's own dialogs, so they look like the OS rather than the app. | No effect.                                                                                                                                                                    |
 
 ## Cancel and interrupt
 
-| Event | Before the first write | After it |
-| --- | --- | --- |
-| Back, or closing a sheet | Dismissing a confirm box cancels outright and writes nothing. Selections in the dropdowns stay where they were. | Nothing to undo. A grant can be countered only by another grant of the opposite kind, and there is no such control; an attach cannot be undone at all. |
-| Navigating away inside the app | Nothing recorded. The audit re-runs its read when you come back. | The write already landed. |
-| Reload | Selections are lost; nothing else. | Every change is there. The audit's counts are recomputed from scratch. |
-| Backgrounded | No effect. | An in-flight write continues. The toast may be missed; the audit's next read shows the truth. |
-| Network lost mid-request | Nothing was sent. | A grant either landed or did not. An **attach** is three calls, so it can have moved the secrets and not the pack history — leaving a device half-rescued with no indication of it. Re-running the attach on the same device is the repair, and is safe. |
-| The request fails or times out | Not applicable. | A toast with the server's words. The dust panel keeps its old label, the grant keeps its selections, the device stays in the list. |
-| The token expires or is cleared | For up to a minute after a 12-hour session ends every control still looks live — the page re-checks the token once a minute — and the first confirm you accept in that window fails with "Admin PIN required". | The worst version is an attach interrupted between its three steps by an expiry, which leaves exactly the half-moved state above. Re-entering the PIN and repeating the attach finishes it. |
-| Changed by someone else | The audit is thirty seconds stale at most, so a device rescued by a second commissioner can still be listed here. Attaching it again is harmless. | A dust flip made elsewhere is not pushed; this panel keeps its old label until it re-reads the event. |
-| A second tab or device | Both consoles show their own snapshot. | Granting the same card from two consoles hands out two copies — the grant is deliberately unconditional and does not check for a recent identical one. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the first write                                                                                                                                                                                         | After it                                                                                                                                                                                                                                                 |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Dismissing a confirm box cancels outright and writes nothing. Selections in the dropdowns stay where they were.                                                                                                | Nothing to undo. A grant can be countered only by another grant of the opposite kind, and there is no such control; an attach cannot be undone at all.                                                                                                   |
+| Navigating away inside the app              | Nothing recorded. The audit re-runs its read when you come back.                                                                                                                                               | The write already landed.                                                                                                                                                                                                                                |
+| Reload                                      | Selections are lost; nothing else.                                                                                                                                                                             | Every change is there. The audit's counts are recomputed from scratch.                                                                                                                                                                                   |
+| Backgrounded                                | No effect.                                                                                                                                                                                                     | An in-flight write continues. The toast may be missed; the audit's next read shows the truth.                                                                                                                                                            |
+| Network lost mid-request                    | Nothing was sent.                                                                                                                                                                                              | A grant either landed or did not. An **attach** is three calls, so it can have moved the secrets and not the pack history — leaving a device half-rescued with no indication of it. Re-running the attach on the same device is the repair, and is safe. |
+| The request fails or times out              | Not applicable.                                                                                                                                                                                                | A toast with the server's words. The dust panel keeps its old label, the grant keeps its selections, the device stays in the list.                                                                                                                       |
+| The token expires or is cleared             | For up to a minute after a 12-hour session ends every control still looks live — the page re-checks the token once a minute — and the first confirm you accept in that window fails with "Admin PIN required". | The worst version is an attach interrupted between its three steps by an expiry, which leaves exactly the half-moved state above. Re-entering the PIN and repeating the attach finishes it.                                                              |
+| Changed by someone else                     | The audit is thirty seconds stale at most, so a device rescued by a second commissioner can still be listed here. Attaching it again is harmless.                                                              | A dust flip made elsewhere is not pushed; this panel keeps its old label until it re-reads the event.                                                                                                                                                    |
+| A second tab or device                      | Both consoles show their own snapshot.                                                                                                                                                                         | Granting the same card from two consoles hands out two copies — the grant is deliberately unconditional and does not check for a recent identical one.                                                                                                   |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                                                                                     | No effect.                                                                                                                                                                                                                                               |
 
 ## Interactions with other systems
 
@@ -164,7 +164,7 @@ what, and it prints the names of secret cards sitting on unclaimed devices.
 
 **Realtime.** Almost nothing here broadcasts. A dust flip reaches other phones
 when they next read the active event, and a grant reaches its recipient when they
-next read their collection. The exception is a *trophy*: if the rescued device had
+next read their collection. The exception is a _trophy_: if the rescued device had
 already finished a set, banking its cards mints the trophy, and that table is
 published — so the person it belonged to finds out on their own phone.
 
@@ -182,7 +182,7 @@ off every dust operation refuses in the database itself rather than merely being
 hidden — a screen working from a stale switch costs a button that answers "not
 yet" and can spend nothing. Nothing accrues while it is off, and balances already
 earned are kept. A granted roster copy pays no dust and costs none; a granted
-secret pays none either, unlike a *pulled* duplicate, which does when dust is on.
+secret pays none either, unlike a _pulled_ duplicate, which does when dust is on.
 See [dust](../dust/dust.md) and
 [milling and selling](../dust/milling-and-selling.md).
 
@@ -222,8 +222,8 @@ last seen, and up to four card names so the commissioner can match it to whoever
 is complaining. A device with a signed-in account on it but no player is flagged
 "account", because that is the case that will keep happening until it is fixed.
 
-The "Can't trade" tab is the other half: players who are not *reachable* — no
-claimed *member code*, no account. They exist on the roster, they may hold cards,
+The "Can't trade" tab is the other half: players who are not _reachable_ — no
+claimed _member code_, no account. They exist on the roster, they may hold cards,
 and they never appear as a trade partner. Nothing here is repairable from this
 panel; the fix is a member code, on [the roster](the-roster.md).
 

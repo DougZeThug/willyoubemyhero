@@ -6,7 +6,7 @@ A card's whole claim to a tier is a time on the board, so this app is careful
 about time in a way it is not careful about much else. Every duration in it is
 milliseconds, from the timing console to the database to the card back, and it is
 turned into something human only at the edge. This document owns that: the units,
-the format, what makes a run *official*, how splits and penalties compose, and
+the format, what makes a run _official_, how splits and penalties compose, and
 the difference between the clock the crowd watches and the clock that counts.
 
 ## The simple case
@@ -21,7 +21,7 @@ The board shows that total as `1:41.32` — minutes, seconds, hundredths — or 
 
 ## Two clocks, and only one of them counts
 
-**The crowd's clock** starts when the commissioner puts somebody *on the clock*,
+**The crowd's clock** starts when the commissioner puts somebody _on the clock_,
 which usually happens a beat before they tap start. It is unofficial by
 construction and labelled that way on screen. It exists so the big screen counts
 up from something real rather than from whenever the browser happened to load.
@@ -43,7 +43,7 @@ A run is official when it is marked so and carries a time. Only official runs
 count for a tier, and only the fastest official run per athlete is considered.
 
 Anybody out of contention — scratched, disqualified, did not play, absent — is
-out of contention for *everything*, not just their own tier: they cannot hold the
+out of contention for _everything_, not just their own tier: they cannot hold the
 champion slot, a station crown or the penalty box. See
 [the card](the-card.md#what-a-tier-is).
 
@@ -68,12 +68,12 @@ the station-king tier.
 
 ## The format
 
-| Duration | Shown as |
-| --- | --- |
-| Under a minute | `41.32` |
-| A minute or more | `1:41.32` |
-| Negative (a delta) | `-3.10` |
-| Missing | `—` |
+| Duration           | Shown as  |
+| ------------------ | --------- |
+| Under a minute     | `41.32`   |
+| A minute or more   | `1:41.32` |
+| Negative (a delta) | `-3.10`   |
+| Missing            | `—`       |
 
 Hundredths, never thousandths, and always two digits of each.
 
@@ -113,7 +113,7 @@ stateDiagram-v2
 ```
 
 The clock's own interaction belongs to [running the clock](../admin/running-the-clock.md).
-What this document owns is what happens to the *numbers* through those phases.
+What this document owns is what happens to the _numbers_ through those phases.
 
 ### Arrive
 
@@ -150,27 +150,27 @@ reorders, and every device watching the event redraws.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | Times are public and identical for everyone. Only the commissioner can write one. | No effect. |
-| The event's state | Before any official run, no times exist and every card is base. | Times arrive live and change tiers as they land. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | A device with a skewed clock shows the crowd's clock wrong; the official time is unaffected because it is measured by the console. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                         | Changed during                                   |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Who you are (guest · member · account · commissioner)             | Times are public and identical for everyone. Only the commissioner can write one.                                                  | No effect.                                       |
+| The event's state                                                 | Before any official run, no times exist and every card is base.                                                                    | Times arrive live and change tiers as they land. |
+| Dust switched on or off                                           | No effect.                                                                                                                         | No effect.                                       |
+| The device (phone · desktop · reduced motion · presentation mode) | A device with a skewed clock shows the crowd's clock wrong; the official time is unaffected because it is measured by the console. | No effect.                                       |
 
 ## Cancel and interrupt
 
-| Event | Mid-run, on the console | After the run is saved |
-| --- | --- | --- |
-| Back, or closing a sheet | The run is on the device and resumes. | No effect. |
-| Navigating away inside the app | Same — the run's state is persisted as it goes. | No effect. |
-| Reload | The run resumes from its stored wall-clock anchor, which is exactly the failure the anchor was changed to prevent. | No effect. |
-| Backgrounded | The clock keeps its anchor; elapsed time is recomputed from it rather than accumulated by a timer. | No effect. |
-| Network lost mid-request | The run continues locally. Saving is what needs the network. | A saved run is saved. |
-| The request fails or times out | The console reports it and the run is still on the device to retry. | No effect. |
-| The token expires or is cleared | An expired admin token makes the save refuse; the run stays on the device. | No effect. |
-| Changed by someone else | Two consoles timing the same athlete is not defended against; see edge cases. | An edit by another commissioner arrives live. |
-| A second tab or device | The run lives on the device that started it. A second device cannot resume it. | Both see the saved run. |
-| Reduced motion or presentation mode changes | No effect on timing. | No effect. |
+| Event                                       | Mid-run, on the console                                                                                            | After the run is saved                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| Back, or closing a sheet                    | The run is on the device and resumes.                                                                              | No effect.                                    |
+| Navigating away inside the app              | Same — the run's state is persisted as it goes.                                                                    | No effect.                                    |
+| Reload                                      | The run resumes from its stored wall-clock anchor, which is exactly the failure the anchor was changed to prevent. | No effect.                                    |
+| Backgrounded                                | The clock keeps its anchor; elapsed time is recomputed from it rather than accumulated by a timer.                 | No effect.                                    |
+| Network lost mid-request                    | The run continues locally. Saving is what needs the network.                                                       | A saved run is saved.                         |
+| The request fails or times out              | The console reports it and the run is still on the device to retry.                                                | No effect.                                    |
+| The token expires or is cleared             | An expired admin token makes the save refuse; the run stays on the device.                                         | No effect.                                    |
+| Changed by someone else                     | Two consoles timing the same athlete is not defended against; see edge cases.                                      | An edit by another commissioner arrives live. |
+| A second tab or device                      | The run lives on the device that started it. A second device cannot resume it.                                     | Both see the saved run.                       |
+| Reduced motion or presentation mode changes | No effect on timing.                                                                                               | No effect.                                    |
 
 ## Interactions with other systems
 

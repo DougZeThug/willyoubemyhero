@@ -8,7 +8,7 @@ different lifetime and a different set of things it unlocks. This document owns
 those facts. Every other document says which of them a screen requires and links
 here rather than restating them.
 
-The four identities are *guest*, *member*, *account holder* and *commissioner*.
+The four identities are _guest_, _member_, _account holder_ and _commissioner_.
 They are not a ladder. A guest and a member are alternatives; an account is
 durability layered on either; the commissioner is a separate key to a separate
 door, and one person routinely holds two at once.
@@ -19,13 +19,13 @@ You open the app for the first time. You are nobody, and almost everything works
 anyway: the vault, the board, the League screens, and a pack.
 
 The moment you go to open a pack, the app quietly asks the server for an
-anonymous identity, and the server mints one and signs it. You are now a *guest*.
+anonymous identity, and the server mints one and signs it. You are now a _guest_.
 Your pack, your daily secret and your streak are attached to that identity, and
 they stay attached for 90 days.
 
 Later, somebody hands you a slip of paper with a six-character code on it. You
 type it into [the claim screen](../accounts/claiming-your-player.md), and the
-app trades it for a *member* token. You are now a person on the roster: you can
+app trades it for a _member_ token. You are now a person on the roster: you can
 trade, vote on superlatives, use the marketplace and hold roster cards on your
 name. Everything you pulled as a guest comes with you.
 
@@ -130,12 +130,12 @@ guest, so the device uploads them itself once it holds a member token. See
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | This is the axis itself. A member token always beats a guest token on the same device, so somebody who played as a guest and then claimed never ends up with their history split across two identities. | Claiming mid-session upgrades every screen at once. Signing out clears the member token but leaves the guest token, so you drop back to being nobody in particular rather than to nothing. |
-| The event's state | No effect on identity. An admin token is bound to one event and stops working when a different event is active. | A member or guest token is not event-bound and survives a new combine. |
-| Dust switched on or off | No effect. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | Identity is per-browser, not per-person. A second browser on the same phone is a different guest. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                              | Changed during                                                                                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Who you are (guest · member · account · commissioner)             | This is the axis itself. A member token always beats a guest token on the same device, so somebody who played as a guest and then claimed never ends up with their history split across two identities. | Claiming mid-session upgrades every screen at once. Signing out clears the member token but leaves the guest token, so you drop back to being nobody in particular rather than to nothing. |
+| The event's state                                                 | No effect on identity. An admin token is bound to one event and stops working when a different event is active.                                                                                         | A member or guest token is not event-bound and survives a new combine.                                                                                                                     |
+| Dust switched on or off                                           | No effect.                                                                                                                                                                                              | No effect.                                                                                                                                                                                 |
+| The device (phone · desktop · reduced motion · presentation mode) | Identity is per-browser, not per-person. A second browser on the same phone is a different guest.                                                                                                       | No effect.                                                                                                                                                                                 |
 
 Changing identity mid-session is common in this app rather than exceptional — it
 is a party, phones get handed around — and every screen is expected to cope with
@@ -143,22 +143,22 @@ a token appearing or vanishing under it.
 
 ## Cancel and interrupt
 
-| Event | Before the token is issued | After it is stored |
-| --- | --- | --- |
-| Back, or closing a sheet | The claim or PIN screen closes and nothing is stored. Attempts already made still count against the limiter. | No effect; the token is already on the device. |
-| Navigating away inside the app | Same: nothing is stored, the attempt count stands. | The token travels with you; every screen reads the same one. |
-| Reload | Nothing is stored. | Tokens survive; they live in the browser's storage, not in memory. |
-| Backgrounded | An in-flight request may fail and need retrying. | No effect. Expiry is wall-clock, so time passes while the app is closed. |
-| Network lost mid-request | No token is issued, and the attempt may or may not have been counted — the limiter is incremented before the code is compared. | No effect. |
-| The request fails or times out | The screen shows the failure and you try again. A limiter that itself errors fails open rather than locking the party out of its own console. | No effect. |
-| The token expires or is cleared | Not applicable. | The screen quietly loses an ability it had a moment ago. A member token is re-checked hourly, an admin token every minute, so an expiry shows up without a reload. |
-| Changed by someone else | The commissioner rotating a code invalidates the paper slip but leaves existing member tokens working until they expire. | Same. A rotated code is about the next claim, not this session. |
-| A second tab or device | Two tabs can each ask for a guest session; the server hands both the same identity. | A token stored in one tab is picked up by the others. A second device shares nothing unless an account links them. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the token is issued                                                                                                                    | After it is stored                                                                                                                                                 |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Back, or closing a sheet                    | The claim or PIN screen closes and nothing is stored. Attempts already made still count against the limiter.                                  | No effect; the token is already on the device.                                                                                                                     |
+| Navigating away inside the app              | Same: nothing is stored, the attempt count stands.                                                                                            | The token travels with you; every screen reads the same one.                                                                                                       |
+| Reload                                      | Nothing is stored.                                                                                                                            | Tokens survive; they live in the browser's storage, not in memory.                                                                                                 |
+| Backgrounded                                | An in-flight request may fail and need retrying.                                                                                              | No effect. Expiry is wall-clock, so time passes while the app is closed.                                                                                           |
+| Network lost mid-request                    | No token is issued, and the attempt may or may not have been counted — the limiter is incremented before the code is compared.                | No effect.                                                                                                                                                         |
+| The request fails or times out              | The screen shows the failure and you try again. A limiter that itself errors fails open rather than locking the party out of its own console. | No effect.                                                                                                                                                         |
+| The token expires or is cleared             | Not applicable.                                                                                                                               | The screen quietly loses an ability it had a moment ago. A member token is re-checked hourly, an admin token every minute, so an expiry shows up without a reload. |
+| Changed by someone else                     | The commissioner rotating a code invalidates the paper slip but leaves existing member tokens working until they expire.                      | Same. A rotated code is about the next claim, not this session.                                                                                                    |
+| A second tab or device                      | Two tabs can each ask for a guest session; the server hands both the same identity.                                                           | A token stored in one tab is picked up by the others. A second device shares nothing unless an account links them.                                                 |
+| Reduced motion or presentation mode changes | No effect.                                                                                                                                    | No effect.                                                                                                                                                         |
 
 After an expiry the app does not log you out of anything, because there was
 nothing to log out of. Buttons stop being drawn, gated screens start showing
-their gate, and a breadcrumb recording that this device *was* a member is left
+their gate, and a breadcrumb recording that this device _was_ a member is left
 behind deliberately — a member's secret cards live on their name rather than on
 the phone, and somebody arriving on a new handset to an empty vault needs to be
 told where their collection went, by which time the token that would have proved
@@ -210,7 +210,7 @@ screen states what it needs rather than simply hiding its contents.
   Nothing server-side can tell that apart from a genuinely new phone, and this is
   accepted rather than defended against.
 - **Two tokens of the same shape.** A guest token and a member token are both
-  four parts. What tells them apart is a one-letter prefix that is *inside* the
+  four parts. What tells them apart is a one-letter prefix that is _inside_ the
   signed payload, so a signature can never be transplanted from one scheme to the
   other. The admin token is three parts and cannot be confused with either.
 - **A code claimed twice.** Codes stay valid after the first claim on purpose —

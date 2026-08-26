@@ -31,14 +31,14 @@ the phone in a pond, sign in on the replacement, and the collection is there.
 
 ## What moves, and when
 
-| Moment | What moves on the server | What the device does | What does not move |
-| --- | --- | --- | --- |
-| Becoming a guest | An identity is minted and signed | Stores the token | Nothing exists yet to move |
-| Claiming a player | Secrets, pack records and any streak milestone already paid are re-filed onto the player | Uploads the roster cards it holds, one copy of each you do not already own | Starred cards and shelf order; they belong to the browser |
-| Signing in, first time on this phone | The account writes down whichever identity this phone already is | Uploads its roster cards again, if there is a player to file them against; the second run adopts nothing new | The identity itself — nothing is moved, it is adopted |
-| Signing in on a second phone | Nothing | Receives the account's identity and fills the vault from the server | A first-phone card that was never uploaded, because it was never on the server |
-| Picking a trading name | A roster-less identity is created and any guest pulls fold into it | Uploads its roster cards | Nothing |
-| Signing out | Nothing | Drops the member token, keeps the guest token, keeps the breadcrumb | The collection; it is on the server |
+| Moment                               | What moves on the server                                                                 | What the device does                                                                                         | What does not move                                                             |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Becoming a guest                     | An identity is minted and signed                                                         | Stores the token                                                                                             | Nothing exists yet to move                                                     |
+| Claiming a player                    | Secrets, pack records and any streak milestone already paid are re-filed onto the player | Uploads the roster cards it holds, one copy of each you do not already own                                   | Starred cards and shelf order; they belong to the browser                      |
+| Signing in, first time on this phone | The account writes down whichever identity this phone already is                         | Uploads its roster cards again, if there is a player to file them against; the second run adopts nothing new | The identity itself — nothing is moved, it is adopted                          |
+| Signing in on a second phone         | Nothing                                                                                  | Receives the account's identity and fills the vault from the server                                          | A first-phone card that was never uploaded, because it was never on the server |
+| Picking a trading name               | A roster-less identity is created and any guest pulls fold into it                       | Uploads its roster cards                                                                                     | Nothing                                                                        |
+| Signing out                          | Nothing                                                                                  | Drops the member token, keeps the guest token, keeps the breadcrumb                                          | The collection; it is on the server                                            |
 
 ## The interaction, event by event
 
@@ -132,27 +132,27 @@ handing one back.
 
 ## Modifiers
 
-| Modifier | At arrival | Changed during |
-| --- | --- | --- |
-| Who you are (guest · member · account · commissioner) | The load-bearing axis, and the whole subject. A guest's collection is the phone's. A member's is the server's, with the phone reconciled against it. An account holder's follows them between phones. A commissioner's own collection is an ordinary member's. | Every transition merges in place, with no confirmation and nothing to approve. The one that cannot be undone is claiming: the cards are on a name from then on. |
-| The event's state (before the combine · running · finished) | A card is held against one combine's roster. Cards belonging to another event are outside the check entirely and are never disowned. | No effect. |
-| Dust switched on or off | No effect on what you hold, only on what you can do with a spare. | No effect. |
-| The device (phone · desktop · reduced motion · presentation mode) | A browser refusing to store reads as an empty collection rather than an error, so a private-mode session can pull cards and lose them on reload. | No effect. |
+| Modifier                                                          | At arrival                                                                                                                                                                                                                                                     | Changed during                                                                                                                                                  |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | The load-bearing axis, and the whole subject. A guest's collection is the phone's. A member's is the server's, with the phone reconciled against it. An account holder's follows them between phones. A commissioner's own collection is an ordinary member's. | Every transition merges in place, with no confirmation and nothing to approve. The one that cannot be undone is claiming: the cards are on a name from then on. |
+| The event's state (before the combine · running · finished)       | A card is held against one combine's roster. Cards belonging to another event are outside the check entirely and are never disowned.                                                                                                                           | No effect.                                                                                                                                                      |
+| Dust switched on or off                                           | No effect on what you hold, only on what you can do with a spare.                                                                                                                                                                                              | No effect.                                                                                                                                                      |
+| The device (phone · desktop · reduced motion · presentation mode) | A browser refusing to store reads as an empty collection rather than an error, so a private-mode session can pull cards and lose them on reload.                                                                                                               | No effect.                                                                                                                                                      |
 
 ## Cancel and interrupt
 
-| Event | Before the identity changes | After it has |
-| --- | --- | --- |
-| Back, or closing a sheet | Nothing has moved. The device still holds what it held. | Nothing to undo. The cards are on the name. |
-| Navigating away inside the app | Same. The upload finishes wherever you are. | Same. |
-| Reload | Nothing has moved. | Everything survives; both halves are stored, not remembered. |
-| Backgrounded | An in-flight claim or sign-in may fail and can be retried. | No effect. |
-| Network lost mid-request | Nothing moves. The device's cards are untouched. | The server-side half may have landed while the upload did not; the claim stands either way and the next sign-in re-runs the upload. |
-| The request fails or times out | The screen says so and nothing changes hands. | The failure is swallowed on purpose. The collection is reconciled at the next transition. |
-| The token expires or is cleared | No effect; nothing was in flight. | The server half stops resolving and the vault shows only what the device holds. Nothing is deleted, and the breadcrumb below explains where the rest went. |
-| Changed by someone else | A card traded away between the vault loading and the upload is refused server-side rather than double-counted. | The vault redraws without it. A card handed to you by the commissioner appears on the next refresh. |
-| A second tab or device | Two tabs share the device's card database. A second device shares only the server's half. | A claim made in one tab reaches the others through the token; the upload runs once per tab and the second adopts nothing. |
-| Reduced motion or presentation mode changes | No effect. | No effect. |
+| Event                                       | Before the identity changes                                                                                    | After it has                                                                                                                                               |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing has moved. The device still holds what it held.                                                        | Nothing to undo. The cards are on the name.                                                                                                                |
+| Navigating away inside the app              | Same. The upload finishes wherever you are.                                                                    | Same.                                                                                                                                                      |
+| Reload                                      | Nothing has moved.                                                                                             | Everything survives; both halves are stored, not remembered.                                                                                               |
+| Backgrounded                                | An in-flight claim or sign-in may fail and can be retried.                                                     | No effect.                                                                                                                                                 |
+| Network lost mid-request                    | Nothing moves. The device's cards are untouched.                                                               | The server-side half may have landed while the upload did not; the claim stands either way and the next sign-in re-runs the upload.                        |
+| The request fails or times out              | The screen says so and nothing changes hands.                                                                  | The failure is swallowed on purpose. The collection is reconciled at the next transition.                                                                  |
+| The token expires or is cleared             | No effect; nothing was in flight.                                                                              | The server half stops resolving and the vault shows only what the device holds. Nothing is deleted, and the breadcrumb below explains where the rest went. |
+| Changed by someone else                     | A card traded away between the vault loading and the upload is refused server-side rather than double-counted. | The vault redraws without it. A card handed to you by the commissioner appears on the next refresh.                                                        |
+| A second tab or device                      | Two tabs share the device's card database. A second device shares only the server's half.                      | A claim made in one tab reaches the others through the token; the upload runs once per tab and the second adopts nothing.                                  |
+| Reduced motion or presentation mode changes | No effect.                                                                                                     | No effect.                                                                                                                                                 |
 
 ## Interactions with other systems
 
@@ -208,7 +208,7 @@ spoken is the vault's breadcrumb line, which is ordinary text.
   is staring at an empty vault the token that would have proved they had a
   collection is gone.
 - **Claiming halfway through a pack.** The pack you are holding was dealt to the
-  device; once you are a member the packs are dealt to *you*, so today's pack is
+  device; once you are a member the packs are dealt to _you_, so today's pack is
   re-dealt and the wrapper is sealed again. The day still counts once toward the
   streak, because the server keeps one pack record per person per day and merges
   rather than duplicating.
