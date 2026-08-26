@@ -280,7 +280,7 @@ Status is one of `not started`, `drafted`, or `verified`.
 | glossary.md | drafted |
 | bug-triage.md | not started |
 | verification/ (8 checklists) | not started |
-| foundations/identity-and-sessions.md | not started |
+| foundations/identity-and-sessions.md | drafted |
 | foundations/the-card.md | not started |
 | foundations/the-collection.md | not started |
 | foundations/navigation-and-screens.md | not started |
