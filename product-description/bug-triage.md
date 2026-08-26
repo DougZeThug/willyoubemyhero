@@ -13,7 +13,7 @@ were confirmed by the scripted pass described in
 ## Summary
 
 Around sixty suspected defects were raised across the fifty-one documents. After
-merging by root cause they come to **35 entries**: 7 high, 24 medium, and 4 low
+merging by root cause they come to **42 entries**: 7 high, 31 medium, and 4 low
 (three of which are clusters of small slips).
 
 Two clusters account for most of the high entries. The first is **writes that
@@ -24,9 +24,14 @@ that failed, and in one case that loses paper codes irrecoverably. The second is
 account that already holds one, and the account screen becoming unreachable the
 moment its own link settles.
 
-The largest medium cluster is **five screens disagreeing about the same number**:
-a run marked official with no time sorts to the top on three screens and to the
-bottom on three others.
+The largest medium cluster is **six screens disagreeing about the same number**:
+a run marked official with no time sorts to the top on three of them and to the
+bottom on the other three.
+
+A second medium cluster is **guards narrower than the writes they protect**: six
+admin handlers check the caller against one event and then write a row belonging
+to any, and a station delete's "this has recorded times" check lives in the
+screen rather than in the handler that cascades.
 
 | ID | Title | Severity | Area | Decision needed |
 | --- | --- | --- | --- | --- |
@@ -61,6 +66,13 @@ bottom on three others.
 | B-29 | Three ways a shared card image can come out wrong | medium | cross-cutting | fix |
 | B-34 | Eight screens subscribe to the live feed and never say when it is down | medium | cross-cutting | fix |
 | B-35 | Every link preview is a large-image card with no image | medium | cross-cutting | fix |
+| B-36 | Six admin writes authorize against one event and write to any | medium | admin | fix |
+| B-37 | Deleting a station takes finished runs' splits with it | medium | admin | fix |
+| B-38 | The tier override is honoured everywhere and reachable from nowhere | medium | cards | product call |
+| B-39 | Grants are not idempotent and cannot be undone | medium | admin | fix |
+| B-40 | Rescuing a device's cards is three writes with no transaction | medium | admin | fix |
+| B-41 | "Record a split here" saves, reads back, and does nothing | medium | admin | fix |
+| B-42 | A retired secret card cannot be brought back | medium | admin | fix |
 | B-30 | Accessibility gaps across the app | low | cross-cutting | fix |
 | B-31 | Small rendering and copy slips | low | — | fix |
 | B-32 | The compare picker dresses an unpacked card in its real tier | low | cards | product call |
@@ -584,6 +596,128 @@ bottom on three others.
 - **Decision needed:** `fix`.
 - **Raised by:** [sharing](cross-cutting/sharing.md#open-questions-and-verification).
 
+### B-36: Six admin writes authorize against one event and write to any
+
+- **Where the user meets it:** They mostly do not, today — one combine is active
+  at a time. It matters the moment a second event exists, or a past one is
+  edited.
+- **What happens / what was expected:** A handler checks the admin token against
+  the event id in the request, then writes a row identified only by its own id,
+  with no check that the row belongs to that event. An admin session for last
+  year's combine can set a participant's status, reorder the running order,
+  rename or delete a station, or delete a run in **this** year's.
+- **Reproduce:** Hold an admin token for event A; issue any of the six calls
+  naming event A with a row id from event B.
+- **Why (from the code):** In `src/lib/admin-write.functions.ts`,
+  `setParticipantStatus`, `removeParticipantFromEvent` and `setRunningOrder`
+  match on `event_participants.id`; `upsertStation` and `deleteStation` match on
+  `stations.id`; `deleteRun` matches on `runs.id`. Each is preceded by
+  `requireAdmin(data.eventId)` and none adds `.eq("event_id", data.eventId)`.
+  `upsertParticipant` is not in this list — the participants table is
+  league-wide by design — and `updateEvent` and `recordRandomization` write with
+  the authorized event id itself.
+- **Severity:** `medium`. Bounded hard by the deployment: one active event,
+  thirteen people, and a shared PIN, so this is a prank rather than a breach
+  today. It is listed because the project's security model says plainly that
+  these guards are the only thing between a request and the database, and this
+  is the guard being narrower than the write it protects.
+- **Decision needed:** `fix`. Add the event filter to all six; the guard already
+  has the id it needs.
+- **Status:** Confirmed by enumerating every handler in that file that calls
+  `requireAdmin(data.eventId)` and checking each write's filters.
+- **Raised by:** [stations](admin/stations.md#open-questions-and-verification),
+  [the roster](admin/the-roster.md#open-questions-and-verification).
+
+### B-37: Deleting a station takes finished runs' splits with it
+
+- **Where the user meets it:** The commissioner removes a station after the
+  combine has been run.
+- **What happens / what was expected:** The panel refuses to delete a station
+  that has recorded times — but that check lives entirely in the screen. The
+  handler checks only that the caller is an admin, and the database cascades, so
+  a delete reaching it another way removes every split at that station. Since a
+  station crown is computed from splits, that can silently demote somebody's
+  `stationKing` card to `base`. Expected: the guard is on the write, not on the
+  button.
+- **Why (from the code):** `deleteStation` in
+  `src/lib/admin-write.functions.ts:316-324` checks `requireAdmin` and nothing
+  else; `splits.station_id` is `ON DELETE CASCADE`; the "has recorded times"
+  block is in `src/components/stations-panel.tsx`.
+- **Severity:** `medium`. Rewrites results, but needs a deliberate act to reach.
+- **Decision needed:** `fix`. Move the check into the handler.
+- **Raised by:** [stations](admin/stations.md#open-questions-and-verification).
+
+### B-38: The tier override is honoured everywhere and reachable from nowhere
+
+- **Where the user meets it:** They cannot. There is no control for it.
+- **What happens / what was expected:** Every card carries a stored tier that
+  beats the computed one, and the rule is honoured on every screen. No screen in
+  the app writes it. Either a commissioner control is missing, or the override is
+  dead weight that every reader still pays for.
+- **Why (from the code):** `card_rarity` is read as an always-wins override in
+  `src/lib/card-rarity.ts:320`; a search of `src/` finds no write outside test
+  fixtures.
+- **Severity:** `medium`. It shaped this description — the foundation document
+  originally said a commissioner could override a tier, on the strength of the
+  code honouring one.
+- **Decision needed:** `product call`. Build the control, or drop the override.
+- **Status:** Confirmed by search; the-card.md corrected accordingly.
+- **Raised by:** [the card](foundations/the-card.md#what-a-tier-is),
+  [dust and ownership](admin/dust-and-ownership.md#open-questions-and-verification).
+
+### B-39: Grants are not idempotent and cannot be undone
+
+- **Where the user meets it:** The commissioner hands somebody a card, and the
+  request times out, or they tap twice.
+- **What happens / what was expected:** A real second copy is handed out. The
+  only thing preventing it is a per-row spinner, which does not survive a
+  reload, and there is no undo. Expected: a grant is idempotent, or reversible.
+- **Why (from the code):** `grantCard` and `grantSecretCard` insert without a
+  uniqueness key on the grant itself.
+- **Severity:** `medium`. Quietly inflates a collection in a game whose whole
+  economy is scarcity.
+- **Decision needed:** `fix`.
+- **Raised by:** [dust and ownership](admin/dust-and-ownership.md#open-questions-and-verification).
+
+### B-40: Rescuing a device's cards is three writes with no transaction
+
+- **Where the user meets it:** The commissioner uses the ownership audit to move
+  cards from a device onto a player.
+- **What happens / what was expected:** The confirm says "This can't be undone",
+  and it is three sequential calls with nothing tying them together. A failure
+  between steps leaves the device half-rescued and nothing on screen says so.
+- **Why (from the code):** `attachDeviceToPlayer` in
+  `src/lib/ownership-audit.functions.ts`.
+- **Severity:** `medium`.
+- **Decision needed:** `fix`.
+- **Raised by:** [dust and ownership](admin/dust-and-ownership.md#open-questions-and-verification).
+
+### B-41: "Record a split here" saves, reads back, and does nothing
+
+- **Where the user meets it:** The commissioner turns a station's split
+  recording off.
+- **What happens / what was expected:** The switch saves faithfully and the
+  timing console ignores it — it filters on whether the station is active and
+  nothing else. Expected: the station is skipped.
+- **Why (from the code):** `split_enabled` is written by the stations panel and
+  read by nothing; `src/hooks/use-run-console.ts` filters on `active` only.
+- **Severity:** `medium`. A control that confirms and lies.
+- **Decision needed:** `fix`, or remove the switch.
+- **Raised by:** [stations](admin/stations.md#open-questions-and-verification).
+
+### B-42: A retired secret card cannot be brought back
+
+- **Where the user meets it:** The commissioner retires a secret card and then
+  changes their mind.
+- **What happens / what was expected:** The handler accepts the field that would
+  restore it; the panel never sends it. There is no way back from the screen.
+- **Why (from the code):** `updateSecretCard` in
+  `src/lib/secret-cards.functions.ts` accepts `active`;
+  `src/components/secret-cards-panel.tsx` never sends `active: true`.
+- **Severity:** `medium`.
+- **Decision needed:** `fix`.
+- **Raised by:** [secret card sets](admin/secret-card-sets.md#open-questions-and-verification).
+
 ## Low
 
 ### B-30: Accessibility gaps across the app
@@ -653,6 +787,22 @@ bottom on three others.
 - **A hidden commissioner-created set renders as a raw identifier** in the admin
   card picker, because the label lookup falls back to the four seeded sets.
 - **An unused import** on the player page.
+- **The bulk-upload oversize badge names the wrong cap.** It reads "Over 12 MB"
+  while the limit is 8.8 MB, so a 10 MB file is correctly rejected and then
+  labelled with a number it is under.
+- **Replacing a player's card art orphans the old files.** The player-card
+  upload never removes what it replaces, unlike the card-back and secret-art
+  uploads, so storage keeps every version ever uploaded.
+- **The stations panel trusts an empty splits list even when that read failed.**
+  The bundle reports which tables it could not read; the panel does not consult
+  it, so the delete guard is disarmed exactly when the data is missing rather
+  than absent.
+- **The ownership audit's "Belongs to" select has no accessible name**, unlike
+  every neighbouring dropdown.
+- **Reordering two stations is two writes with no transaction**, so a
+  half-completed swap leaves them sharing an order value.
+- **A card back's station ladder includes retired stations**, printing an empty
+  row for a station nobody ever ran.
 - **The live feed subscribes to splits and penalties unfiltered**, while runs,
   participants and draft picks are filtered by event — so any event's splits fan
   out to every watcher. Invisible while one combine is active.

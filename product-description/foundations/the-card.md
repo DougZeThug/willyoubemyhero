@@ -59,7 +59,11 @@ Three rules matter enough to state plainly:
   champion slot, and the honest winner shipped as a podium card.
 - **A dead heat shares the place.** Two identical clocks both count as first;
   neither is arbitrarily demoted.
-- **The commissioner can override a tier**, and an override always wins.
+- **A stored override always wins.** Every card carries a tier field that, when
+  set, beats everything computed above. No screen in the app writes it — see
+  [B-38](../bug-triage.md#b-38-the-tier-override-is-honoured-everywhere-and-reachable-from-nowhere).
+  It is honoured everywhere and reachable from nowhere, so today a tier is
+  always the one the course produced.
 
 The six tier strings are persisted on the event roster, which is why they may
 never be renamed: renaming one orphans every card already wearing it.
