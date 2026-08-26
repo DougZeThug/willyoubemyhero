@@ -176,10 +176,15 @@ function CardStrip({
   items,
   lookup,
   size,
+  conceal = false,
+  backUrl = null,
 }: {
   items: TradeItemView[];
   lookup: RosterCardLookup;
   size: "sm" | "lg";
+  /** Hide the art on anything in this strip the viewer does not already hold. */
+  conceal?: boolean;
+  backUrl?: ImageUrlSet | string | null;
 }) {
   if (items.length === 0) {
     // An item whose card has since been deleted is dropped on the way out, so a
@@ -194,6 +199,8 @@ function CardStrip({
           item={item}
           lookup={lookup}
           size={size}
+          concealed={conceal && item.viewerOwns === false}
+          backUrl={backUrl}
         />
       ))}
     </div>
@@ -208,9 +215,18 @@ export type TradeOfferCardProps = {
   lookup: RosterCardLookup;
   /** Accept/decline/cancel buttons. Omitted for a settled offer. */
   actions?: ReactNode;
+  /** The event's universal back, used to conceal art on the "you get" side. */
+  backUrl?: ImageUrlSet | string | null;
 };
 
-export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOfferCardProps) {
+export function TradeOfferCard({
+  offer,
+  me,
+  nameOf,
+  lookup,
+  actions,
+  backUrl = null,
+}: TradeOfferCardProps) {
   const iAmProposer = offer.proposerId === me;
   const theirId = iAmProposer ? offer.recipientId : offer.proposerId;
   const iGive = iAmProposer ? offer.proposerGives : offer.recipientGives;
@@ -304,7 +320,9 @@ export function TradeOfferCard({ offer, me, nameOf, lookup, actions }: TradeOffe
           />
         </div>
         <div className="min-w-0 flex-1">
-          <CardStrip items={iGet} lookup={lookup} size={size} />
+          {/* Their side only: what you are being offered can include art you have
+              never pulled, and an offer should not be a way to see it. */}
+          <CardStrip items={iGet} lookup={lookup} size={size} conceal backUrl={backUrl} />
         </div>
       </div>
 
