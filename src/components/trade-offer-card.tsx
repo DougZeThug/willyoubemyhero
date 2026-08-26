@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
+import { SealedBack } from "@/components/pack-card-back";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
 import type { ImageUrlSet } from "@/lib/media";
@@ -31,6 +32,16 @@ export type TradeItemTileProps = {
    * actually read across a garden.
    */
   size?: "sm" | "lg";
+  /**
+   * Render face-down against the universal deck back instead of showing the art.
+   *
+   * Used for a counterparty's cards you have never pulled: the name and tier stay
+   * readable — you cannot judge an offer otherwise — but the art is not spoiled
+   * by scrolling somebody else's spares.
+   */
+  concealed?: boolean;
+  /** The event's universal back, for `concealed`. Falls back to the sealed pack face. */
+  backUrl?: ImageUrlSet | string | null;
 };
 
 const TILE_WIDTH: Record<"sm" | "lg", string> = {
@@ -53,6 +64,8 @@ export function TradeItemTile({
   selected,
   blockedLabel,
   size = "sm",
+  concealed = false,
+  backUrl = null,
 }: TradeItemTileProps) {
   const width = TILE_WIDTH[size];
   const big = size === "lg";
@@ -68,7 +81,13 @@ export function TradeItemTile({
     <>
       <HoloCard
         frontUrl={item.kind === "roster" ? (roster?.frontUrl ?? null) : item.artUrl}
-        backUrl={null}
+        backUrl={concealed ? backUrl : null}
+        // Controlled at false with `faceDown`, so a concealed card shows the deck
+        // back and stays there — tapping the tile stages the card, it does not
+        // turn it over.
+        faceDown={concealed}
+        flipped={concealed ? false : undefined}
+        backContent={concealed ? <SealedBack /> : undefined}
         name={name}
         rarity={item.kind === "roster" ? (roster?.rarity ?? rarityStyle("base")) : SECRET_RARITY}
         edition={item.kind === "roster" ? item.edition : undefined}
@@ -92,6 +111,13 @@ export function TradeItemTile({
             style={{ color: tier.accent }}
           >
             {tier.label}
+          </div>
+        )}
+        {/* Says why the art is hidden, so a face-down tile reads as a rule rather
+            than as missing artwork. */}
+        {concealed && (
+          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            not yours yet
           </div>
         )}
         {/* Any secret copy is tradeable now, single or not, so this is the only
