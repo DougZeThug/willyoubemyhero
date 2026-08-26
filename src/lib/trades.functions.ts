@@ -132,6 +132,8 @@ async function hydrateSecrets(
   rows: Pick<SecretPullRow, "id" | "secret_card_id" | "tier">[],
   /** Pull ids whose owner holds no other copy of that card. */
   lastCopyIds: ReadonlySet<string> = new Set(),
+  /** Secret card ids the VIEWER already holds a copy of — drives face-down art. */
+  viewerCardIds: ReadonlySet<string> = new Set(),
 ): Promise<Map<string, SecretSpare>> {
   const out = new Map<string, SecretSpare>();
   if (rows.length === 0) return out;
@@ -156,10 +158,41 @@ async function hydrateSecrets(
         artUrl: await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb),
         tier: toSecretTier(row.tier),
         lastCopy: lastCopyIds.has(row.id),
+        viewerOwns: viewerCardIds.has(row.secret_card_id),
       });
     }),
   );
   return out;
+}
+
+/**
+ * What the person holding the phone already has, as two id sets.
+ *
+ * Only ever used to decide whether a card on the OTHER side of the table can show
+ * its art: a card you already own is nothing to spoil, one you do not renders
+ * face-down. Both queries are scoped to the caller's own rows, so this adds no
+ * exposure of anybody else's collection.
+ */
+async function viewerHoldings(
+  me: string,
+): Promise<{ roster: ReadonlySet<string>; secrets: ReadonlySet<string> }> {
+  const sb = await db();
+  const [{ data: copies }, { data: pulls }] = await Promise.all([
+    sb
+      .from("card_copies")
+      .select("event_participant_id")
+      .eq("participant_id", me)
+      .returns<Pick<CardCopyRow, "event_participant_id">[]>(),
+    sb
+      .from("secret_card_pulls")
+      .select("secret_card_id")
+      .eq("participant_id", me)
+      .returns<Pick<SecretPullRow, "secret_card_id">[]>(),
+  ]);
+  return {
+    roster: new Set((copies ?? []).map((r) => r.event_participant_id)),
+    secrets: new Set((pulls ?? []).map((r) => r.secret_card_id)),
+  };
 }
 
 /**
@@ -256,9 +289,20 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       held.filter((r) => perCard.get(r.secret_card_id) === 1).map((r) => r.id),
     );
 
+    // What the ASKER holds, so a card they have never pulled can be shown
+    // face-down on the counterparty's side. Your own list is all yours by
+    // definition, so skip the round trip when looking at yourself.
+    const viewer = mine
+      ? { roster: new Set<string>(), secrets: new Set<string>() }
+      : await viewerHoldings(asker);
+
     // Hydrated over every row rather than only the stakeable ones, so the blocked
     // list below can render a face too — a greyed tile with no art explains nothing.
-    const secrets = await hydrateSecrets(mine ? held : stakeable, lastCopyIds);
+    const secrets = await hydrateSecrets(
+      mine ? held : stakeable,
+      lastCopyIds,
+      mine ? undefined : viewer.secrets,
+    );
 
     // Every copy of a card they hold two or more of. All of them, not "the ones
     // beyond the first": the giver picks which copy to keep, so listing only the
@@ -288,6 +332,8 @@ export const getTradeSpares = createServerFn({ method: "GET" })
                 copyId: r.id,
                 eventParticipantId: r.event_participant_id,
                 edition: toEdition(r.edition),
+                // Your own card, so nothing to conceal.
+                viewerOwns: true,
               },
               reason: "only-copy",
             })),
@@ -296,7 +342,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
             .map((r) => secrets.get(r.id))
             .filter((s): s is SecretSpare => !!s)
             .map<BlockedSpare>((s) => ({
-              item: { kind: "secret", ...s },
+              item: { kind: "secret", ...s, viewerOwns: true },
               reason: "todays-pull",
             })),
         ]
@@ -313,6 +359,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       // same direction the SQL errs in: a provenance nobody has taught this
       // about should under-promise rather than over-promise a payout.
       assertedBy: r.edition_asserted_by === "server" ? ("server" as const) : ("client" as const),
+      viewerOwns: mine || viewer.roster.has(r.event_participant_id),
     });
 
     return {
@@ -326,7 +373,10 @@ export const getTradeSpares = createServerFn({ method: "GET" })
         .filter((list) => list.length >= 2)
         .flat()
         .map(asSpare),
-      secrets: stakeable.map((r) => secrets.get(r.id)!).filter(Boolean),
+      secrets: stakeable
+        .map((r) => secrets.get(r.id)!)
+        .filter(Boolean)
+        .map((sp) => (mine ? { ...sp, viewerOwns: true } : sp)),
       blocked,
     };
   });
@@ -335,7 +385,10 @@ export const getTradeSpares = createServerFn({ method: "GET" })
 async function toOfferViews(
   offers: TradeOfferRow[],
   items: TradeOfferItemRow[],
+  /** The reader, so a card they do not hold can be rendered face-down. */
+  me: string,
 ): Promise<TradeOfferView[]> {
+  const viewer = await viewerHoldings(me);
   const secretRows = items
     .filter((i) => i.kind === "secret" && i.secret_pull_id)
     .map((i) => i.secret_pull_id!);
@@ -379,7 +432,7 @@ async function toOfferViews(
         .map((r) => r.id),
     );
 
-    hydrated = await hydrateSecrets(staked, lastCopyIds);
+    hydrated = await hydrateSecrets(staked, lastCopyIds, viewer.secrets);
   }
   if (copyRows.length) {
     // Which card the copy is of, and the finish on it. Read off the copy rather
@@ -402,6 +455,7 @@ async function toOfferViews(
             copyId: copy.id,
             eventParticipantId: copy.event_participant_id,
             edition: toEdition(copy.edition),
+            viewerOwns: viewer.roster.has(copy.event_participant_id),
           }
         : null;
     }
@@ -496,7 +550,7 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
       .returns<TradeOfferItemRow[]>();
     if (itemError) throw itemError;
 
-    const views = await toOfferViews(wanted, items ?? []);
+    const views = await toOfferViews(wanted, items ?? [], me);
     const byId = new Map(views.map((v) => [v.id, v]));
     return {
       inbox: pending.filter((o) => o.recipient_id === me).map((o) => byId.get(o.id)!),

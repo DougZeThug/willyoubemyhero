@@ -89,8 +89,8 @@ describe("getTradeSpares", () => {
     });
     const res = await spares(ME, asMe());
     expect(res.roster).toEqual([
-      { copyId: COPY_1, eventParticipantId: CARD_A, edition: "platinum", assertedBy: "server" },
-      { copyId: COPY_2, eventParticipantId: CARD_A, edition: "standard", assertedBy: "server" },
+      { copyId: COPY_1, eventParticipantId: CARD_A, edition: "platinum", assertedBy: "server", viewerOwns: true }, // prettier-ignore
+      { copyId: COPY_2, eventParticipantId: CARD_A, edition: "standard", assertedBy: "server", viewerOwns: true }, // prettier-ignore
     ]);
   });
 
@@ -273,6 +273,8 @@ describe("getTradeSpares", () => {
         artUrl: "https://signed/spare-day",
         tier: "rare",
         lastCopy: true,
+        // Your own list, so nothing on it is ever concealed.
+        viewerOwns: true,
       },
     ]);
   });
@@ -588,22 +590,27 @@ describe("getMyTradeOffers", () => {
       },
       // Which card each staked copy is of, and its finish — read off the copy
       // rather than off the item, so it cannot drift from the row that will move.
-      "card_copies.select": {
-        data: [
-          { id: COPY_1, event_participant_id: CARD_A, edition: "gold" },
-          { id: COPY_2, event_participant_id: CARD_B, edition: "standard" },
-        ],
-      },
+      // First call is the reader's own holdings — they hold neither card, so both
+      // sides come back flagged for a face-down render. Second is the staked copies.
+      "card_copies.select": [
+        { data: [] },
+        {
+          data: [
+            { id: COPY_1, event_participant_id: CARD_A, edition: "gold" },
+            { id: COPY_2, event_participant_id: CARD_B, edition: "standard" },
+          ],
+        },
+      ],
     });
     const res = await offers(asMe());
     expect(res.inbox.map((o) => o.id)).toEqual([OFFER_ID]);
     expect(res.outbox.map((o) => o.id)).toEqual(["o2"]);
     expect(res.recent.map((o) => o.id)).toEqual(["o3"]);
     expect(res.inbox[0].proposerGives).toEqual([
-      { kind: "roster", copyId: COPY_1, eventParticipantId: CARD_A, edition: "gold" },
+      { kind: "roster", copyId: COPY_1, eventParticipantId: CARD_A, edition: "gold", viewerOwns: false }, // prettier-ignore
     ]);
     expect(res.inbox[0].recipientGives).toEqual([
-      { kind: "roster", copyId: COPY_2, eventParticipantId: CARD_B, edition: "standard" },
+      { kind: "roster", copyId: COPY_2, eventParticipantId: CARD_B, edition: "standard", viewerOwns: false }, // prettier-ignore
     ]);
   });
 
@@ -627,7 +634,11 @@ describe("getMyTradeOffers", () => {
       },
       // Two calls in order: the staked rows, then every row for those cards so the
       // owner's copy count — and so `lastCopy` — can be worked out.
+      // Three calls in order: the reader's own copies (they hold no Gary), the
+      // staked rows, then every row for those cards so the owner's copy count —
+      // and so `lastCopy` — can be worked out.
       "secret_card_pulls.select": [
+        { data: [] },
         {
           data: [{ id: PULL_ID, participant_id: THEM, secret_card_id: SECRET_ID, tier: "mythic" }],
         },
@@ -648,6 +659,8 @@ describe("getMyTradeOffers", () => {
         tier: "mythic",
         // The proposer holds exactly one — they are offering their only Gary.
         lastCopy: true,
+        // The reader has never pulled it, so the tile renders face-down.
+        viewerOwns: false,
       },
     ]);
   });

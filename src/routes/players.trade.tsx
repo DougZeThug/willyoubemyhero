@@ -9,7 +9,7 @@ import { CollectionComplete } from "@/components/collection-complete";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
-import { useEventCardUrls } from "@/hooks/use-photo-urls";
+import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMemberSession } from "@/lib/member-token";
 import { useAuthUser } from "@/hooks/use-account";
 import { getClaimRoster } from "@/lib/member.functions";
@@ -47,6 +47,7 @@ import {
   type RosterCardLookup,
 } from "@/components/trade-offer-card";
 import { CollectorSignup } from "@/components/collector-signup";
+import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/players/trade")({
@@ -77,6 +78,10 @@ function TradePage() {
   const { user, loading: authLoading } = useAuthUser();
   const qc = useQueryClient();
   const cards = useEventCardUrls(event?.id ?? null);
+  // The event's universal back, never a player's — it is what a card you have not
+  // pulled yet is shown as, so it must give nothing about that card away.
+  const cardBack = useEventCardBack(event?.id ?? null);
+  const backUrl = cardBack.data?.urls ?? null;
 
   const myId = me?.participantId ?? null;
   const offers = useTradeOffers(myId);
@@ -338,6 +343,7 @@ function TradePage() {
                   me={me.participantId}
                   nameOf={nameOf}
                   lookup={lookup}
+                  backUrl={backUrl}
                   actions={
                     <>
                       <button
@@ -377,6 +383,7 @@ function TradePage() {
                   me={me.participantId}
                   nameOf={nameOf}
                   lookup={lookup}
+                  backUrl={backUrl}
                   actions={
                     <button
                       onClick={() => resolve(offer.id, "cancel")}
@@ -442,6 +449,7 @@ function TradePage() {
                   lookup={lookup}
                   staged={give}
                   onToggle={(s) => toggle("give", s)}
+                  backUrl={backUrl}
                 />
                 <SparePicker
                   label={`${nameOf(theirId)} gives (${want.length}/${MAX_PER_SIDE})`}
@@ -450,6 +458,8 @@ function TradePage() {
                   lookup={lookup}
                   staged={want}
                   onToggle={(s) => toggle("want", s)}
+                  backUrl={backUrl}
+                  conceal
                 />
                 <button
                   onClick={propose}
@@ -475,6 +485,7 @@ function TradePage() {
                   me={me.participantId}
                   nameOf={nameOf}
                   lookup={lookup}
+                  backUrl={backUrl}
                 />
               ))}
             </div>
@@ -631,6 +642,8 @@ function SparePicker({
   lookup,
   staged,
   onToggle,
+  backUrl = null,
+  conceal = false,
 }: {
   label: string;
   spares: TradeSpares | undefined;
@@ -638,6 +651,10 @@ function SparePicker({
   lookup: RosterCardLookup;
   staged: Staged[];
   onToggle: (staged: Staged) => void;
+  /** The event's universal back, shown instead of art you have not pulled. */
+  backUrl?: ImageUrlSet | null;
+  /** Set on the counterparty's strip only. Your own cards are never concealed. */
+  conceal?: boolean;
 }) {
   const blocked = spares?.blocked ?? [];
 
@@ -660,6 +677,7 @@ function SparePicker({
             artUrl: s.artUrl,
             tier: s.tier,
             lastCopy: s.lastCopy,
+            viewerOwns: s.viewerOwns,
           },
           payload: { kind: "secret", secretPullId: s.pullId },
         }),
@@ -686,6 +704,7 @@ function SparePicker({
             copyId: r.copyId,
             eventParticipantId: r.eventParticipantId,
             edition: r.edition,
+            viewerOwns: r.viewerOwns,
           },
           payload: { kind: "roster", cardCopyId: r.copyId },
         }),
@@ -710,6 +729,8 @@ function SparePicker({
               lookup={lookup}
               selected={staged.some((x) => x.key === s.key)}
               onClick={() => onToggle(s)}
+              concealed={conceal && s.item.viewerOwns === false}
+              backUrl={backUrl}
             />
           ))}
         </div>

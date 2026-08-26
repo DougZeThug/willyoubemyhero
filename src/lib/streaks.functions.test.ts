@@ -11,6 +11,7 @@ import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/
 import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
 import type { StreakStatus } from "./streaks.functions";
 import { STREAK_MILESTONES } from "./streaks";
+import { leagueDay } from "./trades";
 
 let mock = createSupabaseMock();
 
@@ -35,14 +36,19 @@ function withDb(responses: SupabaseResponses = {}) {
 const asMe = () => memberHeaders(signMemberToken(ME).token);
 const asGuest = () => guestHeaders(signGuestToken(GUEST).token);
 
-/** N consecutive league days ending today, as the rows pack_opens would hand back. */
+/**
+ * N consecutive league days ending today, as the rows pack_opens would hand back.
+ *
+ * Anchored on `leagueDay()` rather than the UTC date: between 00:00 and 05:00 UTC
+ * New York is still on yesterday, so a UTC-built ladder ended a day in the future
+ * and the streak read as broken — a real failure every night, only in CI.
+ */
 function daysEndingToday(n: number) {
   const out: { opened_on: string }[] = [];
-  const today = new Date();
+  const [y, m, d] = leagueDay().split("-").map(Number);
   for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    d.setUTCDate(d.getUTCDate() - i);
-    out.push({ opened_on: d.toISOString().slice(0, 10) });
+    const day = new Date(Date.UTC(y!, m! - 1, d! - i));
+    out.push({ opened_on: day.toISOString().slice(0, 10) });
   }
   return out;
 }

@@ -59,7 +59,14 @@ export function isTradeOfferStatus(value: string): value is TradeOfferStatus {
  * being reachable only through an offer you are party to.
  */
 export type TradeItemView =
-  | { kind: "roster"; copyId: string; eventParticipantId: string; edition: Edition }
+  | {
+      kind: "roster";
+      copyId: string;
+      eventParticipantId: string;
+      edition: Edition;
+      /** See SecretSpare.viewerOwns — same rule, same reason. */
+      viewerOwns?: boolean;
+    }
   | {
       kind: "secret";
       pullId: string;
@@ -68,6 +75,8 @@ export type TradeItemView =
       tier: SecretTier;
       /** True when its owner holds no other copy of that card. */
       lastCopy: boolean;
+      /** Whether the person reading this already holds a copy of the card. */
+      viewerOwns?: boolean;
     };
 
 export type TradeOfferView = {
@@ -93,6 +102,15 @@ export type RosterSpare = {
   copyId: string;
   eventParticipantId: string;
   edition: Edition;
+  /**
+   * Whether the person READING this list already holds a copy of that card.
+   *
+   * Decided on the server because the client cannot work it out for secrets, and
+   * because it drives a privacy rule rather than a decoration: unowned art on a
+   * counterparty's side of the table renders face-down, so browsing somebody's
+   * spares never spoils art you have not pulled.
+   */
+  viewerOwns: boolean;
   /**
    * Who decided this copy's finish — `card_copies.edition_asserted_by`.
    *
@@ -120,6 +138,8 @@ export type SecretSpare = {
   artUrl: string | null;
   tier: SecretTier;
   lastCopy: boolean;
+  /** See RosterSpare.viewerOwns. */
+  viewerOwns: boolean;
 };
 
 /**
