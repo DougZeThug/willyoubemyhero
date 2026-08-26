@@ -278,7 +278,7 @@ Status is one of `not started`, `drafted`, or `verified`.
 | Document | Status |
 | --- | --- |
 | glossary.md | drafted |
-| bug-triage.md | not started |
+| bug-triage.md | drafted |
 | verification/ (8 checklists) | not started |
 | foundations/identity-and-sessions.md | drafted |
 | foundations/the-card.md | drafted |
@@ -330,7 +330,7 @@ Status is one of `not started`, `drafted`, or `verified`.
 | cross-cutting/motion-and-sound.md | drafted |
 | cross-cutting/notifications-and-badges.md | drafted |
 | cross-cutting/sharing.md | drafted |
-| cross-cutting/accessibility.md | not started |
+| cross-cutting/accessibility.md | drafted |
 
 ## Reference
 

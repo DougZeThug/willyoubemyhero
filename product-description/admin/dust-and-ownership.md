@@ -2,12 +2,12 @@
 
 ## Summary
 
-Three panels sit next to each other near the bottom of the admin console and
-share one job: putting a collection back the way it should have been. **Dust** is
-a single button that turns the whole economy on or off for the league. **Give a
-Card** hands somebody a copy of a roster card they lost. **Card Ownership Audit**
-answers the question that produces the most complaints — "why can't I see my card
-in trades?" — and repairs the commonest cause of it in one tap.
+Three panels sit one after another in the admin console and share one job:
+putting a collection back the way it should have been. **Give a Card** hands
+somebody a copy of a roster card they lost. **Dust** is a single button that turns
+the whole economy on or off for the league. **Card Ownership Audit** answers the
+question that produces the most complaints — "why can't I see my card in
+trades?" — and repairs the commonest cause of it in one tap.
 
 None of the three is part of race day. All three exist because a phone-first app
 with no login has two ways to lose track of who owns what: a pack opened before
@@ -149,7 +149,7 @@ sequence and only the ones before the failure have run.
 | Backgrounded | No effect. | An in-flight write continues. The toast may be missed; the audit's next read shows the truth. |
 | Network lost mid-request | Nothing was sent. | A grant either landed or did not. An **attach** is three calls, so it can have moved the secrets and not the pack history — leaving a device half-rescued with no indication of it. Re-running the attach on the same device is the repair, and is safe. |
 | The request fails or times out | Not applicable. | A toast with the server's words. The dust panel keeps its old label, the grant keeps its selections, the device stays in the list. |
-| The token expires or is cleared | Every control still looks live: a 12-hour session's end is noticed on a timer rather than at the moment it happens. The first confirm you accept fails with "Admin PIN required". | The worst version is an attach interrupted between its three steps by an expiry, which leaves exactly the half-moved state above. Re-entering the PIN and repeating the attach finishes it. |
+| The token expires or is cleared | For up to a minute after a 12-hour session ends every control still looks live — the page re-checks the token once a minute — and the first confirm you accept in that window fails with "Admin PIN required". | The worst version is an attach interrupted between its three steps by an expiry, which leaves exactly the half-moved state above. Re-entering the PIN and repeating the attach finishes it. |
 | Changed by someone else | The audit is thirty seconds stale at most, so a device rescued by a second commissioner can still be listed here. Attaching it again is harmless. | A dust flip made elsewhere is not pushed; this panel keeps its old label until it re-reads the event. |
 | A second tab or device | Both consoles show their own snapshot. | Granting the same card from two consoles hands out two copies — the grant is deliberately unconditional and does not check for a recent identical one. |
 | Reduced motion or presentation mode changes | No effect. | No effect. |
@@ -162,10 +162,11 @@ All four writes — the dust flip, the grant, the audit read and the attach — 
 writes because it is the most revealing response in the app: it names who holds
 what, and it prints the names of secret cards sitting on unclaimed devices.
 
-**Realtime.** None of the three broadcasts. A dust flip reaches other phones when
-they next read the active event; a grant reaches its recipient when they next
-read their collection; an attach reaches nobody but the commissioner, though its
-effects are visible immediately to the person it rescued.
+**Realtime.** Almost nothing here broadcasts. A dust flip reaches other phones
+when they next read the active event, and a grant reaches its recipient when they
+next read their collection. The exception is a *trophy*: if the rescued device had
+already finished a set, banking its cards mints the trophy, and that table is
+published — so the person it belonged to finds out on their own phone.
 
 **Offline and reconnection.** All three render from cache with the radio off and
 none can write. The audit is a large read, so on a poor connection it can sit on
@@ -173,8 +174,8 @@ none can write. The audit is a large read, so on a poor connection it can sit on
 
 **Optimistic updates and rollback.** Nothing is optimistic and nothing rolls back:
 every panel waits for the server and then re-reads. The attach is the exception
-worth knowing about — it is not a transaction, so a failure part-way leaves the
-steps already taken taken.
+worth knowing about — it is not a transaction, so a failure part-way leaves in
+place whatever it had already moved.
 
 **The card economy.** The dust switch is the economy's on/off, and while it is
 off every dust operation refuses in the database itself rather than merely being
@@ -200,10 +201,12 @@ somebody holds.
 consoles can both attach the same device, which is harmless — the second run
 finds nothing left to move.
 
-**Accessibility.** Every dropdown carries a real label — "Player", "Card",
-"Finish", "Belongs to…" — and the audit's tabs are buttons with their counts
-inside them, so a screen reader reads "Loose 3" as one control. Each stat pill
-names its own number, and the confirms are the browser's own dialogs.
+**Accessibility.** Give a Card's three dropdowns carry real labels — "Player",
+"Card", "Finish" — and the audit's tabs are buttons with their counts inside them,
+so a screen reader reads "Loose 3" as one control. Each stat pill names its own
+number, and the confirms are the browser's own dialogs. The audit's own
+"Belongs to…" dropdown is the gap: it has no label but its placeholder option, so
+in a list of loose devices a screen reader cannot say which device it belongs to.
 
 ## What "loose" actually means
 
@@ -267,6 +270,8 @@ panel; the fix is a member code, on [the roster](the-roster.md).
   screen read for this document sets one. Either the control lives somewhere not
   covered here or it does not exist yet; worth confirming before treating "the
   commissioner can override a tier" as something anyone can actually do.
+- **The audit's device picker has no accessible name.** Every other dropdown on
+  these three panels does. A one-line fix, and worth filing.
 - Whether the Shop tab really appears on a player's bottom bar without a reload
   after the switch flips was read from the shared event query, not watched on a
   second phone.

@@ -257,6 +257,17 @@ appears nowhere, so the catalogue cannot be enumerated from the feed.
 **Event.** One year's combine. One is active at a time, and almost every screen
 reads the same bundle of it: participants, runs, splits, penalties and stations.
 
+**Feed health.** How the live event feed is doing, in three states.
+*Connecting* — before the socket has answered, and deliberately not treated as a
+failure, or a banner would flash on every page load. *Live* — changes arrive as
+they happen. *Degraded* — the socket is down and the screens are being polled
+instead, more often. Five screens show a banner while degraded; the rest do not.
+
+**Toast.** The transient message that slides in at the top of the screen. Used
+for the outcome of an action somebody took. Deliberately **not** used for a
+failure on a screen somebody is enjoying — the pack's failed secret pull and its
+failed share both stay inline instead.
+
 **Participant.** A person on the roster for an event, and their status on the
 day. The app writes four: **waiting** (the default, and the word players see on
 the running order), **running**, **finished** and **scratched**. The schema

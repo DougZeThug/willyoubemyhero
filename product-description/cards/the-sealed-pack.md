@@ -226,13 +226,19 @@ waiting, which is a fact about the fourth slot rather than about the pack.
 **The second device.** A member's pack follows their identity, so the same pack
 is dealt on both. Only the device that tore it knows how far through it you are.
 
-**Accessibility.** The tear is a drag with no keyboard equivalent, which is
-recorded as an open question below.
+**Accessibility.** The sealed pack is a button as well as a drag target. It is
+focusable, announces itself as "Tear the pack open", and opens on Enter or Space
+— which commits the rip outright rather than asking for a threshold nobody can
+express with a key. The button role, the label and the key handler are all
+dropped the instant the rip commits, and the wrapper is hidden from assistive
+technology from then on: a sealed pack is a button, an opening one is a short
+film.
 
 ## Edge cases
 
 - **A tap with no drag** does not open the pack. This was a real bug, fixed by
-  measuring travel rather than position.
+  measuring travel rather than position. Enter and Space are the deliberate
+  exception: a key has no travel to measure, so it commits the rip outright.
 - **A pack dealt against an empty baseline** cannot happen: the wrapper refuses
   to tear while there is no baseline, so the last slot always has something to
   guarantee against.
@@ -250,9 +256,6 @@ recorded as an open question below.
 
 ## Open questions and verification
 
-- The tear has no keyboard or switch-control path that was found in the source.
-  If that is correct it is an accessibility gap worth filing rather than
-  documenting; it is raised here rather than assumed.
 - The exact feel of the 60% threshold — whether a hesitant drag reads as
   unresponsive — can only be judged on a phone and has not been.
 - The behavior at midnight was read from the polling effect; a tab genuinely left
