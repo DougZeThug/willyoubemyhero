@@ -104,6 +104,15 @@ export type RosterSpare = {
   eventParticipantId: string;
   edition: Edition;
   /**
+   * Whether the person READING this list already holds a copy of that card.
+   *
+   * Decided on the server because the client cannot work it out for secrets, and
+   * because it drives a privacy rule rather than a decoration: unowned art on a
+   * counterparty's side of the table renders face-down, so browsing somebody's
+   * spares never spoils art you have not pulled.
+   */
+  viewerOwns: boolean;
+  /**
    * Who decided this copy's finish — `card_copies.edition_asserted_by`.
    *
    * Here because dust pays by edition and only for a finish Postgres derived, so
@@ -130,6 +139,8 @@ export type SecretSpare = {
   artUrl: string | null;
   tier: SecretTier;
   lastCopy: boolean;
+  /** See RosterSpare.viewerOwns. */
+  viewerOwns: boolean;
 };
 
 /**
