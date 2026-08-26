@@ -48,7 +48,7 @@ import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { usePackIdentity } from "@/lib/device-id";
 import { dealPack, packSeed, packStage, resumeCursor, type SecretSlot } from "@/lib/pack";
 import { editionCelebrates, type Edition } from "@/lib/card-edition";
-import { dustBalanceKey } from "@/hooks/use-dust";
+import { dustLive, secretSellValue } from "@/lib/dust";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
@@ -227,9 +227,6 @@ function PackPage() {
   const status = useSecretStatus(actor);
   const [secret, setSecret] = useState<SecretCardView | null>(null);
   const [secretDuplicate, setSecretDuplicate] = useState(false);
-  // What the pull just paid, held for the reveal caption. Null means nothing to
-  // say — a fresh card, a guest, or a re-read of a pull that already paid.
-  const [secretDust, setSecretDust] = useState<number | null>(null);
   const [secretRevealed, setSecretRevealed] = useState(false);
   /**
    * The set this pull just finished, held until the card has been turned over.
@@ -634,12 +631,9 @@ function PackPage() {
         if (res.ok) {
           setSecret(res.card);
           setSecretDuplicate(res.duplicate);
-          setSecretDust(res.dust && res.dust > 0 ? res.dust : null);
-          // The balance moved, and the vault's chip is the only thing that shows
-          // it. Members only — a guest has no ledger to invalidate.
-          if (res.dust) {
-            void qc.invalidateQueries({ queryKey: dustBalanceKey(me?.participantId) });
-          }
+          // No balance to refresh: a pull credits nothing now. The dupe's worth
+          // is worked out from the tier on the card below, and it only moves when
+          // somebody actually sells it in the shop.
           setSecretUnavailable(false);
           // A card minted just now has never been seen, whatever the device's
           // stored reveal state says — local midnight and league midnight can
@@ -816,7 +810,6 @@ function PackPage() {
     setEditions({});
     setSecret(null);
     setSecretRevealed(false);
-    setSecretDust(null);
     setSecretFailed(false);
     setSecretUnavailable(false);
     // The next person's milestones are their own, and a reveal left on screen
@@ -949,6 +942,21 @@ function PackPage() {
   );
 
   const secretRarity = secretFoil(secret?.foil, secret?.borderFx);
+
+  /**
+   * What this copy would fetch in the shop, for the line under a duplicate.
+   *
+   * Worked out here from the tier on the card — no server field carries it, and
+   * none needs to: the ladder is a constant this bundle already holds. Only on a
+   * DUPLICATE, which is the moment the economy is answering; under a card you
+   * have just found for the first time it would be an invitation to sell the only
+   * copy you own. Members only, because a guest has no ledger to sell into, and
+   * silent while the commissioner has dust switched off.
+   */
+  const sellValue =
+    secretDuplicate && secret && me?.participantId && dustLive(event)
+      ? secretSellValue(secret.tier)
+      : null;
 
   async function revealSecret() {
     // revealingRef first: the secret holds for 1600ms before it turns, and
@@ -1313,7 +1321,7 @@ function PackPage() {
               secretRarity={secretRarity}
               secretRevealed={secretRevealed}
               secretDuplicate={secretDuplicate}
-              secretDust={secretDust}
+              secretSellValue={sellValue}
               secretPeeking={secretPeeking}
               peeking={peeking}
               busy={autoRunning}

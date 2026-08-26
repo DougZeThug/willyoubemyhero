@@ -1,17 +1,19 @@
 // Dust: the prices, and what a spare is worth.
 //
 // Client-safe and pure. Every number here is mirrored in Postgres — the mill
-// ladder in `mill_value`, the credit inside `pull_secret_card`, the prices inside
-// `buy_bonus_secret_pull` and `reroll_copy_edition` — and `tests/db/dust.test.ts`
-// imports this file to pin the two together. The database is authoritative: these
-// exist so the shop can print a price before the call, and a disagreement is a
-// sheet that promises one payout while the ledger files another.
+// ladder in `mill_value`, the secret ladder in `secret_sell_value`, the prices
+// inside `buy_bonus_secret_pull` and `reroll_copy_edition` — and
+// `tests/db/dust.test.ts` imports this file to pin the two together. The database
+// is authoritative: these exist so the shop can print a price before the call,
+// and a disagreement is a sheet that promises one payout while the ledger files
+// another.
 //
 // Named `dust` rather than `tokens` on purpose. `src/lib` already means auth when
 // it says token — member-token.ts, admin-token.ts, session.server.ts — and a
 // tokens.ts sitting next to those, holding a currency, is a security review
 // waiting to read the wrong file.
 import { EDITION_ORDER, type Edition } from "./card-edition";
+import { SECRET_TIER_ORDER, toSecretTier, type SecretTier } from "./secret-rarity";
 
 /**
  * Whether the dust economy is switched on, read off the active event.
@@ -32,16 +34,6 @@ import { EDITION_ORDER, type Edition } from "./card-edition";
 export function dustLive(event: unknown): boolean {
   return !!(event as { dust_enabled?: boolean | null } | null | undefined)?.dust_enabled;
 }
-
-/**
- * What a duplicate secret pays.
- *
- * The dupe was the one moment in the day that felt like nothing — the code called
- * the ceremony "a tax" after the third — so it is the one that pays. Members
- * only: `dust_ledger` is keyed on a participant, and a guest's dust would be
- * earnable and barely spendable.
- */
-export const DUPE_SECRET_CREDIT = 25;
 
 /**
  * What milling a spare roster copy pays, by finish.
@@ -66,6 +58,26 @@ export const MILL_BY_EDITION: Record<Edition, number> = {
  * forging a platinum pointless without punishing anyone for having played early.
  */
 export const MILL_CLIENT_FLAT = 5;
+
+/**
+ * What selling a secret copy pays, by the tier on that copy.
+ *
+ * Three times the mill ladder, and that is the whole derivation: the secret tier
+ * weights are identical to the edition weights (0.5 / 3.5 / 8 / 18 / 70 %), so
+ * this is the roster ladder scaled rather than a second set of judgement calls.
+ * It averages 26.4 dust a copy, which is why {@link DUST_PRICES} needed no
+ * retuning when the flat 25 a duplicate used to pay was folded into this.
+ *
+ * No untrusted variant, unlike the mill's: `secret_card_pulls.tier` is only ever
+ * written by `roll_secret_tier()`, so every tier is already the server's own.
+ */
+export const SELL_BY_SECRET_TIER: Record<SecretTier, number> = {
+  mythic: 300,
+  legendary: 120,
+  epic: 60,
+  rare: 30,
+  common: 15,
+};
 
 /** The sinks. */
 export const DUST_PRICES = {
@@ -98,3 +110,19 @@ export const MILL_LADDER: { edition: Edition; value: number }[] = EDITION_ORDER.
   edition,
   value: MILL_BY_EDITION[edition],
 }));
+
+/**
+ * What this secret copy would pay, for the affordance beside it.
+ *
+ * Narrowed through `toSecretTier`, which falls back to the common rung — the
+ * same floor `secret_sell_value`'s COALESCE lands an unrecognised tier on, so
+ * the sheet and the ledger agree about a value neither of them has heard of.
+ */
+export function secretSellValue(tier: string | null | undefined): number {
+  return SELL_BY_SECRET_TIER[toSecretTier(tier)];
+}
+
+/** Rarest first, the way {@link MILL_LADDER} is. */
+export const SECRET_SELL_LADDER: { tier: SecretTier; value: number }[] = SECRET_TIER_ORDER.map(
+  (tier) => ({ tier, value: SELL_BY_SECRET_TIER[tier] }),
+);

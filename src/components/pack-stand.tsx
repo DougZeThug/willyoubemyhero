@@ -136,7 +136,7 @@ export function PackStand({
   secretRarity,
   secretRevealed,
   secretDuplicate,
-  secretDust,
+  secretSellValue,
   secretPeeking,
   peeking,
   busy,
@@ -171,13 +171,15 @@ export function PackStand({
   secretRevealed: boolean;
   secretDuplicate: boolean;
   /**
-   * Dust this pull paid, or null for nothing to say.
+   * What this copy would sell for, or null for nothing to say.
    *
-   * Null rather than zero on a re-read of a pull that already paid: the credit
-   * happened once, and announcing it again every time the card is looked at
-   * would make the number meaningless.
+   * A duplicate used to pay 25 the instant it landed, and this line announced it.
+   * Nothing is credited at that moment any more — a secret is sold from the shop
+   * now, priced by its tier — so the line points at what the copy is WORTH
+   * instead. Null while the economy is switched off, and on a fresh card, which
+   * is the one you are not going to be selling.
    */
-  secretDust: number | null;
+  secretSellValue: number | null;
   secretPeeking: boolean;
   peeking: boolean;
   /** True while "Reveal all" is driving, so a tap cannot cut across it. */
@@ -966,12 +968,14 @@ export function PackStand({
                         : secretTierCaption(secret?.tier)}
                     </div>
                     {/* The point of the dupe economy, said at the only moment it
-                        lands: the sting is now the payout. Inside the secret
-                        branch rather than beside it — the roster half of this
-                        ternary reads `ep!`, which is null on the secret slot. */}
-                    {secretDust ? (
+                        lands: the sting is now something worth selling. WORTH,
+                        not paid — nothing is credited on a pull any more, so
+                        "+N dust" here would be a lie. Inside the secret branch
+                        rather than beside it — the roster half of this ternary
+                        reads `ep!`, which is null on the secret slot. */}
+                    {secretSellValue ? (
                       <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-                        +{secretDust} dust
+                        Sell for {secretSellValue}
                       </div>
                     ) : null}
                   </>

@@ -6,21 +6,29 @@ import { Button } from "@/components/ui/button";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { editionStyle, toEdition } from "@/lib/card-edition";
-import { DUST_PRICES, MILL_LADDER, MILL_CLIENT_FLAT, millValue } from "@/lib/dust";
+import {
+  DUST_PRICES,
+  MILL_LADDER,
+  MILL_CLIENT_FLAT,
+  millValue,
+  SECRET_SELL_LADDER,
+  secretSellValue,
+} from "@/lib/dust";
+import { secretTierStyle } from "@/lib/secret-rarity";
 import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
-import { millCardCopy, rerollCopyEdition } from "@/lib/dust.functions";
+import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import type { TradeSpares } from "@/lib/trades";
 
 /**
- * What dust buys.
+ * What dust buys, and what it is made of.
  *
- * Three sinks and a price table: a bonus pull, the mill, and a re-roll. This was
- * a sheet behind the vault's dust chip until it grew all three, which is a
- * screen — /players/shop renders it now, and gets a nav tab whenever the
- * commissioner has the economy switched on.
+ * Four sections and a price table: a bonus pull, the mill, the secret counter,
+ * and a re-roll. This was a sheet behind the vault's dust chip until it grew all
+ * of them, which is a screen — /players/shop renders it now, and gets a nav tab
+ * whenever the commissioner has the economy switched on.
  *
  * Still a prop-driven panel rather than the route itself. Everything below is
  * cache bookkeeping whose keys are spelled somewhere else, and getting one wrong
@@ -148,6 +156,46 @@ export function DustShopPanel({
     onSettled: () => setBurning(null),
   });
 
+  // Sorted the way `burnable` is: biggest payout at the top of the thumb, name as
+  // the tiebreak. `secrets` is already exactly the right subset — getTradeSpares
+  // filters out today's un-granted pull, which is precisely what sell_secret_card
+  // refuses — so this needs no query of its own.
+  const sellable = useMemo(
+    () =>
+      [...(spares.data?.secrets ?? [])].sort(
+        (a, b) => secretSellValue(b.tier) - secretSellValue(a.tier) || a.name.localeCompare(b.name),
+      ),
+    [spares.data],
+  );
+
+  const sellFn = useServerFn(sellSecretCard);
+  const [selling, setSelling] = useState<string | null>(null);
+  const sell = useMutation({
+    mutationFn: (secretPullId: string) => sellFn({ data: { secretPullId } }),
+    onSuccess: (res) => {
+      if (!res.ok) {
+        toast(
+          res.reason === "too_fresh"
+            ? "Today's pull — it can be sold tomorrow"
+            : res.reason === "staked"
+              ? "That one is on an open offer"
+              : "Could not sell that one",
+        );
+        return;
+      }
+      qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
+      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      // KEYED ON THE ACTOR, both of them — the vault's secret shelf and the count
+      // beside it have both moved, and a bare participant id matches neither. See
+      // the comment on the prop.
+      void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
+      void qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+      toast(`+${res.awarded} dust`);
+    },
+    onError: () => toast("Could not sell that one"),
+    onSettled: () => setSelling(null),
+  });
+
   // Every copy, not just the spares: reroll_copy_edition has no spare rule, and a
   // card you hold once is the one most worth settling. Unsettled finishes lead,
   // because that is what the section is for.
@@ -272,6 +320,58 @@ export function DustShopPanel({
       </section>
 
       <section className="rounded-lg border border-border p-4">
+        <h2 className="font-display text-sm font-bold uppercase tracking-wide">Sell a secret</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Any secret you hold, priced by the level on your copy — including your only one. Never the
+          one you pulled today.
+        </p>
+        {spares.isLoading ? (
+          <p className="mt-3 text-xs text-muted-foreground">Counting secrets…</p>
+        ) : sellable.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">No secrets yet.</p>
+        ) : (
+          <ul className="mt-3 space-y-1.5">
+            {sellable.map((s) => {
+              const style = secretTierStyle(s.tier);
+              const worth = secretSellValue(s.tier);
+              return (
+                <li key={s.pullId} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-xs">
+                    <span className="font-bold">{s.name}</span>
+                    <span className="ml-1.5" style={{ color: style.accent }}>
+                      {style.label}
+                    </span>
+                    {s.lastCopy && <span className="ml-1.5 text-muted-foreground">last copy</span>}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={sell.isPending}
+                    onClick={() => {
+                      // The card genuinely leaves the collection when it is the
+                      // only one, which is what `lastCopy` is carried for. Same
+                      // shape as the confirm in dust-admin-panel.tsx.
+                      if (
+                        s.lastCopy &&
+                        !confirm(`Sell your only ${s.name} for ${worth}? It leaves your vault.`)
+                      ) {
+                        return;
+                      }
+                      setSelling(s.pullId);
+                      sell.mutate(s.pullId);
+                    }}
+                  >
+                    {selling === s.pullId && sell.isPending ? "…" : `Sell +${worth}`}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-border p-4">
         <h2 className="font-display text-sm font-bold uppercase tracking-wide">Settle a finish</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           Roll a card&apos;s finish again for {DUST_PRICES.reroll}. Any card you hold, including
@@ -324,18 +424,30 @@ export function DustShopPanel({
           Where dust comes from
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          A duplicate secret pays 25. Burning a spare pays by its finish:
+          Burning a spare pays by its finish, and selling a secret pays by its level:
         </p>
-        <ul className="mt-3 space-y-1">
-          {MILL_LADDER.map(({ edition, value }) => (
-            <li key={edition} className="flex items-center justify-between text-xs">
-              <span style={{ color: editionStyle(edition).accent }}>
-                {editionStyle(edition).label}
-              </span>
-              <span className="font-mono">{value}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1">
+          <ul className="space-y-1">
+            {MILL_LADDER.map(({ edition, value }) => (
+              <li key={edition} className="flex items-center justify-between text-xs">
+                <span style={{ color: editionStyle(edition).accent }}>
+                  {editionStyle(edition).label}
+                </span>
+                <span className="font-mono">{value}</span>
+              </li>
+            ))}
+          </ul>
+          <ul className="space-y-1">
+            {SECRET_SELL_LADDER.map(({ tier, value }) => (
+              <li key={tier} className="flex items-center justify-between text-xs">
+                <span style={{ color: secretTierStyle(tier).accent }}>
+                  {secretTierStyle(tier).label}
+                </span>
+                <span className="font-mono">{value}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
         <p className="mt-3 text-xs text-muted-foreground">
           Cards from before finishes were settled server-side pay a flat {MILL_CLIENT_FLAT},
           whatever they say on them. Settling one above fixes that.

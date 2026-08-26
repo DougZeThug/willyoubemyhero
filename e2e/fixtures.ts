@@ -189,8 +189,10 @@ export const DEFAULT_RESPONSES: Responses = {
   // smoke.spec.ts asserts against.
   getMyTradeOffers: { inbox: [], outbox: [], recent: [], nudgeTopic: null },
   // `roster` is one entry per COPY — {copyId, eventParticipantId, edition} — since
-  // a trade moves a specific copy and its finish. Empty here either way.
-  getTradeSpares: { participantId: null, roster: [], secrets: [] },
+  // a trade moves a specific copy and its finish. `secrets` is one entry per
+  // secret_card_pulls row, which is what the shop sells from. Empty here either
+  // way, so no existing spec has to know either feature exists.
+  getTradeSpares: { participantId: null, ownedRoster: [], roster: [], secrets: [], blocked: [] },
   getTradeFeed: [],
 };
 
