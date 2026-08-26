@@ -63,7 +63,12 @@ export type CardCopyRow = {
   edition_asserted_by: "client" | "server";
   /** The league day this copy was pulled on. Null once it has been traded. */
   acquired_on: string | null;
-  source: "pull" | "trade" | "backfill";
+  /**
+   * How this copy arrived. Append-only vocabulary, mirroring
+   * `card_copies_source_ck` — which 20260818192450 widened with 'adopt' and
+   * 'grant', and 20260830120000 with 'market' for a copy somebody bought.
+   */
+  source: "pull" | "trade" | "backfill" | "adopt" | "grant" | "market";
   created_at: string;
 };
 

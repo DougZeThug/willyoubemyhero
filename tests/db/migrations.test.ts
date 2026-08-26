@@ -29,6 +29,7 @@ const EXPECTED_TABLES = [
   "event_participants",
   "event_secrets",
   "events",
+  "market_listings",
   "member_codes",
   "pack_opens",
   "participants",
@@ -115,6 +116,39 @@ describe("migrations", () => {
       "trade_item_is_spare",
       "trade_leaves_a_copy",
     ]);
+  });
+
+  it("creates the marketplace RPCs the app calls", async () => {
+    const rows = await sql<{ proname: string }>(`
+      SELECT proname FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND proname IN ('list_card_for_dust', 'cancel_market_listing', 'buy_market_listing')
+      ORDER BY proname
+    `);
+    expect(rows.map((r) => r.proname)).toEqual([
+      "buy_market_listing",
+      "cancel_market_listing",
+      "list_card_for_dust",
+    ]);
+  });
+
+  it("keeps one copy off the shelf twice", async () => {
+    // The listing is what a sale re-validates against, so two active listings of
+    // one copy would let the same card be sold twice — the second sale finding a
+    // copy that is no longer the seller's and voiding, but only after somebody
+    // tapped Buy on it. Partial and status-scoped, so a sold listing does not
+    // stop the buyer re-listing the copy they now own.
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'market_listings'",
+    );
+    const defs = rows.map((r) => r.indexdef);
+    expect(
+      defs.some((d) => d.includes("(card_copy_id)") && d.includes("status = 'active'::text")),
+    ).toBe(true);
+    expect(
+      defs.some((d) => d.includes("(secret_pull_id)") && d.includes("status = 'active'::text")),
+    ).toBe(true);
   });
 
   it("enforces one pulled copy per person per card per league day", async () => {
@@ -352,6 +386,10 @@ describe("migrations", () => {
     // Everything the card_pulls line says, with a date attached: this is a feed
     // of who packed whom and when.
     expect(published).not.toContain("card_mints");
+    // A listing names a card somebody holds and what they will part with it for,
+    // which is trade_offers' leak with a price on it. The seller hears about a
+    // sale through the payload-free broadcast instead, which publishes nothing.
+    expect(published).not.toContain("market_listings");
   });
 
   it("enforces one pack_opens row per person per league day, which is what makes a row count a pack count", async () => {

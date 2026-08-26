@@ -186,3 +186,123 @@ test.describe("selling a secret", () => {
     }
   });
 });
+
+test.describe("the marketplace", () => {
+  const LISTING = "listing-1";
+
+  /** The shelf, with one roster card on it that somebody else put up. */
+  async function shelf(page: Page, server: ServerFnMock, over: Record<string, unknown> = {}) {
+    await asMember(page);
+    server.set("getActiveEvent", withDust(true));
+    server.set("getDustBalance", { balance: 500 });
+    server.set("getMarketListings", {
+      listings: [
+        {
+          id: LISTING,
+          sellerId: "p-bob",
+          price: 120,
+          createdAt: "2026-08-30T00:00:00Z",
+          item: { kind: "roster", eventParticipantId: BUNDLE.participants[0].id, edition: "gold" },
+          ...over,
+        },
+      ],
+      // Null, or SiteNav opens a realtime websocket to the live Supabase URL —
+      // the one thing these stubs exist to prevent.
+      nudgeTopic: null,
+    });
+    await page.goto("/players/shop");
+  }
+
+  test("shows what other people have put up, with the seller and the price", async ({
+    page,
+    server,
+  }) => {
+    await shelf(page, server);
+    const market = page.locator("section", { hasText: /the market/i }).first();
+    await expect(market.getByRole("button", { name: /buy · 120/i })).toBeVisible();
+  });
+
+  test("says the price rather than offering a button you cannot press", async ({
+    page,
+    server,
+  }) => {
+    // Being told the number you cannot meet is more use than a toast that says
+    // no, and the RPC would refuse it anyway.
+    await asMember(page);
+    server.set("getActiveEvent", withDust(true));
+    server.set("getDustBalance", { balance: 10 });
+    server.set("getMarketListings", {
+      listings: [
+        {
+          id: LISTING,
+          sellerId: "p-bob",
+          price: 120,
+          createdAt: "2026-08-30T00:00:00Z",
+          item: { kind: "roster", eventParticipantId: BUNDLE.participants[0].id, edition: "gold" },
+        },
+      ],
+      nudgeTopic: null,
+    });
+    await page.goto("/players/shop");
+
+    const market = page.locator("section", { hasText: /the market/i }).first();
+    await expect(market.getByRole("button", { name: /^120 dust$/i })).toBeDisabled();
+  });
+
+  test("never names a secret the viewer has not pulled", async ({ page, server }) => {
+    // The rule the browse adds on top of the trade screen's. A listing is not a
+    // completed trade, and every unowned secret in the league could be on the
+    // shelf at once — so a name-bearing browse would be the catalogue
+    // enumeration secret_cards is server-only to prevent. The server withholds
+    // it; this is the screen agreeing.
+    await shelf(page, server, {
+      item: { kind: "secret", name: "Secret card", artUrl: null, tier: "mythic", concealed: true },
+    });
+    const market = page.locator("section", { hasText: /the market/i }).first();
+    await expect(market.getByText(/not yours yet/i)).toBeVisible();
+    await expect(market).not.toContainText(/gary the grill/i);
+  });
+
+  test("tells a seller their card sold, which nothing else on the app does", async ({
+    page,
+    server,
+  }) => {
+    // A sale writes no row into the trade feed, so the settled half of a stall is
+    // the ONLY place it is ever visible.
+    await asMember(page);
+    server.set("getActiveEvent", withDust(true));
+    server.set("getDustBalance", { balance: 120 });
+    server.set("getMyStall", {
+      active: [],
+      recent: [
+        {
+          id: LISTING,
+          sellerId: "p-alice",
+          price: 120,
+          createdAt: "2026-08-30T00:00:00Z",
+          item: { kind: "roster", eventParticipantId: BUNDLE.participants[0].id, edition: "gold" },
+          status: "sold",
+          buyerId: "p-bob",
+          resolvedAt: "2026-08-30T01:00:00Z",
+        },
+      ],
+    });
+    await page.goto("/players/shop");
+
+    const stall = page.locator("section", { hasText: /your stall/i }).first();
+    await expect(stall.getByText(/^sold$/i)).toBeVisible();
+  });
+
+  test("keeps the shelf off the screen while the commissioner has dust off", async ({
+    page,
+    server,
+  }) => {
+    // The tab disappears with the switch, but a bookmark does not — and the
+    // market must not be the thing that leaks through it.
+    await asMember(page);
+    server.set("getActiveEvent", withDust(false));
+    await page.goto("/players/shop");
+    await expect(page.getByText(/has not switched dust on yet/i)).toBeVisible();
+    await expect(page.locator("section", { hasText: /the market/i })).toHaveCount(0);
+  });
+});

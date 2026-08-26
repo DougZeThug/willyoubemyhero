@@ -1,11 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Sparkles } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useMemberSession } from "@/lib/member-token";
 import { useSecretActor } from "@/hooks/use-daily-secret";
 import { useDustBalance } from "@/hooks/use-dust";
+import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
+import { useMarketListings } from "@/hooks/use-market";
+import { useTradeNudge } from "@/hooks/use-trade-nudge";
+import { getClaimRoster } from "@/lib/member.functions";
+import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import type { RosterCardLookup } from "@/components/trade-offer-card";
 import { DustShopPanel } from "@/components/dust-shop";
+import { MarketPanel } from "@/components/market-panel";
 import { dustLive } from "@/lib/dust";
 
 export const Route = createFileRoute("/players/shop")({
@@ -14,7 +23,8 @@ export const Route = createFileRoute("/players/shop")({
       { title: "Dust — Will YOU Be My Hero?" },
       {
         name: "description",
-        content: "Spend dust on a bonus pull, burn your spares, or settle a card's finish.",
+        content:
+          "Buy and sell cards for dust, spend it on a bonus pull, burn your spares, or settle a card's finish.",
       },
       { property: "og:title", content: "Will YOU Be My Hero? — Dust" },
       { property: "og:description", content: "What dust buys." },
@@ -27,9 +37,15 @@ export const Route = createFileRoute("/players/shop")({
  * The dust economy, with a screen of its own.
  *
  * The chrome and the fetching live here; every transaction lives in
- * DustShopPanel, which takes what it needs as props so its cache bookkeeping can
- * be pinned by a test. useEventBundle is fine on a full screen — unlike in the
- * nav, where the realtime channel it opens would ride every page.
+ * MarketPanel or DustShopPanel, both of which take what they need as props so
+ * their cache bookkeeping can be pinned by a test. useEventBundle is fine on a
+ * full screen — unlike in the nav, where the realtime channel it opens would ride
+ * every page.
+ *
+ * THE MARKET COMES FIRST, and the order is the argument: player-to-player, then
+ * the house, then the price table DustShopPanel ends on. What another member will
+ * pay for your spare is the more interesting question, and the mill is the floor
+ * underneath it rather than the headline.
  */
 function ShopPage() {
   const { event, bundle } = useEventBundle();
@@ -41,12 +57,59 @@ function ShopPage() {
   // off, and none to ask for on behalf of somebody with no name yet.
   const dust = useDustBalance(dustOn ? participantId : null);
 
+  const cards = useEventCardUrls(event?.id ?? null);
+  // The event's universal back, never a player's — it is what a card you have not
+  // pulled yet is shown as, so it must give nothing about that card away.
+  const cardBack = useEventCardBack(event?.id ?? null);
+
+  // Joining the topic the shelf hands back is how a SELLER hears that their card
+  // sold: the sale is quiet, so there is no trade feed to ride and nothing else on
+  // this screen would ever go and look. Payload-free, so it only ever means "go
+  // and ask properly" — see nudge.server.ts.
+  const market = useMarketListings(dustOn ? participantId : null);
+  useTradeNudge(market.data?.nudgeTopic ?? null, participantId);
+
   // The lists hold card copy ids; the bundle is the only place a name lives.
   const nameFor = useCallback(
     (eventParticipantId: string) =>
       bundle?.participants.find((p) => p.id === eventParticipantId)?.participant?.name ?? "—",
     [bundle],
   );
+
+  // Sellers and buyers are participants rather than roster entries, and somebody
+  // who has claimed a player may not be on this event's roster at all — the same
+  // two-source lookup the Trading Post builds.
+  const rosterFn = useServerFn(getClaimRoster);
+  const roster = useQuery({
+    queryKey: ["claim-roster"],
+    queryFn: () => rosterFn(),
+    staleTime: 5 * 60_000,
+    enabled: dustOn && !!participantId,
+  });
+
+  const nameOf = useCallback(
+    (id: string) => {
+      const onRoster = bundle?.participants.find((p) => p.participant_id === id);
+      if (onRoster?.participant?.name) return onRoster.participant.name;
+      return roster.data?.find((p) => p.id === id)?.name ?? "Someone";
+    },
+    [bundle, roster.data],
+  );
+
+  const rarities = useMemo(() => rarityMap(bundle ?? null), [bundle]);
+
+  /** event_participant_id → the face the tiles render. */
+  const lookup: RosterCardLookup = useMemo(() => {
+    const byEp = new Map((bundle?.participants ?? []).map((p) => [p.id, p]));
+    return (eventParticipantId: string) => {
+      const ep = byEp.get(eventParticipantId);
+      return {
+        name: ep?.participant?.name ?? "—",
+        frontUrl: cards.data?.[eventParticipantId]?.front ?? null,
+        rarity: rarities.get(eventParticipantId) ?? rarityStyle("base"),
+      };
+    };
+  }, [bundle, cards.data, rarities]);
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
@@ -86,13 +149,25 @@ function ShopPage() {
             </Link>
           </p>
         ) : (
-          <DustShopPanel
-            balance={dust.data?.balance}
-            participantId={participantId}
-            actor={actor}
-            eventId={event?.id ?? null}
-            nameFor={nameFor}
-          />
+          <div className="space-y-6">
+            <MarketPanel
+              balance={dust.data?.balance}
+              participantId={participantId}
+              actor={actor}
+              eventId={event?.id ?? null}
+              nameFor={nameFor}
+              nameOf={nameOf}
+              lookup={lookup}
+              backUrl={cardBack.data?.urls ?? null}
+            />
+            <DustShopPanel
+              balance={dust.data?.balance}
+              participantId={participantId}
+              actor={actor}
+              eventId={event?.id ?? null}
+              nameFor={nameFor}
+            />
+          </div>
         )}
       </div>
     </div>

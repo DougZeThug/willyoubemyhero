@@ -140,7 +140,7 @@ export function DustShopPanel({
             : res.reason === "too_fresh"
               ? "Today's card — it can be burned tomorrow"
               : res.reason === "staked"
-                ? "That one is on an open offer"
+                ? "That one is on an open offer or up for sale"
                 : "Could not burn that one",
         );
         return;
@@ -178,7 +178,7 @@ export function DustShopPanel({
           res.reason === "too_fresh"
             ? "Today's pull — it can be sold tomorrow"
             : res.reason === "staked"
-              ? "That one is on an open offer"
+              ? "That one is on an open offer or up for sale"
               : "Could not sell that one",
         );
         return;
@@ -226,7 +226,7 @@ export function DustShopPanel({
           res.reason === "insufficient"
             ? `Not enough dust — a re-roll is ${DUST_PRICES.reroll}`
             : res.reason === "staked"
-              ? "That one is on an open offer"
+              ? "That one is on an open offer or up for sale"
               : "Could not re-roll that one",
         );
         return;

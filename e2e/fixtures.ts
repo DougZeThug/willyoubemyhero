@@ -194,6 +194,20 @@ export const DEFAULT_RESPONSES: Responses = {
   // way, so no existing spec has to know either feature exists.
   getTradeSpares: { participantId: null, ownedRoster: [], roster: [], secrets: [], blocked: [] },
   getTradeFeed: [],
+  // The marketplace. Empty by default so /players/shop renders its "nothing for
+  // sale right now" state and no existing spec has to know the feature exists.
+  // `getMarketListings` and `getMyStall` are not substrings of each other or of
+  // any key above — the rule the trading block states, which now has to hold
+  // across seven keys rather than three.
+  //
+  // The mutating handlers (listCardForDust, buyMarketListing,
+  // cancelMarketListing) are deliberately NOT defaulted, for the same reason the
+  // trade ones are not: nothing reaches them unless a test means to.
+  //
+  // `nudgeTopic` is null for exactly the reason getMyTradeOffers' is — and it
+  // matters more here, because /players/shop joins this topic itself.
+  getMarketListings: { listings: [], nudgeTopic: null },
+  getMyStall: { active: [], recent: [] },
 };
 
 /** A secret card as pullSecretCard returns it, for tests that want the fourth slot. */
