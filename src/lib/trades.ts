@@ -59,7 +59,14 @@ export function isTradeOfferStatus(value: string): value is TradeOfferStatus {
  * being reachable only through an offer you are party to.
  */
 export type TradeItemView =
-  | { kind: "roster"; copyId: string; eventParticipantId: string; edition: Edition }
+  | {
+      kind: "roster";
+      copyId: string;
+      eventParticipantId: string;
+      edition: Edition;
+      /** See SecretSpare.viewerOwns — same rule, same reason. */
+      viewerOwns?: boolean;
+    }
   | {
       kind: "secret";
       pullId: string;
@@ -68,7 +75,10 @@ export type TradeItemView =
       tier: SecretTier;
       /** True when its owner holds no other copy of that card. */
       lastCopy: boolean;
+      /** Whether the person reading this already holds a copy of the card. */
+      viewerOwns?: boolean;
     };
+
 
 export type TradeOfferView = {
   id: string;
