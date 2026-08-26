@@ -1,0 +1,31 @@
+-- The other half of 20260825165117's guard: assert the hardening once the
+-- functions it names actually exist.
+--
+-- 20260825165117 hardens roll_card_edition and mill_value, and sorts before both
+-- of the migrations that create them (20260826120000 and 20260826130000). It has
+-- to skip them on a replay from empty or the ALTER raises and the cluster build
+-- dies — so on its own that guard would leave a replayed database WITHOUT the
+-- search_path both functions carry in production. A loud failure traded for a
+-- silent drift, which is the worse of the two.
+--
+-- So it is re-asserted here, from a file that sorts after every CREATE. Neither
+-- function is created with a search_path of its own — each is defined exactly
+-- once, by the migration named above, with none — so this file is the only thing
+-- that puts one on them in a replayed database.
+--
+-- Unconditional and unguarded, deliberately: by this point in the order both
+-- signatures exist, and if one ever stops existing this SHOULD fail rather than
+-- skip. A silently-skipped hardening is the thing this file was written to
+-- prevent.
+--
+-- Idempotent by nature — ALTER FUNCTION ... SET search_path sets the same value
+-- however many times it replays.
+--
+-- Both are LANGUAGE sql IMMUTABLE and neither is SECURITY DEFINER, so this is
+-- the lint-level hardening Supabase's function_search_path_mutable check asks
+-- for rather than a privilege boundary. Worth keeping exact all the same: the
+-- point of a replayable migration set is that a rebuilt database IS the live
+-- one, and a setting that only exists in production is a difference nobody finds
+-- until it matters.
+ALTER FUNCTION public.roll_card_edition(uuid, uuid, date) SET search_path = public;
+ALTER FUNCTION public.mill_value(text) SET search_path = public;

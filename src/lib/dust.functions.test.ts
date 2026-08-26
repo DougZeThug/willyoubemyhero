@@ -22,6 +22,7 @@ vi.mock("@/integrations/supabase/client.server", () => ({
 const ME = "11111111-1111-4111-8111-111111111111";
 const THEM = "22222222-2222-4222-8222-222222222222";
 const COPY = "33333333-3333-4333-8333-333333333333";
+const PULL_ID = "77777777-7777-4777-8777-777777777777";
 const REQ = "44444444-4444-4444-8444-444444444444";
 const EVENT = "55555555-5555-4555-8555-555555555555";
 
@@ -116,6 +117,64 @@ describe("millCardCopy", () => {
   });
 });
 
+describe("sellSecretCard", () => {
+  it("refuses a caller with no account", async () => {
+    // dust_ledger is keyed on a participant, so there is nothing for a guest to
+    // sell into even though a guest can hold secrets.
+    const { sellSecretCard } = await import("./dust.functions");
+    await expect(
+      callServerFn(sellSecretCard, { data: { secretPullId: PULL_ID } }),
+    ).rejects.toThrow();
+  });
+
+  it("sells for the token holder, whatever the payload claims", async () => {
+    // Same rule as the mill, and the one that matters most here: the RPC deletes
+    // the row it is handed, so a participant id read off a payload would let
+    // anybody destroy somebody else's mythic.
+    withDb({
+      "rpc.sell_secret_card": {
+        data: { ok: true, awarded: 120, tier: "legendary", secretCardId: "sc", balance: 120 },
+      },
+    });
+    const { sellSecretCard } = await import("./dust.functions");
+    await callServerFn(sellSecretCard, {
+      data: { secretPullId: PULL_ID, participantId: THEM },
+      headers: asMe(),
+    });
+    expect(mock.client.rpc).toHaveBeenCalledWith("sell_secret_card", {
+      _participant_id: ME,
+      _secret_pull_id: PULL_ID,
+    });
+  });
+
+  it("passes today's pull back as a reason rather than throwing", async () => {
+    withDb({ "rpc.sell_secret_card": { data: { ok: false, reason: "too_fresh" } } });
+    const { sellSecretCard } = await import("./dust.functions");
+    const res = await callServerFn<{ ok: boolean; reason: string }>(sellSecretCard, {
+      data: { secretPullId: PULL_ID },
+      headers: asMe(),
+    });
+    expect(res).toEqual({ ok: false, reason: "too_fresh" });
+  });
+
+  it("treats a missing answer as a refusal, not a payout", async () => {
+    withDb({ "rpc.sell_secret_card": { data: null } });
+    const { sellSecretCard } = await import("./dust.functions");
+    const res = await callServerFn<{ ok: boolean; reason: string }>(sellSecretCard, {
+      data: { secretPullId: PULL_ID },
+      headers: asMe(),
+    });
+    expect(res).toEqual({ ok: false, reason: "not_found" });
+  });
+
+  it("rejects a pull id that is not a uuid", async () => {
+    const { sellSecretCard } = await import("./dust.functions");
+    await expect(
+      callServerFn(sellSecretCard, { data: { secretPullId: "../../etc" }, headers: asMe() }),
+    ).rejects.toThrow();
+  });
+});
+
 describe("buyBonusSecretPull", () => {
   const PULL = {
     pullId: "p",
@@ -125,7 +184,6 @@ describe("buyBonusSecretPull", () => {
     tier: "rare",
     granted: true,
     completedCollection: null,
-    dust: 0,
   };
 
   it("refuses a caller with no account", async () => {
@@ -233,6 +291,16 @@ describe("the disabled reason", () => {
     const { millCardCopy } = await import("./dust.functions");
     const res = await callServerFn<{ ok: boolean; reason: string }>(millCardCopy, {
       data: { cardCopyId: COPY },
+      headers: asMe(),
+    });
+    expect(res).toEqual({ ok: false, reason: "disabled" });
+  });
+
+  it("comes back from a sale too", async () => {
+    withDb({ "rpc.sell_secret_card": { data: { ok: false, reason: "disabled" } } });
+    const { sellSecretCard } = await import("./dust.functions");
+    const res = await callServerFn<{ ok: boolean; reason: string }>(sellSecretCard, {
+      data: { secretPullId: PULL_ID },
       headers: asMe(),
     });
     expect(res).toEqual({ ok: false, reason: "disabled" });

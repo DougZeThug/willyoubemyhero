@@ -2,7 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireAdmin, requireMember } from "./require-auth.server";
-import type { BuyBonusPullResult, MillCardCopyResult, RerollEditionResult } from "./dust-db.server";
+import type {
+  BuyBonusPullResult,
+  MillCardCopyResult,
+  RerollEditionResult,
+  SellSecretResult,
+} from "./dust-db.server";
 import { uuid as zuuid } from "./zod-uuid";
 
 /**
@@ -77,6 +82,42 @@ export const millCardCopy = createServerFn({ method: "POST" })
       awarded: result.awarded,
       edition: result.edition,
       eventParticipantId: result.eventParticipantId,
+      balance: result.balance,
+    };
+  });
+
+/**
+ * Sell a secret copy for dust.
+ *
+ * Any copy, including your only one — the rule trading already keeps, since no
+ * public count rides on a member holding one of a secret. Which is why this
+ * takes a `secret_card_pulls` id and has no spare rule to speak of: the one
+ * refusal a caller is likely to meet is `too_fresh`, and that is today's own
+ * un-granted pull, whose deletion would hand back the daily slot.
+ *
+ * Same division of labour as the mill above: every rule lives in SQL under the
+ * participant row lock, and this handler's whole job is to prove who is asking.
+ */
+export const sellSecretCard = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ secretPullId: zuuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    noStore();
+    const sb = await db();
+    const { data: raw, error } = await sb.rpc("sell_secret_card", {
+      _participant_id: me,
+      _secret_pull_id: data.secretPullId,
+    });
+    if (error) throw new Error(error.message);
+    const result = raw as SellSecretResult | null;
+    if (!result?.ok) {
+      return { ok: false as const, reason: result?.reason ?? ("not_found" as const) };
+    }
+    return {
+      ok: true as const,
+      awarded: result.awarded,
+      tier: result.tier,
+      secretCardId: result.secretCardId,
       balance: result.balance,
     };
   });

@@ -63,7 +63,7 @@ function renderStand(over: Partial<React.ComponentProps<typeof PackStand>> = {})
       secretRarity={rarityStyle("base")}
       secretRevealed={false}
       secretDuplicate={false}
-      secretDust={null}
+      secretSellValue={null}
       secretPeeking={false}
       peeking={false}
       busy={false}
@@ -180,7 +180,7 @@ describe("the fake ending", () => {
       secretRarity: rarityStyle("base"),
       secretRevealed: false,
       secretDuplicate: false,
-      secretDust: null,
+      secretSellValue: null,
       secretPeeking: false,
       peeking: false,
       busy: false,

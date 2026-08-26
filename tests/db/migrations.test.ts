@@ -176,6 +176,36 @@ describe("migrations", () => {
     ]);
   });
 
+  it("keeps the search_path hardening a replay would otherwise drop", async () => {
+    // 20260825165117 hardens roll_card_edition and mill_value, and sorts BEFORE
+    // the two migrations that create them. A bare ALTER there raises on a replay
+    // from empty, which took out the cluster build and with it every test in
+    // tests/db — so that file now skips a signature it cannot find.
+    //
+    // Skipping alone would trade the loud failure for a silent one: neither
+    // function is created with a search_path of its own, so a replayed database
+    // would quietly differ from the live one. 20260829130000 re-asserts both
+    // after the CREATEs, and this is what proves it — the guard cannot be left
+    // in place with nothing behind it.
+    const rows = await sql<{ sig: string; config: string[] | null }>(`
+      SELECT p.oid::regprocedure::text AS sig, p.proconfig AS config
+        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public'
+         AND p.proname IN ('roll_card_edition', 'mill_value')
+       ORDER BY sig
+    `);
+    expect(rows.map((r) => r.sig)).toEqual([
+      "mill_value(text)",
+      "roll_card_edition(uuid,uuid,date)",
+    ]);
+    for (const row of rows) {
+      // `?? []` so a function with NO settings at all fails as "expected [] to
+      // contain", which is the actual complaint, rather than as a type error
+      // about null — proconfig is NULL rather than empty when nothing is set.
+      expect(row.config ?? [], row.sig).toContain("search_path=public");
+    }
+  });
+
   it("gives every card_pulls row a finish, defaulting to standard", async () => {
     // NOT NULL with a default is what backfills rows written before editions
     // existed, rather than leaving a null the TS fallback would have to cover.

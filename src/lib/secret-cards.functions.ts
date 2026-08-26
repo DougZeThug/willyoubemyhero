@@ -181,8 +181,6 @@ export const pullSecretCard = createServerFn({ method: "POST" }).handler(async (
     day: pull.day,
     duplicate: pull.duplicate,
     fresh: pull.fresh,
-    // Null on a re-read of a pull that already paid — see the type.
-    dust: pull.dust ?? null,
     // The one number this whole file exists to withhold, and the only response
     // allowed to carry it. Null on every pull that did not just finish a set,
     // which is all but one of them in a season.

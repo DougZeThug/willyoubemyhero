@@ -1,13 +1,16 @@
 // The dust economy, against real Postgres.
 //
-// Two properties live here and nowhere else. A balance can never go negative,
+// Three properties live here and nowhere else. A balance can never go negative,
 // which no CHECK can enforce because the invariant is over a sum rather than a
 // row — the participant row lock is the whole guard, so the concurrency test is
-// the one that matters most. And dust cannot be minted faster than the game hands
-// it out: the mill rules, not the prices, are what keep the sinks meaningful.
+// the one that matters most. Dust cannot be minted faster than the game hands
+// it out: the mill and sale rules, not the prices, are what keep the sinks
+// meaningful. And no sale may buy back a daily pull — pull, sell, pull is the
+// one sequence that would print dust forever, and `sell_secret_card`'s
+// `too_fresh` guard is the only thing standing in front of it.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
-import { MILL_BY_EDITION, MILL_CLIENT_FLAT, DUPE_SECRET_CREDIT, DUST_PRICES } from "../../src/lib/dust"; // prettier-ignore
+import { MILL_BY_EDITION, MILL_CLIENT_FLAT, SELL_BY_SECRET_TIER, DUST_PRICES } from "../../src/lib/dust"; // prettier-ignore
 
 afterAll(closeDb);
 beforeEach(async () => {
@@ -57,7 +60,7 @@ async function balance(participantId = IDS.alice): Promise<number> {
   return row.b;
 }
 
-type Pull = { duplicate: boolean; dust: number | null; pullId: string };
+type Pull = { duplicate: boolean; pullId: string; tier: string };
 async function pullSecret(participantId: string | null, guestId: string | null = null) {
   const [row] = await sql<{ pull_secret_card: Pull }>(
     "SELECT public.pull_secret_card($1, $2, $3)",
@@ -97,6 +100,41 @@ async function twoCopies(edition = "gold", assertedBy = "server") {
   return { spareId: spare.id, cardId: ids[0] };
 }
 
+type SellResult = {
+  ok: boolean;
+  reason?: string;
+  awarded?: number;
+  tier?: string;
+  secretCardId?: string;
+  balance?: number;
+};
+async function sell(pullId: string, participantId = IDS.alice): Promise<SellResult> {
+  const [row] = await sql<{ sell_secret_card: SellResult }>(
+    "SELECT public.sell_secret_card($1, $2)",
+    [participantId, pullId],
+  );
+  return row.sell_secret_card;
+}
+
+/**
+ * One secret on file at a given tier, already sellable.
+ *
+ * Written directly rather than pulled and rewound, because the tier is what every
+ * assertion here is about and `roll_secret_tier()` will not be told what to roll.
+ * `granted` is what keeps it out of the daily-slot rule — it is not the row
+ * `pull_secret_card` looks for — which is also true of a real bonus pull.
+ */
+async function heldSecret(tier = "common", participantId = IDS.alice, name = "gary") {
+  const cardId = await seedSecret(name);
+  const [row] = await sql<{ id: string }>(
+    `INSERT INTO public.secret_card_pulls
+       (participant_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+     VALUES ($1, $2, ${NY}, $3, false, true, $4) RETURNING id`,
+    [participantId, cardId, IDS.event, tier],
+  );
+  return { pullId: row.id, cardId };
+}
+
 type MillResult = { ok: boolean; reason?: string; awarded?: number; balance?: number };
 async function mill(copyId: string, participantId = IDS.alice): Promise<MillResult> {
   const [row] = await sql<{ mill_card_copy: MillResult }>("SELECT public.mill_card_copy($1, $2)", [
@@ -132,6 +170,8 @@ describe("dust_ledger", () => {
       expect(await isDenied(role, "SELECT * FROM public.dust_ledger")).toBe(true);
       expect(await isDenied(role, "SELECT public.dust_balance($1)", [IDS.alice])).toBe(true);
       expect(await isDenied(role, "SELECT public.mill_card_copy($1, $2)", [IDS.alice, IDS.bob])).toBe(true); // prettier-ignore
+      expect(await isDenied(role, "SELECT public.sell_secret_card($1, $2)", [IDS.alice, IDS.bob])).toBe(true); // prettier-ignore
+      expect(await isDenied(role, "SELECT public.secret_sell_value($1)", ["mythic"])).toBe(true); // prettier-ignore
       expect(await isDenied(role, "SELECT public.buy_bonus_secret_pull($1, $2, $3)", [IDS.alice, IDS.event, IDS.bob])).toBe(true); // prettier-ignore
       expect(await isDenied(role, "SELECT public.reroll_copy_edition($1, $2, $3)", [IDS.alice, IDS.bob, IDS.carol])).toBe(true); // prettier-ignore
     }
@@ -185,44 +225,238 @@ describe("mill_value", () => {
   });
 });
 
-describe("the dupe credit", () => {
-  it("pays a member for a duplicate secret", async () => {
+describe("secret_sell_value", () => {
+  it("mirrors the ladder in src/lib/dust.ts", async () => {
+    // Same mirror mill_value keeps, and for the same reason: the shop prints the
+    // TS number before the call, and a disagreement is a sheet promising one
+    // payout while the ledger files another.
+    for (const [tier, expected] of Object.entries(SELL_BY_SECRET_TIER)) {
+      const [row] = await sql<{ v: number }>("SELECT public.secret_sell_value($1) AS v", [tier]);
+      expect(row.v, tier).toBe(expected);
+    }
+  });
+
+  it("pays the common rung for a level it does not recognise, rather than raising", async () => {
+    // secret_tier_rank answers 99 for an unknown value and ARRAY[...][99] is
+    // NULL. Inside a payout that has to land on the floor, not on an exception.
+    // 'platinum' is the trap worth naming: it is a real value in the OTHER
+    // ladder, which is exactly why the two vocabularies are kept apart.
+    for (const unknown of ["platinum", "MYTHIC", "", "vibes"]) {
+      const [row] = await sql<{ v: number }>("SELECT public.secret_sell_value($1) AS v", [unknown]);
+      expect(row.v, unknown).toBe(SELL_BY_SECRET_TIER.common);
+    }
+    const [nul] = await sql<{ v: number }>("SELECT public.secret_sell_value(NULL) AS v");
+    expect(nul.v).toBe(SELL_BY_SECRET_TIER.common);
+  });
+});
+
+describe("sell_secret_card", () => {
+  it("pays each rung the number the ladder pins", async () => {
+    for (const [tier, expected] of Object.entries(SELL_BY_SECRET_TIER)) {
+      const { pullId } = await heldSecret(tier, IDS.alice, `card-${tier}`);
+      const res = await sell(pullId);
+      expect(res, tier).toMatchObject({ ok: true, awarded: expected, tier });
+    }
+    const total = Object.values(SELL_BY_SECRET_TIER).reduce((a, b) => a + b, 0);
+    expect(await balance()).toBe(total);
+  });
+
+  it("pays the floor for a level it does not recognise", async () => {
+    // A row written before a tier was retired, or by a migration nobody has
+    // taught this about. It must land on the floor rather than raise inside a
+    // payout — the same direction mill_value errs in.
+    const { pullId } = await heldSecret("common");
+    await sql("UPDATE public.secret_card_pulls SET tier = 'vibes' WHERE id = $1", [pullId]);
+    expect(await sell(pullId)).toMatchObject({ ok: true, awarded: SELL_BY_SECRET_TIER.common });
+  });
+
+  it("sells your ONLY copy, which is the headline", async () => {
+    // No last-copy rule, deliberately: the rule trade_item_is_spare's secret
+    // branch already keeps, since no public count rides on a member holding one.
+    const { pullId, cardId } = await heldSecret("mythic");
+    const res = await sell(pullId);
+    expect(res).toMatchObject({ ok: true, awarded: SELL_BY_SECRET_TIER.mythic, secretCardId: cardId }); // prettier-ignore
+    expect(
+      await sql("SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE id = $1", [pullId]),
+    ).toEqual([{ n: 0 }]);
+    expect(await balance()).toBe(SELL_BY_SECRET_TIER.mythic);
+  });
+
+  it("refuses today's own un-granted pull", async () => {
+    await seedSecret("only-card");
+    const pull = await pullSecret(IDS.alice);
+    expect(await sell(pull.pullId)).toMatchObject({ ok: false, reason: "too_fresh" });
+    expect(await balance()).toBe(0);
+  });
+
+  it("cannot buy back the day's pull — the sequence this guard exists for", async () => {
+    // THE EXPLOIT, as a test. pull_secret_card decides whether you have pulled by
+    // looking for exactly `pulled_on = today AND NOT granted`, so deleting that
+    // row would hand the slot straight back and pull -> sell -> pull would print
+    // dust for as long as somebody kept tapping.
     await seedSecret("only-card");
     const first = await pullSecret(IDS.alice);
-    expect(first.duplicate).toBe(false);
-    expect(first.dust).toBe(0);
+    expect(await sell(first.pullId)).toMatchObject({ ok: false, reason: "too_fresh" });
+
+    // And the second pull is still the same row rather than a new card.
+    const again = await pullSecret(IDS.alice);
+    expect(again.pullId).toBe(first.pullId);
+    const [rows] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(rows.n).toBe(1);
+    expect(await balance()).toBe(0);
+  });
+
+  it("sells yesterday's pull quite happily", async () => {
+    // The other side of too_fresh: it is today's slot that is protected, not the
+    // row forever. rewindDay is what every mill test uses for the same reason.
+    await seedSecret("only-card");
+    const pull = await pullSecret(IDS.alice);
+    await rewindDay(1);
+    expect(await sell(pull.pullId)).toMatchObject({ ok: true });
+  });
+
+  it("refuses a copy somebody has already been offered", async () => {
+    // trade_offer_items.secret_pull_id cascades, so selling a staked copy would
+    // silently shrink an offer the counterparty is about to accept.
+    const { pullId } = await heldSecret("epic");
+    const [offer] = await sql<{ id: string }>(
+      `INSERT INTO public.trade_offers (event_id, proposer_id, recipient_id)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [IDS.event, IDS.alice, IDS.bob],
+    );
+    await sql(
+      `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, secret_pull_id)
+       VALUES ($1, 'proposer', 'secret', $2)`,
+      [offer.id, pullId],
+    );
+    expect(await sell(pullId)).toMatchObject({ ok: false, reason: "staked" });
+    expect(await balance()).toBe(0);
+  });
+
+  it("refuses a copy that is not yours", async () => {
+    // Proved under the lock. The id comes from the verified token, never from a
+    // payload — but the row still has to be shown to belong to it.
+    const { pullId } = await heldSecret("rare");
+    expect(await sell(pullId, IDS.bob)).toMatchObject({ ok: false, reason: "not_yours" });
+    expect(
+      await sql("SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE id = $1", [pullId]),
+    ).toEqual([{ n: 1 }]);
+  });
+
+  it("promotes a duplicate when the owning row is the one sold", async () => {
+    // resync_secret_ownership, for the reason accept_trade_offer calls it:
+    // `is_duplicate = false` is what four separate counts read as "this person
+    // owns this card", so leaving it unset behind a sale would show a vault card
+    // that every count says is not theirs.
+    const cardId = await seedSecret("gary");
+    const [owning] = await sql<{ id: string }>(
+      `INSERT INTO public.secret_card_pulls
+         (participant_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+       VALUES ($1, $2, ${NY} - 1, $3, false, false, 'common') RETURNING id`,
+      [IDS.alice, cardId, IDS.event],
+    );
+    const [dupe] = await sql<{ id: string }>(
+      `INSERT INTO public.secret_card_pulls
+         (participant_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+       VALUES ($1, $2, ${NY} - 1, $3, true, true, 'mythic') RETURNING id`,
+      [IDS.alice, cardId, IDS.event],
+    );
+
+    expect(await sell(owning.id)).toMatchObject({ ok: true });
+    const [after] = await sql<{ is_duplicate: boolean }>(
+      "SELECT is_duplicate FROM public.secret_card_pulls WHERE id = $1",
+      [dupe.id],
+    );
+    expect(after.is_duplicate).toBe(false);
+  });
+
+  it("cannot be paid twice for one copy", async () => {
+    // The row is gone after the first sale, so the replay is answered not_yours
+    // — and the earn-once index is the backstop under that.
+    const { pullId } = await heldSecret("legendary");
+    await sell(pullId);
+    expect(await sell(pullId)).toMatchObject({ ok: false, reason: "not_yours" });
+    expect(await balance()).toBe(SELL_BY_SECRET_TIER.legendary);
+  });
+
+  it("refuses a guest's copy, because dust starts at the claim", async () => {
+    // A guest holds secrets and has no ledger. The row is keyed on guest_id, so
+    // no participant id can ever match it.
+    await seedSecret("only-card");
+    const pull = await pullSecret(null, GUEST);
+    await rewindDay(1);
+    expect(await sell(pull.pullId)).toMatchObject({ ok: false, reason: "not_yours" });
+    expect(await sql("SELECT count(*)::int AS n FROM public.dust_ledger")).toEqual([{ n: 0 }]);
+  });
+
+  it("answers a missing row rather than raising", async () => {
+    expect(await sell(IDS.bob)).toMatchObject({ ok: false, reason: "not_yours" });
+  });
+});
+
+describe("the dupe, now that the credit is folded into the sale", () => {
+  it("credits nothing at all when a duplicate lands", async () => {
+    // The old behaviour, deleted: a flat 25 paid automatically, ignoring the tier
+    // entirely. The duplicate is still the moment the economy answers — it just
+    // answers with a card worth selling rather than an automatic payout.
+    await seedSecret("only-card");
+    await pullSecret(IDS.alice);
     expect(await balance()).toBe(0);
 
     // One card in the pool, so tomorrow's pull can only be a duplicate.
     await rewindDay(1);
     const second = await pullSecret(IDS.alice);
     expect(second.duplicate).toBe(true);
-    expect(second.dust).toBe(DUPE_SECRET_CREDIT);
-    expect(await balance()).toBe(DUPE_SECRET_CREDIT);
+    expect(await sql("SELECT count(*)::int AS n FROM public.dust_ledger")).toEqual([{ n: 0 }]);
+    expect(await balance()).toBe(0);
   });
 
-  it("pays once however many times the day's pull is re-asked for", async () => {
-    // The client fires this on a reveal that can re-run. The early return for a
-    // day already pulled is the idempotence, and the unique index is the backstop.
+  it("keeps the row, so the dupe is something to sell rather than nothing", async () => {
+    // The whole trade this release makes. Without a second row there would be no
+    // copy to put on the counter, and the duplicate really would be worth zero.
     await seedSecret("only-card");
     await pullSecret(IDS.alice);
     await rewindDay(1);
     await pullSecret(IDS.alice);
-    for (let i = 0; i < 5; i++) {
-      const again = await pullSecret(IDS.alice);
-      // Null rather than zero: the credit happened, on the call that made the row.
-      expect(again.dust).toBeNull();
-    }
-    expect(await balance()).toBe(DUPE_SECRET_CREDIT);
+    const [rows] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(rows.n).toBe(2);
   });
 
-  it("pays a guest nothing, because dust starts at the claim", async () => {
+  it("still upgrades the copy you own when the duplicate rolls better", async () => {
+    // Best wins, never down. The credit went; this did not, and it is the other
+    // half of what makes a duplicate worth having.
+    await seedSecret("only-card");
+    const first = await pullSecret(IDS.alice);
+    await sql("UPDATE public.secret_card_pulls SET tier = 'common' WHERE id = $1", [first.pullId]);
+    await rewindDay(1);
+    const dupe = await pullSecret(IDS.alice);
+    expect(dupe.duplicate).toBe(true);
+
+    // Stated as the invariant rather than as one expected tier, since the roll is
+    // random: whatever the dupe came in at, the owning row is at least as good.
+    const [owning] = await sql<{ rank: number }>(
+      "SELECT public.secret_tier_rank(tier) AS rank FROM public.secret_card_pulls WHERE id = $1",
+      [first.pullId],
+    );
+    const [rolled] = await sql<{ rank: number }>(
+      "SELECT public.secret_tier_rank(tier) AS rank FROM public.secret_card_pulls WHERE id = $1",
+      [dupe.pullId],
+    );
+    expect(owning.rank).toBeLessThanOrEqual(rolled.rank);
+  });
+
+  it("pays a guest nothing either, because dust starts at the claim", async () => {
     await seedSecret("only-card");
     await pullSecret(null, GUEST);
     await rewindDay(1);
     const dupe = await pullSecret(null, GUEST);
     expect(dupe.duplicate).toBe(true);
-    expect(dupe.dust).toBe(0);
     expect(await sql("SELECT count(*)::int AS n FROM public.dust_ledger")).toEqual([{ n: 0 }]);
   });
 });
@@ -719,10 +953,25 @@ describe("while the switch is off", () => {
     expect(await balance()).toBe(DUST_PRICES.reroll);
   });
 
+  it("says so rather than selling a secret", async () => {
+    const { pullId } = await heldSecret("legendary");
+    await switchOff();
+    expect(await sell(pullId)).toEqual({ ok: false, reason: "disabled" });
+    // Refused before it touched anything: the copy is still there.
+    const [row] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE id = $1",
+      [pullId],
+    );
+    expect(row.n).toBe(1);
+    expect(await balance()).toBe(0);
+  });
+
   it("pays nothing at all for a duplicate secret", async () => {
     // The decision behind the switch: no ledger row while it is off. A balance
     // built out of history nobody knew was being scored — during a stretch when
     // burning was unavailable — would be lopsided towards whoever pulled most.
+    // Since the credit was folded into the sale this is the sale being refused
+    // rather than the credit being skipped, but the property is the same one.
     await seedSecret("only-card");
     await pullSecret(IDS.alice);
     await rewindDay(1);
@@ -730,7 +979,6 @@ describe("while the switch is off", () => {
 
     const dupe = await pullSecret(IDS.alice);
     expect(dupe.duplicate).toBe(true);
-    expect(dupe.dust).toBe(0);
     expect(await sql("SELECT count(*)::int AS n FROM public.dust_ledger")).toEqual([{ n: 0 }]);
     expect(await balance()).toBe(0);
   });

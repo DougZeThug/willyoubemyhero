@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { setDustEnabled } from "@/lib/dust.functions";
-import { DUPE_SECRET_CREDIT, DUST_PRICES } from "@/lib/dust";
+import { DUST_PRICES, SELL_BY_SECRET_TIER } from "@/lib/dust";
 
 /**
  * The switch for the whole dust economy.
@@ -28,7 +28,7 @@ export function DustAdminPanel({ eventId, enabled }: { eventId: string; enabled:
     if (
       !confirm(
         next
-          ? `Turn dust on? Duplicate secrets start paying ${DUPE_SECRET_CREDIT}, and the shop appears for everyone.`
+          ? `Turn dust on? Secrets become sellable from ${SELL_BY_SECRET_TIER.common} to ${SELL_BY_SECRET_TIER.mythic}, and the shop appears for everyone.`
           : "Turn dust off? The chip and shop disappear and nothing accrues while it is off. Balances already earned are kept.",
       )
     ) {
@@ -56,7 +56,7 @@ export function DustAdminPanel({ eventId, enabled }: { eventId: string; enabled:
     >
       <p className="text-sm text-muted-foreground">
         {enabled
-          ? `Duplicate secrets pay ${DUPE_SECRET_CREDIT}. Players can burn spares, buy a pull for ${DUST_PRICES.bonusPull} and re-roll a finish for ${DUST_PRICES.reroll}.`
+          ? `Players can sell secrets by level (${SELL_BY_SECRET_TIER.common}–${SELL_BY_SECRET_TIER.mythic}), burn spares, buy a pull for ${DUST_PRICES.bonusPull} and re-roll a finish for ${DUST_PRICES.reroll}.`
           : "Nobody can see or spend dust, and nothing accrues while it is off — the day you turn it on, everyone starts level."}
       </p>
       <div className="mt-3">
