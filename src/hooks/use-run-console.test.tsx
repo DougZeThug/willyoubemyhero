@@ -166,7 +166,16 @@ describe("useRunConsole", () => {
   });
 
   it("records a split only while the run is running", async () => {
-    const station = { id: uuid(), event_id: EVENT_ID, name: "Sled", short_name: null, station_order: 1, active: true, split_enabled: true, penalty_amount_ms: 0 };
+    const station = {
+      id: uuid(),
+      event_id: EVENT_ID,
+      name: "Sled",
+      short_name: null,
+      station_order: 1,
+      active: true,
+      split_enabled: true,
+      penalty_amount_ms: 0,
+    };
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
 
     useEventBundle.mockReturnValue({
@@ -193,7 +202,16 @@ describe("useRunConsole", () => {
   });
 
   it("undoes the last split", async () => {
-    const station = { id: uuid(), event_id: EVENT_ID, name: "Sled", short_name: null, station_order: 1, active: true, split_enabled: true, penalty_amount_ms: 0 };
+    const station = {
+      id: uuid(),
+      event_id: EVENT_ID,
+      name: "Sled",
+      short_name: null,
+      station_order: 1,
+      active: true,
+      split_enabled: true,
+      penalty_amount_ms: 0,
+    };
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
 
     useEventBundle.mockReturnValue({
