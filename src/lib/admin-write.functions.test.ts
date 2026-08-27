@@ -577,12 +577,24 @@ describe("updateEvent", () => {
   it("does not write eventId into the row it updates", async () => {
     const { updateEvent } = await import("./admin-write.functions");
     await callServerFn(updateEvent, {
-      data: { eventId: EVENT_ID, results_locked: true, draft_locked: false },
+      data: { eventId: EVENT_ID, results_locked: true, splits_enabled: false },
       headers: asAdmin(),
     });
     const [update] = mock.callsFor("events", "update");
-    expect(update.payload).toEqual({ results_locked: true, draft_locked: false });
+    expect(update.payload).toEqual({ results_locked: true, splits_enabled: false });
     expect(mock.eqValue(update, "id")).toBe(EVENT_ID);
+  });
+
+  it("refuses the two lock flags nothing could ever set", async () => {
+    // draft_locked and running_order_locked were accepted here and written by
+    // nothing, and this handler has no caller in the app at all — so a "locked
+    // draft" was a capability the league was told about and could not reach.
+    const { updateEvent } = await import("./admin-write.functions");
+    await callServerFn(updateEvent, {
+      data: { eventId: EVENT_ID, draft_locked: true, running_order_locked: true },
+      headers: asAdmin(),
+    });
+    expect(mock.callsFor("events", "update")[0].payload).toEqual({});
   });
 
   it("leaves unmentioned flags alone", async () => {

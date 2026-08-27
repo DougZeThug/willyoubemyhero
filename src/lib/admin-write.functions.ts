@@ -1006,8 +1006,12 @@ export const updateEvent = createServerFn({ method: "POST" })
         eventId: zuuid(),
         status: z.string().optional(),
         results_locked: z.boolean().optional(),
-        draft_locked: z.boolean().optional(),
-        running_order_locked: z.boolean().optional(),
+        // draft_locked and running_order_locked are deliberately absent.
+        // Both columns exist, this was the only thing that could ever have
+        // written them, and no screen calls it — so a "locked draft" was a
+        // capability the league was told about and could not reach. Dropped
+        // rather than wired up, per the triage. The columns stay: removing
+        // one costs a migration to bring back, and the feature may return.
         splits_enabled: z.boolean().optional(),
         timing_mode: z.string().optional(),
       })
