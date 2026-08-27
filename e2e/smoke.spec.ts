@@ -68,6 +68,24 @@ test.describe("smoke", () => {
     await expect(page.locator("body")).not.toBeEmpty();
   });
 
+  test("says which page you are on, rather than only colouring it", async ({ page, server }) => {
+    // The scripted verification pass probed for this and found nothing: the
+    // active tab was a colour class and nothing else, so the current page was
+    // not exposed programmatically anywhere in the app.
+    void server;
+    await page.goto("/leaderboard");
+    const current = page.locator('[aria-current="page"]');
+    await expect(current.first()).toBeVisible();
+    await expect(current.first()).toHaveAttribute("href", "/leaderboard");
+  });
+
+  test("puts a skip link ahead of the whole nav", async ({ page, server }) => {
+    void server;
+    await page.goto("/leaderboard");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: /skip to content/i })).toBeFocused();
+  });
+
   test("an archived recap renders when you walk to it from the archive", async ({
     page,
     server,

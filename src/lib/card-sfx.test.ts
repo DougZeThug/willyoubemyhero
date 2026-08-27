@@ -38,7 +38,10 @@ describe("every cue", () => {
     }
   });
 
-  it("stays silent when the user has asked for less motion", () => {
+  it("stops buzzing when the user has asked for less motion", () => {
+    // Haptics are motion, so this setting governs them. Sound is NOT — gating
+    // audio on it too made "a still screen that still makes a noise"
+    // inexpressible, and the mute toggle could not give the sound back.
     setMatchMedia((q) => q.includes("reduce"));
     for (const name of CUES) cue(name);
     expect(vibrate).not.toHaveBeenCalled();

@@ -142,7 +142,9 @@ function LeaderboardPage() {
                   : "No official times yet — check back after the first athlete crosses."}
               </div>
             ) : (
-              <ul className="divide-y divide-white/5">
+              // An ordered list, because it is one. The place is rendered
+              // separately for the look, so the marker is suppressed.
+              <ol className="list-none divide-y divide-white/5">
                 {rows.map((row) => (
                   <li
                     key={row.run.id}
@@ -217,7 +219,9 @@ function LeaderboardPage() {
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-primary/70 hover:text-primary"
-                      aria-label="Share result card"
+                      // Thirteen buttons carrying the identical label read as
+                      // thirteen identical controls out of context.
+                      aria-label={`Share ${row.ep?.participant?.name ?? "this"} result card`}
                       onClick={() => handleShare(row.run.id)}
                       disabled={sharingRunId === row.run.id}
                     >
@@ -225,14 +229,18 @@ function LeaderboardPage() {
                     </Button>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
           </CardContent>
         </Card>
       </div>
-      {/* Offscreen card for PNG export */}
+      {/* Offscreen card for PNG export. aria-hidden: it is a rendering of a
+          row that is already on the page. */}
       {shareData && (
-        <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
+        <div
+          aria-hidden
+          style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}
+        >
           <ResultCard ref={cardRef} data={shareData} />
         </div>
       )}

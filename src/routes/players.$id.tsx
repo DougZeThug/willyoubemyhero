@@ -692,7 +692,13 @@ function PlayerCardPage() {
           */}
           <div className="hidden items-center gap-2 sm:flex">
             {secondary.map((a) => (
-              <ActionButton key={a.key} onClick={a.onClick} active={a.active} icon={a.icon}>
+              <ActionButton
+                key={a.key}
+                onClick={a.onClick}
+                active={a.active}
+                toggle={a.key !== "copy"}
+                icon={a.icon}
+              >
                 {a.label}
               </ActionButton>
             ))}
@@ -708,9 +714,14 @@ function PlayerCardPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" className="min-w-[10rem]">
               {secondary.map((a) => (
+                // On a phone these live inside menu items, which carry no
+                // pressed state at all — so the checkbox role is what makes
+                // "Tilt is on" expressible here.
                 <DropdownMenuItem
                   key={a.key}
                   onSelect={a.onClick}
+                  role={a.key === "copy" ? undefined : "menuitemcheckbox"}
+                  aria-checked={a.key === "copy" ? undefined : !!a.active}
                   className="gap-2 text-[11px] font-bold uppercase tracking-[0.2em]"
                 >
                   {a.icon}
@@ -812,7 +823,13 @@ function PlayerCardPage() {
           mounted for a locked card: it is an export of the very art being
           withheld, and Share is disabled anyway. */}
       {!locked && (
-        <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
+        // aria-hidden, like the pack summary's equivalent. Mounted for the
+        // whole visit, it put a second copy of every name, time and split on
+        // the page for anybody reading it linearly.
+        <div
+          aria-hidden
+          style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}
+        >
           <ShareCard ref={shareRef} data={shareData} />
         </div>
       )}
@@ -908,17 +925,23 @@ function ActionButton({
   icon,
   active,
   disabled,
+  toggle,
 }: {
   onClick: () => void;
   children: React.ReactNode;
   icon: React.ReactNode;
   active?: boolean;
   disabled?: boolean;
+  /** A setting rather than an action: `active` is a state, not a highlight. */
+  toggle?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      // Pin, Sound and Tilt are all toggles and none of them said so — the
+      // state was carried by a colour class alone, exactly like the nav tab.
+      aria-pressed={toggle ? !!active : undefined}
       className={cn(
         // Tighter on a phone: three chips plus the overflow have to sit on one
         // line, and at the desktop tracking they spill onto a second.

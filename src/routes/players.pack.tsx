@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, PackageOpen } from "lucide-react";
+import { ArrowLeft, PackageOpen, Volume2, VolumeX } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -35,7 +35,13 @@ import {
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import { playEditionShine, playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
+import {
+  playEditionShine,
+  playReveal,
+  playSecretRiser,
+  playTear,
+  useCardSfx,
+} from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
 import { pullSecretCard } from "@/lib/secret-cards.functions";
 import {
@@ -143,6 +149,7 @@ function todayKey(): string {
 
 function PackPage() {
   const { event, bundle, error, realtimeDegraded } = useEventBundle();
+  const sfx = useCardSfx();
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never a player's — see the note on useEventCardBack. The
   // wrapper is shown before anything has been dealt, so a per-player back here
@@ -1221,12 +1228,27 @@ function PackPage() {
             transition={{ duration: 0.3 }}
             className="mb-3 flex items-center justify-between border-b border-primary/20 pb-2"
           >
-            <Link
-              to="/players"
-              className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Vault
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                to="/players"
+                className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Vault
+              </Link>
+              {/* The sound switch used to live on exactly one screen, behind an
+                  overflow menu on a phone — a screen away from the ceremony it
+                  silences. This is that ceremony, and this is the last moment
+                  before it starts. */}
+              <button
+                type="button"
+                onClick={sfx.toggle}
+                aria-pressed={!sfx.muted}
+                aria-label={sfx.muted ? "Turn sound on" : "Turn sound off"}
+                className="text-muted-foreground transition-colors hover:text-primary"
+              >
+                {sfx.muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </button>
+            </div>
             {/* Height-matched to the Collected block beside it, so the row still
                 gives back none of its 90px when it fades for the tear. */}
             {streak && <StreakFlame streak={streak} />}

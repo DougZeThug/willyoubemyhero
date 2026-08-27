@@ -6,7 +6,7 @@ import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { SharePack, type SharePackCard } from "@/components/share-pack-graphic";
-import { exportCardPng } from "@/lib/share-card";
+import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { packedByLabel } from "@/lib/card-pulls";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { cardBadge, type Edition } from "@/lib/card-edition";
@@ -103,6 +103,7 @@ export function PackSummary({
   const shareRef = useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = useState(false);
   const [shared, setShared] = useState(false);
+  const [shareFailed, setShareFailed] = useState(false);
 
   // The rung above wherever they are standing. Null once all five are behind
   // them, which is the one case with nothing left to promise. The copy lives in
@@ -137,13 +138,18 @@ export function PackSummary({
     const node = shareRef.current;
     if (!node || sharing) return;
     setSharing(true);
+    setShareFailed(false);
     try {
+      await waitForPaint(node);
       await exportCardPng(node, "draft-combine-pack.png");
       setShared(true);
       setTimeout(() => setShared(false), 2200);
     } catch {
-      // A share that could not be produced is not worth an error somebody has to
-      // dismiss on a screen they are enjoying. The button simply comes back.
+      // Still not a toast somebody has to dismiss on a screen they are enjoying
+      // — but the button simply coming back said nothing at all, least of all to
+      // a screen reader. A line beside it, announced politely, is the middle.
+      setShareFailed(true);
+      setTimeout(() => setShareFailed(false), 6000);
     } finally {
       setSharing(false);
     }
@@ -384,6 +390,11 @@ export function PackSummary({
           {sharing ? "Rendering…" : shared ? "Shared" : "Share pack"}
         </button>
       </div>
+
+      {/* Polite, so it does not interrupt the reveal it sits under. */}
+      <p role="status" aria-live="polite" className="mt-2 text-center text-xs text-warn">
+        {shareFailed ? "Couldn't build that image — try again in a moment." : ""}
+      </p>
 
       {/* Off-screen, and kept in the tree so it has layout when the button is
           pressed. `left` rather than `display: none` — html-to-image cannot

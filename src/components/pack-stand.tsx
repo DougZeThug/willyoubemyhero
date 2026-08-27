@@ -1025,6 +1025,20 @@ export function PackStand({
           at={shownIndex}
           accent={onSecret && !pretending ? secretRarity.accent : "oklch(0.82 0.14 210)"}
         />
+
+        {/* A real control for the step, not just a swipe and an unannounced
+            arrow key. The line above it is the hint for a thumb; this is what a
+            keyboard, a screen reader, or anybody whose swipe the browser
+            claimed as a pan actually has. Kept out of the way rather than out
+            of the tree — the gesture is still the intended way through. */}
+        <button
+          type="button"
+          onClick={onAdvance}
+          disabled={!canAdvance}
+          className="mt-1 min-h-9 rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary disabled:opacity-0"
+        >
+          Next
+        </button>
       </motion.div>
     </div>
   );

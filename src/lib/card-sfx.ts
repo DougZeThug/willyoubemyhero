@@ -13,13 +13,23 @@ const MUTE_KEY = "wwbh:sfx-muted";
 let ctx: AudioContext | null = null;
 let muted = false;
 
+/**
+ * Whether the device asks for less MOTION.
+ *
+ * Read for haptics, which really are motion. Deliberately NOT read for sound:
+ * "reduce motion" is a vestibular setting, and gating audio on it made "a still
+ * screen that still makes a noise" inexpressible — somebody who cannot take the
+ * card flying across the screen lost the card-stock sound with it, and the mute
+ * toggle could not give it back. `prefers-reduced-sound` does not exist, so the
+ * app's own mute switch is the answer for audio, and it already is one.
+ */
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined") return false;
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
 function audio(): AudioContext | null {
-  if (typeof window === "undefined" || muted || prefersReducedMotion()) return null;
+  if (typeof window === "undefined" || muted) return null;
   if (!ctx) {
     const Ctor =
       window.AudioContext ??
