@@ -6,11 +6,23 @@ const ROUTES = [
   { path: "/live", title: /Live/i },
   { path: "/leaderboard", title: /Leaderboard/i },
   { path: "/players", title: /Vault|Players/i },
-  { path: "/players/trade", title: /Trading Post/i },
+  // An anonymous visit to the Trading Post is a redirect to /claim by design —
+  // most people arriving here hold a paper code and need no account. What this
+  // entry is still worth is the rest of the sweep: a real response, a body that
+  // survived hydration, and a clean console. The Trading Post itself is covered
+  // by e2e/trades.spec.ts, signed in and out.
+  { path: "/players/trade", title: /Claim Your Player/i },
   { path: "/players/shop", title: /Dust/i },
   { path: "/awards", title: /Awards/i },
   { path: "/league", title: /League/i },
   { path: "/claim", title: /Claim/i },
+  // These three render the same data the rest do and were simply missed.
+  { path: "/analytics", title: /Analytics/i },
+  { path: "/tv", title: /TV|Board|Combine/i },
+  // /recap/$slug is not in this list on purpose: its loader runs during the SSR
+  // render, where the browser-side stub cannot reach it, so a direct visit is a
+  // genuine 404 against a dead Supabase. It is covered below by walking to it
+  // the way a reader does.
 ];
 
 test.describe("smoke", () => {
@@ -54,5 +66,45 @@ test.describe("smoke", () => {
     server.fail("getEventBundle", "boom");
     await page.goto("/live");
     await expect(page.locator("body")).not.toBeEmpty();
+  });
+
+  test("an archived recap renders when you walk to it from the archive", async ({
+    page,
+    server,
+  }) => {
+    server.set("listArchives", [
+      {
+        id: "arch-1",
+        slug: "combine-2025",
+        event_name: "Draft Combine",
+        event_year: 2025,
+        created_at: "2025-08-24T12:00:00.000Z",
+      },
+    ]);
+    server.set("getArchivedRecap", {
+      slug: "combine-2025",
+      snapshot: {
+        event: { name: "Draft Combine", year: 2025 },
+        participants: [
+          { id: "ep-1", participant_id: "p-1", participant: { name: "Doug" } },
+          { id: "ep-2", participant_id: "p-2", participant: { name: "Alice" } },
+        ],
+        runs: [
+          { id: "r-1", participant_id: "p-1", is_official: true, official_time_ms: 61_000 },
+          // Official with no time yet: it belongs LAST, which is the thing three
+          // screens used to get backwards.
+          { id: "r-2", participant_id: "p-2", is_official: true, official_time_ms: null },
+        ],
+        drafts: [{ selection_order: 1, participant_id: "p-1", draft_position: 1 }],
+      },
+    });
+
+    await page.goto("/analytics");
+    await page.getByRole("link", { name: /Draft Combine 2025/ }).click();
+    await expect(page).toHaveURL(/\/recap\/combine-2025$/);
+    await expect(page.getByText("1:01.00")).toBeVisible();
+
+    const names = await page.getByText(/^(Doug|Alice)$/).allTextContents();
+    expect(names[0]).toBe("Doug");
   });
 });

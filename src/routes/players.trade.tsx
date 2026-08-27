@@ -49,6 +49,7 @@ import {
 import { CollectorSignup } from "@/components/collector-signup";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner } from "@/components/feed-state";
 
 export const Route = createFileRoute("/players/trade")({
   head: () => ({
@@ -72,7 +73,7 @@ const MAX_PER_SIDE = 4;
 type Staged = { key: string; item: TradeItemView; payload: Record<string, unknown> };
 
 function TradePage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, error, realtimeDegraded } = useEventBundle();
   const me = useMemberSession();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuthUser();
@@ -271,17 +272,18 @@ function TradePage() {
   }
 
   // A visitor with neither a player token nor an account has nothing to trade
-  // with, so send them to make one rather than parking them on a dead end.
-  // Waits for both identities to settle: `me` hydrates in an effect, and
-  // `authLoading` covers the session lookup.
+  // with, so send them somewhere they can get one rather than parking them on a
+  // dead end. Waits for both identities to settle: `me` hydrates in an effect,
+  // and `authLoading` covers the session lookup.
+  //
+  // /claim, not /auth?mode=signup. Most people arriving here are league members
+  // holding a paper code, for whom an account is optional — pushing them into
+  // creating one sends the commonest visitor down the wrong path. The claim
+  // screen carries the account route for anybody who is not on the roster.
   const anonymous = !me && !authLoading && !user;
   useEffect(() => {
     if (!anonymous) return;
-    void navigate({
-      to: "/auth",
-      search: { mode: "signup", next: "/players/trade" },
-      replace: true,
-    });
+    void navigate({ to: "/claim", replace: true });
   }, [anonymous, navigate]);
 
   // Null on the first render whether or not a token exists — useMemberSession
@@ -327,6 +329,10 @@ function TradePage() {
       )}
       <div className="mx-auto max-w-3xl px-4 py-6">
         <Header />
+        {/* The same banner five other screens show. This one watches the event
+          channel too and said nothing when it went down — a frozen screen
+          with no signal is the exact failure the health states exist for. */}
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
 
         <section className="mb-7">
           <SectionTitle

@@ -51,6 +51,7 @@ import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { seededRng, shuffle } from "@/lib/format";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner } from "@/components/feed-state";
 
 export const Route = createFileRoute("/players/")({
   head: () => ({
@@ -88,7 +89,7 @@ const SORTS: { key: SortKey; label: string }[] = [
 const LOCKED_RARITY_RANK = 99;
 
 function PlayersPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, error, realtimeDegraded } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
   // Hoisted once for the whole grid, and the *event's* back rather than each
   // player's — see the note on useEventCardBack. A player's own back on their
@@ -605,6 +606,12 @@ function PlayersPage() {
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-6xl px-4 py-6">
+        {/* The same banner five other screens show. This one watches the event
+          channel too and said nothing at all when it went down — a frozen
+          screen with no signal is the exact failure the health states exist
+          for. */}
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+
         {/* Signed in with no player yet: their pulls are filed against this
             handset and nobody can trade with them until they name themselves.
             The vault is where they land, so it is where the prompt belongs. */}

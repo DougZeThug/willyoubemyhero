@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getCollectionTrophies } from "@/lib/secret-cards.functions";
 import type { CollectionTrophy } from "@/lib/collection-trophies";
 import { useMemberSession } from "@/lib/member-token";
+import { usePackIdentity } from "@/lib/device-id";
 import {
   markTrophiesCelebrated,
   setTrophySeen,
@@ -61,6 +62,10 @@ export function useCollectionTrophyWatcher() {
   const qc = useQueryClient();
   const me = useMemberSession();
   const participantId = me?.participantId ?? null;
+  // `m:<participantId>` for a member, `d:<deviceId>` for a guest, null until
+  // the browser has answered. It is the "we know who this device is" signal the
+  // priming pass below needs, which a participant id alone cannot give.
+  const identity = usePackIdentity();
   const trophies = useCollectionTrophies();
   const seen = useTrophySeen();
   const [queue, setQueue] = useState<CollectionTrophy[]>([]);
@@ -103,7 +108,14 @@ export function useCollectionTrophyWatcher() {
     // query has no `enabled` gate, so the list routinely settles first. Priming in
     // that window would either bank somebody else's shelf or, worse, leave this
     // device unprimed and fire for every trophy the instant the token lands.
-    if (!participantId || !rows) return;
+    //
+    // The GATE is the pack identity, which is `d:<deviceId>` for a guest — so a
+    // device primes while it is still a guest, when it owns no trophies and the
+    // pass is a silent no-op. Waiting for a participant id meant a guest never
+    // primed at all, and the claim that banks their finished set through
+    // claim_guest_secrets WAS the priming pass that swallowed it: the set was
+    // complete and nothing marked it, on the one path where it is most earned.
+    if (!identity || !rows) return;
 
     if (!seen.primed && !primedRef.current) {
       // First run on this device: absorb what is already there and say nothing.
@@ -112,18 +124,20 @@ export function useCollectionTrophyWatcher() {
       primedRef.current = true;
       setTrophySeen({
         primed: true,
-        ids: [...seen.ids, ...fresh.map((t) => trophyKey(participantId, t.collection))],
+        ids: participantId
+          ? [...seen.ids, ...fresh.map((t) => trophyKey(participantId, t.collection))]
+          : [...seen.ids],
       });
       return;
     }
 
-    if (fresh.length === 0) return;
+    if (!participantId || fresh.length === 0) return;
     // Marked before it is shown, not after. The host can be unmounted by a
     // navigation mid-ceremony, and a trophy that fires forever because nobody
     // dismissed it is worse than one somebody scrolled past.
     markTrophiesCelebrated(fresh.map((t) => trophyKey(participantId, t.collection)));
     setQueue((q) => [...q, ...fresh]);
-  }, [participantId, rows, fresh, seen]);
+  }, [identity, participantId, rows, fresh, seen]);
 
   return {
     queue,

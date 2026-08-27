@@ -30,8 +30,7 @@ export const Route = createFileRoute("/awards")({
 });
 
 function AwardsPage() {
-  const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
-    useEventBundle();
+  const { event, bundle, loading, error, realtimeDegraded, refetch } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const me = useMemberSession();
@@ -182,8 +181,11 @@ function AwardsPage() {
                       )}
                     </div>
                   ) : (
+                    // The AWARDS query, not the event bundle. Reading the
+                    // bundle's failure list here meant a failed splits or
+                    // penalties read claimed the votes were unreadable.
                     <p className="text-xs text-muted-foreground">
-                      {failedTables.length > 0
+                      {awards.isError
                         ? "Couldn't read the votes just now — retrying."
                         : "No votes cast."}
                     </p>

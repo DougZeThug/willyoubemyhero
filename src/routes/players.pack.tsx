@@ -63,6 +63,7 @@ import { urlFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner } from "@/components/feed-state";
 
 export const Route = createFileRoute("/players/pack")({
   head: () => ({
@@ -141,7 +142,7 @@ function todayKey(): string {
 }
 
 function PackPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, error, realtimeDegraded } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never a player's — see the note on useEventCardBack. The
   // wrapper is shown before anything has been dealt, so a per-player back here
@@ -1162,6 +1163,10 @@ function PackPage() {
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      {/* The same banner five other screens show. This one watches the event
+          channel too and said nothing when it went down — a frozen screen
+          with no signal is the exact failure the health states exist for. */}
+      {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
       <PresentationMode active={presenting || milestoneReveal !== null} />
       <PresentationStage active={presenting || milestoneReveal !== null} />
       {/* Mounted here rather than inside the summary: the stage above uses

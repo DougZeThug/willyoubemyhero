@@ -49,10 +49,14 @@ const INBOX_OFFER = {
 };
 
 test.describe("trading post", () => {
-  test("tells a signed-out visitor to claim their player", async ({ page, server }) => {
+  test("sends a signed-out visitor to claim their player", async ({ page, server }) => {
     void server;
     await page.goto("/players/trade");
-    await expect(page.getByRole("link", { name: /claim your player/i })).toBeVisible();
+    // The panel is transient — asserting on it alone is what let this pass while
+    // the redirect underneath went to /auth?mode=signup, pushing somebody
+    // holding a paper code into creating an account they do not need.
+    await expect(page).toHaveURL(/\/claim$/);
+    await expect(page.getByRole("heading", { name: /claim your player/i })).toBeVisible();
     // And offers nothing to press: there is no counterparty picker without a
     // member session, so an unclaimed visitor cannot start composing and then
     // discover they cannot send it.

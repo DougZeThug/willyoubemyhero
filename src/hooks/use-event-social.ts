@@ -76,9 +76,14 @@ export function useEventAwards(eventId: string | null | undefined) {
     if (!eventId) return;
     const channel = supabase
       .channel(`awards:${eventId}:${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "awards" }, () =>
-        qc.invalidateQueries({ queryKey: ["event-awards", eventId] }),
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "awards" }, () => {
+        qc.invalidateQueries({ queryKey: ["event-awards", eventId] });
+        // And the event itself, because `awards_locked` rides on it with a 60s
+        // stale time and no subscription of its own. Winners arrived at once
+        // while the ballot stayed open for up to a minute, and every tap on it
+        // was refused — which reads as a bug to the voter, not as a closed vote.
+        qc.invalidateQueries({ queryKey: ["active-event"] });
+      })
       .subscribe();
     return () => {
       supabase.removeChannel(channel);

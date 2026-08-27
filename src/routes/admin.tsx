@@ -86,6 +86,7 @@ import {
 
 import { currentAthlete, fieldSize } from "@/lib/current-athlete";
 import { useRunConsole } from "@/hooks/use-run-console";
+import { FeedDegradedBanner } from "@/components/feed-state";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -234,6 +235,9 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
 // ---------------- TIMING CONSOLE ----------------
 function TimingConsole() {
   const qc = useQueryClient();
+  // The console watches the same event channel every spectator screen does
+  // and was the one that never said when it was down.
+  const { error: bundleError, realtimeDegraded } = useEventBundle();
   const {
     event,
     run,
@@ -266,6 +270,10 @@ function TimingConsole() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-4">
+      {/* The one that matters most: this is where a run is timed, and a
+          console frozen behind a dead socket with nothing on screen saying
+          so is the failure the health states were added for. */}
+      {(realtimeDegraded || !!bundleError) && <FeedDegradedBanner />}
       <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-3">
         <div>
           <div className="flex items-center gap-2 text-primary">

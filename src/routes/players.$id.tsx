@@ -68,6 +68,7 @@ import { playEditionShine, playReveal, useCardSfx } from "@/lib/card-sfx";
 import { exportCardPng } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner } from "@/components/feed-state";
 
 /**
  * Cards whose reveal has already played this page load.
@@ -109,7 +110,7 @@ function PlayerCardPage() {
   const { vs } = Route.useSearch();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { event, bundle, loading } = useEventBundle();
+  const { event, bundle, loading, error, realtimeDegraded } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never this player's own — see the note on useEventCardBack.
@@ -473,6 +474,10 @@ function PlayerCardPage() {
         { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
       }
     >
+      {/* The same banner five other screens show. This one watches the event
+          channel too and said nothing when it went down — a frozen screen
+          with no signal is the exact failure the health states exist for. */}
+      {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
       {/* Tier wash over circuit-bg's own hard-coded cyan bloom. Sits behind the
           content, so a champion's page glows gold and a DNF's barely glows. */}
       <div

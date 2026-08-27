@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { BadgeCheck, LogOut, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { claimPlayer, getClaimRoster } from "@/lib/member.functions";
 import { linkClaimedPlayer } from "@/lib/account.functions";
-import { useAuthUser } from "@/hooks/use-account";
+import { signOutAccount, useAuthUser } from "@/hooks/use-account";
 import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member-token";
 import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +46,7 @@ function ClaimPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   // Once you're claimed there's nothing to do here but sign out.
   useEffect(() => {
@@ -96,11 +97,26 @@ function ClaimPage() {
         }
       }
       // Signed in? Then the player follows the account, not the handset. Awaited
-      // so the next screen's reads already see the bound identity, swallowed
-      // because a claim that worked is worth more than a link that didn't.
+      // so the next screen's reads already see the bound identity. A THROW here
+      // is transient and swallowed — a claim that worked is worth more than a
+      // link that didn't, and signing in again re-runs the adoption. A refusal
+      // is not transient and is not swallowed: the account keeps pointing at the
+      // player it already holds, so the next phone to sign in gets that one
+      // back, and saying "Welcome" over that is the app confirming something it
+      // did not do.
       if (user) {
         try {
-          await linkFn({ data: undefined });
+          const link = await linkFn({ data: undefined });
+          if (!link.ok) {
+            toast.error(
+              link.boundName
+                ? `Claimed on this phone, but your account is already ${link.boundName} — sign out of the account first, or use a different one.`
+                : "Claimed on this phone, but your account is already linked to another player — sign out of the account first, or use a different one.",
+              { duration: 10_000 },
+            );
+            navigate({ to: "/players" });
+            return;
+          }
         } catch {
           /* the claim stands; signing in again re-runs the adoption */
         }
@@ -140,14 +156,29 @@ function ClaimPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => {
-                    clearMemberToken();
-                    setCode("");
-                    toast.success("Signed out on this device");
+                  disabled={signingOut}
+                  onClick={async () => {
+                    setSigningOut(true);
+                    try {
+                      // The account session too, when there is one. Dropping the
+                      // member token alone silently reversed itself: useAccountSync
+                      // is latched per user id and re-mints it on the next reload,
+                      // so the control undid its own work.
+                      if (user) await signOutAccount();
+                      clearMemberToken();
+                      setCode("");
+                      toast.success(
+                        user ? "Signed out of your account" : "Signed out on this device",
+                      );
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Could not sign out");
+                    } finally {
+                      setSigningOut(false);
+                    }
                   }}
                 >
                   <LogOut className="mr-1.5 h-3.5 w-3.5" />
-                  Sign out on this device
+                  {user ? "Sign out" : "Sign out on this device"}
                 </Button>
               </div>
             </CardContent>
@@ -170,9 +201,12 @@ function ClaimPage() {
           <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">
             Claim Your Player
           </h1>
+          {/* The old copy said "One time only — it sticks on this device", which
+              is the opposite of what claimPlayer does: codes stay valid on
+              purpose, because people get new phones and clear browsers. */}
           <p className="mt-2 text-xs text-muted-foreground">
-            Pick your name and enter the code the commissioner gave you. One time only — it sticks
-            on this device.
+            Pick your name and enter the code the commissioner gave you. It keeps working — use the
+            same code on a new phone whenever you need to.
           </p>
         </div>
 
@@ -241,6 +275,20 @@ function ClaimPage() {
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/70" />
           No passwords and no email. Your code only proves which player you are, so the league can
           see who reacted and who voted.
+        </p>
+
+        {/* The other half of the trading gate: somebody sent here who is not on
+            the roster has no code to type and needs the account route. */}
+        <p className="mt-3 text-center text-[11px] text-muted-foreground">
+          Not on the roster?{" "}
+          <Link
+            to="/auth"
+            search={{ mode: "signup" as const, next: undefined }}
+            className="font-bold text-primary underline"
+          >
+            Create an account
+          </Link>{" "}
+          to collect and trade.
         </p>
       </div>
     </div>

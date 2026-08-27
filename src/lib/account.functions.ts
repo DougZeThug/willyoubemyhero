@@ -52,6 +52,18 @@ export const linkClaimedPlayer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const participantId = await requireMember();
-    const { bindParticipant } = await import("./account.server");
-    return bindParticipant(context.userId, participantId);
+    const { AccountAlreadyLinkedError, bindParticipant } = await import("./account.server");
+    try {
+      const bound = await bindParticipant(context.userId, participantId);
+      return { ok: true as const, ...bound };
+    } catch (e) {
+      // The deliberate refusal comes back as data, not as a throw. The caller
+      // has to tell it apart from a flaky request — it used to swallow both in
+      // one catch and say "Welcome" either way, while the account went on
+      // pointing at the OLD player for every other device.
+      if (e instanceof AccountAlreadyLinkedError) {
+        return { ok: false as const, reason: e.reason, boundName: e.boundName };
+      }
+      throw e;
+    }
   });
