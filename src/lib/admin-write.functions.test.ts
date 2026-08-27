@@ -510,6 +510,28 @@ describe("setRunningOrder", () => {
       }),
     ).resolves.toEqual({ ok: true });
   });
+
+  it("rejects when any update fails", async () => {
+    withDb({
+      "event_participants.update": [
+        { data: null, error: null },
+        { data: null, error: { message: "connection lost" } },
+      ],
+    });
+    const { setRunningOrder } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(setRunningOrder, {
+        data: {
+          eventId: EVENT_ID,
+          order: [
+            { id: EVENT_PARTICIPANT_ID, running_order: 2 },
+            { id: STATION_ID, running_order: 1 },
+          ],
+        },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("Failed to update running order");
+  });
 });
 
 describe("updateEvent", () => {
