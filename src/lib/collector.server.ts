@@ -56,19 +56,50 @@ export async function createCollector(
     .single();
   if (error || !created) throw error ?? new Error("Could not create your collector");
 
+  // INSERT, never UPSERT. Two tabs signing up at once each reach here with their
+  // own fresh participant; an upsert would let the second one repoint the account
+  // at its row while the first had already absorbed the guest's cards, stranding
+  // them on a participant nothing can reach again (claim_guest_* nulls guest_id,
+  // so the merge cannot be replayed). The unique violation forces a winner.
   const { error: identityError } = await supabaseAdmin
     .from("account_identities")
-    .upsert(
-      { user_id: userId, participant_id: created.id, guest_id: null },
-      { onConflict: "user_id" },
-    );
-  if (identityError) throw identityError;
+    .insert({ user_id: userId, participant_id: created.id, guest_id: null });
 
-  await mergeGuests(created.id, [row?.guest_id ?? "", ...deviceGuestIds]);
+  let winnerId = created.id;
+  let winnerName = created.name;
+  let winnerGuestId: string | null = row?.guest_id ?? null;
 
-  const { token, expiresAt } = signMemberToken(created.id);
-  return { participantId: created.id, name: created.name, token, expiresAt };
+  if (identityError) {
+    if (identityError.code !== "23505") throw identityError;
+    const { data: winner, error: reReadError } = await supabaseAdmin
+      .from("account_identities")
+      .select("participant_id, guest_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (reReadError) throw reReadError;
+    if (!winner?.participant_id) throw identityError;
+    // The row we lost with holds nothing yet — the guest merge runs below, against
+    // the winner. Retiring it keeps it off the roster and the trade lists.
+    await supabaseAdmin.from("participants").update({ active: false }).eq("id", created.id);
+    const { data: participant, error: participantError } = await supabaseAdmin
+      .from("participants")
+      .select("id, name")
+      .eq("id", winner.participant_id)
+      .maybeSingle();
+    if (participantError || !participant) {
+      throw participantError ?? new Error("Could not create your collector");
+    }
+    winnerId = participant.id;
+    winnerName = participant.name;
+    winnerGuestId = winner.guest_id ?? null;
+  }
+
+  await mergeGuests(winnerId, [winnerGuestId ?? "", ...deviceGuestIds]);
+
+  const { token, expiresAt } = signMemberToken(winnerId);
+  return { participantId: winnerId, name: winnerName, token, expiresAt };
 }
+
 
 async function mergeGuests(participantId: string, guestIds: string[]) {
   for (const guestId of new Set(guestIds.filter(Boolean))) {
