@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { supabase } from "@/integrations/supabase/client";
 import { signOutAccount } from "./use-account";
-
-const signOutMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     auth: {
-      signOut: () => signOutMock(),
+      signOut: vi.fn(),
     },
   },
 }));
@@ -14,8 +13,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 describe("signOutAccount", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    signOutMock.mockReset();
-    signOutMock.mockResolvedValue({ error: null });
+    vi.mocked(supabase.auth.signOut).mockResolvedValue({ error: null });
   });
 
   it("clears the admin token alongside the member token", async () => {
@@ -24,7 +22,7 @@ describe("signOutAccount", () => {
 
     await signOutAccount();
 
-    expect(signOutMock).toHaveBeenCalled();
+    expect(supabase.auth.signOut).toHaveBeenCalled();
     expect(window.localStorage.getItem("wwbh:admin-token")).toBeNull();
     expect(window.localStorage.getItem("wwbh:member-token")).toBeNull();
   });
