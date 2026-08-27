@@ -134,4 +134,5 @@ export function useAccountSync(user: User | null) {
 export async function signOutAccount() {
   await supabase.auth.signOut();
   clearMemberToken();
+  clearAdminToken();
 }
