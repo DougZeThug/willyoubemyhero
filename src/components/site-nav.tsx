@@ -97,6 +97,9 @@ export function SiteNav() {
                 <Link
                   key={l.to}
                   to={l.to}
+                  // The active tab was conveyed by colour alone, so a screen
+                  // reader had no way to know which page it was on.
+                  aria-current={active === l.to ? "page" : undefined}
                   aria-label={waiting ? `${l.label} — ${waiting.suffix}` : undefined}
                   className={cn(
                     "relative rounded-md px-3 py-1.5 text-sm font-semibold uppercase tracking-wide transition-colors",
@@ -132,6 +135,7 @@ export function SiteNav() {
               <li key={l.to}>
                 <Link
                   to={l.to}
+                  aria-current={active === l.to ? "page" : undefined}
                   aria-label={waiting ? `${l.label} — ${waiting.suffix}` : undefined}
                   className={cn(
                     "relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",

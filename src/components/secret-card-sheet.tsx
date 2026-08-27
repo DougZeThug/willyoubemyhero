@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { HoloCard } from "@/components/holo-card";
+import { playFlip } from "@/lib/card-sfx";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { secretFoil, type OwnedSecret } from "@/lib/secret-cards";
@@ -75,7 +76,12 @@ export function SecretCardSheet({
             <div className="mx-auto w-full max-w-[320px] sm:max-w-[420px]">
               <ZoomPanFrame
                 onSwipe={go}
-                onTap={() => setFlipped((f) => !f)}
+                onTap={() => {
+                  // See players.$id.tsx: the zoom frame swallows the click,
+                  // so HoloCard's own toggle and its sound never fire here.
+                  playFlip();
+                  setFlipped((f) => !f);
+                }}
                 canNavigate={cards.length > 1}
                 prevLabel="Previous secret"
                 nextLabel="Next secret"

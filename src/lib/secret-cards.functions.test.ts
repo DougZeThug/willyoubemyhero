@@ -504,15 +504,19 @@ describe("grantSecretCard", () => {
     // Unlike every member-facing handler in this file, the id here IS a payload
     // parameter — the commissioner is acting on somebody else by definition, and
     // requireLeagueAdmin is what makes that safe.
-    withDb({ "rpc.grant_secret_card": { data: { duplicate: false } } });
+    withDb({ "rpc.grant_secret_card_once": { data: { duplicate: false } } });
     const { grantSecretCard } = await import("./secret-cards.functions");
     await callServerFn(grantSecretCard, {
-      data: { participantId: THEM, cardId: CARD_ID },
+      data: { participantId: THEM, cardId: CARD_ID, grantKey: "grant-key-1" },
       headers: asAdmin(),
     });
     expect(mock.client.rpc).toHaveBeenCalledWith(
-      "grant_secret_card",
-      expect.objectContaining({ _participant_id: THEM, _secret_card_id: CARD_ID }),
+      "grant_secret_card_once",
+      expect.objectContaining({
+        _grant_key: "grant-key-1",
+        _participant_id: THEM,
+        _secret_card_id: CARD_ID,
+      }),
     );
   });
 
@@ -521,7 +525,7 @@ describe("grantSecretCard", () => {
     // this value cannot reach them from here — collection_trophies is published
     // to realtime for exactly that reason. This is the admin's confirmation.
     withDb({
-      "rpc.grant_secret_card": {
+      "rpc.grant_secret_card_once": {
         data: {
           duplicate: false,
           completedCollection: {
@@ -536,17 +540,39 @@ describe("grantSecretCard", () => {
     const { grantSecretCard } = await import("./secret-cards.functions");
     const res = await callServerFn<{ completedCollection: { size: number } | null }>(
       grantSecretCard,
-      { data: { participantId: THEM, cardId: CARD_ID }, headers: asAdmin() },
+      {
+        data: { participantId: THEM, cardId: CARD_ID, grantKey: "grant-key-1" },
+        headers: asAdmin(),
+      },
     );
     expect(res.completedCollection).toMatchObject({ collection: "pets", label: "Pets", size: 9 });
   });
 
+  it("replays a repeated key instead of dealing a second card", async () => {
+    // The bug: a request that timed out after the server committed handed out a
+    // real second copy on the next tap, in a game whose economy is scarcity.
+    withDb({
+      "rpc.grant_secret_card_once": {
+        data: { duplicate: false, completedCollection: null, repeat: true },
+      },
+    });
+    const { grantSecretCard } = await import("./secret-cards.functions");
+    const res = await callServerFn<{ repeat: boolean }>(grantSecretCard, {
+      data: { participantId: THEM, cardId: CARD_ID, grantKey: "grant-key-1" },
+      headers: asAdmin(),
+    });
+    expect(res.repeat).toBe(true);
+  });
+
   it("reports a duplicate without a trophy", async () => {
-    withDb({ "rpc.grant_secret_card": { data: { duplicate: true } } });
+    withDb({ "rpc.grant_secret_card_once": { data: { duplicate: true } } });
     const { grantSecretCard } = await import("./secret-cards.functions");
     const res = await callServerFn<{ duplicate: boolean; completedCollection: unknown }>(
       grantSecretCard,
-      { data: { participantId: THEM, cardId: CARD_ID }, headers: asAdmin() },
+      {
+        data: { participantId: THEM, cardId: CARD_ID, grantKey: "grant-key-1" },
+        headers: asAdmin(),
+      },
     );
     expect(res).toMatchObject({ duplicate: true, completedCollection: null });
   });
@@ -627,7 +653,7 @@ describe("the admin catalogue", () => {
     updateSecretCard: { id: CARD_ID, name: "Gary" },
     uploadSecretCardArt: { id: CARD_ID, dataUrl: `data:image/webp;base64,${"A".repeat(64)}` },
     deleteSecretCard: { id: CARD_ID },
-    grantSecretCard: { participantId: ME, cardId: CARD_ID },
+    grantSecretCard: { participantId: ME, cardId: CARD_ID, grantKey: "grant-key-1" },
   };
 
   it.each(ADMIN_FNS)("%s refuses an anonymous caller", async (name) => {

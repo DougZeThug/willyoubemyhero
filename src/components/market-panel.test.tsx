@@ -376,13 +376,26 @@ describe("while the commissioner has dust switched off", () => {
     expect(sparesFn).not.toHaveBeenCalled();
   });
 
-  it("renders nothing at all when there is nothing to rescue", async () => {
+  it("renders nothing at all once the stall comes back empty", async () => {
     // Which is every case but the one above. The route's "not switched on yet"
     // line already says what the screen is; a second empty panel under it would
     // be noise.
     stallFn.mockResolvedValue({ active: [], recent: [] });
     const { container } = renderPanel(500, false);
-    await waitFor(() => expect(stallFn).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it("says it is counting rather than going blank while the stall loads", async () => {
+    // This path exists so a seller can always take a listing back down, so a
+    // blank frame here — then a pop-in — reads as "my cards are gone".
+    let settle: (v: { active: unknown[]; recent: unknown[] }) => void = () => {};
+    stallFn.mockReturnValue(
+      new Promise<{ active: unknown[]; recent: unknown[] }>((r) => {
+        settle = r;
+      }),
+    );
+    renderPanel(500, false);
+    expect(await screen.findByText(/counting your stall/i)).toBeInTheDocument();
+    settle({ active: [], recent: [] });
   });
 });

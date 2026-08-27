@@ -28,7 +28,6 @@ import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-c
 import {
   cardBadge,
   editionCelebrates,
-  editionLabel,
   editionOddsLabel,
   editionRank,
   editionStyle,
@@ -36,7 +35,7 @@ import {
   type Edition,
 } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
-import { requestGyroPermission } from "@/lib/gyro";
+import { requestGyroAccess } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { CardSocial } from "@/components/card-social";
@@ -64,10 +63,11 @@ import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle, TIER_REASON, type Rarity } from "@/lib/card-rarity";
 import { cardStats } from "@/lib/card-stats";
-import { playEditionShine, playReveal, useCardSfx } from "@/lib/card-sfx";
-import { exportCardPng } from "@/lib/share-card";
+import { playEditionShine, playFlip, playReveal, useCardSfx } from "@/lib/card-sfx";
+import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner } from "@/components/feed-state";
 
 /**
  * Cards whose reveal has already played this page load.
@@ -106,10 +106,14 @@ export const Route = createFileRoute("/players/$id")({
 
 function PlayerCardPage() {
   const { id } = Route.useParams();
-  const { vs } = Route.useSearch();
+  const rawVs = Route.useSearch().vs;
+  // The picker filters the current player out; a hand-edited URL did not,
+  // which gave a comparison of somebody against themselves with every row a
+  // tie. validateSearch cannot do this — it never sees the path params.
+  const vs = rawVs === id ? undefined : rawVs;
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { event, bundle, loading } = useEventBundle();
+  const { event, bundle, loading, error, realtimeDegraded } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never this player's own — see the note on useEventCardBack.
@@ -127,7 +131,10 @@ function PlayerCardPage() {
   const [gyro, setGyro] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
-  const [comparing, setComparing] = useState(false);
+  // Seeded from the search parameter, which is the whole reason it exists:
+  // `?vs=` is a link you drop in the group chat, and the recipient used to
+  // land on the left card with the chip lit and have to tap it themselves.
+  const [comparing, setComparing] = useState(!!vs);
   const shareRef = useRef<HTMLDivElement>(null);
 
   // Roster in running order gives prev/next a stable, meaningful sequence.
@@ -376,10 +383,12 @@ function PlayerCardPage() {
     try {
       // Signed storage URLs expire after an hour; a stale one rasterises blank.
       await qc.refetchQueries({ queryKey: ["card-urls", event?.id] });
-      // Let the refreshed <img> paint before html-to-image walks the DOM.
-      await new Promise((r) => setTimeout(r, 350));
       const node = shareRef.current;
       if (!node) throw new Error("Share card not ready");
+      // Waited on rather than guessed at: a fixed delay is either too long
+      // on wifi or too short on a phone in a garden, and too short means a
+      // shared card showing initials where a face should be.
+      await waitForPaint(node);
       await exportCardPng(node, `${name.replace(/\s+/g, "-").toLowerCase()}-card.png`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not export card");
@@ -405,9 +414,16 @@ function PlayerCardPage() {
       setGyro(false);
       return;
     }
-    const granted = await requestGyroPermission();
-    if (!granted) {
-      toast.error("Motion access denied");
+    const access = await requestGyroAccess();
+    if (access !== "granted") {
+      // Told apart, because they are different problems with different
+      // answers. The chip used to light on a desktop browser and nothing
+      // moved, with no message at all.
+      toast.error(
+        access === "denied"
+          ? "Motion access denied"
+          : "This device has no motion sensor — try it on a phone.",
+      );
       return;
     }
     setGyro(true);
@@ -473,6 +489,10 @@ function PlayerCardPage() {
         { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
       }
     >
+      {/* The same banner five other screens show. This one watches the event
+          channel too and said nothing when it went down — a frozen screen
+          with no signal is the exact failure the health states exist for. */}
+      {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
       {/* Tier wash over circuit-bg's own hard-coded cyan bloom. Sits behind the
           content, so a champion's page glows gold and a DNF's barely glows. */}
       <div
@@ -532,7 +552,13 @@ function PlayerCardPage() {
               ) : (
                 <ZoomPanFrame
                   onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
-                  onTap={() => setFlipped((f) => !f)}
+                  onTap={() => {
+                    // The zoom frame swallows the click, so HoloCard's own
+                    // toggle — and the sound that rides on it — never fires
+                    // on either full-size surface.
+                    playFlip();
+                    setFlipped((f) => !f);
+                  }}
                   canNavigate={roster.length > 1}
                   prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
                   nextLabel={`Next: ${next?.participant?.name ?? ""}`}
@@ -632,7 +658,10 @@ function PlayerCardPage() {
               face-down — there is no face to turn, export or line up against
               another. The settings below them still apply to the card you get. */}
           <ActionButton
-            onClick={() => setFlipped((f) => !f)}
+            onClick={() => {
+              playFlip();
+              setFlipped((f) => !f);
+            }}
             active={flipped}
             disabled={locked}
             icon={<RotateCw className="h-3.5 w-3.5" />}
@@ -666,7 +695,13 @@ function PlayerCardPage() {
           */}
           <div className="hidden items-center gap-2 sm:flex">
             {secondary.map((a) => (
-              <ActionButton key={a.key} onClick={a.onClick} active={a.active} icon={a.icon}>
+              <ActionButton
+                key={a.key}
+                onClick={a.onClick}
+                active={a.active}
+                toggle={a.key !== "copy"}
+                icon={a.icon}
+              >
                 {a.label}
               </ActionButton>
             ))}
@@ -682,9 +717,14 @@ function PlayerCardPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" className="min-w-[10rem]">
               {secondary.map((a) => (
+                // On a phone these live inside menu items, which carry no
+                // pressed state at all — so the checkbox role is what makes
+                // "Tilt is on" expressible here.
                 <DropdownMenuItem
                   key={a.key}
                   onSelect={a.onClick}
+                  role={a.key === "copy" ? undefined : "menuitemcheckbox"}
+                  aria-checked={a.key === "copy" ? undefined : !!a.active}
                   className="gap-2 text-[11px] font-bold uppercase tracking-[0.2em]"
                 >
                   {a.icon}
@@ -786,7 +826,13 @@ function PlayerCardPage() {
           mounted for a locked card: it is an export of the very art being
           withheld, and Share is disabled anyway. */}
       {!locked && (
-        <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
+        // aria-hidden, like the pack summary's equivalent. Mounted for the
+        // whole visit, it put a second copy of every name, time and split on
+        // the page for anybody reading it linearly.
+        <div
+          aria-hidden
+          style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}
+        >
           <ShareCard ref={shareRef} data={shareData} />
         </div>
       )}
@@ -882,17 +928,23 @@ function ActionButton({
   icon,
   active,
   disabled,
+  toggle,
 }: {
   onClick: () => void;
   children: React.ReactNode;
   icon: React.ReactNode;
   active?: boolean;
   disabled?: boolean;
+  /** A setting rather than an action: `active` is a state, not a highlight. */
+  toggle?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      // Pin, Sound and Tilt are all toggles and none of them said so — the
+      // state was carried by a colour class alone, exactly like the nav tab.
+      aria-pressed={toggle ? !!active : undefined}
       className={cn(
         // Tighter on a phone: three chips plus the overflow have to sit on one
         // line, and at the desktop tracking they spill onto a second.

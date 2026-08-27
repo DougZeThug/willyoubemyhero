@@ -136,7 +136,9 @@ P1 and P2 item for it has passed or been filed.
 
 `bug-triage.md` is the other half: every behavior the documents flagged as a
 likely defect, deduplicated, with reproduction steps, the reason in the code, a
-severity, and the decision the league needs to make.
+severity, and the decision the league needs to make. That pass has been made —
+every entry marked `fix` is fixed, and each carries a **Fixed** line saying
+what changed. Five product calls are still open and are marked as such.
 
 ### Order of work
 
@@ -275,12 +277,14 @@ cross-cutting/
 
 ## Coverage
 
-Status is one of `not started`, `drafted`, or `verified`.
+Status is one of `not started`, `drafted`, or `verified`. `bug-triage.md` reads
+`triaged`, which is its own end state: every entry decided and, where the
+decision was to fix, fixed.
 
 | Document                                  | Status  |
 | ----------------------------------------- | ------- |
 | glossary.md                               | drafted |
-| bug-triage.md                             | drafted |
+| bug-triage.md                             | triaged |
 | verification/ (8 checklists, 1164 items)  | drafted |
 | foundations/identity-and-sessions.md      | drafted |
 | foundations/the-card.md                   | drafted |

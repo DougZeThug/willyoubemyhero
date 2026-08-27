@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { newClientKey } from "@/lib/format";
 import { toast } from "sonner";
 import {
   ChevronDown,
@@ -10,6 +11,7 @@ import {
   Loader2,
   Plus,
   Trash2,
+  Undo2,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -113,6 +115,8 @@ export function SecretCardsPanel() {
   const uploadFn = useServerFn(uploadSecretCardArt);
   const deleteFn = useServerFn(deleteSecretCard);
   const grantFn = useServerFn(grantSecretCard);
+  /** See `grant` below: the in-flight grant key per card+recipient. */
+  const grantKeys = useRef(new Map<string, string>());
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -470,21 +474,32 @@ export function SecretCardsPanel() {
     }
     const who = roster.find((p) => p.id === participantId)?.name ?? "participant";
     setGrantingId(card.id);
-    const p = grantFn({ data: { participantId, cardId: card.id } }).then(async (r) => {
+    // One key per grant the commissioner meant to make, kept across a failure so
+    // a retry replays it rather than dealing a second copy. Keyed by card and
+    // recipient, so changing either starts a new grant.
+    const intent = `${card.id}:${participantId}`;
+    if (grantKeys.current.get(intent) === undefined) {
+      grantKeys.current.set(intent, newClientKey());
+    }
+    const grantKey = grantKeys.current.get(intent)!;
+    const p = grantFn({ data: { participantId, cardId: card.id, grantKey } }).then(async (r) => {
+      grantKeys.current.delete(intent);
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
       return r;
     });
     toast.promise(p, {
       loading: `Granting "${card.name}" to ${who}…`,
       success: (r) =>
-        r.duplicate
-          ? `${who} already had "${card.name}" — logged as a duplicate`
-          : // The commissioner's copy of a ceremony they cannot see: the recipient
-            // is somewhere else holding their own phone, and finds out through the
-            // realtime subscription on collection_trophies rather than from here.
-            r.completedCollection
-            ? `Granted "${card.name}" — that finished ${r.completedCollection.label} for ${who}`
-            : `Granted "${card.name}" to ${who}`,
+        r.repeat
+          ? `"${card.name}" was already granted to ${who}`
+          : r.duplicate
+            ? `${who} already had "${card.name}" — logged as a duplicate`
+            : // The commissioner's copy of a ceremony they cannot see: the recipient
+              // is somewhere else holding their own phone, and finds out through the
+              // realtime subscription on collection_trophies rather than from here.
+              r.completedCollection
+              ? `Granted "${card.name}" — that finished ${r.completedCollection.label} for ${who}`
+              : `Granted "${card.name}" to ${who}`,
       error: (e) => (e instanceof Error ? e.message : "Grant failed"),
     });
     try {
@@ -494,6 +509,20 @@ export function SecretCardsPanel() {
       // toast.promise already surfaced the error
     } finally {
       setGrantingId(null);
+    }
+  }
+
+  /** The way back from a retirement. See the Remove button in the sheet. */
+  async function restore(card: SecretCardAdminRow) {
+    setBusy(true);
+    try {
+      await updateFn({ data: { id: card.id, active: true } });
+      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+      toast.success(`"${card.name}" is back in the set`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not restore that card");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -976,6 +1005,7 @@ export function SecretCardsPanel() {
                       claimedMembers={list.data?.claimedMembers ?? 0}
                       roster={roster}
                       sets={pickerSets}
+                      allSets={sets}
                       busy={busy}
                       grantTarget={grantTarget[card.id] ?? ""}
                       onGrantTargetChange={(participantId) =>
@@ -1126,16 +1156,33 @@ export function SecretCardsPanel() {
                   </Button>
                 </div>
 
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="min-h-11 w-full text-destructive hover:text-destructive"
-                  disabled={busy}
-                  onClick={() => void remove(editingCard)}
-                >
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                  Remove from the set
-                </Button>
+                {/* A card somebody has already pulled is retired rather than
+                    deleted, and updateSecretCard has always accepted the field
+                    that would bring it back — the panel simply never sent it,
+                    so there was no way out of a retirement from any screen. */}
+                {editingCard.active ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="min-h-11 w-full text-destructive hover:text-destructive"
+                    disabled={busy}
+                    onClick={() => void remove(editingCard)}
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    Remove from the set
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="min-h-11 w-full text-primary hover:text-primary"
+                    disabled={busy}
+                    onClick={() => void restore(editingCard)}
+                  >
+                    <Undo2 className="mr-1.5 h-3.5 w-3.5" />
+                    Put it back in the set
+                  </Button>
+                )}
               </div>
             </>
           )}

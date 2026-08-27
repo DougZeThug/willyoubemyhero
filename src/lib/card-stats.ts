@@ -8,7 +8,14 @@
 
 /** The subset of the event bundle these functions need. */
 export type StatsBundle = {
-  stations: { id: string; name: string; short_name: string | null; station_order: number }[];
+  stations: {
+    id: string;
+    name: string;
+    short_name: string | null;
+    station_order: number;
+    /** Absent on an archived snapshot, which predates the column. */
+    active?: boolean;
+  }[];
   runs: {
     id: string;
     participant_id: string;
@@ -87,7 +94,13 @@ export function cardStats(
     myBestMs != null ? [...allBest.values()].filter((ms) => ms < myBestMs).length + 1 : null;
 
   const runOwner = new Map(bundle.runs.map((r) => [r.id, r.participant_id]));
-  const stations = [...bundle.stations].sort((a, b) => a.station_order - b.station_order);
+  // A retired station stays on the ladder if anybody ran it — the split is
+  // real and the card should say so. What it must not do is print an empty
+  // row for a station that was retired before anybody ever reached it.
+  const ranStations = new Set(bundle.splits.map((s) => s.station_id));
+  const stations = [...bundle.stations]
+    .filter((st) => st.active !== false || ranStations.has(st.id))
+    .sort((a, b) => a.station_order - b.station_order);
 
   const ladder: LadderRow[] = stations.map((st) => {
     const forStation = bundle.splits.filter(

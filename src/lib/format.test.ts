@@ -17,6 +17,13 @@ describe("formatTime", () => {
     expect(formatTime(NaN)).toBe("—");
   });
 
+  it("renders an em dash for a non-finite time", () => {
+    // Analytics reduces a field of null times with Math.min(...), which returns
+    // Infinity — and that used to print "NaN.NaN" down the personal-bests list.
+    expect(formatTime(Infinity)).toBe("—");
+    expect(formatTime(-Infinity)).toBe("—");
+  });
+
   it("renders zero", () => {
     expect(formatTime(0)).toBe("00.00");
   });

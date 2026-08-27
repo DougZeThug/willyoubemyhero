@@ -24,6 +24,13 @@ export function FinishCelebration({
   useEffect(() => {
     onDoneRef.current = onDone;
   });
+
+  // Focus follows the takeover, so the label above is read and Escape or
+  // Enter reaches the dismiss rather than whatever was focused underneath.
+  const surfaceRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (name) surfaceRef.current?.focus();
+  }, [name, timeMs]);
   useEffect(() => {
     if (!name) return;
     let cancelled = false;
@@ -64,7 +71,14 @@ export function FinishCelebration({
       {name && (
         <motion.button
           key="celebration"
+          ref={surfaceRef}
           onClick={onDone}
+          // A full-screen takeover that neither announced itself nor took
+          // focus: a screen reader user got a silent overlay they could not
+          // find, over a page they could still tab through.
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${name} finished in ${formatTime(timeMs ?? 0)}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

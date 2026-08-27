@@ -118,7 +118,11 @@ function OrderPage() {
               Running Order
             </h1>
           </div>
-          {isAdmin && !event?.running_order_locked && (
+          {/* The running_order_locked guard used to sit here. Nothing in the
+              app could set the flag, so it was always false and the check was
+              decoration. See B-27 in the triage: the lock was dropped rather
+              than built. */}
+          {isAdmin && (
             <Button onClick={reshuffle} disabled={busy} size="sm">
               <Shuffle className="mr-1.5 h-4 w-4" />
               {busy ? "Shuffling…" : "Re-randomize"}

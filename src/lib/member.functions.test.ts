@@ -425,7 +425,7 @@ describe("generateMemberCodes", () => {
     const res = (await generate({ eventId: EVENT_ID }, adminOk())) as {
       issued: { code: string }[];
     };
-    const stored = mock.callsFor("member_codes", "upsert")[0].payload as Record<string, string>;
+    const [stored] = mock.callsFor("member_codes", "upsert")[0].payload as Record<string, string>[];
     expect(stored.code_hash).not.toContain(res.issued[0].code);
     expect(stored.code_hash).toBe(hashCode(stored.code_salt, res.issued[0].code));
   });
@@ -450,12 +450,37 @@ describe("generateMemberCodes", () => {
     withDb({ "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] } });
     await generate({ eventId: EVENT_ID }, adminOk());
     const [upsert] = mock.callsFor("member_codes", "upsert");
-    expect(upsert.payload).toMatchObject({
-      claimed_at: null,
-      last_claimed_at: null,
-      claim_count: 0,
-    });
+    expect(upsert.payload).toMatchObject([
+      { claimed_at: null, last_claimed_at: null, claim_count: 0 },
+    ]);
     expect(upsert.options).toEqual({ onConflict: "participant_id" });
+  });
+
+  it("writes the whole roster in one statement, so a failure rotates nobody", async () => {
+    // The loop this replaced threw on its first failure with earlier upserts
+    // already committed. Those players held live codes nobody had ever seen —
+    // the plaintext only exists inside the handler — so their paper slips were
+    // dead with no recovery short of rotating again.
+    withDb({
+      "participants.select": {
+        data: [
+          { id: PARTICIPANT_ID, name: "Doug" },
+          { id: OTHER_ID, name: "Alice" },
+        ],
+      },
+    });
+    await generate({ eventId: EVENT_ID }, adminOk());
+    const upserts = mock.callsFor("member_codes", "upsert");
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].payload).toHaveLength(2);
+  });
+
+  it("reports a failed rotation rather than a list nothing was written for", async () => {
+    withDb({
+      "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] },
+      "member_codes.upsert": { error: { message: "connection lost" } },
+    });
+    await expect(generate({ eventId: EVENT_ID }, adminOk())).rejects.toThrow("connection lost");
   });
 
   it("issues distinct codes to distinct players", async () => {

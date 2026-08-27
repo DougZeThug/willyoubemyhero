@@ -17,6 +17,36 @@ function withOnClock<T extends ParticipantStatusPatch>(patch: T, since: Date | n
   return { ...patch, on_clock_since: since ? since.toISOString() : null } as T;
 }
 
+/**
+ * Escape a value that is about to be handed to `ilike` as a whole-string match.
+ *
+ * Postgres treats `%` and `_` as wildcards inside a LIKE pattern, so a name
+ * carrying either matches things it should not. Backslash first, or it would
+ * escape the escapes.
+ */
+function likeLiteral(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Throw unless an event-scoped write actually matched a row.
+ *
+ * `requireAdmin(data.eventId)` proves the caller holds an admin session for THAT
+ * event. It says nothing about the row id sitting next to it in the request, and
+ * these handlers match rows by their own id — so without an `.eq("event_id", …)`
+ * the guard is narrower than the write it protects, and a session for last
+ * year's combine can set a status, rename a station or delete a run in this
+ * year's. The security model says plainly that these guards are the only thing
+ * between a request and the database.
+ *
+ * The filter alone would fail silently, affecting nothing and returning ok, so
+ * the writes ask for their rows back and hand them here. One round trip, atomic,
+ * and a foreign id gets an answer rather than a shrug.
+ */
+function assertInEvent(rows: unknown[] | null | undefined, what: string): void {
+  if (!rows || rows.length === 0) throw new Error(`That ${what} is not part of this event.`);
+}
+
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -87,6 +117,105 @@ export const addParticipantToEvent = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Put somebody on this event's roster, creating the person only if the league
+ * has never heard of them.
+ *
+ * The screen used to do this as `upsertParticipant` then `addParticipantToEvent`
+ * with nothing tying the two together: a failure between them left a person
+ * created and not on the roster, and retyping the name made a SECOND person
+ * because the form matched nothing. In a league of thirteen that is a duplicate
+ * somebody then has to notice.
+ *
+ * Not a transaction — these are two tables in PostgREST — but the order is the
+ * safe one, and every step is idempotent, so the retry that follows a failure
+ * lands on the same person rather than a new one.
+ */
+export const addPlayerToRoster = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: zuuid(),
+        name: z.string().min(1).max(80),
+        nickname: z.string().max(80).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const name = data.name.trim();
+    const nickname = data.nickname?.trim() || null;
+
+    // Case-insensitively, because "doug" and "Doug" are one person standing in
+    // one garden. participants is league-wide by design — somebody who played
+    // last year is the same somebody this year, with the same cards.
+    //
+    // The name is escaped first: ilike is a PATTERN match, so `_` and `%` in a
+    // name are wildcards rather than characters. Adding "AJ_" would otherwise
+    // match an existing "AJX" and put that unrelated person on the roster
+    // instead of creating the one that was asked for.
+    const { data: existing, error: lookupError } = await supabaseAdmin
+      .from("participants")
+      .select("id, nickname")
+      .ilike("name", likeLiteral(name))
+      .limit(1)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+
+    let participantId = existing?.id ?? null;
+    if (!participantId) {
+      const { data: created, error } = await supabaseAdmin
+        .from("participants")
+        .insert({ name, nickname })
+        .select("id")
+        .single();
+      if (error) throw error;
+      participantId = created.id;
+    } else if (nickname && !existing?.nickname) {
+      // Fill a blank nickname, never overwrite one they already have.
+      const { error } = await supabaseAdmin
+        .from("participants")
+        .update({ nickname })
+        .eq("id", participantId);
+      if (error) throw error;
+    }
+
+    // Already on this roster: a no-op rather than a second row. A double tap on
+    // a phone is the ordinary way to get here.
+    const { data: already, error: rosterError } = await supabaseAdmin
+      .from("event_participants")
+      .select("id")
+      .eq("event_id", data.eventId)
+      .eq("participant_id", participantId)
+      .maybeSingle();
+    if (rosterError) throw rosterError;
+    if (already) {
+      return { ok: true as const, participantId, created: false, alreadyOnRoster: true };
+    }
+
+    const { data: max } = await supabaseAdmin
+      .from("event_participants")
+      .select("running_order")
+      .eq("event_id", data.eventId)
+      .order("running_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const { error } = await supabaseAdmin.from("event_participants").insert({
+      event_id: data.eventId,
+      participant_id: participantId,
+      bib_number: null,
+      running_order: (max?.running_order ?? 0) + 1,
+    });
+    if (error) throw error;
+    return {
+      ok: true as const,
+      participantId,
+      created: !existing,
+      alreadyOnRoster: false,
+    };
+  });
+
 export const removeParticipantFromEvent = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d),
@@ -112,19 +241,25 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
     ]);
 
     if ((copies ?? 0) > 0 || (pulls ?? 0) > 0) {
-      const { error: retireError } = await supabaseAdmin
+      const { data: retired, error: retireError } = await supabaseAdmin
         .from("event_participants")
         .update({ participation_status: "scratched" })
-        .eq("id", data.eventParticipantId);
+        .eq("id", data.eventParticipantId)
+        .eq("event_id", data.eventId)
+        .select("id");
       if (retireError) throw retireError;
+      assertInEvent(retired, "athlete");
       return { ok: true, retained: true } as const;
     }
 
-    const { error } = await supabaseAdmin
+    const { data: removed, error } = await supabaseAdmin
       .from("event_participants")
       .delete()
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .select("id");
     if (error) throw error;
+    assertInEvent(removed, "athlete");
     return { ok: true, retained: false } as const;
   });
 
@@ -146,12 +281,18 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
     // "running". Re-stamping on the second one would drag the spectator clock
     // forward to the Start tap and lose the moment they actually stepped up, so
     // an athlete already on the clock keeps the stamp they were given.
+    //
+    // Scoped to the event, which also makes this the membership check: an admin
+    // token is only good for one combine, and the update below matches on the
+    // roster row's own id.
     const { data: current } = await supabaseAdmin
       .from("event_participants")
       .select("participation_status")
       .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
       .maybeSingle();
-    const alreadyOnClock = current?.participation_status === "running";
+    if (!current) throw new Error("That athlete is not part of this event.");
+    const alreadyOnClock = current.participation_status === "running";
 
     const patch =
       data.status === "running"
@@ -163,7 +304,8 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("event_participants")
       .update(patch)
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
     if (error) throw error;
     return { ok: true };
   });
@@ -243,6 +385,23 @@ export const setRunningOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // One membership check for the whole batch rather than one per row: every id
+    // has to belong to the authorized event before any of them moves, or an
+    // admin session for one combine can reshuffle another's.
+    const ids = data.order.map((row) => row.id);
+    if (ids.length) {
+      const { data: mine, error: scopeError } = await supabaseAdmin
+        .from("event_participants")
+        .select("id")
+        .eq("event_id", data.eventId)
+        .in("id", ids);
+      if (scopeError) throw scopeError;
+      if ((mine ?? []).length !== new Set(ids).size) {
+        throw new Error("That running order names somebody outside this event.");
+      }
+    }
+
     // Bulk update in parallel. Supabase resolves even on failure, so a missing
     // check here would let a partial write look like a clean shuffle.
     const results = await Promise.all(
@@ -250,7 +409,8 @@ export const setRunningOrder = createServerFn({ method: "POST" })
         supabaseAdmin
           .from("event_participants")
           .update({ running_order: row.running_order })
-          .eq("id", row.id),
+          .eq("id", row.id)
+          .eq("event_id", data.eventId),
       ),
     );
     const firstError = results.find((r) => r.error)?.error;
@@ -309,8 +469,14 @@ export const upsertStation = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { eventId, id, ...rest } = data;
     if (id) {
-      const { error } = await supabaseAdmin.from("stations").update(rest).eq("id", id);
+      const { data: updated, error } = await supabaseAdmin
+        .from("stations")
+        .update(rest)
+        .eq("id", id)
+        .eq("event_id", eventId)
+        .select("id");
       if (error) throw error;
+      assertInEvent(updated, "station");
     } else {
       const { error } = await supabaseAdmin.from("stations").insert({ ...rest, event_id: eventId });
       if (error) throw error;
@@ -342,8 +508,36 @@ export const deleteStation = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("stations").delete().eq("id", data.id);
+
+    // The guard, not a nicety. `splits.station_id` is ON DELETE CASCADE, so
+    // deleting a station that has been run takes every split at it — and since a
+    // station crown is computed from splits, that silently demotes somebody's
+    // stationKing card to base. The stations panel refuses this too, but a check
+    // that lives only in a screen is not a check.
+    const [{ count: splits }, { count: penalties }] = await Promise.all([
+      supabaseAdmin
+        .from("splits")
+        .select("id", { count: "exact", head: true })
+        .eq("station_id", data.id),
+      supabaseAdmin
+        .from("penalties")
+        .select("id", { count: "exact", head: true })
+        .eq("station_id", data.id),
+    ]);
+    if ((splits ?? 0) > 0 || (penalties ?? 0) > 0) {
+      throw new Error(
+        "That station already has recorded times — switch it to inactive instead of deleting it.",
+      );
+    }
+
+    const { data: removed, error } = await supabaseAdmin
+      .from("stations")
+      .delete()
+      .eq("id", data.id)
+      .eq("event_id", data.eventId)
+      .select("id");
     if (error) throw error;
+    assertInEvent(removed, "station");
     return { ok: true };
   });
 
@@ -474,8 +668,14 @@ export const deleteRun = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("runs").delete().eq("id", data.runId);
+    const { data: removed, error } = await supabaseAdmin
+      .from("runs")
+      .delete()
+      .eq("id", data.runId)
+      .eq("event_id", data.eventId)
+      .select("id");
     if (error) throw error;
+    assertInEvent(removed, "run");
     return { ok: true };
   });
 
@@ -784,46 +984,34 @@ export const recordDraftSelection = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { count } = await supabaseAdmin
-      .from("draft_selections")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", data.eventId);
-    const { error } = await supabaseAdmin.from("draft_selections").insert({
-      event_id: data.eventId,
-      participant_id: data.participantId,
-      selection_order: (count ?? 0) + 1,
-      draft_position: data.draftPosition,
+    // One statement in the database rather than three writes from here. The
+    // insert and the roster stamp are the same transaction now: a failed stamp
+    // used to leave a square reading Open that UNIQUE(event_id, draft_position)
+    // then refused forever, and selection_order was count + 1 with no
+    // constraint, so two picks landing together shared a number.
+    const { draftDb } = await import("./draft-db.server");
+    const { data: order, error } = await draftDb().rpc("record_draft_selection", {
+      _event_id: data.eventId,
+      _participant_id: data.participantId,
+      _draft_position: data.draftPosition,
     });
-    if (error) throw error;
-    await supabaseAdmin
-      .from("event_participants")
-      .update({ selected_draft_position: data.draftPosition })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", data.participantId);
-    return { ok: true };
+    if (error) throw new Error(error.message);
+    return { ok: true as const, selectionOrder: order as number };
   });
 
 export const undoLastDraftSelection = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: last } = await supabaseAdmin
-      .from("draft_selections")
-      .select("*")
-      .eq("event_id", data.eventId)
-      .order("selection_order", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!last) return { ok: true };
-    await supabaseAdmin.from("draft_selections").delete().eq("id", last.id);
-    await supabaseAdmin
-      .from("event_participants")
-      .update({ selected_draft_position: null })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", last.participant_id);
-    return { ok: true };
+    const { draftDb } = await import("./draft-db.server");
+    const { data: undone, error } = await draftDb().rpc("undo_last_draft_selection", {
+      _event_id: data.eventId,
+    });
+    if (error) throw new Error(error.message);
+    // Null means the board was already empty. That used to return ok, so the
+    // screen said "Undid last pick" over a draft nobody had started.
+    if (!undone) return { ok: false as const, reason: "nothing-to-undo" as const };
+    return { ok: true as const, participantId: undone as string };
   });
 
 // ---------- Event ----------
@@ -834,8 +1022,12 @@ export const updateEvent = createServerFn({ method: "POST" })
         eventId: zuuid(),
         status: z.string().optional(),
         results_locked: z.boolean().optional(),
-        draft_locked: z.boolean().optional(),
-        running_order_locked: z.boolean().optional(),
+        // draft_locked and running_order_locked are deliberately absent.
+        // Both columns exist, this was the only thing that could ever have
+        // written them, and no screen calls it — so a "locked draft" was a
+        // capability the league was told about and could not reach. Dropped
+        // rather than wired up, per the triage. The columns stay: removing
+        // one costs a migration to bring back, and the feature may return.
         splits_enabled: z.boolean().optional(),
         timing_mode: z.string().optional(),
       })

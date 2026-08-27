@@ -19,6 +19,7 @@ import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
 import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
+import { tradeSparesKey } from "@/hooks/use-trades";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import type { TradeSpares } from "@/lib/trades";
 
@@ -149,6 +150,11 @@ export function DustShopPanel({
       // The copy is gone, so both the spares list and the vault's own counts are
       // now wrong until they are asked again.
       void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      // The trading post reads a DIFFERENT key for the same list. Without
+      // this a milled spare stayed offerable for up to a cache lifetime, and
+      // the server refused the offer that was composed from it. market-panel
+      // next door already invalidated both.
+      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
       toast(`+${res.awarded} dust`);
     },
@@ -185,6 +191,11 @@ export function DustShopPanel({
       }
       qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
       void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      // The trading post reads a DIFFERENT key for the same list. Without
+      // this a milled spare stayed offerable for up to a cache lifetime, and
+      // the server refused the offer that was composed from it. market-panel
+      // next door already invalidated both.
+      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       // KEYED ON THE ACTOR, both of them — the vault's secret shelf and the count
       // beside it have both moved, and a bare participant id matches neither. See
       // the comment on the prop.
@@ -233,6 +244,11 @@ export function DustShopPanel({
       }
       qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
       void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      // The trading post reads a DIFFERENT key for the same list. Without
+      // this a milled spare stayed offerable for up to a cache lifetime, and
+      // the server refused the offer that was composed from it. market-panel
+      // next door already invalidated both.
+      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
       // A fresh id, so the next tap on this card is a new gamble rather than a
       // replay of the one just paid for.

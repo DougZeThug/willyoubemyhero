@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Gift } from "lucide-react";
 import { grantCard } from "@/lib/card-pulls.functions";
+import { newClientKey } from "@/lib/format";
 import { EDITION_ORDER, type Edition } from "@/lib/card-edition";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AdminSection } from "@/components/admin-section";
@@ -23,6 +24,19 @@ export function CardGrantPanel({ eventId }: { eventId: string }) {
   const [card, setCard] = useState("");
   const [edition, setEdition] = useState<Edition>("standard");
   const [busy, setBusy] = useState(false);
+  /**
+   * The key for the grant currently being attempted, held across a failure so a
+   * retry replays it. A request that timed out after the server had committed
+   * used to hand out a real second copy on the next tap — the only thing
+   * standing in the way was a spinner, which does not survive a reload.
+   *
+   * Cleared on success, and whenever the selection changes, because either of
+   * those makes the next tap a different grant.
+   */
+  const grantKey = useRef<string | null>(null);
+  useEffect(() => {
+    grantKey.current = null;
+  }, [to, card, edition]);
 
   const roster = bundle?.participants ?? [];
   const nameOf = (participantId: string) =>
@@ -37,10 +51,22 @@ export function CardGrantPanel({ eventId }: { eventId: string }) {
     if (!confirm(`Give ${nameOf(to)} a ${edition} ${cardName} card?`)) return;
     setBusy(true);
     try {
+      grantKey.current ??= newClientKey();
       const res = await grantFn({
-        data: { eventId, participantId: to, eventParticipantId: card, edition },
+        data: {
+          eventId,
+          participantId: to,
+          eventParticipantId: card,
+          edition,
+          grantKey: grantKey.current,
+        },
       });
-      toast.success(`${nameOf(to)} now holds ${res.copies} × ${cardName}`);
+      grantKey.current = null;
+      toast.success(
+        res.repeat
+          ? `Already given — ${nameOf(to)} holds ${res.copies} × ${cardName}`
+          : `${nameOf(to)} now holds ${res.copies} × ${cardName}`,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not grant that card");
     } finally {

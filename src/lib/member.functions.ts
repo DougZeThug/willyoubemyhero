@@ -224,26 +224,37 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
       }
     }
 
-    const issued: { participantId: string; name: string; code: string }[] = [];
-    for (const t of targets) {
+    // Every code is minted first and written in ONE upsert, all or nothing.
+    //
+    // Rotating in a loop and throwing on the first failure was the worst outcome
+    // available: the players already rotated held live codes that NOBODY HAS
+    // EVER SEEN — the plaintext lives only in this handler and went with the
+    // exception, while their paper slips were already dead. The commissioner saw
+    // "Could not generate codes" and had no way back short of rotating again.
+    const minted = targets.map((t) => {
       const code = randomCode();
       const salt = randomSalt();
+      return { participantId: t.id, name: t.name, code, salt };
+    });
+
+    if (minted.length) {
       const { error } = await supabaseAdmin.from("member_codes").upsert(
-        {
-          participant_id: t.id,
-          code_salt: salt,
-          code_hash: hashCode(salt, code),
+        minted.map((m) => ({
+          participant_id: m.participantId,
+          code_salt: m.salt,
+          code_hash: hashCode(m.salt, m.code),
           // Rotating a code resets the claim record; existing tokens keep working
           // until they expire, which is the intended behaviour for a re-issue.
           claimed_at: null,
           last_claimed_at: null,
           claim_count: 0,
-        },
+        })),
         { onConflict: "participant_id" },
       );
       if (error) throw error;
-      issued.push({ participantId: t.id, name: t.name, code });
     }
+
+    const issued = minted.map(({ participantId, name, code }) => ({ participantId, name, code }));
     return { ok: true, issued };
   });
 

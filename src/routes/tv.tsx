@@ -4,6 +4,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { formatTime } from "@/lib/format";
+import { compareOfficialTime } from "@/lib/standings";
 import { currentAthlete } from "@/lib/current-athlete";
 
 export const Route = createFileRoute("/tv")({
@@ -31,14 +32,14 @@ function TvPage() {
     return runs
       .filter((r) => r.is_official)
       .map((r) => ({ run: r, ep: parts.find((p) => p.participant_id === r.participant_id) }))
-      .sort((a, b) => (a.run.official_time_ms ?? 0) - (b.run.official_time_ms ?? 0));
+      .sort((a, b) => compareOfficialTime(a.run, b.run));
   }, [bundle]);
 
   const { athlete: current, onClock } = currentAthlete(bundle?.participants ?? []);
 
   if ((loading || error) && !bundle) {
     return (
-      <div className="circuit-bg -mx-4 -mb-8 -mt-4 grid min-h-screen place-items-center px-8 py-8 sm:-mx-6 sm:px-10">
+      <div className="circuit-bg grid min-h-screen place-items-center px-8 py-8 sm:px-10">
         <div className="text-center">
           <div className="font-display text-4xl font-black uppercase tracking-[0.2em] text-muted-foreground">
             {error ? "Can't reach the combine" : "Reading the combine…"}
@@ -57,7 +58,7 @@ function TvPage() {
   }
 
   return (
-    <div className="circuit-bg -mx-4 -mb-8 -mt-4 min-h-screen px-8 py-8 sm:-mx-6 sm:px-10">
+    <div className="circuit-bg min-h-screen px-8 py-8 sm:px-10">
       {(realtimeDegraded || !!error) && (
         <div className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-4 py-2 text-center font-display text-lg font-black uppercase tracking-[0.2em] text-warn">
           Live feed down — refreshing every few seconds

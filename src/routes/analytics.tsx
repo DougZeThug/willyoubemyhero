@@ -8,6 +8,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { listArchives } from "@/lib/media.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
@@ -25,7 +26,7 @@ export const Route = createFileRoute("/analytics")({
 });
 
 function AnalyticsPage() {
-  const { bundle } = useEventBundle();
+  const { bundle, loading, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
   const listFn = useServerFn(listArchives);
   const archives = useQuery({ queryKey: ["archives"], queryFn: () => listFn(), staleTime: 60_000 });
 
@@ -67,9 +68,33 @@ function AnalyticsPage() {
       .slice(0, 10);
   }, [bundle]);
 
+  // A pending fetch, a failed read and a combine nobody has run all used to
+  // render the same "No split data yet." — the exact failure the live screen
+  // was given feed-state.tsx for.
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100vh-4.5rem)] px-4 py-6">
+        <div className="mx-auto max-w-3xl">
+          <FeedLoading label="Reading the splits…" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100vh-4.5rem)] px-4 py-6">
+        <div className="mx-auto max-w-3xl">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="circuit-bg -mx-4 -mb-8 -mt-4 min-h-[calc(100vh-4.5rem)] px-4 py-6">
+    <div className="circuit-bg min-h-[calc(100vh-4.5rem)] px-4 py-6">
       <div className="mx-auto max-w-3xl space-y-4">
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner />}
         <header>
           <div className="font-display text-[10px] font-black uppercase tracking-[0.4em] text-primary">
             Analytics
@@ -87,7 +112,11 @@ function AnalyticsPage() {
           </CardHeader>
           <CardContent className="pt-0">
             {stationAverages.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No split data yet.</p>
+              <p className="text-xs text-muted-foreground">
+                {failedTables.includes("splits") || failedTables.includes("stations")
+                  ? "Couldn't read the splits just now — retrying."
+                  : "No split data yet."}
+              </p>
             ) : (
               <div className="h-56 w-full">
                 <ResponsiveContainer>
@@ -124,7 +153,11 @@ function AnalyticsPage() {
           </CardHeader>
           <CardContent className="pt-0">
             {bests.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No official finishes yet.</p>
+              <p className="text-xs text-muted-foreground">
+                {failedTables.includes("runs") || failedTables.includes("event_participants")
+                  ? "Couldn't read the results just now — retrying."
+                  : "No official finishes yet."}
+              </p>
             ) : (
               <ol className="space-y-1.5">
                 {bests.map((b, i) => (

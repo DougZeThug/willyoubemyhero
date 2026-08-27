@@ -903,6 +903,8 @@ export const grantSecretCard = createServerFn({ method: "POST" })
       .object({
         participantId: zuuid(),
         cardId: zuuid(),
+        /** See grantCard: one key per grant the commissioner meant to make. */
+        grantKey: z.string().min(8).max(64),
       })
       .parse(d),
   )
@@ -919,7 +921,8 @@ export const grantSecretCard = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
 
-    const { data: result, error } = await db.rpc("grant_secret_card", {
+    const { data: result, error } = await db.rpc("grant_secret_card_once", {
+      _grant_key: data.grantKey,
       _participant_id: data.participantId,
       _secret_card_id: data.cardId,
       _event_id: event?.id ?? null,
@@ -928,6 +931,7 @@ export const grantSecretCard = createServerFn({ method: "POST" })
     const row = result as {
       duplicate: boolean;
       completedCollection: CompletedCollection | null;
+      repeat?: boolean;
     } | null;
     // For the commissioner's toast. The recipient is somewhere else in the garden
     // and cannot be told from here — collection_trophies is published to realtime
@@ -936,5 +940,7 @@ export const grantSecretCard = createServerFn({ method: "POST" })
       ok: true as const,
       duplicate: row?.duplicate ?? false,
       completedCollection: row?.completedCollection ?? null,
+      /** This key had already been granted; nothing new was dealt. */
+      repeat: !!row?.repeat,
     };
   });

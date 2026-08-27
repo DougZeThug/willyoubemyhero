@@ -23,6 +23,15 @@ vi.mock("@/lib/member-token", async (importOriginal) => ({
   useMemberSession: () => memberSession(),
 }));
 
+// The priming gate. Real in the app, mocked here so a test can hold the device
+// in the "we do not know who this is yet" window on purpose rather than by
+// winning a race with a mount effect.
+const packIdentity = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/device-id", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/device-id")>()),
+  usePackIdentity: () => packIdentity(),
+}));
+
 // jsdom has no websocket and the suite must never reach Supabase. The channel is
 // a shell: the watcher's correctness lives in the diff, not in the event.
 vi.mock("@/integrations/supabase/client", () => {
@@ -57,6 +66,7 @@ function watch(trophies: CollectionTrophy[]) {
 beforeEach(() => {
   serverFnMock.mockReset();
   memberSession.mockReturnValue({ participantId: ME });
+  packIdentity.mockReturnValue(`m:${ME}`);
   // Module value first, then storage: setTrophySeen writes through, so clearing
   // in the other order leaves the reset itself sitting under the key and every
   // "the watcher wrote nothing" assertion becomes untrue for the wrong reason.
@@ -101,16 +111,41 @@ describe("useCollectionTrophyWatcher", () => {
     expect(result.current.queue).toEqual([]);
   });
 
-  it("waits for the member to hydrate before deciding anything", async () => {
+  it("waits for the device to hydrate before deciding anything", async () => {
     // useMemberSession reports null on the hydration render even for a claimed
     // member, and this query has no `enabled` gate — so the list lands first.
     // Priming in that window would mark the device seen with nothing in it, and
-    // every trophy would fire the moment the token settled.
+    // every trophy would fire the moment the token settled. usePackIdentity is
+    // null until the browser has answered, which is what closes that window.
     memberSession.mockReturnValue(null);
+    packIdentity.mockReturnValue(null);
     const { result } = watch([trophy(ME, "pets")]);
     await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
     expect(result.current.queue).toEqual([]);
     expect(window.localStorage.getItem("wwbh:trophy-seen")).toBeNull();
+  });
+
+  it("primes a guest silently, so the set they finish is still celebrated", async () => {
+    // The bug: a guest never primed, because the watcher waited on a participant
+    // id they do not have. Claiming banks their finished set through
+    // claim_guest_secrets — and that claim WAS the first priming pass, so it
+    // swallowed the ceremony on the one path where it is most earned.
+    memberSession.mockReturnValue(null);
+    packIdentity.mockReturnValue("d:device-1");
+    const guest = watch([]);
+    await waitFor(() =>
+      expect(window.localStorage.getItem("wwbh:trophy-seen")).toContain('"primed":true'),
+    );
+    expect(guest.result.current.queue).toEqual([]);
+    guest.unmount();
+
+    // They claim: the token lands, and the trophy banked by the claim is new to
+    // a device that has already been through its priming pass.
+    memberSession.mockReturnValue({ participantId: ME });
+    packIdentity.mockReturnValue(`m:${ME}`);
+    const member = watch([trophy(ME, "pets")]);
+    await waitFor(() => expect(member.result.current.queue).toHaveLength(1));
+    expect(member.result.current.queue[0]).toMatchObject({ collection: "pets" });
   });
 
   it("queues both sets a single trade can close", async () => {

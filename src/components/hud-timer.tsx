@@ -57,12 +57,12 @@ export function HudTimer({
   const circ = 2 * Math.PI * r;
   const progress = ((ms % targetMs) / targetMs) * circ;
 
-  const seconds = Math.floor(ms / 1000);
-  const cs = Math.floor((ms % 1000) / 10);
-  const digits =
-    seconds < 60
-      ? `${String(seconds).padStart(2, "0")}:${String(cs).padStart(2, "0")}`
-      : formatTime(ms);
+  // formatTime for both halves, not just past a minute. This used to print a
+  // colon under a minute — 41:32 for what the leaderboard three taps away calls
+  // 41.32 — so somebody arriving from the board read forty-one minutes. The "s"
+  // only rides along while there is no minutes part, or it reads 1:41.32s.
+  const digits = formatTime(ms);
+  const underAMinute = ms < 60_000;
 
   return (
     <div
@@ -159,7 +159,7 @@ export function HudTimer({
           }}
         >
           {digits}
-          <span className="ml-1 align-top text-2xl opacity-75">s</span>
+          {underAMinute && <span className="ml-1 align-top text-2xl opacity-75">s</span>}
         </div>
         <div className="mt-2 text-xs font-black uppercase tracking-[0.4em] text-primary/90">
           {status}

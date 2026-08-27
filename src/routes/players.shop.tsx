@@ -15,7 +15,7 @@ import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import type { RosterCardLookup } from "@/components/trade-offer-card";
 import { DustShopPanel } from "@/components/dust-shop";
 import { MarketPanel } from "@/components/market-panel";
-import { FeedError, FeedLoading } from "@/components/feed-state";
+import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { dustLive } from "@/lib/dust";
 
 export const Route = createFileRoute("/players/shop")({
@@ -49,7 +49,7 @@ export const Route = createFileRoute("/players/shop")({
  * underneath it rather than the headline.
  */
 function ShopPage() {
-  const { event, bundle, loading, error, refetch } = useEventBundle();
+  const { event, bundle, loading, error, realtimeDegraded, refetch } = useEventBundle();
   const member = useMemberSession();
   const participantId = member?.participantId ?? null;
   const actor = useSecretActor();
@@ -137,6 +137,10 @@ function ShopPage() {
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-6xl px-4 py-6">
+        {/* The same banner five other screens show. This one watches the event
+          channel too and said nothing when it went down — a frozen screen
+          with no signal is the exact failure the health states exist for. */}
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Sparkles className="h-5 w-5" />

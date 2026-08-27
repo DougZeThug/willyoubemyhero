@@ -171,6 +171,22 @@ export async function syncAccount(
   return mint(identity, identity.kind === "member" ? await nameFor(identity.id) : null);
 }
 
+/**
+ * The account is already spoken for by somebody else.
+ *
+ * A named class rather than a bare Error, because the caller has to tell this
+ * apart from a flaky request: the claim screen swallowed both in one `catch {}`
+ * and said "Welcome" either way, so the next phone to sign in got the OLD player
+ * back with nothing anywhere having said the link was refused.
+ */
+export class AccountAlreadyLinkedError extends Error {
+  readonly reason = "already_linked" as const;
+  constructor(readonly boundName: string | null) {
+    super("This account is already linked to another player");
+    this.name = "AccountAlreadyLinkedError";
+  }
+}
+
 /** Bind an account to a participant the device has just claimed with a paper code. */
 export async function bindParticipant(userId: string, participantId: string) {
   const row = await readRow(userId);
@@ -187,7 +203,7 @@ export async function bindParticipant(userId: string, participantId: string) {
   // every other device onto the new player and strand the first identity with no
   // recovery path. Guest -> member is still an upgrade, handled below.
   if (row?.participant_id) {
-    throw new Error("This account is already linked to another player");
+    throw new AccountAlreadyLinkedError(await nameFor(row.participant_id));
   }
 
   // The read above is only a fast path — the write itself has to be the guard, or
@@ -214,7 +230,9 @@ export async function bindParticipant(userId: string, participantId: string) {
   if (!bound) {
     const winner = await readRow(userId);
     if (winner?.participant_id !== participantId) {
-      throw new Error("This account is already linked to another player");
+      throw new AccountAlreadyLinkedError(
+        winner?.participant_id ? await nameFor(winner.participant_id) : null,
+      );
     }
   }
 

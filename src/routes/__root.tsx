@@ -4,10 +4,11 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -100,7 +101,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "A pack a day, secret pulls, trades, dust and trophies — and the combine board when game day comes back around.",
       },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      // `summary`, not `summary_large_image`: a large card with no og:image
+      // renders as a big empty rectangle, and every link to this app went into
+      // a group chat looking like that. Switch it back the day a route sets an
+      // og:image worth the space.
+      { name: "twitter:card", content: "summary" },
     ],
     links: [
       {
@@ -149,6 +154,21 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Focus follows the route. Without this a screen reader stayed wherever
+  // the previous page left it while the whole document changed underneath,
+  // which is also why the skip link below could only ever be used once.
+  const mainRef = useRef<HTMLElement>(null);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const firstRoute = useRef(true);
+  useEffect(() => {
+    // Not on the first render: stealing focus on load is its own problem.
+    if (firstRoute.current) {
+      firstRoute.current = false;
+      return;
+    }
+    mainRef.current?.focus();
+  }, [pathname]);
+
   // The saved mute preference has to be in module state before the first card
   // is tapped, and card-sfx is imported by components far below this one.
   useEffect(() => {
@@ -167,6 +187,14 @@ function RootComponent() {
             rather than in one of them. */}
         <TrophyCeremonyHost />
         <div className="flex min-h-screen flex-col">
+          {/* The first thing in the tab order, and invisible until it has
+              focus. Without it every screen began with the whole nav. */}
+          <a
+            href="#main"
+            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-primary-foreground"
+          >
+            Skip to content
+          </a>
           <SiteNav />
           {/* The bottom nav's reserved space stays reserved while presenting.
               Releasing it is a reflow of the whole page on the exact frame the
@@ -174,7 +202,15 @@ function RootComponent() {
               pack route already makes for its own header row. The nav above it
               is gone from sight and from the tab order either way, which is the
               part that matters. */}
-          <main className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+          {/* Focused on every route change, so a screen reader lands on the
+              new page rather than staying wherever the old one left it.
+              tabIndex -1 makes it focusable without adding a tab stop. */}
+          <main
+            id="main"
+            ref={mainRef}
+            tabIndex={-1}
+            className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] focus:outline-none md:pb-0"
+          >
             <Outlet />
           </main>
         </div>

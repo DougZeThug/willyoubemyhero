@@ -11,7 +11,9 @@ import { cn } from "@/lib/utils";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
 import { ResultCard } from "@/components/result-card";
-import { exportCardPng } from "@/lib/share-card";
+import { exportCardPng, waitForPaint } from "@/lib/share-card";
+import { toast } from "sonner";
+import { standings } from "@/lib/standings";
 
 export const Route = createFileRoute("/leaderboard")({
   head: () => ({
@@ -35,16 +37,17 @@ function LeaderboardPage() {
   const cards = useEventCardUrls(event?.id ?? null);
   const [sharingRunId, setSharingRunId] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  // The same standings the tier rules use, not a second looser set. Ranking
+  // official *runs* put a re-timed athlete on the board twice, kept a scratched
+  // one's place, and numbered a dead heat 1 and 2 beside two champion cards —
+  // the board contradicting the card on the same screen.
   const rows = useMemo(() => {
     const parts = bundle?.participants ?? [];
-    const runs = bundle?.runs ?? [];
-    return runs
-      .filter((r) => r.is_official)
-      .map((r) => {
-        const ep = parts.find((p) => p.participant_id === r.participant_id);
-        return { run: r, ep };
-      })
-      .sort((a, b) => (a.run.official_time_ms ?? Infinity) - (b.run.official_time_ms ?? Infinity));
+    return standings(bundle).map((s) => ({
+      run: s.run,
+      place: s.place,
+      ep: parts.find((p) => p.participant_id === s.participantId),
+    }));
   }, [bundle]);
 
   const shareRow = rows.find((r) => r.run.id === sharingRunId);
@@ -60,7 +63,7 @@ function LeaderboardPage() {
           null,
         totalMs: shareRow.run.official_time_ms ?? 0,
         penaltyMs: shareRow.run.penalty_ms ?? 0,
-        rank: rows.findIndex((r) => r.run.id === sharingRunId) + 1,
+        rank: shareRow.place,
         splits: (bundle?.splits ?? [])
           .filter((s) => s.run_id === shareRow.run.id)
           .map((s) => ({
@@ -72,13 +75,20 @@ function LeaderboardPage() {
 
   async function handleShare(runId: string) {
     setSharingRunId(runId);
-    // wait a tick for offscreen render
-    await new Promise((r) => setTimeout(r, 100));
     try {
-      if (cardRef.current) {
-        const filename = `combine-${runId.slice(0, 8)}.png`;
-        await exportCardPng(cardRef.current, filename);
-      }
+      // The offscreen card mounts on the render this state change causes, so
+      // one frame is what it takes for the ref to be filled. The fixed 100ms
+      // this replaces was also a complete no-op when it was not: no catch,
+      // no node, no card, no message.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      const node = cardRef.current;
+      if (!node) throw new Error("Share card not ready");
+      await waitForPaint(node);
+      await exportCardPng(node, `combine-${runId.slice(0, 8)}.png`);
+    } catch (e) {
+      // It used to be try/finally with no catch at all: an unhandled
+      // rejection, and a screen reader user got nothing whatsoever.
+      toast.error(e instanceof Error ? e.message : "Could not export that card");
     } finally {
       setSharingRunId(null);
     }
@@ -132,26 +142,29 @@ function LeaderboardPage() {
                   : "No official times yet — check back after the first athlete crosses."}
               </div>
             ) : (
-              <ul className="divide-y divide-white/5">
-                {rows.map((row, i) => (
+              // An ordered list, because it is one. The place is rendered
+              // separately for the look, so the marker is suppressed.
+              <ol className="list-none divide-y divide-white/5">
+                {rows.map((row) => (
                   <li
                     key={row.run.id}
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 transition",
-                      i === 0 && "bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--color-primary)]",
+                      row.place === 1 &&
+                        "bg-primary/[0.06] shadow-[inset_3px_0_0_0_var(--color-primary)]",
                     )}
                   >
                     <span
                       className={
                         "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black tabular " +
-                        (i === 0
+                        (row.place === 1
                           ? "hud-bezel text-primary ring-1 ring-primary/60"
-                          : i < 3
+                          : row.place <= 3
                             ? "hud-bezel text-primary/90"
                             : "bg-white/10 text-foreground")
                       }
                     >
-                      {i + 1}
+                      {row.place}
                     </span>
                     <ParticipantAvatar
                       name={row.ep?.participant?.name ?? "?"}
@@ -206,7 +219,9 @@ function LeaderboardPage() {
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-primary/70 hover:text-primary"
-                      aria-label="Share result card"
+                      // Thirteen buttons carrying the identical label read as
+                      // thirteen identical controls out of context.
+                      aria-label={`Share ${row.ep?.participant?.name ?? "this"} result card`}
                       onClick={() => handleShare(row.run.id)}
                       disabled={sharingRunId === row.run.id}
                     >
@@ -214,14 +229,18 @@ function LeaderboardPage() {
                     </Button>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
           </CardContent>
         </Card>
       </div>
-      {/* Offscreen card for PNG export */}
+      {/* Offscreen card for PNG export. aria-hidden: it is a rendering of a
+          row that is already on the page. */}
       {shareData && (
-        <div style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}>
+        <div
+          aria-hidden
+          style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}
+        >
           <ResultCard ref={cardRef} data={shareData} />
         </div>
       )}

@@ -6,8 +6,8 @@
 // back a participant id — the aggregate is public, the rows behind it are not.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
-import { callServerFn, memberHeaders } from "@/test/server-fn";
-import { signMemberToken } from "./session.server";
+import { adminHeaders, callServerFn, memberHeaders } from "@/test/server-fn";
+import { signAdminToken, signMemberToken } from "./session.server";
 
 let mock = createSupabaseMock();
 
@@ -458,5 +458,45 @@ describe("getMyCardStats", () => {
       cards: unknown[];
     }>(getMyCardStats, { data: { eventId: EVENT_ID }, headers: asMe() });
     expect(res).toEqual({ packsOpened: 0, firstPackOn: null, lastPackOn: null, cards: [] });
+  });
+});
+
+describe("grantCard", () => {
+  // The only thing between a timed-out request, or a thumb on a phone in a
+  // garden, and a real second copy used to be a per-row spinner — which does not
+  // survive a reload, in a game whose whole economy is scarcity.
+  it("carries the screen's grant key into the database", async () => {
+    withDb({ "rpc.grant_card_copy_once": { data: { copies: 2, repeat: false } } });
+    const { grantCard } = await import("./card-pulls.functions");
+    const res = await callServerFn(grantCard, {
+      data: {
+        eventId: EVENT_ID,
+        participantId: ME,
+        eventParticipantId: CARD_A,
+        grantKey: "grant-key-1",
+      },
+      headers: adminHeaders(signAdminToken(EVENT_ID).token),
+    });
+    expect(res).toMatchObject({ copies: 2, repeat: false });
+    expect(mock.rpcCalls("grant_card_copy_once")[0]).toMatchObject({
+      _grant_key: "grant-key-1",
+      _participant_id: ME,
+      _event_participant_id: CARD_A,
+    });
+  });
+
+  it("reports a replayed key rather than a fresh copy", async () => {
+    withDb({ "rpc.grant_card_copy_once": { data: { copies: 1, repeat: true } } });
+    const { grantCard } = await import("./card-pulls.functions");
+    const res = await callServerFn(grantCard, {
+      data: {
+        eventId: EVENT_ID,
+        participantId: ME,
+        eventParticipantId: CARD_A,
+        grantKey: "grant-key-1",
+      },
+      headers: adminHeaders(signAdminToken(EVENT_ID).token),
+    });
+    expect(res).toMatchObject({ copies: 1, repeat: true });
   });
 });

@@ -10,6 +10,7 @@ import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
 import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
+import { compareOfficialTime } from "@/lib/standings";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { onClockElapsedMs, type OnClockEntry } from "@/lib/live-clock";
 import { computeElapsedMs } from "@/lib/active-run";
@@ -29,7 +30,11 @@ export const Route = createFileRoute("/live")({
       { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Live" },
       { property: "og:description", content: "Read-only broadcast feed of the timed combine." },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      // `summary`, not `summary_large_image`: a large card with no og:image
+      // renders as a big empty rectangle, and every link to this app went into
+      // a group chat looking like that. Switch it back the day a route sets an
+      // og:image worth the space.
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: LivePage,
@@ -69,12 +74,15 @@ function LivePage() {
         const ep = parts.find((p) => p.participant_id === r.participant_id);
         return { run: r, ep };
       })
-      .sort((a, b) => (a.run.official_time_ms ?? 0) - (b.run.official_time_ms ?? 0));
+      .sort((a, b) => compareOfficialTime(a.run, b.run));
     return {
       current: slot.athlete,
       onClock: slot.onClock,
       leaderboard: finished.slice(0, 5),
-      done: finished.length,
+      // Distinct athletes, not official runs: an athlete re-timed has two, and
+      // enough of those tipped the screen into "everyone is done" while people
+      // were still queueing.
+      done: new Set(finished.map((f) => f.run.participant_id)).size,
       total: fieldSize(parts),
     };
   }, [bundle]);

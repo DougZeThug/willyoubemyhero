@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, ArrowLeftRight, Inbox, Send } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { CollectionComplete } from "@/components/collection-complete";
+import { PresentationMode } from "@/components/presentation-mode";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
@@ -33,7 +34,7 @@ import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import {
   BLOCKED_LABEL,
-  tradeSummaryLabel,
+  tradeSummaryParts,
   type TradeItemView,
   type TradeSpares,
 } from "@/lib/trades";
@@ -49,6 +50,7 @@ import {
 import { CollectorSignup } from "@/components/collector-signup";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
+import { FeedDegradedBanner } from "@/components/feed-state";
 
 export const Route = createFileRoute("/players/trade")({
   head: () => ({
@@ -72,7 +74,7 @@ const MAX_PER_SIDE = 4;
 type Staged = { key: string; item: TradeItemView; payload: Record<string, unknown> };
 
 function TradePage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, error, realtimeDegraded } = useEventBundle();
   const me = useMemberSession();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuthUser();
@@ -271,17 +273,18 @@ function TradePage() {
   }
 
   // A visitor with neither a player token nor an account has nothing to trade
-  // with, so send them to make one rather than parking them on a dead end.
-  // Waits for both identities to settle: `me` hydrates in an effect, and
-  // `authLoading` covers the session lookup.
+  // with, so send them somewhere they can get one rather than parking them on a
+  // dead end. Waits for both identities to settle: `me` hydrates in an effect,
+  // and `authLoading` covers the session lookup.
+  //
+  // /claim, not /auth?mode=signup. Most people arriving here are league members
+  // holding a paper code, for whom an account is optional — pushing them into
+  // creating one sends the commonest visitor down the wrong path. The claim
+  // screen carries the account route for anybody who is not on the roster.
   const anonymous = !me && !authLoading && !user;
   useEffect(() => {
     if (!anonymous) return;
-    void navigate({
-      to: "/auth",
-      search: { mode: "signup", next: "/players/trade" },
-      replace: true,
-    });
+    void navigate({ to: "/claim", replace: true });
   }, [anonymous, navigate]);
 
   // Null on the first render whether or not a token exists — useMemberSession
@@ -317,6 +320,11 @@ function TradePage() {
       {/* Outside the page column and above everything, the same way the pack
           screen mounts it. Shifting the queue on dismiss is what plays the second
           one when a single trade closed two sets. */}
+      {/* PresentationMode is what fades the nav bars out from under a
+          full-screen moment. Without it they stayed live — focusable, and
+          tappable at the edges — under a ceremony every other screen pairs
+          the two for. */}
+      <PresentationMode active={!!completions[0]} />
       {completions[0] && (
         <CollectionComplete
           key={completions[0].collection}
@@ -327,6 +335,10 @@ function TradePage() {
       )}
       <div className="mx-auto max-w-3xl px-4 py-6">
         <Header />
+        {/* The same banner five other screens show. This one watches the event
+          channel too and said nothing when it went down — a frozen screen
+          with no signal is the exact failure the health states exist for. */}
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
 
         <section className="mb-7">
           <SectionTitle
@@ -579,12 +591,13 @@ function SectionTitle({
 /**
  * The feed's summary, with the traded card named in the accent colour.
  *
- * `tradeSummaryLabel` already decides the wording; this only splits its result
- * on the separator so each named piece can be lit up rather than reading as one
- * grey run of text.
+ * `tradeSummaryParts` already decides the wording, piece by piece, so each
+ * one can be lit up rather than reading as one grey run of text. It used to
+ * take the joined label and split it back apart on " + ", which cut a secret
+ * named "Salt + Pepper" in half.
  */
-function SummaryText({ items }: { items: Parameters<typeof tradeSummaryLabel>[0] }) {
-  const parts = tradeSummaryLabel(items).split(" + ");
+function SummaryText({ items }: { items: Parameters<typeof tradeSummaryParts>[0] }) {
+  const parts = tradeSummaryParts(items);
   return (
     <>
       {parts.map((part, i) => (

@@ -21,8 +21,34 @@ const EVENT_PARTICIPANT_ID = "00000000-0000-4000-8000-000000000011";
 const STATION_ID = "00000000-0000-4000-8000-000000000022";
 const RUN_ID = "00000000-0000-4000-8000-000000000033";
 
+/**
+ * The row lookups the handlers make to prove a payload id belongs to the
+ * authorized event. Present by default so each test can say what it is about;
+ * a test that wants the foreign-row path overrides them with `{ data: null }`
+ * or `{ data: [] }`.
+ */
+const IN_EVENT: SupabaseResponses = {
+  // Two different reads land on this key: setParticipantStatus asks for one row
+  // with `.maybeSingle()`, setRunningOrder asks which of a list belong to the
+  // event with `.in("id", …)`. The list form echoes back whatever it was asked
+  // about, so a reorder naming this event's rows passes.
+  "event_participants.select": (call) =>
+    call.terminal === "maybeSingle"
+      ? { data: { participation_status: "queued" } }
+      : {
+          data: ((call.filters.find((f) => f.method === "in")?.args[1] as string[]) ?? []).map(
+            (id) => ({ id }),
+          ),
+        },
+  "event_participants.update": { data: [{ id: EVENT_PARTICIPANT_ID }] },
+  "event_participants.delete": { data: [{ id: EVENT_PARTICIPANT_ID }] },
+  "stations.update": { data: [{ id: STATION_ID }] },
+  "stations.delete": { data: [{ id: STATION_ID }] },
+  "runs.delete": { data: [{ id: RUN_ID }] },
+};
+
 function withDb(responses: SupabaseResponses = {}) {
-  mock = createSupabaseMock(responses);
+  mock = createSupabaseMock({ ...IN_EVENT, ...responses });
 }
 
 const asAdmin = (eventId = EVENT_ID) => adminHeaders(signAdminToken(eventId).token);
@@ -60,6 +86,7 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
     resulting: [],
     seed: "seed",
   },
+  addPlayerToRoster: { eventId: EVENT_ID, name: "Doug" },
   upsertStation: {
     eventId: EVENT_ID,
     name: "Sled Push",
@@ -429,20 +456,37 @@ describe("upsertParticipant", () => {
 });
 
 describe("draft selections", () => {
-  it("numbers selections in order and records the drafted position", async () => {
-    withDb({ "draft_selections.select": { count: 4 } });
+  // Both halves live in one Postgres statement now: numbering, the selection row
+  // and the roster stamp. A stamp that failed after the insert used to leave a
+  // square reading Open that UNIQUE(event_id, draft_position) refused forever,
+  // and selection_order was count + 1 with no constraint behind it.
+  it("takes the pick in one statement", async () => {
+    withDb({ "rpc.record_draft_selection": { data: 5 } });
     const { recordDraftSelection } = await import("./admin-write.functions");
-    await callServerFn(recordDraftSelection, {
+    const res = await callServerFn(recordDraftSelection, {
       data: { eventId: EVENT_ID, participantId: PARTICIPANT_ID, draftPosition: 3 },
       headers: asAdmin(),
     });
-    expect(mock.callsFor("draft_selections", "insert")[0].payload).toMatchObject({
-      selection_order: 5,
-      draft_position: 3,
+    expect(res).toEqual({ ok: true, selectionOrder: 5 });
+    expect(mock.rpcCalls("record_draft_selection")[0]).toEqual({
+      _event_id: EVENT_ID,
+      _participant_id: PARTICIPANT_ID,
+      _draft_position: 3,
     });
-    expect(mock.callsFor("event_participants", "update")[0].payload).toEqual({
-      selected_draft_position: 3,
+    expect(mock.callsFor("draft_selections", "insert")).toHaveLength(0);
+  });
+
+  it("surfaces a refused pick rather than reporting one", async () => {
+    withDb({
+      "rpc.record_draft_selection": { error: { message: "That athlete is not on this roster" } },
     });
+    const { recordDraftSelection } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(recordDraftSelection, {
+        data: { eventId: EVENT_ID, participantId: PARTICIPANT_ID, draftPosition: 3 },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not on this roster");
   });
 
   it("rejects a zero or negative draft position", async () => {
@@ -455,34 +499,28 @@ describe("draft selections", () => {
     ).rejects.toThrow();
   });
 
-  it("undo removes the last pick and clears the player's position", async () => {
-    withDb({
-      "draft_selections.select": {
-        data: { id: "sel-1", participant_id: PARTICIPANT_ID, selection_order: 5 },
-      },
-    });
-    const { undoLastDraftSelection } = await import("./admin-write.functions");
-    await callServerFn(undoLastDraftSelection, {
-      data: { eventId: EVENT_ID },
-      headers: asAdmin(),
-    });
-    expect(mock.callsFor("draft_selections", "delete")).toHaveLength(1);
-    expect(mock.callsFor("event_participants", "update")[0].payload).toEqual({
-      selected_draft_position: null,
-    });
-  });
-
-  it("undo on an empty draft changes nothing", async () => {
-    withDb({ "draft_selections.select": { data: null } });
+  it("undo names the pick it gave back", async () => {
+    withDb({ "rpc.undo_last_draft_selection": { data: PARTICIPANT_ID } });
     const { undoLastDraftSelection } = await import("./admin-write.functions");
     expect(
       await callServerFn(undoLastDraftSelection, {
         data: { eventId: EVENT_ID },
         headers: asAdmin(),
       }),
-    ).toEqual({ ok: true });
-    expect(mock.callsFor("draft_selections", "delete")).toHaveLength(0);
-    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+    ).toEqual({ ok: true, participantId: PARTICIPANT_ID });
+  });
+
+  it("undo on an empty draft says so instead of claiming a success", async () => {
+    // This used to return ok, so the screen said "Undid last pick" over a draft
+    // nobody had started.
+    withDb({ "rpc.undo_last_draft_selection": { data: null } });
+    const { undoLastDraftSelection } = await import("./admin-write.functions");
+    expect(
+      await callServerFn(undoLastDraftSelection, {
+        data: { eventId: EVENT_ID },
+        headers: asAdmin(),
+      }),
+    ).toEqual({ ok: false, reason: "nothing-to-undo" });
   });
 });
 
@@ -539,12 +577,24 @@ describe("updateEvent", () => {
   it("does not write eventId into the row it updates", async () => {
     const { updateEvent } = await import("./admin-write.functions");
     await callServerFn(updateEvent, {
-      data: { eventId: EVENT_ID, results_locked: true, draft_locked: false },
+      data: { eventId: EVENT_ID, results_locked: true, splits_enabled: false },
       headers: asAdmin(),
     });
     const [update] = mock.callsFor("events", "update");
-    expect(update.payload).toEqual({ results_locked: true, draft_locked: false });
+    expect(update.payload).toEqual({ results_locked: true, splits_enabled: false });
     expect(mock.eqValue(update, "id")).toBe(EVENT_ID);
+  });
+
+  it("refuses the two lock flags nothing could ever set", async () => {
+    // draft_locked and running_order_locked were accepted here and written by
+    // nothing, and this handler has no caller in the app at all — so a "locked
+    // draft" was a capability the league was told about and could not reach.
+    const { updateEvent } = await import("./admin-write.functions");
+    await callServerFn(updateEvent, {
+      data: { eventId: EVENT_ID, draft_locked: true, running_order_locked: true },
+      headers: asAdmin(),
+    });
+    expect(mock.callsFor("events", "update")[0].payload).toEqual({});
   });
 
   it("leaves unmentioned flags alone", async () => {
@@ -554,5 +604,227 @@ describe("updateEvent", () => {
       headers: asAdmin(),
     });
     expect(mock.callsFor("events", "update")[0].payload).toEqual({ status: "live" });
+  });
+});
+
+/**
+ * The guard has to be as narrow as the write it protects.
+ *
+ * Each of these handlers checks the admin token against `data.eventId` and then
+ * matched its row by that row's own id, with nothing tying the two together — so
+ * an admin session for last year's combine could set a status, reorder the
+ * field, rename or delete a station, or delete a run in this year's. Bounded
+ * hard by one active event and a shared PIN today, which is exactly why it is
+ * worth pinning: the deployment is the only thing holding it shut.
+ */
+describe("an admin token is only good for its own event", () => {
+  it("scopes every roster and station write to the authorized event", async () => {
+    const {
+      setParticipantStatus,
+      removeParticipantFromEvent,
+      upsertStation,
+      deleteStation,
+      deleteRun,
+    } = await import("./admin-write.functions");
+
+    await callServerFn(setParticipantStatus, {
+      data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "finished" },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("event_participants", "update")[0], "event_id")).toBe(
+      EVENT_ID,
+    );
+
+    withDb({ "card_copies.select": { count: 0 }, "card_pulls.select": { count: 0 } });
+    await callServerFn(removeParticipantFromEvent, {
+      data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("event_participants", "delete")[0], "event_id")).toBe(
+      EVENT_ID,
+    );
+
+    withDb();
+    await callServerFn(upsertStation, {
+      data: { ...VALID_PAYLOADS.upsertStation, id: STATION_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("stations", "update")[0], "event_id")).toBe(EVENT_ID);
+
+    withDb({ "splits.select": { count: 0 }, "penalties.select": { count: 0 } });
+    await callServerFn(deleteStation, {
+      data: { eventId: EVENT_ID, id: STATION_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("stations", "delete")[0], "event_id")).toBe(EVENT_ID);
+
+    withDb();
+    await callServerFn(deleteRun, {
+      data: { eventId: EVENT_ID, runId: RUN_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("runs", "delete")[0], "event_id")).toBe(EVENT_ID);
+  });
+
+  it("refuses a status change for somebody outside the event", async () => {
+    withDb({ "event_participants.select": { data: null } });
+    const { setParticipantStatus } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(setParticipantStatus, {
+        data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "finished" },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+  });
+
+  // The filter alone would affect nothing and return ok, which is the same shrug
+  // as no guard at all — so these writes ask for their rows back.
+  it("refuses to delete a station belonging to another event", async () => {
+    withDb({
+      "splits.select": { count: 0 },
+      "penalties.select": { count: 0 },
+      "stations.delete": { data: [] },
+    });
+    const { deleteStation } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(deleteStation, {
+        data: { eventId: EVENT_ID, id: STATION_ID },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not part of this event");
+  });
+
+  it("refuses to delete a run belonging to another event", async () => {
+    withDb({ "runs.delete": { data: [] } });
+    const { deleteRun } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(deleteRun, { data: { eventId: EVENT_ID, runId: RUN_ID }, headers: asAdmin() }),
+    ).rejects.toThrow("not part of this event");
+  });
+
+  it("refuses a reorder that names anybody outside the event", async () => {
+    withDb({ "event_participants.select": { data: [] } });
+    const { setRunningOrder } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(setRunningOrder, {
+        data: { eventId: EVENT_ID, order: [{ id: EVENT_PARTICIPANT_ID, running_order: 1 }] },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("outside this event");
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+  });
+});
+
+/**
+ * Deleting a station cascades to every split recorded at it, and a station crown
+ * is computed from splits — so this delete can silently demote somebody's
+ * stationKing card to base. The stations panel refuses it too; a check that
+ * lives only in a screen is not a check.
+ */
+describe("deleteStation refuses a station that has been run", () => {
+  it.each([
+    ["splits", { "splits.select": { count: 2 }, "penalties.select": { count: 0 } }],
+    ["penalties", { "splits.select": { count: 0 }, "penalties.select": { count: 1 } }],
+  ])("refuses when it has %s", async (_label, responses) => {
+    withDb(responses);
+    const { deleteStation } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(deleteStation, {
+        data: { eventId: EVENT_ID, id: STATION_ID },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("already has recorded times");
+    expect(mock.callsFor("stations", "delete")).toHaveLength(0);
+  });
+
+  it("deletes a station nobody ever ran", async () => {
+    withDb({ "splits.select": { count: 0 }, "penalties.select": { count: 0 } });
+    const { deleteStation } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(deleteStation, {
+        data: { eventId: EVENT_ID, id: STATION_ID },
+        headers: asAdmin(),
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+});
+
+describe("addPlayerToRoster", () => {
+  it("reuses the person the league already knows rather than making a second", async () => {
+    // Two writes from the screen with nothing tying them together meant a
+    // failure between them left somebody created and off the roster — and
+    // retyping the name created a duplicate, in a league of thirteen.
+    withDb({
+      "participants.select": { data: { id: PARTICIPANT_ID, nickname: "Dougie" } },
+      "event_participants.select": { data: null },
+    });
+    const { addPlayerToRoster } = await import("./admin-write.functions");
+    const res = await callServerFn(addPlayerToRoster, {
+      data: { eventId: EVENT_ID, name: "doug" },
+      headers: asAdmin(),
+    });
+    expect(res).toMatchObject({ participantId: PARTICIPANT_ID, created: false });
+    expect(mock.callsFor("participants", "insert")).toHaveLength(0);
+    const [insert] = mock.callsFor("event_participants", "insert");
+    expect(insert.payload).toMatchObject({
+      event_id: EVENT_ID,
+      participant_id: PARTICIPANT_ID,
+      running_order: 1,
+    });
+  });
+
+  it("creates the person when the league has never heard of them", async () => {
+    withDb({
+      "participants.select": { data: null },
+      "participants.insert": { data: { id: PARTICIPANT_ID } },
+      "event_participants.select": { data: null },
+    });
+    const { addPlayerToRoster } = await import("./admin-write.functions");
+    const res = await callServerFn(addPlayerToRoster, {
+      data: { eventId: EVENT_ID, name: "Alice", nickname: "Al" },
+      headers: asAdmin(),
+    });
+    expect(res).toMatchObject({ created: true, alreadyOnRoster: false });
+    expect(mock.callsFor("participants", "insert")[0].payload).toEqual({
+      name: "Alice",
+      nickname: "Al",
+    });
+  });
+
+  it("treats a name with LIKE metacharacters as literal text", async () => {
+    // ilike is a PATTERN match: `_` and `%` are wildcards, so adding "AJ_"
+    // would match an existing "AJX" and put that unrelated person on the roster
+    // instead of creating the one that was asked for.
+    withDb({
+      "participants.select": { data: null },
+      "participants.insert": { data: { id: PARTICIPANT_ID } },
+      "event_participants.select": { data: null },
+    });
+    const { addPlayerToRoster } = await import("./admin-write.functions");
+    await callServerFn(addPlayerToRoster, {
+      data: { eventId: EVENT_ID, name: "AJ_%\\x" },
+      headers: asAdmin(),
+    });
+    const [lookup] = mock.callsFor("participants", "select");
+    expect(lookup.filters.find((f) => f.method === "ilike")?.args).toEqual([
+      "name",
+      "AJ\\_\\%\\\\x",
+    ]);
+  });
+
+  it("is a no-op for somebody already on this roster", async () => {
+    // The double tap on a phone, which used to add a second roster row.
+    withDb({
+      "participants.select": { data: { id: PARTICIPANT_ID, nickname: null } },
+      "event_participants.select": { data: { id: EVENT_PARTICIPANT_ID } },
+    });
+    const { addPlayerToRoster } = await import("./admin-write.functions");
+    const res = await callServerFn(addPlayerToRoster, {
+      data: { eventId: EVENT_ID, name: "Doug" },
+      headers: asAdmin(),
+    });
+    expect(res).toMatchObject({ alreadyOnRoster: true });
+    expect(mock.callsFor("event_participants", "insert")).toHaveLength(0);
   });
 });

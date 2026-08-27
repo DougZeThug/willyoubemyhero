@@ -62,7 +62,10 @@ export function useRunConsole() {
   const stations = useMemo(
     () =>
       (bundle?.stations ?? [])
-        .filter((s) => s.active)
+        // `split_enabled` as well as `active`: the stations panel writes it,
+        // confirms it, and this filtered on `active` alone — so the switch
+        // saved faithfully and changed nothing.
+        .filter((s) => s.active && s.split_enabled !== false)
         .sort((a, b) => a.station_order - b.station_order),
     [bundle],
   );
@@ -215,7 +218,10 @@ export function useRunConsole() {
     if (ep && event?.id) {
       try {
         await setStatusFn({
-          data: { eventId: event.id, eventParticipantId: ep.id, status: "queued" },
+          // "waiting", like every other reset in the app: it is the schema
+          // default and the word players actually see. "queued" behaves
+          // identically and was the only place that wrote it.
+          data: { eventId: event.id, eventParticipantId: ep.id, status: "waiting" },
         });
       } catch {
         /* ignore */

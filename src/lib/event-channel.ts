@@ -112,6 +112,11 @@ function openChannel(eventId: string): Entry {
       },
       fanOut,
     )
+    // Unlike the three above, these two carry no event_id of their own — they
+    // hang off a run — so there is nothing to filter on and every event's
+    // splits fan out to every watcher. Invisible while one combine is active,
+    // and a refetch of this event's bundle either way; the note is here so
+    // the asymmetry reads as known rather than as an oversight.
     .on("postgres_changes", { event: "*", schema: "public", table: "splits" }, fanOut)
     .on("postgres_changes", { event: "*", schema: "public", table: "penalties" }, fanOut)
     .subscribe((status) => {

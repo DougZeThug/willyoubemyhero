@@ -42,7 +42,11 @@ export const Route = createFileRoute("/auth")({
         content: "Keep your combine card collection on every phone you play from.",
       },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      // `summary`, not `summary_large_image`: a large card with no og:image
+      // renders as a big empty rectangle, and every link to this app went into
+      // a group chat looking like that. Switch it back the day a route sets an
+      // og:image worth the space.
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,
@@ -62,10 +66,30 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
 
+  /**
+   * Whether this visit is a sign-in round trip rather than somebody opening
+   * their account screen.
+   *
+   * Redirecting on `user && sync.ready` alone is the steady state for anybody
+   * signed in, so the Account item in the header menu landed on the vault and
+   * this whole screen — the email address, the sign-out, and the only in-app
+   * route to /claim for a signed-in player — was reachable only while the link
+   * was still settling or had failed.
+   *
+   * A `next` is an explicit "send me on afterwards" from whoever linked here.
+   * Otherwise the redirect is armed only when the page was signed OUT when it
+   * mounted, so the sign-in that follows still lands where it should.
+   */
+  const [wasSignedOut, setWasSignedOut] = useState(false);
+  useEffect(() => {
+    if (!loading && !user) setWasSignedOut(true);
+  }, [loading, user]);
+
   useEffect(() => {
     if (!user || sync.status !== "ready" || sync.userId !== user.id) return;
+    if (!next && !wasSignedOut) return;
     void navigate({ to: next ?? "/players" });
-  }, [user, sync, navigate, next]);
+  }, [user, sync, navigate, next, wasSignedOut]);
 
   async function signInWithGoogle() {
     setBusy(true);
@@ -268,7 +292,16 @@ function AuthPage() {
         </CardContent>
       </Card>
 
+      {/* The signed-out screen had no route to /claim at all, so somebody
+          holding a paper code — who needs no account — was left creating one. */}
       <p className="mt-4 text-center text-xs text-muted-foreground">
+        Got a player code from the commissioner?{" "}
+        <Link to="/claim" className="font-bold text-primary underline">
+          Claim your player
+        </Link>{" "}
+        instead — no account needed.
+      </p>
+      <p className="mt-2 text-center text-xs text-muted-foreground">
         An account is optional — you can keep playing as a guest on this phone.
       </p>
     </div>

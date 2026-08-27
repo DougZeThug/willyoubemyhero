@@ -69,6 +69,7 @@ export function SecretCardTile({
   claimedMembers,
   roster,
   sets,
+  allSets,
   grantTarget,
   onGrantTargetChange,
   granting,
@@ -87,6 +88,11 @@ export function SecretCardTile({
   claimedMembers: number;
   roster: Roster;
   sets: readonly SecretCollection[];
+  /**
+   * Every set, hidden ones included, so a card filed into one that has
+   * since been hidden can still be named. `sets` is the pickable subset.
+   */
+  allSets?: readonly SecretCollection[];
   grantTarget: string;
   onGrantTargetChange: (participantId: string) => void;
   granting: boolean;
@@ -224,8 +230,18 @@ export function SecretCardTile({
             <option value="">Unsorted</option>
             {/* A card filed into a set that has since been hidden keeps its own
                 option, or picking anything else would be the only way out. */}
+            {/* secretCollectionLabel falls back to the four SEEDED sets when
+                given no list, so a commissioner-created set that has since
+                been hidden rendered here as its raw uuid. `allSets` carries
+                the hidden ones with their real labels. */}
             {(card.collection && !sets.some((c) => c.id === card.collection)
-              ? [...sets, { id: card.collection, label: secretCollectionLabel(card.collection) }]
+              ? [
+                  ...sets,
+                  {
+                    id: card.collection,
+                    label: secretCollectionLabel(card.collection, allSets ?? sets),
+                  },
+                ]
               : sets
             ).map((c) => (
               <option key={c.id} value={c.id}>

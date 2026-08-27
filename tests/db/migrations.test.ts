@@ -11,6 +11,7 @@ afterAll(closeDb);
 const EXPECTED_TABLES = [
   "account_identities",
   "admin_accounts",
+  "admin_grants",
   "audit_logs",
   "auth_attempts",
   "award_votes",

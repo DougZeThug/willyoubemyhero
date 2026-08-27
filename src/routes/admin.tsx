@@ -7,11 +7,7 @@ import { verifyEventPin, startAdminSessionFromAccount } from "@/lib/admin.functi
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
 import { useAuthUser } from "@/hooks/use-account";
 import { setParticipantStatus, resetCombine } from "@/lib/admin-write.functions";
-import {
-  upsertParticipant,
-  addParticipantToEvent,
-  removeParticipantFromEvent,
-} from "@/lib/admin-write.functions";
+import { addPlayerToRoster, removeParticipantFromEvent } from "@/lib/admin-write.functions";
 import {
   archiveEvent,
   uploadParticipantPhoto,
@@ -90,6 +86,7 @@ import {
 
 import { currentAthlete, fieldSize } from "@/lib/current-athlete";
 import { useRunConsole } from "@/hooks/use-run-console";
+import { FeedDegradedBanner } from "@/components/feed-state";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -238,6 +235,9 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
 // ---------------- TIMING CONSOLE ----------------
 function TimingConsole() {
   const qc = useQueryClient();
+  // The console watches the same event channel every spectator screen does
+  // and was the one that never said when it was down.
+  const { error: bundleError, realtimeDegraded } = useEventBundle();
   const {
     event,
     run,
@@ -270,6 +270,10 @@ function TimingConsole() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-4">
+      {/* The one that matters most: this is where a run is timed, and a
+          console frozen behind a dead socket with nothing on screen saying
+          so is the failure the health states were added for. */}
+      {(realtimeDegraded || !!bundleError) && <FeedDegradedBanner />}
       <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-3">
         <div>
           <div className="flex items-center gap-2 text-primary">
@@ -955,8 +959,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
 
 function AddPlayerPanel({ eventId }: { eventId: string }) {
   const qc = useQueryClient();
-  const upsertFn = useServerFn(upsertParticipant);
-  const addFn = useServerFn(addParticipantToEvent);
+  const addFn = useServerFn(addPlayerToRoster);
   const removeFn = useServerFn(removeParticipantFromEvent);
   const statusFn = useServerFn(setParticipantStatus);
   const resetFn = useServerFn(resetCombine);
@@ -972,18 +975,22 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
     if (!trimmed) return;
     setBusy(true);
     try {
-      const p = await upsertFn({
-        data: {
-          eventId,
-          name: trimmed,
-          nickname: nickname.trim() || null,
-        },
+      // One call, not two: creating the person and putting them on the roster
+      // used to be separate, so a failure between them left somebody created and
+      // not on the roster — and retyping the name made a second person.
+      const res = await addFn({
+        data: { eventId, name: trimmed, nickname: nickname.trim() || null },
       });
-      await addFn({ data: { eventId, participantId: p.id } });
       await qc.invalidateQueries();
       setName("");
       setNickname("");
-      toast.success(`Added ${trimmed}`);
+      toast.success(
+        res.alreadyOnRoster
+          ? `${trimmed} is already on the roster`
+          : res.created
+            ? `Added ${trimmed}`
+            : `Added ${trimmed} back to the field`,
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add player");
     } finally {

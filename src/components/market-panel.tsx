@@ -312,7 +312,12 @@ export function MarketPanel({
   // With the economy off and nothing on the shelf there is nothing to say, and the
   // route's "not switched on yet" line says it already. Below every hook, because
   // an early return above one would change the hook order between renders.
-  if (!dustOn && active.length === 0) return null;
+  //
+  // `!stall.isLoading` matters: this path exists so a seller can always take a
+  // listing down after dust is switched off, and returning null while the stall
+  // was still in flight rendered a blank frame that then popped in — which,
+  // right there, reads as "my cards are gone".
+  if (!dustOn && active.length === 0 && !stall.isLoading) return null;
 
   return (
     <div className="space-y-6">
