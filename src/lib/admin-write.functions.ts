@@ -318,6 +318,25 @@ export const upsertStation = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Reordering swaps two station_order values. Doing that as two client-driven
+// updates could half-apply and leave duplicate orders, so the swap happens
+// inside one transaction in the database.
+export const swapStationOrder = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ eventId: zuuid(), aId: zuuid(), bId: zuuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.rpc("swap_station_order", {
+      _event_id: data.eventId,
+      _a: data.aId,
+      _b: data.bId,
+    });
+    if (error) throw error;
+    return { ok: true };
+  });
+
 export const deleteStation = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid(), id: zuuid() }).parse(d))
   .handler(async ({ data }) => {
