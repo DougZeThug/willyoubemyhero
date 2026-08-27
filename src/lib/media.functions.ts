@@ -484,11 +484,15 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
       medium: side === "front" ? row?.card_path_medium : row?.card_back_path_medium,
     };
 
-    await removePaths(supabaseAdmin, [existing.large, existing.thumb, existing.medium]);
-    await supabaseAdmin
+    // Update the database first and confirm it succeeded before removing storage.
+    // A failed DB write after deleting files would leave rows pointing at ghosts.
+    const { error: dbErr } = await supabaseAdmin
       .from("event_participants")
       .update(cardPatch(side, null))
       .eq("id", data.eventParticipantId);
+    if (dbErr) throw dbErr;
+
+    await removePaths(supabaseAdmin, [existing.large, existing.thumb, existing.medium]);
     return { ok: true };
   });
 
