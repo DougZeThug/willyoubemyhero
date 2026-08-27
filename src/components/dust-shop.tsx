@@ -52,6 +52,7 @@ export function DustShopPanel({
   actor,
   eventId,
   nameFor,
+  backUrl = null,
 }: {
   balance: number | undefined;
   participantId: string | null | undefined;
