@@ -1993,6 +1993,10 @@ export type Database = {
         }
         Returns: number
       }
+      attach_device_to_player: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: Json
+      }
       award_collection_trophy: {
         Args: {
           _collection: string
