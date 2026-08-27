@@ -57,11 +57,15 @@ function DraftPage() {
         const ep = parts.find((p) => p.participant_id === r.participant_id);
         return { run: r, ep };
       })
+      .filter(
+        (row): row is { run: (typeof row)["run"]; ep: NonNullable<(typeof row)["ep"]> } =>
+          row.ep != null,
+      )
       .sort((a, b) => (a.run.official_time_ms ?? Infinity) - (b.run.official_time_ms ?? Infinity));
     const takenSet = new Set(
       parts.filter((p) => p.selected_draft_position != null).map((p) => p.selected_draft_position!),
     );
-    const currentPicker = ranking.find((row) => row.ep?.selected_draft_position == null) ?? null;
+    const currentPicker = ranking.find((row) => row.ep.selected_draft_position == null) ?? null;
     return { rankings: ranking, taken: takenSet, currentPicker };
   }, [bundle]);
 
@@ -74,12 +78,12 @@ function DraftPage() {
       await recordFn({
         data: {
           eventId: event.id,
-          participantId: currentPicker.ep!.participant_id,
+          participantId: currentPicker.ep.participant_id,
           draftPosition: pos,
         },
       });
       await refresh();
-      toast.success(`${currentPicker.ep!.participant?.name} picks #${pos}`);
+      toast.success(`${currentPicker.ep.participant?.name} picks #${pos}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -149,11 +153,11 @@ function DraftPage() {
           <Card className="hud-bezel border-primary/40 hud-glow">
             <CardContent className="flex items-center gap-4 p-5">
               <ParticipantAvatar
-                name={currentPicker.ep!.participant?.name ?? "?"}
-                cardUrl={cards.data?.[currentPicker.ep!.id]?.front ?? null}
+                name={currentPicker.ep.participant?.name ?? "?"}
+                cardUrl={cards.data?.[currentPicker.ep.id]?.front ?? null}
                 photoUrl={
-                  photos.data?.[currentPicker.ep!.id] ??
-                  currentPicker.ep!.participant?.profile_image_url ??
+                  photos.data?.[currentPicker.ep.id] ??
+                  currentPicker.ep.participant?.profile_image_url ??
                   null
                 }
                 size={72}
@@ -164,10 +168,10 @@ function DraftPage() {
                 </div>
                 <Link
                   to="/players/$id"
-                  params={{ id: currentPicker.ep!.id }}
+                  params={{ id: currentPicker.ep.id }}
                   className="font-display text-3xl font-black uppercase hover:text-primary"
                 >
-                  {currentPicker.ep!.participant?.name}
+                  {currentPicker.ep.participant?.name}
                 </Link>
                 <div className="text-xs text-muted-foreground">
                   Combine time {formatTime(currentPicker.run.official_time_ms)}
