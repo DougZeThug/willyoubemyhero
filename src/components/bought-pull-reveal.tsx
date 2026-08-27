@@ -63,7 +63,7 @@ export function BoughtPullReveal({
     if (celebratedRef.current) return;
     celebratedRef.current = true;
     cue("secretImpact");
-    playReveal(duplicate ? SECRET_CHIME : SECRET_DUPE_CHIME);
+    playReveal(duplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
     // A duplicate is still yours, but it does not get the cannon — the same rule
     // the daily pull and the milestone reveal both keep.
     if (!duplicate) void celebrateSecret(rarity);
