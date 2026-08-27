@@ -537,7 +537,7 @@ export function PackWrapper({
         // Card-shaped, not pack-shaped: the wax foil sits directly over the
         // universal back, and a 3/4 wrapper made the sealed pack a different
         // silhouette from the cards that come out of it.
-        "hud-glow relative aspect-[5/7] w-full max-w-[260px] rounded-2xl border border-primary/40",
+        "hud-glow relative aspect-[5/7] mx-auto w-full max-w-[260px] rounded-2xl border border-primary/40",
         sealed && "cursor-grab touch-none active:cursor-grabbing",
       )}
       style={{
