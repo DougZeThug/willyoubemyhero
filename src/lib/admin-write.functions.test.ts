@@ -21,8 +21,34 @@ const EVENT_PARTICIPANT_ID = "00000000-0000-4000-8000-000000000011";
 const STATION_ID = "00000000-0000-4000-8000-000000000022";
 const RUN_ID = "00000000-0000-4000-8000-000000000033";
 
+/**
+ * The row lookups the handlers make to prove a payload id belongs to the
+ * authorized event. Present by default so each test can say what it is about;
+ * a test that wants the foreign-row path overrides them with `{ data: null }`
+ * or `{ data: [] }`.
+ */
+const IN_EVENT: SupabaseResponses = {
+  // Two different reads land on this key: setParticipantStatus asks for one row
+  // with `.maybeSingle()`, setRunningOrder asks which of a list belong to the
+  // event with `.in("id", …)`. The list form echoes back whatever it was asked
+  // about, so a reorder naming this event's rows passes.
+  "event_participants.select": (call) =>
+    call.terminal === "maybeSingle"
+      ? { data: { participation_status: "queued" } }
+      : {
+          data: ((call.filters.find((f) => f.method === "in")?.args[1] as string[]) ?? []).map(
+            (id) => ({ id }),
+          ),
+        },
+  "event_participants.update": { data: [{ id: EVENT_PARTICIPANT_ID }] },
+  "event_participants.delete": { data: [{ id: EVENT_PARTICIPANT_ID }] },
+  "stations.update": { data: [{ id: STATION_ID }] },
+  "stations.delete": { data: [{ id: STATION_ID }] },
+  "runs.delete": { data: [{ id: RUN_ID }] },
+};
+
 function withDb(responses: SupabaseResponses = {}) {
-  mock = createSupabaseMock(responses);
+  mock = createSupabaseMock({ ...IN_EVENT, ...responses });
 }
 
 const asAdmin = (eventId = EVENT_ID) => adminHeaders(signAdminToken(eventId).token);
@@ -554,5 +580,148 @@ describe("updateEvent", () => {
       headers: asAdmin(),
     });
     expect(mock.callsFor("events", "update")[0].payload).toEqual({ status: "live" });
+  });
+});
+
+/**
+ * The guard has to be as narrow as the write it protects.
+ *
+ * Each of these handlers checks the admin token against `data.eventId` and then
+ * matched its row by that row's own id, with nothing tying the two together — so
+ * an admin session for last year's combine could set a status, reorder the
+ * field, rename or delete a station, or delete a run in this year's. Bounded
+ * hard by one active event and a shared PIN today, which is exactly why it is
+ * worth pinning: the deployment is the only thing holding it shut.
+ */
+describe("an admin token is only good for its own event", () => {
+  it("scopes every roster and station write to the authorized event", async () => {
+    const {
+      setParticipantStatus,
+      removeParticipantFromEvent,
+      upsertStation,
+      deleteStation,
+      deleteRun,
+    } = await import("./admin-write.functions");
+
+    await callServerFn(setParticipantStatus, {
+      data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "finished" },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("event_participants", "update")[0], "event_id")).toBe(
+      EVENT_ID,
+    );
+
+    withDb({ "card_copies.select": { count: 0 }, "card_pulls.select": { count: 0 } });
+    await callServerFn(removeParticipantFromEvent, {
+      data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("event_participants", "delete")[0], "event_id")).toBe(
+      EVENT_ID,
+    );
+
+    withDb();
+    await callServerFn(upsertStation, {
+      data: { ...VALID_PAYLOADS.upsertStation, id: STATION_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("stations", "update")[0], "event_id")).toBe(EVENT_ID);
+
+    withDb({ "splits.select": { count: 0 }, "penalties.select": { count: 0 } });
+    await callServerFn(deleteStation, {
+      data: { eventId: EVENT_ID, id: STATION_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("stations", "delete")[0], "event_id")).toBe(EVENT_ID);
+
+    withDb();
+    await callServerFn(deleteRun, {
+      data: { eventId: EVENT_ID, runId: RUN_ID },
+      headers: asAdmin(),
+    });
+    expect(mock.eqValue(mock.callsFor("runs", "delete")[0], "event_id")).toBe(EVENT_ID);
+  });
+
+  it("refuses a status change for somebody outside the event", async () => {
+    withDb({ "event_participants.select": { data: null } });
+    const { setParticipantStatus } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(setParticipantStatus, {
+        data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "finished" },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+  });
+
+  // The filter alone would affect nothing and return ok, which is the same shrug
+  // as no guard at all — so these writes ask for their rows back.
+  it("refuses to delete a station belonging to another event", async () => {
+    withDb({
+      "splits.select": { count: 0 },
+      "penalties.select": { count: 0 },
+      "stations.delete": { data: [] },
+    });
+    const { deleteStation } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(deleteStation, {
+        data: { eventId: EVENT_ID, id: STATION_ID },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not part of this event");
+  });
+
+  it("refuses to delete a run belonging to another event", async () => {
+    withDb({ "runs.delete": { data: [] } });
+    const { deleteRun } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(deleteRun, { data: { eventId: EVENT_ID, runId: RUN_ID }, headers: asAdmin() }),
+    ).rejects.toThrow("not part of this event");
+  });
+
+  it("refuses a reorder that names anybody outside the event", async () => {
+    withDb({ "event_participants.select": { data: [] } });
+    const { setRunningOrder } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(setRunningOrder, {
+        data: { eventId: EVENT_ID, order: [{ id: EVENT_PARTICIPANT_ID, running_order: 1 }] },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("outside this event");
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+  });
+});
+
+/**
+ * Deleting a station cascades to every split recorded at it, and a station crown
+ * is computed from splits — so this delete can silently demote somebody's
+ * stationKing card to base. The stations panel refuses it too; a check that
+ * lives only in a screen is not a check.
+ */
+describe("deleteStation refuses a station that has been run", () => {
+  it.each([
+    ["splits", { "splits.select": { count: 2 }, "penalties.select": { count: 0 } }],
+    ["penalties", { "splits.select": { count: 0 }, "penalties.select": { count: 1 } }],
+  ])("refuses when it has %s", async (_label, responses) => {
+    withDb(responses);
+    const { deleteStation } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(deleteStation, {
+        data: { eventId: EVENT_ID, id: STATION_ID },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("already has recorded times");
+    expect(mock.callsFor("stations", "delete")).toHaveLength(0);
+  });
+
+  it("deletes a station nobody ever ran", async () => {
+    withDb({ "splits.select": { count: 0 }, "penalties.select": { count: 0 } });
+    const { deleteStation } = await import("./admin-write.functions");
+    await expect(
+      callServerFn(deleteStation, {
+        data: { eventId: EVENT_ID, id: STATION_ID },
+        headers: asAdmin(),
+      }),
+    ).resolves.toEqual({ ok: true });
   });
 });

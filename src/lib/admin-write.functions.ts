@@ -17,6 +17,25 @@ function withOnClock<T extends ParticipantStatusPatch>(patch: T, since: Date | n
   return { ...patch, on_clock_since: since ? since.toISOString() : null } as T;
 }
 
+/**
+ * Throw unless an event-scoped write actually matched a row.
+ *
+ * `requireAdmin(data.eventId)` proves the caller holds an admin session for THAT
+ * event. It says nothing about the row id sitting next to it in the request, and
+ * these handlers match rows by their own id — so without an `.eq("event_id", …)`
+ * the guard is narrower than the write it protects, and a session for last
+ * year's combine can set a status, rename a station or delete a run in this
+ * year's. The security model says plainly that these guards are the only thing
+ * between a request and the database.
+ *
+ * The filter alone would fail silently, affecting nothing and returning ok, so
+ * the writes ask for their rows back and hand them here. One round trip, atomic,
+ * and a foreign id gets an answer rather than a shrug.
+ */
+function assertInEvent(rows: unknown[] | null | undefined, what: string): void {
+  if (!rows || rows.length === 0) throw new Error(`That ${what} is not part of this event.`);
+}
+
 // ---------- Participants (global) ----------
 export const upsertParticipant = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -112,19 +131,25 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
     ]);
 
     if ((copies ?? 0) > 0 || (pulls ?? 0) > 0) {
-      const { error: retireError } = await supabaseAdmin
+      const { data: retired, error: retireError } = await supabaseAdmin
         .from("event_participants")
         .update({ participation_status: "scratched" })
-        .eq("id", data.eventParticipantId);
+        .eq("id", data.eventParticipantId)
+        .eq("event_id", data.eventId)
+        .select("id");
       if (retireError) throw retireError;
+      assertInEvent(retired, "athlete");
       return { ok: true, retained: true } as const;
     }
 
-    const { error } = await supabaseAdmin
+    const { data: removed, error } = await supabaseAdmin
       .from("event_participants")
       .delete()
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .select("id");
     if (error) throw error;
+    assertInEvent(removed, "athlete");
     return { ok: true, retained: false } as const;
   });
 
@@ -146,12 +171,18 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
     // "running". Re-stamping on the second one would drag the spectator clock
     // forward to the Start tap and lose the moment they actually stepped up, so
     // an athlete already on the clock keeps the stamp they were given.
+    //
+    // Scoped to the event, which also makes this the membership check: an admin
+    // token is only good for one combine, and the update below matches on the
+    // roster row's own id.
     const { data: current } = await supabaseAdmin
       .from("event_participants")
       .select("participation_status")
       .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
       .maybeSingle();
-    const alreadyOnClock = current?.participation_status === "running";
+    if (!current) throw new Error("That athlete is not part of this event.");
+    const alreadyOnClock = current.participation_status === "running";
 
     const patch =
       data.status === "running"
@@ -163,7 +194,8 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("event_participants")
       .update(patch)
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
     if (error) throw error;
     return { ok: true };
   });
@@ -243,6 +275,23 @@ export const setRunningOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // One membership check for the whole batch rather than one per row: every id
+    // has to belong to the authorized event before any of them moves, or an
+    // admin session for one combine can reshuffle another's.
+    const ids = data.order.map((row) => row.id);
+    if (ids.length) {
+      const { data: mine, error: scopeError } = await supabaseAdmin
+        .from("event_participants")
+        .select("id")
+        .eq("event_id", data.eventId)
+        .in("id", ids);
+      if (scopeError) throw scopeError;
+      if ((mine ?? []).length !== new Set(ids).size) {
+        throw new Error("That running order names somebody outside this event.");
+      }
+    }
+
     // Bulk update in parallel. Supabase resolves even on failure, so a missing
     // check here would let a partial write look like a clean shuffle.
     const results = await Promise.all(
@@ -250,7 +299,8 @@ export const setRunningOrder = createServerFn({ method: "POST" })
         supabaseAdmin
           .from("event_participants")
           .update({ running_order: row.running_order })
-          .eq("id", row.id),
+          .eq("id", row.id)
+          .eq("event_id", data.eventId),
       ),
     );
     const firstError = results.find((r) => r.error)?.error;
@@ -309,8 +359,14 @@ export const upsertStation = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { eventId, id, ...rest } = data;
     if (id) {
-      const { error } = await supabaseAdmin.from("stations").update(rest).eq("id", id);
+      const { data: updated, error } = await supabaseAdmin
+        .from("stations")
+        .update(rest)
+        .eq("id", id)
+        .eq("event_id", eventId)
+        .select("id");
       if (error) throw error;
+      assertInEvent(updated, "station");
     } else {
       const { error } = await supabaseAdmin.from("stations").insert({ ...rest, event_id: eventId });
       if (error) throw error;
@@ -342,8 +398,36 @@ export const deleteStation = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("stations").delete().eq("id", data.id);
+
+    // The guard, not a nicety. `splits.station_id` is ON DELETE CASCADE, so
+    // deleting a station that has been run takes every split at it — and since a
+    // station crown is computed from splits, that silently demotes somebody's
+    // stationKing card to base. The stations panel refuses this too, but a check
+    // that lives only in a screen is not a check.
+    const [{ count: splits }, { count: penalties }] = await Promise.all([
+      supabaseAdmin
+        .from("splits")
+        .select("id", { count: "exact", head: true })
+        .eq("station_id", data.id),
+      supabaseAdmin
+        .from("penalties")
+        .select("id", { count: "exact", head: true })
+        .eq("station_id", data.id),
+    ]);
+    if ((splits ?? 0) > 0 || (penalties ?? 0) > 0) {
+      throw new Error(
+        "That station already has recorded times — switch it to inactive instead of deleting it.",
+      );
+    }
+
+    const { data: removed, error } = await supabaseAdmin
+      .from("stations")
+      .delete()
+      .eq("id", data.id)
+      .eq("event_id", data.eventId)
+      .select("id");
     if (error) throw error;
+    assertInEvent(removed, "station");
     return { ok: true };
   });
 
@@ -474,8 +558,14 @@ export const deleteRun = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("runs").delete().eq("id", data.runId);
+    const { data: removed, error } = await supabaseAdmin
+      .from("runs")
+      .delete()
+      .eq("id", data.runId)
+      .eq("event_id", data.eventId)
+      .select("id");
     if (error) throw error;
+    assertInEvent(removed, "run");
     return { ok: true };
   });
 
