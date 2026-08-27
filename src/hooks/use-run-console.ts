@@ -79,6 +79,15 @@ export function useRunConsole() {
 
   async function startRun() {
     if (!event?.id || !selectedParticipantId) return;
+    const ep = participants.find((p) => p.participant_id === selectedParticipantId);
+    if (!ep) {
+      // The athlete was removed from the roster while this screen was open.
+      // Starting a timer for a ghost row would leave an orphaned local run that
+      // can never sync, so stop before we write anything.
+      toast.error("That athlete is no longer on the roster.");
+      setSelected("");
+      return;
+    }
     // One instant behind both anchors. Read separately they can land a tick
     // apart, and startedAtIso is what the server stores as the start time.
     const startedAt = Date.now();
@@ -99,15 +108,10 @@ export function useRunConsole() {
     setSelected("");
     try {
       await setStatusFn({
-        data: {
-          eventId: event.id,
-          eventParticipantId: participants.find((p) => p.participant_id === selectedParticipantId)!
-            .id,
-          status: "running",
-        },
+        data: { eventId: event.id, eventParticipantId: ep.id, status: "running" },
       });
-    } catch {
-      /* ignore */
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start the run on the server.");
     }
   }
 
