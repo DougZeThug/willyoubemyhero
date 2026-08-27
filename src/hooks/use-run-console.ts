@@ -55,6 +55,17 @@ export function useRunConsole() {
     if (run) saveActiveRun(run);
   }, [run]);
 
+  // If a realtime update removes the selected athlete from the roster, drop the
+  // stale selection before Start Run can try to use it.
+  useEffect(() => {
+    if (
+      selectedParticipantId &&
+      !participants.some((p) => p.participant_id === selectedParticipantId)
+    ) {
+      setSelected("");
+    }
+  }, [selectedParticipantId, participants]);
+
   const participants = useMemo(
     () => [...(bundle?.participants ?? [])].sort((a, b) => a.running_order - b.running_order),
     [bundle],
