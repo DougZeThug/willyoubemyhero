@@ -220,22 +220,40 @@ async function storeCard(
   // secret-art uploads both do this; the player-card one did not, so storage
   // kept every version ever uploaded — and the path carries a timestamp, so
   // nothing ever overwrote anything.
-  const { data: prev } = await supabaseAdmin
+  //
+  // Scoped to the event, and refused before a single byte is uploaded. Both
+  // callers take the roster row's id straight from the payload, and
+  // requireAdmin only proves the caller holds a session for the event id
+  // BESIDE it — the same gap B-36 closed in admin-write.functions.ts. Here it
+  // is the sharper version of that gap: the cleanup below deletes files, so an
+  // id from another event would destroy that event's card artwork rather than
+  // merely overwrite a column.
+  const { data: prev, error: lookupError } = await supabaseAdmin
     .from("event_participants")
     .select(
       "card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium",
     )
     .eq("id", eventParticipantId)
+    .eq("event_id", eventId)
     .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (!prev) throw new Error("That athlete is not part of this event.");
 
   const basePath = `cards/${eventId}/${eventParticipantId}-${side}-${Date.now()}`;
   const paths = await uploadSized(supabaseAdmin, basePath, dataUrls);
 
-  const { error: dbErr } = await supabaseAdmin
+  const { data: updated, error: dbErr } = await supabaseAdmin
     .from("event_participants")
     .update(cardPatch(side, paths))
-    .eq("id", eventParticipantId);
+    .eq("id", eventParticipantId)
+    .eq("event_id", eventId)
+    .select("id");
   if (dbErr) throw dbErr;
+  // The filter alone would affect nothing and still return ok, and the delete
+  // below would then take the previous art with nothing pointing at the new.
+  if (!updated || updated.length === 0) {
+    throw new Error("That athlete is not part of this event.");
+  }
 
   // Only after the row points at the new files, for the reason
   // deleteEventCardBack states: a failed write after a delete leaves the row

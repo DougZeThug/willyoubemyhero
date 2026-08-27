@@ -159,9 +159,14 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
   function printAll() {
     if (freshCodes.length === 0) return;
     const label = [event?.name, event?.year].filter(Boolean).join(" ");
-    if (printCodes(freshCodes, label || "Draft Combine")) {
-      setSaved(true);
-    } else {
+    // Deliberately does NOT mark the codes saved. `window.print()` returns the
+    // same way whether the commissioner printed or hit Cancel, so treating it
+    // as confirmation cleared the unload warning over a list that exists
+    // nowhere — the exact loss this panel was rebuilt to prevent, and by then
+    // the old paper codes are already dead. Copying can be confirmed, because
+    // the clipboard write either resolves or throws; printing cannot, so it
+    // takes the explicit acknowledgement below.
+    if (!printCodes(freshCodes, label || "Draft Combine")) {
       toast.error("Your browser blocked the print window — copy the list instead");
     }
   }
@@ -256,6 +261,16 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
               >
                 <Printer className="h-3 w-3" /> Print
               </button>
+              {/* The only way a printed list gets marked safe, because nothing
+                  the browser tells us distinguishes a print from a cancel. */}
+              {!saved && (
+                <button
+                  onClick={() => setSaved(true)}
+                  className="inline-flex min-h-9 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:underline sm:min-h-0 sm:px-0"
+                >
+                  <Check className="h-3 w-3" /> Got them
+                </button>
+              )}
             </span>
           </div>
           <ul className="max-h-[50vh] space-y-0.5 overflow-auto rounded-md border border-warn/30 bg-warn/5 p-2 sm:max-h-56">

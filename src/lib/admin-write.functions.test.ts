@@ -792,6 +792,27 @@ describe("addPlayerToRoster", () => {
     });
   });
 
+  it("treats a name with LIKE metacharacters as literal text", async () => {
+    // ilike is a PATTERN match: `_` and `%` are wildcards, so adding "AJ_"
+    // would match an existing "AJX" and put that unrelated person on the roster
+    // instead of creating the one that was asked for.
+    withDb({
+      "participants.select": { data: null },
+      "participants.insert": { data: { id: PARTICIPANT_ID } },
+      "event_participants.select": { data: null },
+    });
+    const { addPlayerToRoster } = await import("./admin-write.functions");
+    await callServerFn(addPlayerToRoster, {
+      data: { eventId: EVENT_ID, name: "AJ_%\\x" },
+      headers: asAdmin(),
+    });
+    const [lookup] = mock.callsFor("participants", "select");
+    expect(lookup.filters.find((f) => f.method === "ilike")?.args).toEqual([
+      "name",
+      "AJ\\_\\%\\\\x",
+    ]);
+  });
+
   it("is a no-op for somebody already on this roster", async () => {
     // The double tap on a phone, which used to add a second roster row.
     withDb({

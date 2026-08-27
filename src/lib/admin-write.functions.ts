@@ -18,6 +18,17 @@ function withOnClock<T extends ParticipantStatusPatch>(patch: T, since: Date | n
 }
 
 /**
+ * Escape a value that is about to be handed to `ilike` as a whole-string match.
+ *
+ * Postgres treats `%` and `_` as wildcards inside a LIKE pattern, so a name
+ * carrying either matches things it should not. Backslash first, or it would
+ * escape the escapes.
+ */
+function likeLiteral(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
  * Throw unless an event-scoped write actually matched a row.
  *
  * `requireAdmin(data.eventId)` proves the caller holds an admin session for THAT
@@ -139,10 +150,15 @@ export const addPlayerToRoster = createServerFn({ method: "POST" })
     // Case-insensitively, because "doug" and "Doug" are one person standing in
     // one garden. participants is league-wide by design — somebody who played
     // last year is the same somebody this year, with the same cards.
+    //
+    // The name is escaped first: ilike is a PATTERN match, so `_` and `%` in a
+    // name are wildcards rather than characters. Adding "AJ_" would otherwise
+    // match an existing "AJX" and put that unrelated person on the roster
+    // instead of creating the one that was asked for.
     const { data: existing, error: lookupError } = await supabaseAdmin
       .from("participants")
       .select("id, nickname")
-      .ilike("name", name)
+      .ilike("name", likeLiteral(name))
       .limit(1)
       .maybeSingle();
     if (lookupError) throw lookupError;

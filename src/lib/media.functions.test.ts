@@ -30,8 +30,18 @@ const PNG =
 
 const threeSizes = (large: string) => ({ thumb: large, medium: large, large });
 
+/**
+ * The roster row an upload replaces art on, read and written scoped to the
+ * event. Present by default so each test can say what it is about; the
+ * foreign-row tests override them with `{ data: null }` / `{ data: [] }`.
+ */
+const IN_EVENT: SupabaseResponses = {
+  "event_participants.select": { data: { card_path: "cards/old-front" } },
+  "event_participants.update": { data: [{ id: CARD_ID }] },
+};
+
 function withDb(responses: SupabaseResponses = {}) {
-  mock = createSupabaseMock(responses);
+  mock = createSupabaseMock({ ...IN_EVENT, ...responses });
 }
 
 const asAdmin = (eventId = EVENT_ID) => adminHeaders(signAdminToken(eventId).token);
@@ -703,5 +713,77 @@ describe("deletes", () => {
       "cards/universal-thumb.webp",
       "cards/universal-medium.webp",
     ]);
+  });
+});
+
+describe("a card belonging to another event", () => {
+  // requireAdmin proves the caller holds a session for the event id BESIDE the
+  // roster row's, and both upload handlers take that row id straight from the
+  // payload — the gap B-36 closed in admin-write.functions.ts. It is sharper
+  // here: replacing art now deletes what it replaced, so an id from another
+  // event would destroy that event's card files rather than overwrite a column.
+  it("refuses before uploading anything", async () => {
+    withDb({
+      "event_participants.select": { data: null },
+      "storage.upload": { data: { path: "ok" }, error: null },
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantCard, {
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it("deletes nothing when the scoped update matches no row", async () => {
+    // The filter alone would affect nothing and still return ok, and the
+    // cleanup would then take the previous art with nothing pointing at the new.
+    withDb({
+      "event_participants.update": { data: [] },
+      "storage.upload": { data: { path: "ok" }, error: null },
+      "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantCard, {
+        data: {
+          eventId: EVENT_ID,
+          eventParticipantId: CARD_ID,
+          side: "front",
+          dataUrls: threeSizes(PNG),
+        },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it("scopes both the lookup and the write to the event", async () => {
+    withDb({
+      "storage.upload": { data: { path: "ok" }, error: null },
+      "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.uploadParticipantCard, {
+      data: {
+        eventId: EVENT_ID,
+        eventParticipantId: CARD_ID,
+        side: "front",
+        dataUrls: threeSizes(PNG),
+      },
+      headers: asAdmin(),
+    });
+    const [lookup] = mock.callsFor("event_participants", "select");
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(mock.eqValue(lookup, "event_id")).toBe(EVENT_ID);
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
   });
 });
