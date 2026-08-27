@@ -150,11 +150,11 @@ function DraftPage() {
           <Card className="hud-bezel border-primary/40 hud-glow">
             <CardContent className="flex items-center gap-4 p-5">
               <ParticipantAvatar
-                name={currentPicker.ep!.participant?.name ?? "?"}
-                cardUrl={cards.data?.[currentPicker.ep!.id]?.front ?? null}
+                name={currentPicker.ep.participant?.name ?? "?"}
+                cardUrl={cards.data?.[currentPicker.ep.id]?.front ?? null}
                 photoUrl={
-                  photos.data?.[currentPicker.ep!.id] ??
-                  currentPicker.ep!.participant?.profile_image_url ??
+                  photos.data?.[currentPicker.ep.id] ??
+                  currentPicker.ep.participant?.profile_image_url ??
                   null
                 }
                 size={72}
@@ -165,10 +165,10 @@ function DraftPage() {
                 </div>
                 <Link
                   to="/players/$id"
-                  params={{ id: currentPicker.ep!.id }}
+                  params={{ id: currentPicker.ep.id }}
                   className="font-display text-3xl font-black uppercase hover:text-primary"
                 >
-                  {currentPicker.ep!.participant?.name}
+                  {currentPicker.ep.participant?.name}
                 </Link>
                 <div className="text-xs text-muted-foreground">
                   Combine time {formatTime(currentPicker.run.official_time_ms)}
