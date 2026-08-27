@@ -67,6 +67,51 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_grants: {
+        Row: {
+          created_at: string
+          event_participant_id: string | null
+          grant_key: string
+          kind: string
+          participant_id: string
+          result: Json | null
+          secret_card_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_participant_id?: string | null
+          grant_key: string
+          kind: string
+          participant_id: string
+          result?: Json | null
+          secret_card_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_participant_id?: string | null
+          grant_key?: string
+          kind?: string
+          participant_id?: string
+          result?: Json | null
+          secret_card_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_grants_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_grants_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -1948,6 +1993,10 @@ export type Database = {
         }
         Returns: number
       }
+      attach_device_to_player: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: Json
+      }
       award_collection_trophy: {
         Args: {
           _collection: string
@@ -2033,9 +2082,27 @@ export type Database = {
         }
         Returns: number
       }
+      grant_card_copy_once: {
+        Args: {
+          _edition?: string
+          _event_participant_id: string
+          _grant_key: string
+          _participant_id: string
+        }
+        Returns: Json
+      }
       grant_secret_card: {
         Args: {
           _event_id: string
+          _participant_id: string
+          _secret_card_id: string
+        }
+        Returns: Json
+      }
+      grant_secret_card_once: {
+        Args: {
+          _event_id: string
+          _grant_key: string
           _participant_id: string
           _secret_card_id: string
         }
@@ -2088,6 +2155,14 @@ export type Database = {
           _participant_id: string
         }
         Returns: Json
+      }
+      record_draft_selection: {
+        Args: {
+          _draft_position: number
+          _event_id: string
+          _participant_id: string
+        }
+        Returns: number
       }
       record_pack_open: {
         Args: {
@@ -2160,6 +2235,10 @@ export type Database = {
       trade_summary: {
         Args: { _giver_side: string; _offer_id: string }
         Returns: Json
+      }
+      undo_last_draft_selection: {
+        Args: { _event_id: string }
+        Returns: string
       }
     }
     Enums: {
