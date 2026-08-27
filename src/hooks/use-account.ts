@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
 import { setMemberToken, clearMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
+import { clearAdminToken } from "@/lib/admin-token";
 import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
 import { clearAccountHandoff } from "@/lib/account-handoff";
 import { setAccountSyncState } from "@/lib/account-sync-state";
@@ -133,4 +134,5 @@ export function useAccountSync(user: User | null) {
 export async function signOutAccount() {
   await supabase.auth.signOut();
   clearMemberToken();
+  clearAdminToken();
 }

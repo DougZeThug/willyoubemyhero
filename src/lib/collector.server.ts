@@ -100,7 +100,6 @@ export async function createCollector(
   return { participantId: winnerId, name: winnerName, token, expiresAt };
 }
 
-
 async function mergeGuests(participantId: string, guestIds: string[]) {
   for (const guestId of new Set(guestIds.filter(Boolean))) {
     const { error: secretsError } = await supabaseAdmin.rpc("claim_guest_secrets", {
