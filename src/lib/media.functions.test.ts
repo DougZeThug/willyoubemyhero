@@ -586,3 +586,122 @@ describe("getEventCardBack", () => {
     });
   });
 });
+
+describe("deletes", () => {
+  it("propagates database errors from deleteParticipantCard instead of returning ok: true", async () => {
+    withDb({
+      "event_participants.select": {
+        data: {
+          id: CARD_ID,
+          card_path: "cards/old.jpg",
+          card_path_thumb: "cards/old-thumb.jpg",
+          card_path_medium: "cards/old-medium.jpg",
+          card_back_path: null,
+          card_back_path_thumb: null,
+          card_back_path_medium: null,
+        },
+      },
+      "storage.remove": { data: null, error: null },
+      "event_participants.update": { data: null, error: { message: "db unavailable" } },
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.deleteParticipantCard, {
+        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front" },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("db unavailable");
+
+    // Storage should not have been touched because the DB update failed.
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it("removes storage files only after deleteParticipantCard updates the database", async () => {
+    withDb({
+      "event_participants.select": {
+        data: {
+          id: CARD_ID,
+          card_path: "cards/old.jpg",
+          card_path_thumb: "cards/old-thumb.jpg",
+          card_path_medium: "cards/old-medium.jpg",
+          card_back_path: null,
+          card_back_path_thumb: null,
+          card_back_path_medium: null,
+        },
+      },
+      "storage.remove": { data: null, error: null },
+      "event_participants.update": { data: null, error: null },
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.deleteParticipantCard, {
+      data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front" },
+      headers: asAdmin(),
+    });
+
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(update.payload).toEqual({
+      card_path: null,
+      card_path_thumb: null,
+      card_path_medium: null,
+    });
+    expect(mock.storageBucket.remove).toHaveBeenCalledWith([
+      "cards/old.jpg",
+      "cards/old-thumb.jpg",
+      "cards/old-medium.jpg",
+    ]);
+  });
+
+  it("propagates database errors from deleteEventCardBack instead of returning ok: true", async () => {
+    withDb({
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal-thumb.webp",
+          card_back_path_medium: "cards/universal-medium.webp",
+        },
+      },
+      "storage.remove": { data: null, error: null },
+      "events.update": { data: null, error: { message: "db unavailable" } },
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.deleteEventCardBack, {
+        data: { eventId: EVENT_ID },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("db unavailable");
+
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it("removes storage files only after deleteEventCardBack updates the database", async () => {
+    withDb({
+      "events.select": {
+        data: {
+          card_back_path: "cards/universal.webp",
+          card_back_path_thumb: "cards/universal-thumb.webp",
+          card_back_path_medium: "cards/universal-medium.webp",
+        },
+      },
+      "storage.remove": { data: null, error: null },
+      "events.update": { data: null, error: null },
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.deleteEventCardBack, {
+      data: { eventId: EVENT_ID },
+      headers: asAdmin(),
+    });
+
+    const [update] = mock.callsFor("events", "update");
+    expect(update.payload).toEqual({
+      card_back_path: null,
+      card_back_path_thumb: null,
+      card_back_path_medium: null,
+    });
+    expect(mock.storageBucket.remove).toHaveBeenCalledWith([
+      "cards/universal.webp",
+      "cards/universal-thumb.webp",
+      "cards/universal-medium.webp",
+    ]);
+  });
+});
