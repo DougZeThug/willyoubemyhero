@@ -243,8 +243,9 @@ export const setRunningOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // Bulk update in parallel
-    await Promise.all(
+    // Bulk update in parallel. Supabase resolves even on failure, so a missing
+    // check here would let a partial write look like a clean shuffle.
+    const results = await Promise.all(
       data.order.map((row) =>
         supabaseAdmin
           .from("event_participants")
@@ -252,6 +253,10 @@ export const setRunningOrder = createServerFn({ method: "POST" })
           .eq("id", row.id),
       ),
     );
+    const firstError = results.find((r) => r.error)?.error;
+    if (firstError) {
+      throw new Error(`Failed to update running order: ${firstError.message}`);
+    }
     return { ok: true };
   });
 
