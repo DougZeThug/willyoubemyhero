@@ -68,9 +68,26 @@ export function DustShopPanel({
   eventId: string | null | undefined;
   /** `event_participants.id` → the name on the card. */
   nameFor: (eventParticipantId: string) => string;
+  /**
+   * The event's universal card back, for the reveal a purchase ends on. Taken as
+   * a prop rather than fetched: the route already holds it, and secrets carry no
+   * back of their own — without it the turn lands on a text placeholder.
+   */
+  backUrl?: ImageUrlSet | string | null;
 }) {
   const qc = useQueryClient();
   const buyFn = useServerFn(buyBonusSecretPull);
+  const mySecretsFn = useServerFn(getMySecrets);
+  /**
+   * The card a purchase just bought, held until it has been looked at.
+   *
+   * A 150-dust pull used to close on "check your secrets", which meant going
+   * hunting through the vault to work out which card was new. It is the only way
+   * of getting a secret that never showed you one.
+   */
+  const [bought, setBought] = useState<{ card: OwnedSecret; duplicate: boolean } | null>(null);
+  /** A completed set celebrates AFTER the card, never behind it. */
+  const [trophyPending, setTrophyPending] = useState(false);
   // One id per tap, held until that tap resolves. A lost response on a
   // 150-dust purchase is the worst bug this feature could ship, and the RPC
   // answers a repeat of the same id with the pull it already sold rather than a
