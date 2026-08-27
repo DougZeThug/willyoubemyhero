@@ -40,11 +40,16 @@ function LivePage() {
     useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
-  const [celebration, setCelebration] = useState<{
-    name: string;
-    timeMs: number;
-    deltaMs: number;
-  } | null>(null);
+  /**
+   * Queue of finish celebrations. A single bundle update can contain several
+   * newly-official runs, and React 19 batches synchronous setState calls, so
+   * appending keeps every finisher instead of letting the last one overwrite
+   * the rest.
+   */
+  const [celebrationQueue, setCelebrationQueue] = useState<
+    { name: string; timeMs: number; deltaMs: number }[]
+  >([]);
+  const currentCelebration = celebrationQueue[0] ?? null;
 
   // The commissioner's console, mounted here so timing can happen on the
   // broadcast view. It reads the same single active run as /admin; spectators
