@@ -143,13 +143,25 @@ export async function syncAccount(
   // than a guest id, so the account is upgraded and the guest's secrets ride along.
   if (identity.kind === "guest" && device.memberId) {
     const guestId = identity.id;
-    identity = { kind: "member", id: device.memberId };
-    const { error } = await supabaseAdmin
+    // Guarded so a bindParticipant racing this call cannot be overwritten: only
+    // a still-unbound row is upgraded, otherwise the winner's binding stands.
+    const { data: upgraded, error } = await supabaseAdmin
       .from("account_identities")
       .update({ participant_id: device.memberId, guest_id: null })
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("participant_id", null)
+      .select("user_id, participant_id, guest_id");
     if (error) throw error;
-    await mergeGuestInto(identity, guestId);
+    if (upgraded && upgraded.length > 0) {
+      identity = { kind: "member", id: device.memberId };
+      await mergeGuestInto(identity, guestId);
+    } else {
+      const winner = await readRow(userId);
+      if (winner?.participant_id) {
+        identity = { kind: "member", id: winner.participant_id };
+        await mergeGuestInto(identity, guestId);
+      }
+    }
   }
 
   // A different guest id on this phone — pulls made here before signing in, or on
@@ -163,29 +175,49 @@ export async function syncAccount(
 export async function bindParticipant(userId: string, participantId: string) {
   const row = await readRow(userId);
   const priorGuest = row?.guest_id ?? null;
-  const priorParticipant = row?.participant_id ?? null;
 
   // Re-claiming the same player is a no-op rather than an error: the phone may
   // simply have lost its local token and re-run the paper code.
-  if (priorParticipant === participantId) {
+  if (row?.participant_id === participantId) {
     return { kind: "member" as const, id: participantId, name: await nameFor(participantId) };
   }
 
   // A second, DIFFERENT roster player is refused instead of silently taking over.
   // syncAccount treats this row as authoritative, so an overwrite would re-mint
   // every other device onto the new player and strand the first identity with no
-  // recovery path. Guest -> member is still an upgrade and handled below.
-  if (priorParticipant) {
+  // recovery path. Guest -> member is still an upgrade, handled below.
+  if (row?.participant_id) {
     throw new Error("This account is already linked to another player");
   }
 
-  const { error } = await supabaseAdmin
+  // The read above is only a fast path — the write itself has to be the guard, or
+  // two concurrent binds both pass the check and the last one silently wins.
+  let bound = false;
+  const { error: insertError } = await supabaseAdmin
     .from("account_identities")
-    .upsert(
-      { user_id: userId, participant_id: participantId, guest_id: null },
-      { onConflict: "user_id" },
-    );
-  if (error) throw error;
+    .insert({ user_id: userId, participant_id: participantId, guest_id: null });
+  if (!insertError) {
+    bound = true;
+  } else if (insertError.code === "23505") {
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from("account_identities")
+      .update({ participant_id: participantId, guest_id: null })
+      .eq("user_id", userId)
+      .is("participant_id", null)
+      .select("user_id");
+    if (updateError) throw updateError;
+    bound = (updated?.length ?? 0) > 0;
+  } else {
+    throw insertError;
+  }
+
+  if (!bound) {
+    const winner = await readRow(userId);
+    if (winner?.participant_id !== participantId) {
+      throw new Error("This account is already linked to another player");
+    }
+  }
+
   if (priorGuest) await mergeGuestInto({ kind: "member", id: participantId }, priorGuest);
   return { kind: "member" as const, id: participantId, name: await nameFor(participantId) };
 }
