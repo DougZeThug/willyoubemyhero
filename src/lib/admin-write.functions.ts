@@ -106,6 +106,100 @@ export const addParticipantToEvent = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Put somebody on this event's roster, creating the person only if the league
+ * has never heard of them.
+ *
+ * The screen used to do this as `upsertParticipant` then `addParticipantToEvent`
+ * with nothing tying the two together: a failure between them left a person
+ * created and not on the roster, and retyping the name made a SECOND person
+ * because the form matched nothing. In a league of thirteen that is a duplicate
+ * somebody then has to notice.
+ *
+ * Not a transaction — these are two tables in PostgREST — but the order is the
+ * safe one, and every step is idempotent, so the retry that follows a failure
+ * lands on the same person rather than a new one.
+ */
+export const addPlayerToRoster = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        eventId: zuuid(),
+        name: z.string().min(1).max(80),
+        nickname: z.string().max(80).optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const name = data.name.trim();
+    const nickname = data.nickname?.trim() || null;
+
+    // Case-insensitively, because "doug" and "Doug" are one person standing in
+    // one garden. participants is league-wide by design — somebody who played
+    // last year is the same somebody this year, with the same cards.
+    const { data: existing, error: lookupError } = await supabaseAdmin
+      .from("participants")
+      .select("id, nickname")
+      .ilike("name", name)
+      .limit(1)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+
+    let participantId = existing?.id ?? null;
+    if (!participantId) {
+      const { data: created, error } = await supabaseAdmin
+        .from("participants")
+        .insert({ name, nickname })
+        .select("id")
+        .single();
+      if (error) throw error;
+      participantId = created.id;
+    } else if (nickname && !existing?.nickname) {
+      // Fill a blank nickname, never overwrite one they already have.
+      const { error } = await supabaseAdmin
+        .from("participants")
+        .update({ nickname })
+        .eq("id", participantId);
+      if (error) throw error;
+    }
+
+    // Already on this roster: a no-op rather than a second row. A double tap on
+    // a phone is the ordinary way to get here.
+    const { data: already, error: rosterError } = await supabaseAdmin
+      .from("event_participants")
+      .select("id")
+      .eq("event_id", data.eventId)
+      .eq("participant_id", participantId)
+      .maybeSingle();
+    if (rosterError) throw rosterError;
+    if (already) {
+      return { ok: true as const, participantId, created: false, alreadyOnRoster: true };
+    }
+
+    const { data: max } = await supabaseAdmin
+      .from("event_participants")
+      .select("running_order")
+      .eq("event_id", data.eventId)
+      .order("running_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const { error } = await supabaseAdmin.from("event_participants").insert({
+      event_id: data.eventId,
+      participant_id: participantId,
+      bib_number: null,
+      running_order: (max?.running_order ?? 0) + 1,
+    });
+    if (error) throw error;
+    return {
+      ok: true as const,
+      participantId,
+      created: !existing,
+      alreadyOnRoster: false,
+    };
+  });
+
 export const removeParticipantFromEvent = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d),
@@ -874,46 +968,34 @@ export const recordDraftSelection = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { count } = await supabaseAdmin
-      .from("draft_selections")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", data.eventId);
-    const { error } = await supabaseAdmin.from("draft_selections").insert({
-      event_id: data.eventId,
-      participant_id: data.participantId,
-      selection_order: (count ?? 0) + 1,
-      draft_position: data.draftPosition,
+    // One statement in the database rather than three writes from here. The
+    // insert and the roster stamp are the same transaction now: a failed stamp
+    // used to leave a square reading Open that UNIQUE(event_id, draft_position)
+    // then refused forever, and selection_order was count + 1 with no
+    // constraint, so two picks landing together shared a number.
+    const { draftDb } = await import("./draft-db.server");
+    const { data: order, error } = await draftDb().rpc("record_draft_selection", {
+      _event_id: data.eventId,
+      _participant_id: data.participantId,
+      _draft_position: data.draftPosition,
     });
-    if (error) throw error;
-    await supabaseAdmin
-      .from("event_participants")
-      .update({ selected_draft_position: data.draftPosition })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", data.participantId);
-    return { ok: true };
+    if (error) throw new Error(error.message);
+    return { ok: true as const, selectionOrder: order as number };
   });
 
 export const undoLastDraftSelection = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: last } = await supabaseAdmin
-      .from("draft_selections")
-      .select("*")
-      .eq("event_id", data.eventId)
-      .order("selection_order", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!last) return { ok: true };
-    await supabaseAdmin.from("draft_selections").delete().eq("id", last.id);
-    await supabaseAdmin
-      .from("event_participants")
-      .update({ selected_draft_position: null })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", last.participant_id);
-    return { ok: true };
+    const { draftDb } = await import("./draft-db.server");
+    const { data: undone, error } = await draftDb().rpc("undo_last_draft_selection", {
+      _event_id: data.eventId,
+    });
+    if (error) throw new Error(error.message);
+    // Null means the board was already empty. That used to return ok, so the
+    // screen said "Undid last pick" over a draft nobody had started.
+    if (!undone) return { ok: false as const, reason: "nothing-to-undo" as const };
+    return { ok: true as const, participantId: undone as string };
   });
 
 // ---------- Event ----------

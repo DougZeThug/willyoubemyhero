@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { newClientKey } from "@/lib/format";
 import { toast } from "sonner";
 import {
   ChevronDown,
@@ -113,6 +114,8 @@ export function SecretCardsPanel() {
   const uploadFn = useServerFn(uploadSecretCardArt);
   const deleteFn = useServerFn(deleteSecretCard);
   const grantFn = useServerFn(grantSecretCard);
+  /** See `grant` below: the in-flight grant key per card+recipient. */
+  const grantKeys = useRef(new Map<string, string>());
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -470,21 +473,32 @@ export function SecretCardsPanel() {
     }
     const who = roster.find((p) => p.id === participantId)?.name ?? "participant";
     setGrantingId(card.id);
-    const p = grantFn({ data: { participantId, cardId: card.id } }).then(async (r) => {
+    // One key per grant the commissioner meant to make, kept across a failure so
+    // a retry replays it rather than dealing a second copy. Keyed by card and
+    // recipient, so changing either starts a new grant.
+    const intent = `${card.id}:${participantId}`;
+    if (grantKeys.current.get(intent) === undefined) {
+      grantKeys.current.set(intent, newClientKey());
+    }
+    const grantKey = grantKeys.current.get(intent)!;
+    const p = grantFn({ data: { participantId, cardId: card.id, grantKey } }).then(async (r) => {
+      grantKeys.current.delete(intent);
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
       return r;
     });
     toast.promise(p, {
       loading: `Granting "${card.name}" to ${who}…`,
       success: (r) =>
-        r.duplicate
-          ? `${who} already had "${card.name}" — logged as a duplicate`
-          : // The commissioner's copy of a ceremony they cannot see: the recipient
-            // is somewhere else holding their own phone, and finds out through the
-            // realtime subscription on collection_trophies rather than from here.
-            r.completedCollection
-            ? `Granted "${card.name}" — that finished ${r.completedCollection.label} for ${who}`
-            : `Granted "${card.name}" to ${who}`,
+        r.repeat
+          ? `"${card.name}" was already granted to ${who}`
+          : r.duplicate
+            ? `${who} already had "${card.name}" — logged as a duplicate`
+            : // The commissioner's copy of a ceremony they cannot see: the recipient
+              // is somewhere else holding their own phone, and finds out through the
+              // realtime subscription on collection_trophies rather than from here.
+              r.completedCollection
+              ? `Granted "${card.name}" — that finished ${r.completedCollection.label} for ${who}`
+              : `Granted "${card.name}" to ${who}`,
       error: (e) => (e instanceof Error ? e.message : "Grant failed"),
     });
     try {

@@ -108,6 +108,7 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
     for (const method of [
       "eq",
       "neq",
+      "ilike",
       "in",
       "is",
       "not",
@@ -192,6 +193,10 @@ export function createSupabaseMock(responses: SupabaseResponses = {}) {
     /** The value passed to `.eq(column, value)` on a recorded call, if any. */
     eqValue(call: RecordedCall, column: string) {
       return call.filters.find((f) => f.method === "eq" && f.args[0] === column)?.args[1];
+    },
+    /** The argument bags one RPC was called with, in order. */
+    rpcCalls(name: string) {
+      return client.rpc.mock.calls.filter((c) => c[0] === name).map((c) => c[1]);
     },
   };
 }

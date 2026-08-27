@@ -265,9 +265,13 @@ export const adoptCollection = createServerFn({ method: "POST" })
  * Commissioner hands a player a card.
  *
  * The repair tool for a collection that was lost before adoption existed, so it
- * is deliberately unconditional — the card may well be one they already hold.
- * The copy is filed as `grant`, which keeps it out of the once-a-day pull index
- * and honest in the ledger about where it came from.
+ * deliberately allows a card they already hold. The copy is filed as `grant`,
+ * which keeps it out of the once-a-day pull index and honest in the ledger about
+ * where it came from.
+ *
+ * Idempotent per `grantKey`: a retry replays the first answer rather than
+ * dealing a second copy. Deliberately handing somebody two copies is still two
+ * grants, with two keys.
  */
 export const grantCard = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -277,19 +281,28 @@ export const grantCard = createServerFn({ method: "POST" })
         participantId: zuuid(),
         eventParticipantId: zuuid(),
         edition: z.enum(EDITION_IDS).optional(),
+        /**
+         * One key per grant the commissioner meant to make, held by the screen
+         * across a retry. Without it a request that timed out after committing
+         * handed out a real second copy on the next tap, in a game whose whole
+         * economy is scarcity.
+         */
+        grantKey: z.string().min(8).max(64),
       })
       .parse(d),
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const secrets = await db();
-    const { data: n, error } = await secrets.rpc("grant_card_copy", {
+    const { data: res, error } = await secrets.rpc("grant_card_copy_once", {
+      _grant_key: data.grantKey,
       _participant_id: data.participantId,
       _event_participant_id: data.eventParticipantId,
       _edition: data.edition ?? "standard",
     });
     if (error) throw new Error(error.message);
-    return { ok: true as const, copies: (n as number | null) ?? 0 };
+    const row = (res ?? {}) as { copies?: number; repeat?: boolean };
+    return { ok: true as const, copies: row.copies ?? 0, repeat: !!row.repeat };
   });
 
 /**

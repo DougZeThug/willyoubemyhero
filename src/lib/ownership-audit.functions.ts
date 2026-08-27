@@ -198,56 +198,17 @@ export const attachDeviceToPlayer = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
-    const sb = await admin();
 
-    const { data: participant, error: pError } = await sb
-      .from("participants")
-      .select("id, name")
-      .eq("id", data.participantId)
-      .maybeSingle();
-    if (pError) throw pError;
-    if (!participant) throw new Error("No such player");
-
-    const { error: secretsError } = await sb.rpc("claim_guest_secrets", {
-      _participant_id: data.participantId,
-      _guest_id: data.guestId,
-    });
-    if (secretsError) throw secretsError;
-
-    const { error: packsError } = await sb.rpc("claim_guest_packs", {
-      _participant_id: data.participantId,
-      _guest_id: data.guestId,
-    });
-    if (packsError) throw packsError;
-
-    // Same order everywhere this runs: packs first, then the claims keyed off
-    // them, so a rescued guest cannot re-earn milestones they already collected.
+    // One statement, because the confirm on the button says "This can't be
+    // undone" and meant it: three sequential RPCs plus the account repair could
+    // half-apply, and the half where packs moved but their milestone claims did
+    // not is the one that pays a milestone a second time.
     const { streaksDb } = await import("./streaks-db.server");
-    const { error: streakError } = await streaksDb().rpc("claim_guest_streak_milestones", {
+    const { data: res, error } = await streaksDb().rpc("attach_device_to_player", {
       _participant_id: data.participantId,
       _guest_id: data.guestId,
     });
-    if (streakError) throw streakError;
-
-    // An account sitting on this device with no player of its own would keep
-    // acting as a guest on its next visit, re-stranding new pulls.
-    const { data: identity } = await sb
-      .from("account_identities")
-      .select("user_id, participant_id")
-      .eq("guest_id", data.guestId)
-      .maybeSingle();
-    if (identity && !identity.participant_id) {
-      const { error } = await sb
-        .from("account_identities")
-        .update({ participant_id: data.participantId })
-        .eq("user_id", identity.user_id);
-      if (error) throw error;
-    }
-
-    const { count } = await sb
-      .from("secret_card_pulls")
-      .select("id", { count: "exact", head: true })
-      .eq("participant_id", data.participantId);
-
-    return { name: participant.name, secrets: count ?? 0 };
+    if (error) throw new Error(error.message);
+    const row = (res ?? {}) as { name?: string; secrets?: number };
+    return { name: row.name ?? "", secrets: row.secrets ?? 0 };
   });

@@ -7,11 +7,7 @@ import { verifyEventPin, startAdminSessionFromAccount } from "@/lib/admin.functi
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
 import { useAuthUser } from "@/hooks/use-account";
 import { setParticipantStatus, resetCombine } from "@/lib/admin-write.functions";
-import {
-  upsertParticipant,
-  addParticipantToEvent,
-  removeParticipantFromEvent,
-} from "@/lib/admin-write.functions";
+import { addPlayerToRoster, removeParticipantFromEvent } from "@/lib/admin-write.functions";
 import {
   archiveEvent,
   uploadParticipantPhoto,
@@ -955,8 +951,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
 
 function AddPlayerPanel({ eventId }: { eventId: string }) {
   const qc = useQueryClient();
-  const upsertFn = useServerFn(upsertParticipant);
-  const addFn = useServerFn(addParticipantToEvent);
+  const addFn = useServerFn(addPlayerToRoster);
   const removeFn = useServerFn(removeParticipantFromEvent);
   const statusFn = useServerFn(setParticipantStatus);
   const resetFn = useServerFn(resetCombine);
@@ -972,18 +967,22 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
     if (!trimmed) return;
     setBusy(true);
     try {
-      const p = await upsertFn({
-        data: {
-          eventId,
-          name: trimmed,
-          nickname: nickname.trim() || null,
-        },
+      // One call, not two: creating the person and putting them on the roster
+      // used to be separate, so a failure between them left somebody created and
+      // not on the roster — and retyping the name made a second person.
+      const res = await addFn({
+        data: { eventId, name: trimmed, nickname: nickname.trim() || null },
       });
-      await addFn({ data: { eventId, participantId: p.id } });
       await qc.invalidateQueries();
       setName("");
       setNickname("");
-      toast.success(`Added ${trimmed}`);
+      toast.success(
+        res.alreadyOnRoster
+          ? `${trimmed} is already on the roster`
+          : res.created
+            ? `Added ${trimmed}`
+            : `Added ${trimmed} back to the field`,
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add player");
     } finally {

@@ -48,6 +48,9 @@ const SERVER_ONLY = [
   "public.event_secrets",
   // Salted claim codes. Readable means anyone can claim any player.
   "public.member_codes",
+  // The commissioner's grant ledger: who was quietly handed which card, which is
+  // nobody else's business in a league that trades on scarcity.
+  "public.admin_grants",
   // The secret ballot, before the reveal.
   "public.award_votes",
   // Both of these shipped publicly readable and were locked down afterwards by

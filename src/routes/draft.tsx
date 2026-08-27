@@ -95,9 +95,12 @@ function DraftPage() {
     if (!event?.id) return;
     setBusy(true);
     try {
-      await undoFn({ data: { eventId: event.id } });
+      const res = await undoFn({ data: { eventId: event.id } });
       await refresh();
-      toast.success("Undid last pick");
+      // An empty board used to answer ok, so this said "Undid last pick" over a
+      // draft nobody had started.
+      if (res.ok) toast.success("Undid last pick");
+      else toast.info("No picks to undo yet");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
