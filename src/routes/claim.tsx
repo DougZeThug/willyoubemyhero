@@ -72,14 +72,28 @@ function ClaimPage() {
         setCode("");
         return;
       }
+      // The token has to land first — `adoptCollection` authenticates as the
+      // member it is filing cards for. But the moment it lands, the collection
+      // hook starts reconciling this device against a server record that has
+      // never heard of these guest cards, and an empty `card_pulls` reads as
+      // "you own nothing" rather than "we don't know", so it deletes them. So if
+      // adoption does not stick, the token comes straight back off: no member,
+      // no reconciliation, nothing pruned, and the code still works next time.
       setMemberToken(res.token, res.name);
-      // The cards packed as a guest come with them. Awaited so /players already
-      // shows them, swallowed because a claim that worked outranks an upload
-      // that didn't — the commissioner can hand a card back either way.
       try {
         await adoptLocalCollection(held);
       } catch {
-        /* the claim stands; the cards can be granted or re-packed */
+        try {
+          // One retry, because the usual failure here is a flaky first request
+          // from a phone that has just woken up on garden wifi.
+          await adoptLocalCollection(held);
+        } catch {
+          clearMemberToken();
+          toast.error(
+            "Claimed, but your cards couldn't be transferred — your code still works, try again on a better connection.",
+          );
+          return;
+        }
       }
       // Signed in? Then the player follows the account, not the handset. Awaited
       // so the next screen's reads already see the bound identity, swallowed
@@ -91,6 +105,7 @@ function ClaimPage() {
           /* the claim stands; signing in again re-runs the adoption */
         }
       }
+
       toast.success(`Welcome, ${res.name}`);
       navigate({ to: "/players" });
     } catch (err) {
