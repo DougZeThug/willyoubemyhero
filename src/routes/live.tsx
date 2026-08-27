@@ -270,10 +270,10 @@ function LivePage() {
         </Card>
       </div>
       <FinishCelebration
-        name={celebration?.name ?? null}
-        timeMs={celebration?.timeMs ?? null}
-        deltaMs={celebration?.deltaMs ?? null}
-        onDone={() => setCelebration(null)}
+        name={currentCelebration?.name ?? null}
+        timeMs={currentCelebration?.timeMs ?? null}
+        deltaMs={currentCelebration?.deltaMs ?? null}
+        onDone={() => setCelebrationQueue((q) => q.slice(1))}
       />
     </div>
   );
