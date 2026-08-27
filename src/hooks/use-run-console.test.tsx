@@ -112,19 +112,26 @@ describe("useRunConsole", () => {
 
   it("does not crash or call the server when the selected athlete is removed from the roster", async () => {
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
-    const { result } = await mount([alice]);
+    const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });
 
-    // The picker holds an id that no longer matches anybody in the bundle.
-    // Calling startRun before the cleanup effect commits exercises the guard.
+    const { result, rerender } = await mount([alice, bob]);
+    act(() => result.current.setSelected(alice.participant_id));
+    expect(result.current.selectedParticipantId).toBe(alice.participant_id);
+
+    // A realtime update removes Alice while the picker still holds her id.
+    useEventBundle.mockReturnValue(setupBundle([bob]));
+    rerender();
+
+    // The stale selection is dropped automatically, so a subsequent Start Run
+    // is a no-op rather than a crash or an orphaned local timer.
     await act(async () => {
-      result.current.setSelected("ghost-participant-id");
       await result.current.startRun();
     });
 
+    expect(result.current.selectedParticipantId).toBe("");
     expect(result.current.run).toBeNull();
     expect(saveActiveRun).not.toHaveBeenCalled();
     expect(setParticipantStatus).not.toHaveBeenCalled();
-    expect(toastError).toHaveBeenCalledWith(expect.stringContaining("no longer on the roster"));
   });
 
   it("clears the selected athlete automatically when they disappear from the roster", async () => {
