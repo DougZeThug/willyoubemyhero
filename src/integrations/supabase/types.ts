@@ -2089,6 +2089,14 @@ export type Database = {
         }
         Returns: Json
       }
+      record_draft_selection: {
+        Args: {
+          _draft_position: number
+          _event_id: string
+          _participant_id: string
+        }
+        Returns: number
+      }
       record_pack_open: {
         Args: {
           _card_count?: number
@@ -2160,6 +2168,10 @@ export type Database = {
       trade_summary: {
         Args: { _giver_side: string; _offer_id: string }
         Returns: Json
+      }
+      undo_last_draft_selection: {
+        Args: { _event_id: string }
+        Returns: string
       }
     }
     Enums: {
