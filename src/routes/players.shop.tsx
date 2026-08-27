@@ -15,6 +15,7 @@ import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import type { RosterCardLookup } from "@/components/trade-offer-card";
 import { DustShopPanel } from "@/components/dust-shop";
 import { MarketPanel } from "@/components/market-panel";
+import { FeedError, FeedLoading } from "@/components/feed-state";
 import { dustLive } from "@/lib/dust";
 
 export const Route = createFileRoute("/players/shop")({
