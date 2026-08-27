@@ -114,6 +114,26 @@ function ShopPage() {
     };
   }, [bundle, cards.data, rarities]);
 
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <FeedLoading label="Reading the combine…" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-6xl px-4 py-6">
