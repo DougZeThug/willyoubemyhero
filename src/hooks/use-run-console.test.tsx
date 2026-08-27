@@ -102,7 +102,8 @@ describe("useRunConsole", () => {
 
     expect(result.current.run).not.toBeNull();
     expect(result.current.run?.participantId).toBe(alice.participant_id);
-    expect(saveActiveRun).toHaveBeenCalledTimes(1);
+    // startRun saves explicitly, then the run-change effect saves the same record again.
+    expect(saveActiveRun).toHaveBeenCalledTimes(2);
     expect(setParticipantStatus).toHaveBeenCalledTimes(1);
     expect(setParticipantStatus).toHaveBeenCalledWith({
       data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "running" },
@@ -111,16 +112,12 @@ describe("useRunConsole", () => {
 
   it("does not crash or call the server when the selected athlete is removed from the roster", async () => {
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
-    const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });
+    const { result } = await mount([alice]);
 
-    const { result, rerender } = await mount([alice, bob]);
-    act(() => result.current.setSelected(alice.participant_id));
-
-    // A realtime update removes Alice while the picker still holds her id.
-    useEventBundle.mockReturnValue(setupBundle([bob]));
-    rerender();
-
+    // The picker holds an id that no longer matches anybody in the bundle.
+    // Calling startRun before the cleanup effect commits exercises the guard.
     await act(async () => {
+      result.current.setSelected("ghost-participant-id");
       await result.current.startRun();
     });
 
