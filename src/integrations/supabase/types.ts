@@ -67,6 +67,51 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_grants: {
+        Row: {
+          created_at: string
+          event_participant_id: string | null
+          grant_key: string
+          kind: string
+          participant_id: string
+          result: Json | null
+          secret_card_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_participant_id?: string | null
+          grant_key: string
+          kind: string
+          participant_id: string
+          result?: Json | null
+          secret_card_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_participant_id?: string | null
+          grant_key?: string
+          kind?: string
+          participant_id?: string
+          result?: Json | null
+          secret_card_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_grants_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_grants_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -2033,9 +2078,27 @@ export type Database = {
         }
         Returns: number
       }
+      grant_card_copy_once: {
+        Args: {
+          _edition?: string
+          _event_participant_id: string
+          _grant_key: string
+          _participant_id: string
+        }
+        Returns: Json
+      }
       grant_secret_card: {
         Args: {
           _event_id: string
+          _participant_id: string
+          _secret_card_id: string
+        }
+        Returns: Json
+      }
+      grant_secret_card_once: {
+        Args: {
+          _event_id: string
+          _grant_key: string
           _participant_id: string
           _secret_card_id: string
         }
