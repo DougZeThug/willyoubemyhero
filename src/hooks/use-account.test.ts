@@ -6,7 +6,7 @@ const signOutMock = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     auth: {
-      signOut: signOutMock,
+      signOut: () => signOutMock(),
     },
   },
 }));
