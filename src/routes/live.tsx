@@ -79,7 +79,9 @@ function LivePage() {
     };
   }, [bundle]);
 
-  useFinishWatcher(bundle, (finish) => setCelebration(finish));
+  useFinishWatcher(bundle, (finish) => {
+    setCelebrationQueue((q) => [...q, finish]);
+  });
 
   // Memoised on the stamp rather than recomputed each render: HudTimer restarts
   // its interpolation whenever runningSinceMs changes, so a fresh Date.now()
