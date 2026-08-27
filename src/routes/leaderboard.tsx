@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
 import { ResultCard } from "@/components/result-card";
-import { exportCardPng } from "@/lib/share-card";
+import { exportCardPng, waitForPaint } from "@/lib/share-card";
+import { toast } from "sonner";
 import { standings } from "@/lib/standings";
 
 export const Route = createFileRoute("/leaderboard")({
@@ -74,13 +75,20 @@ function LeaderboardPage() {
 
   async function handleShare(runId: string) {
     setSharingRunId(runId);
-    // wait a tick for offscreen render
-    await new Promise((r) => setTimeout(r, 100));
     try {
-      if (cardRef.current) {
-        const filename = `combine-${runId.slice(0, 8)}.png`;
-        await exportCardPng(cardRef.current, filename);
-      }
+      // The offscreen card mounts on the render this state change causes, so
+      // one frame is what it takes for the ref to be filled. The fixed 100ms
+      // this replaces was also a complete no-op when it was not: no catch,
+      // no node, no card, no message.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      const node = cardRef.current;
+      if (!node) throw new Error("Share card not ready");
+      await waitForPaint(node);
+      await exportCardPng(node, `combine-${runId.slice(0, 8)}.png`);
+    } catch (e) {
+      // It used to be try/finally with no catch at all: an unhandled
+      // rejection, and a screen reader user got nothing whatsoever.
+      toast.error(e instanceof Error ? e.message : "Could not export that card");
     } finally {
       setSharingRunId(null);
     }

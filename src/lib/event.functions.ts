@@ -80,7 +80,14 @@ export const getEventBundle = createServerFn({ method: "GET" })
       ),
       safe(
         "splits",
-        sb.from("splits").select("*, run:runs!inner(event_id)").eq("run.event_id", data.eventId),
+        // Ordered, because the exported card renders them in the order they
+        // arrive and PostgREST guarantees none without this — so the same
+        // card could ship with its stations shuffled.
+        sb
+          .from("splits")
+          .select("*, run:runs!inner(event_id)")
+          .eq("run.event_id", data.eventId)
+          .order("cumulative_time_ms", { ascending: true }),
       ),
       safe(
         "penalties",

@@ -42,7 +42,11 @@ export const Route = createFileRoute("/auth")({
         content: "Keep your combine card collection on every phone you play from.",
       },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      // `summary`, not `summary_large_image`: a large card with no og:image
+      // renders as a big empty rectangle, and every link to this app went into
+      // a group chat looking like that. Switch it back the day a route sets an
+      // og:image worth the space.
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,

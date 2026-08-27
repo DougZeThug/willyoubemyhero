@@ -275,3 +275,39 @@ describe("useRunConsole", () => {
     });
   });
 });
+
+describe("which stations the console offers", () => {
+  // "Record a split here" saved faithfully and changed nothing: the panel wrote
+  // split_enabled, the console filtered on `active` alone, and the switch was a
+  // control that confirmed and lied.
+  function station(over: Record<string, unknown>) {
+    return {
+      id: uuid(),
+      event_id: EVENT_ID,
+      name: "Sled",
+      short_name: null,
+      station_order: 1,
+      active: true,
+      split_enabled: true,
+      penalty_amount_ms: 0,
+      ...over,
+    };
+  }
+
+  it("skips a station with split recording switched off", async () => {
+    const on = station({ name: "Sled", station_order: 1 });
+    const off = station({ name: "Wall", station_order: 2, split_enabled: false });
+    const inactive = station({ name: "Rings", station_order: 3, active: false });
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+
+    useEventBundle.mockReturnValue({
+      ...setupBundle([alice]),
+      bundle: makeBundle({ participants: [alice], stations: [on, off, inactive] }),
+    });
+    const { useRunConsole } = await import("./use-run-console");
+    const { wrapper } = createQueryWrapper();
+    const { result } = renderHook(() => useRunConsole(), { wrapper });
+
+    expect(result.current.stations.map((s) => s.name)).toEqual(["Sled"]);
+  });
+});

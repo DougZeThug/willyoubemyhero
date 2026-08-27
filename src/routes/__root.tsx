@@ -100,7 +100,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "A pack a day, secret pulls, trades, dust and trophies — and the combine board when game day comes back around.",
       },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      // `summary`, not `summary_large_image`: a large card with no og:image
+      // renders as a big empty rectangle, and every link to this app went into
+      // a group chat looking like that. Switch it back the day a route sets an
+      // og:image worth the space.
+      { name: "twitter:card", content: "summary" },
     ],
     links: [
       {

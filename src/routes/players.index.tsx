@@ -350,13 +350,18 @@ function PlayersPage() {
   const visibleSecrets = useMemo(
     () =>
       order.flatMap((id) => {
+        // A rolled-up shelf is not on screen. Walking the whole order meant
+        // swiping past the end of an open shelf landed on a card from a
+        // closed one — which is the opposite of what the comment above
+        // promises and what the gesture looks like it is doing.
+        if (collapsed.has(id)) return [];
         const section = sectionsById.get(id);
         if (section?.kind === "secrets") return section.items;
         if (section?.kind === "favourites")
           return section.items.flatMap((f) => (f.kind === "secret" ? [f.card] : []));
         return [];
       }),
-    [order, sectionsById],
+    [order, sectionsById, collapsed],
   );
 
   /**

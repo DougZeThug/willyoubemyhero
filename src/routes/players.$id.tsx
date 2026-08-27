@@ -36,7 +36,7 @@ import {
   type Edition,
 } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
-import { requestGyroPermission } from "@/lib/gyro";
+import { requestGyroAccess } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { CardSocial } from "@/components/card-social";
@@ -64,8 +64,8 @@ import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
 import { rarityMap, rarityStyle, TIER_REASON, type Rarity } from "@/lib/card-rarity";
 import { cardStats } from "@/lib/card-stats";
-import { playEditionShine, playReveal, useCardSfx } from "@/lib/card-sfx";
-import { exportCardPng } from "@/lib/share-card";
+import { playEditionShine, playFlip, playReveal, useCardSfx } from "@/lib/card-sfx";
+import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
@@ -128,7 +128,10 @@ function PlayerCardPage() {
   const [gyro, setGyro] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
-  const [comparing, setComparing] = useState(false);
+  // Seeded from the search parameter, which is the whole reason it exists:
+  // `?vs=` is a link you drop in the group chat, and the recipient used to
+  // land on the left card with the chip lit and have to tap it themselves.
+  const [comparing, setComparing] = useState(!!vs);
   const shareRef = useRef<HTMLDivElement>(null);
 
   // Roster in running order gives prev/next a stable, meaningful sequence.
@@ -377,10 +380,12 @@ function PlayerCardPage() {
     try {
       // Signed storage URLs expire after an hour; a stale one rasterises blank.
       await qc.refetchQueries({ queryKey: ["card-urls", event?.id] });
-      // Let the refreshed <img> paint before html-to-image walks the DOM.
-      await new Promise((r) => setTimeout(r, 350));
       const node = shareRef.current;
       if (!node) throw new Error("Share card not ready");
+      // Waited on rather than guessed at: a fixed delay is either too long
+      // on wifi or too short on a phone in a garden, and too short means a
+      // shared card showing initials where a face should be.
+      await waitForPaint(node);
       await exportCardPng(node, `${name.replace(/\s+/g, "-").toLowerCase()}-card.png`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not export card");
@@ -406,9 +411,16 @@ function PlayerCardPage() {
       setGyro(false);
       return;
     }
-    const granted = await requestGyroPermission();
-    if (!granted) {
-      toast.error("Motion access denied");
+    const access = await requestGyroAccess();
+    if (access !== "granted") {
+      // Told apart, because they are different problems with different
+      // answers. The chip used to light on a desktop browser and nothing
+      // moved, with no message at all.
+      toast.error(
+        access === "denied"
+          ? "Motion access denied"
+          : "This device has no motion sensor — try it on a phone.",
+      );
       return;
     }
     setGyro(true);
@@ -537,7 +549,13 @@ function PlayerCardPage() {
               ) : (
                 <ZoomPanFrame
                   onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
-                  onTap={() => setFlipped((f) => !f)}
+                  onTap={() => {
+                    // The zoom frame swallows the click, so HoloCard's own
+                    // toggle — and the sound that rides on it — never fires
+                    // on either full-size surface.
+                    playFlip();
+                    setFlipped((f) => !f);
+                  }}
                   canNavigate={roster.length > 1}
                   prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
                   nextLabel={`Next: ${next?.participant?.name ?? ""}`}
@@ -637,7 +655,10 @@ function PlayerCardPage() {
               face-down — there is no face to turn, export or line up against
               another. The settings below them still apply to the card you get. */}
           <ActionButton
-            onClick={() => setFlipped((f) => !f)}
+            onClick={() => {
+              playFlip();
+              setFlipped((f) => !f);
+            }}
             active={flipped}
             disabled={locked}
             icon={<RotateCw className="h-3.5 w-3.5" />}

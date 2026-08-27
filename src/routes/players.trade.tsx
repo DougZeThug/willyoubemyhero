@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, ArrowLeftRight, Inbox, Send } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { CollectionComplete } from "@/components/collection-complete";
+import { PresentationMode } from "@/components/presentation-mode";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
@@ -319,6 +320,11 @@ function TradePage() {
       {/* Outside the page column and above everything, the same way the pack
           screen mounts it. Shifting the queue on dismiss is what plays the second
           one when a single trade closed two sets. */}
+      {/* PresentationMode is what fades the nav bars out from under a
+          full-screen moment. Without it they stayed live — focusable, and
+          tappable at the edges — under a ceremony every other screen pairs
+          the two for. */}
+      <PresentationMode active={!!completions[0]} />
       {completions[0] && (
         <CollectionComplete
           key={completions[0].collection}
