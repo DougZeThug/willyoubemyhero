@@ -49,7 +49,7 @@ export const Route = createFileRoute("/players/shop")({
  * underneath it rather than the headline.
  */
 function ShopPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, loading, error, refetch } = useEventBundle();
   const member = useMemberSession();
   const participantId = member?.participantId ?? null;
   const actor = useSecretActor();
