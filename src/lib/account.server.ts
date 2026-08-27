@@ -143,14 +143,27 @@ export async function syncAccount(
   // than a guest id, so the account is upgraded and the guest's secrets ride along.
   if (identity.kind === "guest" && device.memberId) {
     const guestId = identity.id;
-    identity = { kind: "member", id: device.memberId };
-    const { error } = await supabaseAdmin
+    // Guarded so a bindParticipant racing this call cannot be overwritten: only
+    // a still-unbound row is upgraded, otherwise the winner's binding stands.
+    const { data: upgraded, error } = await supabaseAdmin
       .from("account_identities")
       .update({ participant_id: device.memberId, guest_id: null })
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("participant_id", null)
+      .select("user_id, participant_id, guest_id");
     if (error) throw error;
-    await mergeGuestInto(identity, guestId);
+    if (upgraded && upgraded.length > 0) {
+      identity = { kind: "member", id: device.memberId };
+      await mergeGuestInto(identity, guestId);
+    } else {
+      const winner = await readRow(userId);
+      if (winner?.participant_id) {
+        identity = { kind: "member", id: winner.participant_id };
+        await mergeGuestInto(identity, guestId);
+      }
+    }
   }
+
 
   // A different guest id on this phone — pulls made here before signing in, or on
   // a second handset — is folded into the account's collection.
