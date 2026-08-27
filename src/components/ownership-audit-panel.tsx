@@ -169,6 +169,9 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
                         )}
                         <div className="flex gap-2">
                           <select
+                            // Every neighbouring dropdown carries one; this
+                            // was the only one announcing itself as "combo box".
+                            aria-label="Which player this device belongs to"
                             className="min-h-10 w-full min-w-0 rounded-md border border-primary/30 bg-background px-2 text-xs uppercase tracking-wider text-foreground"
                             value={targets[d.guestId] ?? ""}
                             onChange={(e) =>

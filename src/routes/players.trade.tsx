@@ -34,7 +34,7 @@ import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import {
   BLOCKED_LABEL,
-  tradeSummaryLabel,
+  tradeSummaryParts,
   type TradeItemView,
   type TradeSpares,
 } from "@/lib/trades";
@@ -591,12 +591,13 @@ function SectionTitle({
 /**
  * The feed's summary, with the traded card named in the accent colour.
  *
- * `tradeSummaryLabel` already decides the wording; this only splits its result
- * on the separator so each named piece can be lit up rather than reading as one
- * grey run of text.
+ * `tradeSummaryParts` already decides the wording, piece by piece, so each
+ * one can be lit up rather than reading as one grey run of text. It used to
+ * take the joined label and split it back apart on " + ", which cut a secret
+ * named "Salt + Pepper" in half.
  */
-function SummaryText({ items }: { items: Parameters<typeof tradeSummaryLabel>[0] }) {
-  const parts = tradeSummaryLabel(items).split(" + ");
+function SummaryText({ items }: { items: Parameters<typeof tradeSummaryParts>[0] }) {
+  const parts = tradeSummaryParts(items);
   return (
     <>
       {parts.map((part, i) => (

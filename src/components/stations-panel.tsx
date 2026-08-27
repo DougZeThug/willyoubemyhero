@@ -66,7 +66,7 @@ function toDraft(s: StationRow): Draft {
  * timing console.
  */
 export function StationsPanel({ eventId }: { eventId: string }) {
-  const { bundle } = useEventBundle();
+  const { bundle, failedTables } = useEventBundle();
   const qc = useQueryClient();
   const saveFn = useServerFn(upsertStation);
   const removeFn = useServerFn(deleteStation);
@@ -106,6 +106,15 @@ export function StationsPanel({ eventId }: { eventId: string }) {
   }, [bundle?.splits, bundle?.penalties]);
 
   const hasRuns = (bundle?.runs ?? []).length > 0;
+
+  // An empty splits list is only trustworthy when the read SUCCEEDED. The
+  // bundle coalesces a failed table read to an empty array, so without this
+  // the "this station has recorded times" guard came off at exactly the
+  // moment the times could not be seen — the delete then cascades.
+  const usageUnknown =
+    failedTables.includes("splits") ||
+    failedTables.includes("penalties") ||
+    failedTables.includes("runs");
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
 
@@ -206,6 +215,10 @@ export function StationsPanel({ eventId }: { eventId: string }) {
   }
 
   async function onDelete(s: StationRow) {
+    if (usageUnknown) {
+      toast.error("Can't read this event's times just now — try again in a moment");
+      return;
+    }
     if (used.has(s.id)) {
       toast.error(`${s.name} has recorded times — switch it to inactive instead`);
       return;

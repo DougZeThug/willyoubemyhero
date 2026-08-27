@@ -274,7 +274,11 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                   <div className="truncate text-[11px] text-muted-foreground">{item.file.name}</div>
                   {item.oversize ? (
                     <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-destructive">
-                      <AlertTriangle className="h-3 w-3 shrink-0" /> Over 12 MB
+                      {/* The number, from the constant, rather than a hand-typed one that had
+    drifted: it read "Over 12 MB" against an 8.8 MB cap, so a 10 MB file
+    was correctly rejected and then labelled with a number it is under. */}
+                      <AlertTriangle className="h-3 w-3 shrink-0" /> Over{" "}
+                      {Math.round(MAX_BYTES / 100_000) / 10} MB
                     </div>
                   ) : (
                     // text-base below sm: anything under 16px makes iOS Safari

@@ -28,7 +28,6 @@ import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-c
 import {
   cardBadge,
   editionCelebrates,
-  editionLabel,
   editionOddsLabel,
   editionRank,
   editionStyle,
@@ -107,7 +106,11 @@ export const Route = createFileRoute("/players/$id")({
 
 function PlayerCardPage() {
   const { id } = Route.useParams();
-  const { vs } = Route.useSearch();
+  const rawVs = Route.useSearch().vs;
+  // The picker filters the current player out; a hand-edited URL did not,
+  // which gave a comparison of somebody against themselves with every row a
+  // tie. validateSearch cannot do this — it never sees the path params.
+  const vs = rawVs === id ? undefined : rawVs;
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { event, bundle, loading, error, realtimeDegraded } = useEventBundle();

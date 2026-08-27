@@ -13,7 +13,7 @@ import type { SecretTier } from "./secret-rarity";
  * actually changed hands, and nothing else. Art, flavour, foil and tier stay
  * server-only, and an untraded card still appears nowhere, so the catalogue is
  * not enumerable from this table. Do not widen it further — see the column
- * comments in 20260825140000_trade_feed_secret_names.sql.
+ * comments in 20260827130000_name_traded_secrets.sql.
  *
  * Both fields are optional because rows written before that migration, and any
  * whose card row has since gone, carry neither.
@@ -212,7 +212,7 @@ export function offerStatusLabel(status: string): string {
  * dead code. Roster items are still counted, never named: naming them would mean
  * resolving an event_participant_id, which this pure function cannot do.
  */
-export function tradeSummaryLabel(items: readonly TradeSummaryItem[]): string {
+export function tradeSummaryParts(items: readonly TradeSummaryItem[]): string[] {
   const roster = items.filter((i) => i.kind === "roster").length;
   const named = items.flatMap((i) => (i.kind === "secret" && i.name ? [i.name] : []));
   const nameless = items.length - roster - named.length;
@@ -220,6 +220,18 @@ export function tradeSummaryLabel(items: readonly TradeSummaryItem[]): string {
   if (roster > 0) parts.push(`${roster} card${roster === 1 ? "" : "s"}`);
   parts.push(...named);
   if (nameless > 0) parts.push(nameless === 1 ? "a secret" : `${nameless} secrets`);
+  return parts;
+}
+
+/**
+ * The same summary as one string.
+ *
+ * The parts are exported separately because the feed highlights each one,
+ * and it used to get them by splitting this result back apart on " + " — so
+ * a secret named "Salt + Pepper" rendered as two separately lit pieces.
+ */
+export function tradeSummaryLabel(items: readonly TradeSummaryItem[]): string {
+  const parts = tradeSummaryParts(items);
   return parts.length ? parts.join(" + ") : "nothing";
 }
 

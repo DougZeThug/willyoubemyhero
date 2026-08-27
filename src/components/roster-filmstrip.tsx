@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { HoloCard } from "@/components/holo-card";
 import { initialsOf } from "@/lib/format";
 import type { Rarity } from "@/lib/card-rarity";
+import type { Edition } from "@/lib/card-edition";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,12 @@ export type FilmstripEntry = {
   name: string;
   frontUrl: ImageUrlSet | string | null;
   rarity: Rarity;
+  /**
+   * The finish, which the caller has always computed and this component
+   * never declared — so every thumbnail rendered standard and a mythic on
+   * the strip looked like everything else.
+   */
+  edition?: Edition;
 };
 
 /**
@@ -92,6 +99,7 @@ export function RosterFilmstrip({
                   backUrl={null}
                   name={entry.name}
                   rarity={entry.rarity}
+                  edition={entry.edition}
                   intensity="subtle"
                   interactive={false}
                 />

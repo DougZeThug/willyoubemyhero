@@ -255,7 +255,7 @@ describe("useRunConsole", () => {
     expect(clearActiveRun).toHaveBeenCalled();
   });
 
-  it("cancels the active run and resets the athlete to queued", async () => {
+  it("cancels the active run and puts the athlete back to waiting", async () => {
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
     const { result } = await mount([alice]);
 
@@ -270,8 +270,11 @@ describe("useRunConsole", () => {
 
     expect(result.current.run).toBeNull();
     expect(clearActiveRun).toHaveBeenCalled();
+    // "waiting", the schema default and the word players see. This was the only
+    // reset in the app that wrote "queued"; both behave identically, and one
+    // vocabulary is worth more than the coin-flip.
     expect(setParticipantStatus).toHaveBeenCalledWith({
-      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "queued" },
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "waiting" },
     });
   });
 });

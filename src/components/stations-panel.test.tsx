@@ -18,8 +18,12 @@ vi.mock("@tanstack/react-start", async (importOriginal) => ({
 const bundle = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
 }));
+const failedTables = vi.hoisted(() => ({ current: [] as string[] }));
 vi.mock("@/hooks/use-event-bundle", () => ({
-  useEventBundle: () => ({ bundle: bundle.current }),
+  // `failedTables` matters here: the panel refuses a delete when it cannot tell
+  // whether the station has recorded times, and an empty list is only
+  // trustworthy when the read succeeded.
+  useEventBundle: () => ({ bundle: bundle.current, failedTables: failedTables.current }),
 }));
 
 const EVENT = "00000000-0000-4000-8000-0000000000ff";
@@ -55,6 +59,7 @@ beforeEach(() => {
     splits: [],
     penalties: [],
   };
+  failedTables.current = [];
 });
 
 describe("StationsPanel", () => {
@@ -137,5 +142,20 @@ describe("StationsPanel bulk rename", () => {
 
     expect(serverFnMock).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith("Every station needs a name");
+  });
+});
+
+describe("StationsPanel when the times cannot be read", () => {
+  it("refuses a delete rather than trusting an empty splits list", async () => {
+    // getEventBundle coalesces a failed table read to an empty array, so the
+    // "this station has recorded times" guard came off at exactly the moment
+    // the times could not be seen — and the delete cascades every split at it.
+    failedTables.current = ["splits"];
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /Sprint/ }));
+    await userEvent.click(await screen.findByLabelText("Delete station"));
+
+    expect(serverFnMock).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/can't read/i));
   });
 });

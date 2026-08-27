@@ -215,6 +215,19 @@ async function storeCard(
   dataUrls: SizedDataUrls,
 ) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+  // What this is about to replace, read before the write. The card-back and
+  // secret-art uploads both do this; the player-card one did not, so storage
+  // kept every version ever uploaded — and the path carries a timestamp, so
+  // nothing ever overwrote anything.
+  const { data: prev } = await supabaseAdmin
+    .from("event_participants")
+    .select(
+      "card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium",
+    )
+    .eq("id", eventParticipantId)
+    .maybeSingle();
+
   const basePath = `cards/${eventId}/${eventParticipantId}-${side}-${Date.now()}`;
   const paths = await uploadSized(supabaseAdmin, basePath, dataUrls);
 
@@ -223,6 +236,16 @@ async function storeCard(
     .update(cardPatch(side, paths))
     .eq("id", eventParticipantId);
   if (dbErr) throw dbErr;
+
+  // Only after the row points at the new files, for the reason
+  // deleteEventCardBack states: a failed write after a delete leaves the row
+  // pointing at ghosts.
+  await removePaths(
+    supabaseAdmin,
+    side === "front"
+      ? [prev?.card_path, prev?.card_path_thumb, prev?.card_path_medium]
+      : [prev?.card_back_path, prev?.card_back_path_thumb, prev?.card_back_path_medium],
+  );
 
   return { urls: await signSet(paths), paths };
 }

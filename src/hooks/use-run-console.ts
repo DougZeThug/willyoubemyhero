@@ -218,7 +218,10 @@ export function useRunConsole() {
     if (ep && event?.id) {
       try {
         await setStatusFn({
-          data: { eventId: event.id, eventParticipantId: ep.id, status: "queued" },
+          // "waiting", like every other reset in the app: it is the schema
+          // default and the word players actually see. "queued" behaves
+          // identically and was the only place that wrote it.
+          data: { eventId: event.id, eventParticipantId: ep.id, status: "waiting" },
         });
       } catch {
         /* ignore */

@@ -39,7 +39,7 @@ function TvPage() {
 
   if ((loading || error) && !bundle) {
     return (
-      <div className="circuit-bg -mx-4 -mb-8 -mt-4 grid min-h-screen place-items-center px-8 py-8 sm:-mx-6 sm:px-10">
+      <div className="circuit-bg grid min-h-screen place-items-center px-8 py-8 sm:px-10">
         <div className="text-center">
           <div className="font-display text-4xl font-black uppercase tracking-[0.2em] text-muted-foreground">
             {error ? "Can't reach the combine" : "Reading the combine…"}
@@ -58,7 +58,7 @@ function TvPage() {
   }
 
   return (
-    <div className="circuit-bg -mx-4 -mb-8 -mt-4 min-h-screen px-8 py-8 sm:-mx-6 sm:px-10">
+    <div className="circuit-bg min-h-screen px-8 py-8 sm:px-10">
       {(realtimeDegraded || !!error) && (
         <div className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-4 py-2 text-center font-display text-lg font-black uppercase tracking-[0.2em] text-warn">
           Live feed down — refreshing every few seconds
