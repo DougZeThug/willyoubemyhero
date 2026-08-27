@@ -219,6 +219,7 @@ function ShopPage() {
               actor={actor}
               eventId={event?.id ?? null}
               nameFor={nameFor}
+              backUrl={cardBack.data?.urls ?? null}
             />
           </div>
         )}

@@ -16,6 +16,10 @@ import {
 } from "@/lib/dust";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import { buyBonusSecretPull } from "@/lib/dust.functions";
+import { getMySecrets } from "@/lib/secret-cards.functions";
+import { BoughtPullReveal } from "@/components/bought-pull-reveal";
+import type { OwnedSecret } from "@/lib/secret-cards";
+import type { ImageUrlSet } from "@/lib/media";
 import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
 import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
@@ -48,6 +52,7 @@ export function DustShopPanel({
   actor,
   eventId,
   nameFor,
+  backUrl = null,
 }: {
   balance: number | undefined;
   participantId: string | null | undefined;
@@ -63,9 +68,26 @@ export function DustShopPanel({
   eventId: string | null | undefined;
   /** `event_participants.id` → the name on the card. */
   nameFor: (eventParticipantId: string) => string;
+  /**
+   * The event's universal card back, for the reveal a purchase ends on. Taken as
+   * a prop rather than fetched: the route already holds it, and secrets carry no
+   * back of their own — without it the turn lands on a text placeholder.
+   */
+  backUrl?: ImageUrlSet | string | null;
 }) {
   const qc = useQueryClient();
   const buyFn = useServerFn(buyBonusSecretPull);
+  const mySecretsFn = useServerFn(getMySecrets);
+  /**
+   * The card a purchase just bought, held until it has been looked at.
+   *
+   * A 150-dust pull used to close on "check your secrets", which meant going
+   * hunting through the vault to work out which card was new. It is the only way
+   * of getting a secret that never showed you one.
+   */
+  const [bought, setBought] = useState<{ card: OwnedSecret; duplicate: boolean } | null>(null);
+  /** A completed set celebrates AFTER the card, never behind it. */
+  const [trophyPending, setTrophyPending] = useState(false);
   // One id per tap, held until that tap resolves. A lost response on a
   // 150-dust purchase is the worst bug this feature could ship, and the RPC
   // answers a repeat of the same id with the pull it already sold rather than a
@@ -98,11 +120,35 @@ export function DustShopPanel({
       // pull_bonus_secret_card, which mints the row and awards the trophy. Buying
       // the card that finishes a set is the best moment this feature has, so the
       // shelf should not wait on a realtime event to notice.
-      if (res.pull?.completedCollection) {
-        void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
-      }
+      const completed = !!res.pull?.completedCollection;
+      setTrophyPending(completed);
       setRequestId(crypto.randomUUID());
-      toast("Pull bought — check your secrets");
+
+      // The purchase names the card it bought but not its face, so the shelf is
+      // asked once, directly, and the answer is written into the cache the vault
+      // reads. The trophy waits for the reveal to close: two ceremonies at once
+      // is one ceremony nobody sees.
+      const cardId = res.pull?.cardId ?? null;
+      void (async () => {
+        try {
+          const fresh = (await mySecretsFn()) as { cards: OwnedSecret[]; pulled: number };
+          qc.setQueryData(mySecretsKey(actor), fresh);
+          const card = fresh.cards.find((c) => c.id === cardId) ?? null;
+          if (card) {
+            setBought({ card, duplicate: !!res.pull?.duplicate });
+            return;
+          }
+          throw new Error("card missing from the shelf");
+        } catch {
+          // Offline mid-purchase, or a shelf that came back without it. The card
+          // is minted either way, so this falls back rather than getting stuck.
+          if (completed) {
+            void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
+            setTrophyPending(false);
+          }
+          toast("Pull bought — check your secrets");
+        }
+      })();
     },
     onError: () => toast("Could not buy that just now"),
   });
@@ -469,6 +515,21 @@ export function DustShopPanel({
           whatever they say on them. Settling one above fixes that.
         </p>
       </section>
+
+      {bought && (
+        <BoughtPullReveal
+          card={bought.card}
+          duplicate={bought.duplicate}
+          universalBack={backUrl}
+          onDone={() => {
+            setBought(null);
+            if (trophyPending) {
+              void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
+              setTrophyPending(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
