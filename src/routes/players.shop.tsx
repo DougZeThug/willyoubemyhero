@@ -15,6 +15,7 @@ import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import type { RosterCardLookup } from "@/components/trade-offer-card";
 import { DustShopPanel } from "@/components/dust-shop";
 import { MarketPanel } from "@/components/market-panel";
+import { FeedError, FeedLoading } from "@/components/feed-state";
 import { dustLive } from "@/lib/dust";
 
 export const Route = createFileRoute("/players/shop")({
@@ -48,7 +49,7 @@ export const Route = createFileRoute("/players/shop")({
  * underneath it rather than the headline.
  */
 function ShopPage() {
-  const { event, bundle } = useEventBundle();
+  const { event, bundle, loading, error, refetch } = useEventBundle();
   const member = useMemberSession();
   const participantId = member?.participantId ?? null;
   const actor = useSecretActor();
@@ -112,6 +113,26 @@ function ShopPage() {
       };
     };
   }, [bundle, cards.data, rarities]);
+
+  if (loading && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <FeedLoading label="Reading the combine…" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !bundle) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <FeedError message={error.message} onRetry={() => void refetch()} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
