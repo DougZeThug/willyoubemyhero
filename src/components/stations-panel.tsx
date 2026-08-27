@@ -149,9 +149,9 @@ export function StationsPanel({ eventId }: { eventId: string }) {
     if (!a || !b) return;
     setBusy(true);
     try {
-      // Swap the two sort values; every other row keeps the number it had.
-      await save({ ...toDraft(a), station_order: b.station_order });
-      await save({ ...toDraft(b), station_order: a.station_order });
+      // One RPC swaps both sort values in a single transaction — two separate
+      // writes could half-apply and leave the pair sharing a station_order.
+      await swapFn({ data: { eventId, aId: a.id, bId: b.id } });
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not reorder stations");
