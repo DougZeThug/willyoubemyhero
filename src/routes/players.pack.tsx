@@ -1161,7 +1161,7 @@ function PackPage() {
   const presenting = stage === "opening" || stage === "revealing";
 
   return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
       <PresentationMode active={presenting || milestoneReveal !== null} />
       <PresentationStage active={presenting || milestoneReveal !== null} />
       {/* Mounted here rather than inside the summary: the stage above uses
@@ -1268,7 +1268,10 @@ function PackPage() {
                   node saying the same number is how the e2e suite ends up
                   matching two. */}
               {streak && streakLine(streak) && (
-                <p className="mt-1 text-xs font-bold sm:mt-2" style={{ color: "oklch(0.82 0.19 85)" }}>
+                <p
+                  className="mt-1 text-xs font-bold sm:mt-2"
+                  style={{ color: "oklch(0.82 0.19 85)" }}
+                >
                   {streakLine(streak)}
                 </p>
               )}
