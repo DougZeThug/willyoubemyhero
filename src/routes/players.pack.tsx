@@ -1185,11 +1185,11 @@ function PackPage() {
           onDone={() => setMilestoneReveal(null)}
         />
       )}
-      <div className="relative z-10 mx-auto max-w-4xl px-4 py-6">
+      <div className="relative z-10 mx-auto max-w-4xl px-4 py-3 sm:py-6">
         {/* Same gate as the vault, and here for the same reason: a pack opened
             before they pick a name lands on the device, not on them. Kept out of
             the ceremony itself — only while the pack is still sealed. */}
-        {stage === "sealed" && <CollectorSignupGate className="mb-5" />}
+        {stage === "sealed" && <CollectorSignupGate className="mb-3" />}
         {/* Only while the pack is still sealed. A phone screen is short, and this
             row is 90px of running total above a card whose whole job is to be the
             biggest thing on it.
@@ -1214,7 +1214,7 @@ function PackPage() {
             inert={stage === "opening"}
             animate={{ opacity: stage === "opening" ? 0 : 1 }}
             transition={{ duration: 0.3 }}
-            className="mb-5 flex items-center justify-between border-b border-primary/20 pb-4"
+            className="mb-3 flex items-center justify-between border-b border-primary/20 pb-2"
           >
             <Link
               to="/players"
@@ -1249,7 +1249,7 @@ function PackPage() {
         )}
 
         {stage === "sealed" || stage === "opening" ? (
-          <div className="flex flex-col items-center gap-5 py-6">
+          <div className="flex flex-col items-center gap-3 py-2 sm:gap-5 sm:py-4">
             {/* Faded rather than unmounted. Removing the copy at the moment the
                 rip commits reflows the pack upward on the exact frame the tear is
                 meant to be the only thing moving. */}
@@ -1258,18 +1258,20 @@ function PackPage() {
               animate={{ opacity: stage === "opening" ? 0.12 : 1 }}
               transition={{ duration: 0.3 }}
             >
-              <h1 className="font-display text-3xl font-black uppercase leading-none">
+              <h1 className="font-display text-2xl font-black uppercase leading-none sm:text-3xl">
                 Today&apos;s Pack
               </h1>
-              <p className="mt-2 max-w-sm text-xs text-muted-foreground">
-                One pack a day, dealt to you and nobody else. Refreshing won&apos;t reroll it — rip
-                the top off to open it.
+              <p className="mt-1 max-w-xs px-2 text-[11px] leading-snug text-muted-foreground sm:mt-2 sm:max-w-sm sm:text-xs">
+                One pack a day, dealt to you and nobody else. Rip the top off to open it.
               </p>
               {/* No test id: the flame above already carries one, and a second
                   node saying the same number is how the e2e suite ends up
                   matching two. */}
               {streak && streakLine(streak) && (
-                <p className="mt-2 text-xs font-bold" style={{ color: "oklch(0.82 0.19 85)" }}>
+                <p
+                  className="mt-1 text-xs font-bold sm:mt-2"
+                  style={{ color: "oklch(0.82 0.19 85)" }}
+                >
                   {streakLine(streak)}
                 </p>
               )}
