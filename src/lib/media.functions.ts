@@ -358,12 +358,10 @@ export const deleteEventCardBack = createServerFn({ method: "POST" })
       .select("card_back_path, card_back_path_thumb, card_back_path_medium")
       .eq("id", data.eventId)
       .maybeSingle();
-    await removePaths(supabaseAdmin, [
-      event?.card_back_path,
-      event?.card_back_path_thumb,
-      event?.card_back_path_medium,
-    ]);
-    await supabaseAdmin
+
+    // Update the database first and confirm it succeeded before removing storage.
+    // A failed DB write after deleting files would leave rows pointing at ghosts.
+    const { error: dbErr } = await supabaseAdmin
       .from("events")
       .update({
         card_back_path: null,
@@ -371,6 +369,13 @@ export const deleteEventCardBack = createServerFn({ method: "POST" })
         card_back_path_medium: null,
       })
       .eq("id", data.eventId);
+    if (dbErr) throw dbErr;
+
+    await removePaths(supabaseAdmin, [
+      event?.card_back_path,
+      event?.card_back_path_thumb,
+      event?.card_back_path_medium,
+    ]);
     return { ok: true };
   });
 
