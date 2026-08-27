@@ -10,6 +10,7 @@ import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
 import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
+import { compareOfficialTime } from "@/lib/standings";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { onClockElapsedMs, type OnClockEntry } from "@/lib/live-clock";
 import { computeElapsedMs } from "@/lib/active-run";
@@ -69,12 +70,15 @@ function LivePage() {
         const ep = parts.find((p) => p.participant_id === r.participant_id);
         return { run: r, ep };
       })
-      .sort((a, b) => (a.run.official_time_ms ?? 0) - (b.run.official_time_ms ?? 0));
+      .sort((a, b) => compareOfficialTime(a.run, b.run));
     return {
       current: slot.athlete,
       onClock: slot.onClock,
       leaderboard: finished.slice(0, 5),
-      done: finished.length,
+      // Distinct athletes, not official runs: an athlete re-timed has two, and
+      // enough of those tipped the screen into "everyone is done" while people
+      // were still queueing.
+      done: new Set(finished.map((f) => f.run.participant_id)).size,
       total: fieldSize(parts),
     };
   }, [bundle]);

@@ -5,6 +5,8 @@
 // "base", and because useEventBundle re-fetches on Supabase realtime changes, cards
 // upgrade themselves mid-event the moment someone takes the lead.
 
+import { OUT_OF_CONTENTION_STATUSES, outOfContention, standings } from "./standings";
+
 export type RarityTier = "champion" | "podium" | "stationKing" | "penaltyBox" | "dnf" | "base";
 
 /**
@@ -227,10 +229,10 @@ type RarityBundle = {
   penalties: { run_id: string; penalty_ms: number }[];
 };
 
-// The live app only ever writes queued | running | finished | scratched
-// (admin.tsx, admin-write.functions.ts). The extra values are the wider
-// vocabulary the schema allows and archived snapshots may still contain.
-const DNF_STATUSES = new Set(["scratched", "dq", "dnp", "absent"]);
+// The dnf-family roster statuses live in standings.ts, so the board and the
+// tiers cannot drift apart about who is in contention. Re-exported under the
+// old name because this module reads it for its own dnf tier as well.
+const DNF_STATUSES = OUT_OF_CONTENTION_STATUSES;
 
 function isTier(v: string): v is RarityTier {
   return v in RARITY;
@@ -253,33 +255,13 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
   const dqParticipants = new Set(
     bundle.runs.filter((r) => r.status === "dq").map((r) => r.participant_id),
   );
-  const outOfContention = new Set(dqParticipants);
-  for (const p of bundle.participants) {
-    if (DNF_STATUSES.has(p.participation_status)) outOfContention.add(p.participant_id);
-  }
+  const excluded = outOfContention(bundle);
 
-  const officialRuns = bundle.runs.filter(
-    (r) => r.is_official && r.official_time_ms != null && !outOfContention.has(r.participant_id),
-  );
-
-  // Best official run per participant.
-  const bestByParticipant = new Map<string, (typeof officialRuns)[number]>();
-  for (const run of officialRuns) {
-    const prev = bestByParticipant.get(run.participant_id);
-    if (!prev || (run.official_time_ms ?? 0) < (prev.official_time_ms ?? 0)) {
-      bestByParticipant.set(run.participant_id, run);
-    }
-  }
-  // Same shape as cardStats' rank: count everyone strictly faster, +1, so a
-  // dead heat shares the place. The old sort-index placing split ties on sort
-  // stability — one of two identical clocks drew champion and the other
-  // podium, while both card backs read "Rank 1".
-  const bests = [...bestByParticipant.values()];
+  // Best official run per athlete, placed by counting everyone strictly faster,
+  // so a dead heat shares the place. Shared with the leaderboard, which used to
+  // do all of this a second, looser way and contradict the card beside it.
   const placeByParticipant = new Map(
-    bests.map((r) => [
-      r.participant_id,
-      bests.filter((o) => (o.official_time_ms ?? 0) < (r.official_time_ms ?? 0)).length + 1,
-    ]),
+    standings(bundle).map((s) => [s.participantId, s.place] as const),
   );
 
   // Participants owning the fastest segment at any single station.
@@ -288,7 +270,7 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
   for (const s of bundle.splits) {
     if (s.segment_time_ms == null) continue;
     const participantId = runOwner.get(s.run_id);
-    if (!participantId || outOfContention.has(participantId)) continue;
+    if (!participantId || excluded.has(participantId)) continue;
     const prev = bestPerStation.get(s.station_id);
     if (!prev || s.segment_time_ms < prev.ms) {
       bestPerStation.set(s.station_id, { ms: s.segment_time_ms, participantId });
@@ -300,7 +282,7 @@ export function rarityMap(bundle: RarityBundle | null | undefined): Map<string, 
   const penaltyByParticipant = new Map<string, number>();
   for (const p of bundle.penalties) {
     const participantId = runOwner.get(p.run_id);
-    if (!participantId || outOfContention.has(participantId)) continue;
+    if (!participantId || excluded.has(participantId)) continue;
     penaltyByParticipant.set(
       participantId,
       (penaltyByParticipant.get(participantId) ?? 0) + p.penalty_ms,

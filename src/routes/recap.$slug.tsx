@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getArchivedRecap } from "@/lib/media.functions";
 import { formatTime } from "@/lib/format";
+import { compareOfficialTime } from "@/lib/standings";
 
 export const Route = createFileRoute("/recap/$slug")({
   head: ({ params }) => ({
@@ -60,7 +61,7 @@ function RecapPage() {
       const ep = snap.participants.find((p) => p.participant_id === r.participant_id);
       return { run: r, ep };
     })
-    .sort((a, b) => (a.run.official_time_ms ?? 0) - (b.run.official_time_ms ?? 0));
+    .sort((a, b) => compareOfficialTime(a.run, b.run));
   const drafts = [...snap.drafts].sort((a, b) => a.draft_position - b.draft_position);
 
   return (

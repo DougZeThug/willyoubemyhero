@@ -22,6 +22,14 @@ describe("currentAthlete", () => {
     expect(currentAthlete(parts).athlete).toBe(parts[1]);
   });
 
+  it.each(["dq", "dnp", "absent"])("skips a %s athlete too", (status) => {
+    // Only finished and scratched used to count as done, so anybody in the rest
+    // of the out-of-contention family owned the Up Next slot indefinitely and
+    // the queue never moved past them.
+    const parts = [ep(1, status), ep(2, "waiting")];
+    expect(currentAthlete(parts).athlete).toBe(parts[1]);
+  });
+
   it("returns nothing once the field is done", () => {
     expect(currentAthlete([ep(1, "finished")])).toEqual({ athlete: null, onClock: false });
   });
@@ -30,6 +38,12 @@ describe("currentAthlete", () => {
 describe("fieldSize", () => {
   it("excludes scratched athletes", () => {
     expect(fieldSize([ep(1, "waiting"), ep(2, "scratched"), ep(3, "finished")])).toBe(2);
+  });
+
+  it("excludes the rest of the out-of-contention family", () => {
+    // They are never going to finish, so counting them in the denominator holds
+    // the screen at "12 of 13" for the rest of the party.
+    expect(fieldSize([ep(1, "waiting"), ep(2, "dq"), ep(3, "dnp"), ep(4, "absent")])).toBe(1);
   });
 });
 

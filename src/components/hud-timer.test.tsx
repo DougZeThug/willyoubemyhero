@@ -8,14 +8,28 @@ afterEach(() => {
 });
 
 describe("HudTimer", () => {
-  it("shows SS:cc below a minute", () => {
+  // The crowd's clock reads the same way as every other duration in the app.
+  // It used to print 12:34 for what the leaderboard calls 12.34, which reads as
+  // twelve minutes to anybody arriving from the board.
+  it("shows SS.cc below a minute, the same as formatTime", () => {
     render(<HudTimer runningSinceMs={12_340} paused status="Standby" />);
-    expect(screen.getByText(/^12:34$/)).toBeInTheDocument();
+    expect(screen.getByText(/^12\.34$/)).toBeInTheDocument();
   });
 
   it("pads to two digits", () => {
     render(<HudTimer runningSinceMs={0} paused status="Standby" />);
-    expect(screen.getByText(/^00:00$/)).toBeInTheDocument();
+    expect(screen.getByText(/^00\.00$/)).toBeInTheDocument();
+  });
+
+  it("drops the seconds suffix once there is a minutes part", () => {
+    const { container, unmount } = render(
+      <HudTimer runningSinceMs={12_340} paused status="Standby" />,
+    );
+    expect(container.querySelector(".timer-digits")?.textContent).toBe("12.34s");
+    unmount();
+
+    const over = render(<HudTimer runningSinceMs={63_450} paused status="Standby" />);
+    expect(over.container.querySelector(".timer-digits")?.textContent).toBe("1:03.45");
   });
 
   it("switches to the full M:SS.hh format past a minute", () => {
@@ -32,7 +46,7 @@ describe("HudTimer", () => {
     // A paused clock must not interpolate; the number on screen is the number.
     vi.spyOn(performance, "now").mockReturnValue(1_000_000);
     render(<HudTimer runningSinceMs={5_000} paused status="Paused" />);
-    expect(screen.getByText(/^05:00$/)).toBeInTheDocument();
+    expect(screen.getByText(/^05\.00$/)).toBeInTheDocument();
   });
 
   it("colours the digits as a warning while paused and as primary while running", () => {

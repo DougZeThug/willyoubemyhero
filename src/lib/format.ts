@@ -1,5 +1,8 @@
 export function formatTime(ms: number | null | undefined): string {
-  if (ms == null || Number.isNaN(ms)) return "—";
+  // Non-finite rather than just NaN: analytics reduces a field of null times
+  // with Math.min(...) and hands the resulting Infinity straight to here, which
+  // used to print "NaN.NaN" across the whole personal-bests list.
+  if (ms == null || !Number.isFinite(ms)) return "—";
   // Integer maths all the way down. Deriving the hundredths from a float
   // remainder printed 101_320 ms as 1:41.31, because 101.32 - 101 lands on
   // 0.3199999999999932 — which reads to a commissioner as "my edit did not

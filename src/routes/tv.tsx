@@ -4,6 +4,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { formatTime } from "@/lib/format";
+import { compareOfficialTime } from "@/lib/standings";
 import { currentAthlete } from "@/lib/current-athlete";
 
 export const Route = createFileRoute("/tv")({
@@ -31,7 +32,7 @@ function TvPage() {
     return runs
       .filter((r) => r.is_official)
       .map((r) => ({ run: r, ep: parts.find((p) => p.participant_id === r.participant_id) }))
-      .sort((a, b) => (a.run.official_time_ms ?? 0) - (b.run.official_time_ms ?? 0));
+      .sort((a, b) => compareOfficialTime(a.run, b.run));
   }, [bundle]);
 
   const { athlete: current, onClock } = currentAthlete(bundle?.participants ?? []);
