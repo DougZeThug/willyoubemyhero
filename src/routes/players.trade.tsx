@@ -199,7 +199,9 @@ function TradePage() {
           qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
           // Queued rather than collapsed: one trade genuinely can close two sets,
           // and showing one of them would be a worse bug than showing neither.
-          setCompletions(mine);
+          // Append so concurrent accepts for different offers do not overwrite
+          // ceremonies that are still waiting to play.
+          setCompletions((q) => [...q, ...mine]);
         } else {
           toast.success("Trade done");
           // The same flourish a pack pull gets, at half strength: a swap is a
