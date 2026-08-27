@@ -57,7 +57,10 @@ function DraftPage() {
         const ep = parts.find((p) => p.participant_id === r.participant_id);
         return { run: r, ep };
       })
-      .filter((row): row is { run: (typeof row)["run"]; ep: NonNullable<(typeof row)["ep"]> } => row.ep != null)
+      .filter(
+        (row): row is { run: (typeof row)["run"]; ep: NonNullable<(typeof row)["ep"]> } =>
+          row.ep != null,
+      )
       .sort((a, b) => (a.run.official_time_ms ?? Infinity) - (b.run.official_time_ms ?? Infinity));
     const takenSet = new Set(
       parts.filter((p) => p.selected_draft_position != null).map((p) => p.selected_draft_position!),
