@@ -75,12 +75,12 @@ function DraftPage() {
       await recordFn({
         data: {
           eventId: event.id,
-          participantId: currentPicker.ep!.participant_id,
+          participantId: currentPicker.ep.participant_id,
           draftPosition: pos,
         },
       });
       await refresh();
-      toast.success(`${currentPicker.ep!.participant?.name} picks #${pos}`);
+      toast.success(`${currentPicker.ep.participant?.name} picks #${pos}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
