@@ -120,11 +120,35 @@ export function DustShopPanel({
       // pull_bonus_secret_card, which mints the row and awards the trophy. Buying
       // the card that finishes a set is the best moment this feature has, so the
       // shelf should not wait on a realtime event to notice.
-      if (res.pull?.completedCollection) {
-        void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
-      }
+      const completed = !!res.pull?.completedCollection;
+      setTrophyPending(completed);
       setRequestId(crypto.randomUUID());
-      toast("Pull bought — check your secrets");
+
+      // The purchase names the card it bought but not its face, so the shelf is
+      // asked once, directly, and the answer is written into the cache the vault
+      // reads. The trophy waits for the reveal to close: two ceremonies at once
+      // is one ceremony nobody sees.
+      const cardId = res.pull?.cardId ?? null;
+      void (async () => {
+        try {
+          const fresh = (await mySecretsFn()) as { cards: OwnedSecret[]; pulled: number };
+          qc.setQueryData(mySecretsKey(actor), fresh);
+          const card = fresh.cards.find((c) => c.id === cardId) ?? null;
+          if (card) {
+            setBought({ card, duplicate: !!res.pull?.duplicate });
+            return;
+          }
+          throw new Error("card missing from the shelf");
+        } catch {
+          // Offline mid-purchase, or a shelf that came back without it. The card
+          // is minted either way, so this falls back rather than getting stuck.
+          if (completed) {
+            void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
+            setTrophyPending(false);
+          }
+          toast("Pull bought — check your secrets");
+        }
+      })();
     },
     onError: () => toast("Could not buy that just now"),
   });
