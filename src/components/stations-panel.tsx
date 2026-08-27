@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, ArrowUpDown, Flag, Pencil, Plus, Trash2 } from "lucide-react";
-import { upsertStation, deleteStation } from "@/lib/admin-write.functions";
+import { upsertStation, deleteStation, swapStationOrder } from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
   const qc = useQueryClient();
   const saveFn = useServerFn(upsertStation);
   const removeFn = useServerFn(deleteStation);
+  const swapFn = useServerFn(swapStationOrder);
 
   const [rearranging, setRearranging] = useState(false);
   // Bulk rename keeps its own draft map so a half-typed batch is never written
