@@ -515,6 +515,21 @@ export function DustShopPanel({
           whatever they say on them. Settling one above fixes that.
         </p>
       </section>
+
+      {bought && (
+        <BoughtPullReveal
+          card={bought.card}
+          duplicate={bought.duplicate}
+          universalBack={backUrl}
+          onDone={() => {
+            setBought(null);
+            if (trophyPending) {
+              void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
+              setTrophyPending(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
