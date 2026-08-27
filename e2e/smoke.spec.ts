@@ -74,9 +74,12 @@ test.describe("smoke", () => {
     // not exposed programmatically anywhere in the app.
     void server;
     await page.goto("/leaderboard");
-    const current = page.locator('[aria-current="page"]');
-    await expect(current.first()).toBeVisible();
-    await expect(current.first()).toHaveAttribute("href", "/leaderboard");
+    // Both navs mark the current page — the top bar and the phone's bottom bar —
+    // and exactly one of them is on screen at a given width, so `:visible` is
+    // what makes this one assertion true in both projects.
+    const current = page.locator('[aria-current="page"]:visible');
+    await expect(current).toHaveCount(1);
+    await expect(current).toHaveAttribute("href", "/leaderboard");
   });
 
   test("puts a skip link ahead of the whole nav", async ({ page, server }) => {
