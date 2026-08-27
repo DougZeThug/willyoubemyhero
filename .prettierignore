@@ -28,3 +28,8 @@ AGENTS.md
 src/routes/mcp.ts
 src/routes/\[.mcp\]/
 src/routes/\[.well-known\]/
+
+# Vendored verbatim from the product-description skill's gist. Formatting them
+# turns every re-sync from upstream into a diff, and nothing in this repo reads
+# them as source — Claude Code reads them as skill text.
+.claude/skills/
