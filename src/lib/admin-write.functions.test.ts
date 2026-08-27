@@ -68,6 +68,7 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
     penalty_amount_ms: 5_000,
     active: true,
   },
+  swapStationOrder: { eventId: EVENT_ID, aId: STATION_ID, bId: RUN_ID },
   deleteStation: { eventId: EVENT_ID, id: STATION_ID },
   saveCompletedRun: {
     eventId: EVENT_ID,
