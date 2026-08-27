@@ -164,7 +164,6 @@ export async function syncAccount(
     }
   }
 
-
   // A different guest id on this phone — pulls made here before signing in, or on
   // a second handset — is folded into the account's collection.
   for (const guestId of guestIds) await mergeGuestInto(identity, guestId);
@@ -222,4 +221,3 @@ export async function bindParticipant(userId: string, participantId: string) {
   if (priorGuest) await mergeGuestInto({ kind: "member", id: participantId }, priorGuest);
   return { kind: "member" as const, id: participantId, name: await nameFor(participantId) };
 }
-

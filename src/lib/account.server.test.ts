@@ -31,6 +31,8 @@ function existing(row: { participant_id?: string | null; guest_id?: string | nul
       data: { user_id: USER, participant_id: null, guest_id: null, ...row },
     },
     "participants.select": { data: { name: "Alice" } },
+    // The guarded guest -> member upgrade reads back the rows it changed.
+    "account_identities.update": { data: [{ user_id: USER }] },
   } satisfies SupabaseResponses;
 }
 
