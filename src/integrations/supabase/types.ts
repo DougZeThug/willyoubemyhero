@@ -2204,6 +2204,7 @@ export type Database = {
         Args: { _guest_id: string; _participant_id: string }
         Returns: Json
       }
+      secret_sell_value: { Args: { _tier: string }; Returns: number }
       secret_tier_rank: { Args: { _tier: string }; Returns: number }
       sell_secret_card: {
         Args: { _participant_id: string; _secret_pull_id: string }
