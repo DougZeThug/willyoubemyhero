@@ -2142,6 +2142,10 @@ export type Database = {
           started_on: string
         }[]
       }
+      swap_station_order: {
+        Args: { _a: string; _b: string; _event_id: string }
+        Returns: undefined
+      }
       trade_has_both_sides: { Args: { _offer_id: string }; Returns: boolean }
       trade_item_is_spare: {
         Args: {

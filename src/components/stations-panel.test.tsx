@@ -65,15 +65,13 @@ describe("StationsPanel", () => {
     expect(screen.getByLabelText("Move Sprint down")).toBeTruthy();
   });
 
-  it("swaps the sort order of two stations", async () => {
+  it("swaps the sort order of two stations in one atomic call", async () => {
     renderPanel();
     await userEvent.click(screen.getByRole("button", { name: /rearrange/i }));
     await userEvent.click(screen.getByLabelText("Move Sprint down"));
 
-    await waitFor(() => expect(serverFnMock).toHaveBeenCalledTimes(2));
-    const [first, second] = serverFnMock.mock.calls.map((c) => c[0].data);
-    expect(first).toMatchObject({ id: "a", station_order: 2 });
-    expect(second).toMatchObject({ id: "b", station_order: 1 });
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalledTimes(1));
+    expect(serverFnMock.mock.calls[0][0].data).toMatchObject({ aId: "a", bId: "b" });
   });
 
   it("renames a station through the edit sheet", async () => {
