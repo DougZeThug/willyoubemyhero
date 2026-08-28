@@ -105,14 +105,10 @@ async function main() {
   }
 
   console.log("Running Dependabot dry-run for npm_and_yarn ecosystem...");
-  const result = spawnSync(
-    binary,
-    ["update", "npm_and_yarn", ".", "--local", "."],
-    {
-      cwd: root,
-      stdio: "inherit",
-    },
-  );
+  const result = spawnSync(binary, ["update", "npm_and_yarn", ".", "--local", "."], {
+    cwd: root,
+    stdio: "inherit",
+  });
   process.exit(result.status ?? 0);
 }
 
