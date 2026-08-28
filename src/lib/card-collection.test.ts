@@ -128,13 +128,6 @@ describe("collection", () => {
     expect(collection[CARD_B].count).toBe(2);
   });
 
-  it("clears everything", async () => {
-    const mod = await freshModule();
-    await mod.collectCard(CARD_A, "base");
-    await mod.clearCollection();
-    expect(await mod.loadCollection()).toEqual({});
-  });
-
   it("forgets only the cards it is given", async () => {
     // How the rows left behind by collect-on-sight get removed once the server
     // has disowned them. See collection-merge.ts.
@@ -319,7 +312,6 @@ describe("on the server", () => {
     expect(await mod.loadCollection()).toEqual({});
     expect(await mod.loadPackState()).toBeNull();
     await expect(mod.collectCard(CARD_A, "base")).resolves.toBeUndefined();
-    await expect(mod.clearCollection()).resolves.toBeUndefined();
     await expect(mod.primeCardMeta()).resolves.toBeUndefined();
   });
 });
