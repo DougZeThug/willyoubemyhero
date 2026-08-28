@@ -4,7 +4,9 @@ import { execSync, spawnSync } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync } from "node:fs";
 import { chmod, mkdir, rm } from "node:fs/promises";
 import { platform as osPlatform } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -31,29 +33,38 @@ function findInPath(name) {
   return null;
 }
 
+async function downloadFile(url, dest) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
+  }
+  const file = createWriteStream(dest);
+  await pipeline(Readable.fromWeb(response.body), file);
+}
+
 async function downloadCli() {
   const { platform, arch } = platformArch();
   const suffix = assetSuffix(platform, arch);
   const latestUrl = "https://api.github.com/repos/dependabot/cli/releases/latest";
 
   console.log("Fetching latest Dependabot CLI release...");
-  const release = JSON.parse(execSync(`curl -sL ${latestUrl}`, { encoding: "utf8" }));
+  const releaseRes = await fetch(latestUrl);
+  if (!releaseRes.ok) {
+    throw new Error(`Failed to fetch latest release: ${releaseRes.status} ${releaseRes.statusText}`);
+  }
+  const release = await releaseRes.json();
   const tag = release.tag_name;
   const assetName = `dependabot-${tag}-${suffix}`;
   const downloadUrl = `https://github.com/dependabot/cli/releases/download/${tag}/${assetName}`;
   const assetPath = join(cacheDir, assetName);
-  const binaryPath = join(cacheDir, platform === "win32" ? "dependabot.exe" : "dependabot");
+  const binaryName = platform === "win32" ? "dependabot.exe" : "dependabot";
+  const binaryPath = join(cacheDir, binaryName);
 
   if (existsSync(binaryPath)) return binaryPath;
 
   await mkdir(cacheDir, { recursive: true });
   console.log(`Downloading ${downloadUrl}...`);
-  await new Promise((resolve, reject) => {
-    const file = createWriteStream(assetPath);
-    execSync(`curl -sL ${downloadUrl}`, { stdio: ["ignore", file, "pipe"] })
-      .on("finish", resolve)
-      .on("error", reject);
-  });
+  await downloadFile(downloadUrl, assetPath);
 
   console.log("Extracting...");
   if (suffix.endsWith(".zip")) {
@@ -68,14 +79,11 @@ async function downloadCli() {
 }
 
 async function main() {
-  let binary = findInPath(process.platform === "win32" ? "dependabot.exe" : "dependabot");
+  const binaryName = process.platform === "win32" ? "dependabot.exe" : "dependabot";
+  let binary = findInPath(binaryName);
   if (!binary) {
-    const cached = join(cacheDir, process.platform === "win32" ? "dependabot.exe" : "dependabot");
-    if (existsSync(cached)) {
-      binary = cached;
-    } else {
-      binary = await downloadCli();
-    }
+    const cached = join(cacheDir, binaryName);
+    binary = existsSync(cached) ? cached : await downloadCli();
   }
 
   console.log("Running Dependabot dry-run for npm_and_yarn ecosystem...");
