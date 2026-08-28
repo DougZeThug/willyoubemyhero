@@ -50,7 +50,9 @@ async function downloadCli() {
   console.log("Fetching latest Dependabot CLI release...");
   const releaseRes = await fetch(latestUrl);
   if (!releaseRes.ok) {
-    throw new Error(`Failed to fetch latest release: ${releaseRes.status} ${releaseRes.statusText}`);
+    throw new Error(
+      `Failed to fetch latest release: ${releaseRes.status} ${releaseRes.statusText}`,
+    );
   }
   const release = await releaseRes.json();
   const tag = release.tag_name;
