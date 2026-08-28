@@ -91,6 +91,12 @@ async function downloadCli() {
 }
 
 async function main() {
+  if (!hasDocker()) {
+    console.warn("Docker is not available. The Dependabot CLI requires Docker to run.");
+    console.warn("Start Docker and try again, or review .github/dependabot.yml manually.");
+    process.exit(0);
+  }
+
   const binaryName = process.platform === "win32" ? "dependabot.exe" : "dependabot";
   let binary = findInPath(binaryName);
   if (!binary) {
@@ -99,10 +105,14 @@ async function main() {
   }
 
   console.log("Running Dependabot dry-run for npm_and_yarn ecosystem...");
-  const result = spawnSync(binary, ["update", "npm_and_yarn", ".", "--dry-run"], {
-    cwd: root,
-    stdio: "inherit",
-  });
+  const result = spawnSync(
+    binary,
+    ["update", "npm_and_yarn", ".", "--local", "."],
+    {
+      cwd: root,
+      stdio: "inherit",
+    },
+  );
   process.exit(result.status ?? 0);
 }
 
