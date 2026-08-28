@@ -68,7 +68,7 @@
     "idb": "^8.0.3",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
-    "motion": "^12.42.2",
+    "motion": "^13.1.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
