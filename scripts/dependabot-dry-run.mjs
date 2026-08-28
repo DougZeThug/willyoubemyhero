@@ -34,6 +34,15 @@ function findInPath(name) {
   return null;
 }
 
+function hasDocker() {
+  try {
+    execSync("docker info", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function downloadFile(url, dest) {
   const response = await fetch(url);
   if (!response.ok) {
