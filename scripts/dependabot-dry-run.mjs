@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Dry-run Dependabot updates locally. Downloads the Dependabot CLI if needed.
+// The Dependabot CLI runs the updater in Docker without opening real PRs.
 import { execSync, spawnSync } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 import { chmod, mkdir, rm } from "node:fs/promises";
 import { platform as osPlatform } from "node:os";
 import { join } from "node:path";
