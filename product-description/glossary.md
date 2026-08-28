@@ -82,7 +82,7 @@ everybody. The six tiers are fixed and persisted, so they may never be renamed:
 "Gold"), `stationKing` (fastest split at any one station), `penaltyBox` (most
 penalty time taken), `dnf` (did not finish), and `base` (everyone else). Nothing
 about a tier is random, and a card upgrades itself mid-event the moment someone
-takes the lead. A commissioner can override one.
+takes the lead. A stored override always wins, but no screen in the app writes one.
 
 **Edition.** The finish on one _copy_ of a roster card, rolled by Postgres when
 it is pulled: `platinum` (0.5%), `gold` (3.5%), `silver` (8%), `bronze` (18%),
