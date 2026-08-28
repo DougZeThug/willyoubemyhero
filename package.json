@@ -85,7 +85,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@dependabot/cli": "^1.1.0",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "2.13.1",
     "@playwright/test": "^1.62.0",
