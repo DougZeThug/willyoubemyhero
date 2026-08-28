@@ -16,6 +16,7 @@
     "test:watch": "vitest --project node --project browser",
     "test:db": "vitest run --project db",
     "test:e2e": "playwright test",
+    "test:dependabot": "node scripts/dependabot-dry-run.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {

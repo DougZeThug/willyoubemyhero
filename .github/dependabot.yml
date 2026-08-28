@@ -1,0 +1,65 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # These packages have broken builds on major-version bumps in the past.
+      # Update them manually after reading changelogs and running the full suite.
+      - dependency-name: "@tanstack/react-start"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@tanstack/react-router"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@tanstack/router-plugin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "nitro"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@lovable.dev/vite-tanstack-config"
+        update-types: ["version-update:semver-major"]
+      # js-yaml is pinned via overrides to avoid a transitive vulnerability.
+      # Ignore patch bumps so the override stays in control.
+      - dependency-name: "js-yaml"
+        update-types: ["version-update:semver-patch"]
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
