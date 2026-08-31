@@ -13,7 +13,7 @@ vi.mock("motion/react", () => ({
     {
       get:
         (_, tag: string) =>
-        ({ children, ...props }: Record<string, unknown>) =>
+        ({ children, ...props }: { children?: ReactNode } & Record<string, unknown>) =>
           createElement(tag, props, children),
     },
   ),
