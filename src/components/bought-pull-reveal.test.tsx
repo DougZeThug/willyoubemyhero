@@ -1,6 +1,7 @@
 // The reveal is a user-dismissed full-screen dialog: it must announce itself
 // as modal and own focus, or Tab falls through the overlay to the nav behind
 // it — the same bug the finish-celebration accessibility sweep fixed.
+import { createElement, type ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BoughtPullReveal } from "./bought-pull-reveal";
@@ -12,13 +13,11 @@ vi.mock("motion/react", () => ({
     {
       get:
         (_, tag: string) =>
-        ({ children, ...props }: Record<string, unknown>) => {
-          const { createElement } = require("react");
-          return createElement(tag, props, children);
-        },
+        ({ children, ...props }: Record<string, unknown>) =>
+          createElement(tag, props, children),
     },
   ),
-  AnimatePresence: ({ children }: { children?: React.ReactNode }) => children,
+  AnimatePresence: ({ children }: { children?: ReactNode }) => children,
 }));
 
 vi.mock("@/lib/card-confetti", () => ({ celebrateSecret: vi.fn() }));
