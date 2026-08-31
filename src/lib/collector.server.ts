@@ -136,11 +136,21 @@ export async function createCollector(
     // account row back exactly as it was and retire the fresh participant, so
     // the next attempt replays the whole handoff.
     if (boundFresh) {
-      await supabaseAdmin
-        .from("account_identities")
-        .update({ participant_id: null, guest_id: priorGuestId })
-        .eq("user_id", userId)
-        .eq("participant_id", winnerId);
+      if (priorGuestId) {
+        await supabaseAdmin
+          .from("account_identities")
+          .update({ participant_id: null, guest_id: priorGuestId })
+          .eq("user_id", userId)
+          .eq("participant_id", winnerId);
+      } else {
+        // No guest to restore: the row we inserted held nothing else, and the
+        // check constraint forbids leaving both columns null, so it goes away.
+        await supabaseAdmin
+          .from("account_identities")
+          .delete()
+          .eq("user_id", userId)
+          .eq("participant_id", winnerId);
+      }
       await supabaseAdmin.from("participants").update({ active: false }).eq("id", winnerId);
     }
     throw mergeError;
