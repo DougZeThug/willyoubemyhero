@@ -128,35 +128,24 @@ export const claimPlayer = createServerFn({ method: "POST" })
     // token, never the payload — otherwise claiming your own player would be a
     // way to harvest somebody else's cards.
     //
-    // Swallowed on failure and awaited rather than fired off: a claim that
-    // half-worked is worth far less than a claim that worked, and nobody can act
-    // on "your old secrets did not come across" in the moment anyway.
+    // One transaction, and errors surface. Three sequential RPCs used to run
+    // inside a catch that swallowed everything: packs moving without their
+    // milestone claims leaves those claims on the dead guest id, invisible to
+    // the duplicate check, and the same milestone pays twice. Codes stay valid
+    // after a claim (see above), so a thrown failure is retryable.
+    //
+    // Roster cards cannot come across here — they were never stored server-side
+    // for a guest — so the device uploads those itself through `adoptCollection`
+    // once it holds a member token.
     const guestId = optionalGuest();
     if (guestId) {
-      try {
-        const { secretsDb } = await import("./secret-cards-db.server");
-        await secretsDb().rpc("claim_guest_secrets", {
-          _participant_id: data.participantId,
-          _guest_id: guestId,
-        });
-        // The packs they tore as a guest are theirs too. Roster cards cannot come
-        // across here — they were never stored server-side for a guest — so the
-        // device uploads those itself through `adoptCollection` once it holds a
-        // member token.
-        await secretsDb().rpc("claim_guest_packs", {
-          _participant_id: data.participantId,
-          _guest_id: guestId,
-        });
-        // And the milestones those packs already paid for, or the streak recomputes
-        // against the moved rows and hands them the same rewards again.
-        await secretsDb().rpc("claim_guest_streak_milestones", {
-          _participant_id: data.participantId,
-          _guest_id: guestId,
-        });
-      } catch {
-        /* the claim itself stands; the cards can be reconciled by pulling again */
-      }
+      const { error: attachError } = await secretsDb().rpc("attach_device_to_player", {
+        _participant_id: data.participantId,
+        _guest_id: guestId,
+      });
+      if (attachError) throw new Error(attachError.message);
     }
+
 
     const { token, expiresAt } = signMemberToken(data.participantId);
     return { ok: true as const, token, expiresAt, name: participant?.name ?? "Player" };
