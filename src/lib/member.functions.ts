@@ -146,7 +146,6 @@ export const claimPlayer = createServerFn({ method: "POST" })
       if (attachError) throw new Error(attachError.message);
     }
 
-
     const { token, expiresAt } = signMemberToken(data.participantId);
     return { ok: true as const, token, expiresAt, name: participant?.name ?? "Player" };
   });
