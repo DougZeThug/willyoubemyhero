@@ -18,6 +18,7 @@ import { secretTierStyle } from "@/lib/secret-rarity";
 import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { getMySecrets } from "@/lib/secret-cards.functions";
 import { BoughtPullReveal } from "@/components/bought-pull-reveal";
+import { PresentationMode } from "@/components/presentation-mode";
 import type { OwnedSecret } from "@/lib/secret-cards";
 import type { ImageUrlSet } from "@/lib/media";
 import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
@@ -516,6 +517,9 @@ export function DustShopPanel({
         </p>
       </section>
 
+      {/* While the reveal owns the screen the nav behind it goes inert —
+          otherwise Tab reaches straight through the overlay to the chrome. */}
+      {bought && <PresentationMode active />}
       {bought && (
         <BoughtPullReveal
           card={bought.card}
