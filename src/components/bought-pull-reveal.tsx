@@ -57,7 +57,16 @@ export function BoughtPullReveal({
   const [flipped, setFlipped] = useState(false);
   const rarity = secretFoil(card.foil, card.borderFx);
   const celebratedRef = useRef(false);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const tier = secretTierStyle(card.tier);
+
+  // A user-dismissed full-screen dialog has to own focus while it is open —
+  // role="dialog" alone still lets Tab fall through to the nav behind the
+  // overlay. Same pattern the finish celebration uses: the surface is
+  // focusable, takes focus on arrival, and declares itself modal.
+  useEffect(() => {
+    surfaceRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (celebratedRef.current) return;
@@ -77,9 +86,12 @@ export function BoughtPullReveal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6"
+      ref={surfaceRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6 outline-none"
       data-testid="bought-pull-reveal"
       role="dialog"
+      aria-modal="true"
       aria-label="Bought secret card"
     >
       <RevealAmbience rarity={rarity} secret revealed={revealed} anticipating={!revealed} />
