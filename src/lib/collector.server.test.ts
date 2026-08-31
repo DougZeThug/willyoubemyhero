@@ -68,4 +68,42 @@ describe("createCollector", () => {
       _guest_id: GUEST,
     });
   });
+
+  it("restores the account's guest identity when the merge fails", async () => {
+    withDb({
+      "account_identities.select": {
+        data: { user_id: USER, participant_id: null, guest_id: GUEST },
+      },
+      "rpc.claim_guest_secrets": { data: null, error: { message: "db down", code: "XX000" } },
+    });
+    await expect(create("Jane Doe")).rejects.toThrow();
+
+    // The binding write cleared guest_id before the merge could consume it; a
+    // failed merge must put the account row back, or a retry with no local
+    // guest token can never name that guest again.
+    const restore = mock
+      .callsFor("account_identities", "update")
+      .find((c) => (c.payload as { guest_id?: string | null }).guest_id === GUEST);
+    expect(restore?.payload).toMatchObject({ participant_id: null, guest_id: GUEST });
+    const retired = mock
+      .callsFor("participants", "update")
+      .find((c) => (c.payload as { active?: boolean }).active === false);
+    expect(retired).toBeTruthy();
+  });
+
+  it("deletes the fresh identity row when the merge fails with no guest to restore", async () => {
+    withDb({
+      "rpc.claim_guest_secrets": { data: null, error: { message: "db down", code: "XX000" } },
+    });
+    await expect(create("Jane Doe", GUEST)).rejects.toThrow();
+
+    // No prior guest: the check constraint forbids both columns null, so the
+    // row inserted moments ago is removed rather than restored.
+    expect(mock.callsFor("account_identities", "delete")).toHaveLength(1);
+    expect(
+      mock
+        .callsFor("account_identities", "update")
+        .some((c) => (c.payload as { participant_id?: string | null }).participant_id === null),
+    ).toBe(false);
+  });
 });
