@@ -61,13 +61,13 @@ describe("claimPlayer", () => {
     withDb({
       "member_codes.select": codeRow(),
       "participants.select": { data: { name: "Doug" }, error: null },
-      "rpc.claim_guest_secrets": { data: 2 },
+      "rpc.attach_device_to_player": { data: { name: "Doug", secrets: 2 } },
     });
     await claim(
       { participantId: PARTICIPANT_ID, code: CODE },
       guestHeaders(signGuestToken(GUEST_ID).token),
     );
-    expect(mock.client.rpc).toHaveBeenCalledWith("claim_guest_secrets", {
+    expect(mock.client.rpc).toHaveBeenCalledWith("attach_device_to_player", {
       _participant_id: PARTICIPANT_ID,
       _guest_id: GUEST_ID,
     });
@@ -79,14 +79,14 @@ describe("claimPlayer", () => {
     withDb({
       "member_codes.select": codeRow(),
       "participants.select": { data: { name: "Doug" }, error: null },
-      "rpc.claim_guest_secrets": { data: 0 },
+      "rpc.attach_device_to_player": { data: { name: "Doug", secrets: 0 } },
     });
     await claim(
       { participantId: PARTICIPANT_ID, code: CODE, guestId: OTHER_ID },
       guestHeaders(signGuestToken(GUEST_ID).token),
     );
     expect(mock.client.rpc).toHaveBeenCalledWith(
-      "claim_guest_secrets",
+      "attach_device_to_player",
       expect.objectContaining({ _guest_id: GUEST_ID }),
     );
   });
@@ -104,20 +104,22 @@ describe("claimPlayer", () => {
     expect(names.filter((n) => !n.includes("auth_attempt"))).toEqual([]);
   });
 
-  it("still issues the token when carrying the secrets over fails", async () => {
-    // A claim that half-worked is worth far less than a claim that worked, and
-    // nobody can act on "your old secrets did not come across" in the moment.
+  it("fails loudly when carrying the guest data over fails", async () => {
+    // The migration is atomic, so a failure means nothing moved. Codes stay
+    // valid after a claim, so surfacing it lets the player simply retry —
+    // pretending it worked is how milestone claims got stranded on a dead
+    // guest id and paid a second time.
     withDb({
       "member_codes.select": codeRow(),
       "participants.select": { data: { name: "Doug" }, error: null },
-      "rpc.claim_guest_secrets": { error: { message: "boom" } },
+      "rpc.attach_device_to_player": { error: { message: "boom" } },
     });
-    const res = (await claim(
-      { participantId: PARTICIPANT_ID, code: CODE },
-      guestHeaders(signGuestToken(GUEST_ID).token),
-    )) as { ok: true; token: string };
-    expect(res.ok).toBe(true);
-    expect(verifyMemberToken(res.token)?.participantId).toBe(PARTICIPANT_ID);
+    await expect(
+      claim(
+        { participantId: PARTICIPANT_ID, code: CODE },
+        guestHeaders(signGuestToken(GUEST_ID).token),
+      ),
+    ).rejects.toThrow(/boom/);
   });
 
   it("issues a member token for the right code", async () => {
