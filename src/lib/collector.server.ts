@@ -56,31 +56,63 @@ export async function createCollector(
     .single();
   if (error || !created) throw error ?? new Error("Could not create your collector");
 
-  // INSERT, never UPSERT. Two tabs signing up at once each reach here with their
-  // own fresh participant; an upsert would let the second one repoint the account
-  // at its row while the first had already absorbed the guest's cards, stranding
-  // them on a participant nothing can reach again (claim_guest_* nulls guest_id,
-  // so the merge cannot be replayed). The unique violation forces a winner.
-  const { error: identityError } = await supabaseAdmin
-    .from("account_identities")
-    .insert({ user_id: userId, participant_id: created.id, guest_id: null });
+  // The account's guest id is captured BEFORE the binding write. The write
+  // clears guest_id (the constraint allows exactly one of the two), so anything
+  // read afterwards — including by a racing tab — can no longer see it. Holding
+  // it here is the only way the merge below can still consume it, and the only
+  // way a failed merge can put it back.
+  const priorGuestId = row?.guest_id ?? null;
 
+  // Two write shapes, both guarded so a racing tab cannot overwrite a winner:
+  // - row exists: one UPDATE sets participant_id and clears guest_id together,
+  //   only while participant_id is still NULL.
+  // - no row: INSERT. Two tabs signing up at once each reach here with their
+  //   own fresh participant; an upsert would let the second one repoint the
+  //   account at its row while the first had already absorbed the guest's
+  //   cards, stranding them on a participant nothing can reach again
+  //   (claim_guest_* nulls guest_id, so the merge cannot be replayed). The
+  //   unique violation forces a winner.
   let winnerId = created.id;
   let winnerName = created.name;
-  let winnerGuestId: string | null = row?.guest_id ?? null;
+  let boundFresh = false;
 
-  if (identityError) {
-    if (identityError.code !== "23505") throw identityError;
+  if (row) {
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from("account_identities")
+      .update({ participant_id: created.id, guest_id: null })
+      .eq("user_id", userId)
+      .is("participant_id", null)
+      .select("user_id");
+    if (updateError) {
+      await supabaseAdmin.from("participants").update({ active: false }).eq("id", created.id);
+      throw updateError;
+    }
+    boundFresh = (updated?.length ?? 0) > 0;
+  } else {
+    const { error: identityError } = await supabaseAdmin
+      .from("account_identities")
+      .insert({ user_id: userId, participant_id: created.id, guest_id: null });
+    if (identityError) {
+      if (identityError.code !== "23505") {
+        await supabaseAdmin.from("participants").update({ active: false }).eq("id", created.id);
+        throw identityError;
+      }
+    } else {
+      boundFresh = true;
+    }
+  }
+
+  if (!boundFresh) {
+    // Lost the race — the winner's row stands. The row we lost with holds
+    // nothing yet; retiring it keeps it off the roster and the trade lists.
+    await supabaseAdmin.from("participants").update({ active: false }).eq("id", created.id);
     const { data: winner, error: reReadError } = await supabaseAdmin
       .from("account_identities")
-      .select("participant_id, guest_id")
+      .select("participant_id")
       .eq("user_id", userId)
       .maybeSingle();
     if (reReadError) throw reReadError;
-    if (!winner?.participant_id) throw identityError;
-    // The row we lost with holds nothing yet — the guest merge runs below, against
-    // the winner. Retiring it keeps it off the roster and the trade lists.
-    await supabaseAdmin.from("participants").update({ active: false }).eq("id", created.id);
+    if (!winner?.participant_id) throw new Error("Could not create your collector");
     const { data: participant, error: participantError } = await supabaseAdmin
       .from("participants")
       .select("id, name")
@@ -91,10 +123,38 @@ export async function createCollector(
     }
     winnerId = participant.id;
     winnerName = participant.name;
-    winnerGuestId = winner.guest_id ?? null;
   }
 
-  await mergeGuests(winnerId, [winnerGuestId ?? "", ...deviceGuestIds]);
+  try {
+    await mergeGuests(winnerId, [priorGuestId ?? "", ...deviceGuestIds]);
+  } catch (mergeError) {
+    // The merge is the only consumer of priorGuestId, and claim_guest_* nulls
+    // the source guest as it goes — so a failure partway through must not
+    // leave the binding pointing at a collector with the account's guest id
+    // already cleared: a retry (especially on another device, with no guest
+    // token left locally) would have no way to name that guest again. Put the
+    // account row back exactly as it was and retire the fresh participant, so
+    // the next attempt replays the whole handoff.
+    if (boundFresh) {
+      if (priorGuestId) {
+        await supabaseAdmin
+          .from("account_identities")
+          .update({ participant_id: null, guest_id: priorGuestId })
+          .eq("user_id", userId)
+          .eq("participant_id", winnerId);
+      } else {
+        // No guest to restore: the row we inserted held nothing else, and the
+        // check constraint forbids leaving both columns null, so it goes away.
+        await supabaseAdmin
+          .from("account_identities")
+          .delete()
+          .eq("user_id", userId)
+          .eq("participant_id", winnerId);
+      }
+      await supabaseAdmin.from("participants").update({ active: false }).eq("id", winnerId);
+    }
+    throw mergeError;
+  }
 
   const { token, expiresAt } = signMemberToken(winnerId);
   return { participantId: winnerId, name: winnerName, token, expiresAt };
