@@ -151,7 +151,6 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
     [targets],
   );
 
-
   const removeItem = useCallback((id: string) => {
     setItems((prev) => {
       // Defensive: ids can repeat when the same file is dropped twice, so revoke

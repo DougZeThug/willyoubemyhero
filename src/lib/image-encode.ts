@@ -133,9 +133,7 @@ export async function encodeUploadImageVariants(file: File): Promise<EncodedImag
       const passthrough = await readAsDataUrl(file);
       return { thumb: passthrough, medium: passthrough, large: passthrough };
     } catch {
-      throw new Error(
-        `Couldn't read ${file.name} — pick it again, or save it to your phone first`,
-      );
+      throw new Error(`Couldn't read ${file.name} — pick it again, or save it to your phone first`);
     }
   }
 }
@@ -167,8 +165,6 @@ export async function snapshotFile(file: File): Promise<File> {
       lastModified: file.lastModified,
     });
   } catch {
-    throw new Error(
-      `Couldn't read ${file.name} — pick it again, or save it to your phone first`,
-    );
+    throw new Error(`Couldn't read ${file.name} — pick it again, or save it to your phone first`);
   }
 }

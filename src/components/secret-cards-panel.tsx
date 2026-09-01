@@ -271,7 +271,6 @@ export function SecretCardsPanel() {
     setDrafts((prev) => [...prev, ...next]);
   }
 
-
   async function saveDrafts() {
     if (drafts.length === 0) return;
     const unnamed = drafts.find((d) => !d.name.trim());
