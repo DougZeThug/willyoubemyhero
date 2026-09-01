@@ -27,7 +27,7 @@ import {
   updateSecretCollectionLook,
   uploadSecretCardArt,
 } from "@/lib/secret-cards.functions";
-import { encodeUploadImage } from "@/lib/image-encode";
+import { encodeUploadImage, snapshotFile } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
 import { SetAccentPicker } from "@/components/set-accent-picker";
@@ -235,7 +235,7 @@ export function SecretCardsPanel() {
       .finally(() => setSetBusyId(null));
   }
 
-  function addFiles(files: File[]) {
+  async function addFiles(files: File[]) {
     const next: Draft[] = [];
     for (const file of files) {
       if (!ACCEPT.includes(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) {
@@ -246,6 +246,15 @@ export function SecretCardsPanel() {
         toast.error(`${file.name}: card art is over 8.8 MB`);
         continue;
       }
+      // Read the bytes now, while the OS handle is still alive. One unreadable
+      // file is rejected on its own so the rest of the batch stays staged.
+      let staged: File;
+      try {
+        staged = await snapshotFile(file);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : `Couldn't read ${file.name}`);
+        continue;
+      }
       next.push({
         // Batch index alone repeats across drops, so the same file added twice
         // produced two drafts sharing a key — removing one wiped both.
@@ -253,11 +262,12 @@ export function SecretCardsPanel() {
         name: nameFromFile(file.name),
         flavour: "",
         collection: uploadCollection,
-        file,
+        file: staged,
         // Revoked in clearDrafts / removeDraft, and after a successful save.
-        previewUrl: URL.createObjectURL(file),
+        previewUrl: URL.createObjectURL(staged),
       });
     }
+    if (next.length === 0) return;
     setDrafts((prev) => [...prev, ...next]);
   }
 
@@ -337,7 +347,8 @@ export function SecretCardsPanel() {
   async function replaceArt(id: string, file: File) {
     setBusy(true);
     try {
-      await uploadFn({ data: { id, dataUrl: await encodeUploadImage(file) } });
+      const staged = await snapshotFile(file);
+      await uploadFn({ data: { id, dataUrl: await encodeUploadImage(staged) } });
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
       toast.success("Art replaced");
     } catch (e) {
@@ -579,7 +590,7 @@ export function SecretCardsPanel() {
         onDrop={(e) => {
           e.preventDefault();
           setDragging(false);
-          addFiles(Array.from(e.dataTransfer.files ?? []));
+          void addFiles(Array.from(e.dataTransfer.files ?? []));
         }}
         onClick={() => !busy && inputRef.current?.click()}
         role="button"
@@ -657,7 +668,7 @@ export function SecretCardsPanel() {
           accept="image/png,image/jpeg,image/webp"
           className="hidden"
           onChange={(e) => {
-            addFiles(Array.from(e.target.files ?? []));
+            void addFiles(Array.from(e.target.files ?? []));
             e.target.value = "";
           }}
         />

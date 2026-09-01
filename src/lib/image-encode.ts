@@ -127,8 +127,14 @@ export async function encodeUploadImageVariants(file: File): Promise<EncodedImag
       large: large.startsWith("data:image/") ? large : await readAsDataUrl(file),
     };
   } catch {
-    const passthrough = await readAsDataUrl(file);
-    return { thumb: passthrough, medium: passthrough, large: passthrough };
+    // Last resort. If even a plain read fails the handle is gone, so say
+    // something a human can act on rather than the browser's permission prose.
+    try {
+      const passthrough = await readAsDataUrl(file);
+      return { thumb: passthrough, medium: passthrough, large: passthrough };
+    } catch {
+      throw new Error(`Couldn't read ${file.name} — pick it again, or save it to your phone first`);
+    }
   }
 }
 
@@ -139,4 +145,26 @@ export async function encodeUploadImageVariants(file: File): Promise<EncodedImag
 export async function encodeUploadImage(file: File): Promise<string> {
   const sizes = await encodeUploadImageVariants(file);
   return sizes.large;
+}
+
+/**
+ * Copy a picked file's bytes into memory, immediately.
+ *
+ * On Android a file chosen from Gallery / Photos / Drive is a handle to a
+ * document the OS can revoke at any time. The upload panels stage a file, show
+ * a preview, and only read the bytes when the admin taps save — by which point
+ * the handle is often dead and both `createImageBitmap` and `FileReader` fail
+ * with a raw `NotReadableError` ("The requested file could not be read…").
+ * Snapshotting at pick time means the handle no longer matters afterwards.
+ */
+export async function snapshotFile(file: File): Promise<File> {
+  try {
+    const buf = await file.arrayBuffer();
+    return new File([buf], file.name, {
+      type: file.type,
+      lastModified: file.lastModified,
+    });
+  } catch {
+    throw new Error(`Couldn't read ${file.name} — pick it again, or save it to your phone first`);
+  }
 }
