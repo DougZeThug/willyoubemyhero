@@ -140,3 +140,27 @@ export async function encodeUploadImage(file: File): Promise<string> {
   const sizes = await encodeUploadImageVariants(file);
   return sizes.large;
 }
+
+/**
+ * Copy a picked file's bytes into memory, immediately.
+ *
+ * On Android a file chosen from Gallery / Photos / Drive is a handle to a
+ * document the OS can revoke at any time. The upload panels stage a file, show
+ * a preview, and only read the bytes when the admin taps save — by which point
+ * the handle is often dead and both `createImageBitmap` and `FileReader` fail
+ * with a raw `NotReadableError` ("The requested file could not be read…").
+ * Snapshotting at pick time means the handle no longer matters afterwards.
+ */
+export async function snapshotFile(file: File): Promise<File> {
+  try {
+    const buf = await file.arrayBuffer();
+    return new File([buf], file.name, {
+      type: file.type,
+      lastModified: file.lastModified,
+    });
+  } catch {
+    throw new Error(
+      `Couldn't read ${file.name} — pick it again, or save it to your phone first`,
+    );
+  }
+}
