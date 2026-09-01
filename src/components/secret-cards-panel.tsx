@@ -235,7 +235,7 @@ export function SecretCardsPanel() {
       .finally(() => setSetBusyId(null));
   }
 
-  function addFiles(files: File[]) {
+  async function addFiles(files: File[]) {
     const next: Draft[] = [];
     for (const file of files) {
       if (!ACCEPT.includes(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) {
@@ -246,6 +246,15 @@ export function SecretCardsPanel() {
         toast.error(`${file.name}: card art is over 8.8 MB`);
         continue;
       }
+      // Read the bytes now, while the OS handle is still alive. One unreadable
+      // file is rejected on its own so the rest of the batch stays staged.
+      let staged: File;
+      try {
+        staged = await snapshotFile(file);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : `Couldn't read ${file.name}`);
+        continue;
+      }
       next.push({
         // Batch index alone repeats across drops, so the same file added twice
         // produced two drafts sharing a key — removing one wiped both.
@@ -253,13 +262,15 @@ export function SecretCardsPanel() {
         name: nameFromFile(file.name),
         flavour: "",
         collection: uploadCollection,
-        file,
+        file: staged,
         // Revoked in clearDrafts / removeDraft, and after a successful save.
-        previewUrl: URL.createObjectURL(file),
+        previewUrl: URL.createObjectURL(staged),
       });
     }
+    if (next.length === 0) return;
     setDrafts((prev) => [...prev, ...next]);
   }
+
 
   async function saveDrafts() {
     if (drafts.length === 0) return;
