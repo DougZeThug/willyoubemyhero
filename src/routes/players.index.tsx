@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Shuffle, Layers, Check, ArrowUpDown, Medal } from "lucide-react";
@@ -52,6 +52,7 @@ import { seededRng, shuffle } from "@/lib/format";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 
 export const Route = createFileRoute("/players/")({
   head: () => ({
@@ -342,6 +343,46 @@ function PlayersPage() {
   const { order, collapsed, toggle, move } = useVaultLayout(presentIds);
   const sectionsById = useMemo(() => new Map(sections.map((x) => [x.id, x])), [sections]);
 
+  /**
+   * Take a finished-set plaque to the shelf holding that set's cards.
+   *
+   * The trophy is a badge, not a replacement for the cards, but it reads like one
+   * when the only thing on screen under "Complete" is a medal — a player finished
+   * Legacy Pets and reported his four cards had gone. So the plaque now points at
+   * the shelf they are actually on.
+   */
+  const shelfRefs = useRef(new Map<string, HTMLDivElement | null>());
+  const [flashed, setFlashed] = useState<string | null>(null);
+  const reducedMotion = usePrefersReducedMotion();
+  const shelfForTrophy = useCallback(
+    (collection: string) => {
+      const id = secretSectionId(collection);
+      // No shelf when every card of the set is pinned upstairs, or the cards have
+      // been traded away: the plaque stays a plain badge rather than a dead tap.
+      return sectionsById.has(id) ? id : null;
+    },
+    [sectionsById],
+  );
+  const openShelf = useCallback(
+    (id: string) => {
+      if (collapsed.has(id)) toggle(id);
+      setFlashed(id);
+      // Across a frame, so an expanding shelf has laid out before we scroll to it.
+      requestAnimationFrame(() => {
+        shelfRefs.current.get(id)?.scrollIntoView({
+          behavior: reducedMotion ? "auto" : "smooth",
+          block: "start",
+        });
+      });
+    },
+    [collapsed, toggle, reducedMotion],
+  );
+  useEffect(() => {
+    if (!flashed) return;
+    const t = setTimeout(() => setFlashed(null), 1600);
+    return () => clearTimeout(t);
+  }, [flashed]);
+
   // The sheet swipes what is on screen, in the order it is on screen. It used to
   // swipe the flat newest-pull-first list while the grid was already grouped, so
   // the next card of a swipe was rarely the one to the right of the last — and
@@ -372,39 +413,64 @@ function PlayersPage() {
    * nowhere else on this page — this is the one shelf entitled to a denominator,
    * because it only ever describes something already finished.
    */
-  const trophyTile = (t: CollectionTrophy) => (
-    <div
-      key={t.collection}
-      className="hud-bezel flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center"
-      style={{ borderColor: TROPHY_RARITY.border }}
-    >
-      <Medal
-        aria-hidden
-        className="h-9 w-9"
-        style={{ color: TROPHY_RARITY.accent, filter: "drop-shadow(0 0 10px currentColor)" }}
-      />
-      <div className="truncate font-display text-xs font-black uppercase tracking-wide">
-        {t.label}
-      </div>
-      <div
-        className="text-[9px] font-bold uppercase tracking-[0.25em]"
-        style={{ color: TROPHY_RARITY.accent }}
-      >
-        {trophySizeLabel(t.size)}
-      </div>
-      {/* Backfilled trophies carry the day this table came into existence, not the
+  const trophyTile = (t: CollectionTrophy) => {
+    const shelf = shelfForTrophy(t.collection);
+    const body = (
+      <>
+        <Medal
+          aria-hidden
+          className="h-9 w-9"
+          style={{ color: TROPHY_RARITY.accent, filter: "drop-shadow(0 0 10px currentColor)" }}
+        />
+        <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+          {t.label}
+        </div>
+        <div
+          className="text-[9px] font-bold uppercase tracking-[0.25em]"
+          style={{ color: TROPHY_RARITY.accent }}
+        >
+          {trophySizeLabel(t.size)}
+        </div>
+        {/* Backfilled trophies carry the day this table came into existence, not the
           day the set was finished — nothing in the schema records when a given
           person acquired a given card, and a traded row keeps the GIVER's pull
           date. Better to say nothing than to state a date the data cannot
           support, and better than eight people appearing to finish the same
           afternoon. */}
-      {t.via !== "backfill" && (
-        <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-          {t.completedOn}
+        {t.via !== "backfill" && (
+          <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+            {t.completedOn}
+          </div>
+        )}
+        {shelf && (
+          <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+            View set
+          </div>
+        )}
+      </>
+    );
+    const shell =
+      "hud-bezel flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center";
+    if (!shelf) {
+      return (
+        <div key={t.collection} className={shell} style={{ borderColor: TROPHY_RARITY.border }}>
+          {body}
         </div>
-      )}
-    </div>
-  );
+      );
+    }
+    return (
+      <button
+        key={t.collection}
+        type="button"
+        onClick={() => openShelf(shelf)}
+        aria-label={`Show your ${t.label} cards`}
+        className={cn(shell, "transition-transform hover:scale-[1.02] active:scale-[0.99]")}
+        style={{ borderColor: TROPHY_RARITY.border }}
+      >
+        {body}
+      </button>
+    );
+  };
 
   const secretTile = (s: OwnedSecret) => {
     const rarity = secretFoil(s.foil, s.borderFx);
@@ -676,33 +742,45 @@ function PlayersPage() {
           const section = sectionsById.get(id);
           if (!section) return null;
           return (
-            <VaultSection
+            // Scroll target for the Complete plaques, plus a brief ring so it is
+            // obvious which shelf you just landed on.
+            <div
               key={id}
-              title={section.title}
-              meta={section.meta}
-              accent={section.kind === "secrets" ? section.accent : undefined}
-              open={!collapsed.has(id)}
-              onOpenChange={() => toggle(id)}
-              canMoveUp={i > 0}
-              canMoveDown={i < order.length - 1}
-              onMove={(delta) => move(id, delta)}
-              rearranging={rearranging}
+              ref={(el) => {
+                shelfRefs.current.set(id, el);
+              }}
+              className={cn(
+                "scroll-mt-4 rounded-xl transition-shadow",
+                flashed === id && "ring-2 ring-primary/60",
+              )}
             >
-              {section.kind === "roster"
-                ? rosterBody
-                : section.kind === "trophies"
-                  ? cardGrid(section.trophies.map(trophyTile))
-                  : section.kind === "favourites"
-                    ? // Both kinds of card land on one shelf, each drawn by the
-                      // renderer it would have had downstairs, so a pinned card
-                      // looks like itself rather than like a third thing.
-                      cardGrid(
-                        section.items.map((f) =>
-                          f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
-                        ),
-                      )
-                    : cardGrid(section.items.map(secretTile))}
-            </VaultSection>
+              <VaultSection
+                title={section.title}
+                meta={section.meta}
+                accent={section.kind === "secrets" ? section.accent : undefined}
+                open={!collapsed.has(id)}
+                onOpenChange={() => toggle(id)}
+                canMoveUp={i > 0}
+                canMoveDown={i < order.length - 1}
+                onMove={(delta) => move(id, delta)}
+                rearranging={rearranging}
+              >
+                {section.kind === "roster"
+                  ? rosterBody
+                  : section.kind === "trophies"
+                    ? cardGrid(section.trophies.map(trophyTile))
+                    : section.kind === "favourites"
+                      ? // Both kinds of card land on one shelf, each drawn by the
+                        // renderer it would have had downstairs, so a pinned card
+                        // looks like itself rather than like a third thing.
+                        cardGrid(
+                          section.items.map((f) =>
+                            f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
+                          ),
+                        )
+                      : cardGrid(section.items.map(secretTile))}
+              </VaultSection>
+            </div>
           );
         })}
       </div>
