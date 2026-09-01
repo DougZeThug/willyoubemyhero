@@ -744,34 +744,47 @@ function PlayersPage() {
           const section = sectionsById.get(id);
           if (!section) return null;
           return (
-            <VaultSection
+            // Scroll target for the Complete plaques, plus a brief ring so it is
+            // obvious which shelf you just landed on.
+            <div
               key={id}
-              title={section.title}
-              meta={section.meta}
-              accent={section.kind === "secrets" ? section.accent : undefined}
-              open={!collapsed.has(id)}
-              onOpenChange={() => toggle(id)}
-              canMoveUp={i > 0}
-              canMoveDown={i < order.length - 1}
-              onMove={(delta) => move(id, delta)}
-              rearranging={rearranging}
+              ref={(el) => {
+                shelfRefs.current.set(id, el);
+              }}
+              className={cn(
+                "scroll-mt-4 rounded-xl transition-shadow",
+                flashed === id && "ring-2 ring-primary/60",
+              )}
             >
-              {section.kind === "roster"
-                ? rosterBody
-                : section.kind === "trophies"
-                  ? cardGrid(section.trophies.map(trophyTile))
-                  : section.kind === "favourites"
-                    ? // Both kinds of card land on one shelf, each drawn by the
-                      // renderer it would have had downstairs, so a pinned card
-                      // looks like itself rather than like a third thing.
-                      cardGrid(
-                        section.items.map((f) =>
-                          f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
-                        ),
-                      )
-                    : cardGrid(section.items.map(secretTile))}
-            </VaultSection>
+              <VaultSection
+                title={section.title}
+                meta={section.meta}
+                accent={section.kind === "secrets" ? section.accent : undefined}
+                open={!collapsed.has(id)}
+                onOpenChange={() => toggle(id)}
+                canMoveUp={i > 0}
+                canMoveDown={i < order.length - 1}
+                onMove={(delta) => move(id, delta)}
+                rearranging={rearranging}
+              >
+                {section.kind === "roster"
+                  ? rosterBody
+                  : section.kind === "trophies"
+                    ? cardGrid(section.trophies.map(trophyTile))
+                    : section.kind === "favourites"
+                      ? // Both kinds of card land on one shelf, each drawn by the
+                        // renderer it would have had downstairs, so a pinned card
+                        // looks like itself rather than like a third thing.
+                        cardGrid(
+                          section.items.map((f) =>
+                            f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
+                          ),
+                        )
+                      : cardGrid(section.items.map(secretTile))}
+              </VaultSection>
+            </div>
           );
+
         })}
       </div>
     </div>
