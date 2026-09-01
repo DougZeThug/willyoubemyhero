@@ -110,17 +110,26 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
   const [busy, setBusy] = useState(false);
 
   const addFiles = useCallback(
-    (files: FileList | File[]) => {
+    async (files: FileList | File[]) => {
       const next: Candidate[] = [];
       for (const file of Array.from(files)) {
         // Some browsers report an empty MIME type for dragged files, so fall
         // back to the extension rather than silently dropping the file.
         if (!ACCEPT.includes(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) continue;
+        // Copy the bytes now: an Android gallery handle can be revoked between
+        // staging and save, which is what surfaced the raw NotReadableError.
+        let staged: File;
+        try {
+          staged = await snapshotFile(file);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : `Couldn't read ${file.name}`);
+          continue;
+        }
         const { side, id } = bestMatch(file.name, targets);
         next.push({
           id: `${file.name}-${file.size}-${file.lastModified}`,
-          file,
-          previewUrl: URL.createObjectURL(file),
+          file: staged,
+          previewUrl: URL.createObjectURL(staged),
           eventParticipantId: id,
           side,
           autoMatched: !!id,
@@ -141,6 +150,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
     },
     [targets],
   );
+
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => {
