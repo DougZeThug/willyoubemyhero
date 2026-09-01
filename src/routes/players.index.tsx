@@ -343,6 +343,47 @@ function PlayersPage() {
   const { order, collapsed, toggle, move } = useVaultLayout(presentIds);
   const sectionsById = useMemo(() => new Map(sections.map((x) => [x.id, x])), [sections]);
 
+  /**
+   * Take a finished-set plaque to the shelf holding that set's cards.
+   *
+   * The trophy is a badge, not a replacement for the cards, but it reads like one
+   * when the only thing on screen under "Complete" is a medal — a player finished
+   * Legacy Pets and reported his four cards had gone. So the plaque now points at
+   * the shelf they are actually on.
+   */
+  const shelfRefs = useRef(new Map<string, HTMLDivElement | null>());
+  const [flashed, setFlashed] = useState<string | null>(null);
+  const reducedMotion = usePrefersReducedMotion();
+  const shelfForTrophy = useCallback(
+    (collection: string) => {
+      const id = secretSectionId(collection);
+      // No shelf when every card of the set is pinned upstairs, or the cards have
+      // been traded away: the plaque stays a plain badge rather than a dead tap.
+      return sectionsById.has(id) ? id : null;
+    },
+    [sectionsById],
+  );
+  const openShelf = useCallback(
+    (id: string) => {
+      if (collapsed.has(id)) toggle(id);
+      setFlashed(id);
+      // Across a frame, so an expanding shelf has laid out before we scroll to it.
+      requestAnimationFrame(() => {
+        shelfRefs.current.get(id)?.scrollIntoView({
+          behavior: reducedMotion ? "auto" : "smooth",
+          block: "start",
+        });
+      });
+    },
+    [collapsed, toggle, reducedMotion],
+  );
+  useEffect(() => {
+    if (!flashed) return;
+    const t = setTimeout(() => setFlashed(null), 1600);
+    return () => clearTimeout(t);
+  }, [flashed]);
+
+
   // The sheet swipes what is on screen, in the order it is on screen. It used to
   // swipe the flat newest-pull-first list while the grid was already grouped, so
   // the next card of a swipe was rarely the one to the right of the last — and
