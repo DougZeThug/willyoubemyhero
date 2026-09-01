@@ -383,7 +383,6 @@ function PlayersPage() {
     return () => clearTimeout(t);
   }, [flashed]);
 
-
   // The sheet swipes what is on screen, in the order it is on screen. It used to
   // swipe the flat newest-pull-first list while the grid was already grouped, so
   // the next card of a swipe was rarely the one to the right of the last — and
@@ -472,7 +471,6 @@ function PlayersPage() {
       </button>
     );
   };
-
 
   const secretTile = (s: OwnedSecret) => {
     const rarity = secretFoil(s.foil, s.borderFx);
@@ -784,7 +782,6 @@ function PlayersPage() {
               </VaultSection>
             </div>
           );
-
         })}
       </div>
     </div>
