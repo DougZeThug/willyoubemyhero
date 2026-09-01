@@ -127,8 +127,16 @@ export async function encodeUploadImageVariants(file: File): Promise<EncodedImag
       large: large.startsWith("data:image/") ? large : await readAsDataUrl(file),
     };
   } catch {
-    const passthrough = await readAsDataUrl(file);
-    return { thumb: passthrough, medium: passthrough, large: passthrough };
+    // Last resort. If even a plain read fails the handle is gone, so say
+    // something a human can act on rather than the browser's permission prose.
+    try {
+      const passthrough = await readAsDataUrl(file);
+      return { thumb: passthrough, medium: passthrough, large: passthrough };
+    } catch {
+      throw new Error(
+        `Couldn't read ${file.name} — pick it again, or save it to your phone first`,
+      );
+    }
   }
 }
 
