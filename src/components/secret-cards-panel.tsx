@@ -27,7 +27,7 @@ import {
   updateSecretCollectionLook,
   uploadSecretCardArt,
 } from "@/lib/secret-cards.functions";
-import { encodeUploadImage } from "@/lib/image-encode";
+import { encodeUploadImage, snapshotFile } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
 import { SetAccentPicker } from "@/components/set-accent-picker";
@@ -348,7 +348,8 @@ export function SecretCardsPanel() {
   async function replaceArt(id: string, file: File) {
     setBusy(true);
     try {
-      await uploadFn({ data: { id, dataUrl: await encodeUploadImage(file) } });
+      const staged = await snapshotFile(file);
+      await uploadFn({ data: { id, dataUrl: await encodeUploadImage(staged) } });
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
       toast.success("Art replaced");
     } catch (e) {
@@ -590,7 +591,7 @@ export function SecretCardsPanel() {
         onDrop={(e) => {
           e.preventDefault();
           setDragging(false);
-          addFiles(Array.from(e.dataTransfer.files ?? []));
+          void addFiles(Array.from(e.dataTransfer.files ?? []));
         }}
         onClick={() => !busy && inputRef.current?.click()}
         role="button"
@@ -668,7 +669,7 @@ export function SecretCardsPanel() {
           accept="image/png,image/jpeg,image/webp"
           className="hidden"
           onChange={(e) => {
-            addFiles(Array.from(e.target.files ?? []));
+            void addFiles(Array.from(e.target.files ?? []));
             e.target.value = "";
           }}
         />
