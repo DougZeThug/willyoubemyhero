@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Upload, X, CheckCircle2, AlertTriangle } from "lucide-react";
 import { uploadParticipantCardsBulk } from "@/lib/media.functions";
 import type { CardSide } from "@/lib/media";
-import { encodeUploadImageVariants } from "@/lib/image-encode";
+import { encodeUploadImageVariants, snapshotFile } from "@/lib/image-encode";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -221,7 +221,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
         onDrop={(e) => {
           e.preventDefault();
           setDragging(false);
-          addFiles(e.dataTransfer.files);
+          void addFiles(e.dataTransfer.files);
         }}
         onClick={() => inputRef.current?.click()}
         role="button"
@@ -254,7 +254,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
           accept="image/png,image/jpeg,image/webp"
           className="hidden"
           onChange={(e) => {
-            if (e.target.files) addFiles(e.target.files);
+            if (e.target.files) void addFiles(e.target.files);
             e.target.value = "";
           }}
         />
