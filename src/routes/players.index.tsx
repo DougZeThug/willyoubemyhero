@@ -414,39 +414,65 @@ function PlayersPage() {
    * nowhere else on this page — this is the one shelf entitled to a denominator,
    * because it only ever describes something already finished.
    */
-  const trophyTile = (t: CollectionTrophy) => (
-    <div
-      key={t.collection}
-      className="hud-bezel flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center"
-      style={{ borderColor: TROPHY_RARITY.border }}
-    >
-      <Medal
-        aria-hidden
-        className="h-9 w-9"
-        style={{ color: TROPHY_RARITY.accent, filter: "drop-shadow(0 0 10px currentColor)" }}
-      />
-      <div className="truncate font-display text-xs font-black uppercase tracking-wide">
-        {t.label}
-      </div>
-      <div
-        className="text-[9px] font-bold uppercase tracking-[0.25em]"
-        style={{ color: TROPHY_RARITY.accent }}
-      >
-        {trophySizeLabel(t.size)}
-      </div>
-      {/* Backfilled trophies carry the day this table came into existence, not the
+  const trophyTile = (t: CollectionTrophy) => {
+    const shelf = shelfForTrophy(t.collection);
+    const body = (
+      <>
+        <Medal
+          aria-hidden
+          className="h-9 w-9"
+          style={{ color: TROPHY_RARITY.accent, filter: "drop-shadow(0 0 10px currentColor)" }}
+        />
+        <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+          {t.label}
+        </div>
+        <div
+          className="text-[9px] font-bold uppercase tracking-[0.25em]"
+          style={{ color: TROPHY_RARITY.accent }}
+        >
+          {trophySizeLabel(t.size)}
+        </div>
+        {/* Backfilled trophies carry the day this table came into existence, not the
           day the set was finished — nothing in the schema records when a given
           person acquired a given card, and a traded row keeps the GIVER's pull
           date. Better to say nothing than to state a date the data cannot
           support, and better than eight people appearing to finish the same
           afternoon. */}
-      {t.via !== "backfill" && (
-        <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-          {t.completedOn}
+        {t.via !== "backfill" && (
+          <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+            {t.completedOn}
+          </div>
+        )}
+        {shelf && (
+          <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+            View set
+          </div>
+        )}
+      </>
+    );
+    const shell =
+      "hud-bezel flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center";
+    if (!shelf) {
+      return (
+        <div key={t.collection} className={shell} style={{ borderColor: TROPHY_RARITY.border }}>
+          {body}
         </div>
-      )}
-    </div>
-  );
+      );
+    }
+    return (
+      <button
+        key={t.collection}
+        type="button"
+        onClick={() => openShelf(shelf)}
+        aria-label={`Show your ${t.label} cards`}
+        className={cn(shell, "transition-transform hover:scale-[1.02] active:scale-[0.99]")}
+        style={{ borderColor: TROPHY_RARITY.border }}
+      >
+        {body}
+      </button>
+    );
+  };
+
 
   const secretTile = (s: OwnedSecret) => {
     const rarity = secretFoil(s.foil, s.borderFx);
