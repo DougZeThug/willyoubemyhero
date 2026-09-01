@@ -52,6 +52,7 @@ import { seededRng, shuffle } from "@/lib/format";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
+import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 
 export const Route = createFileRoute("/players/")({
   head: () => ({
