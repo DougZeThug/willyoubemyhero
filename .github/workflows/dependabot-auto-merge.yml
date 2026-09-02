@@ -7,6 +7,12 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # An explicit permissions block sets every unlisted scope to none, and the wait
+  # below reads the head commit's check runs and commit statuses. Without these
+  # two the gh call returns an authorization error, the rollup comes back empty,
+  # and the step fails closed on every run.
+  checks: read
+  statuses: read
 
 jobs:
   approve-and-merge:
@@ -49,7 +55,13 @@ jobs:
           # ignored and the rollup it printed is what gets judged. Blanking the
           # output on a non-zero exit would hide the failure this step exists to
           # catch. Only a rollup that will not parse falls back to empty.
-          empty_polls=0
+          #
+          # These are ci.yml's job names, and they are required by name on
+          # purpose: "nothing pending and nothing failed" is also true of a
+          # rollup holding only a fast review bot, and approving on that would
+          # merge a head CI never ran on.
+          required='["lint / build","database","e2e"]'
+          absent_polls=0
           while true; do
             rollup=$(gh pr checks "$PR_URL" --json name,bucket,workflow) || true
             others=$(jq -c --arg self "$SELF_WORKFLOW" \
@@ -58,20 +70,6 @@ jobs:
             # an empty result has to be turned back into an array here or every
             # later test compares against the empty string and the loop spins.
             [ -n "$others" ] || others="[]"
-
-            # A head carrying no checks at all is never safe to merge: pushes
-            # made with GITHUB_TOKEN — the bun.lock regeneration workflow — start
-            # no workflow run, so such a head has no CI behind it. Tolerated only
-            # for the couple of minutes GitHub can take to report a fresh push.
-            if [ "$(jq 'length' <<<"$others")" -eq 0 ]; then
-              empty_polls=$((empty_polls + 1))
-              if [ "$empty_polls" -gt 20 ]; then
-                echo "::error::No checks reported on this head after five minutes; refusing to auto-merge."
-                exit 1
-              fi
-              sleep 15
-              continue
-            fi
 
             # A cancelled check counts as a failure: it proves nothing about the
             # head, and failing closed here only costs a human clicking merge.
@@ -82,9 +80,26 @@ jobs:
               exit 1
             fi
 
-            if [ "$(jq '[.[] | select(.bucket == "pending")] | length' <<<"$others")" -eq 0 ]; then
+            # A required job absent from the rollup is not the same as one still
+            # running: pushes made with GITHUB_TOKEN — the bun.lock regeneration
+            # workflow — start no workflow run, so that head has no CI behind it
+            # at all. Tolerated only for the few minutes GitHub takes to report a
+            # fresh push, then refused.
+            absent=$(jq -r --argjson req "$required" '$req - [.[].name] | join(", ")' <<<"$others")
+            if [ -n "$absent" ]; then
+              absent_polls=$((absent_polls + 1))
+              if [ "$absent_polls" -gt 20 ]; then
+                echo "::error::No run reported for: $absent — refusing to auto-merge a head CI did not run on."
+                exit 1
+              fi
+              sleep 15
+              continue
+            fi
+
+            if [ "$(jq --argjson req "$required" \
+              '[.[] | select(.name as $n | $req | index($n)) | select(.bucket != "pass")] | length' <<<"$others")" -eq 0 ]; then
               jq -r '.[] | "  \(.bucket)\t\(.name)"' <<<"$others"
-              echo "Every check on this head finished and none failed."
+              echo "Every required check passed on this head."
               exit 0
             fi
 
