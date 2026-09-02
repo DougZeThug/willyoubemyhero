@@ -88,9 +88,15 @@ export type PackState = {
  * the next load.
  */
 export type UnrecordedPulls = {
-  /** Local date key the pack was dealt for. */
+  /**
+   * The most recent day that added to this row.
+   *
+   * Nothing reads it: the ids are protected until the league takes them, not
+   * until the date rolls over. Kept because a row that has outlived its own day
+   * is the symptom of the retry problem, and this is the only place that says so.
+   */
   dayKey: string;
-  /** Who the pack was dealt to, as `usePackIdentity` returns it. */
+  /** Whose pulls these are, as `usePackIdentity` returns it. */
   identity?: string;
   /** `event_participants.id` for every card the server still owes an answer on. */
   ids: string[];
@@ -283,23 +289,48 @@ export async function loadUnrecorded(): Promise<UnrecordedPulls | null> {
   }
 }
 
-export async function saveUnrecorded(state: UnrecordedPulls): Promise<void> {
+/**
+ * File a pack the server has not taken yet.
+ *
+ * Adds rather than replaces. A pack that failed to record on Monday used to lose
+ * its protection the moment Tuesday's was dealt — and Monday's is never re-sent
+ * (the pack row for it is already gone), so nothing would ever have vouched for
+ * those cards and the next server answer deleted them. The one thing that does
+ * replace the row is a different identity: the previous person's cards are not
+ * this one's to hold on to, and `mergeCollection` disowns their collected rows
+ * on this handset anyway.
+ */
+export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
   if (!isBrowser()) return;
   try {
     const db = await getDb();
-    await db.put(PACK_STATE, state, UNRECORDED_KEY);
+    const prior = (await db.get(PACK_STATE, UNRECORDED_KEY)) as UnrecordedPulls | undefined;
+    const keep = prior && prior.identity === state.identity ? prior.ids : [];
+    const ids = [...new Set([...keep, ...state.ids])];
+    await db.put(PACK_STATE, { ...state, ids }, UNRECORDED_KEY);
     announcePackState();
   } catch {
     /* ignore */
   }
 }
 
-/** Hand the ids back to the merge. Only a successful record may call this. */
-export async function clearUnrecorded(): Promise<void> {
+/**
+ * Hand back the ids the league has just taken, and only those.
+ *
+ * A record posts one pack, so it can only vouch for one pack. Clearing the whole
+ * row would retire an older pack's ids on the strength of a call that never
+ * mentioned them.
+ */
+export async function retireUnrecorded(recorded: readonly string[]): Promise<void> {
   if (!isBrowser()) return;
   try {
     const db = await getDb();
-    await db.delete(PACK_STATE, UNRECORDED_KEY);
+    const prior = (await db.get(PACK_STATE, UNRECORDED_KEY)) as UnrecordedPulls | undefined;
+    if (!prior) return;
+    const taken = new Set(recorded);
+    const ids = prior.ids.filter((id) => !taken.has(id));
+    if (ids.length === 0) await db.delete(PACK_STATE, UNRECORDED_KEY);
+    else await db.put(PACK_STATE, { ...prior, ids }, UNRECORDED_KEY);
     announcePackState();
   } catch {
     /* ignore */

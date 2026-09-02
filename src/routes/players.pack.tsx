@@ -28,11 +28,11 @@ import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
-  clearUnrecorded,
+  addUnrecorded,
   collectCard,
   loadPackState,
+  retireUnrecorded,
   savePackState,
-  saveUnrecorded,
   type CollectedCard,
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
@@ -66,7 +66,7 @@ import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
 import { streakLine, streakMilestone } from "@/lib/streaks";
 import type { SecretTier } from "@/lib/secret-rarity";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
-import { packedByLabel } from "@/lib/card-pulls";
+import { packedByLabel, type MyCardStats } from "@/lib/card-pulls";
 import { urlFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
@@ -151,10 +151,12 @@ function todayKey(): string {
 
 function PackPage() {
   const { event, bundle, error, realtimeDegraded, refetch } = useEventBundle();
-  // The league could not be reached at all, as opposed to a bundle that is still
-  // on its way. Nothing on this screen works without the roster, so this is both
-  // what unblocks `useMyCollection` below and what the render bails out on.
-  const eventFailed = !!error && !event;
+  // A read that failed, as opposed to one still on its way. Either half counts:
+  // the roster comes out of the bundle, and a bundle that errored behind a
+  // cached event leaves `dealPack` with nothing to deal exactly as a missing
+  // event does. This is both what unblocks `useMyCollection` below and what the
+  // render bails out on.
+  const eventFailed = !!error && (!event || !bundle);
   const sfx = useCardSfx();
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never a player's — see the note on useEventCardBack. The
@@ -768,7 +770,7 @@ function PackPage() {
       // server cannot vouch for these — so a pack torn in a dead spot was
       // collected, shown, and then deleted on the next load. This row is what
       // `useMyCollection` reads to hold them back, and it outlives the page.
-      await saveUnrecorded({ dayKey, identity: identity ?? undefined, ids });
+      await addUnrecorded({ dayKey, identity: identity ?? undefined, ids });
       // Three tries with a pause between them, then hand the latch back and
       // wait for a wake (recordWake above) to start a fresh cycle. One garden
       // dead spot used to cost the whole day's count: the latch was taken
@@ -811,13 +813,25 @@ function PackPage() {
             // Only a member has card rows to recount; a guest's ids went nowhere.
             ...(pid ? [qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) })] : []),
           ]);
-          // After the invalidations, never before. `invalidateQueries` waits on
-          // the refetch, so by here the stats answer that vouches for this pack
-          // is in the cache and can take over. Cleared first, there is a window
-          // where the merge is still reading the answer from before the tear and
-          // the ids have just lost their protection — which is the prune this
-          // whole row exists to prevent, on a pack that actually recorded.
-          await clearUnrecorded();
+          // Retired only once something else vouches for these cards, because
+          // the moment the row lets go of them the merge may delete them.
+          //
+          // `invalidateQueries` resolves whether or not the refetch it fired
+          // succeeded, and a failed one leaves the answer from *before* the tear
+          // sitting in the cache — retiring against that is the exact prune this
+          // row exists to prevent. So the answer has to be here and has to name
+          // the cards. A guest has no stats query and is never pruned, so there
+          // is nothing for one to wait for.
+          //
+          // The actor guard is the same one each attempt makes above: a phone
+          // that changed hands mid-request has a new member's own run filing
+          // their row by now, and this one must not retire it for them.
+          const answered = pid
+            ? (qc.getQueryData(myCardStatsKey(event?.id, pid)) as MyCardStats | undefined)
+            : undefined;
+          const vouchedFor = new Set(answered?.cards.map((c) => c.eventParticipantId));
+          const vouched = !pid || (!!answered && ids.every((id) => vouchedFor.has(id)));
+          if (recordActorRef.current === actor && vouched) await retireUnrecorded(ids);
           return;
         } catch {
           /* a count nobody asked for is not worth an error nobody can act on */

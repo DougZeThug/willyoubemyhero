@@ -9,6 +9,7 @@ import {
   loadUnrecorded,
   PACK_STATE_CHANGED,
   type CollectedCard,
+  type UnrecordedPulls,
 } from "@/lib/card-collection";
 import { bestEdition, type Edition } from "@/lib/card-edition";
 import { mergeCollection } from "@/lib/collection-merge";
@@ -20,16 +21,21 @@ export const myCardStatsKey = (eventId: string | null | undefined, participantId
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 /**
- * Whether a re-read found the same unrecorded ids as the last one.
+ * Whether a re-read found the same row as the last one.
  *
  * `savePackState` announces itself on every card turned over, so this is read
- * several times a pack. A fresh Set each time is a new `merged`, a new
- * `collection` and a re-render of every card on the vault for an answer that did
- * not change.
+ * several times a pack. Handing back a fresh object each time is a new `merged`,
+ * a new `collection` and a re-render of every card on the vault for an answer
+ * that did not change.
  */
-function sameIds(prev: ReadonlySet<string>, next: readonly string[] | undefined) {
-  const ids = next ?? [];
-  return prev.size === ids.length && ids.every((id) => prev.has(id));
+function sameRow(a: UnrecordedPulls | null, b: UnrecordedPulls | null) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.identity === b.identity &&
+    a.ids.length === b.ids.length &&
+    a.ids.every((id, i) => b.ids[i] === id)
+  );
 }
 
 export type MyCollection = {
@@ -123,13 +129,15 @@ export function useMyCollection(
   // IndexedDB. Read here rather than handed in: every screen that shows a card
   // has to honour them, and the pack screen — the only thing that writes them —
   // is not mounted on any of the others.
-  const [protectedIds, setProtectedIds] = useState<ReadonlySet<string>>(EMPTY_IDS);
+  const [unrecorded, setUnrecorded] = useState<UnrecordedPulls | null>(null);
+  const [unrecordedLoaded, setUnrecordedLoaded] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const read = () =>
       void loadUnrecorded().then((u) => {
         if (cancelled) return;
-        setProtectedIds((prev) => (sameIds(prev, u?.ids) ? prev : new Set(u?.ids ?? [])));
+        setUnrecorded((prev) => (sameRow(prev, u) ? prev : u));
+        setUnrecordedLoaded(true);
       });
     read();
     window.addEventListener(PACK_STATE_CHANGED, read);
@@ -138,6 +146,20 @@ export function useMyCollection(
       window.removeEventListener(PACK_STATE_CHANGED, read);
     };
   }, []);
+
+  const protectedIds = useMemo(() => {
+    if (!unrecorded || unrecorded.ids.length === 0) return EMPTY_IDS;
+    // A row belongs to whoever pulled it, and a handset changes hands in this
+    // league. Holding the previous member's unreported cards back from the prune
+    // would show them in this one's vault as cards they own — and the merge
+    // disowns that person's collected rows here regardless, recorded or not.
+    // Derived rather than filtered at read time so claiming a player re-decides
+    // it without a remount.
+    if (participantId && unrecorded.identity && unrecorded.identity !== `m:${participantId}`) {
+      return EMPTY_IDS;
+    }
+    return new Set(unrecorded.ids);
+  }, [unrecorded, participantId]);
 
   const fn = useServerFn(getMyCardStats);
   const stats = useQuery({
@@ -163,8 +185,14 @@ export function useMyCollection(
   // is the caller distinguishing a read that failed from one that is merely slow;
   // the merge then runs against no server answer at all, which by its first rule
   // hands the local store back untouched and prunes nothing.
+  //
+  // `unrecordedLoaded` is the second half of `localLoaded`, and it is here for
+  // the same reason: these are two separate IndexedDB reads, and reconciling
+  // after the first has landed but not the second means merging with an empty
+  // protection set — which deletes the very cards the row was written to save.
   const settled =
     localLoaded &&
+    unrecordedLoaded &&
     (!participantId || stats.isSuccess || stats.isError || (eventFailed && !eventId));
 
   const roster = useMemo(() => new Set(rosterIds), [rosterIds]);

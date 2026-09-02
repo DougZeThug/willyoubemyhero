@@ -261,6 +261,45 @@ describe("useMyCollection, holding a pull the server has not been told about", (
     expect(deleted).toHaveLength(16);
   });
 
+  it("waits for the row before reconciling, however fast the server is", async () => {
+    // Two separate IndexedDB reads back this hook, and settling on the first
+    // means merging with an empty protection set — which deletes the very cards
+    // the row was written to save. The server answering instantly is the
+    // ordinary case on a warm cache, not a contrived one.
+    let land!: (v: unknown) => void;
+    loadUnrecorded.mockReturnValue(new Promise((r) => (land = r)));
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(getMyCardStats).toHaveBeenCalled());
+    expect(result.current.ready).toBe(false);
+    expect(forgetCards).not.toHaveBeenCalled();
+
+    await act(async () => land(unrecorded(["ep-5"])));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).not.toContain("ep-5");
+  });
+
+  it("does not hold the previous member's cards back for the next one", async () => {
+    // A handset changes hands in this league. Whoever picks it up next does not
+    // own the cards the last person never managed to report, and showing them
+    // would be this hook's one unforgivable direction: a card unlocking that
+    // nobody pulled. Their collected rows are disowned here either way.
+    loadUnrecorded.mockResolvedValue({
+      dayKey: "2026-07-31",
+      identity: "m:p-someone-else",
+      ids: ["ep-5"],
+    });
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.collection["ep-5"]).toBeUndefined();
+    await waitFor(() =>
+      expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).toContain("ep-5"),
+    );
+  });
+
   it("takes the server's row for one the server does list", async () => {
     // The record landed after all, or another phone pulled it. Protection buys a
     // card the benefit of the doubt, never a better number than the league's.

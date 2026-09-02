@@ -244,15 +244,54 @@ describe("unrecorded pulls", () => {
 
   it("round-trips the ids the server has not been told about", async () => {
     const mod = await freshModule();
-    await mod.saveUnrecorded(UNRECORDED);
+    await mod.addUnrecorded(UNRECORDED);
     expect(await mod.loadUnrecorded()).toEqual(UNRECORDED);
   });
 
-  it("is cleared outright, so only a successful record retires it", async () => {
+  it("is retired by the record that took it, and only then", async () => {
     const mod = await freshModule();
-    await mod.saveUnrecorded(UNRECORDED);
-    await mod.clearUnrecorded();
+    await mod.addUnrecorded(UNRECORDED);
+    await mod.retireUnrecorded([CARD_A, CARD_B]);
     expect(await mod.loadUnrecorded()).toBeNull();
+  });
+
+  it("retires only the ids the league actually took", async () => {
+    // A record posts one pack, so it can only vouch for one pack. Monday's cards
+    // are not adjudicated by Tuesday's call.
+    const mod = await freshModule();
+    await mod.addUnrecorded(UNRECORDED);
+    await mod.retireUnrecorded([CARD_A]);
+    expect((await mod.loadUnrecorded())?.ids).toEqual([CARD_B]);
+  });
+
+  it("keeps an earlier day's pack when a later one is filed", async () => {
+    // The hole this closes: a pack that failed to record on Monday used to lose
+    // its protection the moment Tuesday's was dealt, and Monday's is never
+    // re-sent — so nothing would ever have vouched for those cards again.
+    const mod = await freshModule();
+    await mod.addUnrecorded({ dayKey: "2026-07-27", identity: "m:p-alice", ids: [CARD_A] });
+    await mod.addUnrecorded({ dayKey: "2026-07-28", identity: "m:p-alice", ids: [CARD_B] });
+    const row = (await mod.loadUnrecorded())!;
+    expect(row.ids.sort()).toEqual([CARD_A, CARD_B].sort());
+    expect(row.dayKey).toBe("2026-07-28");
+  });
+
+  it("does not file the same card twice", async () => {
+    const mod = await freshModule();
+    await mod.addUnrecorded(UNRECORDED);
+    await mod.addUnrecorded(UNRECORDED);
+    expect((await mod.loadUnrecorded())?.ids).toEqual([CARD_A, CARD_B]);
+  });
+
+  it("gives the row to the next person when the handset changes hands", async () => {
+    // The one thing that replaces rather than merges. The previous member's
+    // unreported cards are not this one's to hold on to — and mergeCollection
+    // disowns their collected rows on this handset either way.
+    const mod = await freshModule();
+    await mod.addUnrecorded({ dayKey: "2026-07-28", identity: "m:p-alice", ids: [CARD_A] });
+    await mod.addUnrecorded({ dayKey: "2026-07-28", identity: "m:p-bob", ids: [CARD_B] });
+    const row = (await mod.loadUnrecorded())!;
+    expect(row).toEqual({ dayKey: "2026-07-28", identity: "m:p-bob", ids: [CARD_B] });
   });
 
   it("lives beside the pack row rather than inside it", async () => {
@@ -262,10 +301,10 @@ describe("unrecorded pulls", () => {
     const mod = await freshModule();
     const pack = { dayKey: "2026-07-28", ids: [CARD_A], revealed: [0] };
     await mod.savePackState(pack);
-    await mod.saveUnrecorded(UNRECORDED);
+    await mod.addUnrecorded(UNRECORDED);
     expect(await mod.loadPackState()).toEqual(pack);
 
-    await mod.clearUnrecorded();
+    await mod.retireUnrecorded([CARD_A, CARD_B]);
     expect(await mod.loadPackState()).toEqual(pack);
     expect(await mod.loadUnrecorded()).toBeNull();
   });
@@ -276,8 +315,13 @@ describe("unrecorded pulls", () => {
     // opens it at a hardcoded 2. See the note at the top of card-collection.ts.
     const mod = await freshModule();
     await mod.collectCard(CARD_A, "champion", "gold");
-    await mod.saveUnrecorded(UNRECORDED);
-    expect((await mod.loadCollection())[CARD_A]).toMatchObject({ tier: "champion", count: 1 });
+    await mod.addUnrecorded(UNRECORDED);
+    const collection = await mod.loadCollection();
+    // The exact key set, not just that CARD_A survived: loadCollection hands back
+    // every key in the store, so a row written into the wrong one would sail past
+    // an assertion that only looks at the card it already expects.
+    expect(Object.keys(collection)).toEqual([CARD_A]);
+    expect(collection[CARD_A]).toMatchObject({ tier: "champion", count: 1 });
   });
 
   it("announces every write, so an open vault re-reads what it may not delete", async () => {
@@ -288,8 +332,8 @@ describe("unrecorded pulls", () => {
     const listen = () => heard.push("changed");
     window.addEventListener(mod.PACK_STATE_CHANGED, listen);
     try {
-      await mod.saveUnrecorded(UNRECORDED);
-      await mod.clearUnrecorded();
+      await mod.addUnrecorded(UNRECORDED);
+      await mod.retireUnrecorded([CARD_A, CARD_B]);
       await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A], revealed: [] });
       expect(heard).toHaveLength(3);
     } finally {
@@ -376,9 +420,9 @@ describe("when IndexedDB is unavailable", () => {
     const mod = await blockedModule();
     expect(await mod.loadUnrecorded()).toBeNull();
     await expect(
-      mod.saveUnrecorded({ dayKey: "2026-07-28", ids: [CARD_A] }),
+      mod.addUnrecorded({ dayKey: "2026-07-28", ids: [CARD_A] }),
     ).resolves.toBeUndefined();
-    await expect(mod.clearUnrecorded()).resolves.toBeUndefined();
+    await expect(mod.retireUnrecorded([CARD_A])).resolves.toBeUndefined();
   });
 
   it("still caches card meta in memory", async () => {
