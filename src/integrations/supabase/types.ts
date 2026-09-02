@@ -274,6 +274,39 @@ export type Database = {
           },
         ]
       }
+      card_adoptions: {
+        Row: {
+          adopted_on: string
+          event_participant_id: string
+          participant_id: string
+        }
+        Insert: {
+          adopted_on?: string
+          event_participant_id: string
+          participant_id: string
+        }
+        Update: {
+          adopted_on?: string
+          event_participant_id?: string
+          participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_adoptions_event_participant_id_fkey"
+            columns: ["event_participant_id"]
+            isOneToOne: false
+            referencedRelation: "event_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_adoptions_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_comments: {
         Row: {
           body: string
