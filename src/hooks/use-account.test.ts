@@ -198,6 +198,65 @@ describe("useAccountSync", () => {
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
   });
 
+  it("takes a previous account's token off even when the switch lands mid-sync", async () => {
+    // The token on the device came from an earlier visit, so this run never
+    // wrote it — and a switch before the first request returns must still not
+    // let the next account's sync read it.
+    const OLD_TOKEN = "m.00000000-0000-4000-8000-0000000000cc.9999999999999.sig";
+    window.localStorage.setItem("wwbh:member-token", OLD_TOKEN);
+    let seenAtSync: string | null = "unread";
+    const SECOND_TOKEN = "m.00000000-0000-4000-8000-0000000000bb.9999999999999.sig";
+    vi.mocked(syncAccountSession)
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockImplementation(async () => {
+        seenAtSync = window.localStorage.getItem("wwbh:member-token");
+        return { kind: "member", token: SECOND_TOKEN, name: "Bob" } as never;
+      });
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), { initialProps: { u: user } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    rerender({ u: { id: "user-2" } as User });
+    await settle();
+
+    expect(seenAtSync).toBeNull();
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
+  });
+
+  it("keeps a token it did not write on a device that has never synced", async () => {
+    // The paper-code-then-sign-in path: the token IS the identity the account
+    // should adopt, and the first request has to carry it.
+    const CLAIM_TOKEN = "m.00000000-0000-4000-8000-0000000000cc.9999999999999.sig";
+    window.localStorage.setItem("wwbh:member-token", CLAIM_TOKEN);
+    let seenAtSync: string | null = "unread";
+    vi.mocked(syncAccountSession).mockImplementation(async () => {
+      seenAtSync = window.localStorage.getItem("wwbh:member-token");
+      return { kind: "member", token: MEMBER_TOKEN, name: "Alice" } as never;
+    });
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    renderHook(() => useAccountSync(user));
+    await settle();
+    expect(seenAtSync).toBe(CLAIM_TOKEN);
+  });
+
+  it("tries again a minute after giving up, without the user changing", async () => {
+    // Keyed on the id, a token refresh no longer re-runs the effect, so the
+    // retry has to be the hook's own.
+    vi.mocked(adoptLocalCollection).mockRejectedValue(new Error("offline"));
+    renderHook(() => useAccountSync(user));
+    await settle();
+    expect(lastState).toMatchObject({ status: "error" });
+    const attempts = vi.mocked(syncAccountSession).mock.calls.length;
+    expect(attempts).toBe(4);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(vi.mocked(syncAccountSession).mock.calls.length).toBeGreaterThan(attempts);
+  });
+
   it("snapshots the store once, before the first token lands", async () => {
     // A re-read on retry would adopt whatever the prune had already left.
     vi.mocked(adoptLocalCollection)

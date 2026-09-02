@@ -45,6 +45,12 @@ export function useAuthUser(): { user: User | null; loading: boolean } {
  */
 export function useAccountSync(user: User | null) {
   const syncedFor = useRef<string | null>(null);
+  // Whose run last started on this device. Deliberately not cleared on
+  // sign-out: it is how the next run knows the member token it finds belongs to
+  // somebody else.
+  const lastStarted = useRef<string | null>(null);
+  // Bumped when a sync that gave up should be tried again for the same user.
+  const [wake, setWake] = useState(0);
   // The id, not the object. Supabase hands out a fresh User on every token
   // refresh, and an effect keyed on the object cancelled a sync mid-adoption for
   // an identity that had not changed — the guarded returns below then skipped
@@ -61,6 +67,15 @@ export function useAccountSync(user: User | null) {
     // Narrowed once here: the closures below cannot see the guard above.
     const userId: string = authUserId;
     if (syncedFor.current === userId) return;
+    // A different account from the one whose run last started here. Whatever
+    // member token is on the device is that account's, and syncAccount binds a
+    // first-time account to the token in the headers — so it comes off before
+    // this run's first request, whether or not the previous run ever got as far
+    // as writing one. A device that has never run a sync keeps its token: that
+    // is the paper-code-then-sign-in path, where the token IS the identity the
+    // account should adopt.
+    if (lastStarted.current && lastStarted.current !== userId) clearMemberToken();
+    lastStarted.current = userId;
     syncedFor.current = userId;
     setAccountSyncState({ status: "syncing", userId, message: null });
 
@@ -68,6 +83,8 @@ export function useAccountSync(user: User | null) {
     // account switch: the device would then act as that stale identity.
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    let wakeTimer: ReturnType<typeof setTimeout> | undefined;
+    let forgetOnline: (() => void) | undefined;
 
     // Snapshotted once, before the first token lands, for the same reason as
     // the claim page: once this device is a member, its unrecognised local cards
@@ -148,12 +165,21 @@ export function useAccountSync(user: User | null) {
           userId,
           message: "Your cards are safe, but this phone could not finish linking them.",
         });
+        // Keyed on the id, nothing about the user re-runs this on its own any
+        // more — a token refresh used to, by accident. So the next go is
+        // scheduled here: a minute, or the radio coming back, whichever first.
+        const bump = () => setWake((n) => n + 1);
+        wakeTimer = setTimeout(bump, 60_000);
+        window.addEventListener("online", bump, { once: true });
+        forgetOnline = () => window.removeEventListener("online", bump);
       }
     })();
 
     return () => {
       cancelled = true;
       if (retry) clearTimeout(retry);
+      if (wakeTimer) clearTimeout(wakeTimer);
+      forgetOnline?.();
       // A different account is taking over this device. The token this run
       // wrote must be gone before that account's sync reads the headers:
       // syncAccount takes `x-member-token` as the player to bind a new account
@@ -161,7 +187,7 @@ export function useAccountSync(user: User | null) {
       // Compare-and-clear, so a token a newer run has already replaced stays.
       if (wrote && getMemberToken() === wrote) clearMemberToken();
     };
-  }, [authUserId]);
+  }, [authUserId, wake]);
 }
 
 /**

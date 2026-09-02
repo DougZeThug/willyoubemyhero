@@ -73,9 +73,11 @@ export function useTradeOffers(participantId: string | null | undefined) {
 /**
  * What one member has spare — yours or a counterparty's.
  *
- * Keyed on the participant being asked about rather than on the asker, because
- * the answer is the same whoever is looking, and composing an offer flips
- * between the two panels constantly.
+ * Keyed on the viewer AND the participant being asked about. The answer is not
+ * the same whoever is looking: a counterparty's secrets you have never pulled
+ * arrive with no name and no art, so a device that changes identity must not be
+ * handed the last person's answer. Composing an offer flips between the two
+ * panels constantly, and both stay cached — under this viewer.
  */
 export function useTradeSpares(
   participantId: string | null | undefined,
