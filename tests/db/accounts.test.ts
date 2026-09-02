@@ -168,3 +168,34 @@ describe("account_identities", () => {
     await expect(neither).rejects.toThrow();
   });
 });
+
+describe("merge_guest_pulls and granted rows", () => {
+  it("keeps an incoming granted pull on a day the destination already spent", async () => {
+    // Same rule as claim_guest_secrets: only a daily slot can collide with a
+    // daily slot. A milestone's reward on the same day is not one.
+    const a = await addCard("merge-granted-a");
+    const b = await addCard("merge-granted-b");
+    await givePull(GUEST_A, a, { day: "2026-02-01", granted: false });
+    await givePull(GUEST_B, b, { day: "2026-02-01", granted: true });
+
+    expect(await merge()).toBe(1);
+    expect(await pullsFor(GUEST_A)).toHaveLength(2);
+    expect(await pullsFor(GUEST_B)).toHaveLength(0);
+  });
+});
+
+describe("merge_guest_pulls promotes a preserved reward", () => {
+  it("leaves the destination owning a card it now holds only as a reward", async () => {
+    const x = await addCard("merge-promote-x");
+    const y = await addCard("merge-promote-y");
+    await givePull(GUEST_A, y, { day: "2026-02-01", granted: false });
+    await givePull(GUEST_B, x, { day: "2026-02-01", granted: false });
+    await givePull(GUEST_B, x, { day: "2026-02-01", granted: true, duplicate: true, tier: "rare" });
+
+    await merge();
+    const mine = await pullsFor(GUEST_A);
+    expect(mine).toHaveLength(2);
+    expect(mine.find((p) => p.secret_card_id === x)).toMatchObject({ is_duplicate: false, tier: "rare" }); // prettier-ignore
+    expect(await pullsFor(GUEST_B)).toHaveLength(0);
+  });
+});

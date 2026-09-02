@@ -110,8 +110,8 @@ function TradePage() {
    */
   const [completions, setCompletions] = useState<CompletedCollection[]>([]);
 
-  const mySpares = useTradeSpares(myId);
-  const theirSpares = useTradeSpares(theirId);
+  const mySpares = useTradeSpares(myId, myId);
+  const theirSpares = useTradeSpares(theirId, myId);
 
   const acceptFn = useServerFn(acceptTradeOffer);
   const declineFn = useServerFn(declineTradeOffer);
@@ -160,8 +160,8 @@ function TradePage() {
   async function refreshMine() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: tradeOffersKey(myId) }),
+      // The viewer prefix: theirs and mine alike.
       qc.invalidateQueries({ queryKey: tradeSparesKey(myId) }),
-      qc.invalidateQueries({ queryKey: tradeSparesKey(theirId) }),
       qc.invalidateQueries({ queryKey: tradeFeedKey(event?.id) }),
       // The collection caches too, rather than leaving them to the realtime
       // handler in useTradeFeed. That handler is what updates everybody ELSE, and

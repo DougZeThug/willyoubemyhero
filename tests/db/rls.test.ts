@@ -72,6 +72,9 @@ const SERVER_ONLY = [
   "public.card_copies",
   // The same private collection again, as a dated history of what was packed.
   "public.card_mints",
+  // Which cards a person has been through adoption for — a ledger over the same
+  // private collection, and one that says who ever played as a guest.
+  "public.card_adoptions",
   // Unlike card_pulls there is no public aggregate over this at all — a pack
   // count is shown to the person it belongs to and to nobody else.
   "public.pack_opens",

@@ -194,7 +194,11 @@ describe("getMarketListings", () => {
           },
         ],
       },
-      "card_copies.select": { data: [{ id: COPY, event_participant_id: "ep", edition: "gold" }] },
+      "card_copies.select": {
+        data: [
+          { id: COPY, event_participant_id: "ep", edition: "gold", edition_asserted_by: "server" },
+        ],
+      },
       "secret_card_pulls.select": { data: [] },
     });
     const { getMarketListings } = await import("./market.functions");
@@ -304,7 +308,11 @@ describe("getMyStall", () => {
         { data: [row(LISTING, "active", null, null)] },
         { data: [row(EVENT, "sold", "2026-08-30T01:00:00Z", THEM)] },
       ],
-      "card_copies.select": { data: [{ id: COPY, event_participant_id: "ep", edition: "gold" }] },
+      "card_copies.select": {
+        data: [
+          { id: COPY, event_participant_id: "ep", edition: "gold", edition_asserted_by: "server" },
+        ],
+      },
       "secret_card_pulls.select": { data: [] },
     });
     const { getMyStall } = await import("./market.functions");
@@ -579,5 +587,47 @@ describe("the disabled reason", () => {
       headers: asMe(),
     });
     expect(res.reason).toBe("disabled");
+  });
+});
+
+describe("getMarketListings and provenance", () => {
+  it("tells the buyer who decided a roster copy's finish", async () => {
+    // A client-asserted "platinum" mills for the flat floor. Without this the
+    // shelf showed the word and nothing else, and the word was what got paid for.
+    withDb({
+      ...activeEvent,
+      "market_listings.select": {
+        data: [
+          {
+            id: LISTING,
+            event_id: EVENT,
+            seller_id: THEM,
+            kind: "roster",
+            card_copy_id: COPY,
+            secret_pull_id: null,
+            price: 100,
+            status: "active",
+            buyer_id: null,
+            created_at: "2026-08-30T00:00:00Z",
+            resolved_at: null,
+          },
+        ],
+      },
+      "card_copies.select": {
+        data: [{ id: COPY, event_participant_id: "ep", edition: "platinum", edition_asserted_by: "client" }], // prettier-ignore
+      },
+      "secret_card_pulls.select": { data: [] },
+    });
+    const { getMarketListings } = await import("./market.functions");
+    const res = await callServerFn<{ listings: { item: Record<string, unknown> }[] }>(
+      getMarketListings,
+      { headers: asMe() },
+    );
+    expect(res.listings[0].item).toEqual({
+      kind: "roster",
+      eventParticipantId: "ep",
+      edition: "platinum",
+      assertedBy: "client",
+    });
   });
 });

@@ -130,10 +130,12 @@ async function hydrate(
     copyIds.length
       ? sb
           .from("card_copies")
-          .select("id, event_participant_id, edition")
+          .select("id, event_participant_id, edition, edition_asserted_by")
           .in("id", copyIds)
-          .returns<Pick<CardCopyRow, "id" | "event_participant_id" | "edition">[]>()
-      : Promise.resolve({ data: [] as Pick<CardCopyRow, "id" | "event_participant_id" | "edition">[] }), // prettier-ignore
+          .returns<
+            Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">[]
+          >()
+      : Promise.resolve({ data: [] as Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">[] }), // prettier-ignore
     pullIds.length
       ? sb
           .from("secret_card_pulls")
@@ -176,6 +178,8 @@ async function hydrate(
           kind: "roster",
           eventParticipantId: copy.event_participant_id,
           edition: toEdition(copy.edition),
+          // Anything but Postgres's own word is the phone's, and pays the floor.
+          assertedBy: copy.edition_asserted_by === "server" ? "server" : "client",
         });
         return;
       }

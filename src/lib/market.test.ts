@@ -19,10 +19,14 @@ import { DUST_PRICES, MILL_BY_EDITION, MILL_CLIENT_FLAT, SELL_BY_SECRET_TIER } f
 import { EDITION_ORDER, type Edition } from "./card-edition";
 import { SECRET_TIER_ORDER } from "./secret-rarity";
 
-const roster = (edition: Edition): MarketListingItem => ({
+const roster = (
+  edition: Edition,
+  assertedBy: "client" | "server" = "server",
+): MarketListingItem => ({
   kind: "roster",
   eventParticipantId: "ep",
   edition,
+  assertedBy,
 });
 
 describe("the price bounds", () => {
@@ -110,5 +114,14 @@ describe("marketStatusLabel", () => {
     // The status column is append-only text; a value added in SQL before this
     // file learns about it should read as unknown rather than crash a list.
     expect(marketStatusLabel("teleported")).toBe("Unknown");
+  });
+});
+
+describe("houseFloor reads the provenance the shelf now carries", () => {
+  it("prices a client-asserted finish at the flat floor without being told twice", () => {
+    // The browse tile has only the item. It used to have only the finish, and
+    // priced a phone's "platinum" at the platinum floor.
+    expect(houseFloor(roster("platinum", "client"))).toBe(MILL_CLIENT_FLAT);
+    expect(houseFloor(roster("platinum", "server"))).toBe(MILL_BY_EDITION.platinum);
   });
 });

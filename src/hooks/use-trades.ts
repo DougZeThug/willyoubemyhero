@@ -10,8 +10,20 @@ import { cardPullCountsKey } from "./use-card-pulls";
 
 export const tradeOffersKey = (participantId: string | null | undefined) =>
   ["trade-offers", participantId] as const;
-export const tradeSparesKey = (participantId: string | null | undefined) =>
-  ["trade-spares", participantId] as const;
+/**
+ * Keyed on the VIEWER first, then whose spares. The response is shaped for the
+ * viewer — a counterparty's unowned secrets arrive with no name and no art — so a
+ * device that changes identity must not read the last person's answer out of the
+ * cache. Called with the viewer alone it is a prefix, which is what every
+ * invalidation wants: everything this viewer has cached, theirs and others'.
+ */
+export const tradeSparesKey = (
+  viewerId: string | null | undefined,
+  participantId?: string | null | undefined,
+) =>
+  participantId === undefined
+    ? (["trade-spares", viewerId] as const)
+    : (["trade-spares", viewerId, participantId] as const);
 export const tradeFeedKey = (eventId: string | null | undefined) =>
   ["trade-feed", eventId] as const;
 
@@ -61,14 +73,19 @@ export function useTradeOffers(participantId: string | null | undefined) {
 /**
  * What one member has spare — yours or a counterparty's.
  *
- * Keyed on the participant being asked about rather than on the asker, because
- * the answer is the same whoever is looking, and composing an offer flips
- * between the two panels constantly.
+ * Keyed on the viewer AND the participant being asked about. The answer is not
+ * the same whoever is looking: a counterparty's secrets you have never pulled
+ * arrive with no name and no art, so a device that changes identity must not be
+ * handed the last person's answer. Composing an offer flips between the two
+ * panels constantly, and both stay cached — under this viewer.
  */
-export function useTradeSpares(participantId: string | null | undefined) {
+export function useTradeSpares(
+  participantId: string | null | undefined,
+  viewerId: string | null | undefined,
+) {
   const fn = useServerFn(getTradeSpares);
   return useQuery({
-    queryKey: tradeSparesKey(participantId),
+    queryKey: tradeSparesKey(viewerId, participantId),
     queryFn: () => fn({ data: { participantId: participantId! } }) as Promise<TradeSpares>,
     enabled: !!participantId,
     staleTime: 30_000,

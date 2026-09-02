@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
-import { setMemberToken, clearMemberToken } from "@/lib/member-token";
+import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import { clearAdminToken } from "@/lib/admin-token";
 import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
@@ -36,6 +36,12 @@ export function useAuthUser(): { user: User | null; loading: boolean } {
   return { user, loading };
 }
 
+// A sync that gave up tries again on its own: a minute, then two, four, eight,
+// fifteen, fifteen — and then only when the radio says it is back.
+const WAKE_BASE_MS = 60_000;
+const WAKE_MAX_MS = 15 * 60_000;
+const WAKE_LIMIT = 6;
+
 /**
  * Keep this device's collection token in step with the signed-in account.
  *
@@ -45,15 +51,55 @@ export function useAuthUser(): { user: User | null; loading: boolean } {
  */
 export function useAccountSync(user: User | null) {
   const syncedFor = useRef<string | null>(null);
+  // Whose run last started on this device. Deliberately not cleared on
+  // sign-out: it is how the next run knows the member token it finds belongs to
+  // somebody else.
+  const lastStarted = useRef<string | null>(null);
+  // Bumped when a sync that gave up should be tried again for the same user,
+  // and how many times that has happened, which sets the wait before the next.
+  const [wake, setWake] = useState(0);
+  const wakes = useRef(0);
+  // The local collection as it stood before this user's FIRST token landed.
+  // Kept across the wake re-runs above: each of those is a fresh effect, and a
+  // fresh read of the store would see whatever the prune has since taken.
+  const heldFor = useRef<{
+    userId: string;
+    snapshot: Awaited<ReturnType<typeof snapshotLocalCollection>>;
+  } | null>(null);
+  // The id, not the object. Supabase hands out a fresh User on every token
+  // refresh, and an effect keyed on the object cancelled a sync mid-adoption for
+  // an identity that had not changed — the guarded returns below then skipped
+  // the ready state, the latch skipped the re-run, and the account screen sat
+  // on "syncing" until a reload.
+  const authUserId = user?.id ?? null;
 
   useEffect(() => {
-    if (!user) {
+    if (!authUserId) {
       syncedFor.current = null;
+      // Signed out. The next sign-in — the same account or another — starts
+      // from a fresh read of the store, because cards pulled as a guest in
+      // between exist only there; and with its retries back.
+      heldFor.current = null;
+      wakes.current = 0;
       setAccountSyncState({ status: "idle", userId: null, message: null });
       return;
     }
-    const userId = user.id;
+    // Narrowed once here: the closures below cannot see the guard above.
+    const userId: string = authUserId;
     if (syncedFor.current === userId) return;
+    // A different account from the one whose run last started here. Whatever
+    // member token is on the device is that account's, and syncAccount binds a
+    // first-time account to the token in the headers — so it comes off before
+    // this run's first request, whether or not the previous run ever got as far
+    // as writing one. A device that has never run a sync keeps its token: that
+    // is the paper-code-then-sign-in path, where the token IS the identity the
+    // account should adopt.
+    if (lastStarted.current && lastStarted.current !== userId) {
+      clearMemberToken();
+      wakes.current = 0;
+      heldFor.current = null;
+    }
+    lastStarted.current = userId;
     syncedFor.current = userId;
     setAccountSyncState({ status: "syncing", userId, message: null });
 
@@ -61,27 +107,68 @@ export function useAccountSync(user: User | null) {
     // account switch: the device would then act as that stale identity.
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    let wakeTimer: ReturnType<typeof setTimeout> | undefined;
+    let forgetOnline: (() => void) | undefined;
+
+    // Snapshotted once per user, before the first token lands, for the same
+    // reason as the claim page: once this device is a member, its unrecognised
+    // local cards are pruned, and a guest's base cards exist nowhere else. Once
+    // rather than per attempt or per wake, because a read after the prune has
+    // run would snapshot a store that has already lost them.
+    async function snapshot() {
+      if (heldFor.current?.userId === userId) return heldFor.current.snapshot;
+      const captured = await snapshotLocalCollection();
+      // Kept only if this run is still the live one. A read that resolves after
+      // an account switch would otherwise overwrite the next account's entry
+      // with one keyed on the old user, and their wake re-run would then read
+      // the store afresh — after the prune.
+      if (!cancelled) heldFor.current = { userId, snapshot: captured };
+      return captured;
+    }
+    // The member token this run wrote, so the cleanup can take back exactly
+    // that one and nothing a newer run has written since.
+    let wrote: string | null = null;
 
     async function runSync() {
-      // Snapshotted before the token changes, for the same reason as the claim
-      // page: once this device is a member, its unrecognised local cards are
-      // pruned, and a guest's base cards exist nowhere else.
-      const held = await snapshotLocalCollection();
+      const held = await snapshot();
       const res = await syncAccountSession({ data: undefined });
       if (cancelled) return;
       if (res.kind === "member") {
         setMemberToken(res.token, res.name ?? "Player");
-        clearGuestToken();
+        wrote = res.token;
+        // Every await below is a moment the account can change under this sync.
+        // Once it has, the tokens belong to the new user's run: a stale rejection
+        // must not clear the member token that run just wrote, and a stale
+        // success must not clear its guest token. Hence the checks after each.
         try {
           await adoptLocalCollection(held);
         } catch {
-          /* signed in without the upload: the cards can be granted back */
+          if (cancelled) return;
+          try {
+            // One retry, because the usual failure here is a flaky first request
+            // from a phone that has just woken up on garden wifi.
+            await adoptLocalCollection(held);
+          } catch (e) {
+            if (cancelled) return;
+            // The claim screen's rule, which this path used to skip: if the
+            // upload does not stick, the token comes straight back off. No
+            // member, no reconciliation, nothing pruned — and the throw hands
+            // the whole sync to the retry loop below, so a later attempt gets
+            // the same snapshot rather than a store the prune has been through.
+            clearMemberToken();
+            throw e;
+          }
         }
+        if (cancelled) return;
+        // Only now. Clearing it before the upload left a phone whose adoption
+        // failed with no identity at all, and its cards filed under neither.
+        clearGuestToken();
       } else {
         clearMemberToken();
         setGuestToken(res.token);
       }
       clearAccountHandoff();
+      wakes.current = 0;
       setAccountSyncState({ status: "ready", userId, message: null });
     }
 
@@ -112,14 +199,34 @@ export function useAccountSync(user: User | null) {
           userId,
           message: "Your cards are safe, but this phone could not finish linking them.",
         });
+        // Keyed on the id, nothing about the user re-runs this on its own any
+        // more — a token refresh used to, by accident. So the next go is
+        // scheduled here: the radio coming back, or a timer that doubles from
+        // a minute up to a quarter of an hour and stops after a handful — a
+        // phone left open on a dead network is not a reason to poll all night.
+        const bump = () => setWake((n) => n + 1);
+        if (wakes.current < WAKE_LIMIT) {
+          wakeTimer = setTimeout(bump, Math.min(WAKE_BASE_MS * 2 ** wakes.current, WAKE_MAX_MS));
+          wakes.current += 1;
+        }
+        window.addEventListener("online", bump, { once: true });
+        forgetOnline = () => window.removeEventListener("online", bump);
       }
     })();
 
     return () => {
       cancelled = true;
       if (retry) clearTimeout(retry);
+      if (wakeTimer) clearTimeout(wakeTimer);
+      forgetOnline?.();
+      // A different account is taking over this device. The token this run
+      // wrote must be gone before that account's sync reads the headers:
+      // syncAccount takes `x-member-token` as the player to bind a new account
+      // to, so leaving it would link the next person to this one's collection.
+      // Compare-and-clear, so a token a newer run has already replaced stays.
+      if (wrote && getMemberToken() === wrote) clearMemberToken();
     };
-  }, [user]);
+  }, [authUserId, wake]);
 }
 
 /**

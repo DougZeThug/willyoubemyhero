@@ -16,6 +16,7 @@ const EXPECTED_TABLES = [
   "auth_attempts",
   "award_votes",
   "awards",
+  "card_adoptions",
   "card_comments",
   "card_copies",
   "card_mints",
