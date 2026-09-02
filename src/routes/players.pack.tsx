@@ -28,8 +28,10 @@ import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
+  addUnrecorded,
   collectCard,
   loadPackState,
+  retireUnrecorded,
   savePackState,
   type CollectedCard,
 } from "@/lib/card-collection";
@@ -64,12 +66,12 @@ import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
 import { streakLine, streakMilestone } from "@/lib/streaks";
 import type { SecretTier } from "@/lib/secret-rarity";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
-import { packedByLabel } from "@/lib/card-pulls";
+import { packedByLabel, type MyCardStats } from "@/lib/card-pulls";
 import { urlFromSet } from "@/lib/media";
 import type { ImageUrlSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
-import { FeedDegradedBanner } from "@/components/feed-state";
+import { FeedDegradedBanner, FeedError } from "@/components/feed-state";
 
 export const Route = createFileRoute("/players/pack")({
   head: () => ({
@@ -148,7 +150,16 @@ function todayKey(): string {
 }
 
 function PackPage() {
-  const { event, bundle, error, realtimeDegraded } = useEventBundle();
+  const { event, bundle, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
+  // A read that failed, as opposed to one still on its way — and all three ways
+  // it can fail, because every one of them ends with `dealPack` holding an empty
+  // roster and `tearOpen` refusing without a word. The event can be missing, the
+  // bundle query can reject, or the bundle can come back fine with the roster
+  // table coalesced to `[]` — which is the case `failed` exists to name, and the
+  // one an error check alone cannot see. This is both what unblocks
+  // `useMyCollection` below and what the render bails out on.
+  const eventFailed =
+    (!!error && (!event || !bundle)) || failedTables.includes("event_participants");
   const sfx = useCardSfx();
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never a player's — see the note on useEventCardBack. The
@@ -162,7 +173,7 @@ function PackPage() {
   // behaviour, which also meant `dealPack` believed there was nothing left to
   // pick as the guaranteed-new last card.
   const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
-  const mine = useMyCollection(event?.id ?? null, rosterIds);
+  const mine = useMyCollection(event?.id ?? null, rosterIds, eventFailed);
   const collected = mine.collection;
   const collectionLoaded = mine.ready;
   // Snapshot of the collection taken when a pack is dealt. The pack composition
@@ -756,13 +767,22 @@ function PackPage() {
       // revealed with "Packed by 1", making the counter meaningless. Better an
       // honest ramp than a uniform stripe.
       const ids = dealtIds.slice(0, 16);
+      // Filed before the first attempt, because the cards are in IndexedDB the
+      // moment they are turned over and `mergeCollection` deletes anything the
+      // server does not vouch for. Until one of the attempts below lands, the
+      // server cannot vouch for these — so a pack torn in a dead spot was
+      // collected, shown, and then deleted on the next load. This row is what
+      // `useMyCollection` reads to hold them back, and it outlives the page.
+      await addUnrecorded({ dayKey, identity: identity ?? undefined, ids });
       // Three tries with a pause between them, then hand the latch back and
       // wait for a wake (recordWake above) to start a fresh cycle. One garden
       // dead spot used to cost the whole day's count: the latch was taken
       // before the await and a swallowed failure never returned it. A retry
-      // after a lost response can double-count a pull, accepted for the same
-      // reason the endpoint tolerates hand-posted ids: the ceiling is a
-      // decorative stat only its owner can see.
+      // after a lost response is safe to send: record_card_pulls files a copy
+      // ON CONFLICT (participant, card, acquired_on) and resync_card_pull
+      // derives pull_count from the copies, so the same pack posted twice on one
+      // league day lands on the same numbers. Twice across the server's midnight
+      // does not — that is the day-boundary problem, and it is not this loop's.
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 4_000));
         // Abandon without touching the latch if the phone changed hands while
@@ -796,6 +816,25 @@ function PackPage() {
             // Only a member has card rows to recount; a guest's ids went nowhere.
             ...(pid ? [qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) })] : []),
           ]);
+          // Retired only once something else vouches for these cards, because
+          // the moment the row lets go of them the merge may delete them.
+          //
+          // `invalidateQueries` resolves whether or not the refetch it fired
+          // succeeded, and a failed one leaves the answer from *before* the tear
+          // sitting in the cache — retiring against that is the exact prune this
+          // row exists to prevent. So the answer has to be here and has to name
+          // the cards. A guest has no stats query and is never pruned, so there
+          // is nothing for one to wait for.
+          //
+          // The actor guard is the same one each attempt makes above: a phone
+          // that changed hands mid-request has a new member's own run filing
+          // their row by now, and this one must not retire it for them.
+          const answered = pid
+            ? (qc.getQueryData(myCardStatsKey(event?.id, pid)) as MyCardStats | undefined)
+            : undefined;
+          const vouchedFor = new Set(answered?.cards.map((c) => c.eventParticipantId));
+          const vouched = !pid || (!!answered && ids.every((id) => vouchedFor.has(id)));
+          if (recordActorRef.current === actor && vouched) await retireUnrecorded(ids);
           return;
         } catch {
           /* a count nobody asked for is not worth an error nobody can act on */
@@ -807,7 +846,19 @@ function PackPage() {
     })();
     // `editions` is deliberately absent: this effect WRITES it, and depending on
     // what it sets would re-run it against its own result.
-  }, [torn, dealtIds, actor, me?.participantId, record, qc, event?.id, seed, recordWake]);
+  }, [
+    torn,
+    dealtIds,
+    actor,
+    me?.participantId,
+    record,
+    qc,
+    event?.id,
+    seed,
+    recordWake,
+    dayKey,
+    identity,
+  ]);
 
   // A phone changing hands mid-party is a real thing in this league. Re-arm the
   // latch when the member changes so the next person gets their own card.
@@ -1151,6 +1202,25 @@ function PackPage() {
 
   const collectedCount = mine.collectedCount;
   const total = bundle?.participants.length ?? 0;
+
+  // Nothing on this screen survives a league nobody can reach: no roster means no
+  // pack to deal, and `tearOpen` refuses on an empty one without a word. Said out
+  // loud here rather than above the wrapper, because on the commonest version of
+  // this — a pack already torn today — `dealtIds` comes back from IndexedDB while
+  // `pack` is still empty, and the guard below would sit on "Loading…" for good.
+  // The same shape /leaderboard and /analytics use for a read they cannot make.
+  if (eventFailed) {
+    return (
+      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+        <div className="mx-auto max-w-4xl px-4 py-10">
+          <FeedError
+            message="Your cards are safe on this phone — today's pack needs the roster before it can be dealt."
+            onRetry={() => void refetch()}
+          />
+        </div>
+      </div>
+    );
+  }
 
   // The sealed pack must not flash on a day already opened, so nothing renders
   // until the stored state has been read.

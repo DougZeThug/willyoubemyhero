@@ -955,6 +955,94 @@ test.describe("opening a pack", () => {
       })
       .toBeGreaterThan(3);
   });
+
+  test("keeps a pack it never managed to record, across a reload", async ({ page, server }) => {
+    // The cards are in IndexedDB the moment they are turned over, and the merge
+    // deletes anything the server does not vouch for — so a pack torn in a dead
+    // spot used to be collected, shown, and then deleted on the next load. The
+    // in-memory floor covered the session that pulled them and nothing after it.
+    await page.addInitScript(([key, token]) => localStorage.setItem(key, token), [
+      MEMBER_KEY,
+      `m.p-alice.${Date.now() + 60 * 60_000}.signature`,
+    ] as const);
+    // An answer that vouches for nothing, which is what makes this a real test:
+    // there is no getMyCardStats default, and an unstubbed null reads as "nobody
+    // is claimed here" and prunes nothing whatever the route does.
+    server.set("getMyCardStats", { cards: [], packsOpened: 0, firstPackOn: null });
+    // No recover: this pack never reaches the league at all.
+    server.fail("recordCardPulls", "a dead spot that lasts");
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    const dealt = (await readPackState(page))!.ids;
+    expect(dealt).toHaveLength(PACK_SIZE);
+
+    // The reload is the whole point: the floor that protected these cards while
+    // they were being turned lives in memory and does not survive it.
+    await page.reload();
+    await expect(sealedPack(page)).toBeHidden();
+    expect((await readPackState(page))?.ids).toEqual(dealt);
+
+    await page.goto("/players");
+    await expect(page.getByRole("heading", { name: /the vault/i })).toBeVisible();
+    // One slot still shut on a four-player fixture. Before this, all four were:
+    // the three cards had been deleted from the device.
+    await expect(page.getByText(/not packed yet/i)).toHaveCount(PLAYERS.length - PACK_SIZE);
+  });
+
+  test("says so when the league cannot be reached, rather than sitting there", async ({
+    page,
+    server,
+  }) => {
+    // With no active event there is no roster, so `tearOpen` refuses — and it
+    // refuses silently. A member got a sealed pack that did nothing when pressed
+    // and no way to ask again.
+    await page.addInitScript(([key, token]) => localStorage.setItem(key, token), [
+      MEMBER_KEY,
+      `m.p-alice.${Date.now() + 60 * 60_000}.signature`,
+    ] as const);
+    server.fail("getActiveEvent", "the league is unreachable");
+
+    await page.goto("/players/pack");
+    // Longer than the 15s default on purpose. The screen is not allowed to call
+    // the read failed until TanStack Query has finished retrying it — three
+    // attempts at 1s, 2s and 4s — so several seconds of sealed pack is the
+    // correct behaviour here, not a slow test.
+    await expect(page.getByText(/safe on this phone/i)).toBeVisible({ timeout: 30_000 });
+    await expect(sealedPack(page)).toBeHidden();
+
+    // And the way back, without a reload.
+    server.recover("getActiveEvent");
+    await page.getByRole("button", { name: /try again/i }).click();
+    await expect(sealedPack(page)).toBeVisible();
+  });
+
+  test("says so on a pack already torn, where the screen used to hang", async ({
+    page,
+    server,
+  }) => {
+    // The commonest shape of the outage above, and the one an error card above
+    // the wrapper would never have reached: the dealt ids come back from
+    // IndexedDB, so the route counts the pack as torn while the roster behind it
+    // is empty — and the loading guard sat on "Loading…" for the rest of the day.
+    await page.addInitScript(([key, token]) => localStorage.setItem(key, token), [
+      MEMBER_KEY,
+      `m.p-alice.${Date.now() + 60 * 60_000}.signature`,
+    ] as const);
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await expect.poll(() => readPackState(page)).not.toBeNull();
+
+    server.fail("getActiveEvent", "the league went away mid-party");
+    await page.reload();
+    // Same retry budget as the test above buys the read before it counts as lost.
+    await expect(page.getByText(/safe on this phone/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/^Loading…$/)).toBeHidden();
+  });
 });
 
 test.describe("navigation", () => {

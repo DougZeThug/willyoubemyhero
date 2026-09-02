@@ -12,6 +12,7 @@ import type { CollectedCard } from "@/lib/card-collection";
 const getMyCardStats = vi.fn();
 const loadCollection = vi.fn();
 const forgetCards = vi.fn();
+const loadUnrecorded = vi.fn();
 const useMemberSession = vi.fn();
 
 vi.mock("@/lib/card-pulls.functions", () => ({
@@ -20,6 +21,8 @@ vi.mock("@/lib/card-pulls.functions", () => ({
 vi.mock("@/lib/card-collection", () => ({
   loadCollection: () => loadCollection(),
   forgetCards: (...args: unknown[]) => forgetCards(...args),
+  loadUnrecorded: () => loadUnrecorded(),
+  PACK_STATE_CHANGED: "wwbh:pack-state-changed",
 }));
 vi.mock("@/lib/member-token", () => ({
   useMemberSession: () => useMemberSession(),
@@ -50,10 +53,13 @@ const serverHas = (ids: string[], pullCount = 1) => ({
   })),
 });
 
-async function mount() {
+async function mount(eventId: string | null = EVENT, eventFailed = false) {
   const { useMyCollection } = await import("./use-my-collection");
   const { wrapper, client } = createQueryWrapper();
-  return { ...renderHook(() => useMyCollection(EVENT, ROSTER), { wrapper }), client };
+  return {
+    ...renderHook(() => useMyCollection(eventId, ROSTER, eventFailed), { wrapper }),
+    client,
+  };
 }
 
 beforeEach(() => {
@@ -61,6 +67,9 @@ beforeEach(() => {
   getMyCardStats.mockReset();
   forgetCards.mockReset().mockResolvedValue(undefined);
   loadCollection.mockReset().mockResolvedValue(inflatedLocal());
+  // No unrecorded row is the ordinary case: every pack this device ever tore
+  // reached the server.
+  loadUnrecorded.mockReset().mockResolvedValue(null);
   useMemberSession.mockReset().mockReturnValue(ME);
 });
 
@@ -218,5 +227,149 @@ describe("useMyCollection, revealing a card", () => {
 
     act(() => result.current.markCollected("ep-0", "base", "standard", 2));
     expect(result.current.collection["ep-0"].edition).toBe("platinum");
+  });
+});
+
+describe("useMyCollection, holding a pull the server has not been told about", () => {
+  // The loss path this exists for. `recordCardPulls` is fire-and-forget, so one
+  // dead spot at tear time meant the cards were collected, shown, and then
+  // deleted the next time the server answered without them. The in-memory floor
+  // covered the session that pulled them and nothing after it.
+  const unrecorded = (ids: string[]) => ({ dayKey: "2026-07-31", identity: "m:p-me", ids });
+
+  it("keeps them through a server answer that does not list them", async () => {
+    loadUnrecorded.mockResolvedValue(unrecorded(["ep-5", "ep-6", "ep-7"]));
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(result.current.collection["ep-5"]).toBeDefined());
+    expect(Object.keys(result.current.collection).sort()).toEqual(["ep-0", "ep-5", "ep-6", "ep-7"]);
+  });
+
+  it("never hands them to forgetCards, whatever else is pruned", async () => {
+    loadUnrecorded.mockResolvedValue(unrecorded(["ep-5"]));
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+    // Sixteen of the eighteen browsed rows still go: the server's own ep-0, and
+    // the protected ep-5, are the two that stay.
+    const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(deleted).not.toContain("ep-5");
+    expect(deleted).toHaveLength(16);
+  });
+
+  it("waits for the row before reconciling, however fast the server is", async () => {
+    // Two separate IndexedDB reads back this hook, and settling on the first
+    // means merging with an empty protection set — which deletes the very cards
+    // the row was written to save. The server answering instantly is the
+    // ordinary case on a warm cache, not a contrived one.
+    let land!: (v: unknown) => void;
+    loadUnrecorded.mockReturnValue(new Promise((r) => (land = r)));
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(getMyCardStats).toHaveBeenCalled());
+    expect(result.current.ready).toBe(false);
+    expect(forgetCards).not.toHaveBeenCalled();
+
+    await act(async () => land(unrecorded(["ep-5"])));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).not.toContain("ep-5");
+  });
+
+  it("does not hold the previous member's cards back for the next one", async () => {
+    // A handset changes hands in this league. Whoever picks it up next does not
+    // own the cards the last person never managed to report, and showing them
+    // would be this hook's one unforgivable direction: a card unlocking that
+    // nobody pulled. Their collected rows are disowned here either way.
+    loadUnrecorded.mockResolvedValue({
+      dayKey: "2026-07-31",
+      identity: "m:p-someone-else",
+      ids: ["ep-5"],
+    });
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.collection["ep-5"]).toBeUndefined();
+    await waitFor(() =>
+      expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).toContain("ep-5"),
+    );
+  });
+
+  it("does not adopt a row it cannot attribute", async () => {
+    // Nothing writes an identity-less row — the record loop cannot run before
+    // `seed`, which needs the identity — so this is the safe reading of a case
+    // that should not arise. Unattributable is not universal.
+    loadUnrecorded.mockResolvedValue({ dayKey: "2026-07-31", ids: ["ep-5"] });
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.collection["ep-5"]).toBeUndefined();
+  });
+
+  it("takes the server's row for one the server does list", async () => {
+    // The record landed after all, or another phone pulled it. Protection buys a
+    // card the benefit of the doubt, never a better number than the league's.
+    loadUnrecorded.mockResolvedValue(unrecorded(["ep-5"]));
+    getMyCardStats.mockResolvedValue(serverHas(["ep-5"], 4));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(result.current.collection["ep-5"]?.count).toBe(4));
+  });
+
+  it("disowns them once the record lands and the row is cleared", async () => {
+    // `clearUnrecorded` fires the same event `savePackState` does, and the hook
+    // re-reads on it — otherwise a vault left open on another tab would go on
+    // protecting ids the league has since adjudicated.
+    loadUnrecorded.mockResolvedValue(unrecorded(["ep-5"]));
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.collection["ep-5"]).toBeDefined());
+
+    loadUnrecorded.mockResolvedValue(null);
+    await act(async () => {
+      window.dispatchEvent(new Event("wwbh:pack-state-changed"));
+    });
+
+    await waitFor(() => expect(result.current.collection["ep-5"]).toBeUndefined());
+    expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).toContain("ep-5");
+  });
+});
+
+describe("useMyCollection, when the league cannot be reached", () => {
+  // With no event id the stats query never runs, so it never succeeds and never
+  // errors — `settled` used to stay false forever and every screen read that as
+  // "still reconciling" and locked the whole vault face-down without a word.
+  it("settles a member on the local collection, and prunes none of it", async () => {
+    const { result } = await mount(null, true);
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(Object.keys(result.current.collection)).toHaveLength(18);
+    expect(getMyCardStats).not.toHaveBeenCalled();
+    expect(forgetCards).not.toHaveBeenCalled();
+  });
+
+  it("hangs, as before, while the read is merely slow", async () => {
+    // The distinction the flag exists for: a query still in flight is not a
+    // failed one, and flashing the unreconciled local store is the bug this hook
+    // was written to fix.
+    const { result } = await mount(null, false);
+    await waitFor(() => expect(result.current.collection).toEqual({}));
+    expect(result.current.ready).toBe(false);
+  });
+
+  it("changes nothing for a guest, who was never blocked", async () => {
+    useMemberSession.mockReturnValue(null);
+    const { result } = await mount(null, true);
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.isMember).toBe(false);
+    expect(Object.keys(result.current.collection)).toHaveLength(18);
+    expect(forgetCards).not.toHaveBeenCalled();
   });
 });

@@ -163,7 +163,10 @@ function PlayersPage() {
   // and cannot also be what the collection is asked about. The hook only ever
   // builds a Set from this, so the order the grid happens to be in is irrelevant.
   const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
-  const mine = useMyCollection(event?.id ?? null, rosterIds);
+  // The third argument is what stops a failed event read locking the vault: with
+  // no id the stats query never runs, so without it `mine.ready` never turns true
+  // and every slot below renders face-down for good.
+  const mine = useMyCollection(event?.id ?? null, rosterIds, !!error && !event);
   const collected = mine.collection;
 
   /**

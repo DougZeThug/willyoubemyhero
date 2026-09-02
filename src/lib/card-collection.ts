@@ -76,6 +76,32 @@ export type PackState = {
   cursor?: number;
 };
 
+/**
+ * Cards this device has pulled that the server has not been told about.
+ *
+ * A second row rather than a field on the pack row above, because the two retire
+ * at different moments: a pack row lasts the day and is overwritten by the next
+ * one, while this lasts until `recordCardPulls` has actually landed — which can
+ * be the following morning. `mergeCollection` deletes anything the server does
+ * not vouch for, and until that call succeeds the server cannot vouch for these,
+ * so without this row one garden dead spot at tear time cost the whole pack on
+ * the next load.
+ */
+export type UnrecordedPulls = {
+  /**
+   * The most recent day that added to this row.
+   *
+   * Nothing reads it: the ids are protected until the league takes them, not
+   * until the date rolls over. Kept because a row that has outlived its own day
+   * is the symptom of the retry problem, and this is the only place that says so.
+   */
+  dayKey: string;
+  /** Whose pulls these are, as `usePackIdentity` returns it. */
+  identity?: string;
+  /** `event_participants.id` for every card the server still owes an answer on. */
+  ids: string[];
+};
+
 export type CollectedCard = {
   eventParticipantId: string;
   /** ms epoch of the first pull. */
@@ -219,6 +245,105 @@ export async function savePackState(state: PackState): Promise<void> {
   try {
     const db = await getDb();
     await db.put(PACK_STATE, state, PACK_STATE_KEY);
+    announcePackState();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Fired after any write to this store.
+ *
+ * `useMyCollection` reads the unrecorded row to decide what it is not allowed to
+ * delete, and it reads it on mount — so a record that finally lands, on a screen
+ * the hook is not mounted on, has to say so out loud or the vault goes on
+ * protecting ids the server has since vouched for. Same shape and the same
+ * reason as `wwbh:member-token-changed` in member-token.ts.
+ */
+export const PACK_STATE_CHANGED = "wwbh:pack-state-changed";
+
+function announcePackState() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(PACK_STATE_CHANGED));
+}
+
+/** A second row in the same store, so the pack and its unsent ids expire apart. */
+const UNRECORDED_KEY = "unrecorded";
+
+/**
+ * The ids this device pulled and never managed to report, or null.
+ *
+ * Deliberately not scoped to today. An old row still protects its cards: a pull
+ * the league has never heard of does not become somebody else's because the date
+ * rolled over, and only a record that actually succeeds retires one.
+ */
+export async function loadUnrecorded(): Promise<UnrecordedPulls | null> {
+  if (!isBrowser()) return null;
+  try {
+    const db = await getDb();
+    return ((await db.get(PACK_STATE, UNRECORDED_KEY)) as UnrecordedPulls | undefined) ?? null;
+  } catch {
+    // Nothing to protect: a device with IndexedDB blocked never wrote the
+    // collected rows the prune would have deleted either.
+    return null;
+  }
+}
+
+/**
+ * File a pack the server has not taken yet.
+ *
+ * Adds rather than replaces. A pack that failed to record on Monday used to lose
+ * its protection the moment Tuesday's was dealt — and Monday's is never re-sent
+ * (the pack row for it is already gone), so nothing would ever have vouched for
+ * those cards and the next server answer deleted them. The one thing that does
+ * replace the row is a different identity: the previous person's cards are not
+ * this one's to hold on to, and `mergeCollection` disowns their collected rows
+ * on this handset anyway.
+ */
+export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
+  if (!isBrowser()) return;
+  try {
+    const db = await getDb();
+    // Read and write inside one transaction, like `forgetCards` above. Both of
+    // these are read-modify-write against the same row, and a record that lands
+    // while another is being filed would otherwise write back the value it read
+    // before the filing — losing a whole pack's protection to a lost update.
+    const tx = db.transaction(PACK_STATE, "readwrite");
+    const prior = (await tx.store.get(UNRECORDED_KEY)) as UnrecordedPulls | undefined;
+    const keep = prior && prior.identity === state.identity ? prior.ids : [];
+    const ids = [...new Set([...keep, ...state.ids])];
+    await tx.store.put({ ...state, ids }, UNRECORDED_KEY);
+    await tx.done;
+    announcePackState();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Hand back the ids the league has just taken, and only those.
+ *
+ * A record posts one pack, so it can only vouch for one pack. Clearing the whole
+ * row would retire an older pack's ids on the strength of a call that never
+ * mentioned them.
+ */
+export async function retireUnrecorded(recorded: readonly string[]): Promise<void> {
+  if (!isBrowser()) return;
+  try {
+    const db = await getDb();
+    // One transaction, for the reason given in `addUnrecorded`.
+    const tx = db.transaction(PACK_STATE, "readwrite");
+    const prior = (await tx.store.get(UNRECORDED_KEY)) as UnrecordedPulls | undefined;
+    if (!prior) {
+      await tx.done;
+      return;
+    }
+    const taken = new Set(recorded);
+    const ids = prior.ids.filter((id) => !taken.has(id));
+    if (ids.length === 0) await tx.store.delete(UNRECORDED_KEY);
+    else await tx.store.put({ ...prior, ids }, UNRECORDED_KEY);
+    await tx.done;
+    announcePackState();
   } catch {
     /* ignore */
   }
