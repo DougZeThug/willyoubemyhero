@@ -96,10 +96,17 @@ jobs:
               continue
             fi
 
-            if [ "$(jq --argjson req "$required" \
-              '[.[] | select(.name as $n | $req | index($n)) | select(.bucket != "pass")] | length' <<<"$others")" -eq 0 ]; then
+            # Two conditions, not one. Nothing anywhere may still be running —
+            # a review bot mid-flight has not had its say yet — and the three CI
+            # jobs must each have passed. Demanding "pass" from *every* row
+            # instead would hang on a legitimately skipped check, which is not
+            # pending and never becomes pass.
+            still_running=$(jq '[.[] | select(.bucket == "pending")] | length' <<<"$others")
+            required_unpassed=$(jq --argjson req "$required" \
+              '[.[] | select(.name as $n | $req | index($n)) | select(.bucket != "pass")] | length' <<<"$others")
+            if [ "$still_running" -eq 0 ] && [ "$required_unpassed" -eq 0 ]; then
               jq -r '.[] | "  \(.bucket)\t\(.name)"' <<<"$others"
-              echo "Every required check passed on this head."
+              echo "Every check on this head finished, the required ones passed."
               exit 0
             fi
 
