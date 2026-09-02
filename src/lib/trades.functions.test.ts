@@ -747,3 +747,59 @@ describe("getTradeFeed", () => {
     expect(call.columns).not.toContain("secret");
   });
 });
+
+describe("getTradeSpares and the catalogue", () => {
+  async function spares(participantId: string, headers?: Record<string, string>) {
+    const { getTradeSpares } = await import("./trades.functions");
+    return callServerFn<TradeSpares>(getTradeSpares, { data: { participantId }, headers });
+  }
+
+  it("ships neither the name nor the art of a counterparty's secret you have never pulled", async () => {
+    // This used to hand every face over and rely on the tile to turn it down —
+    // so one GET per member walked most of the league's catalogue with signed
+    // art, which is the enumeration secret_cards is server-only to prevent.
+    withDb({
+      "event_participants.select": { data: [] },
+      "card_copies.select": { data: [] },
+      "secret_card_pulls.select": [
+        // Their spares: one card the asker holds too, one they have never seen.
+        {
+          data: [
+            { id: PULL_ID, secret_card_id: SECRET_ID, tier: "mythic", granted: true, pulled_on: "2026-01-02" }, // prettier-ignore
+            { id: "p2", secret_card_id: "s2", tier: "rare", granted: true, pulled_on: "2026-01-02" }, // prettier-ignore
+          ],
+        },
+        // The asker's own holdings: s2 and nothing else.
+        { data: [{ secret_card_id: "s2" }] },
+      ],
+      "secret_cards.select": { data: [{ id: "s2", name: "Tucker", art_path: "secrets/tucker.webp" }] }, // prettier-ignore
+      "storage.createSignedUrl": { data: { signedUrl: "https://signed/tucker" } },
+    });
+    const res = await spares(THEM, asMe());
+    expect(res.secrets).toEqual([
+      { pullId: PULL_ID, name: "Secret card", artUrl: null, tier: "mythic", lastCopy: true, viewerOwns: false }, // prettier-ignore
+      { pullId: "p2", name: "Tucker", artUrl: "https://signed/tucker", tier: "rare", lastCopy: true, viewerOwns: true }, // prettier-ignore
+    ]);
+    // Not looked up, let alone signed: the unowned card's id never reaches the
+    // catalogue query at all.
+    expect(JSON.stringify(mock.callsFor("secret_cards", "select"))).not.toContain(SECRET_ID);
+  });
+
+  it("still shows you every face on your own side of the table", async () => {
+    withDb({
+      "event_participants.select": { data: [] },
+      "card_copies.select": { data: [] },
+      "secret_card_pulls.select": {
+        data: [
+          { id: PULL_ID, secret_card_id: SECRET_ID, tier: "mythic", granted: true, pulled_on: "2026-01-02" }, // prettier-ignore
+        ],
+      },
+      "secret_cards.select": { data: [{ id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/gary.webp" }] }, // prettier-ignore
+      "storage.createSignedUrl": { data: { signedUrl: "https://signed/gary" } },
+    });
+    const res = await spares(ME, asMe());
+    expect(res.secrets).toEqual([
+      { pullId: PULL_ID, name: "Gary the Grill", artUrl: "https://signed/gary", tier: "mythic", lastCopy: true, viewerOwns: true }, // prettier-ignore
+    ]);
+  });
+});

@@ -105,7 +105,12 @@ const rosterListing = {
   sellerId: THEM,
   price: 120,
   createdAt: "2026-08-30T00:00:00Z",
-  item: { kind: "roster" as const, eventParticipantId: "ep-1", edition: "gold" as const },
+  item: {
+    kind: "roster" as const,
+    eventParticipantId: "ep-1",
+    edition: "gold" as const,
+    assertedBy: "server" as const,
+  },
 };
 
 beforeEach(() => {

@@ -168,3 +168,18 @@ describe("account_identities", () => {
     await expect(neither).rejects.toThrow();
   });
 });
+
+describe("merge_guest_pulls and granted rows", () => {
+  it("keeps an incoming granted pull on a day the destination already spent", async () => {
+    // Same rule as claim_guest_secrets: only a daily slot can collide with a
+    // daily slot. A milestone's reward on the same day is not one.
+    const a = await addCard("merge-granted-a");
+    const b = await addCard("merge-granted-b");
+    await givePull(GUEST_A, a, { day: "2026-02-01", granted: false });
+    await givePull(GUEST_B, b, { day: "2026-02-01", granted: true });
+
+    expect(await merge()).toBe(1);
+    expect(await pullsFor(GUEST_A)).toHaveLength(2);
+    expect(await pullsFor(GUEST_B)).toHaveLength(0);
+  });
+});

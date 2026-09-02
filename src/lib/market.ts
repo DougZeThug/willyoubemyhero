@@ -41,7 +41,18 @@ export type MarketListingStatus = "active" | "sold" | "cancelled" | "voided";
  * `SecretSpare` already keeps by carrying no `secretCardId`.
  */
 export type MarketListingItem =
-  | { kind: "roster"; eventParticipantId: string; edition: Edition }
+  | {
+      kind: "roster";
+      eventParticipantId: string;
+      edition: Edition;
+      /**
+       * Who decided the finish — `card_copies.edition_asserted_by`. On the shelf
+       * because the tile prices by it: a client-asserted "platinum" mills for the
+       * flat floor, and a buyer reading the finish alone paid the platinum price
+       * for a card worth five. Same field the seller's own spares already carry.
+       */
+      assertedBy: "client" | "server";
+    }
   | {
       kind: "secret";
       /**
@@ -136,7 +147,10 @@ export function marketStatusLabel(status: string): string {
  * Composed from the existing ladders rather than a third copy of them, so a change
  * to either reaches this automatically.
  */
-export function houseFloor(item: MarketListingItem, assertedBy = "server"): number {
+export function houseFloor(
+  item: MarketListingItem,
+  assertedBy: string = item.kind === "roster" ? item.assertedBy : "server",
+): number {
   return item.kind === "roster"
     ? assertedBy === "server"
       ? MILL_BY_EDITION[item.edition]

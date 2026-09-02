@@ -502,3 +502,33 @@ describe("secret_pull_status", () => {
     ]);
   });
 });
+
+describe("claim_guest_secrets and a guest's granted rows", () => {
+  it("keeps a guest's granted secret on a day the member also pulled", async () => {
+    // A streak milestone pays out as a granted row on the day it is claimed, and
+    // a daily player has an ordinary pull that day too. The collision rule is
+    // about daily slots; it used to take the reward with it.
+    const daily = await addCard("Gary the Grill");
+    const reward = await addCard("Tucker");
+    // Out of the pool, so both daily pulls land on Gary and the reward row below
+    // cannot collide with a Tucker the guest happened to draw.
+    await sql("UPDATE public.secret_cards SET weight = 0 WHERE id = $1", [reward]);
+    await pull(IDS.alice);
+    await pullAsGuest(GUEST_A);
+    await sql(
+      `INSERT INTO public.secret_card_pulls (guest_id, secret_card_id, pulled_on, granted, tier)
+       VALUES ($1, $2, current_date, true, 'rare')`,
+      [GUEST_A, reward],
+    );
+    await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+    const rows = await sql<{ secret_card_id: string; granted: boolean; guest_id: string | null }>(
+      "SELECT secret_card_id, granted, guest_id FROM public.secret_card_pulls ORDER BY granted",
+    );
+    // The guest's daily pull lost to the member's, as before; the reward came across.
+    expect(rows).toEqual([
+      { secret_card_id: daily, granted: false, guest_id: null },
+      { secret_card_id: reward, granted: true, guest_id: null },
+    ]);
+    expect(await status(IDS.alice)).toMatchObject({ pulled: 2 });
+  });
+});

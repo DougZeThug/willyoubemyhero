@@ -134,31 +134,56 @@ async function hydrateSecrets(
   lastCopyIds: ReadonlySet<string> = new Set(),
   /** Secret card ids the VIEWER already holds a copy of — drives face-down art. */
   viewerCardIds: ReadonlySet<string> = new Set(),
+  /**
+   * Withhold the name and art of a card the viewer does not hold, server-side.
+   *
+   * Off inside an offer — the scoped exception `TradeItemView` describes, where
+   * both people are already in the trade. ON for a counterparty's spares list,
+   * which used to ship every face and rely on the tile to turn it over: one GET
+   * per member walked most of the league's catalogue with signed art, which is
+   * exactly the enumeration `secret_cards` is server-only to prevent. The
+   * marketplace shelf has always done it this way (see market.functions.ts).
+   */
+  concealUnowned = false,
 ): Promise<Map<string, SecretSpare>> {
   const out = new Map<string, SecretSpare>();
   if (rows.length === 0) return out;
 
   const sb = await db();
-  const cardIds = [...new Set(rows.map((r) => r.secret_card_id))];
-  const { data: cards } = await sb
-    .from("secret_cards")
-    .select("id, name, art_path")
-    .in("id", cardIds)
-    .returns<Pick<SecretCardRow, "id" | "name" | "art_path">[]>();
+  // Only the cards whose face may be shown are even looked up. Not fetching the
+  // rest is the clearer statement of the rule, and saves signing art nobody may
+  // see.
+  const cardIds = [
+    ...new Set(
+      rows.flatMap((r) =>
+        !concealUnowned || viewerCardIds.has(r.secret_card_id) ? [r.secret_card_id] : [],
+      ),
+    ),
+  ];
+  const { data: cards } = cardIds.length
+    ? await sb
+        .from("secret_cards")
+        .select("id, name, art_path")
+        .in("id", cardIds)
+        .returns<Pick<SecretCardRow, "id" | "name" | "art_path">[]>()
+    : { data: [] as Pick<SecretCardRow, "id" | "name" | "art_path">[] };
   const byId = new Map((cards ?? []).map((c) => [c.id, c]));
 
   await Promise.all(
     rows.map(async (row) => {
-      const card = byId.get(row.secret_card_id);
+      const owns = viewerCardIds.has(row.secret_card_id);
+      const shown = !concealUnowned || owns;
+      const card = shown ? byId.get(row.secret_card_id) : undefined;
       out.set(row.id, {
         pullId: row.id,
-        // A retired card still trades; it just has no row left to name it.
+        // A retired card still trades; it just has no row left to name it — and
+        // a concealed one reads the same, so the two cannot be told apart.
         name: card?.name ?? "Secret card",
         // thumb rather than large: these are tiles in a picker, not the reveal.
-        artUrl: await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb),
+        artUrl: shown ? await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb) : null,
         tier: toSecretTier(row.tier),
         lastCopy: lastCopyIds.has(row.id),
-        viewerOwns: viewerCardIds.has(row.secret_card_id),
+        viewerOwns: owns,
       });
     }),
   );
@@ -302,6 +327,9 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       mine ? held : stakeable,
       lastCopyIds,
       mine ? undefined : viewer.secrets,
+      // Somebody else's spares: a card you have never pulled arrives with no
+      // name and no art, not merely a flag asking the tile to hide them.
+      !mine,
     );
 
     // Every copy of a card they hold two or more of. All of them, not "the ones

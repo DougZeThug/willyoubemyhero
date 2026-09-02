@@ -105,7 +105,14 @@ function asTileItem(listing: MarketListing): TradeItemView {
 function itemMeta(item: MarketListingItem): { label: string | null; accent: string } {
   if (item.kind === "roster") {
     const style = editionStyle(item.edition);
-    return { label: editionLabel(item.edition), accent: style.accent };
+    // "unsettled" is the shop's word for a finish Postgres did not decide, and
+    // it belongs beside the price: a client-asserted platinum mills for the flat
+    // floor, so a buyer reading "Platinum" alone was paying for the word.
+    const label =
+      item.assertedBy === "client"
+        ? `${editionLabel(item.edition)} · unsettled`
+        : editionLabel(item.edition);
+    return { label, accent: style.accent };
   }
   const style = secretTierStyle(item.tier);
   return { label: style.label, accent: style.accent };
@@ -268,10 +275,12 @@ export function MarketPanel({
           eventParticipantId: r.eventParticipantId,
           edition: toEdition(r.edition),
         },
-        floor: houseFloor(
-          { kind: "roster", eventParticipantId: r.eventParticipantId, edition: toEdition(r.edition) }, // prettier-ignore
-          r.assertedBy,
-        ),
+        floor: houseFloor({
+          kind: "roster",
+          eventParticipantId: r.eventParticipantId,
+          edition: toEdition(r.edition),
+          assertedBy: r.assertedBy,
+        }),
       })),
       ...data.secrets.map((s) => ({
         item: {
