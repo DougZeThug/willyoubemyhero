@@ -142,10 +142,60 @@ describe("useAccountSync", () => {
     await settle();
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
 
+    // The stale run's retry has to fail too, or the guard inside the catch is
+    // never the thing keeping the token: a retry that succeeded would exit
+    // through the guard after it.
+    vi.mocked(adoptLocalCollection).mockRejectedValue(new Error("late again"));
     rejectFirst(new Error("late"));
     await settle();
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
     expect(lastState).toMatchObject({ status: "ready", userId: "user-2" });
+  });
+
+  it("does not treat a refreshed User object for the same id as a new sign-in", async () => {
+    // Supabase hands out a fresh object on every token refresh. Keyed on the
+    // object, the effect cancelled a sync mid-adoption and then skipped the
+    // re-run, so the account screen sat on "syncing" until a reload.
+    let resolveAdopt: (n: number) => void = () => {};
+    vi.mocked(adoptLocalCollection).mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveAdopt = resolve;
+        }),
+    );
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), { initialProps: { u: user } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    rerender({ u: { id: "user-1" } as User });
+    resolveAdopt(1);
+    await settle();
+
+    expect(syncAccountSession).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(MEMBER_TOKEN);
+    expect(window.localStorage.getItem("wwbh:guest-token")).toBeNull();
+    expect(lastState).toMatchObject({ status: "ready", userId: "user-1" });
+  });
+
+  it("takes the previous account's member token off before the next account syncs", async () => {
+    // syncAccount binds a first-time account to whatever `x-member-token` the
+    // device sends. The token the last account's run wrote must not be it.
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), { initialProps: { u: user } });
+    await settle();
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(MEMBER_TOKEN);
+
+    let seenAtSync: string | null = "unread";
+    const SECOND_TOKEN = "m.00000000-0000-4000-8000-0000000000bb.9999999999999.sig";
+    vi.mocked(syncAccountSession).mockImplementation(async () => {
+      seenAtSync = window.localStorage.getItem("wwbh:member-token");
+      return { kind: "member", token: SECOND_TOKEN, name: "Bob" } as never;
+    });
+    rerender({ u: { id: "user-2" } as User });
+    await settle();
+
+    expect(seenAtSync).toBeNull();
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
   });
 
   it("snapshots the store once, before the first token lands", async () => {

@@ -627,8 +627,12 @@ describe("adopt_card_copies", () => {
   });
 
   it("serialises two adoptions racing on one account", async () => {
-    // THE TEST THAT MATTERS. Without the participant row lock both calls read an
-    // empty table, both insert, and every card has a millable spare.
+    // What this proves is the ledger's primary key: the second insert into
+    // card_adoptions waits on the first and lands on ON CONFLICT DO NOTHING, so
+    // it files no copies whether or not the row lock is held. The lock is for a
+    // different race — record_card_pulls and mill_card_copy hold the same
+    // participant row, and adoption's "no copy held yet" read has to queue
+    // behind them rather than interleave.
     const ids = await cardIds();
     const one = await newClient();
     const two = await newClient();

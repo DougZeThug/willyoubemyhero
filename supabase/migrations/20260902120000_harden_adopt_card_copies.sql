@@ -42,6 +42,13 @@ GRANT ALL ON public.card_adoptions TO service_role;
 -- Every adopt copy that already exists was an adoption; record it so the rule
 -- holds for people who claimed before this landed. created_at is the closest
 -- thing to the day it happened.
+--
+-- Best effort, and knowingly so. An adopt copy milled before today is gone, and
+-- one traded away is now somebody else's 'trade' row indistinguishable from a
+-- traded pull, so neither can be recovered here. The residual is one further
+-- standard copy per such pair, once, reachable only from a doctored store —
+-- after which the ledger holds. A heuristic reconstruction would also record
+-- adoptions that never happened, which is the worse error.
 INSERT INTO public.card_adoptions (participant_id, event_participant_id, adopted_on)
 SELECT DISTINCT ON (participant_id, event_participant_id)
        participant_id, event_participant_id, created_at::date
@@ -69,8 +76,10 @@ DECLARE
 BEGIN
   IF _participant_id IS NULL OR _event_participant_ids IS NULL THEN RETURN 0; END IF;
 
-  -- The lock is the whole concurrency guard. Two sign-ins racing on one account
-  -- queue here, and the second sees the ledger rows the first wrote.
+  -- Two sign-ins racing on one account are settled by the ledger's primary key
+  -- below either way. The lock is for the other writers that hold this row —
+  -- record_card_pulls and mill_card_copy — so the "no copy held yet" read cannot
+  -- interleave with a pack landing or a copy leaving.
   PERFORM 1 FROM public.participants WHERE id = _participant_id FOR UPDATE;
   IF NOT FOUND THEN RETURN 0; END IF;
 

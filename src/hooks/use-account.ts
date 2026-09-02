@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
-import { setMemberToken, clearMemberToken } from "@/lib/member-token";
+import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import { clearAdminToken } from "@/lib/admin-token";
 import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
@@ -45,14 +45,21 @@ export function useAuthUser(): { user: User | null; loading: boolean } {
  */
 export function useAccountSync(user: User | null) {
   const syncedFor = useRef<string | null>(null);
+  // The id, not the object. Supabase hands out a fresh User on every token
+  // refresh, and an effect keyed on the object cancelled a sync mid-adoption for
+  // an identity that had not changed — the guarded returns below then skipped
+  // the ready state, the latch skipped the re-run, and the account screen sat
+  // on "syncing" until a reload.
+  const authUserId = user?.id ?? null;
 
   useEffect(() => {
-    if (!user) {
+    if (!authUserId) {
       syncedFor.current = null;
       setAccountSyncState({ status: "idle", userId: null, message: null });
       return;
     }
-    const userId = user.id;
+    // Narrowed once here: the closures below cannot see the guard above.
+    const userId: string = authUserId;
     if (syncedFor.current === userId) return;
     syncedFor.current = userId;
     setAccountSyncState({ status: "syncing", userId, message: null });
@@ -68,6 +75,9 @@ export function useAccountSync(user: User | null) {
     // than per attempt, because a retry after the prune has run would snapshot
     // a store that has already lost them.
     let held: Awaited<ReturnType<typeof snapshotLocalCollection>> | null = null;
+    // The member token this run wrote, so the cleanup can take back exactly
+    // that one and nothing a newer run has written since.
+    let wrote: string | null = null;
 
     async function runSync() {
       held ??= await snapshotLocalCollection();
@@ -75,6 +85,7 @@ export function useAccountSync(user: User | null) {
       if (cancelled) return;
       if (res.kind === "member") {
         setMemberToken(res.token, res.name ?? "Player");
+        wrote = res.token;
         // Every await below is a moment the account can change under this sync.
         // Once it has, the tokens belong to the new user's run: a stale rejection
         // must not clear the member token that run just wrote, and a stale
@@ -143,8 +154,14 @@ export function useAccountSync(user: User | null) {
     return () => {
       cancelled = true;
       if (retry) clearTimeout(retry);
+      // A different account is taking over this device. The token this run
+      // wrote must be gone before that account's sync reads the headers:
+      // syncAccount takes `x-member-token` as the player to bind a new account
+      // to, so leaving it would link the next person to this one's collection.
+      // Compare-and-clear, so a token a newer run has already replaced stays.
+      if (wrote && getMemberToken() === wrote) clearMemberToken();
     };
-  }, [user]);
+  }, [authUserId]);
 }
 
 /**

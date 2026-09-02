@@ -108,9 +108,11 @@ function itemMeta(item: MarketListingItem): { label: string | null; accent: stri
     // "unsettled" is the shop's word for a finish Postgres did not decide, and
     // it belongs beside the price: a client-asserted platinum mills for the flat
     // floor, so a buyer reading "Platinum" alone was paying for the word.
+    // editionLabel is null for standard, which every adopted copy now is, so
+    // the two halves are joined rather than templated.
     const label =
       item.assertedBy === "client"
-        ? `${editionLabel(item.edition)} · unsettled`
+        ? [editionLabel(item.edition), "unsettled"].filter(Boolean).join(" · ")
         : editionLabel(item.edition);
     return { label, accent: style.accent };
   }

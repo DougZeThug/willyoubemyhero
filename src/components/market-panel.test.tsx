@@ -404,3 +404,37 @@ describe("while the commissioner has dust switched off", () => {
     settle({ active: [], recent: [] });
   });
 });
+
+describe("provenance on the shelf", () => {
+  it("labels a client-asserted standard copy 'unsettled' and nothing else", async () => {
+    // editionLabel is null for standard — which every adopted copy is — so the
+    // first draft of this badge read "null · unsettled".
+    browseFn.mockResolvedValue({
+      listings: [
+        {
+          ...rosterListing,
+          item: {
+            ...rosterListing.item,
+            edition: "standard" as const,
+            assertedBy: "client" as const,
+          },
+        },
+      ],
+      nudgeTopic: null,
+    });
+    renderPanel();
+    expect(await screen.findByText("unsettled")).toBeInTheDocument();
+    expect(screen.queryByText(/null/)).toBeNull();
+  });
+
+  it("keeps the finish beside the word when there is one", async () => {
+    browseFn.mockResolvedValue({
+      listings: [
+        { ...rosterListing, item: { ...rosterListing.item, assertedBy: "client" as const } },
+      ],
+      nudgeTopic: null,
+    });
+    renderPanel();
+    expect(await screen.findByText("Gold · unsettled")).toBeInTheDocument();
+  });
+});
