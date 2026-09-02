@@ -251,10 +251,43 @@ describe("useAccountSync", () => {
     const attempts = vi.mocked(syncAccountSession).mock.calls.length;
     expect(attempts).toBe(4);
 
+    // Between attempts the token was briefly on the device, and the collection
+    // hook may have pruned the store in that window. The retry has to file the
+    // cards as they stood before the first attempt, not as they stand now.
+    vi.mocked(snapshotLocalCollection).mockResolvedValue({});
     await act(async () => {
       await vi.advanceTimersByTimeAsync(61_000);
     });
     expect(vi.mocked(syncAccountSession).mock.calls.length).toBeGreaterThan(attempts);
+    expect(snapshotLocalCollection).toHaveBeenCalledTimes(1);
+    expect(adoptLocalCollection).toHaveBeenLastCalledWith(held);
+  });
+
+  it("backs off between wakes and stops polling after a handful", async () => {
+    vi.mocked(adoptLocalCollection).mockRejectedValue(new Error("offline"));
+    renderHook(() => useAccountSync(user));
+    // Six wakes at 1, 2, 4, 8, 15, 15 minutes. Advanced in slices, because each
+    // wake is a state change React only acts on between them, and the next
+    // timer is armed by the effect that runs after that.
+    async function hours(n: number) {
+      for (let i = 0; i < n * 12; i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5 * 60_000);
+        });
+      }
+    }
+    await hours(2);
+    const after = vi.mocked(syncAccountSession).mock.calls.length;
+    // 4 attempts per run, 7 runs (the first plus six wakes).
+    expect(after).toBe(28);
+    await hours(2);
+    expect(vi.mocked(syncAccountSession).mock.calls.length).toBe(after);
+    // The radio coming back is still a reason to try.
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+    await settle();
+    expect(vi.mocked(syncAccountSession).mock.calls.length).toBe(after + 4);
   });
 
   it("snapshots the store once, before the first token lands", async () => {

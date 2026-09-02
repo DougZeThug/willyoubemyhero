@@ -36,6 +36,12 @@ export function useAuthUser(): { user: User | null; loading: boolean } {
   return { user, loading };
 }
 
+// A sync that gave up tries again on its own: a minute, then two, four, eight,
+// fifteen, fifteen — and then only when the radio says it is back.
+const WAKE_BASE_MS = 60_000;
+const WAKE_MAX_MS = 15 * 60_000;
+const WAKE_LIMIT = 6;
+
 /**
  * Keep this device's collection token in step with the signed-in account.
  *
@@ -49,8 +55,17 @@ export function useAccountSync(user: User | null) {
   // sign-out: it is how the next run knows the member token it finds belongs to
   // somebody else.
   const lastStarted = useRef<string | null>(null);
-  // Bumped when a sync that gave up should be tried again for the same user.
+  // Bumped when a sync that gave up should be tried again for the same user,
+  // and how many times that has happened, which sets the wait before the next.
   const [wake, setWake] = useState(0);
+  const wakes = useRef(0);
+  // The local collection as it stood before this user's FIRST token landed.
+  // Kept across the wake re-runs above: each of those is a fresh effect, and a
+  // fresh read of the store would see whatever the prune has since taken.
+  const heldFor = useRef<{
+    userId: string;
+    snapshot: Awaited<ReturnType<typeof snapshotLocalCollection>>;
+  } | null>(null);
   // The id, not the object. Supabase hands out a fresh User on every token
   // refresh, and an effect keyed on the object cancelled a sync mid-adoption for
   // an identity that had not changed — the guarded returns below then skipped
@@ -74,7 +89,11 @@ export function useAccountSync(user: User | null) {
     // as writing one. A device that has never run a sync keeps its token: that
     // is the paper-code-then-sign-in path, where the token IS the identity the
     // account should adopt.
-    if (lastStarted.current && lastStarted.current !== userId) clearMemberToken();
+    if (lastStarted.current && lastStarted.current !== userId) {
+      clearMemberToken();
+      wakes.current = 0;
+      heldFor.current = null;
+    }
     lastStarted.current = userId;
     syncedFor.current = userId;
     setAccountSyncState({ status: "syncing", userId, message: null });
@@ -86,18 +105,23 @@ export function useAccountSync(user: User | null) {
     let wakeTimer: ReturnType<typeof setTimeout> | undefined;
     let forgetOnline: (() => void) | undefined;
 
-    // Snapshotted once, before the first token lands, for the same reason as
-    // the claim page: once this device is a member, its unrecognised local cards
-    // are pruned, and a guest's base cards exist nowhere else. Read once rather
-    // than per attempt, because a retry after the prune has run would snapshot
-    // a store that has already lost them.
-    let held: Awaited<ReturnType<typeof snapshotLocalCollection>> | null = null;
+    // Snapshotted once per user, before the first token lands, for the same
+    // reason as the claim page: once this device is a member, its unrecognised
+    // local cards are pruned, and a guest's base cards exist nowhere else. Once
+    // rather than per attempt or per wake, because a read after the prune has
+    // run would snapshot a store that has already lost them.
+    async function snapshot() {
+      if (heldFor.current?.userId !== userId) {
+        heldFor.current = { userId, snapshot: await snapshotLocalCollection() };
+      }
+      return heldFor.current.snapshot;
+    }
     // The member token this run wrote, so the cleanup can take back exactly
     // that one and nothing a newer run has written since.
     let wrote: string | null = null;
 
     async function runSync() {
-      held ??= await snapshotLocalCollection();
+      const held = await snapshot();
       const res = await syncAccountSession({ data: undefined });
       if (cancelled) return;
       if (res.kind === "member") {
@@ -135,6 +159,7 @@ export function useAccountSync(user: User | null) {
         setGuestToken(res.token);
       }
       clearAccountHandoff();
+      wakes.current = 0;
       setAccountSyncState({ status: "ready", userId, message: null });
     }
 
@@ -167,9 +192,14 @@ export function useAccountSync(user: User | null) {
         });
         // Keyed on the id, nothing about the user re-runs this on its own any
         // more — a token refresh used to, by accident. So the next go is
-        // scheduled here: a minute, or the radio coming back, whichever first.
+        // scheduled here: the radio coming back, or a timer that doubles from
+        // a minute up to a quarter of an hour and stops after a handful — a
+        // phone left open on a dead network is not a reason to poll all night.
         const bump = () => setWake((n) => n + 1);
-        wakeTimer = setTimeout(bump, 60_000);
+        if (wakes.current < WAKE_LIMIT) {
+          wakeTimer = setTimeout(bump, Math.min(WAKE_BASE_MS * 2 ** wakes.current, WAKE_MAX_MS));
+          wakes.current += 1;
+        }
         window.addEventListener("online", bump, { once: true });
         forgetOnline = () => window.removeEventListener("online", bump);
       }
