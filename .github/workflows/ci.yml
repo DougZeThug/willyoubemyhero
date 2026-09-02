@@ -74,7 +74,9 @@ jobs:
       - name: Build
         run: bun run build
 
-  # Grants, RLS policies and the award RPCs, against a real Postgres.
+  # Grants, RLS policies and the award RPCs, against a real Postgres. A gate, not
+  # advisory: this job is the only automated proof of the security model, so a
+  # red run here has to block the sync rather than sit unnoticed.
   #
   # No Docker and no Supabase CLI: the harness in tests/db/cluster.ts runs initdb
   # itself and applies bootstrap.sql plus every migration from empty, which also
@@ -83,7 +85,6 @@ jobs:
     name: database
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
 
     steps:
       - name: Checkout

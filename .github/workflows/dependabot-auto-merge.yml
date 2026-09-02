@@ -12,6 +12,9 @@ jobs:
   approve-and-merge:
     name: Approve and enable auto-merge for safe Dependabot updates
     runs-on: ubuntu-latest
+    # This job now sits through all of CI before it approves anything, and e2e
+    # alone takes about eight minutes on the runner.
+    timeout-minutes: 30
     if: github.actor == 'dependabot[bot]'
     steps:
       - name: Fetch Dependabot metadata
@@ -19,6 +22,74 @@ jobs:
         uses: dependabot/fetch-metadata@v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # Approval used to happen the moment this workflow ran, waiting for
+      # nothing, so a supabase-js or Playwright bump that broke RLS or every
+      # browser journey could merge to the Lovable-connected branch unattended.
+      # Nothing is approved now until verify, database and e2e have all finished
+      # green on this head — e2e included, even though it stays advisory for
+      # humans, because an unattended merge has nobody reading an advisory red.
+      #
+      # `gh pr checks --watch` cannot do the waiting: this job is itself a check
+      # run on the PR, so gh counts it as pending and waits on itself until the
+      # timeout. (There is no --fail-level flag either; gh has only --fail-fast,
+      # which exits early on failure and would not help with the self-wait.)
+      # Hence the poll below, which skips this workflow's own rows.
+      - name: Wait for checks to pass
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELF_WORKFLOW: ${{ github.workflow }}
+        run: |
+          # gh exits 8 while anything is still running and 1 once something has
+          # failed, which is every poll that matters — so its exit code is
+          # ignored and the rollup it printed is what gets judged. Blanking the
+          # output on a non-zero exit would hide the failure this step exists to
+          # catch. Only a rollup that will not parse falls back to empty.
+          empty_polls=0
+          while true; do
+            rollup=$(gh pr checks "$PR_URL" --json name,bucket,workflow) || true
+            others=$(jq -c --arg self "$SELF_WORKFLOW" \
+              '[.[] | select(.workflow != $self)]' <<<"$rollup" 2>/dev/null) || true
+            # jq prints nothing and still succeeds when gh printed nothing, so
+            # an empty result has to be turned back into an array here or every
+            # later test compares against the empty string and the loop spins.
+            [ -n "$others" ] || others="[]"
+
+            # A head carrying no checks at all is never safe to merge: pushes
+            # made with GITHUB_TOKEN — the bun.lock regeneration workflow — start
+            # no workflow run, so such a head has no CI behind it. Tolerated only
+            # for the couple of minutes GitHub can take to report a fresh push.
+            if [ "$(jq 'length' <<<"$others")" -eq 0 ]; then
+              empty_polls=$((empty_polls + 1))
+              if [ "$empty_polls" -gt 20 ]; then
+                echo "::error::No checks reported on this head after five minutes; refusing to auto-merge."
+                exit 1
+              fi
+              sleep 15
+              continue
+            fi
+
+            # A cancelled check counts as a failure: it proves nothing about the
+            # head, and failing closed here only costs a human clicking merge.
+            failed=$(jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | .name' <<<"$others")
+            if [ -n "$failed" ]; then
+              echo "::error::Not auto-merging — these checks did not pass on this head:"
+              printf '%s\n' "$failed" | sed 's/^/  /'
+              exit 1
+            fi
+
+            if [ "$(jq '[.[] | select(.bucket == "pending")] | length' <<<"$others")" -eq 0 ]; then
+              jq -r '.[] | "  \(.bucket)\t\(.name)"' <<<"$others"
+              echo "Every check on this head finished and none failed."
+              exit 0
+            fi
+
+            sleep 15
+          done
 
       - name: Approve and enable auto-merge
         if: |
