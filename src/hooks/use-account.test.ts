@@ -290,6 +290,60 @@ describe("useAccountSync", () => {
     expect(vi.mocked(syncAccountSession).mock.calls.length).toBe(after + 4);
   });
 
+  it("reads the store afresh after a sign-out, even for the same account", async () => {
+    // Cards pulled as a guest in between exist only in the store, and an
+    // exhausted retry budget from before the sign-out is not this sign-in's.
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), {
+      initialProps: { u: user as User | null },
+    });
+    await settle();
+    expect(snapshotLocalCollection).toHaveBeenCalledTimes(1);
+
+    const later = { ...held, "ep-2": { ...held["ep-1"], eventParticipantId: "ep-2" } };
+    vi.mocked(snapshotLocalCollection).mockResolvedValue(later);
+    rerender({ u: null });
+    rerender({ u: { id: "user-1" } as User });
+    await settle();
+
+    expect(snapshotLocalCollection).toHaveBeenCalledTimes(2);
+    expect(adoptLocalCollection).toHaveBeenLastCalledWith(later);
+  });
+
+  it("does not let a stale run's late snapshot displace the next account's", async () => {
+    // The first account's read of the store resolves after the switch. If it
+    // landed in the shared slot, the second account's wake re-run would find an
+    // entry for somebody else and read the store again — after the prune.
+    let resolveFirst: (c: Record<string, (typeof held)["ep-1"]>) => void = () => {};
+    const first = { "ep-9": { ...held["ep-1"], eventParticipantId: "ep-9" } };
+    vi.mocked(snapshotLocalCollection)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValue(held);
+    vi.mocked(adoptLocalCollection).mockRejectedValue(new Error("offline"));
+
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), { initialProps: { u: user } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    rerender({ u: { id: "user-2" } as User });
+    await settle();
+    expect(lastState).toMatchObject({ status: "error", userId: "user-2" });
+
+    resolveFirst(first);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    // The wake re-run adopted from the second account's own snapshot, and did
+    // not have to read the store again to find it.
+    expect(snapshotLocalCollection).toHaveBeenCalledTimes(2);
+    expect(adoptLocalCollection).toHaveBeenLastCalledWith(held);
+  });
+
   it("snapshots the store once, before the first token lands", async () => {
     // A re-read on retry would adopt whatever the prune had already left.
     vi.mocked(adoptLocalCollection)

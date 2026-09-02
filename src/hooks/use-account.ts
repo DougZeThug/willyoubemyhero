@@ -76,6 +76,11 @@ export function useAccountSync(user: User | null) {
   useEffect(() => {
     if (!authUserId) {
       syncedFor.current = null;
+      // Signed out. The next sign-in — the same account or another — starts
+      // from a fresh read of the store, because cards pulled as a guest in
+      // between exist only there; and with its retries back.
+      heldFor.current = null;
+      wakes.current = 0;
       setAccountSyncState({ status: "idle", userId: null, message: null });
       return;
     }
@@ -111,10 +116,14 @@ export function useAccountSync(user: User | null) {
     // rather than per attempt or per wake, because a read after the prune has
     // run would snapshot a store that has already lost them.
     async function snapshot() {
-      if (heldFor.current?.userId !== userId) {
-        heldFor.current = { userId, snapshot: await snapshotLocalCollection() };
-      }
-      return heldFor.current.snapshot;
+      if (heldFor.current?.userId === userId) return heldFor.current.snapshot;
+      const captured = await snapshotLocalCollection();
+      // Kept only if this run is still the live one. A read that resolves after
+      // an account switch would otherwise overwrite the next account's entry
+      // with one keyed on the old user, and their wake re-run would then read
+      // the store afresh — after the prune.
+      if (!cancelled) heldFor.current = { userId, snapshot: captured };
+      return captured;
     }
     // The member token this run wrote, so the cleanup can take back exactly
     // that one and nothing a newer run has written since.
