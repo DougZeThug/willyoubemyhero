@@ -116,6 +116,38 @@ describe("useAccountSync", () => {
     expect(lastState).toMatchObject({ status: "error", userId: "user-1" });
   });
 
+  it("leaves a newer account's tokens alone when a stale adoption settles late", async () => {
+    // Sign in as one account, switch to another while the first upload is still
+    // in flight, then let the first one fail: the cleanup set `cancelled`, and
+    // the stale run must not take the second account's member token with it.
+    let rejectFirst: (e: Error) => void = () => {};
+    vi.mocked(adoptLocalCollection)
+      .mockImplementationOnce(
+        () =>
+          new Promise<number>((_, reject) => {
+            rejectFirst = reject;
+          }),
+      )
+      .mockResolvedValue(1);
+    const SECOND_TOKEN = "m.00000000-0000-4000-8000-0000000000bb.9999999999999.sig";
+    vi.mocked(syncAccountSession)
+      .mockResolvedValueOnce({ kind: "member", token: MEMBER_TOKEN, name: "Alice" } as never)
+      .mockResolvedValue({ kind: "member", token: SECOND_TOKEN, name: "Bob" } as never);
+
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), { initialProps: { u: user } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    rerender({ u: { id: "user-2" } as User });
+    await settle();
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
+
+    rejectFirst(new Error("late"));
+    await settle();
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
+    expect(lastState).toMatchObject({ status: "ready", userId: "user-2" });
+  });
+
   it("snapshots the store once, before the first token lands", async () => {
     // A re-read on retry would adopt whatever the prune had already left.
     vi.mocked(adoptLocalCollection)

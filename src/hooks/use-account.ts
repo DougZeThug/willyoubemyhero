@@ -75,14 +75,20 @@ export function useAccountSync(user: User | null) {
       if (cancelled) return;
       if (res.kind === "member") {
         setMemberToken(res.token, res.name ?? "Player");
+        // Every await below is a moment the account can change under this sync.
+        // Once it has, the tokens belong to the new user's run: a stale rejection
+        // must not clear the member token that run just wrote, and a stale
+        // success must not clear its guest token. Hence the checks after each.
         try {
           await adoptLocalCollection(held);
         } catch {
+          if (cancelled) return;
           try {
             // One retry, because the usual failure here is a flaky first request
             // from a phone that has just woken up on garden wifi.
             await adoptLocalCollection(held);
           } catch (e) {
+            if (cancelled) return;
             // The claim screen's rule, which this path used to skip: if the
             // upload does not stick, the token comes straight back off. No
             // member, no reconciliation, nothing pruned — and the throw hands
@@ -92,6 +98,7 @@ export function useAccountSync(user: User | null) {
             throw e;
           }
         }
+        if (cancelled) return;
         // Only now. Clearing it before the upload left a phone whose adoption
         // failed with no identity at all, and its cards filed under neither.
         clearGuestToken();

@@ -532,3 +532,38 @@ describe("claim_guest_secrets and a guest's granted rows", () => {
     expect(await status(IDS.alice)).toMatchObject({ pulled: 2 });
   });
 });
+
+describe("claim_guest_secrets promotes a preserved reward", () => {
+  it("leaves the member owning a card the guest now holds only as a reward", async () => {
+    // The guest pulled X as their daily, then a milestone dealt them a second X
+    // the same day — a granted duplicate. The member pulled Y that day. The
+    // daily X loses the day, the reward stays; it has to become the owning row
+    // or every count says the member does not hold X.
+    const x = await addCard("Gary the Grill");
+    const y = await addCard("Tucker");
+    await sql("UPDATE public.secret_cards SET weight = 0 WHERE id = $1", [y]);
+    await pullAsGuest(GUEST_A); // X, as their daily
+    await sql(
+      `INSERT INTO public.secret_card_pulls
+         (guest_id, secret_card_id, pulled_on, is_duplicate, granted, tier)
+       VALUES ($1, $2, current_date, true, true, 'rare')`,
+      [GUEST_A, x],
+    );
+    // The member's daily lands on Y: X is out of the pool for a beat.
+    await sql("UPDATE public.secret_cards SET weight = 0 WHERE id = $1", [x]);
+    await sql("UPDATE public.secret_cards SET weight = 100 WHERE id = $1", [y]);
+    await pull(IDS.alice);
+
+    await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+    const rows = await sql<{ secret_card_id: string; is_duplicate: boolean; granted: boolean }>(
+      `SELECT secret_card_id, is_duplicate, granted FROM public.secret_card_pulls
+        WHERE participant_id = $1 ORDER BY granted`,
+      [IDS.alice],
+    );
+    expect(rows).toEqual([
+      { secret_card_id: y, is_duplicate: false, granted: false },
+      { secret_card_id: x, is_duplicate: false, granted: true },
+    ]);
+    expect(await status(IDS.alice)).toMatchObject({ pulled: 2 });
+  });
+});

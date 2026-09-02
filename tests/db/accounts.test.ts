@@ -183,3 +183,19 @@ describe("merge_guest_pulls and granted rows", () => {
     expect(await pullsFor(GUEST_B)).toHaveLength(0);
   });
 });
+
+describe("merge_guest_pulls promotes a preserved reward", () => {
+  it("leaves the destination owning a card it now holds only as a reward", async () => {
+    const x = await addCard("merge-promote-x");
+    const y = await addCard("merge-promote-y");
+    await givePull(GUEST_A, y, { day: "2026-02-01", granted: false });
+    await givePull(GUEST_B, x, { day: "2026-02-01", granted: false });
+    await givePull(GUEST_B, x, { day: "2026-02-01", granted: true, duplicate: true, tier: "rare" });
+
+    await merge();
+    const mine = await pullsFor(GUEST_A);
+    expect(mine).toHaveLength(2);
+    expect(mine.find((p) => p.secret_card_id === x)).toMatchObject({ is_duplicate: false, tier: "rare" }); // prettier-ignore
+    expect(await pullsFor(GUEST_B)).toHaveLength(0);
+  });
+});
