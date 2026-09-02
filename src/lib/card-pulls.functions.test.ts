@@ -500,3 +500,54 @@ describe("grantCard", () => {
     expect(res).toMatchObject({ copies: 1, repeat: true });
   });
 });
+
+describe("adoptCollection", () => {
+  it("refuses a caller with no member token", async () => {
+    const { adoptCollection } = await import("./card-pulls.functions");
+    await expect(
+      callServerFn(adoptCollection, { data: { eventParticipantIds: [CARD_A] } }),
+    ).rejects.toThrow("Claim your player first");
+    expect(mock.client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("adopts for the token holder and never sends a finish", async () => {
+    // A phone from before the change still posts `editions` beside the ids.
+    // Tolerated and dropped: the RPC files every adopted copy as standard, and
+    // the handler must not hand it anything it could be tempted to read.
+    withDb({ "rpc.adopt_card_copies": { data: 2 } });
+    const { adoptCollection } = await import("./card-pulls.functions");
+    const res = await callServerFn(adoptCollection, {
+      data: { eventParticipantIds: [CARD_A, CARD_B], editions: ["platinum", "gold"] },
+      headers: asMe(),
+    });
+    expect(res).toEqual({ ok: true, adopted: 2 });
+    expect(mock.client.rpc).toHaveBeenCalledWith("adopt_card_copies", {
+      _participant_id: ME,
+      _event_participant_ids: [CARD_A, CARD_B],
+      _editions: null,
+    });
+  });
+
+  it("rejects an empty list and a 65th card before Postgres sees them", async () => {
+    const { adoptCollection } = await import("./card-pulls.functions");
+    await expect(
+      callServerFn(adoptCollection, { data: { eventParticipantIds: [] }, headers: asMe() }),
+    ).rejects.toThrow();
+    const tooMany = Array.from(
+      { length: 65 },
+      (_, i) => `00000000-0000-4000-8000-0000000000${(i + 10).toString(16).padStart(2, "0")}`,
+    );
+    await expect(
+      callServerFn(adoptCollection, { data: { eventParticipantIds: tooMany }, headers: asMe() }),
+    ).rejects.toThrow();
+    expect(mock.client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the RPC's own message", async () => {
+    withDb({ "rpc.adopt_card_copies": { error: { message: "nope" } } });
+    const { adoptCollection } = await import("./card-pulls.functions");
+    await expect(
+      callServerFn(adoptCollection, { data: { eventParticipantIds: [CARD_A] }, headers: asMe() }),
+    ).rejects.toThrow("nope");
+  });
+});

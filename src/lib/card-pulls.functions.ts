@@ -238,15 +238,13 @@ export const adoptCollection = createServerFn({ method: "POST" })
       .object({
         // A whole roster's worth, since this is a collection rather than a pack.
         eventParticipantIds: z.array(zuuid()).min(1).max(64),
-        editions: z.array(z.enum(EDITION_IDS)).max(64).optional(),
+        // NO FINISHES. There used to be an `editions` array beside the ids, and
+        // the RPC filed whatever it said. An adopted copy is `edition_asserted_by
+        // = 'client'` and pays the flat floor at the mill, but `card_pulls.edition`
+        // is derived from the copies, so every screen dressed the card in the
+        // phone's word for it — and the marketplace priced it that way. A phone
+        // still sending the key is tolerated (zod strips it) and ignored.
       })
-      .refine(
-        (v) => v.editions === undefined || v.editions.length === v.eventParticipantIds.length,
-        {
-          message: "editions must line up one-to-one with eventParticipantIds",
-          path: ["editions"],
-        },
-      )
       .parse(d),
   )
   .handler(async ({ data }) => {
@@ -255,7 +253,9 @@ export const adoptCollection = createServerFn({ method: "POST" })
     const { data: n, error } = await secrets.rpc("adopt_card_copies", {
       _participant_id: me,
       _event_participant_ids: data.eventParticipantIds,
-      _editions: data.editions ?? null,
+      // Kept in the call because the RPC's signature keeps it, the same way
+      // record_card_pulls keeps its own. Postgres never reads it.
+      _editions: null,
     });
     if (error) throw new Error(error.message);
     return { ok: true as const, adopted: (n as number | null) ?? 0 };

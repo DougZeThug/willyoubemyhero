@@ -62,21 +62,39 @@ export function useAccountSync(user: User | null) {
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
 
+    // Snapshotted once, before the first token lands, for the same reason as
+    // the claim page: once this device is a member, its unrecognised local cards
+    // are pruned, and a guest's base cards exist nowhere else. Read once rather
+    // than per attempt, because a retry after the prune has run would snapshot
+    // a store that has already lost them.
+    let held: Awaited<ReturnType<typeof snapshotLocalCollection>> | null = null;
+
     async function runSync() {
-      // Snapshotted before the token changes, for the same reason as the claim
-      // page: once this device is a member, its unrecognised local cards are
-      // pruned, and a guest's base cards exist nowhere else.
-      const held = await snapshotLocalCollection();
+      held ??= await snapshotLocalCollection();
       const res = await syncAccountSession({ data: undefined });
       if (cancelled) return;
       if (res.kind === "member") {
         setMemberToken(res.token, res.name ?? "Player");
-        clearGuestToken();
         try {
           await adoptLocalCollection(held);
         } catch {
-          /* signed in without the upload: the cards can be granted back */
+          try {
+            // One retry, because the usual failure here is a flaky first request
+            // from a phone that has just woken up on garden wifi.
+            await adoptLocalCollection(held);
+          } catch (e) {
+            // The claim screen's rule, which this path used to skip: if the
+            // upload does not stick, the token comes straight back off. No
+            // member, no reconciliation, nothing pruned — and the throw hands
+            // the whole sync to the retry loop below, so a later attempt gets
+            // the same snapshot rather than a store the prune has been through.
+            clearMemberToken();
+            throw e;
+          }
         }
+        // Only now. Clearing it before the upload left a phone whose adoption
+        // failed with no identity at all, and its cards filed under neither.
+        clearGuestToken();
       } else {
         clearMemberToken();
         setGuestToken(res.token);

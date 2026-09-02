@@ -6,7 +6,7 @@
 // tests that matter most are the ones that hammer the same pair and prove the
 // count does not move.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, isDenied, IDS, seedEvent, sql } from "./helpers";
+import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
 
 afterAll(closeDb);
 beforeEach(seedEvent);
@@ -522,5 +522,134 @@ describe("record_card_pulls editions", () => {
       [IDS.alice, ids[0]],
     );
     expect(row.edition).toBe(held[0].edition);
+  });
+});
+
+describe("adopt_card_copies", () => {
+  // The guest-to-member handover. It was the one unrationed mint left once
+  // copies became currency: it took the finish from the phone, held no lock, and
+  // joined any event's roster. 20260902120000 closed all three.
+  async function adopt(
+    participantId: string,
+    ids: string[],
+    editions: string[] | null = null,
+  ): Promise<number> {
+    const [row] = await sql<{ adopt_card_copies: number }>(
+      "SELECT public.adopt_card_copies($1, $2, $3)",
+      [participantId, ids, editions],
+    );
+    return row.adopt_card_copies;
+  }
+
+  async function copies(participantId: string) {
+    return sql<{
+      event_participant_id: string;
+      edition: string;
+      source: string;
+      edition_asserted_by: string;
+    }>(
+      `SELECT event_participant_id, edition, source, edition_asserted_by
+         FROM public.card_copies WHERE participant_id = $1 ORDER BY event_participant_id`,
+      [participantId],
+    );
+  }
+
+  it("files one standard copy of each card not already held", async () => {
+    const ids = await cardIds();
+    expect(await adopt(IDS.alice, [ids[0], ids[1]])).toBe(2);
+    const rows = await copies(IDS.alice);
+    expect(rows.map((r) => [r.edition, r.source, r.edition_asserted_by])).toEqual([
+      ["standard", "adopt", "client"],
+      ["standard", "adopt", "client"],
+    ]);
+    const pulls = await sql<{ pull_count: number; edition: string }>(
+      "SELECT pull_count, edition FROM public.card_pulls WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(pulls).toEqual([
+      { pull_count: 1, edition: "standard" },
+      { pull_count: 1, edition: "standard" },
+    ]);
+  });
+
+  it("ignores the finish the phone claims", async () => {
+    // The finish on a guest's card is the phone's word alone, and card_pulls
+    // derives its edition from the copies — so a trusted 'platinum' here dressed
+    // the card as platinum on every screen and priced it that way on the shelf.
+    const ids = await cardIds();
+    expect(await adopt(IDS.alice, [ids[0], ids[1]], ["platinum", "gold"])).toBe(2);
+    expect((await copies(IDS.alice)).map((r) => r.edition)).toEqual(["standard", "standard"]);
+    expect(await editionOf(ids[0])).toBe("standard");
+  });
+
+  it("skips a card from another event", async () => {
+    // A guest's pack is dealt from the live roster and nothing else, so an id
+    // from another event is not a card the phone could honestly hold.
+    const OLD_EVENT = "00000000-0000-4000-8000-0000000000fd";
+    await sql(
+      `INSERT INTO public.events (id, name, year, active) VALUES ($1, 'Last year', 2025, false)`,
+      [OLD_EVENT],
+    );
+    const [old] = await sql<{ id: string }>(
+      `INSERT INTO public.event_participants (event_id, participant_id, running_order)
+       VALUES ($1, $2, 1) RETURNING id`,
+      [OLD_EVENT, IDS.bob],
+    );
+    const ids = await cardIds();
+    expect(await adopt(IDS.alice, [old.id, ids[0]])).toBe(1);
+    expect((await copies(IDS.alice)).map((r) => r.event_participant_id)).toEqual([ids[0]]);
+  });
+
+  it("considers each card once, ever", async () => {
+    // The old guard was NOT EXISTS over card_copies, which is true again the
+    // moment the copy is milled or traded away — so every sign-in after that
+    // filed a fresh one, and the mill paid 5 dust for it each time round.
+    const ids = await cardIds();
+    expect(await adopt(IDS.alice, [ids[0]])).toBe(1);
+    await sql("DELETE FROM public.card_copies WHERE participant_id = $1", [IDS.alice]);
+    expect(await adopt(IDS.alice, [ids[0]])).toBe(0);
+    expect(await copies(IDS.alice)).toEqual([]);
+    expect(
+      await sql("SELECT count(*)::int AS n FROM public.card_adoptions WHERE participant_id = $1", [
+        IDS.alice,
+      ]),
+    ).toEqual([{ n: 1 }]);
+  });
+
+  it("never files a second copy of a card already pulled, and never will", async () => {
+    const ids = await cardIds();
+    await record(IDS.alice, [ids[0]]);
+    expect(await adopt(IDS.alice, [ids[0]])).toBe(0);
+    expect(await copies(IDS.alice)).toHaveLength(1);
+    // Noted anyway: the pair has been through adoption, whatever was held.
+    await sql("DELETE FROM public.card_copies WHERE participant_id = $1", [IDS.alice]);
+    expect(await adopt(IDS.alice, [ids[0]])).toBe(0);
+  });
+
+  it("serialises two adoptions racing on one account", async () => {
+    // THE TEST THAT MATTERS. Without the participant row lock both calls read an
+    // empty table, both insert, and every card has a millable spare.
+    const ids = await cardIds();
+    const one = await newClient();
+    const two = await newClient();
+    try {
+      const results = await Promise.all([
+        one.query("SELECT public.adopt_card_copies($1, $2, NULL) AS n", [IDS.alice, ids]),
+        two.query("SELECT public.adopt_card_copies($1, $2, NULL) AS n", [IDS.alice, ids]),
+      ]);
+      const filed = results.map((r) => r.rows[0].n as number);
+      expect(filed.reduce((a, b) => a + b, 0)).toBe(ids.length);
+      expect(await copies(IDS.alice)).toHaveLength(ids.length);
+    } finally {
+      await one.end();
+      await two.end();
+    }
+  });
+
+  it("cannot be called by anon", async () => {
+    const ids = await cardIds();
+    expect(
+      await isDenied("anon", "SELECT public.adopt_card_copies($1, $2, NULL)", [IDS.alice, ids]),
+    ).toBe(true);
   });
 });

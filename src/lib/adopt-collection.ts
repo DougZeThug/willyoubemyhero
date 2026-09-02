@@ -1,6 +1,5 @@
 import { loadCollection } from "./card-collection";
 import { adoptCollection } from "./card-pulls.functions";
-import { isEdition, type Edition } from "./card-edition";
 
 /**
  * File the cards on this handset against the member it has just become.
@@ -21,6 +20,10 @@ import { isEdition, type Edition } from "./card-edition";
  * the store before the app knows who it is means a delete cannot beat us to it.
  * The server keeps one copy of each card the person does not already hold, so a
  * second call adopts nothing and calling it on every claim is safe.
+ *
+ * Only the ids go up. The finish on a guest's card is the phone's word alone,
+ * and the server files every adopted copy as standard — see
+ * 20260902120000_harden_adopt_card_copies.sql for what trusting it cost.
  */
 export async function adoptLocalCollection(
   snapshot: Awaited<ReturnType<typeof loadCollection>>,
@@ -28,10 +31,7 @@ export async function adoptLocalCollection(
   const cards = Object.values(snapshot).slice(0, 64);
   if (cards.length === 0) return 0;
   const res = await adoptCollection({
-    data: {
-      eventParticipantIds: cards.map((c) => c.eventParticipantId),
-      editions: cards.map<Edition>((c) => (isEdition(c.edition) ? c.edition : "standard")),
-    },
+    data: { eventParticipantIds: cards.map((c) => c.eventParticipantId) },
   });
   return res.adopted;
 }
