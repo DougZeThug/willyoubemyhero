@@ -184,9 +184,15 @@ and fail with a mysteriously empty page.
 separate `db` and `e2e` jobs.
 
 Unit tests **gate** alongside lint, typecheck and build — a red test blocks the
-sync. The `db` and `e2e` jobs are still **advisory** (`continue-on-error: true`
-at the job level); drop those flags too once each job has held a green streak on
-main, since an advisory suite is how stale tests accumulated unnoticed before.
+sync. The `db` job **gates** too: it is the only automated proof of the security
+model, so a red run there has to block rather than sit unread. Only `e2e` is
+still **advisory** (`continue-on-error: true` at the job level); drop that flag
+too once the job has held a green streak on main, since an advisory suite is how
+stale tests accumulated unnoticed before.
+
+Dependabot auto-merge waits for every check on the PR — `e2e` included — before
+it approves anything, because an unattended merge has nobody to read an advisory
+red.
 
 ## Lovable
 

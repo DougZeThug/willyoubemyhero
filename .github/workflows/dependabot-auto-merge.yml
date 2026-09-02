@@ -7,11 +7,20 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # An explicit permissions block sets every unlisted scope to none, and the wait
+  # below reads the head commit's check runs and commit statuses. Without these
+  # two the gh call returns an authorization error, the rollup comes back empty,
+  # and the step fails closed on every run.
+  checks: read
+  statuses: read
 
 jobs:
   approve-and-merge:
     name: Approve and enable auto-merge for safe Dependabot updates
     runs-on: ubuntu-latest
+    # This job now sits through all of CI before it approves anything, and e2e
+    # alone takes about eight minutes on the runner.
+    timeout-minutes: 30
     if: github.actor == 'dependabot[bot]'
     steps:
       - name: Fetch Dependabot metadata
@@ -19,6 +28,90 @@ jobs:
         uses: dependabot/fetch-metadata@v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # Approval used to happen the moment this workflow ran, waiting for
+      # nothing, so a supabase-js or Playwright bump that broke RLS or every
+      # browser journey could merge to the Lovable-connected branch unattended.
+      # Nothing is approved now until verify, database and e2e have all finished
+      # green on this head — e2e included, even though it stays advisory for
+      # humans, because an unattended merge has nobody reading an advisory red.
+      #
+      # `gh pr checks --watch` cannot do the waiting: this job is itself a check
+      # run on the PR, so gh counts it as pending and waits on itself until the
+      # timeout. (There is no --fail-level flag either; gh has only --fail-fast,
+      # which exits early on failure and would not help with the self-wait.)
+      # Hence the poll below, which skips this workflow's own rows.
+      - name: Wait for checks to pass
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELF_WORKFLOW: ${{ github.workflow }}
+        run: |
+          # gh exits 8 while anything is still running and 1 once something has
+          # failed, which is every poll that matters — so its exit code is
+          # ignored and the rollup it printed is what gets judged. Blanking the
+          # output on a non-zero exit would hide the failure this step exists to
+          # catch. Only a rollup that will not parse falls back to empty.
+          #
+          # These are ci.yml's job names, and they are required by name on
+          # purpose: "nothing pending and nothing failed" is also true of a
+          # rollup holding only a fast review bot, and approving on that would
+          # merge a head CI never ran on.
+          required='["lint / build","database","e2e"]'
+          absent_polls=0
+          while true; do
+            rollup=$(gh pr checks "$PR_URL" --json name,bucket,workflow) || true
+            others=$(jq -c --arg self "$SELF_WORKFLOW" \
+              '[.[] | select(.workflow != $self)]' <<<"$rollup" 2>/dev/null) || true
+            # jq prints nothing and still succeeds when gh printed nothing, so
+            # an empty result has to be turned back into an array here or every
+            # later test compares against the empty string and the loop spins.
+            [ -n "$others" ] || others="[]"
+
+            # A cancelled check counts as a failure: it proves nothing about the
+            # head, and failing closed here only costs a human clicking merge.
+            failed=$(jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | .name' <<<"$others")
+            if [ -n "$failed" ]; then
+              echo "::error::Not auto-merging — these checks did not pass on this head:"
+              printf '%s\n' "$failed" | sed 's/^/  /'
+              exit 1
+            fi
+
+            # A required job absent from the rollup is not the same as one still
+            # running: pushes made with GITHUB_TOKEN — the bun.lock regeneration
+            # workflow — start no workflow run, so that head has no CI behind it
+            # at all. Tolerated only for the few minutes GitHub takes to report a
+            # fresh push, then refused.
+            absent=$(jq -r --argjson req "$required" '$req - [.[].name] | join(", ")' <<<"$others")
+            if [ -n "$absent" ]; then
+              absent_polls=$((absent_polls + 1))
+              if [ "$absent_polls" -gt 20 ]; then
+                echo "::error::No run reported for: $absent — refusing to auto-merge a head CI did not run on."
+                exit 1
+              fi
+              sleep 15
+              continue
+            fi
+
+            # Two conditions, not one. Nothing anywhere may still be running —
+            # a review bot mid-flight has not had its say yet — and the three CI
+            # jobs must each have passed. Demanding "pass" from *every* row
+            # instead would hang on a legitimately skipped check, which is not
+            # pending and never becomes pass.
+            still_running=$(jq '[.[] | select(.bucket == "pending")] | length' <<<"$others")
+            required_unpassed=$(jq --argjson req "$required" \
+              '[.[] | select(.name as $n | $req | index($n)) | select(.bucket != "pass")] | length' <<<"$others")
+            if [ "$still_running" -eq 0 ] && [ "$required_unpassed" -eq 0 ]; then
+              jq -r '.[] | "  \(.bucket)\t\(.name)"' <<<"$others"
+              echo "Every check on this head finished, the required ones passed."
+              exit 0
+            fi
+
+            sleep 15
+          done
 
       - name: Approve and enable auto-merge
         if: |
