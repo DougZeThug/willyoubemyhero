@@ -212,3 +212,76 @@ describe("mergeCollection, reconciling a finish", () => {
     expect(collection["ep-0"].edition).toBe("platinum");
   });
 });
+
+describe("mergeCollection, holding a pull the server has not been told about", () => {
+  // `recordCardPulls` is fire-and-forget and can fail for a whole day. The rule
+  // above — the server replaces the local store outright — then deleted exactly
+  // the pulls nobody had managed to report, which are the ones with no second
+  // copy anywhere. Silence from a server that was never asked is not a verdict.
+  const ids = roster(4);
+
+  it("keeps a protected card the server does not list, and never calls it stale", () => {
+    const { collection, stale } = mergeCollection(
+      localFor(ids, AFTER),
+      [served(ids[0])],
+      new Set(ids),
+      new Set([ids[1]]),
+    );
+
+    expect(collection[ids[1]]).toBeDefined();
+    expect(stale).not.toContain(ids[1]);
+  });
+
+  it("hands the protected card back exactly as this device recorded it", () => {
+    // Straight out of `local`. There is no server row to take anything from —
+    // that is the whole situation — so the tier and count the pull was made at
+    // are all there is.
+    const mine = card(ids[0], AFTER, 2, "champion");
+    const { collection } = mergeCollection({ [ids[0]]: mine }, [], new Set(ids), new Set([ids[0]]));
+    expect(collection[ids[0]]).toEqual(mine);
+  });
+
+  it("still disowns everything the protection does not cover", () => {
+    // The protection is a named list of ids, not an amnesty. A collect-on-sight
+    // row beside a genuine unreported pull is still a collect-on-sight row.
+    const { collection, stale } = mergeCollection(
+      localFor(ids, BEFORE),
+      [served(ids[0])],
+      new Set(ids),
+      new Set([ids[1]]),
+    );
+
+    expect(stale.sort()).toEqual([ids[2], ids[3]].sort());
+    expect(collection[ids[2]]).toBeUndefined();
+  });
+
+  it("gives way to the server the moment it does list the card", () => {
+    // The record landed after all. Protection buys a card the benefit of the
+    // doubt until the league answers, never a better number than the league's.
+    const { collection, stale } = mergeCollection(
+      { [ids[0]]: card(ids[0], AFTER, 9, "champion") },
+      [served(ids[0], 2)],
+      new Set(ids),
+      new Set([ids[0]]),
+    );
+
+    expect(collection[ids[0]].count).toBe(2);
+    expect(collection[ids[0]].tier).toBe("champion");
+    expect(stale).toEqual([]);
+  });
+
+  it("protects nothing for a guest, who was never being pruned", () => {
+    const local = localFor(ids, BEFORE);
+    const { collection, stale } = mergeCollection(local, null, new Set(ids), new Set([ids[0]]));
+    expect(collection).toEqual(local);
+    expect(stale).toEqual([]);
+  });
+
+  it("does not invent a card the device never collected", () => {
+    // A dealt id is protected from the moment the pack is filed, but a card that
+    // has not been turned over yet has no local row — and this must not conjure
+    // one, or the vault would light up cards nobody has looked at.
+    const { collection } = mergeCollection({}, [], new Set(ids), new Set([ids[0]]));
+    expect(collection).toEqual({});
+  });
+});

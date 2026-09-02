@@ -234,6 +234,70 @@ describe("pack state", () => {
   });
 });
 
+describe("unrecorded pulls", () => {
+  const UNRECORDED = { dayKey: "2026-07-28", identity: "m:p-alice", ids: [CARD_A, CARD_B] };
+
+  it("is null before a pack has ever failed to record", async () => {
+    const mod = await freshModule();
+    expect(await mod.loadUnrecorded()).toBeNull();
+  });
+
+  it("round-trips the ids the server has not been told about", async () => {
+    const mod = await freshModule();
+    await mod.saveUnrecorded(UNRECORDED);
+    expect(await mod.loadUnrecorded()).toEqual(UNRECORDED);
+  });
+
+  it("is cleared outright, so only a successful record retires it", async () => {
+    const mod = await freshModule();
+    await mod.saveUnrecorded(UNRECORDED);
+    await mod.clearUnrecorded();
+    expect(await mod.loadUnrecorded()).toBeNull();
+  });
+
+  it("lives beside the pack row rather than inside it", async () => {
+    // Two rows in one store, because they retire at different moments: a pack
+    // row lasts the day, an unrecorded row lasts until the league takes it. One
+    // must never overwrite or shorten the other.
+    const mod = await freshModule();
+    const pack = { dayKey: "2026-07-28", ids: [CARD_A], revealed: [0] };
+    await mod.savePackState(pack);
+    await mod.saveUnrecorded(UNRECORDED);
+    expect(await mod.loadPackState()).toEqual(pack);
+
+    await mod.clearUnrecorded();
+    expect(await mod.loadPackState()).toEqual(pack);
+    expect(await mod.loadUnrecorded()).toBeNull();
+  });
+
+  it("leaves an existing collection alone", async () => {
+    // The new key shares a store with the pack row, not with the collection —
+    // and nothing here may bump the database version, because e2e/journeys.spec.ts
+    // opens it at a hardcoded 2. See the note at the top of card-collection.ts.
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "champion", "gold");
+    await mod.saveUnrecorded(UNRECORDED);
+    expect((await mod.loadCollection())[CARD_A]).toMatchObject({ tier: "champion", count: 1 });
+  });
+
+  it("announces every write, so an open vault re-reads what it may not delete", async () => {
+    // useMyCollection holds these ids out of the prune and reads them on mount.
+    // A record that lands on the pack screen has to reach a vault in another tab.
+    const mod = await freshModule();
+    const heard: string[] = [];
+    const listen = () => heard.push("changed");
+    window.addEventListener(mod.PACK_STATE_CHANGED, listen);
+    try {
+      await mod.saveUnrecorded(UNRECORDED);
+      await mod.clearUnrecorded();
+      await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A], revealed: [] });
+      expect(heard).toHaveLength(3);
+    } finally {
+      window.removeEventListener(mod.PACK_STATE_CHANGED, listen);
+    }
+  });
+});
+
 describe("card meta", () => {
   it("returns null before priming", async () => {
     const mod = await freshModule();
@@ -306,6 +370,17 @@ describe("when IndexedDB is unavailable", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("protects nothing, having collected nothing", async () => {
+    // Symmetrical with the collection above: a device that cannot write a
+    // collected row has none for the prune to delete either.
+    const mod = await blockedModule();
+    expect(await mod.loadUnrecorded()).toBeNull();
+    await expect(
+      mod.saveUnrecorded({ dayKey: "2026-07-28", ids: [CARD_A] }),
+    ).resolves.toBeUndefined();
+    await expect(mod.clearUnrecorded()).resolves.toBeUndefined();
+  });
+
   it("still caches card meta in memory", async () => {
     const mod = await blockedModule();
     await mod.saveCardMeta(CARD_A, { aspect: 0.72 });
@@ -318,6 +393,7 @@ describe("on the server", () => {
     const mod = await serverModule();
     expect(await mod.loadCollection()).toEqual({});
     expect(await mod.loadPackState()).toBeNull();
+    expect(await mod.loadUnrecorded()).toBeNull();
     await expect(mod.collectCard(CARD_A, "base")).resolves.toBeUndefined();
     await expect(mod.clearCollection()).resolves.toBeUndefined();
     await expect(mod.primeCardMeta()).resolves.toBeUndefined();

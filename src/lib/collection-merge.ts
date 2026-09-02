@@ -25,6 +25,15 @@
 // them apart, and unlike a member there is no server record to restore a genuine
 // pull it guessed wrong about. Better an honestly unadjudicated number than a
 // confidently deleted card.
+//
+// The one exception to the server replacing the local store is a pull the server
+// has never been told about. `recordCardPulls` is fire-and-forget and can fail
+// for a whole day in a garden dead spot, and the cards it never reported are
+// already in the local store the moment they are turned over — so the rule above
+// deleted exactly the pulls that most needed keeping. "Not vouched for" is only
+// "not owned" once a record has succeeded at least once, so `protectedIds` holds
+// those ids out of the prune until it has. See `card-collection.ts`'s unrecorded
+// row, which is what outlives the page and answers this question.
 
 import type { CollectedCard } from "./card-collection";
 import type { MyCard } from "./card-pulls";
@@ -39,9 +48,10 @@ export type MergeResult = {
 /**
  * Reconcile the local collection against the server's, if there is one.
  *
- * @param local     everything in this device's `collected` store.
- * @param server    your own `card_pulls` rows, or null when nobody is claimed here.
- * @param rosterIds the cards of the event on screen.
+ * @param local        everything in this device's `collected` store.
+ * @param server       your own `card_pulls` rows, or null when nobody is claimed here.
+ * @param rosterIds    the cards of the event on screen.
+ * @param protectedIds pulls the server has not been told about yet.
  *
  * `rosterIds` scopes the prune, not the result: a card from another event is
  * outside the server query and so is never something this can disown.
@@ -50,6 +60,7 @@ export function mergeCollection(
   local: Record<string, CollectedCard>,
   server: readonly MyCard[] | null,
   rosterIds: ReadonlySet<string>,
+  protectedIds: ReadonlySet<string> = new Set(),
 ): MergeResult {
   // Nobody claimed on this device: nothing can adjudicate these rows, so nothing
   // touches them.
@@ -89,12 +100,19 @@ export function mergeCollection(
 
   // Anything local that the server does not vouch for. Restricted to this event's
   // roster: a key belonging to another event is not ours to judge, let alone delete.
-  const stale = Object.keys(local).filter((id) => rosterIds.has(id) && !collection[id]);
+  // A protected id is not on trial at all — the server has not been asked about
+  // it yet, so its silence says nothing. See the note at the top of this file.
+  const stale = Object.keys(local).filter(
+    (id) => rosterIds.has(id) && !collection[id] && !protectedIds.has(id),
+  );
 
-  // Cards from another event pass through untouched — they are outside both the
-  // server query (which is scoped to this event) and the prune.
+  // Cards the server did not list, passed through rather than dropped: another
+  // event's, which is outside both the server query and the prune, and an
+  // unreported pull, which is this device's own word for the card until the
+  // league takes it. A card the server DID list is already above, on its terms.
   for (const [id, card] of Object.entries(local)) {
-    if (!rosterIds.has(id) && !collection[id]) collection[id] = card;
+    if (collection[id]) continue;
+    if (!rosterIds.has(id) || protectedIds.has(id)) collection[id] = card;
   }
 
   return { collection, stale };

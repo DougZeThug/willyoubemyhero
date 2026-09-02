@@ -76,6 +76,26 @@ export type PackState = {
   cursor?: number;
 };
 
+/**
+ * Cards this device has pulled that the server has not been told about.
+ *
+ * A second row rather than a field on the pack row above, because the two retire
+ * at different moments: a pack row lasts the day and is overwritten by the next
+ * one, while this lasts until `recordCardPulls` has actually landed — which can
+ * be the following morning. `mergeCollection` deletes anything the server does
+ * not vouch for, and until that call succeeds the server cannot vouch for these,
+ * so without this row one garden dead spot at tear time cost the whole pack on
+ * the next load.
+ */
+export type UnrecordedPulls = {
+  /** Local date key the pack was dealt for. */
+  dayKey: string;
+  /** Who the pack was dealt to, as `usePackIdentity` returns it. */
+  identity?: string;
+  /** `event_participants.id` for every card the server still owes an answer on. */
+  ids: string[];
+};
+
 export type CollectedCard = {
   eventParticipantId: string;
   /** ms epoch of the first pull. */
@@ -219,6 +239,68 @@ export async function savePackState(state: PackState): Promise<void> {
   try {
     const db = await getDb();
     await db.put(PACK_STATE, state, PACK_STATE_KEY);
+    announcePackState();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Fired after any write to this store.
+ *
+ * `useMyCollection` reads the unrecorded row to decide what it is not allowed to
+ * delete, and it reads it on mount — so a record that finally lands, on a screen
+ * the hook is not mounted on, has to say so out loud or the vault goes on
+ * protecting ids the server has since vouched for. Same shape and the same
+ * reason as `wwbh:member-token-changed` in member-token.ts.
+ */
+export const PACK_STATE_CHANGED = "wwbh:pack-state-changed";
+
+function announcePackState() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(PACK_STATE_CHANGED));
+}
+
+/** A second row in the same store, so the pack and its unsent ids expire apart. */
+const UNRECORDED_KEY = "unrecorded";
+
+/**
+ * The ids this device pulled and never managed to report, or null.
+ *
+ * Deliberately not scoped to today. An old row still protects its cards: a pull
+ * the league has never heard of does not become somebody else's because the date
+ * rolled over, and only a record that actually succeeds retires one.
+ */
+export async function loadUnrecorded(): Promise<UnrecordedPulls | null> {
+  if (!isBrowser()) return null;
+  try {
+    const db = await getDb();
+    return ((await db.get(PACK_STATE, UNRECORDED_KEY)) as UnrecordedPulls | undefined) ?? null;
+  } catch {
+    // Nothing to protect: a device with IndexedDB blocked never wrote the
+    // collected rows the prune would have deleted either.
+    return null;
+  }
+}
+
+export async function saveUnrecorded(state: UnrecordedPulls): Promise<void> {
+  if (!isBrowser()) return;
+  try {
+    const db = await getDb();
+    await db.put(PACK_STATE, state, UNRECORDED_KEY);
+    announcePackState();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Hand the ids back to the merge. Only a successful record may call this. */
+export async function clearUnrecorded(): Promise<void> {
+  if (!isBrowser()) return;
+  try {
+    const db = await getDb();
+    await db.delete(PACK_STATE, UNRECORDED_KEY);
+    announcePackState();
   } catch {
     /* ignore */
   }

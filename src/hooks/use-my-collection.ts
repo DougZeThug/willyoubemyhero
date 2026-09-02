@@ -3,13 +3,34 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyCardStats } from "@/lib/card-pulls.functions";
 import { dupeCount, type MyCardStats } from "@/lib/card-pulls";
-import { forgetCards, loadCollection, type CollectedCard } from "@/lib/card-collection";
+import {
+  forgetCards,
+  loadCollection,
+  loadUnrecorded,
+  PACK_STATE_CHANGED,
+  type CollectedCard,
+} from "@/lib/card-collection";
 import { bestEdition, type Edition } from "@/lib/card-edition";
 import { mergeCollection } from "@/lib/collection-merge";
 import { useMemberSession } from "@/lib/member-token";
 
 export const myCardStatsKey = (eventId: string | null | undefined, participantId?: string | null) =>
   ["my-card-stats", eventId, participantId ?? null] as const;
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * Whether a re-read found the same unrecorded ids as the last one.
+ *
+ * `savePackState` announces itself on every card turned over, so this is read
+ * several times a pack. A fresh Set each time is a new `merged`, a new
+ * `collection` and a re-render of every card on the vault for an answer that did
+ * not change.
+ */
+function sameIds(prev: ReadonlySet<string>, next: readonly string[] | undefined) {
+  const ids = next ?? [];
+  return prev.size === ids.length && ids.every((id) => prev.has(id));
+}
 
 export type MyCollection = {
   /** `event_participants.id` → the card, reconciled against the server. */
@@ -59,10 +80,13 @@ export type MyCollection = {
  *
  * @param rosterIds the event's `event_participants.id`s. Cards outside it are left
  *   alone — another event's collection is not this event's business.
+ * @param eventFailed the active-event read failed, as opposed to not having
+ *   answered yet. See `settled` below for what hung without it.
  */
 export function useMyCollection(
   eventId: string | null | undefined,
   rosterIds: readonly string[],
+  eventFailed = false,
 ): MyCollection {
   const member = useMemberSession();
   const participantId = member?.participantId ?? null;
@@ -95,6 +119,26 @@ export function useMyCollection(
     };
   }, []);
 
+  // Pulls this device made that the server has not been told about, straight off
+  // IndexedDB. Read here rather than handed in: every screen that shows a card
+  // has to honour them, and the pack screen — the only thing that writes them —
+  // is not mounted on any of the others.
+  const [protectedIds, setProtectedIds] = useState<ReadonlySet<string>>(EMPTY_IDS);
+  useEffect(() => {
+    let cancelled = false;
+    const read = () =>
+      void loadUnrecorded().then((u) => {
+        if (cancelled) return;
+        setProtectedIds((prev) => (sameIds(prev, u?.ids) ? prev : new Set(u?.ids ?? [])));
+      });
+    read();
+    window.addEventListener(PACK_STATE_CHANGED, read);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(PACK_STATE_CHANGED, read);
+    };
+  }, []);
+
   const fn = useServerFn(getMyCardStats);
   const stats = useQuery({
     queryKey: myCardStatsKey(eventId, participantId),
@@ -111,7 +155,17 @@ export function useMyCollection(
   // "not looked yet" are the same value on the first render. `localLoaded` settles
   // asynchronously and therefore strictly after that effect has run, which makes it
   // the signal that the member session is now trustworthy.
-  const settled = localLoaded && (!participantId || stats.isSuccess || stats.isError);
+  //
+  // A member with no event id is the case that used to hang here forever: the
+  // stats query is gated on one, so with the active-event read down it never
+  // runs, never succeeds and never errors. The screens read that as "still
+  // reconciling" and lock every card face-down without saying why. `eventFailed`
+  // is the caller distinguishing a read that failed from one that is merely slow;
+  // the merge then runs against no server answer at all, which by its first rule
+  // hands the local store back untouched and prunes nothing.
+  const settled =
+    localLoaded &&
+    (!participantId || stats.isSuccess || stats.isError || (eventFailed && !eventId));
 
   const roster = useMemo(() => new Set(rosterIds), [rosterIds]);
 
@@ -124,8 +178,8 @@ export function useMyCollection(
     if (!settled) return { collection: {}, stale: [] as string[] };
     // A failed query leaves the local store exactly as it is: with no answer from
     // the server there is nothing to disown a row with, so nothing is disowned.
-    return mergeCollection(local, stats.data?.cards ?? null, roster);
-  }, [settled, local, stats.data, roster]);
+    return mergeCollection(local, stats.data?.cards ?? null, roster, protectedIds);
+  }, [settled, local, stats.data, roster, protectedIds]);
 
   // Drop a floor once the server's own row has reached it. Not on "a response
   // arrived" — a refetch already in flight when the card was revealed knows
@@ -171,11 +225,17 @@ export function useMyCollection(
   // list, which used to re-fire the whole delete for everything still on it.
   const forgottenRef = useRef(new Set<string>());
   useEffect(() => {
-    const fresh = merged.stale.filter((id) => !forgottenRef.current.has(id) && !bumps[id]);
+    // `protectedIds` is already held out of `stale` by the merge. Repeated at the
+    // one site that actually deletes, because that is where the rule has to hold:
+    // this is the only irreversible step in the hook, and it should not depend on
+    // a caller three modules away having passed the right fourth argument.
+    const fresh = merged.stale.filter(
+      (id) => !forgottenRef.current.has(id) && !bumps[id] && !protectedIds.has(id),
+    );
     if (fresh.length === 0) return;
     for (const id of fresh) forgottenRef.current.add(id);
     void forgetCards(fresh);
-  }, [merged.stale, bumps]);
+  }, [merged.stale, bumps, protectedIds]);
 
   const markCollected = useCallback(
     (eventParticipantId: string, tier: string, edition: Edition, count: number) => {
