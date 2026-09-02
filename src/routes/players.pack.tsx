@@ -150,13 +150,16 @@ function todayKey(): string {
 }
 
 function PackPage() {
-  const { event, bundle, error, realtimeDegraded, refetch } = useEventBundle();
-  // A read that failed, as opposed to one still on its way. Either half counts:
-  // the roster comes out of the bundle, and a bundle that errored behind a
-  // cached event leaves `dealPack` with nothing to deal exactly as a missing
-  // event does. This is both what unblocks `useMyCollection` below and what the
-  // render bails out on.
-  const eventFailed = !!error && (!event || !bundle);
+  const { event, bundle, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
+  // A read that failed, as opposed to one still on its way — and all three ways
+  // it can fail, because every one of them ends with `dealPack` holding an empty
+  // roster and `tearOpen` refusing without a word. The event can be missing, the
+  // bundle query can reject, or the bundle can come back fine with the roster
+  // table coalesced to `[]` — which is the case `failed` exists to name, and the
+  // one an error check alone cannot see. This is both what unblocks
+  // `useMyCollection` below and what the render bails out on.
+  const eventFailed =
+    (!!error && (!event || !bundle)) || failedTables.includes("event_participants");
   const sfx = useCardSfx();
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never a player's — see the note on useEventCardBack. The

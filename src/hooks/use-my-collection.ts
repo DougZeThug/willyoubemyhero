@@ -155,9 +155,12 @@ export function useMyCollection(
     // disowns that person's collected rows here regardless, recorded or not.
     // Derived rather than filtered at read time so claiming a player re-decides
     // it without a remount.
-    if (participantId && unrecorded.identity && unrecorded.identity !== `m:${participantId}`) {
-      return EMPTY_IDS;
-    }
+    // A row with no identity at all is unattributable rather than universal, and
+    // gets the same answer. Nothing writes one — the record loop cannot run
+    // before `seed`, which needs the identity — so this is the safe reading of a
+    // case that should not arise, not leniency toward a legacy row. There are no
+    // legacy rows: this key ships with the protection that reads it.
+    if (participantId && unrecorded.identity !== `m:${participantId}`) return EMPTY_IDS;
     return new Set(unrecorded.ids);
   }, [unrecorded, participantId]);
 

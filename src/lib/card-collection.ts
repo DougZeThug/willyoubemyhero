@@ -304,10 +304,16 @@ export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
   if (!isBrowser()) return;
   try {
     const db = await getDb();
-    const prior = (await db.get(PACK_STATE, UNRECORDED_KEY)) as UnrecordedPulls | undefined;
+    // Read and write inside one transaction, like `forgetCards` above. Both of
+    // these are read-modify-write against the same row, and a record that lands
+    // while another is being filed would otherwise write back the value it read
+    // before the filing — losing a whole pack's protection to a lost update.
+    const tx = db.transaction(PACK_STATE, "readwrite");
+    const prior = (await tx.store.get(UNRECORDED_KEY)) as UnrecordedPulls | undefined;
     const keep = prior && prior.identity === state.identity ? prior.ids : [];
     const ids = [...new Set([...keep, ...state.ids])];
-    await db.put(PACK_STATE, { ...state, ids }, UNRECORDED_KEY);
+    await tx.store.put({ ...state, ids }, UNRECORDED_KEY);
+    await tx.done;
     announcePackState();
   } catch {
     /* ignore */
@@ -325,12 +331,18 @@ export async function retireUnrecorded(recorded: readonly string[]): Promise<voi
   if (!isBrowser()) return;
   try {
     const db = await getDb();
-    const prior = (await db.get(PACK_STATE, UNRECORDED_KEY)) as UnrecordedPulls | undefined;
-    if (!prior) return;
+    // One transaction, for the reason given in `addUnrecorded`.
+    const tx = db.transaction(PACK_STATE, "readwrite");
+    const prior = (await tx.store.get(UNRECORDED_KEY)) as UnrecordedPulls | undefined;
+    if (!prior) {
+      await tx.done;
+      return;
+    }
     const taken = new Set(recorded);
     const ids = prior.ids.filter((id) => !taken.has(id));
-    if (ids.length === 0) await db.delete(PACK_STATE, UNRECORDED_KEY);
-    else await db.put(PACK_STATE, { ...prior, ids }, UNRECORDED_KEY);
+    if (ids.length === 0) await tx.store.delete(UNRECORDED_KEY);
+    else await tx.store.put({ ...prior, ids }, UNRECORDED_KEY);
+    await tx.done;
     announcePackState();
   } catch {
     /* ignore */

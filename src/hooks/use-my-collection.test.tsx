@@ -300,6 +300,18 @@ describe("useMyCollection, holding a pull the server has not been told about", (
     );
   });
 
+  it("does not adopt a row it cannot attribute", async () => {
+    // Nothing writes an identity-less row — the record loop cannot run before
+    // `seed`, which needs the identity — so this is the safe reading of a case
+    // that should not arise. Unattributable is not universal.
+    loadUnrecorded.mockResolvedValue({ dayKey: "2026-07-31", ids: ["ep-5"] });
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.collection["ep-5"]).toBeUndefined();
+  });
+
   it("takes the server's row for one the server does list", async () => {
     // The record landed after all, or another phone pulled it. Protection buys a
     // card the benefit of the doubt, never a better number than the league's.
