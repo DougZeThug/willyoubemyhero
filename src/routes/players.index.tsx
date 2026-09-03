@@ -186,10 +186,7 @@ function PlayersPage() {
    * while unlocked→locked is a leak. Same argument as the counters at
    * use-my-collection.ts:116.
    */
-  const isLocked = useCallback(
-    (id: string) => !ready || !collected[id],
-    [ready, collected],
-  );
+  const isLocked = useCallback((id: string) => !ready || !collected[id], [ready, collected]);
 
   const rows = useMemo(() => {
     const list = [...(bundle?.participants ?? [])];

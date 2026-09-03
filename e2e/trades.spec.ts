@@ -209,6 +209,32 @@ test.describe("trading post", () => {
     expect(posted[0]).toContain(PULL_ID);
   });
 
+  test("says trading is out of season rather than reading as a bug", async ({ page, server }) => {
+    // With no active event the server hands back nothing, and "No spares to
+    // trade." on a full collection reads as a broken screen. B-33 keeps the
+    // product call open; this is only the copy.
+    await signIn(page);
+    server.set("getActiveEvent", null);
+    server.set("getClaimRoster", [
+      { id: ME.pid, name: ME.name, nickname: null, hasCode: true, claimed: true, reachable: true },
+      {
+        id: THEM.pid,
+        name: THEM.name,
+        nickname: null,
+        hasCode: true,
+        claimed: true,
+        reachable: true,
+      },
+    ]);
+    server.set("getTradeSpares", { participantId: ME.pid, roster: [], secrets: [] });
+
+    await page.goto("/players/trade");
+    await page.getByRole("button", { name: THEM.name }).click();
+
+    await expect(page.getByText(/trading opens with the next combine/i)).toHaveCount(2);
+    await expect(page.getByText("No spares to trade.")).toHaveCount(0);
+  });
+
   test("shows each copy of a card separately, by its finish", async ({ page, server }) => {
     // Two Alices, one platinum and one standard. Before card_copies these were a
     // single tile with a spare count, and whichever one you traded arrived
