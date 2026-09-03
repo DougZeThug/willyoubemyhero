@@ -117,7 +117,10 @@
   --warn-foreground: oklch(0.15 0.02 85);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.82 0.14 210);
+  /* Focus is deliberately not the cyan accent: a ring in --primary reads as the
+     same thing as a selected chip. */
+  --focus: oklch(0.98 0.01 240 / 85%);
+  --ring: var(--focus);
   --field: oklch(0.18 0.04 220);
   --field-line: oklch(0.82 0.14 210 / 10%);
   --chart-1: oklch(0.82 0.14 210);
