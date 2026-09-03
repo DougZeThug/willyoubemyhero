@@ -4,6 +4,16 @@ import "fake-indexeddb/auto";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
 
+// React reports the failing component through console.error("The above error
+// occurred in the <%s> component:"). Vitest flattens extra args, so relay every
+// console.error verbatim with a prefix, keeping the format string intact.
+// eslint-disable-next-line no-console
+const realConsoleError = console.error.bind(console);
+// eslint-disable-next-line no-console
+console.error = (...args: unknown[]) => {
+  realConsoleError("[console.error]", ...args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))));
+};
+
 // jsdom has no matchMedia. use-count-up.ts, card-sfx.ts and use-mobile.tsx all
 // call it, and the first two branch on prefers-reduced-motion — so the stub has
 // to be a real object with listeners, not a bare `{ matches: false }`.
