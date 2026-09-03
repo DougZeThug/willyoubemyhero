@@ -13,11 +13,21 @@
 // never requested at all. Warming the half of the graph that was not racing
 // would have been worse than nothing here, since this is also a blocking job.
 //
-// One pass over two routes, not more, because this costs real time on a job with
-// a twenty-minute budget: measured at roughly twenty seconds an entry. A second
-// pass over the same two buys nothing once the first has settled, and the routes
-// NOT listed here — /players/pack, /awards, /league and the rest — are the
-// argument against trying to be exhaustive. This closes the worst window, the
+// TWO passes, and two is measured rather than picked. Vite announces a re-bundle
+// by reloading the page, so main-frame navigations count the reloads. Against a
+// cold server this loop sees 5, then 4, 4, 4 — Playwright reports two
+// navigations per `goto` at rest, so pass 1 carries one real reload and every
+// pass after it is already quiet. One pass would exit with a re-bundle possibly
+// still in flight behind the last entry; a third buys nothing but twenty seconds
+// an entry.
+//
+// Terminating on the reload count itself was tried and does not work: there is
+// no fixed navigations-per-goto to compare against, so the condition never
+// becomes true and the loop spends its whole budget (8.0 min against 6.5 for
+// two passes, on the same cold cache).
+//
+// The routes NOT listed here — /players/pack, /awards, /league and the rest —
+// are the argument against being exhaustive. This closes the worst window, the
 // very first cold load under two workers. It is not a proof that no route can
 // ever trigger a late re-optimise.
 //
@@ -26,6 +36,7 @@
 import { chromium, type FullConfig } from "@playwright/test";
 
 const ENTRY_POINTS = ["/", "/players"];
+const PASSES = 2;
 
 export default async function warmUp(config: FullConfig) {
   const use = config.projects[0]?.use;
@@ -37,15 +48,18 @@ export default async function warmUp(config: FullConfig) {
   const browser = await chromium.launch(use.launchOptions);
   try {
     const page = await browser.newPage({ baseURL: use.baseURL });
-    for (const path of ENTRY_POINTS) {
-      await page.goto(path);
-      // The route chunks land after hydration, which is the part a document load
-      // does not wait for. `networkidle` is discouraged for assertions and does
-      // settle here — measured at 8-12s against this dev server, well inside the
-      // bound; Playwright does not count Vite's HMR socket as traffic. Bounded
-      // and swallowed anyway: the warm-up is not an assertion, and whether these
-      // screens render is smoke.spec.ts's business.
-      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+    for (let pass = 0; pass < PASSES; pass++) {
+      for (const path of ENTRY_POINTS) {
+        await page.goto(path);
+        // The route chunks land after hydration, which is the part a document
+        // load does not wait for. `networkidle` is discouraged for assertions
+        // and does settle here — measured at 8-12s against this dev server,
+        // well inside the bound; Playwright does not count Vite's HMR socket as
+        // traffic. Bounded and swallowed anyway: the warm-up is not an
+        // assertion, and whether these screens render is smoke.spec.ts's
+        // business.
+        await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      }
     }
   } finally {
     await browser.close();
