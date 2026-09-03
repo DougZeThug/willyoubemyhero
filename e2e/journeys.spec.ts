@@ -484,10 +484,43 @@ test.describe("opening a pack", () => {
     await page.goto("/players/pack");
     await tearPack(page);
 
+    /**
+     * Press the card on the stand until it turns, `until` being what says so.
+     *
+     * PRESS ONLY WHILE THE STAND SAYS THE CARD IS FACE-DOWN. Its own copy, "Tap
+     * the card to turn it", is on screen exactly when there is a card on the
+     * stage and it has not been turned — and that is the whole safety of this.
+     * A loop that presses on "the signal has not appeared yet" cannot tell a
+     * swallowed press from a press that took and has not painted, so on a slow
+     * render it presses a card that has already turned; the stand's copy there is
+     * "tap for the back", so the card flips, the swipe finds nothing to throw
+     * away, and the stand never advances. That is not hypothetical — it is what
+     * this test did on CI when it was written that way.
+     *
+     * One press is not enough either, and the reason is the very latch this test
+     * is about: `revealAt` holds it for the whole of the PREVIOUS card's
+     * celebration, so a press landing while confetti is still in the air is
+     * swallowed on purpose and the walk can arrive inside that window.
+     */
+    const faceDown = page.getByText(/tap the card to turn it/i);
+    async function pressUntil(until: ReturnType<typeof swipeHint>) {
+      await expect
+        .poll(
+          async () => {
+            if (await until.count()) return true;
+            if (await faceDown.count()) await standCard(page).click();
+            await page.waitForTimeout(250);
+            return (await until.count()) > 0;
+          },
+          { timeout: 20_000, intervals: [200] },
+        )
+        .toBe(true);
+    }
+
     // Walk to the last card, which is the one that holds before it turns.
     for (const n of [1, 2]) {
       await expect(standStep(page)).toHaveText(`${n} / 3`);
-      await standCard(page).click();
+      await pressUntil(swipeHint(page));
       await expect(swipeHint(page)).toBeVisible();
       await swipeNext(page);
     }
@@ -500,28 +533,13 @@ test.describe("opening a pack", () => {
     // previous card's celebration — `revealAt` holds the very latch this test is
     // about for the whole of it — and nothing below is testing anything.
     //
-    // "Last card…" is that hold on screen: it renders for exactly as long as the
-    // card is held face-down. Pressing until it appears is safe in a way the same
-    // loop would NOT be around the walk above, and the difference is worth
-    // stating. Here an extra press lands on a card that is still face-down and is
-    // swallowed by the latch, which is the scenario. There it would land on a
-    // card that has already turned, and the stand's own copy is "tap for the
-    // back" — it would flip the card and the swipe that follows would find
-    // nothing to throw away. That is not hypothetical: it is what this test did
-    // on CI when the walk was written that way.
+    // "Last card…" is that hold on screen, so it is what says the press took.
+    // Nothing is pressed once it appears: the stand's helper line goes blank for
+    // the length of the hold, so the loop's face-down guard is already false and
+    // the two taps below are the only ones that land inside it. Which is the
+    // point of the test.
     const card = standCard(page);
-    const holding = page.getByText(/last card/i);
-    await expect
-      .poll(
-        async () => {
-          if (await holding.count()) return true;
-          await card.click();
-          await page.waitForTimeout(250);
-          return (await holding.count()) > 0;
-        },
-        { timeout: 20_000, intervals: [200] },
-      )
-      .toBe(true);
+    await pressUntil(page.getByText(/last card/i));
     await card.click({ force: true });
     await card.click({ force: true });
 
