@@ -11,7 +11,7 @@ import type {
   SecretCollectionRow,
   SecretPullRow,
   SecretPullStatusResult,
-} from "./secret-cards-db.server";
+} from "./secret-cards-rows";
 import type { CollectionTrophy, CompletedCollection } from "./collection-trophies";
 import type { SecretCardView } from "./secret-cards";
 import {
@@ -22,6 +22,7 @@ import {
 } from "./secret-cards";
 import { bestSecretTier, toSecretTier } from "./secret-rarity";
 import { uuid as zuuid } from "./zod-uuid";
+import { sqlNull } from "./rpc-null";
 
 /**
  * The daily secret card: a permanent league collection nobody can browse.
@@ -46,10 +47,10 @@ async function admin() {
   return supabaseAdmin;
 }
 
-/** Untyped client, for the two tables types.ts has not been regenerated for. */
+/** The service-role client, loaded inside the handler so it never reaches the bundle. */
 async function secrets() {
-  const { secretsDb } = await import("./secret-cards-db.server");
-  return secretsDb();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
 }
 
 /**
@@ -158,9 +159,9 @@ export const pullSecretCard = createServerFn({ method: "POST" }).handler(async (
     .maybeSingle();
 
   const { data, error } = await db.rpc("pull_secret_card", {
-    _participant_id: actor.kind === "member" ? actor.id : null,
-    _guest_id: actor.kind === "guest" ? actor.id : null,
-    _event_id: event?.id ?? null,
+    _participant_id: sqlNull(actor.kind === "member" ? actor.id : null),
+    _guest_id: sqlNull(actor.kind === "guest" ? actor.id : null),
+    _event_id: sqlNull(event?.id ?? null),
   });
   if (error) throw new Error(error.message);
 
@@ -216,8 +217,8 @@ export const getSecretStatus = createServerFn({ method: "GET" }).handler(async (
   }
   const db = await secrets();
   const { data, error } = await db.rpc("secret_pull_status", {
-    _participant_id: actor.kind === "member" ? actor.id : null,
-    _guest_id: actor.kind === "guest" ? actor.id : null,
+    _participant_id: sqlNull(actor.kind === "member" ? actor.id : null),
+    _guest_id: sqlNull(actor.kind === "guest" ? actor.id : null),
   });
   if (error) throw new Error(error.message);
   const status = data as SecretPullStatusResult;
@@ -496,8 +497,7 @@ export const getSecretCollections = createServerFn({ method: "GET" }).handler(as
  * renders as something rather than as a raw slug.
  */
 export const getCollectionTrophies = createServerFn({ method: "GET" }).handler(async () => {
-  const { trophiesDb } = await import("./trophies-db.server");
-  const db = trophiesDb();
+  const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
   const { data, error } = await db
     .from("collection_trophies")
     .select("participant_id, collection_id, size_at_completion, completed_on, via")
@@ -925,7 +925,7 @@ export const grantSecretCard = createServerFn({ method: "POST" })
       _grant_key: data.grantKey,
       _participant_id: data.participantId,
       _secret_card_id: data.cardId,
-      _event_id: event?.id ?? null,
+      _event_id: sqlNull(event?.id ?? null),
     });
     if (error) throw new Error(error.message);
     const row = result as {

@@ -6,8 +6,6 @@
 // `is_collector` is what keeps them off the roster, the claim list and the
 // draft while leaving every trading rule untouched.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-// The streak claims are not in types.ts yet, so they need the widened client.
-import { streaksDb } from "./streaks-db.server";
 import { signMemberToken } from "./session.server";
 
 export type CollectorIdentity = {
@@ -174,7 +172,7 @@ async function mergeGuests(participantId: string, guestIds: string[]) {
     if (packsError) throw packsError;
     // After the packs, always: a claim stranded on the dead guest id would let the
     // same milestone pay twice once the streak recomputes against the moved rows.
-    const { error: streakError } = await streaksDb().rpc("claim_guest_streak_milestones", {
+    const { error: streakError } = await supabaseAdmin.rpc("claim_guest_streak_milestones", {
       _participant_id: participantId,
       _guest_id: guestId,
     });

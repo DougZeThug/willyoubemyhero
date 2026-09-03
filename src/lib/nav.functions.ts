@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { TOGGLEABLE_ROW_IDS } from "./nav";
@@ -33,13 +32,7 @@ export const setNavHidden = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const hidden = [...new Set(data.hidden)];
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // The cast is the only way to write nav_hidden today: the column landed in
-    // supabase/migrations/20260903170000_nav_rows.sql and the checked-in
-    // generated types have not been regenerated since — the same drift
-    // on_clock_since already carries. Cast the client rather than the patch, so
-    // the payload stays a plain readable object. Regenerating types.ts retires
-    // the whole line.
-    const { error } = await (supabaseAdmin as unknown as SupabaseClient)
+    const { error } = await supabaseAdmin
       .from("events")
       .update({ nav_hidden: hidden })
       .eq("id", data.eventId);

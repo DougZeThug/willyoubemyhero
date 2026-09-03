@@ -17,7 +17,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // *.server.ts module, so it never reaches the client bundle.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { CompletedCollection } from "./collection-trophies";
-import type { DustFailure } from "./dust-db.server";
+import type { DustFailure } from "./dust-rows";
 import type { MarketListingStatus } from "./market";
 
 export type MarketListingRow = {

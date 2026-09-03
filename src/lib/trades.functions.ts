@@ -15,7 +15,7 @@ import type {
   TradeOfferView,
   TradeSpares,
 } from "./trades";
-import type { SecretCardRow, SecretPullRow } from "./secret-cards-db.server";
+import type { SecretCardRow, SecretPullRow } from "./secret-cards-rows";
 import type {
   AcceptTradeOfferResult,
   CardCopyRow,
@@ -23,8 +23,9 @@ import type {
   TradeOfferItemRow,
   TradeOfferRow,
   TradeRow,
-} from "./trades-db.server";
+} from "./trades-rows";
 import { uuid as zuuid } from "./zod-uuid";
+import { sqlNull } from "./rpc-null";
 
 /**
  * The Trading Post: moving a spare card from one member to another.
@@ -57,10 +58,10 @@ async function admin() {
   return supabaseAdmin;
 }
 
-/** Untyped client, for the tables types.ts has not been regenerated for. */
+/** The service-role client, loaded inside the handler so it never reaches the bundle. */
 async function db() {
-  const { tradesDb } = await import("./trades-db.server");
-  return tradesDb();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
 }
 
 /**
@@ -617,7 +618,7 @@ export const createTradeOffer = createServerFn({ method: "POST" })
     const { data: result, error } = await sb.rpc("create_trade_offer", {
       _proposer_id: me,
       _recipient_id: data.recipientId,
-      _event_id: await activeEventId(),
+      _event_id: sqlNull(await activeEventId()),
       _give: data.give,
       _want: data.want,
     });

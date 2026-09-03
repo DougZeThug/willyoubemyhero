@@ -2,9 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { EDITION_IDS, toEdition, type Edition } from "./card-edition";
 import { optionalGuest, optionalMember, requireAdmin, requireMember } from "./require-auth.server";
-import type { CardPullRow, PackOpenRow } from "./secret-cards-db.server";
+import type { CardPullRow, PackOpenRow } from "./secret-cards-rows";
 import type { CardPullCounts, MyCardStats } from "./card-pulls";
 import { uuid as zuuid } from "./zod-uuid";
+import { sqlNull } from "./rpc-null";
 
 /**
  * Who has packed which roster card.
@@ -31,10 +32,10 @@ type CardEditions = Record<string, Edition>;
  */
 type RecordCardPullsResult = { recorded: number; editions: Record<string, string> };
 
-/** Untyped client, for the tables types.ts has not been regenerated for. */
+/** The service-role client, loaded inside the handler so it never reaches the bundle. */
 async function db() {
-  const { secretsDb } = await import("./secret-cards-db.server");
-  return secretsDb();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
 }
 
 /**
@@ -151,8 +152,8 @@ export const recordCardPulls = createServerFn({ method: "POST" })
       if (!guest)
         return { ok: true as const, recorded: 0, packsOpened: 0, editions: {} as CardEditions };
       const { data: guestPacks } = await secrets.rpc("record_pack_open", {
-        _participant_id: null,
-        _event_id: activeEvent?.id ?? null,
+        _participant_id: sqlNull(null),
+        _event_id: sqlNull(activeEvent?.id ?? null),
         _card_count: data.eventParticipantIds.length,
         _guest_id: guest,
       });
@@ -172,7 +173,7 @@ export const recordCardPulls = createServerFn({ method: "POST" })
       // Always null. The parameter still exists so an old client's call resolves,
       // and the RPC ignores it either way — passing the claim through would be
       // the client-asserted finish coming back in through the window.
-      _editions: null,
+      _editions: sqlNull(null),
     });
     if (error) throw new Error(error.message);
 
@@ -196,9 +197,9 @@ export const recordCardPulls = createServerFn({ method: "POST" })
     // that never corresponded to real cards.
     const { data: packs } = await secrets.rpc("record_pack_open", {
       _participant_id: me,
-      _event_id: activeEvent?.id ?? null,
+      _event_id: sqlNull(activeEvent?.id ?? null),
       _card_count: recorded,
-      _guest_id: null,
+      _guest_id: sqlNull(null),
     });
 
     return {
@@ -255,7 +256,7 @@ export const adoptCollection = createServerFn({ method: "POST" })
       _event_participant_ids: data.eventParticipantIds,
       // Kept in the call because the RPC's signature keeps it, the same way
       // record_card_pulls keeps its own. Postgres never reads it.
-      _editions: null,
+      _editions: sqlNull(null),
     });
     if (error) throw new Error(error.message);
     return { ok: true as const, adopted: (n as number | null) ?? 0 };

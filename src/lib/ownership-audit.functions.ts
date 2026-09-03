@@ -20,10 +20,10 @@ async function admin() {
   return supabaseAdmin;
 }
 
-/** Untyped client for the trading tables types.ts has not been regenerated for. */
+/** The service-role client, loaded inside the handler so it never reaches the bundle. */
 async function tradesClient() {
-  const { tradesDb } = await import("./trades-db.server");
-  return tradesDb();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
 }
 
 export type OwnershipRow = {
@@ -203,8 +203,8 @@ export const attachDeviceToPlayer = createServerFn({ method: "POST" })
     // undone" and meant it: three sequential RPCs plus the account repair could
     // half-apply, and the half where packs moved but their milestone claims did
     // not is the one that pays a milestone a second time.
-    const { streaksDb } = await import("./streaks-db.server");
-    const { data: res, error } = await streaksDb().rpc("attach_device_to_player", {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: res, error } = await supabaseAdmin.rpc("attach_device_to_player", {
       _participant_id: data.participantId,
       _guest_id: data.guestId,
     });
