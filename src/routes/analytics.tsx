@@ -32,6 +32,11 @@ function AnalyticsPage() {
 
   const stationAverages = useMemo(() => {
     if (!bundle) return [];
+    // With no splits — whether the read failed and coalesced to [] or the
+    // event genuinely has none — the loop below can only produce zero-value
+    // bars. Return empty so the render falls through to the error/empty
+    // message instead.
+    if (!bundle.splits.length) return [];
     const byStation = new Map<string, number[]>();
     for (const s of bundle.splits) {
       const st = bundle.stations.find((x) => x.id === s.station_id);

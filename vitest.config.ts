@@ -62,7 +62,7 @@ export default defineConfig({
           environment: "jsdom",
           include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
           exclude: [...configDefaults.exclude, ...NODE_TESTS],
-          setupFiles: ["./src/test/setup.ts"],
+          setupFiles: ["./src/test/setup.ts", "./src/test/jsx-guard.ts"],
           // The default 5s is fine for a file run on its own and not fine for
           // the same file run alongside 90 others: a userEvent-driven render can
           // sit behind the pool for seconds. A timeout here is doubly expensive
