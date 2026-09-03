@@ -67,13 +67,6 @@ vi.mock("recharts", async (importOriginal) => {
   return stubs;
 });
 
-vi.mock("recharts", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    ResponsiveContainer: ({ children }: { children: ReactNode }) => <>{children}</>,
-  };
-});
 
 function healthyBundle() {
   return makeBundle();
