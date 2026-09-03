@@ -117,11 +117,22 @@ export function MilestoneReveal({
     return () => clearTimeout(t);
   }, [phase, duplicate, rarity]);
 
+  // Same as BoughtPullReveal: role="dialog" alone still lets Tab fall through to
+  // the nav behind the overlay, so the surface is focusable and takes focus on
+  // arrival. The inert half is already wired by the caller (players.pack.tsx).
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    surfaceRef.current?.focus();
+  }, []);
+
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6"
+      ref={surfaceRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6 outline-none"
       data-testid="milestone-reveal"
       role="dialog"
+      aria-modal="true"
       aria-label={`Day ${milestone} streak reward`}
     >
       <RevealAmbience
@@ -132,7 +143,7 @@ export function MilestoneReveal({
       />
 
       <div className="relative z-10 text-center">
-        <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <div className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Streak reward
         </div>
         <div className="mt-1 flex items-center justify-center gap-2">
@@ -154,7 +165,7 @@ export function MilestoneReveal({
             {phase === "flare" ? Math.round(days ?? 0) : milestone}
           </span>
         </div>
-        <div className="mt-1 font-display text-xs font-bold uppercase tracking-[0.2em]">
+        <div className="mt-1 font-display text-label font-bold uppercase tracking-[0.08em]">
           {milestone} days in a row
         </div>
         {/* What the run bought, printed next to the days that bought it. Not
@@ -163,7 +174,7 @@ export function MilestoneReveal({
             not happen. */}
         {tierFloor && (
           <div
-            className="mt-1 font-display text-[10px] font-black uppercase tracking-[0.18em]"
+            className="mt-1 font-display text-badge font-black uppercase tracking-[0.08em]"
             style={{ color: secretTierStyle(tierFloor).accent }}
           >
             {secretTierFloorLabel(tierFloor)}

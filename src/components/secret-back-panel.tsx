@@ -1,6 +1,7 @@
 import { SECRET_REASON, type OwnedSecret, type SecretCardView } from "@/lib/secret-cards";
 import { secretTierLabel, secretTierOddsLabel, secretTierStyle } from "@/lib/secret-rarity";
 import type { Rarity } from "@/lib/card-rarity";
+import { formatDay } from "@/lib/format";
 
 /**
  * Generated back for a secret card.
@@ -37,7 +38,7 @@ export function SecretBackPanel({
 }) {
   const large = size === "large";
   return (
-    <div className="relative flex h-full w-full flex-col gap-2 overflow-hidden bg-[oklch(0.13_0.02_240)] p-3 text-left">
+    <div className="@container relative flex h-full w-full flex-col gap-2 overflow-hidden bg-[oklch(0.13_0.02_240)] p-3 text-left">
       {/* A rosette ghosted behind the text, so the panel reads as printed rather
           than as a card whose stats failed to load. Static: this sits on a
           rotateY(180deg) face and never gets a pointer, so there is nothing for a
@@ -58,7 +59,7 @@ export function SecretBackPanel({
         style={{ borderColor: rarity.border }}
       >
         <span
-          className={`font-display font-black uppercase tracking-[0.25em] ${large ? "text-xs" : "text-[10px]"}`}
+          className={`font-display font-black uppercase tracking-[0.08em] ${large ? "text-badge" : "text-[clamp(10px,4cqw,13px)]"}`}
           style={{ color: rarity.accent }}
         >
           {rarity.label}
@@ -67,7 +68,7 @@ export function SecretBackPanel({
             tier: "base" to satisfy the type, and that lookup would print
             "Combine athlete" on a card that was never at the combine. */}
         <span
-          className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}
+          className={`font-bold uppercase tracking-[0.08em] text-muted-foreground ${large ? "text-label" : "text-[clamp(8px,3.75cqw,12px)]"}`}
         >
           {SECRET_REASON}
         </span>
@@ -81,12 +82,14 @@ export function SecretBackPanel({
         </div>
         {card.flavour ? (
           <p
-            className={`italic leading-snug text-muted-foreground ${large ? "text-sm line-clamp-5" : "text-[10px] line-clamp-4"}`}
+            className={`italic leading-snug text-muted-foreground ${large ? "text-body line-clamp-5" : "text-[clamp(10px,3.75cqw,12px)] line-clamp-4"}`}
           >
             &ldquo;{card.flavour}&rdquo;
           </p>
         ) : (
-          <p className={`italic text-muted-foreground/70 ${large ? "text-sm" : "text-[10px]"}`}>
+          <p
+            className={`italic text-muted-foreground ${large ? "text-body" : "text-[clamp(10px,3.75cqw,12px)]"}`}
+          >
             Will YOU Be My Hero?
           </p>
         )}
@@ -94,7 +97,7 @@ export function SecretBackPanel({
 
       <div className="relative flex items-center justify-between border-t border-white/10 pt-1.5">
         <span
-          className={`font-bold uppercase tracking-[0.2em] ${large ? "text-[10px]" : "text-[8px]"}`}
+          className={`font-bold uppercase tracking-[0.08em] ${large ? "text-badge" : "text-[clamp(10px,4cqw,13px)]"}`}
           style={{ color: secretTierStyle(card.tier).accent }}
         >
           {/* The level of this copy and the rate that produced it — the one fact
@@ -107,7 +110,7 @@ export function SecretBackPanel({
             the louder of the two. */}
         {completed ? (
           <span
-            className={`inline-flex items-center gap-1 font-bold uppercase tracking-[0.2em] ${large ? "text-[10px]" : "text-[8px]"}`}
+            className={`inline-flex items-center gap-1 font-bold uppercase tracking-[0.08em] ${large ? "text-label" : "text-[clamp(8px,3.75cqw,12px)]"}`}
             style={{ color: "oklch(0.82 0.19 85)" }}
           >
             <span aria-hidden>◆</span>
@@ -116,9 +119,9 @@ export function SecretBackPanel({
         ) : (
           pulledOn && (
             <span
-              className={`font-bold uppercase tracking-[0.2em] text-muted-foreground ${large ? "text-[10px]" : "text-[8px]"}`}
+              className={`font-semibold text-muted-foreground ${large ? "text-meta" : "text-[clamp(8px,3.75cqw,12px)]"}`}
             >
-              Pulled {pulledOn}
+              Pulled {formatDay(pulledOn)}
             </span>
           )
         )}

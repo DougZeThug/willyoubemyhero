@@ -41,10 +41,10 @@ export function PackStats({
   return (
     <section className="mt-8">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <h2 className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Your pack stats
         </h2>
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <div className="text-meta font-semibold text-muted-foreground">
           {packsOpenedLabel(packsOpened) ?? "No packs yet"}
           {since && ` · since ${since}`}
         </div>
@@ -57,7 +57,7 @@ export function PackStats({
         <StatTile label="Best pull" value={best?.label ?? "—"} />
       </div>
 
-      <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+      <p className="mt-2 text-meta text-muted-foreground">
         One pack a day. Only cards you have actually pulled count here.
       </p>
     </section>

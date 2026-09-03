@@ -202,11 +202,12 @@ export const rerollCopyEdition = createServerFn({ method: "POST" })
 /**
  * The commissioner's switch for the whole economy.
  *
- * Its own function rather than a field on `updateEvent`, for two reasons. The
- * generated types do not know `dust_enabled` yet, so the typed client rejects it
- * and this needs the same untyped shim the rest of the feature uses. And a
- * feature switch reads better owned by the feature than buried among the event's
- * lock flags.
+ * Its own function rather than a field on `updateEvent`: a feature switch reads
+ * better owned by the feature than buried among the event's lock flags, and
+ * `updateEvent`'s validator already carries a caution about optional booleans
+ * nothing ever calls. It goes through this file's untyped shim because the rest
+ * of the feature does, not because the column is missing — types.ts has since
+ * been regenerated and carries `dust_enabled`.
  *
  * `requireAdmin(eventId)` rather than `requireMember()`, unlike everything else
  * in this file — this is the one dust call a player must never make.

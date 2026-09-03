@@ -634,7 +634,7 @@ export function SecretCardsPanel() {
           Browse files
         </Button>
         {drafts.length > 0 && (
-          <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-primary">
+          <p className="mt-2 text-label font-bold uppercase tracking-[0.08em] text-primary">
             {drafts.length} staged
           </p>
         )}
@@ -644,7 +644,7 @@ export function SecretCardsPanel() {
           className="mx-auto mt-3 flex max-w-xs items-center gap-2"
           onClick={(e) => e.stopPropagation()}
         >
-          <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="shrink-0 text-label uppercase tracking-[0.08em] text-muted-foreground">
             Add to
           </span>
           <select
@@ -707,11 +707,11 @@ export function SecretCardsPanel() {
                       )
                     }
                   />
-                  <p className="text-[10px] leading-snug text-muted-foreground">
+                  <p className="text-meta leading-snug text-muted-foreground">
                     One line, printed on the back. This is the whole joke — keep it short.
                   </p>
                   <label className="flex items-center gap-2">
-                    <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <span className="shrink-0 text-label uppercase tracking-[0.08em] text-muted-foreground">
                       Set
                     </span>
                     <select
@@ -781,7 +781,7 @@ export function SecretCardsPanel() {
             Sets
           </span>
           <span className="flex shrink-0 items-center gap-2">
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
               {allSets.length}
             </span>
             <ChevronDown
@@ -858,7 +858,7 @@ export function SecretCardsPanel() {
                     }}
                     className="min-w-0 flex-1"
                   />
-                  <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <span className="shrink-0 text-label uppercase tracking-[0.08em] text-muted-foreground">
                     {cardsPerSet.get(s.id) ?? 0}
                   </span>
                   {setBusyId === s.id && (
@@ -988,7 +988,7 @@ export function SecretCardsPanel() {
                   {group.label}
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                     {group.items.length}
                   </span>
                   <ChevronDown
@@ -1067,7 +1067,7 @@ export function SecretCardsPanel() {
                 <div className="flex items-start gap-3">
                   <SecretArtThumb card={editingCard} className="w-24" />
                   <label className="min-w-0 flex-1">
-                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                       Card art
                     </span>
                     <span className="mt-1 flex min-h-11 cursor-pointer items-center justify-center rounded border border-white/15 px-3 text-xs font-bold uppercase tracking-widest text-primary transition-colors hover:border-primary/50">
@@ -1087,7 +1087,7 @@ export function SecretCardsPanel() {
                 </div>
 
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                     Name
                   </span>
                   <Input
@@ -1099,7 +1099,7 @@ export function SecretCardsPanel() {
                 </label>
 
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                     Wording
                   </span>
                   <Input
@@ -1112,7 +1112,7 @@ export function SecretCardsPanel() {
                 </label>
 
                 <label className="block">
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                     Set
                   </span>
                   {/* Saves on change like the look does, not on Save: it goes
@@ -1232,7 +1232,7 @@ function SetLookRow({
 }) {
   return (
     <div className="flex flex-col gap-2 rounded border border-white/10 bg-white/[0.03] p-2">
-      <span className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+      <span className="flex items-center gap-2 text-label uppercase tracking-[0.08em] text-muted-foreground">
         Whole set
         {saving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
       </span>

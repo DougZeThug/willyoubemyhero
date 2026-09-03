@@ -48,7 +48,7 @@ export function FeedError({
           </p>
         </div>
         {onRetry && (
-          <Button size="sm" variant="secondary" onClick={onRetry}>
+          <Button size="default" variant="secondary" className="min-h-11" onClick={onRetry}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Try again
           </Button>
         )}
@@ -65,7 +65,7 @@ export function FeedDegradedBanner({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-2 rounded-md border border-warn/30 bg-warn/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-warn",
+        "flex items-center justify-center gap-2 rounded-md border border-warn/30 bg-warn/10 px-3 py-1.5 text-meta font-semibold text-warn",
         className,
       )}
     >

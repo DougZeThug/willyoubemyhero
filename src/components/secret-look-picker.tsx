@@ -34,7 +34,7 @@ function labelFor(options: readonly { id: string; label: string }[], id: string,
  */
 function PickerCaption({ caption, value }: { caption: string; value: string }) {
   return (
-    <span className="flex items-baseline gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+    <span className="flex items-baseline gap-1.5 text-label uppercase tracking-[0.08em] text-muted-foreground">
       {caption}
       <span className="normal-case tracking-normal text-foreground">{value}</span>
     </span>
@@ -277,7 +277,9 @@ export function CompactLookSelect({
   const selected = options.some((o) => o.id === value) ? value : fallback;
   return (
     <label className="flex min-w-0 flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{caption}</span>
+      <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
+        {caption}
+      </span>
       <span className="flex min-w-0 items-center gap-1.5">
         {swatch}
         {/* text-base below sm: anything under 16px makes iOS Safari zoom the

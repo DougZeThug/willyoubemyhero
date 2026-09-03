@@ -125,3 +125,20 @@ describe("MilestoneReveal", () => {
     expect(queryByText(/or better|guaranteed/)).toBeNull();
   });
 });
+
+// Mirrors bought-pull-reveal.test.tsx: the two reveals are the same kind of
+// thing and used to disagree about whether they owned the screen.
+describe("MilestoneReveal accessibility", () => {
+  it("announces itself as a modal dialog", () => {
+    renderReveal();
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+  });
+
+  it("is focusable and takes focus on arrival", () => {
+    renderReveal();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("tabIndex", "-1");
+    // Without this, Tab from the reveal reaches the nav behind the overlay.
+    expect(dialog).toHaveFocus();
+  });
+});

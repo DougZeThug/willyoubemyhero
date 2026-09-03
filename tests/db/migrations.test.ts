@@ -435,4 +435,76 @@ describe("migrations", () => {
       ),
     ).toBe(true);
   });
+
+  it("ships the bottom bar whole, which is what makes deploying it a no-op", async () => {
+    const [row] = await sql<{ data_type: string; is_nullable: string; column_default: string }>(`
+      SELECT data_type, is_nullable, column_default FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'nav_hidden'
+    `);
+    expect(row.data_type).toBe("ARRAY");
+    expect(row.is_nullable).toBe("NO");
+    // Empty means the whole bar, so every existing row — including the live one
+    // — comes through this migration with nothing hidden.
+    expect(row.column_default).toContain("{}");
+  });
+
+  it("will not let the vault or the shop off the bar", async () => {
+    // The pin, in the one place a client cannot route around. setNavHidden
+    // refuses both by name too; this is the rule about the data rather than
+    // about one request.
+    //
+    // Matched on the constraint name rather than on "it threw": a bare
+    // rejects.toThrow() passes just as happily if the CHECK is dropped and the
+    // INSERT fails for some unrelated reason, which is the failure this test is
+    // least able to notice.
+    await expect(
+      sql(`INSERT INTO public.events (name, year, active, nav_hidden)
+           VALUES ('Pinned', 2029, false, ARRAY['vault'])`),
+    ).rejects.toThrow(/events_nav_hidden_hideable/);
+    await expect(
+      sql(`INSERT INTO public.events (name, year, active, nav_hidden)
+           VALUES ('Pinned', 2029, false, ARRAY['shop'])`),
+    ).rejects.toThrow(/events_nav_hidden_hideable/);
+  });
+
+  it("stores a toggleable row and hands it back through the public view", async () => {
+    // The control the rejections above need: without it they would still pass
+    // against a constraint that refused everything, and nothing would prove a
+    // hidden row actually survives the trip the app reads it over.
+    const [row] = await sql<{ id: string }>(
+      `INSERT INTO public.events (name, year, active, nav_hidden)
+         VALUES ('Bar', 2029, false, ARRAY['board', 'league'])
+       RETURNING id`,
+    );
+    try {
+      const [seen] = await sql<{ nav_hidden: string[] }>(
+        "SELECT nav_hidden FROM public.events_public WHERE id = $1",
+        [row.id],
+      );
+      expect(seen.nav_hidden).toEqual(["board", "league"]);
+    } finally {
+      await sql("DELETE FROM public.events WHERE id = $1", [row.id]);
+    }
+  });
+
+  it("carries the hidden rows through the public view", async () => {
+    // THREE PLACES, NOT ONE: a column on the table alone is invisible to
+    // getActiveEvent, which reads events_public — and the bar could never hide
+    // anything. Nothing caught that for dust_enabled; this is that check.
+    const rows = await sql<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'events_public'`,
+    );
+    expect(rows.map((r) => r.column_name)).toContain("nav_hidden");
+  });
+
+  it("reads the public event view as the caller, not as its owner", async () => {
+    // security_invoker went missing in 20260828120000's rebuild and came back in
+    // the nav one. Nothing caught it going, which is the whole argument for
+    // asserting it now.
+    const [row] = await sql<{ reloptions: string[] | null }>(
+      `SELECT reloptions FROM pg_class WHERE relname = 'events_public'`,
+    );
+    expect((row.reloptions ?? []).join(",")).toContain("security_invoker=true");
+  });
 });

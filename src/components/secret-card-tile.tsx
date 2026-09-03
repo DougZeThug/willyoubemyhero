@@ -47,7 +47,7 @@ export function SecretArtThumb({
   ) : (
     <div
       className={cn(
-        "flex aspect-[5/7] w-16 shrink-0 items-center justify-center rounded-md border border-dashed border-white/15 bg-white/5 text-center text-[9px] uppercase leading-tight tracking-widest text-muted-foreground",
+        "flex aspect-[5/7] w-16 shrink-0 items-center justify-center rounded-md border border-dashed border-white/15 bg-white/5 text-center text-label uppercase leading-tight tracking-[0.08em] text-muted-foreground",
         className,
       )}
     >
@@ -122,14 +122,14 @@ export function SecretCardTile({
             {card.name}
           </div>
           {(!card.active || !card.hasArt) && (
-            <div className="text-[10px] font-bold uppercase tracking-widest text-warn">
+            <div className="text-label font-bold uppercase tracking-[0.08em] text-warn">
               {!card.active ? "Retired" : "No art · not in packs"}
             </div>
           )}
           <div className="truncate text-[11px] text-muted-foreground">
             {card.flavour || "No wording yet"}
           </div>
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-meta text-muted-foreground">
             Pulled by {card.ownerCount} of {claimedMembers}
           </div>
         </div>
@@ -155,7 +155,7 @@ export function SecretCardTile({
         }}
       >
         <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
             Weight
           </span>
           <span className="flex items-center gap-1.5">
@@ -208,19 +208,19 @@ export function SecretCardTile({
         </div>
 
         {savingLook && (
-          <span className="col-span-2 flex items-center gap-1.5 text-[10px] text-muted-foreground sm:hidden">
+          <span className="col-span-2 flex items-center gap-1.5 text-meta text-muted-foreground sm:hidden">
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Saving look…
           </span>
         )}
 
-        <span className="col-span-2 text-[10px] text-muted-foreground sm:col-span-1">
+        <span className="col-span-2 text-meta text-muted-foreground sm:col-span-1">
           {card.weight === 0
             ? "Excluded from packs"
             : "Higher weight = shows up more often (100 = baseline)"}
         </span>
 
         <label className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:flex-row sm:items-center sm:gap-2">
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Set</span>
+          <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">Set</span>
           <select
             value={card.collection ?? ""}
             onChange={(e) => onSaveCollection(e.target.value || null)}
@@ -272,7 +272,7 @@ export function SecretCardTile({
               variant="secondary"
               onClick={onGrant}
               disabled={granting || !grantTarget}
-              className="min-h-11 shrink-0 px-3 text-[10px] sm:min-h-0 sm:h-7 sm:px-2"
+              className="min-h-11 shrink-0 px-3 sm:min-h-0 sm:h-7 sm:px-2"
             >
               {granting ? (
                 <>

@@ -112,3 +112,27 @@ export function newClientKey(): string {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * A stored day, as a player reads it: "2026-07-28" becomes "28 Jul".
+ *
+ * Split on the string rather than going through Date. `new Date("2026-07-28")`
+ * is UTC midnight, and formatting that anywhere west of Greenwich renders the
+ * day BEFORE the one in the database — a secret pulled on the 28th would read
+ * "27 Jul" to everybody in the league, which is where this is shown.
+ *
+ * Rendering only. The raw string stays the sort key (collection-trophies.ts
+ * orders trophies with localeCompare on it), so nothing here may be written
+ * back.
+ */
+export function formatDay(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  if (!m) return "—";
+  const month = MONTHS[Number(m[2]) - 1];
+  // A well-formed shape with a nonsense month (13, 00) still has to say
+  // something rather than "28 undefined".
+  if (!month) return "—";
+  return `${Number(m[3])} ${month}`;
+}

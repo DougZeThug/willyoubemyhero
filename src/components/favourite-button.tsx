@@ -35,17 +35,23 @@ export function FavouriteButton({
         e.stopPropagation();
         onToggle();
       }}
-      className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-full border backdrop-blur transition-colors",
-        on
-          ? "border-primary/60 bg-background/80 text-primary"
-          : // Dimmed rather than hidden-until-hover: hover does not exist on the
-            // phone this is played on, and a control you cannot find is not one.
-            "border-white/15 bg-background/60 text-muted-foreground hover:border-primary/50 hover:text-primary",
-        className,
-      )}
+      // 44x44 of tappable area (§18), but the disc stays 36: a full-size disc
+      // covers a third of a tile at 320px, and the thing that was wrong here was
+      // the hit box, not the badge.
+      className={cn("flex h-11 w-11 items-center justify-center", className)}
     >
-      <Star className="h-4 w-4" fill={on ? "currentColor" : "none"} aria-hidden />
+      <span
+        className={cn(
+          "flex h-9 w-9 items-center justify-center rounded-full border backdrop-blur transition-colors",
+          on
+            ? "border-primary/60 bg-background/80 text-primary"
+            : // Dimmed rather than hidden-until-hover: hover does not exist on the
+              // phone this is played on, and a control you cannot find is not one.
+              "border-white/15 bg-background/60 text-muted-foreground hover:border-primary/50 hover:text-primary",
+        )}
+      >
+        <Star className="h-4 w-4" fill={on ? "currentColor" : "none"} aria-hidden />
+      </span>
     </button>
   );
 }

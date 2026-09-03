@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { secretWaiting, SECRET_RARITY } from "@/lib/secret-cards";
-import { activeTab, navTabs } from "@/lib/nav";
+import { activeTab, navHidden, navTabs, type NavRowId } from "@/lib/nav";
 import { useActiveEvent } from "@/hooks/use-active-event";
 import { dustLive } from "@/lib/dust";
 import { cn } from "@/lib/utils";
@@ -33,13 +33,15 @@ export function SiteNav() {
   // nav share one round trip rather than making two.
   const secretStatus = useSecretStatus(useSecretActor());
   const packWaiting = secretWaiting(secretStatus.data);
-  // Whether the Shop tab exists at all. useActiveEvent rather than
-  // useEventBundle on purpose — see the note on that hook: the bundle one opens a
-  // realtime channel, and this component renders on every screen. It shares the
-  // bundle's query key, so on any page that already has the event this is a cache
-  // read rather than a request.
-  const dustOn = dustLive(useActiveEvent().data);
-  const links = navTabs(dustOn);
+  // Which rows the bar holds: the shop answers to the dust switch, the rest to
+  // the commissioner's hidden set. Both ride the same event, so this is one read
+  // and not two. useActiveEvent rather than useEventBundle on purpose — see the
+  // note on that hook: the bundle one opens a realtime channel, and this
+  // component renders on every screen. It shares the bundle's query key, so on
+  // any page that already has the event this is a cache read rather than a
+  // request.
+  const event = useActiveEvent().data;
+  const links = navTabs({ dustOn: dustLive(event), hidden: navHidden(event) });
   // A screen playing something cinematic gets the whole device. Faded and inert
   // rather than unmounted: unmounting the header reflows every page under it, and
   // the flag flips mid-ceremony. `inert` is the load-bearing half — chrome dimmed
@@ -64,9 +66,9 @@ export function SiteNav() {
    * each one has to name its own thing rather than share a generic "something
    * is waiting".
    */
-  const badge = (to: string): { suffix: string; color?: string } | null => {
-    if (to === "/players/trade" && tradeUnread > 0) return { suffix: "a trade offer is waiting" };
-    if (to === "/players/pack" && packWaiting)
+  const badge = (id: NavRowId): { suffix: string; color?: string } | null => {
+    if (id === "trade" && tradeUnread > 0) return { suffix: "a trade offer is waiting" };
+    if (id === "pack" && packWaiting)
       return { suffix: "a secret is waiting", color: SECRET_RARITY.border };
     return null;
   };
@@ -86,9 +88,15 @@ export function SiteNav() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-2.5 sm:gap-4">
           <div className="w-11 md:w-16" aria-hidden />
           {/* Tracking loosens with the viewport rather than the wordmark wrapping:
-              two stacked lines turned the 48px header into 90px at 320px. */}
-          <Link to="/players" className="flex flex-col items-center leading-none">
-            <span className="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/80 sm:tracking-[0.35em]">
+              two stacked lines turned the 48px header into 90px at 320px. The
+              wide desktop step is the one place under 14px that keeps tracking
+              above the 0.08em cap (§16) — the cap is aimed at labels and
+              metadata, and this is the wordmark. */}
+          <Link
+            to="/players"
+            className="flex min-h-11 flex-col items-center justify-center leading-none"
+          >
+            <span className="whitespace-nowrap text-nav font-semibold uppercase tracking-[0.08em] text-primary/80 sm:tracking-[0.35em]">
               Will YOU Be My Hero?
             </span>
             <span className="whitespace-nowrap font-display text-base font-black uppercase tracking-[0.1em] text-foreground sm:text-lg sm:tracking-[0.22em]">
@@ -97,7 +105,7 @@ export function SiteNav() {
           </Link>
           <nav aria-label="Sections" className="hidden gap-1 md:flex">
             {links.map((l) => {
-              const waiting = badge(l.to);
+              const waiting = badge(l.id);
               return (
                 <Link
                   key={l.to}
@@ -131,20 +139,24 @@ export function SiteNav() {
         aria-label="Primary"
         className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/15 bg-background/95 backdrop-blur md:hidden"
       >
-        {/* Both class names spelled out: Tailwind scans source for literals,
-            so a computed `grid-cols-${n}` emits no rule at all. */}
-        <ul className={cn("mx-auto grid max-w-md", dustOn ? "grid-cols-6" : "grid-cols-5")}>
+        {/* flex rather than grid: the row count is whatever the commissioner has
+            left switched on, and Tailwind scans source for literals — a computed
+            `grid-cols-${n}` emits no rule at all, and a lookup map would need a
+            new entry every time the bar grows. Equal `flex-1` cells give the same
+            layout the grid did at every count, which is what the desktop bar
+            above already relies on. */}
+        <ul className="mx-auto flex max-w-md">
           {links.map((l) => {
             const Icon = l.icon;
-            const waiting = badge(l.to);
+            const waiting = badge(l.id);
             return (
-              <li key={l.to}>
+              <li key={l.to} className="min-w-0 flex-1">
                 <Link
                   to={l.to}
                   aria-current={active === l.to ? "page" : undefined}
                   aria-label={waiting ? `${l.label} — ${waiting.suffix}` : undefined}
                   className={cn(
-                    "relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
+                    "relative flex flex-col items-center gap-1 py-2.5 text-nav font-bold uppercase tracking-[0.08em] transition-colors",
                     active === l.to ? "text-primary" : "text-muted-foreground",
                   )}
                 >

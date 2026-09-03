@@ -97,17 +97,17 @@ export function BoughtPullReveal({
       <RevealAmbience rarity={rarity} secret revealed={revealed} anticipating={!revealed} />
 
       <div className="relative z-10 text-center">
-        <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <div className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Bought pull
         </div>
         <div
-          className="mt-1 font-display text-xs font-black uppercase tracking-[0.18em]"
+          className="mt-1 font-display text-badge font-black uppercase tracking-[0.08em]"
           style={{ color: tier.accent }}
         >
           {tier.label}
         </div>
         {duplicate && (
-          <div className="mt-1 text-[11px] text-muted-foreground">You already had this one</div>
+          <div className="mt-1 text-meta text-muted-foreground">You already had this one</div>
         )}
       </div>
 

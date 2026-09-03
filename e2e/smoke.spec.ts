@@ -1,5 +1,6 @@
 // Every public route renders, hydrates, and survives having no data.
-import { test, expect } from "./fixtures";
+import type { Page } from "@playwright/test";
+import { test, expect, PLAYERS, sealedPack } from "./fixtures";
 
 const ROUTES = [
   { path: "/", title: /Draft Combine|Hero/i },
@@ -128,4 +129,136 @@ test.describe("smoke", () => {
     const names = await page.getByText(/^(Doug|Alice)$/).allTextContents();
     expect(names[0]).toBe("Doug");
   });
+});
+
+/**
+ * Nothing a thumb can land on is smaller than a thumb (§18 of the mobile audit).
+ *
+ * Mobile only, and that is the point rather than a shortcut: 44px is a TOUCH
+ * guideline, the pointer equivalent is 24px, and this repo already writes the
+ * distinction down — vault-section.tsx's move arrows are `h-11 w-11 sm:h-8
+ * sm:w-8` on purpose, and the top bar's section links only exist above `md`.
+ * Run against the desktop project this would fail two deliberate decisions and
+ * prove nothing.
+ */
+const MIN_TARGET = 44;
+
+/** Everything a thumb can land on. An <a> with no href is not one. */
+const CONTROLS = 'button, a[href], [role="button"]';
+
+/**
+ * Controls allowed under the floor, each with the reason it is allowed.
+ *
+ * The skip link is the only one: it is `sr-only` until focused, which Playwright
+ * still counts as visible because it has a box. Anything added here needs a
+ * reason of the same kind beside it.
+ */
+const EXEMPT = [{ name: /^skip to content$/i, why: "sr-only until focused" }];
+
+/**
+ * Every visible control that is too short, named well enough to find in the
+ * source from the failure text alone.
+ *
+ * One evaluateAll rather than a boundingBox() per element: it is a single round
+ * trip instead of forty, and every control is measured on the same frame, so a
+ * re-render between two of them cannot skew the answer.
+ */
+async function shortTargets(page: Page): Promise<string[]> {
+  const measured = await page
+    .locator(CONTROLS)
+    .filter({ visible: true })
+    .evaluateAll((els) =>
+      els.map((el) => ({
+        height: el.getBoundingClientRect().height,
+        tag: el.tagName.toLowerCase(),
+        name: (el.getAttribute("aria-label") ?? el.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 50),
+        // The class fragment is what makes a failure actionable: this is a
+        // class-driven floor, so it is the string you grep for.
+        hint: (el.getAttribute("class") ?? "").split(/\s+/).filter(Boolean).slice(0, 3).join(" "),
+      })),
+    );
+
+  return measured
+    .filter((t) => t.height < MIN_TARGET && !EXEMPT.some((e) => e.name.test(t.name)))
+    .map((t) => `${t.height.toFixed(0)}px <${t.tag}> "${t.name || "(unnamed)"}" — ${t.hint}`);
+}
+
+/** A member token these stubs never verify — the server is mocked out. */
+async function signInAsMember(page: Page) {
+  const me = PLAYERS[0];
+  await page.addInitScript(
+    ([key, token, who]) => {
+      localStorage.setItem(key, token);
+      localStorage.setItem("wwbh:member-name", who);
+    },
+    ["wwbh:member-token", `m.${me.pid}.${Date.now() + 60 * 60_000}.signature`, me.name] as const,
+  );
+}
+
+/**
+ * `settle` is the wait AND the route's own sanity check: measuring a screen that
+ * has not filled in yet passes for the wrong reason, because half the controls
+ * are not mounted yet.
+ */
+const TAP_TARGET_ROUTES: {
+  path: string;
+  member?: true;
+  settle: (page: Page) => Promise<void>;
+}[] = [
+  {
+    path: "/players",
+    // The sort row lives inside the roster shelf's body, so it only exists once
+    // the bundle has landed and the grid has rendered.
+    settle: async (page) => {
+      await expect(page.getByRole("button", { name: /shuffle/i })).toBeVisible();
+    },
+  },
+  {
+    path: "/players/pack",
+    // Not in ROUTES above and not warmed by global-setup, so this is the one
+    // screen here the smoke suite does not otherwise open. Measured sealed: the
+    // ceremony's own controls are covered by the component specs.
+    settle: async (page) => {
+      await expect(page.getByTestId("collected-count")).not.toHaveText(/—/);
+      await expect(sealedPack(page)).toBeVisible();
+    },
+  },
+  {
+    path: "/players/trade",
+    member: true,
+    // Anonymous, this route redirects to /claim — which is what the ROUTES entry
+    // above covers. The heading proves the member branch rendered, so a broken
+    // session fails here rather than silently measuring /claim.
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: "Trading Post" })).toBeVisible();
+    },
+  },
+];
+
+test.describe("tap targets", () => {
+  for (const route of TAP_TARGET_ROUTES) {
+    test(`${route.path} has nothing smaller than a thumb`, async ({ page, server }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== "mobile",
+        "44px is a touch rule; the desktop chrome is mouse-driven and 24px is its bar.",
+      );
+      void server;
+      if (route.member) await signInAsMember(page);
+
+      await page.goto(route.path);
+      await route.settle(page);
+
+      // One assertion over the whole list rather than one per element: a bare
+      // toBeGreaterThanOrEqual inside a loop reports "36 is not >= 44" and
+      // nothing about which of forty controls it was.
+      expect(
+        await shortTargets(page),
+        `Controls under ${MIN_TARGET}px on ${route.path}. Grow the hit box ` +
+          `(min-h-11, or h-11 w-11 with the glyph centred) — not the glyph.`,
+      ).toEqual([]);
+    });
+  }
 });

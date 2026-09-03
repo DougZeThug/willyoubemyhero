@@ -452,6 +452,7 @@ describe("anon has no write grant anywhere", () => {
     ["delete a run", "DELETE FROM public.runs", []],
     ["scratch a player", "UPDATE public.event_participants SET participation_status = 'scratched'", []], // prettier-ignore
     ["unlock the results", "UPDATE public.events SET results_locked = false", []],
+    ["take a row off everybody's bottom bar", "UPDATE public.events SET nav_hidden = ARRAY['board']", []], // prettier-ignore
     ["rename a player", "UPDATE public.participants SET name = 'pwned'", []],
     ["publish an award", `INSERT INTO public.awards (event_id, award_name) VALUES ($1, 'MVP')`, [IDS.event]], // prettier-ignore
     ["stuff the ballot", `INSERT INTO public.award_votes (event_id, category, voter_participant_id, target_participant_id) VALUES ($1, 'mvp', $2, $2)`, [IDS.event, IDS.alice]], // prettier-ignore
