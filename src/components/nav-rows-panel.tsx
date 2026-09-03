@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { setNavHidden } from "@/lib/nav.functions";
-import { DUST_ROW_ID, navTabs, PINNED_ROW_IDS, type NavRowId } from "@/lib/nav";
+import { DUST_ROW_ID, navTabs, PINNED_ROW_IDS, TOGGLEABLE_ROW_IDS, type NavRowId } from "@/lib/nav";
 
 /** Why a row has no switch here, for the two that do not. */
 const FIXED_REASON: Partial<Record<NavRowId, string>> = {
@@ -55,13 +55,23 @@ export function NavRowsPanel({
   const setFn = useServerFn(setNavHidden);
   const [busy, setBusy] = useState(false);
 
-  // Keyed on the VALUE rather than the array's identity: `hidden` is rebuilt by
-  // navHidden on every render, so re-seeding on identity would wipe a
-  // half-finished draft every time anything else in the console re-rendered.
-  // Re-seeding on the value is wanted — this panel and the bar read the same
-  // ["active-event"] query, so a save landing should reach these switches.
-  const storedKey = [...hidden].sort().join(" ");
-  const [draft, setDraft] = useState<Set<string>>(() => new Set(hidden));
+  // Filtered to the ids this deploy knows, which is what stops the panel wedging
+  // itself. navHidden and navTabs both tolerate an unknown id — a set written by
+  // a newer deploy has to degrade to showing the row, not to a blank bar — but
+  // the draft is what gets POSTed back, and setNavHidden's validator refuses an
+  // id it has never heard of. Left in, one stale entry would reject every save
+  // the commissioner made, with nothing on screen but "Could not change that".
+  // Dropping it is also the honest answer: a deploy that cannot draw a row
+  // cannot hold an opinion about hiding it.
+  const known = hidden.filter((id) => (TOGGLEABLE_ROW_IDS as readonly string[]).includes(id));
+
+  // Keyed on the VALUE rather than the array's identity: `known` is rebuilt on
+  // every render, so re-seeding on identity would wipe a half-finished draft
+  // every time anything else in the console re-rendered. Re-seeding on the value
+  // is wanted — this panel and the bar read the same ["active-event"] query, so
+  // a save landing should reach these switches.
+  const storedKey = [...known].sort().join(" ");
+  const [draft, setDraft] = useState<Set<string>>(() => new Set(known));
   useEffect(() => {
     setDraft(new Set(storedKey ? storedKey.split(" ") : []));
   }, [storedKey]);

@@ -118,6 +118,10 @@ export function CardBackPanel({
         </div>
       </div>
 
+      {/* The two numeric columns are sized for the widest thing formatTime
+          prints at the clamp's 12px ceiling — "1:41.32" is about 50px there,
+          where the old w-9 was already marginal at 8px. The bar between them
+          takes the difference. */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="mb-1 text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Station Splits
@@ -141,13 +145,13 @@ export function CardBackPanel({
                     />
                   )}
                 </span>
-                <span className="w-9 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] tabular text-foreground/90">
+                <span className="w-12 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] tabular text-foreground/90">
                   {row.ms != null ? formatTime(row.ms) : "—"}
                 </span>
                 {row.deltaMs != null && (
                   <span
                     className={
-                      "w-8 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] font-bold tabular " +
+                      "w-10 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] font-bold tabular " +
                       (row.deltaMs <= 0 ? "text-primary" : "text-warn")
                     }
                   >
