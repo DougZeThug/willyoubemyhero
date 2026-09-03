@@ -57,8 +57,39 @@
   --color-field-line: var(--field-line);
   --color-warn: var(--warn);
   --color-warn-foreground: var(--warn-foreground);
+  --color-focus: var(--focus);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Barlow Condensed", "Bebas Neue", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Type scale (§16 of the mobile UX audit). Nothing below 11px. */
+  --text-title: 1.875rem;
+  --text-title--line-height: 2rem;
+  --text-section: 1.125rem;
+  --text-section--line-height: 1.375rem;
+  --text-card-name: 0.9375rem;
+  --text-card-name--line-height: 1.125rem;
+  --text-viewer-name: 1.375rem;
+  --text-viewer-name--line-height: 1.5rem;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.375rem;
+  --text-label: 0.75rem;
+  --text-label--line-height: 1rem;
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1rem;
+  --text-badge: 0.8125rem;
+  --text-badge--line-height: 1rem;
+  --text-nav: 0.6875rem;
+  --text-nav--line-height: 0.875rem;
+  --text-button: 0.9375rem;
+  --text-button--line-height: 1.25rem;
+
+  /* Spacing scale (§17). 4pt base, 8pt rhythm. */
+  --spacing-page-x: 1rem;
+  --spacing-section-gap: 1.5rem;
+  --spacing-stack-gap: 0.5rem;
+  --spacing-grid-gap: 0.75rem;
+  --spacing-control-gap: 0.5rem;
 }
 
 :root {
