@@ -90,9 +90,25 @@ describe("subscribeToEventChannel", () => {
       "draft_selections",
       "splits",
       "penalties",
+      "events",
     ]);
     const runs = bindings[0].cfg as { filter?: string };
     expect(runs.filter).toBe(`event_id=eq.${EVENT_ID}`);
+  });
+
+  it("watches the event row on its primary key, so other events stay quiet", async () => {
+    const { subscribeToEventChannel } = await freshModule();
+    subscribeToEventChannel(EVENT_ID, { change: vi.fn(), health: vi.fn() });
+    const events = bindings.find((b) => b.cfg.table === "events")!.cfg as { filter?: string };
+    expect(events.filter).toBe(`id=eq.${EVENT_ID}`);
+  });
+
+  it("fans an event-row change out, which is how a dust flip reaches other phones", async () => {
+    const { subscribeToEventChannel } = await freshModule();
+    const a = { change: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, a);
+    fire("events");
+    expect(a.change).toHaveBeenCalledTimes(1);
   });
 
   it("fans a change out to every subscriber", async () => {
