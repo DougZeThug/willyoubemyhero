@@ -46,6 +46,12 @@ export function VaultHero({
   dustBalance: number | undefined;
   isMember: boolean;
   wasMember: boolean;
+  /**
+   * Set when this device signed in but could not finish linking the account.
+   * The message lived only on /auth, so anyone landing here from a deep link
+   * saw an empty shelf and no reason for it.
+   */
+  syncError?: string | null;
   streak: Streak | null;
   packWaiting: boolean;
   tradeUnread: number;
