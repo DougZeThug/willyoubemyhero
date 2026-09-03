@@ -22,8 +22,10 @@ export const verifyEventPin = createServerFn({ method: "POST" })
     // hammering the gate locks the gate rather than enumerating it — and the
     // commissioner's account path (startAdminSessionFromAccount) stays open
     // through a lockout regardless.
-    const { secretsDb } = await import("./secret-cards-db.server");
-    const { data: allowed } = await secretsDb().rpc("note_auth_attempt", {
+    // note_auth_attempt / clear_auth_attempts are still unknown to the generated
+    // types, so this one call needs the widened client. See auth-attempts-db.server.ts.
+    const { authAttemptsDb } = await import("./auth-attempts-db.server");
+    const { data: allowed } = await authAttemptsDb().rpc("note_auth_attempt", {
       _kind: "pin",
       _key: data.eventId,
       _window_seconds: PIN_ATTEMPT_WINDOW_S,
@@ -45,7 +47,7 @@ export const verifyEventPin = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "bad_pin" as const };
     }
     // Success wipes the counter, so the next fumble starts from zero.
-    await secretsDb().rpc("clear_auth_attempts", { _kind: "pin", _key: data.eventId });
+    await authAttemptsDb().rpc("clear_auth_attempts", { _kind: "pin", _key: data.eventId });
     const { token, expiresAt } = signAdminToken(secret.event_id);
     return { ok: true as const, token, expiresAt };
   });

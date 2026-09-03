@@ -8,7 +8,6 @@ import { deleteComment, postComment, toggleReaction } from "@/lib/social.functio
 import { useMemberSession } from "@/lib/member-token";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import type { CommentRow, ReactionRow } from "@/hooks/use-event-social";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 const REACTIONS = ["🔥", "💀", "😂", "🐐", "🤡", "🍺"] as const;
@@ -239,7 +238,18 @@ export function CardSocial({
                 <button
                   onClick={() => onReact(emoji)}
                   disabled={pending === emoji}
+                  // The names used to hang off a 20px ⓘ in the chip's corner —
+                  // a target nobody standing in a garden could hit, and a second
+                  // tappable thing inside a tappable chip. They live on the chip
+                  // itself now: read out by a screen reader, and on a long press
+                  // by the browser's own tooltip, with no double-firing.
                   aria-label={`React with ${emoji}`}
+                  aria-description={
+                    list.length > 0
+                      ? `Reacted by ${list.map((r) => labelFor(r)).join(", ")}`
+                      : undefined
+                  }
+                  title={list.length > 0 ? list.map((r) => labelFor(r)).join(", ") : undefined}
                   className={cn(
                     "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-transform duration-150 active:scale-90 disabled:opacity-50",
                     active
@@ -283,22 +293,6 @@ export function CardSocial({
                     </div>
                   )}
                 </AnimatePresence>
-
-                {list.length > 0 && (
-                  <Popover>
-                    <PopoverTrigger
-                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-background text-meta text-muted-foreground hover:text-primary"
-                      aria-label={`Who reacted with ${emoji}`}
-                    >
-                      ⓘ
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto max-w-[14rem] px-3 py-2">
-                      <p className="text-xs leading-snug text-foreground/90">
-                        {list.map((r) => labelFor(r)).join(", ")}
-                      </p>
-                    </PopoverContent>
-                  </Popover>
-                )}
               </div>
             );
           })}

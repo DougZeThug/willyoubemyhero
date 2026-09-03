@@ -2,7 +2,7 @@
 // as modal and own focus, or Tab falls through the overlay to the nav behind
 // it — the same bug the finish-celebration accessibility sweep fixed.
 import { createElement, type ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BoughtPullReveal } from "./bought-pull-reveal";
 import type { SecretCardView } from "@/lib/secret-cards";
@@ -43,5 +43,23 @@ describe("BoughtPullReveal accessibility", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("tabIndex", "-1");
     expect(dialog).toHaveFocus();
+  });
+
+  it("keeps Tab inside the reveal rather than in the nav behind it", () => {
+    render(<BoughtPullReveal card={card} duplicate={false} onDone={vi.fn()} />);
+    const done = screen.getByTestId("bought-pull-done");
+    done.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("hands focus back to whatever opened it", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = render(<BoughtPullReveal card={card} duplicate={false} onDone={vi.fn()} />);
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
   });
 });

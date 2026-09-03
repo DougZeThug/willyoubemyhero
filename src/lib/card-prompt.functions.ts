@@ -4,10 +4,11 @@ import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { requireLeagueAdmin } from "./league-admin.server";
 import { uuid as zuuid } from "./zod-uuid";
+import type { Json } from "@/integrations/supabase/types";
 
 async function db() {
-  const { cardPromptDb } = await import("./card-prompt-db.server");
-  return cardPromptDb();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
 }
 
 function noStore() {
@@ -125,7 +126,8 @@ export const saveCardPromptRun = createServerFn({ method: "POST" })
         event_id: data.eventId,
         event_participant_id: data.eventParticipantId ?? null,
         subject_name: data.subjectName,
-        input_snapshot: data.inputSnapshot,
+        // jsonb column; the validator has already shaped it.
+        input_snapshot: data.inputSnapshot as Json,
         generated_prompt: data.generatedPrompt,
         kind: data.kind,
         parent_prompt_id: data.parentPromptId ?? null,

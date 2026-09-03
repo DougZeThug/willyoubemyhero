@@ -119,6 +119,15 @@ function openChannel(eventId: string): Entry {
     // the asymmetry reads as known rather than as an oversight.
     .on("postgres_changes", { event: "*", schema: "public", table: "splits" }, fanOut)
     .on("postgres_changes", { event: "*", schema: "public", table: "penalties" }, fanOut)
+    // The event row itself, so a commissioner flipping dust or saving the nav
+    // rows reaches every other phone rather than only their own. Filtered on the
+    // primary key: this is the one table where an unfiltered listener would wake
+    // every watcher of every other event for a change none of them can see.
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "events", filter: `id=eq.${eventId}` },
+      fanOut,
+    )
     .subscribe((status) => {
       // Anything that is not a live subscription means updates may be going
       // missing, which is all a caller needs to know to start polling harder.

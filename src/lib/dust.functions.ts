@@ -7,8 +7,9 @@ import type {
   MillCardCopyResult,
   RerollEditionResult,
   SellSecretResult,
-} from "./dust-db.server";
+} from "./dust-rows";
 import { uuid as zuuid } from "./zod-uuid";
+import { sqlNull } from "./rpc-null";
 
 /**
  * Dust: what a spare is worth, and what it buys.
@@ -28,10 +29,10 @@ import { uuid as zuuid } from "./zod-uuid";
  * says how big the secret set is or what anybody else has.
  */
 
-/** Untyped client, for the dust tables types.ts has not been regenerated for. */
+/** The service-role client, loaded inside the handler so it never reaches the bundle. */
 async function db() {
-  const { dustDb } = await import("./dust-db.server");
-  return dustDb();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
 }
 
 function noStore() {
@@ -142,7 +143,7 @@ export const buyBonusSecretPull = createServerFn({ method: "POST" })
     const sb = await db();
     const { data: raw, error } = await sb.rpc("buy_bonus_secret_pull", {
       _participant_id: me,
-      _event_id: null,
+      _event_id: sqlNull(null),
       _request_id: data.requestId,
     });
     if (error) throw new Error(error.message);

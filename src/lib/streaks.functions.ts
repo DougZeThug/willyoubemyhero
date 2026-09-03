@@ -3,12 +3,13 @@ import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { optionalActor, requireActor } from "./require-auth.server";
 import { signSecretCard } from "./secret-cards.functions";
-import type { SecretCardRow, PackOpenRow } from "./secret-cards-db.server";
-import type { ClaimStreakMilestoneResult } from "./streaks-db.server";
+import type { SecretCardRow, PackOpenRow } from "./secret-cards-rows";
+import type { ClaimStreakMilestoneResult } from "./streaks-rows";
 import type { SecretCardView } from "./secret-cards";
 import type { SecretTier } from "./secret-rarity";
 import { STREAK_MILESTONES, isStreakMilestone, walkStreak, type Streak } from "./streaks";
 import { leagueDay } from "./trades";
+import { sqlNull } from "./rpc-null";
 
 /**
  * Streaks, and the milestones they pay out.
@@ -28,18 +29,6 @@ import { leagueDay } from "./trades";
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
-}
-
-/** Untyped client, for the streak table types.ts has not been regenerated for. */
-async function db() {
-  const { streaksDb } = await import("./streaks-db.server");
-  return streaksDb();
-}
-
-/** Untyped client again, for pack_opens and secret_cards. */
-async function secrets() {
-  const { secretsDb } = await import("./secret-cards-db.server");
-  return secretsDb();
 }
 
 function noStore() {
@@ -99,7 +88,7 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
     const today = leagueDay();
     if (!actor) return { ...NO_STREAK, today };
 
-    const sb = await secrets();
+    const sb = await admin();
     // One column per actor kind rather than an `.or()` filter: PostgREST would
     // take the or, but it is not a thing the test double models, and a query
     // whose only coverage is production is not covered.
@@ -116,7 +105,7 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
       today,
     );
 
-    const streaks = await db();
+    const streaks = await admin();
     const { data: claims, error: claimError } = await streaks
       .from("streak_milestone_claims")
       .select("milestone, streak_started_on")
@@ -204,12 +193,12 @@ export const claimStreakMilestone = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
 
-    const streaks = await db();
+    const streaks = await admin();
     const { data: raw, error } = await streaks.rpc("claim_streak_milestone", {
-      _participant_id: actor.kind === "member" ? actor.id : null,
-      _guest_id: actor.kind === "guest" ? actor.id : null,
+      _participant_id: sqlNull(actor.kind === "member" ? actor.id : null),
+      _guest_id: sqlNull(actor.kind === "guest" ? actor.id : null),
       _milestone: data.milestone,
-      _event_id: event?.id ?? null,
+      _event_id: sqlNull(event?.id ?? null),
     });
     if (error) throw new Error(error.message);
 
@@ -221,7 +210,7 @@ export const claimStreakMilestone = createServerFn({ method: "POST" })
       return { ok: false as const, reason: result?.reason ?? ("unavailable" as const) };
     }
 
-    const sbSecrets = await secrets();
+    const sbSecrets = await admin();
     const { data: card } = await sbSecrets
       .from("secret_cards")
       .select("*")

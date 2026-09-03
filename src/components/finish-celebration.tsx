@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useModalSurface } from "@/hooks/use-modal-surface";
 import { motion, AnimatePresence } from "motion/react";
 import { formatTime } from "@/lib/format";
 
@@ -26,11 +27,9 @@ export function FinishCelebration({
   });
 
   // Focus follows the takeover, so the label above is read and Escape or
-  // Enter reaches the dismiss rather than whatever was focused underneath.
-  const surfaceRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (name) surfaceRef.current?.focus();
-  }, [name, timeMs]);
+  // Enter reaches the dismiss rather than whatever was focused underneath — and
+  // goes back where it came from once the next athlete's card takes over.
+  const surfaceRef = useModalSurface<HTMLButtonElement>(!!name);
   useEffect(() => {
     if (!name) return;
     let cancelled = false;

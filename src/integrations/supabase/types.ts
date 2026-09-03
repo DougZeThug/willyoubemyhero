@@ -979,6 +979,7 @@ export type Database = {
           id: string
           location: string | null
           name: string
+          nav_hidden: string[]
           results_locked: boolean
           running_order_locked: boolean
           splits_enabled: boolean
@@ -1001,6 +1002,7 @@ export type Database = {
           id?: string
           location?: string | null
           name: string
+          nav_hidden?: string[]
           results_locked?: boolean
           running_order_locked?: boolean
           splits_enabled?: boolean
@@ -1023,6 +1025,7 @@ export type Database = {
           id?: string
           location?: string | null
           name?: string
+          nav_hidden?: string[]
           results_locked?: boolean
           running_order_locked?: boolean
           splits_enabled?: boolean
@@ -1964,6 +1967,7 @@ export type Database = {
           id: string | null
           location: string | null
           name: string | null
+          nav_hidden: string[] | null
           results_locked: boolean | null
           running_order_locked: boolean | null
           splits_enabled: boolean | null
@@ -1983,6 +1987,7 @@ export type Database = {
           id?: string | null
           location?: string | null
           name?: string | null
+          nav_hidden?: string[] | null
           results_locked?: boolean | null
           running_order_locked?: boolean | null
           splits_enabled?: boolean | null
@@ -2002,6 +2007,7 @@ export type Database = {
           id?: string | null
           location?: string | null
           name?: string | null
+          nav_hidden?: string[] | null
           results_locked?: boolean | null
           running_order_locked?: boolean | null
           splits_enabled?: boolean | null

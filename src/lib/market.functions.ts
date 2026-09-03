@@ -9,8 +9,8 @@ import { toEdition } from "./card-edition";
 import { MARKET_PRICE_MAX, MARKET_PRICE_MIN } from "./market";
 import type { MarketBrowse, MarketListing, MarketListingItem, MyMarketListing, MyStall } from "./market"; // prettier-ignore
 import type { BuyListingResult, CancelListingResult, ListCardResult, MarketListingRow } from "./market-db.server"; // prettier-ignore
-import type { CardCopyRow } from "./trades-db.server";
-import type { SecretCardRow, SecretPullRow } from "./secret-cards-db.server";
+import type { CardCopyRow } from "./trades-rows";
+import type { SecretCardRow, SecretPullRow } from "./secret-cards-rows";
 import { uuid as zuuid } from "./zod-uuid";
 
 /**

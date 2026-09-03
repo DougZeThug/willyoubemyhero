@@ -81,8 +81,10 @@ export const claimPlayer = createServerFn({ method: "POST" })
     // rate-limits exactly like one with a wrong code — the limiter must not
     // become the enumeration channel the generic bad_code below closes. Fails
     // OPEN on a counter error: see verifyEventPin for the reasoning.
-    const { secretsDb } = await import("./secret-cards-db.server");
-    const { data: allowed } = await secretsDb().rpc("note_auth_attempt", {
+    // note_auth_attempt / clear_auth_attempts are still unknown to the generated
+    // types, so this one call needs the widened client. See auth-attempts-db.server.ts.
+    const { authAttemptsDb } = await import("./auth-attempts-db.server");
+    const { data: allowed } = await authAttemptsDb().rpc("note_auth_attempt", {
       _kind: "claim",
       _key: data.participantId,
       _window_seconds: CLAIM_ATTEMPT_WINDOW_S,
@@ -105,7 +107,7 @@ export const claimPlayer = createServerFn({ method: "POST" })
     }
     // A right code clears the counter — codes stay valid forever (see above), so
     // a family of re-claims across the day must not stack into a lockout.
-    await secretsDb().rpc("clear_auth_attempts", { _kind: "claim", _key: data.participantId });
+    await authAttemptsDb().rpc("clear_auth_attempts", { _kind: "claim", _key: data.participantId });
 
     const now = new Date().toISOString();
     await supabaseAdmin
@@ -139,7 +141,7 @@ export const claimPlayer = createServerFn({ method: "POST" })
     // once it holds a member token.
     const guestId = optionalGuest();
     if (guestId) {
-      const { error: attachError } = await secretsDb().rpc("attach_device_to_player", {
+      const { error: attachError } = await supabaseAdmin.rpc("attach_device_to_player", {
         _participant_id: data.participantId,
         _guest_id: guestId,
       });

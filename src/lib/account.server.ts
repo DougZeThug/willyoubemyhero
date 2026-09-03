@@ -10,8 +10,6 @@
 // nothing downstream has to know accounts exist.
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-// The streak claims are not in types.ts yet, so they need the widened client.
-import { streaksDb } from "./streaks-db.server";
 import { signGuestToken, signMemberToken } from "./session.server";
 
 export type AccountIdentity = {
@@ -60,7 +58,7 @@ async function mergeGuestInto(identity: AccountIdentity, guestId: string) {
     // Must follow the packs, and must never be skipped: the streak walks the rows
     // claim_guest_packs just re-parented, so a claim left behind on the dead guest
     // id reads as unclaimed on this identity and pays its milestone a second time.
-    const { error: streakError } = await streaksDb().rpc("claim_guest_streak_milestones", {
+    const { error: streakError } = await supabaseAdmin.rpc("claim_guest_streak_milestones", {
       _participant_id: identity.id,
       _guest_id: guestId,
     });
@@ -76,7 +74,7 @@ async function mergeGuestInto(identity: AccountIdentity, guestId: string) {
       _from_guest: guestId,
     });
     if (packsError) throw packsError;
-    const { error: streakError } = await streaksDb().rpc("merge_guest_streak_milestones", {
+    const { error: streakError } = await supabaseAdmin.rpc("merge_guest_streak_milestones", {
       _into_guest: identity.id,
       _from_guest: guestId,
     });

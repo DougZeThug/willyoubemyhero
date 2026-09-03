@@ -37,6 +37,12 @@ export function useEventBundle() {
     return subscribeToEventChannel(eventId, {
       change: () => {
         qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
+        // The event row rides the same channel, so a commissioner's dust switch
+        // or nav rows reach other phones here rather than on their next focus.
+        // Deliberately not everywhere: /claim and /auth do not mount this hook,
+        // so those two screens still wait for a focus refetch — neither shows
+        // the bar or the shop, so there is nothing there to go stale.
+        qc.invalidateQueries({ queryKey: ["active-event"] });
       },
       health: setHealth,
     });

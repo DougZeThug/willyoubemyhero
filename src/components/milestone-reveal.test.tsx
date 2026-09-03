@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { setMatchMedia } from "@/test/setup";
 import { MilestoneReveal } from "./milestone-reveal";
 import type { SecretCardView } from "@/lib/secret-cards";
@@ -140,5 +140,21 @@ describe("MilestoneReveal accessibility", () => {
     expect(dialog).toHaveAttribute("tabIndex", "-1");
     // Without this, Tab from the reveal reaches the nav behind the overlay.
     expect(dialog).toHaveFocus();
+  });
+
+  it("keeps Tab inside the reveal", () => {
+    renderReveal();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("hands focus back to whatever opened it", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = renderReveal();
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
   });
 });
