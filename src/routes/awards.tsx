@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Award, Lock, Vote } from "lucide-react";
@@ -38,12 +38,18 @@ function AwardsPage() {
   const awards = useEventAwards(event?.id ?? null);
   const myVotesFn = useServerFn(getMyAwardVotes);
   const voteFn = useServerFn(castAwardVote);
-  const [pending, setPending] = useState<string | null>(null);
 
   const locked = !!event?.awards_locked;
 
+  // One place for the key: the same array used to be inlined here and in the
+  // vote handler, one typo away from an invalidate that never matched.
+  const votesKey = useMemo(
+    () => ["my-award-votes", event?.id, me?.participantId] as const,
+    [event?.id, me?.participantId],
+  );
+
   const myVotes = useQuery({
-    queryKey: ["my-award-votes", event?.id, me?.participantId],
+    queryKey: votesKey,
     queryFn: () => myVotesFn({ data: { eventId: event!.id } }),
     enabled: !!event?.id && !!me,
     staleTime: 30_000,
@@ -74,18 +80,51 @@ function AwardsPage() {
     return map;
   }, [awards.data]);
 
-  async function vote(category: string, targetParticipantId: string) {
-    if (!event?.id || !me || locked) return;
-    setPending(`${category}:${targetParticipantId}`);
-    try {
-      await voteFn({ data: { eventId: event.id, category, targetParticipantId } });
-      await qc.invalidateQueries({ queryKey: ["my-award-votes", event.id, me.participantId] });
-      toast.success("Vote recorded");
-    } catch (e) {
+  type MyVote = { category: string; target_participant_id: string };
+
+  // Optimistic on purpose: the chip is the feedback, and thirteen categories
+  // times a garden round trip each is where the voting session used to die.
+  // The database is still the referee — cast_award_vote row-locks, re-checks
+  // the lock and the nominee, and upserts under a unique index — so the only
+  // job here is to show the choice now and put it back if the referee says no.
+  const voteMutation = useMutation({
+    mutationKey: ["cast-award-vote"],
+    mutationFn: (vars: { category: string; targetParticipantId: string }) =>
+      voteFn({ data: { eventId: event!.id, ...vars } }),
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: votesKey });
+      const prev = qc.getQueryData<MyVote[]>(votesKey);
+      qc.setQueryData<MyVote[]>(votesKey, (rows = []) => [
+        ...rows.filter((r) => r.category !== vars.category),
+        { category: vars.category, target_participant_id: vars.targetParticipantId },
+      ]);
+      return { prev };
+    },
+    onError: (e, _vars, ctx) => {
+      // A vote cast before the ballot query ever answered has no snapshot, and
+      // setQueryData(key, undefined) is a no-op — the refused chip would stay
+      // lit. Dropping the entry instead makes the active query refetch, and
+      // until it answers the empty ballot reads as unlit, which is the truth.
+      if (ctx?.prev === undefined) qc.removeQueries({ queryKey: votesKey });
+      else qc.setQueryData(votesKey, ctx.prev);
       toast.error(e instanceof Error ? e.message : "Could not vote");
-    } finally {
-      setPending(null);
-    }
+    },
+    // Reconcile behind the paint — the server may have tallied a concurrent
+    // vote from this member's other phone. Only once the LAST in-flight vote
+    // settles, though: thirteen quick taps run concurrently, and the first
+    // response's refetch cannot yet contain the votes still on the wire, so an
+    // early invalidate would snuff chips that are merely pending. isMutating
+    // counts this mutation too, so 1 means "I am the last one standing".
+    onSettled: () => {
+      if (qc.isMutating({ mutationKey: ["cast-award-vote"] }) === 1) {
+        void qc.invalidateQueries({ queryKey: votesKey });
+      }
+    },
+  });
+
+  function vote(category: string, targetParticipantId: string) {
+    if (!event?.id || !me || locked) return;
+    voteMutation.mutate({ category, targetParticipantId });
   }
 
   const nameOf = (participantId: string) =>
@@ -195,12 +234,11 @@ function AwardsPage() {
                     {roster.map((p) => {
                       const pid = p.participant_id;
                       const chosen = myVote === pid;
-                      const key = `${cat.id}:${pid}`;
                       return (
                         <button
                           key={p.id}
                           onClick={() => vote(cat.id, pid)}
-                          disabled={!me || pending === key}
+                          disabled={!me}
                           className={cn(
                             "flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:opacity-50",
                             chosen
