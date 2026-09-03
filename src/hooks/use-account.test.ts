@@ -19,7 +19,11 @@ vi.mock("@/lib/account.functions", () => ({
   syncAccountSession: vi.fn(),
 }));
 
-vi.mock("@/lib/adopt-collection", () => ({
+vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
+  // The two round trips are stubbed; `adoptableIds` is left real, because it is
+  // a pure read of the snapshot and the sync passes its answer straight to the
+  // pack carry. A vi.fn() here would let a signature change through unnoticed.
+  ...(await importOriginal<typeof import("@/lib/adopt-collection")>()),
   adoptLocalCollection: vi.fn(),
   snapshotLocalCollection: vi.fn(),
 }));

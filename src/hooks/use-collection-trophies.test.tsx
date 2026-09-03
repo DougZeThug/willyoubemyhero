@@ -43,7 +43,12 @@ vi.mock("@/integrations/supabase/client", () => {
 });
 
 import { useCollectionTrophyWatcher } from "./use-collection-trophies";
-import { markTrophiesCelebrated, setTrophySeen, trophyKey } from "@/lib/trophy-seen";
+import {
+  carryTrophySeen,
+  markTrophiesCelebrated,
+  setTrophySeen,
+  trophyKey,
+} from "@/lib/trophy-seen";
 
 const ME = "p-me";
 const THEM = "p-them";
@@ -146,6 +151,39 @@ describe("useCollectionTrophyWatcher", () => {
     const member = watch([trophy(ME, "pets")]);
     await waitFor(() => expect(member.result.current.queue).toHaveLength(1));
     expect(member.result.current.queue[0]).toMatchObject({ collection: "pets" });
+  });
+
+  it("does not replay a set the guest already celebrated before claiming", async () => {
+    // The other half of the guest path. B-13's fix stopped the ceremony being
+    // swallowed; this stops it being shown twice. The pack screen fires it there
+    // and then, marked under the only name the device has for a guest — and the
+    // claim banks the trophy under a participant id the watcher then finds
+    // uncelebrated. carryTrophySeen translates the key at claim time.
+    //
+    // TWO SETS, and the second one is what makes this a real assertion. A queue
+    // that is simply empty is empty on the first render too, so waiting for it
+    // proves nothing: `wags` was never celebrated anywhere and has to arrive, and
+    // the moment it does the watcher has demonstrably been through this data. If
+    // the carry were broken, `pets` would be sitting beside it.
+    const DEVICE = "d:device-1";
+    memberSession.mockReturnValue(null);
+    packIdentity.mockReturnValue(DEVICE);
+    const guest = watch([]);
+    await waitFor(() =>
+      expect(window.localStorage.getItem("wwbh:trophy-seen")).toContain('"primed":true'),
+    );
+    // The pack screen's own ceremony, keyed on the guest's pack identity.
+    markTrophiesCelebrated([trophyKey(DEVICE, "pets")]);
+    guest.unmount();
+
+    // They claim. Both trophies land under the participant; only one of them has
+    // already had its ceremony.
+    carryTrophySeen(DEVICE, ME);
+    memberSession.mockReturnValue({ participantId: ME });
+    packIdentity.mockReturnValue(`m:${ME}`);
+    const member = watch([trophy(ME, "pets"), trophy(ME, "wags")]);
+    await waitFor(() => expect(member.result.current.queue).toHaveLength(1));
+    expect(member.result.current.queue[0]).toMatchObject({ collection: "wags" });
   });
 
   it("queues both sets a single trade can close", async () => {

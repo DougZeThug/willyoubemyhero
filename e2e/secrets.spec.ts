@@ -52,6 +52,27 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
   });
 }
 
+/** Today's pack row out of IndexedDB, for the parts of it the server never sees. */
+function packRow(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<{ ids: string[]; pendingCompletion?: { collection: string } } | null>(
+        (resolve) => {
+          const open = indexedDB.open("wwbh-cards", 2);
+          open.onsuccess = () => {
+            const db = open.result;
+            if (!db.objectStoreNames.contains("pack-state")) return resolve(null);
+            const req = db.transaction("pack-state").objectStore("pack-state").get("today");
+            req.onsuccess = () =>
+              resolve((req.result as { ids: string[]; pendingCompletion?: never }) ?? null);
+            req.onerror = () => resolve(null);
+          };
+          open.onerror = () => resolve(null);
+        },
+      ),
+  );
+}
+
 /**
  * Run the whole reveal sequence.
  *
@@ -184,6 +205,145 @@ test.describe("the daily secret", () => {
       .toBeGreaterThan(before);
     // And the slot stays on screen rather than disappearing on the way.
     await expect(page.getByText(/one more card/i)).toBeVisible();
+  });
+
+  test("keeps the set-complete ceremony across a reload before the card is turned", async ({
+    page,
+    server,
+  }) => {
+    // The most earned moment in the game, and it was being swallowed by a
+    // refresh. The pull answers with the completed set at the TEAR, but the
+    // ceremony deliberately waits until the secret has been turned over — you see
+    // which card it was, and only then that it was the last one. Everything in
+    // that gap lived in memory: the ref went with the page, the re-pull answers
+    // with no completion because the row already exists, and the global host
+    // stays quiet because the trophy was marked celebrated at pull time. Three
+    // correct behaviours adding up to a ceremony nobody ever saw.
+    //
+    // A tear, a reload and then the whole reveal sequence — four cards' holds and
+    // chimes, the secret's long one, and the beat the set ceremony waits out
+    // behind it. That is past the default budget on its own, before the reload
+    // has recompiled anything.
+    test.slow();
+    await asMember(page);
+    withSecret(server, {
+      pull: {
+        completedCollection: {
+          collection: "pets",
+          label: "Pets Of The League",
+          size: 9,
+          completedOn: "2026-07-28",
+        },
+      },
+    });
+    const pulls = () => server.calls.filter((c) => c.includes("pullSecretCard")).length;
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+    // The pull fires off the tear, so by here the completion has landed and been
+    // parked — and the card has not been turned, which is the whole gap.
+    // Waiting for the completion to be PARKED, not merely for the request to go
+    // out: the response is what parks it, and reloading on top of one still in
+    // flight tests nothing but the reload. This is also the persistence half of
+    // the fix, asserted where it happens.
+    await expect
+      .poll(async () => (await packRow(page))?.pendingCompletion?.collection)
+      .toBe("pets");
+    const beforeReload = pulls();
+
+    // The server will not say it twice. A completion is derived from the row
+    // being new, so the pull that runs on the next load answers with none at all
+    // — which is exactly why the pack row has to be the one carrying it.
+    withSecret(server, { pull: { completedCollection: null } });
+    await page.reload();
+    await expect(sealedPack(page)).toBeHidden();
+    // Still owed, on a page that has never heard the answer.
+    expect((await packRow(page))?.pendingCompletion?.collection).toBe("pets");
+    // The reload's own pull has to be in the air before the sequence starts.
+    // `revealEverything` waits for a pull it can see one going out for; pressed
+    // before that, it finds nothing pending, gives up on the fourth slot and
+    // finishes without ever turning the card the ceremony hangs off.
+    await expect.poll(pulls).toBeGreaterThan(beforeReload);
+
+    await revealAll(page);
+    const ceremony = page.getByTestId("collection-complete");
+    await expect(ceremony).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Pets Of The League/i).first()).toBeVisible();
+    // Once. Two of these on top of each other is one nobody can read, which is
+    // what marking the trophy at pull time exists to prevent.
+    await expect(ceremony).toHaveCount(1);
+    // And the row lets go of it, so tomorrow's reload does not replay it.
+    await expect.poll(async () => (await packRow(page))?.pendingCompletion).toBeUndefined();
+  });
+
+  test("fires a set-complete ceremony that a reload caught mid-beat", async ({ page, server }) => {
+    // The ceremony deliberately trails the card: `secretRevealed` goes true, the
+    // secret's own burst runs, and only then does the set resolve behind it. A
+    // reload inside that beat leaves a row that says BOTH that the secret is
+    // turned and that a ceremony is still owed — and parking that on resume
+    // strands it forever, because `revealSecret` is the only thing that fires one
+    // and it returns at the door on an already-revealed card.
+    //
+    // The row is written directly rather than raced for: the beat is 900ms and
+    // reloading inside it by timing would be a coin toss on a loaded runner. What
+    // is being tested is the resume, and this is exactly the row the resume finds.
+    await asMember(page);
+    withSecret(server, { status: { pulledToday: true }, pull: { fresh: false } });
+    await page.goto("/players/pack");
+    // Settled before touching IndexedDB. Reaching into the page mid-hydration is
+    // how this lost its execution context and came back "promise was garbage
+    // collected" rather than an answer.
+    await expect(sealedPack(page)).toBeVisible();
+    await expect(page.getByTestId("collection-complete")).toHaveCount(0);
+
+    const seeded = await page.evaluate(
+      (label: string) =>
+        // Shaped like readPackState in journeys.spec.ts: every handler on the
+        // request itself. A promise settled from `tx.oncomplete` has nothing
+        // holding the transaction, and Playwright collects it out from under us.
+        new Promise<boolean>((resolve) => {
+          const d = new Date();
+          const p = (n: number) => String(n).padStart(2, "0");
+          const open = indexedDB.open("wwbh-cards", 2);
+          open.onsuccess = () => {
+            const db = open.result;
+            const req = db
+              .transaction("pack-state", "readwrite")
+              .objectStore("pack-state")
+              .put(
+                {
+                  dayKey: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+                  ids: ["ep-alice", "ep-bob", "ep-carol"],
+                  revealed: [0, 1, 2],
+                  cursor: 4,
+                  identity: "m:p-alice",
+                  secretRevealed: true,
+                  pendingCompletion: {
+                    collection: "pets",
+                    label,
+                    size: 9,
+                    completedOn: "2026-07-28",
+                  },
+                },
+                "today",
+              );
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+          };
+          open.onerror = () => resolve(false);
+          open.onblocked = () => resolve(false);
+        }),
+      "Pets Of The League",
+    );
+    // Asserted, because a seed that quietly failed would leave this testing that
+    // a sealed pack shows no ceremony.
+    expect(seeded).toBe(true);
+
+    await page.reload();
+    const ceremony = page.getByTestId("collection-complete");
+    await expect(ceremony).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Pets Of The League/i).first()).toBeVisible();
+    await expect(ceremony).toHaveCount(1);
   });
 
   test("a duplicate reads as a wink, not a failure", async ({ page, server }) => {
@@ -323,11 +483,46 @@ test.describe("the daily secret", () => {
       await page.mouse.up();
     }
 
+    /**
+     * Turn the card on the stand, pressing until it takes.
+     *
+     * One tap is not enough on a loaded runner. `revealAt` holds its re-entrancy
+     * latch for the whole of the previous card's celebration — deliberately: it
+     * is what stops a double tap running two ceremonies over one card, two chimes
+     * and two writes into the collection — so a tap that lands while confetti is
+     * still in the air is swallowed on purpose, and that window can outlast the
+     * walk to the next card. The same press-until-it-takes shape the fake-clock
+     * test in journeys.spec.ts uses.
+     *
+     * The hint is the signal, and it has to be read before every press rather
+     * than after: the stand's own copy is "tap for the back", so a tap on a card
+     * that has already turned flips it rather than doing nothing. `aria-pressed`
+     * is NOT the signal — on HoloCard it tracks that flip, not the reveal, so a
+     * loop keyed on it never terminates. It is only good enough to say "this card
+     * is not currently showing its back", which is the second guard below.
+     */
+    const hint = page.getByText(/swipe/i).first();
+    async function turnCard() {
+      await expect
+        .poll(
+          async () => {
+            if (await hint.count()) return true;
+            if ((await card.getAttribute("aria-pressed")) === "false") await card.click();
+            // A beat before deciding whether it took, or the next press lands
+            // inside the hold this is waiting out.
+            await page.waitForTimeout(400);
+            return (await hint.count()) > 0;
+          },
+          { timeout: 25_000, intervals: [200] },
+        )
+        .toBe(true);
+    }
+
     // Walk the roster by hand, turning each card and throwing it away.
     for (let n = 1; n <= 3; n++) {
       await expect(step).toHaveText(`${n} / 3`);
-      await card.click();
-      await expect(page.getByText(/swipe/i).first()).toBeVisible({ timeout: 15_000 });
+      await turnCard();
+      await expect(hint).toBeVisible({ timeout: 15_000 });
       const name = await card.getAttribute("aria-labelledby");
       const third = n === 3 ? await page.locator(`#${name}`).innerText() : null;
       await swipeNext();

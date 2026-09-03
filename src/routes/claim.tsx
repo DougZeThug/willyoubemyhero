@@ -8,7 +8,14 @@ import { claimPlayer, getClaimRoster } from "@/lib/member.functions";
 import { linkClaimedPlayer } from "@/lib/account.functions";
 import { signOutAccount, useAuthUser } from "@/hooks/use-account";
 import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member-token";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import {
+  adoptableIds,
+  adoptLocalCollection,
+  snapshotLocalCollection,
+} from "@/lib/adopt-collection";
+import { carryPackToIdentity } from "@/lib/card-collection";
+import { carryTrophySeen } from "@/lib/trophy-seen";
+import { deviceId } from "@/lib/device-id";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,6 +102,18 @@ function ClaimPage() {
           );
           return;
         }
+      }
+      // Their guest pack and their guest ceremonies follow them across, now that
+      // the cards themselves have. Both are keyed on the identity `usePackIdentity`
+      // hands out, and a claim moves that from `d:<deviceId>` to `m:<participantId>`
+      // — which every screen keyed on it reads as the handset changing hands. See
+      // B-07 on the pack row and B-13 on the trophies. After the adoption, because
+      // the adoption is what makes carrying the pack safe: it is the record for
+      // these cards, so the member must not file them a second time.
+      const device = deviceId();
+      if (device) {
+        await carryPackToIdentity(`d:${device}`, `m:${selected}`, adoptableIds(held));
+        carryTrophySeen(`d:${device}`, selected);
       }
       // Signed in? Then the player follows the account, not the handset. Awaited
       // so the next screen's reads already see the bound identity. A THROW here

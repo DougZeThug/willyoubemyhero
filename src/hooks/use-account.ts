@@ -5,7 +5,14 @@ import { syncAccountSession } from "@/lib/account.functions";
 import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import { clearAdminToken } from "@/lib/admin-token";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import {
+  adoptableIds,
+  adoptLocalCollection,
+  snapshotLocalCollection,
+} from "@/lib/adopt-collection";
+import { carryPackToIdentity } from "@/lib/card-collection";
+import { carryTrophySeen } from "@/lib/trophy-seen";
+import { deviceId } from "@/lib/device-id";
 import { clearAccountHandoff } from "@/lib/account-handoff";
 import { setAccountSyncState } from "@/lib/account-sync-state";
 
@@ -160,6 +167,22 @@ export function useAccountSync(user: User | null) {
           }
         }
         if (cancelled) return;
+        // The claim screen's move, for the same two reasons — a sign-in is the
+        // other way a guest becomes a member, and B-07 and B-13 do not care which
+        // door was used.
+        //
+        // Gated on the token this run actually wrote still being the one on the
+        // device, which is the same compare-and-clear the cleanup below makes and
+        // strictly stronger than `cancelled`: that flips on unmount too, and says
+        // nothing about which identity localStorage holds by now. A pack rewritten
+        // to an account that has already been switched away from cannot be carried
+        // again, and the next run would deal a second one.
+        const device = deviceId();
+        if (device && getMemberToken() === wrote) {
+          await carryPackToIdentity(`d:${device}`, `m:${res.id}`, adoptableIds(held));
+          if (cancelled) return;
+          carryTrophySeen(`d:${device}`, res.id);
+        }
         // Only now. Clearing it before the upload left a phone whose adoption
         // failed with no identity at all, and its cards filed under neither.
         clearGuestToken();

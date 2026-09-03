@@ -28,12 +28,26 @@ import { adoptCollection } from "./card-pulls.functions";
 export async function adoptLocalCollection(
   snapshot: Awaited<ReturnType<typeof loadCollection>>,
 ): Promise<number> {
-  const cards = Object.values(snapshot).slice(0, 64);
-  if (cards.length === 0) return 0;
-  const res = await adoptCollection({
-    data: { eventParticipantIds: cards.map((c) => c.eventParticipantId) },
-  });
+  const ids = adoptableIds(snapshot);
+  if (ids.length === 0) return 0;
+  const res = await adoptCollection({ data: { eventParticipantIds: ids } });
   return res.adopted;
+}
+
+/**
+ * Exactly the ids the call above sends, ceiling and all.
+ *
+ * Split out because the claim has to know afterwards WHICH cards adoption
+ * accounted for. A pack torn but only half turned is the case: `collectCard`
+ * runs inside the reveal, so a card still face-down is in no snapshot, adoption
+ * never hears about it, and the pack's record is the only thing that will ever
+ * file it. See `carryPackToIdentity`, which skips re-recording these and only
+ * these.
+ */
+export function adoptableIds(snapshot: Awaited<ReturnType<typeof loadCollection>>): string[] {
+  return Object.values(snapshot)
+    .slice(0, 64)
+    .map((c) => c.eventParticipantId);
 }
 
 /** Read this device's collection before anything can prune it. */
