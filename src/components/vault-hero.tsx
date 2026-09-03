@@ -30,6 +30,7 @@ export function VaultHero({
   dustBalance,
   isMember,
   wasMember,
+  syncError = null,
   streak,
   packWaiting,
   tradeUnread,
@@ -45,6 +46,12 @@ export function VaultHero({
   dustBalance: number | undefined;
   isMember: boolean;
   wasMember: boolean;
+  /**
+   * Set when this device signed in but could not finish linking the account.
+   * The message lived only on /auth, so anyone landing here from a deep link
+   * saw an empty shelf and no reason for it.
+   */
+  syncError?: string | null;
   streak: Streak | null;
   packWaiting: boolean;
   tradeUnread: number;
@@ -96,6 +103,16 @@ export function VaultHero({
           {!isMember && wasMember && (
             <p className="mt-2 max-w-xs text-[11px] leading-snug text-muted-foreground">
               Your secrets are on your name, not on this phone. Claim again to get them back.
+            </p>
+          )}
+          {/* Same place and voice as the breadcrumb above: the shelf is empty
+              for a reason, and the reason has an action. */}
+          {syncError && (
+            <p className="mt-2 max-w-xs text-[11px] leading-snug text-muted-foreground">
+              {syncError}{" "}
+              <Link to="/auth" className="font-bold text-primary hover:underline">
+                Try again
+              </Link>
             </p>
           )}
           {!isMember && (
