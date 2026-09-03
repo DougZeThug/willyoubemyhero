@@ -807,3 +807,294 @@ Glow: only champion/podium tiers, gold/platinum editions, legendary/mythic level
 **Completing sets.** The gold curtain and the count-up stay exactly as they are; they are the best moment after the pack. The plaque goes to the trophy shelf at the top of the binder, the "?" disappears from that set's page, and the set's shelf header wears a small medal from then on.
 
 The cards are the hero. The room is dark. Everything you can press is the size of a thumb, and everything you need to read is the size of a word.
+
+---
+
+## 28. Phased PR plan — prompts for a coding agent
+
+Each phase below is one pull request. Run them in order: every phase builds on the tokens and sizes from the one before it, and each one is small enough to review on a phone in an evening. Paste the **Project guardrails** block at the top of every prompt, then the phase's prompt. The prompts are written for Claude Code; the tool notes at the end say what to change for Lovable or Codex.
+
+### How to use these prompts
+
+1. Start every phase from an up-to-date `main` on a new branch named in the prompt.
+2. Paste the guardrails block, then the phase prompt, into the agent.
+3. When the PR opens, read it on a phone at 390 px before merging: the "Done when" list in each prompt is what to check.
+4. Merge, pull, move to the next phase. Do not run two phases at once; they touch the same files.
+
+### Project guardrails (paste at the top of every prompt)
+
+```text
+Project guardrails for willyoubemyhero (read CLAUDE.md first):
+- Package manager is Bun 1.3.11. Before you finish, run `bun run format`, then `bun run lint`, `bun run typecheck` and `bun run test`, and fix anything red. Lint includes Prettier and is the formatting gate.
+- Never rename or remove the six tier ids (champion, podium, stationKing, penaltyBox, dnf, base), the edition ids (platinum, gold, silver, bronze, standard), the secret levels (mythic, legendary, epic, rare, common) or any award category id. They are persisted. Changing their colours, labels or presentation is fine.
+- Colours are oklch() everywhere.
+- Never show how many secret cards exist in a set, on any screen or in any response, except the existing completion trophy. No "x of N", no silhouettes of unpulled secrets, no empty set headers.
+- Never hand-edit src/routeTree.gen.ts or anything under src/integrations/supabase/.
+- Import the server Supabase client only dynamically inside a handler: `const { supabaseAdmin } = await import("@/integrations/supabase/client.server")`.
+- Any new mutating server function starts with requireAdmin(eventId) or requireMember() from src/lib/require-auth.server.ts. Participant ids come from the verified token, never from the request payload.
+- New migrations must replay from empty (IF NOT EXISTS, DROP POLICY IF EXISTS, CREATE OR REPLACE).
+- Do not add npm dependencies. If a dependency must change, update both bun.lock and package-lock.json.
+- Add or extend tests in the existing layers: src/**/*.test.tsx for components and hooks, src/lib/*.functions.test.ts with callServerFn + memberHeaders() for server functions, e2e/*.spec.ts for screens. Keep e2e stubs in e2e/fixtures.ts consistent (no stub key may be a substring of another).
+- Respect prefers-reduced-motion for anything animated; keep aria labels and pressed/current states on controls.
+- Comments explain why, not what. Match the existing tone.
+- Never force-push, rebase or amend anything already pushed; the repo is connected to Lovable.
+- When done, open a PR against main with the title given in the prompt, describe the change, attach a 390 px phone screenshot of each changed screen, and link the relevant section of docs/ux-audit-mobile.md.
+```
+
+### Phase overview
+
+| PR  | Title                                           | Implements         | Touches                                                                    | Risk   |
+| --- | ----------------------------------------------- | ------------------ | -------------------------------------------------------------------------- | ------ |
+| 0   | Design tokens and control sizes                 | §16, §17, §18, §26 | `src/styles.css`, `site-nav.tsx`, every `neon-btn` caller                  | Low    |
+| 1   | Readability and touch-target sweep              | §16, §18, §20      | vault, pack, player, trade, secret sheet, dialog                           | Low    |
+| 2   | Quieter room, rarity by rank                    | §8, §15            | `styles.css`, `card-rarity.ts` colours, `holo-card.tsx`, tiles             | Medium |
+| 3   | Pack ribbons, summary reflow, mute on the stand | §7, §12            | `players.pack.tsx`, `pack-stand.tsx`, `pack-summary.tsx`                   | Medium |
+| 4   | Feedback surfaces                               | §19, §21           | `__root.tsx`, `error-page.ts`, vault skeletons, `milestone-reveal.tsx`     | Low    |
+| 5   | Home "Today" card and streak strip              | §3, §11, §13, §5   | `players.index.tsx`, `vault-hero.tsx` → `today-card.tsx`                   | Medium |
+| 6   | Acquisitions read and "new since last visit"    | §12                | new server function + test, vault, player page                             | Medium |
+| 7   | Full-screen card viewer                         | §6, §9             | new `card-viewer.tsx`, `players.$id.tsx`, `secret-card-sheet.tsx`          | High   |
+| 8   | Trade builder                                   | §10                | `players.trade.tsx` split, `trade-offer-card.tsx`, new `trade-builder.tsx` | High   |
+| 9   | Navigation and profile                          | §4                 | `nav.ts`, `site-nav.tsx`, `league.ts`, new `routes/you.tsx`                | Medium |
+| 10  | Two-beat reveal and set mystery slot            | §7, §9, §14        | `pack-stand.tsx`, `players.index.tsx`                                      | Medium |
+
+### PR 0 — Design tokens and control sizes
+
+Branch `ux/00-tokens`. Title: **Design tokens and control sizes**.
+
+```text
+Goal: give the app one type scale, one spacing scale and one set of control sizes, so the later UX phases change tokens rather than utility strings. Implements §16, §17, §18 and §26 of docs/ux-audit-mobile.md.
+
+Do this in src/styles.css and the components named below only; do not change any screen's layout yet.
+
+1. In @theme inline, add font-size tokens for the scale in §16 (title 30/32, section 18/22, card-name 15/18, viewer-name 22/24, body 15/22, label 12/16, meta 12/16, badge 13/16, nav 11/14, button 15/20) and spacing tokens for §17 (page-x 16, section-gap 24, stack-gap 8, grid-gap 12, control-gap 8). Add --focus: oklch(0.98 0.01 240 / 85%) and point --ring at it so focus rings stop matching --primary.
+2. Decide the body face: apply Inter via --font-sans (it is already requested in src/routes/__root.tsx) OR remove the Inter family from that Google Fonts request. Pick one; do not leave an unused download.
+3. Replace the neon-btn @utility's fixed padding/font-size with three size classes: neon-btn-sm (min-height 44px), neon-btn (48px) and neon-btn-lg (56px), all with a visible :focus-visible ring using --focus. Then update every caller that currently overrides with !px-* !py-* !text-* (vault-hero.tsx, pack-summary.tsx, players.trade.tsx, players.$id.tsx, collector-signup.tsx, milestone-reveal.tsx, bought-pull-reveal.tsx, claim.tsx, collection-complete.tsx) to use a size class and drop the overrides. Open Pack, Send offer and Accept get neon-btn-lg.
+4. Add a global :focus-visible rule in @layer base (2px outline, 2px offset, colour --focus) so raw <button> elements get a ring without per-component classes.
+5. In src/components/site-nav.tsx: aria-label="Primary" on the bottom <nav> and aria-label="Sections" on the desktop <nav>; make the account/sign-in control 44x44 (keep the icon size); prevent the wordmark from wrapping below 640px (single line, smaller tracking); add padding-top: env(safe-area-inset-top) to the sticky header.
+6. Fix the stale "electric green accent" comment at the top of src/styles.css.
+
+Done when:
+- bun run lint, typecheck and test are green.
+- grep -rn "neon-btn" src | grep -c "!py-" returns 0.
+- The header is one line at a 320px viewport (check e2e mobile project or a manual screenshot).
+- Tabbing through the vault shows a visible focus ring that is not the same colour as a selected chip.
+- No screen's layout has changed beyond button heights and the header.
+```
+
+### PR 1 — Readability and touch-target sweep
+
+Branch `ux/01-readability-targets`. Title: **Readability and touch-target sweep**.
+
+```text
+Goal: nothing a player reads is under 11px and nothing a player taps is under 44px. Implements §16, §18 and §20 of docs/ux-audit-mobile.md. Use the tokens from PR 0; do not restructure any screen.
+
+Scope: src/routes/players.index.tsx, players.$id.tsx, players.pack.tsx, players.trade.tsx, players.shop.tsx, src/components/pack-stand.tsx, pack-summary.tsx, pack-opening.tsx, trade-offer-card.tsx, secret-card-tile.tsx, secret-card-sheet.tsx, zoom-pan-frame.tsx, vault-hero.tsx, vault-section.tsx, favourite-button.tsx, card-social.tsx, card-compare.tsx, feed-state.tsx, and src/components/ui/dialog.tsx (close button only).
+
+1. Replace every text-[7px]..text-[10px] on player-facing surfaces with the label/meta tokens (12px) or, for badges, the badge token (13px). Cap letter-spacing at 0.08em below 14px. Keep uppercase for display, labels and buttons; metadata such as "Packed by 7" and "Pulled ×3" becomes sentence case. Do not touch admin panels or the TV route.
+2. Give every tappable chip, pill and link min-h-11 with enough horizontal padding: vault sort chips and Shuffle, Rearrange, "Claim your player", "Offer waiting", back links ("← Vault", "← The Vault"), the player page action chips and its phone overflow trigger, award pills, the reveal stand's Next, Reveal all (keep its quiet styling, raise opacity to 60%), the ceremony Skip, trade partner pills, Decline and Take it back, the shop's Burn/Sell/Re-roll (Button size="default" instead of "sm"), the leaderboard share icons, reaction chips and Post.
+3. Icon-only controls become 44x44 with the glyph centred: the pack screen's sound toggle, the dialog close in ui/dialog.tsx, the zoom-pan-frame buttons, the vault section move arrows in rearrange mode, the comment delete (also make it visible on touch, not hover-only).
+4. The favourite star: 44x44, and give the tile link an inset so a star tap never navigates; keep aria-pressed and the existing labels.
+5. Semantics: aria-pressed on the vault sort chips (or role="radiogroup"), aria-pressed on the trade partner pills, a visible text status ("Pending") on pending offer cards, aria-modal="true" and a focus trap on MilestoneReveal matching BoughtPullReveal, and replace hover:text-danger in players.trade.tsx with the destructive token.
+6. Format dates shown to players (secret sheet "Pulled 2026-07-28") with the existing formatting helpers in src/lib/format.ts, adding one if none fits.
+
+Done when:
+- bun run lint, typecheck and test are green; update any test that asserted old text sizes or labels.
+- rg -n "text-\[(7|8|9|10)px\]" src/routes/players*.tsx src/components/{pack,trade,vault,secret,holo,card}*.tsx returns nothing.
+- A Playwright check (add it to e2e/smoke.spec.ts) asserts that on /players, /players/pack and /players/trade every visible button, link and [role=button] has a bounding box of at least 44px in height, excluding the skip link.
+- Screenshots at 320 and 390 show the sort chips on one row and nothing clipped.
+```
+
+### PR 2 — Quieter room, rarity by rank
+
+Branch `ux/02-room-and-rarity`. Title: **Quieter room, rarity by rank**.
+
+```text
+Goal: the page behind the cards goes quiet and rarity becomes readable at tile size without colour alone. Implements §8 and §15 of docs/ux-audit-mobile.md. Presentation only: no id, weight or odds changes.
+
+1. Ground: remove circuit-bg from the card routes (players.index, players.pack, players.$id, players.trade, players.shop) and give them a flat --bg of oklch(0.13 0.015 240) with one soft top vignette. Keep circuit-bg on league, leaderboard, live, order, draft, awards, analytics and tv.
+2. Glow budget: the primary CTA keeps --glow-primary. Remove hud-glow and glowing box-shadows from the active tab underline, waiting dots, selected partner pills, offer cards and the open secret set panel; use a 2px ring or a chip instead. On vault tiles, the tier glow renders only for champion and podium; a Gold or Platinum edition and a Legendary or Mythic secret get their own glow; base, penaltyBox, dnf and Standard get none.
+3. Base tier: border to oklch(1 0 0 / 24%); holoA/holoB shifted about 20 degrees off the UI primary (toward teal-green) in src/lib/card-rarity.ts so base cards stop matching buttons. Add a unit assertion that the six tier ids are unchanged.
+4. Level pips: a small LevelPips component (one to five filled diamonds in the level's accent, aria-label "Epic, 3 of 5") rendered under a secret's name on vault tiles, the reveal stand, the pack summary, the secret sheet, trade tiles and shop rows. Mythic forces the prism ring's shimmer at hero size.
+5. Edition tab: a small 45-degree corner tab in the edition metal on tiles and trade tiles for bronze, silver, gold and platinum; nothing for standard. Reuse the --edn-* custom properties holo-card.tsx already sets.
+6. Panels: one surface token (oklch(0.17 0.02 240), 1px border at 8% white, 12px radius) for shelves, panels and sheets; keep hud-bezel only on the sealed pack, the card slab and the trophy plaque.
+7. Theme the 404 and error boundary in src/routes/__root.tsx (dark surface, display font, neon-btn) and make src/lib/error-page.ts dark to match.
+
+Done when:
+- lint/typecheck/test green; card-rarity.test.ts still passes with the id assertion added.
+- On /players with the e2e stubs, a base card tile has no box-shadow glow and a champion tile does (add an e2e assertion using getComputedStyle).
+- LevelPips has a unit test for 1..5 and an aria-label.
+- Screenshots of vault, pack stand and trade at 390 attached, before and after.
+```
+
+### PR 3 — Pack ribbons, summary reflow, mute on the stand
+
+Branch `ux/03-pack-payoff`. Title: **Pack ribbons, summary reflow, mute on the stand**.
+
+```text
+Goal: the pack's last screen is as big a moment as its first, and every pull says whether it is new. Implements §7 and §12 of docs/ux-audit-mobile.md. Do not change the ceremony timings, the stand's phase machine (src/lib/stand-phase.ts) or anything in src/lib/pack-ceremony.ts.
+
+1. NEW / ×N ribbons, two predicates:
+   - Roster cards: read packBaseline in src/routes/players.pack.tsx (keyed by event_participants.id). held === 0 shows "NEW"; held > 0 shows "×{held+1}". Pass the value into PackStand and PackSummary as a prop; do not recompute from the live collection (it already includes the pull once the record lands).
+   - The secret: packBaseline holds no secrets. Use SecretPullResult.duplicate from the pull response: false shows "NEW", true shows "×N" with N from getMySecrets count for that card id.
+   Render the ribbon as a small corner label on the card frame on the stand and in the summary, with aria text. Keep the existing "Already yours" caption and dust sell-hint for secret dupes; add the same sell-hint for roster dupes when dust is on (worth comes from src/lib/dust.ts MILL_BY_EDITION).
+2. Summary reflow in src/components/pack-summary.tsx: the secret full-width first (same sizing rule as the stand, max 320px), then the three roster cards in a horizontal snap row with each card at least 140px wide (scrolls on 320px, fits at 430px), captions at 12px (tier word, finish, ×N), then the streak block, the collected counter, and two neon-btn-lg buttons: View collection (primary) and Share pack. Keep the share export unchanged.
+3. Mute on the stand: render the sound toggle (44x44, aria-pressed) at the bottom-left of the stand and the summary as well as the sealed screen, outside the presentation fade, so it can be reached mid-reveal.
+4. Pending secret: replace the plain pulse with a foil sweep on the sealed back every second and a hint that changes at 2s ("Still sealed…") and 4s ("Slow signal — it's yours either way"); keep the 6s timeout and inline retry exactly as they are.
+5. Hide FeedDegradedBanner while presentation mode is active on the pack route.
+
+Done when:
+- lint/typecheck/test green; pack-summary.test.tsx and pack-stand.test.tsx cover both ribbon predicates (roster held 0 and 2; secret duplicate false and true).
+- e2e/journeys.spec.ts or secrets.spec.ts asserts "NEW" on a first pull and "×2" on a duplicate secret using the existing withSecret helper.
+- At 390px the summary's roster cards measure at least 140px wide (assert via boundingBox in e2e).
+- Screenshots of stand and summary at 320 and 390 attached.
+```
+
+### PR 4 — Feedback surfaces
+
+Branch `ux/04-feedback`. Title: **Feedback surfaces: skeletons, toasts, offline, errors**.
+
+```text
+Goal: every wait, failure and arrival is shown in the right place. Implements §19 and §21 of docs/ux-audit-mobile.md.
+
+1. Toasts: in src/routes/__root.tsx move <Toaster> to position="bottom-center" with an offset above the tab bar (5rem + safe-area on phones, 1rem at md+), and suppress rendering while presentation mode is active (read useIsPresenting inside a small wrapper).
+2. Skeletons: in src/routes/players.index.tsx, while !mine.ready render 5:7 skeleton tiles (use ui/skeleton.tsx, a slow shimmer, reduced-motion safe) in place of the locked→owned pop. Reserve the hero's heights: the dust chip, streak flame, packs line, secrets line, streak sentence and offer pill each keep a fixed slot (min-height) so the grid does not move as queries land.
+3. Offline: a small hook (navigator.onLine + online/offline events) and a slim banner above the tab bar: "You're offline — the vault still works; packs record when you're back". Disable Send offer, Accept, Decline, Burn, Sell, Buy and Claim while offline, with that reason as a title/aria-description.
+4. Error pages: theme NotFoundComponent and ErrorComponent in __root.tsx (dark surface, display font, neon-btn) and make src/lib/error-page.ts dark.
+5. Locked tiles: src/components/pack-card-back.tsx takes loading="lazy" and the thumb rendition (VARIANT_WIDTHS.thumb) when rendered inside a grid; the sealed pack keeps large.
+6. Undo: after Decline and Take it back, show a 5s toast with an Undo action that re-opens the offer through a new server function reopenTradeOffer (requireMember(), only the same actor, only within 60s, only if still declined/cancelled and every staked copy is still held). Add a unit test via callServerFn and a db test if a SQL helper is needed. If the server change is out of scope for you, leave the toast without Undo and say so in the PR.
+
+Done when:
+- lint/typecheck/test green.
+- e2e: /players with a delayed getMyCardStats (server.delay) shows skeleton tiles before real ones; a toast on /players/trade renders above the tab bar (assert its y is above the nav's).
+- Offline banner appears when page.context().setOffline(true) in a new e2e test.
+- The 404 route screenshot matches the app's theme.
+```
+
+### PR 5 — Home "Today" card and streak strip
+
+Branch `ux/05-today-card`. Title: **Home "Today" card, streak strip and sort sheet**.
+
+```text
+Goal: the home screen answers "what should I do right now" in one fixed-height card, and the binder starts within one screen height. Implements §3, §11, §13 and the sort/filter part of §5 in docs/ux-audit-mobile.md.
+
+1. New src/components/today-card.tsx replacing the top half of VaultHero on /players. Fixed height (no layout shift; reserve slots). Three pack states from the data the vault already fetches (useSecretStatus, the stored pack state via the same helpers players.pack.tsx uses, useStreak):
+   - sealed: "Open today's pack" (neon-btn-lg) with the secret-waiting ring/dot as today;
+   - torn, unfinished: "Finish your pack · N cards left";
+   - done: "Next pack in Nh" from SecretDayStatus.resetsAt (fall back to the device-local midnight the pack uses when resetsAt is null), plus the streak sentence.
+   A guest sees the same three states; the secret cue stays members-only as it is now.
+2. Streak strip inside the card (only when streak.current > 0): flame + "Day N", then five rung markers 3 · 7 · 14 · 30 · 100 from STREAK_MILESTONES with passed rungs filled and the next rung labelled from nextMilestoneLine. At-risk state (alive, not openedToday): amber outline and "Keep it alive". If a rung is claimable and canClaim, the strip becomes a "Claim {label}" button that opens MilestoneReveal here (reuse the claim flow from players.pack.tsx; move it into a hook if needed). If !canClaim, show "Sign in to claim" linking to /auth?mode=signup&next=/players.
+3. Below the card: one line "Roster 3 / 13 · Secrets 3 across 2 sets · 1 set complete" (never a secret denominator), then the shelves. Remove "cards printed" and "packs opened" from the player-facing hero (keep the data for the profile later).
+4. Sort & filter sheet: replace the Rearrange row and the sort chips with one "Sort & filter" chip on the Roster shelf header that opens a vaul Drawer (already in ui/drawer.tsx) containing sort (Name/Order/Pick/Rarity/Newest), filters (Owned, Missing, Spares), density (2-up/3-up) and the Rearrange toggle. Persist choices in the existing vault-layout storage.
+5. ×N pip on roster tiles from collected[id].count when count > 1; never on locked tiles.
+6. The Complete shelf moves above the set shelves by default (vault-layout default order only; user order still wins).
+
+Done when:
+- lint/typecheck/test green; today-card.test.tsx covers the three pack states, the at-risk state and the claimable state; use-my-collection and vault-layout tests still pass.
+- e2e/favourites.spec.ts and secrets.spec.ts updated for the new sheet; a new assertion that at 390x844 the first roster tile's top is within the first viewport height.
+- No secret set size appears anywhere (keep the existing "not.toContainText(/of \d+ secrets/)" assertion).
+- Screenshots at 320 and 390 attached.
+```
+
+### PR 6 — Acquisitions read and "new since last visit"
+
+Branch `ux/06-acquisitions`. Title: **Acquisitions read and "new since last visit" strip**.
+
+```text
+Goal: the app can say what arrived since you last looked, from server data rather than guesses. Implements the strip in §12 of docs/ux-audit-mobile.md and the first-view celebration in §6.
+
+1. New server function getRecentAcquisitions in src/lib/acquisitions.functions.ts (method GET). First line requireMember(). Input: { eventId: uuid, since: ISO timestamp }. Reads, for the token's participant only: card_copies rows with acquired_on >= since (return event_participant_id, edition, source, acquired_on) and secret_card_pulls rows pulled on or after since (return the secret card id, name, art path signed the same way getMySecrets does, tier, and whether it was a duplicate). Never return a set id count, a set size, or another participant's rows. Cap at 50 rows, newest first. Cache-Control private, no-store like the streak function.
+2. Test it in src/lib/acquisitions.functions.test.ts with callServerFn + memberHeaders(): a guest or anonymous caller is refused; the participant id is taken from the token, not the payload; the response has no key that could carry a set size (mirror the key-exact assertions the secret tests use).
+3. Client: a hook useRecentAcquisitions(eventId, since) with the same query conventions as useMySecrets (staleTime 60s, refetch on focus, retry false). The device stores wwbh:vault-last-seen; the vault reads it before fetching and writes the current time when the strip is dismissed or after 24h.
+4. Strip: inside the Today card from PR 5, a horizontal snap row of small cards (roster via HoloCard subtle, secrets with LevelPips) with a "NEW" or "×N" corner label from the response. Tapping a card opens it (route for roster, secret sheet for secrets) and marks the strip seen. Hidden when empty.
+5. Player page celebration: in src/routes/players.$id.tsx replace the module-scoped revealed Set with a device-stored seen set keyed by event_participant_id + acquired_on from the acquisitions data (fall back to the current per-session guard when the data is missing). The chime and confetti fire the first time a card is opened after it was acquired and not again on reload. Keep the existing tier/edition gate for confetti.
+
+Done when:
+- lint/typecheck/test green; the new functions test passes; if you add SQL, tests/db replays it from empty.
+- e2e: stub getRecentAcquisitions in e2e/fixtures.ts (check the substring rule) and assert the strip renders two items and disappears after tapping.
+- No response from the new function contains a set size (assert exact keys).
+```
+
+### PR 7 — Full-screen card viewer
+
+Branch `ux/07-card-viewer`. Title: **Full-screen card viewer**.
+
+```text
+Goal: tapping a card shows the card, as big as the phone allows, before anything else. Implements §6 and the sheet half of §9 in docs/ux-audit-mobile.md. Reuse ZoomPanFrame, HoloCard (tilt="hero") and useCardZoom; do not fork them.
+
+1. New src/components/card-viewer.tsx: a full-screen layer (role="dialog", aria-modal, focus trap, Escape and pull-down to dismiss) on a dark wash with a vignette, the card sized by the same svh rule the reveal stand uses, name and tier/finish badge (or LevelPips for a secret) beneath. Bottom row of 44px controls: Close (left), Flip (centre), More (right: Share, Pin, Compare, "Offer this card" when the viewer has spares, "Ask for this card" when it is locked). Swipe left/right steps through the list the caller passes (roster in running order, or the visible secrets), wrapping. Pinch and double-tap zoom as on the player page. Presentation mode on while open. Reduced motion: no transitions.
+2. Vault: a tap on a roster tile opens the viewer (locked cards open it face-down with "Rip a pack to see this card"); a tap on a secret tile opens the same viewer instead of SecretCardSheet. Keep the URL for roster cards: push /players/$id?view=1 so back closes the viewer; secrets keep no URL (they must not be shareable).
+3. Player page (/players/$id): opens directly into the viewer when ?view=1; a "Details" swipe-up or chip reveals the existing slab, stats, filmstrip and social below. Landing celebration rules from PR 6 apply inside the viewer, not on the details page.
+4. "Offer this card" navigates to /players/trade with the copy pre-staged (search param or in-memory store the trade route reads once); "Ask for this card" opens the partner picker filtered to owners (from getCardPullCounts) — if PR 8 is not merged yet, land on the existing compose panel with the card pre-selected.
+5. Remove SecretCardSheet once the viewer covers it, and move its tests.
+
+Done when:
+- lint/typecheck/test green; card-viewer.test.tsx covers open/close, swipe wrap, flip, and that a secret never sets a URL.
+- e2e: from /players, tapping a tile opens the viewer with the card at least 300px wide at 390x844; Escape closes it; the back button closes a roster viewer.
+- The accessibility assertions in e2e/smoke.spec.ts still pass.
+- Screenshots at 375 and 390 attached, roster and secret.
+```
+
+### PR 8 — Trade builder
+
+Branch `ux/08-trade-builder`. Title: **Trade builder: trays, review and confirm**.
+
+```text
+Goal: building an offer reads as "you give / you get", never as a form, and answering one is deliberate. Implements §10 of docs/ux-audit-mobile.md. Server functions (createTradeOffer, acceptTradeOffer, decline, cancel) and their payloads do not change.
+
+1. Split src/routes/players.trade.tsx into: trade-offers.tsx (inbox, outbox, receipts), trade-feed.tsx, and a new trade-builder.tsx. The route shows two tabs (Offers, Feed) and a sticky "Make an offer" neon-btn-lg above the tab bar. The signed-out and collector gates stay exactly as they are.
+2. Builder as a full-screen flow (presentation mode, Escape/back closes, state kept in memory until sent or cancelled):
+   - Who: a list, not pills — initials avatar, name, one line "N spares" from getTradeSpares (and "wants …" later). 56px rows, aria-pressed on the selected row.
+   - Give / Get: stacked on phones. "You give" tray (staged cards 2-up with LevelPips/edition tab/×N, 44px remove buttons) with "+ Add your cards" opening a vaul Drawer picker: a 3-up grid of full cards, tap to toggle (aria-pressed), blocked cards greyed with the reason from BLOCKED_LABEL, last-copy in words, the 4-per-side cap shown as "3 / 4". Then "You get" tray with "+ Ask for their cards" on their spares, concealed art for cards you have not pulled exactly as today.
+   - Review: both trays as small cards, the one-line summary from tradeItemsLabel at 16px, a last-copy warning, then Send offer (neon-btn-lg). On success return to Offers with the new outbox card highlighted.
+3. Answering: TradeOfferCard stacks You give above You get on phones (each a snap row at ≥110px per card), shows a status chip at every state including Pending, uses "1 of 3" text instead of dot spans, Accept (neon-btn-lg) and Decline (quiet 44px). Accept opens a confirm sheet: "Swap your Standard Alice for Bob's Gold Bob?" with Confirm / Cancel. Decline and Take it back need no confirm.
+4. Empty inbox keeps "Nobody wants your cards. Yet." and gains the Make an offer button beneath it.
+
+Done when:
+- lint/typecheck/test green; trade-builder.test.tsx covers step navigation, the 4-per-side cap, blocked cards not selectable, and the summary text.
+- e2e/trades.spec.ts updated: composing posts the same recipientId/gives payload as before (keep the existing posted-body assertion); Accept requires the confirm; the signed-out redirect to /claim is unchanged.
+- At 390px the give and get trays are stacked (assert the get tray's top is below the give tray's bottom).
+- Screenshots of Who, trays, Review and an incoming offer at 390 attached.
+```
+
+### PR 9 — Navigation and profile
+
+Branch `ux/09-nav-profile`. Title: **Five fixed tabs and a profile screen**.
+
+```text
+Goal: the tab bar never changes shape and every setting has one home. Implements §4 of docs/ux-audit-mobile.md.
+
+1. src/lib/nav.ts: navTabs returns five tabs always — Vault (/players), Pack (/players/pack), Trade (/players/trade), League (/league), You (/you). Shop is no longer a tab; keep dustOn as an input only if a badge needs it. Update nav.test.ts (no 5↔6 reflow; activeTab rules unchanged; /players/shop lights Vault; /you lights You).
+2. src/lib/league.ts: Board (/leaderboard) becomes the first hub tile; add a Shop tile (/players/shop) that exists only while dust is on. Update the hub test that guards against stranded screens.
+3. Dust chip in the Today card keeps linking to /players/shop.
+4. New src/routes/you.tsx: name and player code status (from useMemberSession and the claim helpers), account (sign in/out, reuse AccountMenu logic), streak ladder and history (from useStreak; history = milestones with claimed=true, each with the label; if PR 6 landed, show the card each paid), dust balance, sound (the mute toggle from card-sfx), haptics, tilt (gyro permission), the Admin link (PIN-gated route as today), and the collection numbers removed from the hero in PR 5. Title and meta like other routes. Header account icon links here.
+5. site-nav.tsx: five columns, 11px labels, min-h-14 tiles; keep the two dots and their aria text; add the torn-pack glyph variant for the Pack tab while today's pack is mid-reveal (read the stored pack state the vault already reads).
+
+Done when:
+- lint/typecheck/test green; nav.test.ts and the league hub test updated; e2e/smoke.spec.ts renders /you and asserts aria-current on the You tab.
+- e2e/dust.spec.ts: with dust on, the bar still has five tabs and Shop is reachable from the League hub and the dust chip.
+- Screenshot of /you and the bar at 320 and 390 attached.
+```
+
+### PR 10 — Two-beat reveal and set mystery slot
+
+Branch `ux/10-reveal-beat-mystery`. Title: **Two-beat reveal for special pulls; one mystery slot per set**.
+
+```text
+Goal: a good pull gets one more beat, and a set page has a horizon without a denominator. Implements the reveal pacing in §7 and the mystery slot in §9/§14 of docs/ux-audit-mobile.md. Do not change src/lib/stand-phase.ts or the ceremony table.
+
+1. Two-beat reveal in src/components/pack-stand.tsx: for champion or podium tiers, Silver or better editions, and Rare or better secret levels, the flip lands on a face dimmed to 60% for 250ms, then the edition frame / prism ring blooms to full with the existing holo-shine sweep and the second cue (playEditionShine, or the secret's own chime) fires. Common pulls keep the current single beat. Reduced motion: no dim, one beat. The "known" guard stays: a card whose finish the server has not answered gets no second beat.
+2. Mystery slot in src/routes/players.index.tsx: at the end of every open secret set shelf (not Favourites, not Complete, not the unsorted "Secrets" pile), render one face-down tile using the event's universal back with a "?" and the caption "More in this set". It is not a link, never counts toward the shelf's number, carries aria-hidden text only ("Unknown cards remain"), and is not rendered for a set that has a completion trophy. Add a comment explaining why this does not leak: one slot regardless of how many remain.
+3. Set chip: print the set name (from the set list the vault already fetches, falling back to the shipped labels) as a small chip on secret captions in the viewer/sheet, trade tiles and shop rows, coloured with the set accent.
+
+Done when:
+- lint/typecheck/test green; pack-stand.test.tsx covers the two-beat path for a gold edition and the single beat for standard; players.index tests cover the mystery slot present on an incomplete set, absent on a completed one, and excluded from the count.
+- e2e/secrets.spec.ts: the existing "no total, no empty slots" assertion is updated to allow exactly one "More in this set" tile per open set and still forbids /of \d+ secrets/.
+- Screenshots of a set shelf and a gold reveal at 390 attached.
+```
+
+### Tool notes
+
+- **Claude Code**: run from the repository root on a fresh branch; it reads `CLAUDE.md` automatically, and the guardrails block repeats the parts that matter. Ask it to run `/code-review` on its own diff before opening the PR. Keep one phase per session.
+- **Lovable**: paste the guardrails and the phase prompt as one message. Lovable commits to the connected branch as it works, so add "work on branch `<name>` and do not push to the connected branch until I approve" and never let it rewrite history. Its preview will not show pack sounds or haptics; check those on a real phone after merge.
+- **Codex**: same prompt. Codex may not read `CLAUDE.md`, so the guardrails block is load-bearing; add "run `bun run format && bun run lint && bun run typecheck && bun run test` and paste the output before finishing". Ask it for the 390 px screenshots explicitly; it will not attach them unprompted.
+- **Any tool**: if a phase's "Done when" list cannot be met, the PR description must say which item was skipped and why, not silently narrow the scope.
