@@ -169,11 +169,16 @@ export function useAccountSync(user: User | null) {
         if (cancelled) return;
         // The claim screen's move, for the same two reasons — a sign-in is the
         // other way a guest becomes a member, and B-07 and B-13 do not care which
-        // door was used. Guarded by `cancelled` like every other await here: a
-        // sync the next account has taken over must not rewrite this device's
-        // pack under an identity that is no longer live.
+        // door was used.
+        //
+        // Gated on the token this run actually wrote still being the one on the
+        // device, which is the same compare-and-clear the cleanup below makes and
+        // strictly stronger than `cancelled`: that flips on unmount too, and says
+        // nothing about which identity localStorage holds by now. A pack rewritten
+        // to an account that has already been switched away from cannot be carried
+        // again, and the next run would deal a second one.
         const device = deviceId();
-        if (device) {
+        if (device && getMemberToken() === wrote) {
           await carryPackToIdentity(`d:${device}`, `m:${res.id}`, adoptableIds(held));
           if (cancelled) return;
           carryTrophySeen(`d:${device}`, res.id);

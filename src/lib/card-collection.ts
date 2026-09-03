@@ -367,17 +367,23 @@ export function packDealtElsewhere(dayKey: string, identity: string): boolean {
 }
 
 /**
- * Forget the mirror.
+ * Forget the mirror, but only this identity's.
  *
  * Called where the route decides the stored row is not this person's pack for
  * today, which is also the only way a mirror that has outlived its row is ever
- * cleaned up — and the reason a stale one can never lock somebody out for more
- * than a single refused tap.
+ * cleaned up. IDENTITY-AWARE, because a blind `removeItem` is a hole: a tab
+ * still holding the guest identity re-runs its resume the moment a claim in
+ * another tab carries the pack, finds a row that is now the member's, and would
+ * delete the mirror the member's own tabs are relying on — after which a tap in
+ * one of them deals a second pack. A mirror for another day or identity blocks
+ * nothing anyway, so leaving it costs nothing.
  */
-export function clearPackDealt(): void {
-  dealtMirror = null;
+export function clearPackDealt(dayKey: string, identity: string | undefined): void {
+  const mine = mirrorValue(dayKey, identity);
+  if (dealtMirror === mine) dealtMirror = null;
   if (typeof window === "undefined") return;
   try {
+    if (window.localStorage.getItem(PACK_DEALT_KEY) !== mine) return;
     window.localStorage.removeItem(PACK_DEALT_KEY);
   } catch {
     /* nothing to forget */
@@ -528,12 +534,17 @@ export async function carryPackToIdentity(
       carriedAdopted: state.ids.filter((id) => taken.has(id)),
     };
     await tx.store.put(carried, PACK_STATE_KEY);
-    // THE ADOPTION IS THE RECORD for everything this row was protecting.
+    // THE ADOPTION IS THE RECORD, for the cards it actually took and no others.
     // `adoptLocalCollection` runs immediately before this against the whole local
-    // store, and the store is exactly what the prune can reach — a card never
-    // turned over is not in it and has nothing to lose yet. Retiring only today's
-    // ids would strand an older day's, and those were adopted too.
-    await tx.store.delete(UNRECORDED_KEY);
+    // store, so every id it saw is now vouched for and this row has nothing left
+    // to hold back on their account — but a card still face-down was in no
+    // snapshot, and dropping its protection with the rest would leave it unowned
+    // the moment it is finally turned over. What is left moves to the member,
+    // because a row still carrying the guest's name protects nothing for them.
+    const prior = (await tx.store.get(UNRECORDED_KEY)) as UnrecordedPulls | undefined;
+    const stillOwed = (prior?.ids ?? []).filter((id) => !taken.has(id));
+    if (!prior || stillOwed.length === 0) await tx.store.delete(UNRECORDED_KEY);
+    else await tx.store.put({ ...prior, identity: to, ids: stillOwed }, UNRECORDED_KEY);
     await tx.done;
     // The mirror moves with the row, which is also what wakes a pack screen open
     // in another tab: it is watching this key, and the identity has changed.

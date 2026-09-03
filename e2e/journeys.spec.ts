@@ -1150,9 +1150,10 @@ test.describe("opening a pack", () => {
       claimServer.set("adoptCollection", { ok: true, adopted: 1 });
       // Held back on purpose. The token lands before the adoption resolves, so
       // this is the window the pack tab used to write into — widened from
-      // milliseconds to two seconds so the race is decided the same way on every
-      // machine rather than by whichever runner is quicker today.
-      claimServer.delay("adoptCollection", 2_000);
+      // milliseconds to six seconds so the race is decided the same way on every
+      // machine rather than by whichever runner is quicker today, and so there is
+      // room to look at the pack tab while it is still open.
+      claimServer.delay("adoptCollection", 6_000);
 
       // The pack tab, torn and idle with one card turned.
       await page.goto("/players/pack");
@@ -1168,7 +1169,28 @@ test.describe("opening a pack", () => {
         .getByRole("button", { name: /claim|unlock|submit/i })
         .last()
         .click();
-      await expect(claimTab).toHaveURL(/\/players/);
+      // Synchronised on the adoption actually being in the air rather than on a
+      // fixed sleep: the window this is about opens when the token lands and
+      // closes when the carry runs, and only the request tells us we are inside
+      // it. While we are, the pack tab holds the member's identity and a row that
+      // is still the guest's — and it waits rather than re-sealing, so the cards
+      // stay on screen and there is no wrapper for a fast tap to deal a second
+      // pack from.
+      await expect
+        .poll(() => claimServer.calls.filter((c) => c.includes("adoptCollection")).length)
+        .toBeGreaterThan(0);
+      // A beat inside that window, not the edge of it: the identity reaches this
+      // tab through a `storage` event and its resume load is asynchronous, so
+      // looking the instant the request goes out is looking before anything can
+      // have happened.
+      await page.waitForTimeout(2_500);
+      // And then the tap, which is the actual risk. Held, there is no wrapper to
+      // press and this does nothing. Unheld, the tab has re-sealed and this deals
+      // a second pack straight over the one being carried — after which the carry
+      // finds a row it does not recognise and the assertions below fail.
+      if (await sealedPack(page).count()) await sealedPack(page).press("Enter");
+
+      await expect(claimTab).toHaveURL(/\/players/, { timeout: 20_000 });
 
       // The carry found the row it was looking for.
       await expect.poll(async () => (await readPackState(page))?.identity).toBe("m:p-alice");

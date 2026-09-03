@@ -57,7 +57,7 @@ import {
   type SecretCardView,
 } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
-import { usePackIdentity } from "@/lib/device-id";
+import { deviceId, usePackIdentity } from "@/lib/device-id";
 import { dealPack, packSeed, packStage, resumeCursor, type SecretSlot } from "@/lib/pack";
 import { editionCelebrates, type Edition } from "@/lib/card-edition";
 import { dustLive, secretSellValue } from "@/lib/dust";
@@ -145,6 +145,17 @@ const AUTO_MOUNT_MS = 300;
  * would finish having never shown the card the whole sequence is built around.
  */
 const SECRET_STAGE_TIMEOUT_MS = 4_000;
+/**
+ * How long to hold a guest's pack while a claim in another tab carries it.
+ *
+ * The token lands a whole network round trip before `carryPackToIdentity` does,
+ * and re-sealing in between is what lets a second pack be dealt over the one
+ * being carried. Generous, because the wait costs nothing but a pack staying on
+ * screen — and bounded, because a claim on a tab running an older bundle never
+ * carries anything at all, and a pack that waits forever is worse than a second
+ * one.
+ */
+const CARRY_GRACE_MS = 20_000;
 
 function PackPage() {
   const { event, bundle, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
@@ -364,6 +375,26 @@ function PackPage() {
    */
   const dealtForRef = useRef<string | null>(null);
   /**
+   * The league day `dealtIds` were dealt on.
+   *
+   * `dayKey` moves on the day tick, a render before the resume load can answer
+   * with the new day's row — so for that render the ids in hand are yesterday's
+   * while everything keyed on the day says today. Recording them then files a
+   * fresh mint against a day nobody opened a pack on, and saving them then
+   * rewrites the row to claim yesterday's cards are today's pack, which the next
+   * resume accepts and nobody gets today's.
+   */
+  const dealtOnRef = useRef<string | null>(null);
+  /**
+   * A claim in another tab is carrying this pack across right now.
+   *
+   * Read by `tearOpen`, which must not deal a replacement over a pack that is
+   * about to arrive under this identity.
+   */
+  const awaitingCarryRef = useRef(false);
+  /** When this tab stops waiting for that carry. Fixed once, so a re-run cannot push it out. */
+  const carryDeadlineRef = useRef<number | null>(null);
+  /**
    * Re-run the resume load without waiting for `dayKey` or `identity` to move.
    *
    * Two things need that. Another tab tearing the pack, which reaches this one
@@ -418,11 +449,42 @@ function PackPage() {
       return;
     }
     let cancelled = false;
+    let graceTimer: number | undefined;
     // Cleared first so the rollover below cannot write today's key over
     // yesterday's ids in the window before this resolves.
     setStateLoaded(false);
     loadPackState().then((s) => {
       if (cancelled) return;
+      // A claim in another tab is carrying this pack across right now.
+      //
+      // `setMemberToken` flips this tab's identity the instant the token is
+      // written, which is a whole network round trip before the carry rewrites
+      // the row. Re-sealing in that window takes the cards off the screen and
+      // lets a fast tap deal a second pack over the one being carried — B-07
+      // again, through the back door. So an upgrade from THIS DEVICE's own guest
+      // identity waits: the pack stays exactly where it is, nothing is saved or
+      // recorded under the new name (both effects check `dealtForRef`), and the
+      // carry's own write to the mirror brings us back here with the row it
+      // expects. A phone that genuinely changed hands is the same shape and gets
+      // the same answer, which is the product decision B-07 records.
+      const device = deviceId();
+      const carrying =
+        !!s &&
+        s.dayKey === dayKey &&
+        !!device &&
+        s.identity === `d:${device}` &&
+        identity.startsWith("m:");
+      if (carrying) {
+        carryDeadlineRef.current ??= Date.now() + CARRY_GRACE_MS;
+        const left = carryDeadlineRef.current - Date.now();
+        if (left > 0) {
+          awaitingCarryRef.current = true;
+          graceTimer = window.setTimeout(() => setResumeNonce((n) => n + 1), left);
+          setStateLoaded(true);
+          return;
+        }
+      }
+      awaitingCarryRef.current = false;
       // A stored row without an identity predates per-person packs; treat it
       // as a match so nobody mid-reveal on the day this ships loses their
       // cards. Now that we always wait for `identity` above, a mismatch here
@@ -456,10 +518,17 @@ function PackPage() {
         // A row with no identity predates per-person packs and counted as a match
         // above, so it counts as one here too.
         dealtForRef.current = s.identity ?? identity;
+        dealtOnRef.current = s.dayKey;
         // The parked ceremony, back from the row. Both homes, because the reveal
         // reads the ref and the save effect reads the state.
-        pendingCompletionRef.current = s.pendingCompletion ?? null;
-        setPendingCompletion(s.pendingCompletion ?? null);
+        //
+        // Never one owed on a secret that has already been turned: `revealSecret`
+        // is the only thing that fires it and it returns at the door on an
+        // already-revealed card, so restoring it there just leaves a dead field
+        // on the row until the day rolls over.
+        const owed = s.secretRevealed ? null : (s.pendingCompletion ?? null);
+        pendingCompletionRef.current = owed;
+        setPendingCompletion(owed);
         revealedRef.current = revealedNow;
         setRevealed(revealedNow);
         setSecretRevealed(!!s.secretRevealed);
@@ -485,6 +554,7 @@ function PackPage() {
         carriedFromRef.current = null;
         carriedAdoptedRef.current = [];
         dealtForRef.current = null;
+        dealtOnRef.current = null;
         pendingCompletionRef.current = null;
         setPendingCompletion(null);
         setRevealed([]);
@@ -494,14 +564,21 @@ function PackPage() {
         // mirror. This is the only place a mirror that outlived its row is ever
         // cleaned up — which is why one that somehow survives can cost at most a
         // single refused tap rather than the day's pack.
-        clearPackDealt();
+        clearPackDealt(dayKey, identity);
       }
       setStateLoaded(true);
     });
     return () => {
       cancelled = true;
+      if (graceTimer) window.clearTimeout(graceTimer);
     };
   }, [dayKey, identity, resumeNonce]);
+
+  // A different identity waits its own grace, not the leftovers of the last one's.
+  useEffect(() => {
+    carryDeadlineRef.current = null;
+    awaitingCarryRef.current = false;
+  }, [identity]);
 
   // Another tab tore the pack. IndexedDB says nothing across tabs, so the mirror
   // beside it is the only signal this one gets — and without it a tab left on a
@@ -629,6 +706,10 @@ function PackPage() {
    */
   const tearOpen = useCallback((): boolean => {
     if (dealtIds || nextPack.length === 0) return false;
+    // A pack of this device's is on its way over from a claim in another tab.
+    // Dealing now would put a second one on top of it. The resume load comes back
+    // on its own when the carry lands, or when it gives up waiting.
+    if (awaitingCarryRef.current) return false;
     // Another tab already tore this pack. `dealtIds` above only knows about this
     // one, and IndexedDB fires no cross-tab event — so without the mirror a
     // second tab dealt the same ids and wrote `revealed: []` and `cursor: 0` over
@@ -653,6 +734,7 @@ function PackPage() {
     carriedFromRef.current = null;
     carriedAdoptedRef.current = [];
     dealtForRef.current = identity;
+    dealtOnRef.current = dayKey;
     setCursor(0);
     // The ceremony is the only thing the preference silences. Everything above is
     // the pack actually opening and happens either way.
@@ -927,7 +1009,7 @@ function PackPage() {
     // And the ids in hand have to be this identity's. Nothing is latched on the
     // way out: the resume load is already on its way to deciding whether this
     // pack is carried or re-sealed, and it owns the answer.
-    if (dealtForRef.current !== identity) return;
+    if (dealtForRef.current !== identity || dealtOnRef.current !== dayKey) return;
     if (recordedForRef.current === actor) return;
     // On a carried pack, the cards the claim's adoption already filed are dropped
     // from the payload. `record_card_pulls` rations on `card_mints` rather than
@@ -950,12 +1032,13 @@ function PackPage() {
       return;
     }
     recordedForRef.current = actor;
-    // The league day these ids belong to. Captured before the first attempt
-    // rather than read live, because the loop below sleeps up to twelve seconds
-    // and re-arms on `online` and `visibilitychange` — a phone that woke up at
-    // 00:01 could otherwise file yesterday's pack against the new day, minting it
-    // afresh and writing a pack_open for a day nobody opened a pack on.
-    const dealtOn = dayKey;
+    // The league day these ids were dealt on, taken from the row rather than from
+    // the screen's clock, and captured before the first attempt rather than read
+    // live: the loop below sleeps up to twelve seconds and re-arms on `online`
+    // and `visibilitychange`, so a phone that woke up at 00:01 could otherwise
+    // file yesterday's pack against the new day — minting it afresh and writing a
+    // pack_open for a day nobody opened a pack on.
+    const dealtOn = dealtOnRef.current;
 
     void (async () => {
       // Record only today's dealt cards. An earlier version also backfilled the
@@ -1279,7 +1362,11 @@ function PackPage() {
     // longer recognised: the pack stayed, unmarked as carried, and the record
     // loop minted every card in it a second time. Progress made inside that
     // window is not saved, which costs at most one card's flip on the resume.
-    if (dealtForRef.current !== identity) return;
+    //
+    // The day is the same argument. `dayKey` moves on the tick a render before
+    // the load can answer, and writing then rewrites the row to claim yesterday's
+    // cards are today's pack — which the next resume believes.
+    if (dealtForRef.current !== identity || dealtOnRef.current !== dayKey) return;
     void savePackState({
       dayKey,
       ids: dealtIds,

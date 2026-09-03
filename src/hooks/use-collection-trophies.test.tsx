@@ -159,6 +159,12 @@ describe("useCollectionTrophyWatcher", () => {
     // and then, marked under the only name the device has for a guest — and the
     // claim banks the trophy under a participant id the watcher then finds
     // uncelebrated. carryTrophySeen translates the key at claim time.
+    //
+    // TWO SETS, and the second one is what makes this a real assertion. A queue
+    // that is simply empty is empty on the first render too, so waiting for it
+    // proves nothing: `wags` was never celebrated anywhere and has to arrive, and
+    // the moment it does the watcher has demonstrably been through this data. If
+    // the carry were broken, `pets` would be sitting beside it.
     const DEVICE = "d:device-1";
     memberSession.mockReturnValue(null);
     packIdentity.mockReturnValue(DEVICE);
@@ -170,26 +176,14 @@ describe("useCollectionTrophyWatcher", () => {
     markTrophiesCelebrated([trophyKey(DEVICE, "pets")]);
     guest.unmount();
 
-    // They claim. The trophy lands under the participant, and the carry is what
-    // makes it already-seen.
+    // They claim. Both trophies land under the participant; only one of them has
+    // already had its ceremony.
     carryTrophySeen(DEVICE, ME);
     memberSession.mockReturnValue({ participantId: ME });
     packIdentity.mockReturnValue(`m:${ME}`);
-    const member = watch([trophy(ME, "pets")]);
-    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
-    expect(member.result.current.queue).toEqual([]);
-  });
-
-  it("still fires for a set the guest never saw a ceremony for", async () => {
-    // The carry must not turn into a blanket "this member has seen everything".
-    // A set banked by a grant while they were a guest has had no ceremony, and
-    // still deserves one.
-    const DEVICE = "d:device-1";
-    setTrophySeen({ primed: true, ids: [trophyKey(DEVICE, "pets")] });
-    carryTrophySeen(DEVICE, ME);
-    const { result } = watch([trophy(ME, "pets"), trophy(ME, "wags")]);
-    await waitFor(() => expect(result.current.queue).toHaveLength(1));
-    expect(result.current.queue[0]).toMatchObject({ collection: "wags" });
+    const member = watch([trophy(ME, "pets"), trophy(ME, "wags")]);
+    await waitFor(() => expect(member.result.current.queue).toHaveLength(1));
+    expect(member.result.current.queue[0]).toMatchObject({ collection: "wags" });
   });
 
   it("queues both sets a single trade can close", async () => {

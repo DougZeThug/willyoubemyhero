@@ -126,7 +126,11 @@ export function carryTrophySeen(from: string, to: string) {
   const prefix = `${from}:`;
   const carried = current.ids
     .filter((id) => id.startsWith(prefix))
-    .map((id) => `${to}:${id.slice(prefix.length)}`);
+    .map((id) => `${to}:${id.slice(prefix.length)}`)
+    // Already carried. A re-claim on the same handset would otherwise rebuild the
+    // identical set and slip past setTrophySeen's no-op guard, which compares
+    // lengths — writing storage and waking every listener for nothing.
+    .filter((id) => !current.ids.includes(id));
   if (carried.length === 0) return;
   // The guest's own keys stay. Nothing reads them again, and dropping them would
   // make a second call to this — a re-claim on the same handset — a no-op that

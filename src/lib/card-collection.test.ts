@@ -489,16 +489,29 @@ describe("carrying a pack across a claim", () => {
     expect((await mod.loadPackState())?.carriedAdopted).toEqual([CARD_A, CARD_B]);
   });
 
-  it("retires the unrecorded row, because the adoption is the record now", async () => {
-    // adoptLocalCollection runs immediately before the carry and files every card
-    // on the handset against the member, so the server vouches for them and the
-    // row has nothing left to protect. The whole row, not just today's ids: the
-    // snapshot it was adopted from is the whole store.
+  it("retires the ids the adoption took, and only those", async () => {
+    // adoptLocalCollection runs immediately before the carry against the whole
+    // local store, so every id it saw is vouched for and this row has nothing
+    // left to hold back. Everything else stays — a card still face-down was in no
+    // snapshot, and dropping its protection would leave it unowned the moment it
+    // is finally turned over.
     const mod = await freshModule();
     await todaysPack(mod);
     await mod.addUnrecorded({ dayKey: "2026-07-27", identity: DEVICE, ids: [CARD_A] });
     await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: DEVICE, ids: [CARD_B] });
-    expect(await mod.carryPackToIdentity(DEVICE, MEMBER)).toBe(true);
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [CARD_A])).toBe(true);
+    const row = (await mod.loadUnrecorded())!;
+    expect(row.ids).toEqual([CARD_B]);
+    // And under the member's name, because a row carrying the guest's protects
+    // nothing for them — see the identity check in useMyCollection.
+    expect(row.identity).toBe(MEMBER);
+  });
+
+  it("drops the row outright when the adoption took everything", async () => {
+    const mod = await freshModule();
+    await todaysPack(mod);
+    await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: DEVICE, ids: [CARD_A, CARD_B] });
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [CARD_A, CARD_B])).toBe(true);
     expect(await mod.loadUnrecorded()).toBeNull();
   });
 
@@ -574,8 +587,27 @@ describe("the pack-dealt mirror", () => {
       revealed: [],
       identity: "d:device-1",
     });
-    mod.clearPackDealt();
+    mod.clearPackDealt("2026-07-28", "d:device-1");
     expect(mod.packDealtElsewhere("2026-07-28", "d:device-1")).toBe(false);
+  });
+
+  it("leaves somebody else's mirror where it is", async () => {
+    // The hole a blind removeItem opened: a tab still holding the guest identity
+    // re-runs its resume the moment a claim in another tab carries the pack,
+    // finds a row that is now the member's, and would delete the mirror the
+    // member's own tabs are relying on — after which a tap in one of them deals a
+    // second pack.
+    const mod = await freshModule();
+    await mod.savePackState({
+      dayKey: "2026-07-28",
+      ids: [CARD_A],
+      revealed: [],
+      identity: "m:p-alice",
+    });
+    mod.clearPackDealt("2026-07-28", "d:device-1");
+    expect(mod.packDealtElsewhere("2026-07-28", "m:p-alice")).toBe(true);
+    mod.clearPackDealt("2026-07-27", "m:p-alice");
+    expect(mod.packDealtElsewhere("2026-07-28", "m:p-alice")).toBe(true);
   });
 });
 
