@@ -6,6 +6,7 @@ import {
   EVENT_ID,
   PLAYERS,
   sealedPack,
+  serverFnName,
   stubServerFns,
   tearPack,
 } from "./fixtures";
@@ -275,8 +276,20 @@ test.describe("a player's card", () => {
 test.describe("opening a pack", () => {
   const PACK_SIZE = 3;
 
-  /** Today's pack row straight out of IndexedDB, or null if nothing is stored. */
-  type PackState = { dayKey: string; ids: string[]; revealed: number[]; cursor?: number };
+  /**
+   * Today's pack row straight out of IndexedDB, or null if nothing is stored.
+   *
+   * Spelled out here rather than imported, so a field disappearing from the real
+   * type is caught by an assertion rather than by the shape silently widening.
+   */
+  type PackState = {
+    dayKey: string;
+    ids: string[];
+    revealed: number[];
+    cursor?: number;
+    identity?: string;
+    carriedFrom?: string;
+  };
 
   function readPackState(page: import("@playwright/test").Page) {
     return page.evaluate(
@@ -882,6 +895,213 @@ test.describe("opening a pack", () => {
         timeout: 20_000,
       })
       .toBeGreaterThan(before);
+  });
+
+  test("sends nothing when the retry loop sleeps through midnight", async ({ page, server }) => {
+    // The loop waits up to twelve seconds between attempts and re-arms on
+    // `online`, so a phone in a garden dead spot at 23:59 can wake with the radio
+    // back at 00:01 — and `record_card_pulls` rations on the league day it is
+    // CALLED on, so those same three cards would be minted afresh and a pack_open
+    // written for a day nobody opened a pack on. The day tick eventually notices
+    // and re-seals, but "eventually" is up to a minute, and the loop wakes first.
+    //
+    // A 90-day token, the length a real member token actually has: an hour-long
+    // one would expire under the shift below, drop the member session, and
+    // re-seal the pack for a reason that has nothing to do with this.
+    await page.addInitScript(([key, token]) => localStorage.setItem(key, token), [
+      MEMBER_KEY,
+      `m.p-alice.${Date.now() + 90 * 24 * 60 * 60_000}.signature`,
+    ] as const);
+    // Vouches for nothing, so the prune at the end is real and the protection
+    // means something. Same reason the unrecorded-row test sets it.
+    server.set("getMyCardStats", { cards: [], packsOpened: 0, firstPackOn: null });
+    server.fail("recordCardPulls", "a dead spot at the turn of the day");
+
+    const records = () => server.calls.filter((c) => c.includes("recordCardPulls")).length;
+    await page.goto("/players/pack");
+    await tearPack(page);
+    // The first attempt goes out and dies. The loop is now asleep, four seconds
+    // before the second and twelve before the third.
+    await expect.poll(records, { timeout: 20_000 }).toBe(1);
+
+    // And midnight lands in that sleep.
+    //
+    // `Date` is shifted by hand rather than with `page.clock`, which also freezes
+    // what React's scheduler reads — a state update made after it may then never
+    // flush, and an assertion that a request does NOT go out would pass for the
+    // wrong reason. This proved exactly that before it was written this way. Only
+    // `Date` moves; `performance.now`, and so every timer, is left alone.
+    await page.evaluate(
+      (offset: number) => {
+        const Real = Date;
+        window.Date = new Proxy(Real, {
+          construct: (target, args) =>
+            args.length === 0
+              ? new target(Real.now() + offset)
+              : new target(...(args as unknown as [])),
+          get: (target, prop) =>
+            prop === "now" ? () => Real.now() + offset : Reflect.get(target, prop),
+        });
+      },
+      26 * 60 * 60 * 1000,
+    );
+    // The signal comes back, so nothing but the day is stopping the next attempt.
+    server.recover("recordCardPulls");
+
+    // Turn the cards while it sleeps, which is what a person would be doing.
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+    // Comfortably past both of the loop's remaining wakes, and comfortably short
+    // of the sixty-second day tick — so what is being asserted here is the loop's
+    // own guard and not the re-seal that eventually follows it.
+    await page.waitForTimeout(6_000);
+    expect(records()).toBe(1);
+
+    // And the cards are still here. The unrecorded row is deliberately not scoped
+    // to today — a pull the league has never heard of does not stop being one
+    // because the date rolled over — so it goes on holding them out of the prune.
+    await page.goto("/players");
+    await expect(page.getByRole("heading", { name: /the vault/i })).toBeVisible();
+    await expect(page.getByText(/not packed yet/i)).toHaveCount(PLAYERS.length - PACK_SIZE);
+  });
+
+  test("carries a guest's pack across a claim instead of dealing a second one", async ({
+    page,
+    server,
+  }) => {
+    // B-07, on the commonest first-timer path there is: somebody plays as a
+    // guest, tears today's pack, is asked to claim a player, does, and comes
+    // back. The stored pack is keyed on who they were, so claiming used to look
+    // exactly like the handset changing hands — a second pack for the same day,
+    // and its three copies minted on top of the three the claim just adopted.
+    //
+    // Searched for rather than pinned: the fixture roster is four players deep,
+    // so an arbitrary device id deals the same three cards as Alice's member pack
+    // on some days, and this assertion has to be a real one every day.
+    const device = Array.from({ length: 60 }, (_, i) => `carry-${i}`).find(
+      (d) => expectedPack(`d:${d}`).join() !== expectedPack("m:p-alice").join(),
+    );
+    expect(device, "no guest device id produced a pack unlike Alice's").toBeTruthy();
+    const guestIds = expectedPack(`d:${device}`);
+
+    const expiresAt = Date.now() + 90 * 24 * 60 * 60_000;
+    server.set("claimPlayer", {
+      ok: true,
+      token: `m.p-alice.${expiresAt}.signature`,
+      expiresAt,
+      name: "Alice Ace",
+    });
+    // The claim adopts the handset's cards before it carries the pack, and a
+    // failed adoption takes the member token back off — so an unstubbed one would
+    // end this test on the claim screen rather than at the bug.
+    server.set("adoptCollection", { ok: true, adopted: guestIds.length });
+
+    // Every body `recordCardPulls` was ever sent, so the assertion can be about
+    // THESE cards rather than about a call count that other things move. Matched
+    // as raw text: a server-function REQUEST is seroval cross-JSON just as the
+    // response is, so the ids arrive as `{"t":1,"s":"ep-dave"}` rather than as an
+    // array anything can destructure. Quoted, so no id can match half of another.
+    const filed: string[] = [];
+    page.on("request", (req) => {
+      if (!req.url().includes("/_serverFn/")) return;
+      if (!serverFnName(req.url()).includes("recordCardPulls")) return;
+      filed.push(req.postData() ?? "");
+    });
+    const filedGuestPack = () =>
+      filed.filter((body) => guestIds.every((id) => body.includes(`"${id}"`))).length;
+
+    await page.addInitScript((d: string) => {
+      localStorage.setItem("wwbh:device-id", d);
+    }, device!);
+
+    // As a guest: tear, and turn the first card, so a re-deal would be visible as
+    // lost progress and not just as different ids.
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await standCard(page).click();
+    await expect.poll(async () => (await readPackState(page))?.revealed).toEqual([0]);
+    const dealt = (await readPackState(page))!;
+    expect(dealt.ids).toEqual(guestIds);
+    expect(dealt.identity).toBe(`d:${device}`);
+    await expect.poll(filedGuestPack).toBeGreaterThan(0);
+    const filedAsGuest = filedGuestPack();
+
+    // They claim their player.
+    await page.goto("/claim");
+    await page.getByRole("button", { name: /Alice Ace/i }).click();
+    await page.getByRole("textbox").fill("ACDEF4");
+    await page
+      .getByRole("button", { name: /claim|unlock|submit/i })
+      .last()
+      .click();
+    await expect(page).toHaveURL(/\/players/);
+
+    // The pack came with them, cards and progress and all, and it remembers who
+    // it was dealt to.
+    await expect.poll(async () => (await readPackState(page))?.identity).toBe("m:p-alice");
+    const carried = (await readPackState(page))!;
+    expect(carried.ids).toEqual(guestIds);
+    expect(carried.revealed).toEqual([0]);
+    expect(carried.carriedFrom).toBe(`d:${device}`);
+
+    // And back on the pack screen it is the pack they already tore. No wrapper,
+    // no second deal, and — the economy half of the bug — the member does not
+    // file cards the claim's adoption has already filed. Six copies for one
+    // league day is the thing B-07 actually costs.
+    await page.goto("/players/pack");
+    await expect(sealedPack(page)).toBeHidden();
+    expect((await readPackState(page))?.ids).toEqual(guestIds);
+    // A fixed wait for the same reason the midnight test has one: the assertion
+    // is that a request does not go out, and there is nothing to poll for.
+    await page.waitForTimeout(6_000);
+    expect(filedGuestPack()).toBe(filedAsGuest);
+    expect((await readPackState(page))?.ids).toEqual(guestIds);
+  });
+
+  test("a second tab picks the pack up rather than dealing over it", async ({ page, server }) => {
+    // IndexedDB fires no cross-tab event, so a tab opened before the tear sat on
+    // a sealed wrapper forever — and tearing there dealt the same ids and wrote
+    // `revealed: []` and `cursor: 0` over the first tab's progress. Both tabs are
+    // in one context on purpose: that is what shares the storage this turns on.
+    const device = "two-tab-device";
+    const ids = expectedPack(`d:${device}`);
+    const seed = (p: import("@playwright/test").Page) =>
+      p.addInitScript((d: string) => {
+        localStorage.setItem("wwbh:device-id", d);
+      }, device);
+
+    await seed(page);
+    const other = await page.context().newPage();
+    try {
+      await seed(other);
+      await stubServerFns(other);
+
+      // The second tab opens FIRST, and sits on the wrapper.
+      await other.goto(`${BASE_URL}/players/pack`);
+      await expect(sealedPack(other)).toBeVisible();
+
+      // The first tab tears and turns a card.
+      await page.goto("/players/pack");
+      await tearPack(page);
+      await standCard(page).click();
+      await expect.poll(async () => (await readPackState(page))?.revealed).toEqual([0]);
+
+      // The other tab hears about it and picks the same pack up, unsealed.
+      await expect(sealedPack(other)).toBeHidden();
+      expect((await readPackState(other))?.ids).toEqual(ids);
+
+      // And the first tab's progress is still there — which is the half that was
+      // actually being lost.
+      await expect.poll(async () => (await readPackState(other))?.revealed).toEqual([0]);
+      await page.waitForTimeout(2_000);
+      const row = (await readPackState(page))!;
+      expect(row.ids).toEqual(ids);
+      expect(row.revealed).toEqual([0]);
+    } finally {
+      await other.close();
+    }
+    // Nothing about the stub in the other tab should have leaked into this one.
+    expect(server.calls.length).toBeGreaterThan(0);
   });
 
   test("puts no finish on a card nobody has packed", async ({ page }) => {

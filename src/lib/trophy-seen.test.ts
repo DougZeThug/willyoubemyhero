@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
+  carryTrophySeen,
   markTrophiesCelebrated,
   setTrophySeen,
   trophyKey,
@@ -83,6 +84,72 @@ describe("markTrophiesCelebrated", () => {
   it("does nothing at all for an empty list", () => {
     markTrophiesCelebrated([]);
     expect(live().primed).toBe(false);
+  });
+});
+
+describe("carryTrophySeen", () => {
+  const DEVICE = "d:device-1";
+
+  it("re-files a guest's ceremonies under the player they claimed", () => {
+    // The pack screen marks a guest's finished set under their pack identity,
+    // because that is the only name the device has for them. The watcher only
+    // ever asks about `<participantId>:<set>`, so without the translation the
+    // claim banks the trophy and the host plays the ceremony a second time.
+    setTrophySeen({ primed: true, ids: [trophyKey(DEVICE, "pets")] });
+    carryTrophySeen(DEVICE, ME);
+    expect(live().ids).toContain(trophyKey(ME, "pets"));
+  });
+
+  it("carries every set the guest finished, not just the first", () => {
+    setTrophySeen({
+      primed: true,
+      ids: [trophyKey(DEVICE, "pets"), trophyKey(DEVICE, "wags")],
+    });
+    carryTrophySeen(DEVICE, ME);
+    expect(live().ids).toEqual(
+      expect.arrayContaining([trophyKey(ME, "pets"), trophyKey(ME, "wags")]),
+    );
+  });
+
+  it("leaves keys that are not the guest's alone", () => {
+    // Two people at a party on one handset. Translating somebody else's key onto
+    // the claimer would swallow a ceremony that is genuinely theirs to see.
+    setTrophySeen({
+      primed: true,
+      ids: [trophyKey(DEVICE, "pets"), trophyKey(THEM, "cornhole"), "d:other-device:wags"],
+    });
+    carryTrophySeen(DEVICE, ME);
+    const ids = live().ids;
+    expect(ids).toContain(trophyKey(ME, "pets"));
+    expect(ids).not.toContain(trophyKey(ME, "cornhole"));
+    expect(ids).not.toContain(trophyKey(ME, "wags"));
+    // And the originals are untouched.
+    expect(ids).toEqual(
+      expect.arrayContaining([trophyKey(THEM, "cornhole"), "d:other-device:wags"]),
+    );
+  });
+
+  it("keeps a set name containing a colon in one piece", () => {
+    // Only the identity prefix is replaced. Splitting on every colon would cut a
+    // set id in half and mark a trophy nobody owns.
+    setTrophySeen({ primed: true, ids: [trophyKey(DEVICE, "pets:2026")] });
+    carryTrophySeen(DEVICE, ME);
+    expect(live().ids).toContain(trophyKey(ME, "pets:2026"));
+  });
+
+  it("writes nothing when the guest celebrated nothing", () => {
+    // The overwhelmingly common case: a claim with no finished set behind it must
+    // not wake every listener for a no-op.
+    setTrophySeen({ primed: true, ids: [trophyKey(THEM, "pets")] });
+    const before = window.localStorage.getItem(KEY);
+    carryTrophySeen(DEVICE, ME);
+    expect(window.localStorage.getItem(KEY)).toBe(before);
+  });
+
+  it("shrugs at a carry to the identity it is already under", () => {
+    setTrophySeen({ primed: true, ids: [trophyKey(ME, "pets")] });
+    carryTrophySeen(ME, ME);
+    expect(live().ids).toEqual([trophyKey(ME, "pets")]);
   });
 });
 

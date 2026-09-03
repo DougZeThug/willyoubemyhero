@@ -6,6 +6,9 @@ import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-t
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import { clearAdminToken } from "@/lib/admin-token";
 import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import { carryPackToIdentity } from "@/lib/card-collection";
+import { carryTrophySeen } from "@/lib/trophy-seen";
+import { deviceId } from "@/lib/device-id";
 import { clearAccountHandoff } from "@/lib/account-handoff";
 import { setAccountSyncState } from "@/lib/account-sync-state";
 
@@ -160,6 +163,17 @@ export function useAccountSync(user: User | null) {
           }
         }
         if (cancelled) return;
+        // The claim screen's move, for the same two reasons — a sign-in is the
+        // other way a guest becomes a member, and B-07 and B-13 do not care which
+        // door was used. Guarded by `cancelled` like every other await here: a
+        // sync the next account has taken over must not rewrite this device's
+        // pack under an identity that is no longer live.
+        const device = deviceId();
+        if (device) {
+          await carryPackToIdentity(`d:${device}`, `m:${res.id}`);
+          if (cancelled) return;
+          carryTrophySeen(`d:${device}`, res.id);
+        }
         // Only now. Clearing it before the upload left a phone whose adoption
         // failed with no identity at all, and its cards filed under neither.
         clearGuestToken();

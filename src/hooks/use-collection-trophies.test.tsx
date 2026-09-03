@@ -43,7 +43,12 @@ vi.mock("@/integrations/supabase/client", () => {
 });
 
 import { useCollectionTrophyWatcher } from "./use-collection-trophies";
-import { markTrophiesCelebrated, setTrophySeen, trophyKey } from "@/lib/trophy-seen";
+import {
+  carryTrophySeen,
+  markTrophiesCelebrated,
+  setTrophySeen,
+  trophyKey,
+} from "@/lib/trophy-seen";
 
 const ME = "p-me";
 const THEM = "p-them";
@@ -146,6 +151,45 @@ describe("useCollectionTrophyWatcher", () => {
     const member = watch([trophy(ME, "pets")]);
     await waitFor(() => expect(member.result.current.queue).toHaveLength(1));
     expect(member.result.current.queue[0]).toMatchObject({ collection: "pets" });
+  });
+
+  it("does not replay a set the guest already celebrated before claiming", async () => {
+    // The other half of the guest path. B-13's fix stopped the ceremony being
+    // swallowed; this stops it being shown twice. The pack screen fires it there
+    // and then, marked under the only name the device has for a guest — and the
+    // claim banks the trophy under a participant id the watcher then finds
+    // uncelebrated. carryTrophySeen translates the key at claim time.
+    const DEVICE = "d:device-1";
+    memberSession.mockReturnValue(null);
+    packIdentity.mockReturnValue(DEVICE);
+    const guest = watch([]);
+    await waitFor(() =>
+      expect(window.localStorage.getItem("wwbh:trophy-seen")).toContain('"primed":true'),
+    );
+    // The pack screen's own ceremony, keyed on the guest's pack identity.
+    markTrophiesCelebrated([trophyKey(DEVICE, "pets")]);
+    guest.unmount();
+
+    // They claim. The trophy lands under the participant, and the carry is what
+    // makes it already-seen.
+    carryTrophySeen(DEVICE, ME);
+    memberSession.mockReturnValue({ participantId: ME });
+    packIdentity.mockReturnValue(`m:${ME}`);
+    const member = watch([trophy(ME, "pets")]);
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    expect(member.result.current.queue).toEqual([]);
+  });
+
+  it("still fires for a set the guest never saw a ceremony for", async () => {
+    // The carry must not turn into a blanket "this member has seen everything".
+    // A set banked by a grant while they were a guest has had no ceremony, and
+    // still deserves one.
+    const DEVICE = "d:device-1";
+    setTrophySeen({ primed: true, ids: [trophyKey(DEVICE, "pets")] });
+    carryTrophySeen(DEVICE, ME);
+    const { result } = watch([trophy(ME, "pets"), trophy(ME, "wags")]);
+    await waitFor(() => expect(result.current.queue).toHaveLength(1));
+    expect(result.current.queue[0]).toMatchObject({ collection: "wags" });
   });
 
   it("queues both sets a single trade can close", async () => {

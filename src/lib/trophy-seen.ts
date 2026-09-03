@@ -104,6 +104,37 @@ export function markTrophiesCelebrated(keys: readonly string[]) {
 }
 
 /**
+ * Re-file a guest's ceremonies under the player they have just claimed.
+ *
+ * The pack screen marks a guest's finished set under their PACK identity
+ * (`d:<deviceId>`), because that is the only name the device has for them — and
+ * `uncelebratedTrophies` above only ever asks about `<participantId>:<set>`. So
+ * without this the claim banks the trophy under the participant, the global host
+ * finds it uncelebrated, and the guest sees the same ceremony a second time.
+ * B-13's fix stopped it being swallowed; this stops it being shown twice.
+ *
+ * `to` is the bare participant id and NOT the `m:` pack identity, on purpose:
+ * this key space belongs to the member the watcher asks about, not to the pack
+ * the row was carried with.
+ *
+ * Reads the module value rather than storage, like markTrophiesCelebrated — the
+ * ceremony host is mounted at the root, so every screen that can reach a claim
+ * has already primed it.
+ */
+export function carryTrophySeen(from: string, to: string) {
+  if (!from || !to || from === to) return;
+  const prefix = `${from}:`;
+  const carried = current.ids
+    .filter((id) => id.startsWith(prefix))
+    .map((id) => `${to}:${id.slice(prefix.length)}`);
+  if (carried.length === 0) return;
+  // The guest's own keys stay. Nothing reads them again, and dropping them would
+  // make a second call to this — a re-claim on the same handset — a no-op that
+  // silently un-marks a set if the first one's write was refused.
+  setTrophySeen({ primed: true, ids: [...current.ids, ...carried] });
+}
+
+/**
  * Which of this person's trophies have not been celebrated on this device.
  *
  * Pure, so the interesting cases can be tested without a browser. Returns an

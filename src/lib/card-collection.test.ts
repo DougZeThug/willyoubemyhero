@@ -224,6 +224,33 @@ describe("pack state", () => {
     ]);
   });
 
+  it("round-trips a set the pull finished but the secret has not revealed yet", async () => {
+    // The ceremony fires late, after the card has been turned over, so there is a
+    // gap — and a reload in it used to swallow the most earned moment in the game:
+    // the in-memory ref went with the page and the re-pull answers null because
+    // the row already exists.
+    const mod = await freshModule();
+    const pendingCompletion = {
+      collection: "pets",
+      label: "Pets",
+      size: 9,
+      completedOn: "2026-07-28",
+    };
+    await mod.savePackState({
+      dayKey: "2026-07-28",
+      ids: [CARD_A],
+      revealed: [],
+      pendingCompletion,
+    });
+    expect((await mod.loadPackState())?.pendingCompletion).toEqual(pendingCompletion);
+  });
+
+  it("loads a row that has no ceremony owing", async () => {
+    const mod = await freshModule();
+    await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A], revealed: [] });
+    expect((await mod.loadPackState())?.pendingCompletion).toBeUndefined();
+  });
+
   it("stores the dealt ids rather than a seed", async () => {
     // The last slot is swapped for a card the user had not collected at the
     // moment the pack was dealt, so re-deriving from the seed after revealing
@@ -339,6 +366,180 @@ describe("unrecorded pulls", () => {
     } finally {
       window.removeEventListener(mod.PACK_STATE_CHANGED, listen);
     }
+  });
+});
+
+describe("carrying a pack across a claim", () => {
+  // B-07. A guest tears today's pack, claims a player, and comes back — and the
+  // stored identity has moved from `d:<deviceId>` to `m:<participantId>`, which
+  // the resume effect reads as the handset changing hands. The league's answer is
+  // to carry the pack, so the same day never deals twice.
+  const DEVICE = "d:device-1";
+  const MEMBER = "m:p-alice";
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  async function todaysPack(mod: typeof import("./card-collection"), identity = DEVICE) {
+    const state = {
+      dayKey: mod.todayKey(),
+      ids: [CARD_A, CARD_B],
+      revealed: [0],
+      cursor: 1,
+      identity,
+    };
+    await mod.savePackState(state);
+    return state;
+  }
+
+  it("moves today's pack to the member and remembers who it was dealt to", async () => {
+    const mod = await freshModule();
+    const state = await todaysPack(mod);
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER)).toBe(true);
+    expect(await mod.loadPackState()).toEqual({
+      ...state,
+      identity: MEMBER,
+      carriedFrom: DEVICE,
+    });
+  });
+
+  it("leaves the reveal progress exactly where it was", async () => {
+    // The whole point: the cards on screen are the cards that were on screen. A
+    // carry that reset the cursor would be a re-deal wearing the same ids.
+    const mod = await freshModule();
+    await todaysPack(mod);
+    await mod.carryPackToIdentity(DEVICE, MEMBER);
+    const row = (await mod.loadPackState())!;
+    expect(row.ids).toEqual([CARD_A, CARD_B]);
+    expect(row.revealed).toEqual([0]);
+    expect(row.cursor).toBe(1);
+  });
+
+  it("refuses yesterday's pack", async () => {
+    // Yesterday's row is not a pack anybody is holding. Carrying it would hand a
+    // fresh member a stale pack and skip today's.
+    const mod = await freshModule();
+    await mod.savePackState({
+      dayKey: "2026-07-27",
+      ids: [CARD_A],
+      revealed: [],
+      identity: DEVICE,
+    });
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER)).toBe(false);
+    expect((await mod.loadPackState())?.identity).toBe(DEVICE);
+  });
+
+  it("refuses somebody else's pack", async () => {
+    // The handoff this must not swallow: a phone genuinely changing hands still
+    // re-seals, which is the behaviour the identity field exists for.
+    const mod = await freshModule();
+    await todaysPack(mod, "d:somebody-else");
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER)).toBe(false);
+    expect((await mod.loadPackState())?.identity).toBe("d:somebody-else");
+    expect((await mod.loadPackState())?.carriedFrom).toBeUndefined();
+  });
+
+  it("refuses when there is no pack at all", async () => {
+    const mod = await freshModule();
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER)).toBe(false);
+    expect(await mod.loadPackState()).toBeNull();
+  });
+
+  it("refuses to carry an identity to itself", async () => {
+    const mod = await freshModule();
+    await todaysPack(mod, MEMBER);
+    expect(await mod.carryPackToIdentity(MEMBER, MEMBER)).toBe(false);
+    expect((await mod.loadPackState())?.carriedFrom).toBeUndefined();
+  });
+
+  it("retires the unrecorded row, because the adoption is the record now", async () => {
+    // adoptLocalCollection runs immediately before the carry and files every card
+    // on the handset against the member, so the server vouches for them and the
+    // row has nothing left to protect. The whole row, not just today's ids: the
+    // snapshot it was adopted from is the whole store.
+    const mod = await freshModule();
+    await todaysPack(mod);
+    await mod.addUnrecorded({ dayKey: "2026-07-27", identity: DEVICE, ids: [CARD_A] });
+    await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: DEVICE, ids: [CARD_B] });
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER)).toBe(true);
+    expect(await mod.loadUnrecorded()).toBeNull();
+  });
+
+  it("leaves the unrecorded row alone when it refuses", async () => {
+    const mod = await freshModule();
+    await todaysPack(mod, "d:somebody-else");
+    await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: DEVICE, ids: [CARD_A] });
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER)).toBe(false);
+    expect((await mod.loadUnrecorded())?.ids).toEqual([CARD_A]);
+  });
+
+  it("announces the carry, so an open vault and an open pack both re-read", async () => {
+    const mod = await freshModule();
+    await todaysPack(mod);
+    const heard: string[] = [];
+    const listen = () => heard.push("changed");
+    window.addEventListener(mod.PACK_STATE_CHANGED, listen);
+    try {
+      await mod.carryPackToIdentity(DEVICE, MEMBER);
+      expect(heard).toHaveLength(1);
+    } finally {
+      window.removeEventListener(mod.PACK_STATE_CHANGED, listen);
+    }
+  });
+
+  it("moves the cross-tab mirror with the row", async () => {
+    // The mirror is what a second tab reads before dealing, and what wakes one
+    // sitting on a sealed wrapper. Left on the guest's name it would neither
+    // stop the member's tab dealing a second pack nor tell it to look again.
+    const mod = await freshModule();
+    await todaysPack(mod);
+    expect(mod.packDealtElsewhere(mod.todayKey(), DEVICE)).toBe(true);
+    await mod.carryPackToIdentity(DEVICE, MEMBER);
+    expect(mod.packDealtElsewhere(mod.todayKey(), MEMBER)).toBe(true);
+    expect(mod.packDealtElsewhere(mod.todayKey(), DEVICE)).toBe(false);
+  });
+});
+
+describe("the pack-dealt mirror", () => {
+  // localStorage rather than the row itself, because IndexedDB can answer
+  // neither question the tear asks: it is asynchronous, and it says nothing
+  // across tabs.
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("is written by the save, and only for the pack that was saved", async () => {
+    const mod = await freshModule();
+    await mod.savePackState({
+      dayKey: "2026-07-28",
+      ids: [CARD_A],
+      revealed: [],
+      identity: "d:device-1",
+    });
+    expect(mod.packDealtElsewhere("2026-07-28", "d:device-1")).toBe(true);
+    expect(mod.packDealtElsewhere("2026-07-28", "d:device-2")).toBe(false);
+    expect(mod.packDealtElsewhere("2026-07-29", "d:device-1")).toBe(false);
+  });
+
+  it("says nothing before a pack has been dealt", async () => {
+    const mod = await freshModule();
+    expect(mod.packDealtElsewhere("2026-07-28", "d:device-1")).toBe(false);
+  });
+
+  it("is forgotten when the row it mirrors is", async () => {
+    // Cleared where the route decides the stored row is not this person's pack
+    // for today, which is what stops a mirror that outlived its row costing
+    // anything more than a single refused tap.
+    const mod = await freshModule();
+    await mod.savePackState({
+      dayKey: "2026-07-28",
+      ids: [CARD_A],
+      revealed: [],
+      identity: "d:device-1",
+    });
+    mod.clearPackDealt();
+    expect(mod.packDealtElsewhere("2026-07-28", "d:device-1")).toBe(false);
   });
 });
 

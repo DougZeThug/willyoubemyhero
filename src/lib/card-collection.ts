@@ -6,6 +6,7 @@
 
 import { openDB, type IDBPDatabase } from "idb";
 import { bestEdition, type Edition } from "./card-edition";
+import type { CompletedCollection } from "./collection-trophies";
 
 // The name, the version and the store names below are read directly by
 // e2e/journeys.spec.ts, which opens this database itself to assert what a pack
@@ -16,6 +17,21 @@ const DB_NAME = "wwbh-cards";
 const COLLECTED = "collected";
 const CARD_META = "card-meta";
 const PACK_STATE = "pack-state";
+
+/**
+ * Local date key, so the pack rolls over at midnight in the user's own timezone.
+ *
+ * Lives beside the row that carries it rather than in the pack route, because
+ * two things now have to agree on what "today" means: the screen deciding
+ * whether to re-seal, and `carryPackToIdentity` below deciding whether a stored
+ * pack is still today's. Two copies of this would disagree at exactly the moment
+ * it matters.
+ */
+export function todayKey(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 /** Aspect ratio of a player's card art, cached so revisits never re-measure or jump. */
 export type CardMeta = { aspect: number };
@@ -74,6 +90,32 @@ export type PackState = {
    * not having shipped. See the resume effect in players.pack.tsx.
    */
   cursor?: number;
+  /**
+   * The identity this pack was dealt to before a claim carried it across.
+   *
+   * B-07: a guest tears today's pack and then claims a player, and `identity`
+   * above moves from `d:<deviceId>` to `m:<participantId>` — which the resume
+   * effect cannot tell apart from the handset changing hands, so it re-sealed and
+   * dealt a second pack for the same day. `carryPackToIdentity` rewrites the
+   * identity instead and leaves this behind, which is the only record that the
+   * pack on screen was somebody's *guest* pack. The record loop reads it: the
+   * claim's adoption already filed these cards, so the member must not file them
+   * again. Absent on every pack that was never carried, which is nearly all of them.
+   */
+  carriedFrom?: string;
+  /**
+   * A set this pull finished, waiting for the secret to be turned over.
+   *
+   * The ceremony deliberately fires late — you see WHICH card it was and only
+   * then that it was the last one — so between the pull landing and the card
+   * being turned there is a gap, and a reload in that gap used to swallow the
+   * most earned moment in the game outright: the in-memory ref went with the
+   * page, the re-pull answers `completedCollection: null` because the row already
+   * exists, and the global host stays quiet because the trophy was marked
+   * celebrated at pull time. Parked here so it survives the reload, and dropped
+   * the moment the ceremony actually runs.
+   */
+  pendingCompletion?: CompletedCollection;
 };
 
 /**
@@ -245,9 +287,88 @@ export async function savePackState(state: PackState): Promise<void> {
   try {
     const db = await getDb();
     await db.put(PACK_STATE, state, PACK_STATE_KEY);
+    // Only once the row is actually down. The mirror is what stops a second tab
+    // dealing over this pack, so a mirror written for a row that never landed
+    // would lock a device with IndexedDB blocked out of the pack entirely —
+    // the exact opposite of the call `loadPackState` makes above.
+    markPackDealt(state);
     announcePackState();
   } catch {
     /* ignore */
+  }
+}
+
+/**
+ * A synchronous, cross-tab shadow of "this identity has a pack today".
+ *
+ * IndexedDB can answer neither question `tearOpen` has to answer at the moment
+ * of the rip. It is asynchronous, and `tearOpen` is synchronous because the
+ * wrapper's `onTear` wants a boolean back in the same tick; and it fires no
+ * cross-tab event, so a second tab opened before the tear sat on a sealed
+ * wrapper forever — tearing there dealt the same ids and wrote `revealed: []`
+ * over the first tab's progress.
+ *
+ * localStorage answers both. Same `wwbh:` key and the same try/catch as
+ * vault-favourites.ts, and the same no-op guard trophy-seen.ts uses: the value
+ * is constant for the life of one pack, so the whole day writes once and the
+ * other tab gets exactly one `storage` event — at the tear, which is the only
+ * moment it needs one.
+ */
+export const PACK_DEALT_KEY = "wwbh:pack-dealt";
+
+/** The last value written, for the no-op guard. See setTrophySeen's `current`. */
+let dealtMirror: string | null = null;
+
+function mirrorValue(dayKey: string, identity: string | undefined): string {
+  return `${dayKey}:${identity ?? ""}`;
+}
+
+function markPackDealt(state: PackState) {
+  const next = mirrorValue(state.dayKey, state.identity);
+  try {
+    // Seeded from storage on the first write of a page load, so resuming a pack
+    // this browser already holds is a genuine no-op. Without it the first save
+    // after a reload rewrites the same value, and a browser that fires `storage`
+    // on an unchanged write would wake every other tab for nothing.
+    dealtMirror ??= window.localStorage.getItem(PACK_DEALT_KEY);
+    if (next === dealtMirror) return;
+    dealtMirror = next;
+    window.localStorage.setItem(PACK_DEALT_KEY, next);
+  } catch {
+    /* private mode still gets the in-tab half, which is the re-entrancy guard */
+  }
+}
+
+/**
+ * Does this identity already hold today's pack, as far as any tab knows?
+ *
+ * Read straight from storage rather than from the module value: the whole point
+ * is the tab that did NOT do the writing.
+ */
+export function packDealtElsewhere(dayKey: string, identity: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(PACK_DEALT_KEY) === mirrorValue(dayKey, identity);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Forget the mirror.
+ *
+ * Called where the route decides the stored row is not this person's pack for
+ * today, which is also the only way a mirror that has outlived its row is ever
+ * cleaned up — and the reason a stale one can never lock somebody out for more
+ * than a single refused tap.
+ */
+export function clearPackDealt(): void {
+  dealtMirror = null;
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(PACK_DEALT_KEY);
+  } catch {
+    /* nothing to forget */
   }
 }
 
@@ -346,6 +467,59 @@ export async function retireUnrecorded(recorded: readonly string[]): Promise<voi
     announcePackState();
   } catch {
     /* ignore */
+  }
+}
+
+/**
+ * Move today's pack from the guest who tore it to the member they just became.
+ *
+ * B-07, AND THE ANSWER IS A PRODUCT DECISION RATHER THAN A BUG FIX. A guest who
+ * tears today's pack and then claims a player was dealt a SECOND pack, because
+ * the stored identity moved from `d:<deviceId>` to `m:<participantId>` and the
+ * resume effect reads a mismatch as the handset changing hands. Two readings
+ * were defensible: carry the pack across, or call the second one a welcome gift.
+ * The league chose to CARRY IT. Six roster copies for one day, in a game whose
+ * economy is scarcity, is not a gift worth minting — and it lands on the path
+ * most new players take. Reversing that decision is one line: stop calling this
+ * from claim.tsx and use-account.ts, and the mismatch re-seals as it used to.
+ *
+ * Deliberately narrow. It carries only TODAY's pack, and only from the identity
+ * the caller names — so a phone that genuinely changed hands, or a row left over
+ * from yesterday, still gets the re-seal it should. Anything else is a no-op that
+ * answers false.
+ */
+export async function carryPackToIdentity(from: string, to: string): Promise<boolean> {
+  if (!isBrowser() || !from || !to || from === to) return false;
+  try {
+    const db = await getDb();
+    // One transaction over both rows. The unrecorded row goes with the pack, and
+    // a carry that moved one without the other would leave the member holding
+    // ids filed under a guest — which `useMyCollection` reads as unattributable
+    // and stops protecting anyway.
+    const tx = db.transaction(PACK_STATE, "readwrite");
+    const state = (await tx.store.get(PACK_STATE_KEY)) as PackState | undefined;
+    if (!state || state.dayKey !== todayKey() || state.identity !== from) {
+      await tx.done;
+      return false;
+    }
+    const carried: PackState = { ...state, identity: to, carriedFrom: from };
+    await tx.store.put(carried, PACK_STATE_KEY);
+    // THE ADOPTION IS THE RECORD NOW. `adoptLocalCollection` runs immediately
+    // before this and files every card on the handset against the member, so the
+    // server vouches for them and the row has nothing left to protect. Retiring
+    // only this pack's ids would strand an older day's, and those were adopted
+    // too — the snapshot is the whole store, not today's three.
+    await tx.store.delete(UNRECORDED_KEY);
+    await tx.done;
+    // The mirror moves with the row, which is also what wakes a pack screen open
+    // in another tab: it is watching this key, and the identity has changed.
+    markPackDealt(carried);
+    announcePackState();
+    return true;
+  } catch {
+    // A device that cannot write cannot carry. It gets the second pack, which is
+    // the behaviour it had before this existed.
+    return false;
   }
 }
 

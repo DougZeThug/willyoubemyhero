@@ -52,6 +52,27 @@ function withSecret(server: ServerFnMock, over: Record<string, unknown> = {}) {
   });
 }
 
+/** Today's pack row out of IndexedDB, for the parts of it the server never sees. */
+function packRow(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<{ ids: string[]; pendingCompletion?: { collection: string } } | null>(
+        (resolve) => {
+          const open = indexedDB.open("wwbh-cards", 2);
+          open.onsuccess = () => {
+            const db = open.result;
+            if (!db.objectStoreNames.contains("pack-state")) return resolve(null);
+            const req = db.transaction("pack-state").objectStore("pack-state").get("today");
+            req.onsuccess = () =>
+              resolve((req.result as { ids: string[]; pendingCompletion?: never }) ?? null);
+            req.onerror = () => resolve(null);
+          };
+          open.onerror = () => resolve(null);
+        },
+      ),
+  );
+}
+
 /**
  * Run the whole reveal sequence.
  *
@@ -184,6 +205,75 @@ test.describe("the daily secret", () => {
       .toBeGreaterThan(before);
     // And the slot stays on screen rather than disappearing on the way.
     await expect(page.getByText(/one more card/i)).toBeVisible();
+  });
+
+  test("keeps the set-complete ceremony across a reload before the card is turned", async ({
+    page,
+    server,
+  }) => {
+    // The most earned moment in the game, and it was being swallowed by a
+    // refresh. The pull answers with the completed set at the TEAR, but the
+    // ceremony deliberately waits until the secret has been turned over — you see
+    // which card it was, and only then that it was the last one. Everything in
+    // that gap lived in memory: the ref went with the page, the re-pull answers
+    // with no completion because the row already exists, and the global host
+    // stays quiet because the trophy was marked celebrated at pull time. Three
+    // correct behaviours adding up to a ceremony nobody ever saw.
+    //
+    // A tear, a reload and then the whole reveal sequence — four cards' holds and
+    // chimes, the secret's long one, and the beat the set ceremony waits out
+    // behind it. That is past the default budget on its own, before the reload
+    // has recompiled anything.
+    test.slow();
+    await asMember(page);
+    withSecret(server, {
+      pull: {
+        completedCollection: {
+          collection: "pets",
+          label: "Pets Of The League",
+          size: 9,
+          completedOn: "2026-07-28",
+        },
+      },
+    });
+    const pulls = () => server.calls.filter((c) => c.includes("pullSecretCard")).length;
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+    // The pull fires off the tear, so by here the completion has landed and been
+    // parked — and the card has not been turned, which is the whole gap.
+    // Waiting for the completion to be PARKED, not merely for the request to go
+    // out: the response is what parks it, and reloading on top of one still in
+    // flight tests nothing but the reload. This is also the persistence half of
+    // the fix, asserted where it happens.
+    await expect
+      .poll(async () => (await packRow(page))?.pendingCompletion?.collection)
+      .toBe("pets");
+    const beforeReload = pulls();
+
+    // The server will not say it twice. A completion is derived from the row
+    // being new, so the pull that runs on the next load answers with none at all
+    // — which is exactly why the pack row has to be the one carrying it.
+    withSecret(server, { pull: { completedCollection: null } });
+    await page.reload();
+    await expect(sealedPack(page)).toBeHidden();
+    // Still owed, on a page that has never heard the answer.
+    expect((await packRow(page))?.pendingCompletion?.collection).toBe("pets");
+    // The reload's own pull has to be in the air before the sequence starts.
+    // `revealEverything` waits for a pull it can see one going out for; pressed
+    // before that, it finds nothing pending, gives up on the fourth slot and
+    // finishes without ever turning the card the ceremony hangs off.
+    await expect.poll(pulls).toBeGreaterThan(beforeReload);
+
+    await revealAll(page);
+    const ceremony = page.getByTestId("collection-complete");
+    await expect(ceremony).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Pets Of The League/i).first()).toBeVisible();
+    // Once. Two of these on top of each other is one nobody can read, which is
+    // what marking the trophy at pull time exists to prevent.
+    await expect(ceremony).toHaveCount(1);
+    // And the row lets go of it, so tomorrow's reload does not replay it.
+    await expect.poll(async () => (await packRow(page))?.pendingCompletion).toBeUndefined();
   });
 
   test("a duplicate reads as a wink, not a failure", async ({ page, server }) => {

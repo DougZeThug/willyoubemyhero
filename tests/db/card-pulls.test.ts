@@ -626,6 +626,54 @@ describe("adopt_card_copies", () => {
     expect(await adopt(IDS.alice, [ids[0]])).toBe(0);
   });
 
+  it("mints a SECOND copy when a pack is recorded after the same cards were adopted", async () => {
+    // B-07's load-bearing finding, and the reason the pack screen refuses to
+    // re-record a carried pack. The day's ration is card_mints, and an adopted
+    // copy writes no mint row — it is not a pull. So a guest's pack that the
+    // claim has just adopted, recorded again a moment later under the member,
+    // files a whole second copy of every card in it: three become six for one
+    // league day, in a game whose economy is scarcity.
+    //
+    // This is documenting the behaviour rather than asking for it to change. The
+    // RPC is right: adoption and pulling are different events and the once-a-day
+    // index is deliberately scoped to pulls. The client is what must not ask.
+    const ids = await cardIds();
+    expect(await adopt(IDS.alice, [ids[0], ids[1]])).toBe(2);
+    expect(await copies(IDS.alice)).toHaveLength(2);
+
+    expect(await record(IDS.alice, [ids[0], ids[1]])).toBe(2);
+    const after = await copies(IDS.alice);
+    expect(after).toHaveLength(4);
+    expect(after.filter((c) => c.source === "adopt")).toHaveLength(2);
+    expect(after.filter((c) => c.source === "pull")).toHaveLength(2);
+  });
+
+  it("re-rolls the finish on the copy that record then mints", async () => {
+    // The second half of the same finding, and why the client's skip stays even
+    // if the count above ever became one. An adopted copy is standard and
+    // client-asserted on purpose; the minted one is server-rolled, and
+    // card_pulls.edition is best-of-copies — so recording a carried pack does not
+    // merely duplicate it, it re-decides what the card is wearing.
+    const ids = await cardIds();
+    await adopt(IDS.alice, [ids[0]]);
+    expect((await copies(IDS.alice)).map((c) => c.edition_asserted_by)).toEqual(["client"]);
+    await record(IDS.alice, [ids[0]]);
+    expect((await copies(IDS.alice)).map((c) => c.edition_asserted_by).sort()).toEqual([
+      "client",
+      "server",
+    ]);
+  });
+
+  it("adopts nothing after the pack was recorded, which is the safe order", async () => {
+    // The mirror image, and the reason the skip belongs on the record rather than
+    // on the adoption: adoption already refuses a card the person holds a copy of,
+    // so the two calls are only dangerous in one direction.
+    const ids = await cardIds();
+    expect(await record(IDS.alice, [ids[0], ids[1]])).toBe(2);
+    expect(await adopt(IDS.alice, [ids[0], ids[1]])).toBe(0);
+    expect(await copies(IDS.alice)).toHaveLength(2);
+  });
+
   it("serialises two adoptions racing on one account", async () => {
     // What this proves is the ledger's primary key: the second insert into
     // card_adoptions waits on the first and lands on ON CONFLICT DO NOTHING, so

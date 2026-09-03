@@ -29,10 +29,14 @@ import type { CompletedCollection } from "@/lib/collection-trophies";
 import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import {
   addUnrecorded,
+  clearPackDealt,
   collectCard,
   loadPackState,
+  packDealtElsewhere,
   retireUnrecorded,
   savePackState,
+  todayKey,
+  PACK_DEALT_KEY,
   type CollectedCard,
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
@@ -141,13 +145,6 @@ const AUTO_MOUNT_MS = 300;
  * would finish having never shown the card the whole sequence is built around.
  */
 const SECRET_STAGE_TIMEOUT_MS = 4_000;
-
-/** Local date key so the pack rolls over at midnight in the user's own timezone. */
-function todayKey(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 function PackPage() {
   const { event, bundle, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
@@ -260,6 +257,16 @@ function PackPage() {
    * stale. Same reason the reveal latch beside it is one.
    */
   const pendingCompletionRef = useRef<CompletedCollection | null>(null);
+  /**
+   * The same value, mirrored into state so the save effect can persist it.
+   *
+   * The ref is what revealSecret reads — see above, a stale closure would swallow
+   * the one ceremony this feature exists for. But nothing else in the pack row
+   * changes when a completion arrives, so a ref alone would never wake the save
+   * effect, and the reload the parked ceremony has to survive is exactly the one
+   * that loses it. Two homes for one value, each doing a job the other cannot.
+   */
+  const [pendingCompletion, setPendingCompletion] = useState<CompletedCollection | null>(null);
   const [completion, setCompletion] = useState<CompletedCollection | null>(null);
   const [secretPeeking, setSecretPeeking] = useState(false);
   const [secretPulling, setSecretPulling] = useState(false);
@@ -327,6 +334,61 @@ function PackPage() {
   const identity = usePackIdentity();
   const seed = identity ? packSeed(event?.id ?? null, dayKey, identity) : null;
 
+  /**
+   * The pack on screen was dealt to a guest and carried across by a claim.
+   *
+   * Read by the record loop, which must not file these cards again, and by the
+   * baseline latch, which must not treat the upgrade as a new person. A ref
+   * rather than state: both of those read it from inside effects that are keyed
+   * on other things, and nothing renders it.
+   */
+  const carriedFromRef = useRef<string | null>(null);
+  /**
+   * The identity `dealtIds` were actually dealt to.
+   *
+   * `identity` moves under a pack that is already on screen — a claim in another
+   * tab, the 90-day token expiring on the hourly tick — and the resume load that
+   * re-seals is always a beat behind it, because it is asynchronous and the
+   * effects keyed on the new identity are not. For that beat the ids in hand
+   * belong to somebody else, and the record loop below would file them under
+   * whoever the phone is now. That is how a guest's pack was minted a second
+   * time against the member who claimed it, in the tab they were not looking at.
+   */
+  const dealtForRef = useRef<string | null>(null);
+  /**
+   * Re-run the resume load without waiting for `dayKey` or `identity` to move.
+   *
+   * Two things need that. Another tab tearing the pack, which reaches this one
+   * as a `storage` event and nothing else; and an identity change that arrived
+   * while a card was mid-flip, which is deferred below rather than acted on.
+   */
+  const [resumeNonce, setResumeNonce] = useState(0);
+  /**
+   * An identity change the resume load has not been allowed to act on yet.
+   *
+   * The day tick refuses to re-seal a pack under somebody's thumb; this effect
+   * had no such guard, so any identity flip mid-reveal nulled `dealtIds` and the
+   * cards vanished under their finger. Reachable from a claim in another tab, the
+   * 90-day token expiring on the hourly tick, and this screen's own
+   * `clearMemberToken()` when the secret pull answers "Claim your player first".
+   * Remembered here and replayed when the reveal or the ceremony lets go.
+   */
+  const deferredIdentityRef = useRef<string | null>(null);
+
+  /**
+   * Act on a deferred identity change, now that nothing is in the air.
+   *
+   * Called from every `finally` that hands `revealingRef` back and from the
+   * ceremony's own close — those are the three places the guard above can stop
+   * being true, and a deferral that outlives all of them is a pack that never
+   * re-seals.
+   */
+  const releaseDeferredResume = useCallback(() => {
+    if (deferredIdentityRef.current == null) return;
+    deferredIdentityRef.current = null;
+    setResumeNonce((n) => n + 1);
+  }, []);
+
   // One pack a day, so a return visit resumes rather than deals. Yesterday's row
   // is simply ignored — the next tear overwrites it.
   useEffect(() => {
@@ -337,6 +399,13 @@ function PackPage() {
     // tearable sealed pack that a fast tap can deal straight over the saved
     // one. Skipping this pass keeps `stateLoaded` false until we know.
     if (identity == null) return;
+    // The day tick's guard, which this effect went without. Deferred rather than
+    // dropped: whoever the pack now belongs to, the cards already on the stand
+    // finish their reveal first and the re-seal happens after.
+    if (revealingRef.current || openingRef.current) {
+      deferredIdentityRef.current = identity;
+      return;
+    }
     let cancelled = false;
     // Cleared first so the rollover below cannot write today's key over
     // yesterday's ids in the window before this resolves.
@@ -371,6 +440,14 @@ function PackPage() {
         // good.
         replayedRef.current = new Set(replay ? s.revealed : []);
         resumedRef.current = true;
+        carriedFromRef.current = s.carriedFrom ?? null;
+        // A row with no identity predates per-person packs and counted as a match
+        // above, so it counts as one here too.
+        dealtForRef.current = s.identity ?? identity;
+        // The parked ceremony, back from the row. Both homes, because the reveal
+        // reads the ref and the save effect reads the state.
+        pendingCompletionRef.current = s.pendingCompletion ?? null;
+        setPendingCompletion(s.pendingCompletion ?? null);
         revealedRef.current = revealedNow;
         setRevealed(revealedNow);
         setSecretRevealed(!!s.secretRevealed);
@@ -393,16 +470,38 @@ function PackPage() {
         revealedRef.current = [];
         replayedRef.current = new Set();
         resumedRef.current = false;
+        carriedFromRef.current = null;
+        dealtForRef.current = null;
+        pendingCompletionRef.current = null;
+        setPendingCompletion(null);
         setRevealed([]);
         setSecretRevealed(false);
         setCursor(0);
+        // The stored row is not this person's pack for today, so neither is the
+        // mirror. This is the only place a mirror that outlived its row is ever
+        // cleaned up — which is why one that somehow survives can cost at most a
+        // single refused tap rather than the day's pack.
+        clearPackDealt();
       }
       setStateLoaded(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [dayKey, identity]);
+  }, [dayKey, identity, resumeNonce]);
+
+  // Another tab tore the pack. IndexedDB says nothing across tabs, so the mirror
+  // beside it is the only signal this one gets — and without it a tab left on a
+  // sealed wrapper stayed sealed, then dealt the same ids over the other tab's
+  // reveal progress when somebody eventually tapped it.
+  useEffect(() => {
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== PACK_DEALT_KEY) return;
+      setResumeNonce((n) => n + 1);
+    };
+    window.addEventListener("storage", theirs);
+    return () => window.removeEventListener("storage", theirs);
+  }, []);
 
   // A tab left open past midnight used to sit on yesterday's pack forever, which
   // with a server-side drop becomes actively confusing: the fourth slot re-arms
@@ -450,7 +549,13 @@ function PackPage() {
   const baselineForRef = useRef<string | null>(null);
   useEffect(() => {
     if (!identity) return;
-    const somebodyNew = baselineForRef.current !== identity;
+    // A claim is not somebody new. `carriedFrom` names the identity this pack was
+    // dealt to, and the snapshot the reveal counts its floor from is *that*
+    // person's — see `revealAt`, which reads the baseline as "what the collection
+    // held when the pack was dealt". Dropping it on the upgrade would hand every
+    // remaining card a floor of zero on the way past.
+    const carried = carriedFromRef.current;
+    const somebodyNew = baselineForRef.current !== identity && carried !== baselineForRef.current;
     if (!collectionLoaded) {
       // Their reconciliation is still out. Drop the previous person's snapshot
       // rather than deal against it: `nextPack` is empty without a baseline and
@@ -511,6 +616,15 @@ function PackPage() {
    */
   const tearOpen = useCallback((): boolean => {
     if (dealtIds || nextPack.length === 0) return false;
+    // Another tab already tore this pack. `dealtIds` above only knows about this
+    // one, and IndexedDB fires no cross-tab event — so without the mirror a
+    // second tab dealt the same ids and wrote `revealed: []` and `cursor: 0` over
+    // the first tab's progress. Refused rather than merged, and the resume load
+    // is nudged so this tab picks the other's row up instead of sitting sealed.
+    if (identity && packDealtElsewhere(dayKey, identity)) {
+      setResumeNonce((n) => n + 1);
+      return false;
+    }
     const ids = nextPack.map((p) => p.id);
     // Dealt at the moment the rip commits rather than when the ceremony ends, so
     // the two round trips this unblocks — the daily secret's pull and the pack
@@ -521,6 +635,10 @@ function PackPage() {
     revealedRef.current = [];
     replayedRef.current = new Set();
     resumedRef.current = false;
+    // A pack dealt here is nobody's carried pack, whatever the last one was, and
+    // it belongs to whoever is holding the phone right now.
+    carriedFromRef.current = null;
+    dealtForRef.current = identity;
     setCursor(0);
     // The ceremony is the only thing the preference silences. Everything above is
     // the pack actually opening and happens either way.
@@ -537,13 +655,20 @@ function PackPage() {
     setSecretComing(!!actor && status.data?.available === true);
     playTear();
     return true;
-  }, [dealtIds, nextPack, reduced, actor, status.data?.available]);
+  }, [dealtIds, nextPack, reduced, actor, status.data?.available, dayKey, identity]);
 
-  const closeCeremony = useCallback((from: PackHandoff | null) => {
-    openingRef.current = false;
-    setEntering(from);
-    setOpening(false);
-  }, []);
+  const closeCeremony = useCallback(
+    (from: PackHandoff | null) => {
+      openingRef.current = false;
+      setEntering(from);
+      setOpening(false);
+      // One of the three moments the resume guard stops holding. Three cards in
+      // the air is the worst thing to re-seal under, so an identity that changed
+      // during the ceremony has been waiting for exactly this.
+      releaseDeferredResume();
+    },
+    [releaseDeferredResume],
+  );
 
   async function revealAt(i: number) {
     // Both guards read refs, not state. A tap during the hit's hold, and a second
@@ -614,6 +739,7 @@ function PackPage() {
       }
     } finally {
       revealingRef.current = false;
+      releaseDeferredResume();
     }
   }
 
@@ -659,8 +785,21 @@ function PackPage() {
           // be hours apart, so the resumed pack can carry a stale "revealed".
           if (res.fresh) setSecretRevealed(false);
           // Null on all but one pull in a season. Held for revealSecret rather
-          // than shown here — the card comes first.
-          pendingCompletionRef.current = res.completedCollection ?? null;
+          // than shown here — the card comes first. Parked on the pack row as
+          // well as in the ref, because the gap between this and the card being
+          // turned is a gap a reload used to swallow the ceremony in: the ref
+          // goes with the page, the re-pull answers null because the row already
+          // exists, and the mark below keeps the global host quiet.
+          //
+          // ONLY WHEN THERE IS ONE, never a null over the top. This same pull
+          // runs again on every load of an already-torn pack, and the server
+          // answers the second one with no completion at all because the row
+          // already exists — so assigning unconditionally would wipe the very
+          // ceremony the row was persisted to save, a beat after restoring it.
+          if (res.completedCollection) {
+            pendingCompletionRef.current = res.completedCollection;
+            setPendingCompletion(res.completedCollection);
+          }
           qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
           qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
           if (res.completedCollection) {
@@ -668,11 +807,18 @@ function PackPage() {
             // is a beat behind the card and the refetch below is not. Left until
             // then, the global host would see an uncelebrated trophy first and
             // play a second ceremony over the top of this one.
-            if (me?.participantId) {
-              markTrophiesCelebrated([
-                trophyKey(me.participantId, res.completedCollection.collection),
-              ]);
-            }
+            //
+            // A GUEST IS MARKED TOO, under the identity they actually have. They
+            // used to be marked under nothing at all, so the claim banked the
+            // trophy under their new participant id, the host found it
+            // uncelebrated, and they got the same ceremony twice.
+            // `carryTrophySeen` translates the key at claim time.
+            const key = me?.participantId
+              ? trophyKey(me.participantId, res.completedCollection.collection)
+              : identity
+                ? trophyKey(identity, res.completedCollection.collection)
+                : null;
+            if (key) markTrophiesCelebrated([key]);
             qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
           }
         } else {
@@ -699,10 +845,10 @@ function PackPage() {
     })();
 
     return () => clearTimeout(timer);
-    // `me?.participantId` only to stamp a completed set as already celebrated.
-    // Re-running on it is free: pullFiredRef latches on the first pass, so a
-    // second entry returns before it can spend anything.
-  }, [torn, actor, me?.participantId, pull, qc, retryNonce]);
+    // `me?.participantId` and `identity` only to stamp a completed set as already
+    // celebrated. Re-running on either is free: pullFiredRef latches on the first
+    // pass, so a second entry returns before it can spend anything.
+  }, [torn, actor, me?.participantId, identity, pull, qc, retryNonce]);
 
   /**
    * Tell the server which cards were in this pack, so the vault can say how many
@@ -757,8 +903,35 @@ function PackPage() {
     // dealt against nothing — and the latch below would make that pack permanent
     // for the day. Waiting costs nothing: the effect re-runs when the event lands.
     if (!torn || !dealtIds?.length || !actor || !seed || !event?.id) return;
+    // `stateLoaded` is the second half of the midnight guard below. When the day
+    // turns under an open tab, `dayKey` moves a beat before the resume load has
+    // answered with the new day's row — so for that beat `dealtIds` is still
+    // yesterday's while `dayKey` is today, and a wake landing in it would file
+    // yesterday's ids against today. The resume effect clears this flag for the
+    // whole of that window.
+    if (!stateLoaded) return;
+    // And the ids in hand have to be this identity's. Nothing is latched on the
+    // way out: the resume load is already on its way to deciding whether this
+    // pack is carried or re-sealed, and it owns the answer.
+    if (dealtForRef.current !== identity) return;
     if (recordedForRef.current === actor) return;
+    // A carried pack has already been filed, by the adoption the claim ran on the
+    // way here — and `record_card_pulls` rations on `card_mints` rather than on
+    // copies, so an adopted copy buys no protection at all: re-sending these ids
+    // mints a SECOND copy of every card and a pack_open for a pack the guest
+    // already opened. The pack open itself is not lost, because it was recorded
+    // against the guest id and `claim_guest_packs` carries it across.
+    if (carriedFromRef.current && pid) {
+      recordedForRef.current = actor;
+      return;
+    }
     recordedForRef.current = actor;
+    // The league day these ids belong to. Captured before the first attempt
+    // rather than read live, because the loop below sleeps up to twelve seconds
+    // and re-arms on `online` and `visibilitychange` — a phone that woke up at
+    // 00:01 could otherwise file yesterday's pack against the new day, minting it
+    // afresh and writing a pack_open for a day nobody opened a pack on.
+    const dealtOn = dayKey;
 
     void (async () => {
       // Record only today's dealt cards. An earlier version also backfilled the
@@ -785,6 +958,11 @@ function PackPage() {
       // does not — that is the day-boundary problem, and it is not this loop's.
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 4_000));
+        // Midnight, checked before every attempt and therefore after every wake.
+        // The latch is deliberately left alone: these ids belong to a day that is
+        // over, and nothing should re-send them. They stay protected by the
+        // `unrecorded` row, which is not scoped to today for exactly this reason.
+        if (todayKey() !== dealtOn) return;
         // Abandon without touching the latch if the phone changed hands while
         // this loop slept — the new member's own effect run owns it now, and a
         // request sent here would carry their token with this pack's ids.
@@ -849,6 +1027,7 @@ function PackPage() {
   }, [
     torn,
     dealtIds,
+    stateLoaded,
     actor,
     me?.participantId,
     record,
@@ -1052,9 +1231,14 @@ function PackPage() {
         pendingCompletionRef.current = null;
         await new Promise((r) => setTimeout(r, COMPLETION_BEAT_MS));
         setCompletion(finished);
+        // And only once it has actually fired does the row let go of it. Cleared
+        // with the ref instead, a reload during the beat above would lose the
+        // ceremony exactly as it used to.
+        setPendingCompletion(null);
       }
     } finally {
       revealingRef.current = false;
+      releaseDeferredResume();
     }
   }
 
@@ -1069,8 +1253,22 @@ function PackPage() {
       secretRevealed,
       identity: identity ?? undefined,
       cursor,
+      // Both survive the reload for the same reason the reveal progress does:
+      // whoever loads this row next has to know the pack was carried, and that a
+      // ceremony is still owed.
+      carriedFrom: carriedFromRef.current ?? undefined,
+      pendingCompletion: pendingCompletion ?? undefined,
     });
-  }, [dealtIds, dayKey, revealed, secretRevealed, stateLoaded, identity, cursor]);
+  }, [
+    dealtIds,
+    dayKey,
+    revealed,
+    secretRevealed,
+    stateLoaded,
+    identity,
+    cursor,
+    pendingCompletion,
+  ]);
 
   const secretSlot: SecretSlot = !torn
     ? "hidden"
