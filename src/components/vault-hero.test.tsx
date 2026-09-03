@@ -130,6 +130,21 @@ describe("VaultHero", () => {
     expect(screen.getByText(/3 secrets pulled/i)).toBeInTheDocument();
   });
 
+  it("says nothing about linking when the account is fine", () => {
+    renderHero({ syncError: null });
+    expect(screen.queryByText(/could not finish linking/i)).not.toBeInTheDocument();
+  });
+
+  it("says why the shelf is empty when linking failed", () => {
+    // The message used to live only on /auth, so a deep link into the vault
+    // showed an empty shelf and no reason for it.
+    renderHero({
+      syncError: "Your cards are safe, but this phone could not finish linking them.",
+    });
+    expect(screen.getByText(/could not finish linking them/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /try again/i })).toHaveAttribute("href", "/auth");
+  });
+
   it("holds the collected count back until the collection has reconciled", () => {
     renderHero({ ready: false, collectedCount: 13, packsOpened: 4 });
     expect(screen.queryByText(/collected/i)).not.toBeInTheDocument();
