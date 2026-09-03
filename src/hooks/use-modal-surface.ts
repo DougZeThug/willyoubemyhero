@@ -45,11 +45,14 @@ export function useModalSurface<T extends HTMLElement>(active = true) {
       if (e.key !== "Tab") return;
       const surface = surfaceRef.current;
       if (!surface) return;
+      // No visibility filter: jsdom reports every element as unlaid-out, and the
+      // reveals hide nothing behind `hidden` — the surface's own controls are all
+      // there is inside it.
       const focusable = [
         ...surface.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ),
-      ].filter((el) => el.offsetParent !== null || el === document.activeElement);
+      ].filter((el) => !el.hasAttribute("hidden"));
       // Nothing to cycle between — hold focus on the surface rather than letting
       // it escape to the nav underneath.
       if (focusable.length === 0) {
