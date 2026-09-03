@@ -215,10 +215,13 @@ function TradePage() {
       } else {
         toast("That offer was already settled");
       }
-      await refreshMine();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not accept");
     } finally {
+      // In `finally` because a dropped connection AFTER the server moved the
+      // cards throws here, and skipping the refresh would leave the vault, the
+      // spares and the secrets showing the pre-trade collection for minutes.
+      await refreshMine();
       setPending(null);
     }
   }
@@ -464,6 +467,7 @@ function TradePage() {
                   staged={give}
                   onToggle={(s) => toggle("give", s)}
                   backUrl={backUrl}
+                  outOfSeason={!event}
                 />
                 <SparePicker
                   label={`${nameOf(theirId)} gives (${want.length}/${MAX_PER_SIDE})`}
@@ -474,6 +478,7 @@ function TradePage() {
                   onToggle={(s) => toggle("want", s)}
                   backUrl={backUrl}
                   conceal
+                  outOfSeason={!event}
                 />
                 <button
                   onClick={propose}
@@ -659,6 +664,7 @@ function SparePicker({
   onToggle,
   backUrl = null,
   conceal = false,
+  outOfSeason = false,
 }: {
   label: string;
   spares: TradeSpares | undefined;
@@ -670,6 +676,8 @@ function SparePicker({
   backUrl?: ImageUrlSet | null;
   /** Set on the counterparty's strip only. Your own cards are never concealed. */
   conceal?: boolean;
+  /** No active event: empty is the season, not a bug. */
+  outOfSeason?: boolean;
 }) {
   const blocked = spares?.blocked ?? [];
 
@@ -734,7 +742,9 @@ function SparePicker({
       {loading ? (
         <p className="text-[11px] text-muted-foreground">Counting spares…</p>
       ) : items.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">No spares to trade.</p>
+        <p className="text-[11px] text-muted-foreground">
+          {outOfSeason ? "Trading opens with the next combine." : "No spares to trade."}
+        </p>
       ) : (
         <div className="flex gap-1 overflow-x-auto pb-1">
           {items.map((s) => (

@@ -53,6 +53,7 @@ import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
+import { useAccountSyncState } from "@/lib/account-sync-state";
 
 export const Route = createFileRoute("/players/")({
   head: () => ({
@@ -168,6 +169,13 @@ function PlayersPage() {
   // and every slot below renders face-down for good.
   const mine = useMyCollection(event?.id ?? null, rosterIds, !!error && !event);
   const collected = mine.collection;
+  // A phone that has just signed in has no member token yet, so the collection
+  // settles off the local store alone and the counter would state "0 collected"
+  // as a fact while the account is still being linked. Folded into the one
+  // `ready` flag rather than a second one, so the counters and the grid can
+  // never disagree about whether the answer is known.
+  const sync = useAccountSyncState();
+  const ready = mine.ready && sync.status !== "syncing";
 
   /**
    * Whether a slot renders face-down — and the only thing the rarity sort is
@@ -179,8 +187,8 @@ function PlayersPage() {
    * use-my-collection.ts:116.
    */
   const isLocked = useCallback(
-    (id: string) => !mine.ready || !collected[id],
-    [mine.ready, collected],
+    (id: string) => !ready || !collected[id],
+    [ready, collected],
   );
 
   const rows = useMemo(() => {
@@ -693,7 +701,7 @@ function PlayersPage() {
         <VaultHero
           printed={withCards}
           rosterSize={rows.length}
-          ready={mine.ready}
+          ready={ready}
           collectedCount={mine.collectedCount}
           packsOpened={mine.packsOpened}
           secretsPulled={secrets.data?.pulled ?? 0}
@@ -701,6 +709,7 @@ function PlayersPage() {
           dustBalance={dust.data?.balance}
           isMember={!!member}
           wasMember={wasMember}
+          syncError={sync.status === "error" ? sync.message : null}
           streak={streak}
           packWaiting={packWaiting}
           tradeUnread={tradeUnread}
