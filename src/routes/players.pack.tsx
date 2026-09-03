@@ -364,16 +364,19 @@ function PackPage() {
    */
   const [resumeNonce, setResumeNonce] = useState(0);
   /**
-   * An identity change the resume load has not been allowed to act on yet.
+   * A resume the guard below has held back, waiting for the screen to be still.
    *
    * The day tick refuses to re-seal a pack under somebody's thumb; this effect
    * had no such guard, so any identity flip mid-reveal nulled `dealtIds` and the
    * cards vanished under their finger. Reachable from a claim in another tab, the
    * 90-day token expiring on the hourly tick, and this screen's own
    * `clearMemberToken()` when the secret pull answers "Claim your player first".
-   * Remembered here and replayed when the reveal or the ceremony lets go.
+   *
+   * A flag rather than the identity that was deferred: the load re-reads
+   * everything from the row when it runs, so all that has to survive is THAT one
+   * was owed — which stays true however many times the identity moves in between.
    */
-  const deferredIdentityRef = useRef<string | null>(null);
+  const resumeDeferredRef = useRef(false);
 
   /**
    * Act on a deferred identity change, now that nothing is in the air.
@@ -384,8 +387,8 @@ function PackPage() {
    * re-seals.
    */
   const releaseDeferredResume = useCallback(() => {
-    if (deferredIdentityRef.current == null) return;
-    deferredIdentityRef.current = null;
+    if (!resumeDeferredRef.current) return;
+    resumeDeferredRef.current = false;
     setResumeNonce((n) => n + 1);
   }, []);
 
@@ -403,7 +406,7 @@ function PackPage() {
     // dropped: whoever the pack now belongs to, the cards already on the stand
     // finish their reveal first and the re-seal happens after.
     if (revealingRef.current || openingRef.current) {
-      deferredIdentityRef.current = identity;
+      resumeDeferredRef.current = true;
       return;
     }
     let cancelled = false;
