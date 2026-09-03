@@ -54,6 +54,21 @@ vi.mock("lucide-react", async (importOriginal) => {
 
 vi.mock("recharts", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
+  const stubs: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(actual)) {
+    if (typeof value === "function") {
+      stubs[name] = (props: Record<string, unknown>) => (
+        <svg data-recharts-stub={name} {...props} />
+      );
+    } else {
+      stubs[name] = value;
+    }
+  }
+  return stubs;
+});
+
+vi.mock("recharts", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
     ResponsiveContainer: ({ children }: { children: ReactNode }) => <>{children}</>,
