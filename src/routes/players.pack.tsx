@@ -344,6 +344,14 @@ function PackPage() {
    */
   const carriedFromRef = useRef<string | null>(null);
   /**
+   * Which of the carried pack's cards the claim's adoption already filed.
+   *
+   * Never assume the whole pack: `collectCard` runs inside the reveal, so a guest
+   * who claims with cards still face-down has those in no snapshot and adoption
+   * never heard about them. The record loop skips these and sends the rest.
+   */
+  const carriedAdoptedRef = useRef<readonly string[]>([]);
+  /**
    * The identity `dealtIds` were actually dealt to.
    *
    * `identity` moves under a pack that is already on screen — a claim in another
@@ -444,6 +452,7 @@ function PackPage() {
         replayedRef.current = new Set(replay ? s.revealed : []);
         resumedRef.current = true;
         carriedFromRef.current = s.carriedFrom ?? null;
+        carriedAdoptedRef.current = s.carriedAdopted ?? [];
         // A row with no identity predates per-person packs and counted as a match
         // above, so it counts as one here too.
         dealtForRef.current = s.identity ?? identity;
@@ -474,6 +483,7 @@ function PackPage() {
         replayedRef.current = new Set();
         resumedRef.current = false;
         carriedFromRef.current = null;
+        carriedAdoptedRef.current = [];
         dealtForRef.current = null;
         pendingCompletionRef.current = null;
         setPendingCompletion(null);
@@ -641,6 +651,7 @@ function PackPage() {
     // A pack dealt here is nobody's carried pack, whatever the last one was, and
     // it belongs to whoever is holding the phone right now.
     carriedFromRef.current = null;
+    carriedAdoptedRef.current = [];
     dealtForRef.current = identity;
     setCursor(0);
     // The ceremony is the only thing the preference silences. Everything above is
@@ -918,13 +929,23 @@ function PackPage() {
     // pack is carried or re-sealed, and it owns the answer.
     if (dealtForRef.current !== identity) return;
     if (recordedForRef.current === actor) return;
-    // A carried pack has already been filed, by the adoption the claim ran on the
-    // way here — and `record_card_pulls` rations on `card_mints` rather than on
-    // copies, so an adopted copy buys no protection at all: re-sending these ids
-    // mints a SECOND copy of every card and a pack_open for a pack the guest
-    // already opened. The pack open itself is not lost, because it was recorded
-    // against the guest id and `claim_guest_packs` carries it across.
-    if (carriedFromRef.current && pid) {
+    // On a carried pack, the cards the claim's adoption already filed are dropped
+    // from the payload. `record_card_pulls` rations on `card_mints` rather than
+    // on copies, and an adopt copy writes no mint row — so re-sending an adopted
+    // id mints a SECOND copy of that card and re-rolls its finish.
+    //
+    // DROPPED, NOT THE WHOLE PACK. `collectCard` runs inside the reveal, so a
+    // guest who claimed with cards still face-down had those in no snapshot;
+    // adoption never heard about them and this is the only thing that will ever
+    // file them. Skipping wholesale left them owned by nobody and the next
+    // reconcile deleted them off the phone the moment they were turned over.
+    const alreadyFiled = carriedAdoptedRef.current;
+    const owed = alreadyFiled.length
+      ? dealtIds.filter((id) => !alreadyFiled.includes(id))
+      : dealtIds;
+    if (owed.length === 0) {
+      // Nothing left to tell the league. The pack open is not lost either: it was
+      // recorded against the guest id and `claim_guest_packs` carries it across.
       recordedForRef.current = actor;
       return;
     }
@@ -942,7 +963,7 @@ function PackPage() {
       // in practice the first person to claim painted every card they'd ever
       // revealed with "Packed by 1", making the counter meaningless. Better an
       // honest ramp than a uniform stripe.
-      const ids = dealtIds.slice(0, 16);
+      const ids = owed.slice(0, 16);
       // Filed before the first attempt, because the cards are in IndexedDB the
       // moment they are turned over and `mergeCollection` deletes anything the
       // server does not vouch for. Until one of the attempts below lands, the
@@ -1249,6 +1270,16 @@ function PackPage() {
   // mid-reveal comes back to the cards it had already flipped.
   useEffect(() => {
     if (!dealtIds || !stateLoaded) return;
+    // Never write this pack under an identity it was not dealt to. `identity`
+    // moves a whole render before the resume load can answer — a claim in another
+    // tab is the case — and `stateLoaded` is still true on that render, because
+    // the resume effect's `setStateLoaded(false)` lands with the next one. So
+    // this used to stamp the guest's row with the member's name a beat before
+    // `carryPackToIdentity` looked at it, and the carry then refused a row it no
+    // longer recognised: the pack stayed, unmarked as carried, and the record
+    // loop minted every card in it a second time. Progress made inside that
+    // window is not saved, which costs at most one card's flip on the resume.
+    if (dealtForRef.current !== identity) return;
     void savePackState({
       dayKey,
       ids: dealtIds,
@@ -1260,6 +1291,7 @@ function PackPage() {
       // whoever loads this row next has to know the pack was carried, and that a
       // ceremony is still owed.
       carriedFrom: carriedFromRef.current ?? undefined,
+      carriedAdopted: carriedFromRef.current ? [...carriedAdoptedRef.current] : undefined,
       pendingCompletion: pendingCompletion ?? undefined,
     });
   }, [

@@ -104,6 +104,18 @@ export type PackState = {
    */
   carriedFrom?: string;
   /**
+   * Which of this pack's cards the carrying claim's adoption actually filed.
+   *
+   * NOT the whole pack, and that distinction is a loss path. `collectCard` runs
+   * inside the reveal, so a guest who claims with cards still face-down has those
+   * in no snapshot — adoption never hears about them, and the pack's own record
+   * is the only thing that will ever file them. Skipping the record wholesale
+   * left them owned by nobody, and the next reconcile deleted them off the phone
+   * the moment they were finally turned over. So the record loop skips exactly
+   * these ids and still sends the rest.
+   */
+  carriedAdopted?: string[];
+  /**
    * A set this pull finished, waiting for the secret to be turned over.
    *
    * The ceremony deliberately fires late — you see WHICH card it was and only
@@ -488,7 +500,11 @@ export async function retireUnrecorded(recorded: readonly string[]): Promise<voi
  * from yesterday, still gets the re-seal it should. Anything else is a no-op that
  * answers false.
  */
-export async function carryPackToIdentity(from: string, to: string): Promise<boolean> {
+export async function carryPackToIdentity(
+  from: string,
+  to: string,
+  adopted: readonly string[] = [],
+): Promise<boolean> {
   if (!isBrowser() || !from || !to || from === to) return false;
   try {
     const db = await getDb();
@@ -502,13 +518,21 @@ export async function carryPackToIdentity(from: string, to: string): Promise<boo
       await tx.done;
       return false;
     }
-    const carried: PackState = { ...state, identity: to, carriedFrom: from };
+    // Only the ids adoption actually saw. Anything still face-down was in no
+    // snapshot, so the record loop is still the only thing that can file it.
+    const taken = new Set(adopted);
+    const carried: PackState = {
+      ...state,
+      identity: to,
+      carriedFrom: from,
+      carriedAdopted: state.ids.filter((id) => taken.has(id)),
+    };
     await tx.store.put(carried, PACK_STATE_KEY);
-    // THE ADOPTION IS THE RECORD NOW. `adoptLocalCollection` runs immediately
-    // before this and files every card on the handset against the member, so the
-    // server vouches for them and the row has nothing left to protect. Retiring
-    // only this pack's ids would strand an older day's, and those were adopted
-    // too — the snapshot is the whole store, not today's three.
+    // THE ADOPTION IS THE RECORD for everything this row was protecting.
+    // `adoptLocalCollection` runs immediately before this against the whole local
+    // store, and the store is exactly what the prune can reach — a card never
+    // turned over is not in it and has nothing to lose yet. Retiring only today's
+    // ids would strand an older day's, and those were adopted too.
     await tx.store.delete(UNRECORDED_KEY);
     await tx.done;
     // The mirror moves with the row, which is also what wakes a pack screen open

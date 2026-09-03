@@ -993,22 +993,27 @@ test.describe("opening a pack", () => {
     });
     // The claim adopts the handset's cards before it carries the pack, and a
     // failed adoption takes the member token back off — so an unstubbed one would
-    // end this test on the claim screen rather than at the bug.
-    server.set("adoptCollection", { ok: true, adopted: guestIds.length });
+    // end this test on the claim screen rather than at the bug. One card, because
+    // only one will have been turned over by then.
+    server.set("adoptCollection", { ok: true, adopted: 1 });
 
-    // Every body `recordCardPulls` was ever sent, so the assertion can be about
-    // THESE cards rather than about a call count that other things move. Matched
-    // as raw text: a server-function REQUEST is seroval cross-JSON just as the
-    // response is, so the ids arrive as `{"t":1,"s":"ep-dave"}` rather than as an
-    // array anything can destructure. Quoted, so no id can match half of another.
-    const filed: string[] = [];
+    // Every `recordCardPulls` this page sent, and whether it went out as the
+    // member. The token is the precise signal: the guest files the whole pack at
+    // the tear, so a body alone cannot tell the two callers apart.
+    //
+    // Bodies are matched as raw text: a server-function REQUEST is seroval
+    // cross-JSON just as the response is, so the ids arrive as
+    // `{"t":1,"s":"ep-dave"}` rather than as an array anything can destructure.
+    // Quoted, so no id can match half of another.
+    const filed: { body: string; asMember: boolean }[] = [];
     page.on("request", (req) => {
       if (!req.url().includes("/_serverFn/")) return;
       if (!serverFnName(req.url()).includes("recordCardPulls")) return;
-      filed.push(req.postData() ?? "");
+      filed.push({ body: req.postData() ?? "", asMember: !!req.headers()["x-member-token"] });
     });
-    const filedGuestPack = () =>
-      filed.filter((body) => guestIds.every((id) => body.includes(`"${id}"`))).length;
+    const filedBy = (asMember: boolean, ids: string[]) =>
+      filed.filter((f) => f.asMember === asMember && ids.every((id) => f.body.includes(`"${id}"`)))
+        .length;
 
     await page.addInitScript((d: string) => {
       localStorage.setItem("wwbh:device-id", d);
@@ -1023,8 +1028,8 @@ test.describe("opening a pack", () => {
     const dealt = (await readPackState(page))!;
     expect(dealt.ids).toEqual(guestIds);
     expect(dealt.identity).toBe(`d:${device}`);
-    await expect.poll(filedGuestPack).toBeGreaterThan(0);
-    const filedAsGuest = filedGuestPack();
+    // The guest files the whole pack, as they always did.
+    await expect.poll(() => filedBy(false, guestIds)).toBeGreaterThan(0);
 
     // They claim their player.
     await page.goto("/claim");
@@ -1045,16 +1050,24 @@ test.describe("opening a pack", () => {
     expect(carried.carriedFrom).toBe(`d:${device}`);
 
     // And back on the pack screen it is the pack they already tore. No wrapper,
-    // no second deal, and — the economy half of the bug — the member does not
-    // file cards the claim's adoption has already filed. Six copies for one
-    // league day is the thing B-07 actually costs.
+    // and no second deal.
     await page.goto("/players/pack");
     await expect(sealedPack(page)).toBeHidden();
     expect((await readPackState(page))?.ids).toEqual(guestIds);
+
+    // The two cards still face-down at the claim were in no snapshot, so
+    // adoption never heard about them and this record is the only thing that
+    // will ever file them.
+    await expect.poll(() => filedBy(true, [guestIds[1], guestIds[2]])).toBeGreaterThan(0);
+    // But never the one they had turned. Adoption filed that, and
+    // `record_card_pulls` rations on card_mints rather than on copies — so
+    // re-sending it mints a SECOND copy and re-rolls its finish. Six copies for
+    // one league day is the thing B-07 actually costs.
+    //
     // A fixed wait for the same reason the midnight test has one: the assertion
     // is that a request does not go out, and there is nothing to poll for.
     await page.waitForTimeout(6_000);
-    expect(filedGuestPack()).toBe(filedAsGuest);
+    expect(filedBy(true, [guestIds[0]])).toBe(0);
     expect((await readPackState(page))?.ids).toEqual(guestIds);
   });
 
@@ -1102,6 +1115,75 @@ test.describe("opening a pack", () => {
     }
     // Nothing about the stub in the other tab should have leaked into this one.
     expect(server.calls.length).toBeGreaterThan(0);
+  });
+
+  test("does not stamp the guest's row with the member's name when the claim is in another tab", async ({
+    page,
+  }) => {
+    // The pack tab is idle and torn; the claim happens beside it. `setMemberToken`
+    // fires `storage`, so this tab's `identity` becomes the member a whole render
+    // before its own resume load can answer — and the save effect runs on that
+    // render, with `stateLoaded` still true. It used to write the guest's pack row
+    // under the member's name, and `carryPackToIdentity` then refused a row it no
+    // longer recognised: the pack stayed but was never marked as carried, so the
+    // record loop minted every card in it a second time. The exact bug B-07 is
+    // about, reached from the side.
+    const device = "handoff-tab-device";
+    const guestIds = expectedPack(`d:${device}`);
+    const seed = (p: import("@playwright/test").Page) =>
+      p.addInitScript((d: string) => {
+        localStorage.setItem("wwbh:device-id", d);
+      }, device);
+
+    await seed(page);
+    const claimTab = await page.context().newPage();
+    try {
+      await seed(claimTab);
+      const claimServer = await stubServerFns(claimTab);
+      const expiresAt = Date.now() + 90 * 24 * 60 * 60_000;
+      claimServer.set("claimPlayer", {
+        ok: true,
+        token: `m.p-alice.${expiresAt}.signature`,
+        expiresAt,
+        name: "Alice Ace",
+      });
+      claimServer.set("adoptCollection", { ok: true, adopted: 1 });
+      // Held back on purpose. The token lands before the adoption resolves, so
+      // this is the window the pack tab used to write into — widened from
+      // milliseconds to two seconds so the race is decided the same way on every
+      // machine rather than by whichever runner is quicker today.
+      claimServer.delay("adoptCollection", 2_000);
+
+      // The pack tab, torn and idle with one card turned.
+      await page.goto("/players/pack");
+      await tearPack(page);
+      await standCard(page).click();
+      await expect.poll(async () => (await readPackState(page))?.revealed).toEqual([0]);
+
+      // And the claim, beside it.
+      await claimTab.goto(`${BASE_URL}/claim`);
+      await claimTab.getByRole("button", { name: /Alice Ace/i }).click();
+      await claimTab.getByRole("textbox").fill("ACDEF4");
+      await claimTab
+        .getByRole("button", { name: /claim|unlock|submit/i })
+        .last()
+        .click();
+      await expect(claimTab).toHaveURL(/\/players/);
+
+      // The carry found the row it was looking for.
+      await expect.poll(async () => (await readPackState(page))?.identity).toBe("m:p-alice");
+      const row = (await readPackState(page))!;
+      expect(row.carriedFrom).toBe(`d:${device}`);
+      expect(row.ids).toEqual(guestIds);
+      expect(row.revealed).toEqual([0]);
+
+      // And the pack tab is still holding the same pack, not a sealed wrapper.
+      await expect(sealedPack(page)).toBeHidden();
+      await page.waitForTimeout(2_000);
+      expect((await readPackState(page))?.carriedFrom).toBe(`d:${device}`);
+    } finally {
+      await claimTab.close();
+    }
   });
 
   test("puts no finish on a card nobody has packed", async ({ page }) => {

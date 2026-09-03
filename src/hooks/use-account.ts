@@ -5,7 +5,11 @@ import { syncAccountSession } from "@/lib/account.functions";
 import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import { clearAdminToken } from "@/lib/admin-token";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import {
+  adoptableIds,
+  adoptLocalCollection,
+  snapshotLocalCollection,
+} from "@/lib/adopt-collection";
 import { carryPackToIdentity } from "@/lib/card-collection";
 import { carryTrophySeen } from "@/lib/trophy-seen";
 import { deviceId } from "@/lib/device-id";
@@ -170,7 +174,7 @@ export function useAccountSync(user: User | null) {
         // pack under an identity that is no longer live.
         const device = deviceId();
         if (device) {
-          await carryPackToIdentity(`d:${device}`, `m:${res.id}`);
+          await carryPackToIdentity(`d:${device}`, `m:${res.id}`, adoptableIds(held));
           if (cancelled) return;
           carryTrophySeen(`d:${device}`, res.id);
         }

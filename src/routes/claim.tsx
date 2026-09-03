@@ -8,7 +8,11 @@ import { claimPlayer, getClaimRoster } from "@/lib/member.functions";
 import { linkClaimedPlayer } from "@/lib/account.functions";
 import { signOutAccount, useAuthUser } from "@/hooks/use-account";
 import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member-token";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import {
+  adoptableIds,
+  adoptLocalCollection,
+  snapshotLocalCollection,
+} from "@/lib/adopt-collection";
 import { carryPackToIdentity } from "@/lib/card-collection";
 import { carryTrophySeen } from "@/lib/trophy-seen";
 import { deviceId } from "@/lib/device-id";
@@ -108,7 +112,7 @@ function ClaimPage() {
       // these cards, so the member must not file them a second time.
       const device = deviceId();
       if (device) {
-        await carryPackToIdentity(`d:${device}`, `m:${selected}`);
+        await carryPackToIdentity(`d:${device}`, `m:${selected}`, adoptableIds(held));
         carryTrophySeen(`d:${device}`, selected);
       }
       // Signed in? Then the player follows the account, not the handset. Awaited

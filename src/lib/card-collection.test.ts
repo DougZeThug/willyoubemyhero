@@ -401,6 +401,8 @@ describe("carrying a pack across a claim", () => {
       ...state,
       identity: MEMBER,
       carriedFrom: DEVICE,
+      // Nothing was turned over before the claim, so adoption saw nothing.
+      carriedAdopted: [],
     });
   });
 
@@ -451,6 +453,40 @@ describe("carrying a pack across a claim", () => {
     await todaysPack(mod, MEMBER);
     expect(await mod.carryPackToIdentity(MEMBER, MEMBER)).toBe(false);
     expect((await mod.loadPackState())?.carriedFrom).toBeUndefined();
+  });
+
+  it("notes only the cards the adoption actually saw", async () => {
+    // The loss path a blanket skip opened. `collectCard` runs inside the reveal,
+    // so a guest who claims with cards still face-down has those in no snapshot —
+    // adoption never hears about them, and the pack's own record is the only
+    // thing that will ever file them.
+    const mod = await freshModule();
+    await mod.savePackState({
+      dayKey: mod.todayKey(),
+      ids: [CARD_A, CARD_B],
+      revealed: [0],
+      cursor: 1,
+      identity: DEVICE,
+    });
+    // Only CARD_A was turned over, so only CARD_A was in the snapshot.
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [CARD_A, "some-older-card"])).toBe(true);
+    const row = (await mod.loadPackState())!;
+    expect(row.carriedAdopted).toEqual([CARD_A]);
+  });
+
+  it("notes nothing when the guest claimed before turning a single card", async () => {
+    const mod = await freshModule();
+    await todaysPack(mod);
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [])).toBe(true);
+    expect((await mod.loadPackState())?.carriedAdopted).toEqual([]);
+  });
+
+  it("notes the whole pack when every card was turned before the claim", async () => {
+    const mod = await freshModule();
+    await todaysPack(mod);
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [CARD_B, CARD_A])).toBe(true);
+    // In the pack's own order, because that is the order the record reads them in.
+    expect((await mod.loadPackState())?.carriedAdopted).toEqual([CARD_A, CARD_B]);
   });
 
   it("retires the unrecorded row, because the adoption is the record now", async () => {
