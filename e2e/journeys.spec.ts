@@ -667,6 +667,26 @@ test.describe("opening a pack", () => {
     await expect(compare).toBeDisabled();
   });
 
+  test("taps the chip a second time and the sheet goes back down", async ({ page }) => {
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    await page.goto("/players");
+    const compare = page.getByRole("button", { name: /^compare$/i });
+    await expect(compare).toBeEnabled();
+    const sheet = page.getByText(/pick someone to compare/i);
+
+    // The chip is a toggle now, not a one-way latch: what the first tap
+    // opened, the second tap closes — the same state, driven both ways.
+    await compare.click();
+    await expect(sheet).toBeVisible();
+    await compare.click();
+    await expect(sheet).toBeHidden();
+  });
+
+
   test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {
     await page.goto("/players/pack");
     await expect(sealedPack(page)).toBeVisible();
