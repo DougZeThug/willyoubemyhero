@@ -167,6 +167,14 @@
     font-feature-settings: "ss01", "tnum";
   }
 
+  /* Keyboard focus is visible everywhere, including raw <button> elements that
+     carry no ring classes of their own. --focus rather than --primary so it never
+     reads as a selected chip. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
   .tabular {
     font-variant-numeric: tabular-nums;
   }
