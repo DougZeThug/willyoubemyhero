@@ -141,4 +141,20 @@ describe("MilestoneReveal accessibility", () => {
     // Without this, Tab from the reveal reaches the nav behind the overlay.
     expect(dialog).toHaveFocus();
   });
+
+  it("keeps Tab inside the reveal", () => {
+    renderReveal();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
+  });
+
+  it("hands focus back to whatever opened it", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = renderReveal();
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
 });

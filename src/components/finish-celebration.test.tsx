@@ -2,7 +2,7 @@
 // combine, so the failure modes worth pinning are all about the second
 // finisher and the re-renders between finishes — not the first happy path.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { FinishCelebration } from "./finish-celebration";
 
 vi.mock("canvas-confetti", () => ({ default: vi.fn() }));
@@ -73,6 +73,22 @@ describe("FinishCelebration", () => {
     expect(onDone).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(2_900));
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes focus, keeps Tab inside, and gives it back once the athlete clears", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { rerender } = render(
+      <FinishCelebration name="AJ" timeMs={60_810} deltaMs={0} onDone={vi.fn()} />,
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(dialog);
+    rerender(<FinishCelebration name={null} timeMs={null} deltaMs={null} onDone={vi.fn()} />);
+    expect(opener).toHaveFocus();
+    opener.remove();
   });
 
   it("renders nothing between finishes", () => {
