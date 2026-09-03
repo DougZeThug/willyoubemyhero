@@ -24,9 +24,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    Link: (props: { to: string; children: ReactNode }) => (
-      <a href={props.to}>{props.children}</a>
-    ),
+    Link: (props: { to: string; children: ReactNode }) => <a href={props.to}>{props.children}</a>,
   };
 });
 
@@ -42,9 +40,7 @@ vi.mock("lucide-react", async (importOriginal) => {
   const stubs: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(actual)) {
     if (typeof value === "function") {
-      stubs[name] = (props: Record<string, unknown>) => (
-        <svg data-lucide-stub={name} {...props} />
-      );
+      stubs[name] = (props: Record<string, unknown>) => <svg data-lucide-stub={name} {...props} />;
     } else {
       stubs[name] = value;
     }
@@ -66,7 +62,6 @@ vi.mock("recharts", async (importOriginal) => {
   }
   return stubs;
 });
-
 
 function healthyBundle() {
   return makeBundle();
@@ -98,9 +93,7 @@ describe("AnalyticsPage station averages", () => {
     });
     render(<AnalyticsPage />);
     await waitFor(() =>
-      expect(
-        screen.getByText("Couldn't read the splits just now — retrying."),
-      ).toBeInTheDocument(),
+      expect(screen.getByText("Couldn't read the splits just now — retrying.")).toBeInTheDocument(),
     );
     expect(screen.queryByText("No split data yet.")).not.toBeInTheDocument();
   });

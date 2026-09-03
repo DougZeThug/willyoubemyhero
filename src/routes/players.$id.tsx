@@ -676,8 +676,8 @@ function PlayerCardPage() {
             {sharing ? "Rendering…" : "Share"}
           </ActionButton>
           <ActionButton
-            onClick={() => setComparing(true)}
-            active={!!vs}
+            onClick={() => setComparing(!comparing)}
+            active={comparing}
             icon={<GitCompareArrows className="h-3.5 w-3.5" />}
             disabled={locked || roster.length < 2}
           >

@@ -11,7 +11,10 @@ import { afterEach, beforeEach, vi } from "vitest";
 const realConsoleError = console.error.bind(console);
 // eslint-disable-next-line no-console
 console.error = (...args: unknown[]) => {
-  realConsoleError("[console.error]", ...args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))));
+  realConsoleError(
+    "[console.error]",
+    ...args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))),
+  );
 };
 
 // jsdom has no matchMedia. use-count-up.ts, card-sfx.ts and use-mobile.tsx all
