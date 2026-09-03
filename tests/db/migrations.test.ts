@@ -351,6 +351,11 @@ describe("migrations", () => {
     // grantSecretCard can invalidate nothing but the commissioner's own query
     // key. Unpublished, the trophy is real but silent until a reload.
     expect(published).toContain("collection_trophies");
+    // The commissioner's switches — dust, and which rows the bar holds — live on
+    // the event row, and only the phone that flipped them invalidates its own
+    // cache. Unpublished, every other phone keeps the old bar until a focus
+    // refetch, which in a garden is minutes.
+    expect(published).toContain("events");
   });
 
   it("keeps the secret tables out of realtime", async () => {
@@ -377,6 +382,10 @@ describe("migrations", () => {
     // and a pending offer — to every phone in the garden.
     expect(published).not.toContain("trade_offers");
     expect(published).not.toContain("trade_offer_items");
+    // `events` is published (above) and is the exception that proves the rule:
+    // it carries no PIN, no code and nobody's holdings. Its neighbours do.
+    expect(published).not.toContain("event_secrets");
+    expect(published).not.toContain("member_codes");
     // Everything the card_pulls line above says, per copy and with the finish on
     // each — strictly the worse leak of the two.
     expect(published).not.toContain("card_copies");
