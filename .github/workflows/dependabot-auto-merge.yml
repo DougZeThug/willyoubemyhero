@@ -33,8 +33,8 @@ jobs:
       # nothing, so a supabase-js or Playwright bump that broke RLS or every
       # browser journey could merge to the Lovable-connected branch unattended.
       # Nothing is approved now until verify, database and e2e have all finished
-      # green on this head — e2e included, even though it stays advisory for
-      # humans, because an unattended merge has nobody reading an advisory red.
+      # green on this head. Every check on the PR has to finish, not just those
+      # three: an unattended merge has nobody reading whatever else ran.
       #
       # `gh pr checks --watch` cannot do the waiting: this job is itself a check
       # run on the PR, so gh counts it as pending and waits on itself until the

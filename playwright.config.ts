@@ -12,6 +12,9 @@ const launchOptions = executablePath ? { executablePath } : {};
 
 export default defineConfig({
   testDir: "./e2e",
+  // Runs once the webServer below is up and before any worker starts. See the
+  // file for what it is warming and why a cold start used to fail a run.
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

@@ -114,11 +114,15 @@ jobs:
       - name: Database tests
         run: bun run test:db
 
+  # Every screen, in a real browser, on a phone viewport and a desktop one. A
+  # gate now, like the two above: the job has been green on every push for a
+  # week and takes about eight of its twenty minutes, so the caution that made
+  # it advisory has been paid off. Leaving it advisory is also how a suite goes
+  # stale — nobody reads a red that blocks nothing.
   e2e:
     name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
 
     steps:
       - name: Checkout
