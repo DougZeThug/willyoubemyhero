@@ -130,11 +130,7 @@ export function BoughtPullReveal({
         />
       </motion.div>
 
-      <button
-        onClick={onDone}
-        className="neon-btn-sm relative z-10"
-        data-testid="bought-pull-done"
-      >
+      <button onClick={onDone} className="neon-btn-sm relative z-10" data-testid="bought-pull-done">
         {duplicate ? "Another one for the pile" : "Nice"}
       </button>
     </div>

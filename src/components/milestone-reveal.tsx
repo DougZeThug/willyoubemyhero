@@ -192,11 +192,7 @@ export function MilestoneReveal({
         </motion.div>
       )}
 
-      <button
-        onClick={onDone}
-        className="neon-btn-sm relative z-10"
-        data-testid="milestone-done"
-      >
+      <button onClick={onDone} className="neon-btn-sm relative z-10" data-testid="milestone-done">
         {duplicate ? "Another one for the pile" : "Nice"}
       </button>
     </div>

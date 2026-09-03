@@ -79,18 +79,23 @@ export function SiteNav() {
         animate={{ opacity: presenting ? 0 : 1 }}
         transition={step}
         className="sticky top-0 z-30 border-b border-primary/10 bg-background/85 backdrop-blur"
+        // The notch sits over a sticky header, so the bar owes it the same room
+        // the bottom nav already gives the home indicator.
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5">
-          <div className="w-8 md:w-16" aria-hidden />
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-2.5 sm:gap-4">
+          <div className="w-11 md:w-16" aria-hidden />
+          {/* Tracking loosens with the viewport rather than the wordmark wrapping:
+              two stacked lines turned the 48px header into 90px at 320px. */}
           <Link to="/players" className="flex flex-col items-center leading-none">
-            <span className="text-[9px] font-semibold uppercase tracking-[0.35em] text-primary/80">
+            <span className="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/80 sm:tracking-[0.35em]">
               Will YOU Be My Hero?
             </span>
-            <span className="font-display text-lg font-black uppercase tracking-[0.22em] text-foreground">
+            <span className="whitespace-nowrap font-display text-base font-black uppercase tracking-[0.1em] text-foreground sm:text-lg sm:tracking-[0.22em]">
               Trading Cards
             </span>
           </Link>
-          <nav className="hidden gap-1 md:flex">
+          <nav aria-label="Sections" className="hidden gap-1 md:flex">
             {links.map((l) => {
               const waiting = badge(l.to);
               return (
@@ -123,6 +128,7 @@ export function SiteNav() {
         inert={presenting}
         animate={{ opacity: presenting ? 0 : 1 }}
         transition={step}
+        aria-label="Primary"
         className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/15 bg-background/95 backdrop-blur md:hidden"
       >
         {/* Both class names spelled out: Tailwind scans source for literals,
@@ -216,7 +222,7 @@ function AccountMenu() {
       <Link
         to="/auth"
         aria-label="Sign in"
-        className="flex w-8 items-center justify-center text-muted-foreground transition-colors hover:text-primary md:w-16 md:justify-end"
+        className="flex h-11 w-11 items-center justify-center text-muted-foreground transition-colors hover:text-primary md:w-16 md:justify-end"
       >
         <LogIn className="h-5 w-5" strokeWidth={1.75} />
       </Link>
@@ -227,7 +233,7 @@ function AccountMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Account"
-        className="flex w-8 items-center justify-center text-primary transition-opacity hover:opacity-80 md:w-16 md:justify-end"
+        className="flex h-11 w-11 items-center justify-center text-primary transition-opacity hover:opacity-80 md:w-16 md:justify-end"
       >
         <UserRound className="h-5 w-5" strokeWidth={1.75} />
       </DropdownMenuTrigger>
