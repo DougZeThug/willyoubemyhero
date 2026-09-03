@@ -328,7 +328,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                           )
                         }
                         className={cn(
-                          "min-h-11 px-3 text-label font-bold uppercase tracking-[0.08em] transition-colors sm:min-h-0 sm:px-2",
+                          "min-h-11 px-3 py-1 text-label font-bold uppercase tracking-[0.08em] transition-colors sm:min-h-0 sm:px-2",
                           item.side === side
                             ? "bg-primary/20 text-primary"
                             : "text-muted-foreground hover:text-foreground",
