@@ -244,10 +244,13 @@ describe("reactions", () => {
     expect(fire).toHaveTextContent("0");
   });
 
-  it("names who reacted, for touch devices that never see a title tooltip", async () => {
+  it("names who reacted on the chip itself, rather than behind a 20px ⓘ", async () => {
     await renderSocial({ reactions: [reaction()] });
-    await userEvent.click(screen.getByRole("button", { name: "Who reacted with 🔥" }));
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
+    const chip = await screen.findByRole("button", {
+      name: "React with 🔥. Reacted by Alice",
+    });
+    expect(chip).toHaveAttribute("title", "Alice");
+    expect(screen.queryByRole("button", { name: "Who reacted with 🔥" })).toBeNull();
   });
 });
 
