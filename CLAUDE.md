@@ -178,21 +178,26 @@ The stub fixture is `auto: true`. Playwright only builds a fixture a test
 destructures, and a test taking just `{ page }` would otherwise run unstubbed
 and fail with a mysteriously empty page.
 
+A server function nothing in `DEFAULT_RESPONSES` matches gets a 500 and fails
+the test, so **adding or renaming one means adding its key there** — or calling
+`server.set()` in the test, or `server.allowUnmatched()` where the call is meant
+to go unstubbed. No key may be a substring of another; the suite refuses to start
+if one is.
+
 ## CI
 
 `.github/workflows/ci.yml` runs lint → typecheck → **unit tests** → build, plus
 separate `db` and `e2e` jobs.
 
-Unit tests **gate** alongside lint, typecheck and build — a red test blocks the
-sync. The `db` job **gates** too: it is the only automated proof of the security
-model, so a red run there has to block rather than sit unread. Only `e2e` is
-still **advisory** (`continue-on-error: true` at the job level); drop that flag
-too once the job has held a green streak on main, since an advisory suite is how
-stale tests accumulated unnoticed before.
+All three **gate** — a red run in any of them blocks the sync. Unit tests gate
+alongside lint, typecheck and build; `db` gates because it is the only automated
+proof of the security model; `e2e` gates because it is the only place the screens
+are exercised in a browser at all. None of them may sit red and unread, which is
+what an advisory job invites.
 
-Dependabot auto-merge waits for every check on the PR — `e2e` included — before
-it approves anything, because an unattended merge has nobody to read an advisory
-red.
+Dependabot auto-merge waits for every check on the PR to finish and requires
+`lint / build`, `database` and `e2e` by name before it approves anything: an
+unattended merge has nobody reading the result.
 
 ## Lovable
 

@@ -92,6 +92,12 @@ test.describe("the commissioner console", () => {
   });
 
   test("unlocks and stores a token for the right PIN", async ({ page, server }) => {
+    // The only test here that gets past the gate, and the console behind it
+    // reads the award tally, the ownership audit, the card-prompt templates and
+    // runs, and the member claims. This test has no opinion about any of them —
+    // it is about the PIN and the token — and inventing five admin payloads to
+    // satisfy the strict stub would be fiction rather than fixture.
+    server.allowUnmatched();
     const expiresAt = Date.now() + 12 * 60 * 60_000;
     server.set("verifyEventPin", {
       ok: true,
@@ -250,7 +256,14 @@ test.describe("a player's card", () => {
    * The load-bearing part is that the tap survives: a guest who reacts, gets
    * asked who they are, and answers should not then have to react again.
    */
-  test("asks a signed-out visitor for a name before their first reaction", async ({ page }) => {
+  test("asks a signed-out visitor for a name before their first reaction", async ({
+    page,
+    server,
+  }) => {
+    // The tap survives the prompt, which means it is re-fired against the server
+    // once the name lands. A mutation, so it is not defaulted — see the trade
+    // handlers in e2e/fixtures.ts for why.
+    server.set("toggleReaction", { ok: true, reacted: true });
     await page.goto("/players/ep-alice");
 
     const prompt = page.getByText(/what should we call you/i);
@@ -270,6 +283,17 @@ test.describe("a player's card", () => {
     // the page shows it took the answer rather than just closing the form.
     await expect(prompt).toBeHidden();
     await expect(page.getByPlaceholder(/talk your talk, garden guest/i)).toBeVisible();
+
+    // The load-bearing half, and until now the unasserted one: the stashed tap
+    // is replayed, so the guest does not have to react a second time. Exactly
+    // once — twice would mean they did.
+    //
+    // Read off the calls rather than the count beside the emoji, because that
+    // count is optimistic and the stubbed refresh takes it straight back off
+    // again — an assertion on it would pass or fail on timing, not behaviour.
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("toggleReaction")).length)
+      .toBe(1);
   });
 });
 

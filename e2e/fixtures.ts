@@ -88,16 +88,51 @@ export const BUNDLE = {
  */
 export type Responses = Record<string, unknown>;
 
+function matches(name: string, key: string) {
+  return name.toLowerCase().includes(key.toLowerCase());
+}
+
+/**
+ * Rule 1 below, enforced rather than asked for.
+ *
+ * `matches` is a substring test resolved in insertion order, so a key that
+ * contains another key shadows it. The symptom is a screen rendering some other
+ * function's data, which reads as a product bug rather than a fixture one, and
+ * refusing to start is far cheaper than debugging that from a screenshot.
+ *
+ * Runs over DEFAULT_RESPONSES at module load and over the merged set on every
+ * `set`, because a test can add a key too.
+ */
+function assertDistinctKeys(responses: Responses, added?: string) {
+  const keys = Object.keys(responses);
+  for (const key of added === undefined ? keys : [added]) {
+    for (const other of keys) {
+      if (other === key) continue;
+      if (!matches(key, other) && !matches(other, key)) continue;
+      const [wider, narrower] = matches(key, other) ? [key, other] : [other, key];
+      throw new Error(
+        `e2e stub: "${narrower}" is a substring of "${wider}", so whichever of the two comes ` +
+          `first answers for both. Rename one of them.`,
+      );
+    }
+  }
+}
+
 /**
  * Two rules govern every key below, because the lookup is a case-insensitive
  * `includes` over insertion order (see `matches`):
  *
- *  1. No key may be a substring of another key.
- *  2. No new server-function export name may contain an unrelated key.
+ *  1. No key may be a substring of another key. `assertDistinctKeys` enforces
+ *     this one — break it and the suite refuses to start.
+ *  2. No new server-function export name may contain an unrelated key. Nothing
+ *     here can check that: the export names live in src/lib/*.functions.ts and
+ *     only the running app knows which of them a screen reaches for. Still a
+ *     rule you hold to by hand.
  *
- * Break either and the wrong stub answers. And a *missing* stub is worse than a
- * loud failure: an unmatched name falls through to `result: null` with a 200, so
- * the screen renders its empty state and the test passes for the wrong reason.
+ * A *missing* stub used to be the worse failure of the two because it was
+ * silent: an unmatched name fell through to `result: null` with a 200, the
+ * screen rendered its empty state, and the test passed for the wrong reason. It
+ * answers 500 and fails the test now — see `stubServerFns`.
  */
 /** The anonymous identity every unclaimed visitor in this suite pulls as. */
 const GUEST_ID = "00000000-0000-4000-8000-0000000000e1";
@@ -208,7 +243,25 @@ export const DEFAULT_RESPONSES: Responses = {
   // matters more here, because /players/shop joins this topic itself.
   getMarketListings: { listings: [], nudgeTopic: null },
   getMyStall: { active: [], recent: [] },
+  // The trophy shelf, and the set names it prints. Empty by default: nobody in
+  // this league has finished a set, so there is no shelf, no card-back badge and
+  // no ceremony, and no existing spec has to know the feature exists. Neither
+  // key is a substring of any other above — `assertDistinctKeys` checks.
+  getCollectionTrophies: { trophies: [] },
+  getSecretCollections: { collections: [] },
+  // `null` on purpose, and the one entry here that is not a shaped response.
+  //
+  // useMyCollection reads a null answer as "the server has no opinion" and hands
+  // this device's local rows back untouched, which is the state every spec that
+  // deals a pack was written against. The shaped empty answer — `{ cards: [] }` —
+  // is the server saying "you own nothing", and that PRUNES the cards the pack
+  // just dealt: recordCardPulls answers ok by default, so nothing is holding
+  // them back. A test that wants the server to have an opinion sets one, the way
+  // favourites.spec.ts does.
+  getMyCardStats: null,
 };
+
+assertDistinctKeys(DEFAULT_RESPONSES);
 
 /** A secret card as pullSecretCard returns it, for tests that want the fourth slot. */
 export const SECRET_CARD = {
@@ -259,10 +312,6 @@ export function serverFnName(url: string): string {
   }
 }
 
-function matches(name: string, key: string) {
-  return name.toLowerCase().includes(key.toLowerCase());
-}
-
 // TanStack Start does not send plain JSON over the wire: a server-function
 // response is seroval cross-JSON, flagged with `x-tss-serialized` so the client
 // knows to run it through fromCrossJSON. A plain JSON.stringify body parses to
@@ -289,15 +338,41 @@ export type ServerFnMock = {
    * covers deal cards and run reveal animations while requests are still out.
    */
   delay: (key: string, ms: number) => void;
+  /**
+   * Answer an unstubbed server function with `result: null` again, the way this
+   * file used to answer every one of them.
+   *
+   * The deliberate escape hatch, for a test that means to exercise a call
+   * nothing here has an answer for. Call it before the first navigation: it
+   * changes what happens next and cannot unsay a 500 already sent.
+   */
+  allowUnmatched: () => void;
   /** Every server function the page called, in order. */
   calls: string[];
+  /** The unstubbed calls this mock refused. Drained by the `server` fixture. */
+  unmatched: string[];
 };
 
-export async function stubServerFns(page: Page): Promise<ServerFnMock> {
+/**
+ * Every mock alive in the current test, the ones a spec builds by hand for a
+ * second tab included — journeys.spec.ts opens three. The `server` fixture
+ * drains this on teardown, so an unstubbed call fails the test whichever page
+ * made it, not only the page the fixture owns.
+ *
+ * Module state is safe here because a worker runs one test at a time.
+ */
+const liveMocks = new Set<ServerFnMock>();
+
+export async function stubServerFns(
+  page: Page,
+  onUnmatched?: (message: string) => void,
+): Promise<ServerFnMock> {
   const responses: Responses = { ...DEFAULT_RESPONSES };
   const failures: Record<string, string> = {};
   const delays: Record<string, number> = {};
   const calls: string[] = [];
+  const unmatched: string[] = [];
+  let unmatchedAllowed = false;
 
   await page.route("**/_serverFn/**", async (route: Route) => {
     const name = serverFnName(route.request().url());
@@ -317,6 +392,31 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
     }
 
     const key = Object.keys(responses).find((k) => matches(name, k));
+    if (key === undefined && !unmatchedAllowed) {
+      // Loud three ways over, because no one of them catches every test: the 500
+      // breaks whichever screen was waiting on the answer, the console line
+      // fails smoke.spec.ts's clean-console assertion, and the teardown check in
+      // the `server` fixture fails everything else — which is nearly all of
+      // them, since smoke.spec.ts's route sweep is the only place in the suite
+      // that asks for `consoleErrors` at all.
+      //
+      // Plain text rather than the serialized error `fail` sends: that one is
+      // shaped for a UI error path to swallow gracefully, and this is the case
+      // where swallowing it is the bug.
+      const message =
+        `e2e stub: nothing answers "${name}". Add a key to DEFAULT_RESPONSES in ` +
+        `e2e/fixtures.ts, call server.set() in the test, or server.allowUnmatched() if the ` +
+        `call is meant to go unstubbed. Known keys: ${Object.keys(responses).join(", ")}`;
+      unmatched.push(message);
+      onUnmatched?.(message);
+      await route.fulfill({
+        status: 500,
+        headers: { "content-type": "text/plain" },
+        body: message,
+      });
+      return;
+    }
+
     await route.fulfill({
       status: 200,
       headers: { "content-type": "application/json", [SERIALIZED_HEADER]: "true" },
@@ -324,8 +424,12 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
     });
   });
 
-  return {
+  const mock: ServerFnMock = {
     set: (key, value) => {
+      // Rule 1 again. A test can add a key, and one that collides with a default
+      // would shadow it rather than override it — which looks like the override
+      // simply not working.
+      assertDistinctKeys({ ...responses, [key]: value }, key);
       responses[key] = value;
     },
     fail: (key, message) => {
@@ -337,8 +441,14 @@ export async function stubServerFns(page: Page): Promise<ServerFnMock> {
     delay: (key, ms) => {
       delays[key] = ms;
     },
+    allowUnmatched: () => {
+      unmatchedAllowed = true;
+    },
     calls,
+    unmatched,
   };
+  liveMocks.add(mock);
+  return mock;
 }
 
 export const test = base.extend<{ server: ServerFnMock; consoleErrors: string[] }>({
@@ -346,9 +456,20 @@ export const test = base.extend<{ server: ServerFnMock; consoleErrors: string[] 
   // destructures, so a test taking just `{ page }` would run with no stubbing at
   // all, hit the real backend, and fail with an empty page rather than an
   // obvious connection error. Every test gets the stub whether it names it or not.
+  // It takes `consoleErrors` so that fixture is built for every test too: an
+  // unstubbed call has to land somewhere the test can see it, and only
+  // smoke.spec.ts asks for the array by name.
   server: [
-    async ({ page }, use) => {
-      await use(await stubServerFns(page));
+    async ({ page, consoleErrors }, use) => {
+      liveMocks.clear();
+      const mock = await stubServerFns(page, (message) => consoleErrors.push(message));
+      await use(mock);
+      // In teardown, so an unstubbed call fails the test even when the screen
+      // shrugged the 500 off and the test never looked at `consoleErrors`. Over
+      // every mock in the test rather than this one, so a second tab counts.
+      const missed = [...liveMocks].flatMap((m) => m.unmatched);
+      liveMocks.clear();
+      if (missed.length) throw new Error([...new Set(missed)].join("\n"));
     },
     { auto: true },
   ],
