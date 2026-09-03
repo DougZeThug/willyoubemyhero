@@ -218,7 +218,7 @@ function LeaderboardPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 text-primary/70 hover:text-primary"
+                      className="h-11 w-11 text-primary/70 hover:text-primary"
                       // Thirteen buttons carrying the identical label read as
                       // thirteen identical controls out of context.
                       aria-label={`Share ${row.ep?.participant?.name ?? "this"} result card`}

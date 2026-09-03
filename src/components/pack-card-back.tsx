@@ -14,7 +14,7 @@ export function SealedBack() {
   return (
     <div className="wax-foil flex h-full w-full flex-col items-center justify-center gap-1 p-3 text-center">
       <Sparkles className="h-5 w-5 text-primary/80" />
-      <div className="font-display text-[8px] font-black uppercase tracking-[0.3em] text-primary/80">
+      <div className="font-display text-label font-black uppercase tracking-[0.08em] text-primary/80">
         Will YOU Be My Hero?
       </div>
       <div className="font-display text-sm font-black uppercase leading-none text-foreground/90">

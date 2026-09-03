@@ -64,10 +64,10 @@ export function CardSlab({
       */}
       <div className="mb-2 flex items-baseline gap-2 px-1.5">
         <CollectionMark collected={collected} />
-        <span className="min-w-0 flex-1 truncate text-center text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate text-center text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           {slabTitle(eventName, eventYear)}
         </span>
-        <span className="font-display shrink-0 text-[10px] font-black uppercase tracking-[0.2em] text-foreground/80">
+        <span className="font-display tabular shrink-0 text-label font-black uppercase tracking-[0.08em] text-foreground/80">
           {serial}
           <span className="text-muted-foreground">/{ofTotal}</span>
         </span>
@@ -76,7 +76,7 @@ export function CardSlab({
       {children}
 
       {leagueLine && (
-        <div className="mt-2 px-1.5 text-center text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <div className="mt-2 px-1.5 text-center text-meta font-semibold text-muted-foreground">
           {leagueLine}
         </div>
       )}
@@ -118,14 +118,14 @@ function CollectionMark({ collected }: { collected: CollectedCard | null }) {
   return (
     <span className="flex shrink-0 items-baseline gap-1.5">
       <span
-        className="font-display text-[10px] font-black uppercase tracking-[0.2em]"
+        className="text-meta font-bold"
         style={{ color: finish ? "var(--edn)" : "var(--tier)" }}
       >
         {collected.count > 1 ? `Pulled ×${collected.count}` : "Collected"}
       </span>
       {finish && (
         <span
-          className="font-display text-[10px] font-black uppercase tracking-[0.2em]"
+          className="font-display text-badge font-black uppercase tracking-[0.08em]"
           style={{ color: "var(--edn)" }}
         >
           {finish}

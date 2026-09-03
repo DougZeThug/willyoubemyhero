@@ -7,6 +7,7 @@ import { SecretBackPanel } from "@/components/secret-back-panel";
 import { secretFoil, type OwnedSecret } from "@/lib/secret-cards";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { stepIndex } from "@/lib/zoom";
+import { formatDay } from "@/lib/format";
 import { packedByLabel } from "@/lib/card-pulls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack } from "@/hooks/use-photo-urls";
@@ -131,13 +132,13 @@ export function SecretCardSheet({
               {secretTierCaption(card.tier)}
             </p>
 
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.25em] text-muted-foreground">
-              <span>Pulled {card.firstPulledOn}</span>
+            <div className="flex items-center justify-between text-meta font-semibold text-muted-foreground">
+              <span>Pulled {formatDay(card.firstPulledOn)}</span>
               {card.count > 1 && <span style={{ color: rarity.accent }}>Pulled ×{card.count}</span>}
             </div>
 
             {packedByLabel(card.ownerCount) && (
-              <p className="text-center text-xs font-bold uppercase tracking-[0.25em] text-muted-foreground">
+              <p className="text-center text-meta font-semibold text-muted-foreground">
                 {card.ownerCount === 1
                   ? "You are the only one who has found this"
                   : packedByLabel(card.ownerCount)}

@@ -78,7 +78,7 @@ export function ZoomPanFrame({
           </FrameButton>
         ) : (
           position && (
-            <span className="min-w-14 text-center text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+            <span className="min-w-14 text-center text-meta font-semibold tabular text-muted-foreground">
               {position}
             </span>
           )
@@ -98,9 +98,7 @@ export function ZoomPanFrame({
       </div>
 
       {hint && !zoomed && (
-        <p className="mt-1 text-center text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground/70">
-          {hint}
-        </p>
+        <p className="mt-1 text-center text-meta text-muted-foreground">{hint}</p>
       )}
     </div>
   );
@@ -124,7 +122,7 @@ function FrameButton({
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-white/10 bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
     >
       {children}
     </button>

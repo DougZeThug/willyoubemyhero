@@ -302,10 +302,15 @@ function TradePage() {
               code will never arrive. Name themselves and they can trade. */}
           {user && <CollectorSignup />}
           {!anonymous && !user && (
-            <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-              <Link to="/claim" className="font-bold text-primary underline">
+            <div className="flex flex-wrap items-center gap-x-1.5 rounded-lg border border-primary/30 bg-primary/5 px-4 py-1 text-sm">
+              {/* The only thing to press in this panel, so it is a control
+                  rather than a word in a sentence that happens to be blue. */}
+              <Link
+                to="/claim"
+                className="inline-flex min-h-11 items-center font-bold text-primary underline"
+              >
                 Claim your player
-              </Link>{" "}
+              </Link>
               <span className="text-muted-foreground">to trade cards.</span>
             </div>
           )}
@@ -373,7 +378,7 @@ function TradePage() {
                       <button
                         onClick={() => resolve(offer.id, "decline")}
                         disabled={pending === offer.id}
-                        className="rounded-full border border-white/10 px-6 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:border-danger/50 hover:text-danger disabled:opacity-50"
+                        className="inline-flex min-h-11 items-center rounded-full border border-white/10 px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
                       >
                         Decline
                       </button>
@@ -405,7 +410,7 @@ function TradePage() {
                     <button
                       onClick={() => resolve(offer.id, "cancel")}
                       disabled={pending === offer.id}
-                      className="rounded-full border border-primary/40 px-6 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                      className="inline-flex min-h-11 items-center rounded-full border border-primary/40 px-6 text-label font-bold uppercase tracking-[0.08em] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                     >
                       Take it back
                     </button>
@@ -420,7 +425,11 @@ function TradePage() {
         <section className="mb-6">
           <SectionTitle icon={<ArrowLeftRight className="h-3.5 w-3.5" />} label="Make an offer" />
           <div className="hud-bezel rounded-lg border border-white/10 p-3">
-            <div className="mb-3 flex flex-wrap gap-1.5">
+            <div
+              role="group"
+              aria-label="Who to trade with"
+              className="mb-3 flex flex-wrap gap-1.5"
+            >
               {counterparties.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Nobody else has claimed their player or signed in yet.
@@ -429,6 +438,9 @@ function TradePage() {
                 counterparties.map((p) => (
                   <button
                     key={p.id}
+                    // Selected was a border, a ring and a green dot, none of
+                    // which a screen reader reaches.
+                    aria-pressed={p.id === theirId}
                     onClick={() => {
                       setTheirId(p.id === theirId ? null : p.id);
                       // Their spares are half of what is staged, so keeping the
@@ -438,7 +450,7 @@ function TradePage() {
                       setWant([]);
                     }}
                     className={cn(
-                      "rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition-all active:scale-95",
+                      "inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] transition-all active:scale-95",
                       p.id === theirId
                         ? "relative border border-primary/60 bg-primary/10 text-primary shadow-[0_0_12px_-2px_oklch(0.7_0.2_210/0.4)] ring-1 ring-primary/20"
                         : "border border-white/10 bg-white/5 shadow-inner text-muted-foreground hover:border-primary/40 hover:text-primary",
@@ -522,10 +534,7 @@ function TradePage() {
             <div className="hud-bezel hud-glow max-h-72 overflow-y-auto rounded-lg border border-primary/30">
               <ul className="divide-y divide-white/10">
                 {(feed.data ?? []).map((t) => (
-                  <li
-                    key={t.id}
-                    className="px-3 py-2.5 text-[11px] leading-relaxed text-foreground"
-                  >
+                  <li key={t.id} className="px-3 py-2.5 text-meta leading-relaxed text-foreground">
                     <span className="font-display font-black uppercase tracking-wide">
                       {nameOf(t.proposerId)}
                     </span>{" "}
@@ -553,7 +562,7 @@ function Header() {
     <div className="mb-5 border-b border-primary/20 pb-4">
       <Link
         to="/players"
-        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground hover:text-primary"
+        className="-ml-2 inline-flex min-h-11 items-center gap-1.5 px-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-primary"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         The Vault
@@ -583,9 +592,9 @@ function SectionTitle({
   return (
     <div className="mb-2 flex items-center gap-2 text-primary">
       {icon}
-      <h2 className="font-display text-[11px] font-bold uppercase tracking-[0.3em]">{label}</h2>
+      <h2 className="font-display text-badge font-bold uppercase tracking-[0.08em]">{label}</h2>
       {count !== undefined && (
-        <span className="rounded-full bg-primary px-2 py-0.5 font-display text-[10px] font-black text-background">
+        <span className="rounded-full bg-primary px-2 py-0.5 font-display text-meta font-black tabular text-background">
           {count}
         </span>
       )}
@@ -736,13 +745,13 @@ function SparePicker({
 
   return (
     <div className="mt-3">
-      <div className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+      <div className="mb-1.5 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
       {loading ? (
-        <p className="text-[11px] text-muted-foreground">Counting spares…</p>
+        <p className="text-meta text-muted-foreground">Counting spares…</p>
       ) : items.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-meta text-muted-foreground">
           {outOfSeason ? "Trading opens with the next combine." : "No spares to trade."}
         </p>
       ) : (
@@ -764,7 +773,7 @@ function SparePicker({
           else. Shown so "where is my card?" has an answer on the screen. */}
       {blocked.length > 0 && (
         <>
-          <div className="mt-2 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground/70">
+          <div className="mt-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
             Can&apos;t be traded
           </div>
           <div className="flex gap-1 overflow-x-auto pb-1">

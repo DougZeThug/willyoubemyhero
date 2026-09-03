@@ -697,7 +697,7 @@ export function PackOpening({
             // finds the card on the stand with `[role="button"][aria-pressed]`,
             // which is an attribute selector — a native button does not match it,
             // and neither do the aria-hidden divs above.
-            className="relative z-10 rounded-full border border-white/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground outline-none hover:border-primary/50 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
+            className="relative z-10 inline-flex min-h-11 items-center rounded-full border border-white/10 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground outline-none hover:border-primary/50 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
           >
             Skip
           </button>

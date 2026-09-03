@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  formatDay,
   formatTime,
   hueOf,
   initialsOf,
@@ -240,5 +241,43 @@ describe("newClientKey", () => {
     } finally {
       globalThis.crypto = original;
     }
+  });
+});
+
+describe("formatDay", () => {
+  it("reads a stored day as a person would say it", () => {
+    expect(formatDay("2026-07-28")).toBe("28 Jul");
+  });
+
+  it("drops the leading zero on the day but not the month name", () => {
+    expect(formatDay("2026-01-05")).toBe("5 Jan");
+    expect(formatDay("2026-12-31")).toBe("31 Dec");
+  });
+
+  it("does not shift the day for a timezone", () => {
+    // The whole reason this does not go through Date. `new Date("2026-07-28")`
+    // is UTC midnight, and toLocaleDateString on it renders "27 Jul" for every
+    // player west of Greenwich — including the league's own America/New_York.
+    const tz = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      expect(formatDay("2026-07-28")).toBe("28 Jul");
+    } finally {
+      process.env.TZ = tz;
+    }
+  });
+
+  it("ignores a time suffix, so a timestamp column formats too", () => {
+    expect(formatDay("2026-07-28T23:30:00Z")).toBe("28 Jul");
+  });
+
+  it("says nothing rather than something wrong for a missing or unreadable day", () => {
+    // Secret pulls carry pulled_on from the database; a row that predates the
+    // column arrives as null and used to render the literal word "null".
+    expect(formatDay(null)).toBe("—");
+    expect(formatDay(undefined)).toBe("—");
+    expect(formatDay("")).toBe("—");
+    expect(formatDay("yesterday")).toBe("—");
+    expect(formatDay("2026-13-01")).toBe("—");
   });
 });

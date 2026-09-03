@@ -282,7 +282,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[11px] text-muted-foreground">{item.file.name}</div>
                   {item.oversize ? (
-                    <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-destructive">
+                    <div className="flex items-center gap-1 text-label font-bold uppercase tracking-[0.08em] text-destructive">
                       {/* The number, from the constant, rather than a hand-typed one that had
     drifted: it read "Over 12 MB" against an 8.8 MB cap, so a 10 MB file
     was correctly rejected and then labelled with a number it is under. */}
@@ -328,7 +328,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                           )
                         }
                         className={cn(
-                          "min-h-9 px-3 py-1 text-[9px] font-bold uppercase tracking-widest transition-colors sm:min-h-0 sm:px-2",
+                          "min-h-11 px-3 text-label font-bold uppercase tracking-[0.08em] transition-colors sm:min-h-0 sm:px-2",
                           item.side === side
                             ? "bg-primary/20 text-primary"
                             : "text-muted-foreground hover:text-foreground",

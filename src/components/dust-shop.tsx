@@ -364,9 +364,8 @@ export function DustShopPanel({
                     )}
                   </span>
                   <Button
-                    size="sm"
                     variant="outline"
-                    className="shrink-0"
+                    className="min-h-11 shrink-0"
                     disabled={mill.isPending}
                     onClick={() => {
                       setBurning(r.copyId);
@@ -407,9 +406,8 @@ export function DustShopPanel({
                     {s.lastCopy && <span className="ml-1.5 text-muted-foreground">last copy</span>}
                   </span>
                   <Button
-                    size="sm"
                     variant="outline"
-                    className="shrink-0"
+                    className="min-h-11 shrink-0"
                     disabled={sell.isPending}
                     onClick={() => {
                       // The card genuinely leaves the collection when it is the
@@ -462,9 +460,8 @@ export function DustShopPanel({
                     )}
                   </span>
                   <Button
-                    size="sm"
                     variant="outline"
-                    className="shrink-0"
+                    className="min-h-11 shrink-0"
                     disabled={!canReroll || reroll.isPending}
                     onClick={() => {
                       setRolling(r.copyId);

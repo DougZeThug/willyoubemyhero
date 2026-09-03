@@ -73,7 +73,7 @@ export function CardCompare({
                   <li key={p.id}>
                     <button
                       onClick={() => onPick(p.id)}
-                      className="flex w-full items-center gap-2 rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-2 text-left transition-colors hover:border-primary/40"
+                      className="flex min-h-11 w-full items-center gap-2 rounded-md border border-white/10 bg-white/[0.02] px-3 text-left transition-colors hover:border-primary/40"
                     >
                       <span
                         className="font-display shrink-0 text-xs font-black uppercase"
@@ -109,7 +109,7 @@ export function CardCompare({
                         >
                           {row.aMs != null ? formatTime(row.aMs) : "—"}
                         </span>
-                        <span className="w-24 truncate text-center text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
+                        <span className="w-24 truncate text-center text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                           {row.label}
                         </span>
                         <span
@@ -129,7 +129,7 @@ export function CardCompare({
 
               <button
                 onClick={() => onPick(null)}
-                className="mx-auto block rounded-full border border-white/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground hover:border-primary/50 hover:text-primary"
+                className="mx-auto flex min-h-11 items-center rounded-full border border-white/10 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground hover:border-primary/50 hover:text-primary"
               >
                 Pick someone else
               </button>
@@ -157,7 +157,7 @@ function Side({ player, stats }: { player: ComparePlayer; stats: ReturnType<type
       <div className="timer-digits tabular mt-1 text-xl text-foreground">
         {stats.bestRun ? formatTime(stats.bestRun.official_time_ms) : "—:—"}
       </div>
-      <div className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
+      <div className="mt-0.5 text-meta font-semibold text-muted-foreground">
         {stats.rank != null ? `Rank #${stats.rank}` : "No official run"}
         {wins > 0 && ` · ${wins} won`}
       </div>

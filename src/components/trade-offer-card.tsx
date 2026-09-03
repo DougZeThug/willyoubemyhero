@@ -100,14 +100,14 @@ export function TradeItemTile({
         <div
           className={cn(
             "truncate font-display font-black uppercase tracking-wide",
-            big ? "text-[13px]" : "text-[11px]",
+            big ? "text-card-name" : "text-badge",
           )}
         >
           {name}
         </div>
         {tier && (
           <div
-            className="text-[9px] font-bold uppercase tracking-[0.2em]"
+            className="text-badge font-bold uppercase tracking-[0.08em]"
             style={{ color: tier.accent }}
           >
             {tier.label}
@@ -116,23 +116,19 @@ export function TradeItemTile({
         {/* Says why the art is hidden, so a face-down tile reads as a rule rather
             than as missing artwork. */}
         {concealed && (
-          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            not yours yet
-          </div>
+          <div className="text-meta font-semibold text-muted-foreground">Not yours yet</div>
         )}
         {/* Any secret copy is tradeable now, single or not, so this is the only
             thing standing between somebody and giving away their only mythic.
             A marker rather than a dialog: visible, not in the way. */}
         {item.kind === "secret" && item.lastCopy && (
-          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-warn">
-            ⚠ last copy
-          </div>
+          <div className="text-meta font-bold text-warn">⚠ Last copy</div>
         )}
         {/* Null for a standard finish — 70% of copies — so the metal only shows
             up where it means something. Same rule editionLabel applies everywhere. */}
         {finish && (
           <div
-            className="text-[9px] font-bold uppercase tracking-[0.2em]"
+            className="text-badge font-bold uppercase tracking-[0.08em]"
             style={{ color: editionStyle(toEdition(item.kind === "roster" ? item.edition : null)).accent }} // prettier-ignore
           >
             {finish}
@@ -148,7 +144,7 @@ export function TradeItemTile({
     return (
       <div className={cn(width, "shrink-0 opacity-40 grayscale")} aria-disabled="true">
         {body}
-        <div className="mt-0.5 text-center text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+        <div className="mt-0.5 text-center text-meta font-semibold text-muted-foreground">
           {blockedLabel}
         </div>
       </div>
@@ -189,7 +185,7 @@ function CardStrip({
   if (items.length === 0) {
     // An item whose card has since been deleted is dropped on the way out, so a
     // side can arrive empty and must still render as something.
-    return <p className="text-[11px] text-muted-foreground">Nothing left on this side.</p>;
+    return <p className="text-meta text-muted-foreground">Nothing left on this side.</p>;
   }
   return (
     <div className={cn("flex gap-2 overflow-x-auto pb-1", size === "lg" && "justify-center")}>
@@ -262,17 +258,20 @@ export function TradeOfferCard({
         >
           {iAmProposer ? `You → ${nameOf(theirId)}` : `${nameOf(theirId)} → You`}
         </h3>
-        {!pending && (
-          <span className="shrink-0 rounded-full border border-white/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            {offerStatusLabel(offer.status)}
-          </span>
-        )}
+        <span
+          className={cn(
+            "shrink-0 rounded-full border px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em]",
+            pending ? "border-primary/50 text-primary" : "border-white/15 text-muted-foreground",
+          )}
+        >
+          {offerStatusLabel(offer.status)}
+        </span>
       </div>
 
       {/* The one-line version, which is also what the public feed shows. It is
           above the tiles rather than below because on a phone, in a garden, it is
           usually the only part anyone reads. */}
-      <p className={cn("mb-3 text-muted-foreground", pending ? "text-sm" : "text-[11px]")}>
+      <p className={cn("mb-3 text-muted-foreground", pending ? "text-sm" : "text-meta")}>
         {tradeItemsLabel(iGive)} for {tradeItemsLabel(iGet)}
       </p>
 
@@ -281,8 +280,8 @@ export function TradeOfferCard({
       <div className={cn("mb-2 flex", pending ? "gap-2" : "gap-3")}>
         <div
           className={cn(
-            "min-w-0 flex-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
-            pending ? "text-center text-[10px]" : "text-left",
+            "min-w-0 flex-1 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground",
+            pending ? "text-center" : "text-left",
           )}
         >
           You give
@@ -290,8 +289,8 @@ export function TradeOfferCard({
         <div className="shrink-0 w-8" aria-hidden />
         <div
           className={cn(
-            "min-w-0 flex-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground",
-            pending ? "text-center text-[10px]" : "text-left",
+            "min-w-0 flex-1 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground",
+            pending ? "text-center" : "text-left",
           )}
         >
           You get

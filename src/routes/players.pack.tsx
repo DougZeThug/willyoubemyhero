@@ -1658,7 +1658,7 @@ function PackPage() {
             <div className="flex items-center gap-3">
               <Link
                 to="/players"
-                className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline"
+                className="-ml-2 inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline"
               >
                 <ArrowLeft className="h-3.5 w-3.5" /> Vault
               </Link>
@@ -1671,7 +1671,7 @@ function PackPage() {
                 onClick={sfx.toggle}
                 aria-pressed={!sfx.muted}
                 aria-label={sfx.muted ? "Turn sound on" : "Turn sound off"}
-                className="text-muted-foreground transition-colors hover:text-primary"
+                className="flex h-11 w-11 items-center justify-center text-muted-foreground transition-colors hover:text-primary"
               >
                 {sfx.muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               </button>
@@ -1680,7 +1680,7 @@ function PackPage() {
                 gives back none of its 90px when it fades for the tear. */}
             {streak && <StreakFlame streak={streak} />}
             <div className="text-right">
-              <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+              <div className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 Collected
               </div>
               {/* Dashed until reconciled — this counter used to read the whole
@@ -1715,7 +1715,7 @@ function PackPage() {
               <h1 className="font-display text-2xl font-black uppercase leading-none sm:text-3xl">
                 Today&apos;s Pack
               </h1>
-              <p className="mt-1 max-w-xs px-2 text-[11px] leading-snug text-muted-foreground sm:mt-2 sm:max-w-sm sm:text-xs">
+              <p className="mt-1 max-w-xs px-2 text-meta leading-snug text-muted-foreground sm:mt-2 sm:max-w-sm">
                 One pack a day, dealt to you and nobody else. Rip the top off to open it.
               </p>
               {/* No test id: the flame above already carries one, and a second
@@ -1750,7 +1750,7 @@ function PackPage() {
             />
 
             <motion.div
-              className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground"
+              className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground"
               animate={{ opacity: stage === "opening" ? 0 : 1 }}
               transition={{ duration: 0.2 }}
             >
@@ -1806,7 +1806,7 @@ function PackPage() {
                   // hundred milliseconds the real card is invisible behind the
                   // flight, and this would turn a card nobody can see.
                   disabled={autoRunning || entering != null}
-                  className="rounded-full px-3 py-1 text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground/45 hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground/45"
+                  className="inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground/70"
                 >
                   Reveal all
                 </button>

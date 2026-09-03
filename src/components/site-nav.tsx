@@ -86,9 +86,15 @@ export function SiteNav() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-2.5 sm:gap-4">
           <div className="w-11 md:w-16" aria-hidden />
           {/* Tracking loosens with the viewport rather than the wordmark wrapping:
-              two stacked lines turned the 48px header into 90px at 320px. */}
-          <Link to="/players" className="flex flex-col items-center leading-none">
-            <span className="whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.16em] text-primary/80 sm:tracking-[0.35em]">
+              two stacked lines turned the 48px header into 90px at 320px. The
+              wide desktop step is the one place under 14px that keeps tracking
+              above the 0.08em cap (§16) — the cap is aimed at labels and
+              metadata, and this is the wordmark. */}
+          <Link
+            to="/players"
+            className="flex min-h-11 flex-col items-center justify-center leading-none"
+          >
+            <span className="whitespace-nowrap text-nav font-semibold uppercase tracking-[0.08em] text-primary/80 sm:tracking-[0.35em]">
               Will YOU Be My Hero?
             </span>
             <span className="whitespace-nowrap font-display text-base font-black uppercase tracking-[0.1em] text-foreground sm:text-lg sm:tracking-[0.22em]">
@@ -144,7 +150,7 @@ export function SiteNav() {
                   aria-current={active === l.to ? "page" : undefined}
                   aria-label={waiting ? `${l.label} — ${waiting.suffix}` : undefined}
                   className={cn(
-                    "relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
+                    "relative flex flex-col items-center gap-1 py-2.5 text-nav font-bold uppercase tracking-[0.08em] transition-colors",
                     active === l.to ? "text-primary" : "text-muted-foreground",
                   )}
                 >

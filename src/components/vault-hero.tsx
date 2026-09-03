@@ -64,7 +64,7 @@ export function VaultHero({
         <div>
           <div className="flex items-center gap-2 text-primary">
             <Layers className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               Collection
             </span>
           </div>
@@ -118,7 +118,7 @@ export function VaultHero({
           {!isMember && (
             <Link
               to="/claim"
-              className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-primary hover:underline"
+              className="mt-2 -ml-3 inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline"
             >
               <UserRoundCheck className="h-3.5 w-3.5" />
               Claim your player
@@ -156,7 +156,7 @@ export function VaultHero({
             {tradeUnread > 0 && (
               <Link
                 to="/players/trade"
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary/50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-primary"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-primary/50 px-3 text-label font-bold uppercase tracking-[0.08em] text-primary"
               >
                 <ArrowLeftRight className="h-3.5 w-3.5" />
                 Offer waiting

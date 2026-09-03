@@ -226,7 +226,7 @@ export function CardSocial({
   return (
     <div className="mt-8 space-y-6">
       <section>
-        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <div className="mb-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Reactions
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -241,7 +241,7 @@ export function CardSocial({
                   disabled={pending === emoji}
                   aria-label={`React with ${emoji}`}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-transform duration-150 active:scale-90 disabled:opacity-50",
+                    "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-transform duration-150 active:scale-90 disabled:opacity-50",
                     active
                       ? "border-primary bg-primary/15"
                       : "border-white/10 bg-white/[0.02] hover:border-primary/40",
@@ -250,7 +250,7 @@ export function CardSocial({
                   <span aria-hidden>{emoji}</span>
                   <span
                     className={cn(
-                      "text-[11px] font-bold tabular",
+                      "text-meta font-bold tabular",
                       active ? "text-primary" : "text-muted-foreground",
                     )}
                   >
@@ -287,7 +287,7 @@ export function CardSocial({
                 {list.length > 0 && (
                   <Popover>
                     <PopoverTrigger
-                      className="absolute -right-1 -top-1 h-4 w-4 rounded-full text-[9px] text-muted-foreground hover:text-primary"
+                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-background text-meta text-muted-foreground hover:text-primary"
                       aria-label={`Who reacted with ${emoji}`}
                     >
                       ⓘ
@@ -306,7 +306,7 @@ export function CardSocial({
       </section>
 
       <section>
-        <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <div className="mb-2 flex items-center gap-1.5 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           <MessageSquare className="h-3.5 w-3.5" />
           Trash Talk
           {comments.length > 0 && <span className="text-primary">{comments.length}</span>}
@@ -324,7 +324,7 @@ export function CardSocial({
                   className="group flex items-start gap-2 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-primary/80">
+                    <div className="text-label font-bold uppercase tracking-[0.08em] text-primary/80">
                       {labelFor(c)}
                     </div>
                     <p className="break-words text-sm text-foreground/90">{c.body}</p>
@@ -333,7 +333,7 @@ export function CardSocial({
                     <button
                       onClick={() => onDelete(c.id)}
                       aria-label="Delete your comment"
-                      className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -361,7 +361,7 @@ export function CardSocial({
             type="submit"
             disabled={busy || !draft.trim()}
             aria-label="Post"
-            className="shrink-0 rounded-md border border-primary/40 bg-primary/10 p-2 text-primary transition-colors hover:bg-primary/20 disabled:opacity-40"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-primary/40 bg-primary/10 text-primary transition-colors hover:bg-primary/20 disabled:opacity-40"
           >
             <Send className="h-4 w-4" />
           </button>
@@ -369,7 +369,7 @@ export function CardSocial({
 
         {namePrompt && !me && (
           <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-primary">
+            <p className="text-label font-bold uppercase tracking-[0.08em] text-primary">
               What should we call you?
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -392,7 +392,7 @@ export function CardSocial({
               <button
                 type="submit"
                 disabled={!nameDraft.trim()}
-                className="shrink-0 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold uppercase tracking-widest text-primary hover:bg-primary/20 disabled:opacity-40"
+                className="min-h-11 shrink-0 rounded-md border border-primary/40 bg-primary/10 px-3 text-label font-bold uppercase tracking-[0.08em] text-primary hover:bg-primary/20 disabled:opacity-40"
               >
                 Save
               </button>

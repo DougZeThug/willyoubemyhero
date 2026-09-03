@@ -78,7 +78,7 @@ export function VaultSection({
             className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 text-left disabled:cursor-default"
           >
             <h2
-              className="truncate font-display text-[11px] font-black uppercase tracking-[0.3em]"
+              className="truncate font-display text-badge font-black uppercase tracking-[0.08em]"
               style={accent ? { color: accent } : undefined}
             >
               {title}
@@ -86,7 +86,7 @@ export function VaultSection({
             <span className="flex shrink-0 items-center gap-2">
               {meta != null && (
                 <span
-                  className="text-[10px] uppercase tracking-widest text-muted-foreground"
+                  className="text-meta text-muted-foreground"
                   style={accent ? { color: accent, opacity: 0.8 } : undefined}
                 >
                   {meta}
@@ -149,7 +149,7 @@ function MoveButton({
       aria-disabled={enabled ? undefined : true}
       onClick={() => enabled && onMove()}
       className={cn(
-        "flex h-11 w-7 shrink-0 items-center justify-center rounded transition-colors sm:h-8",
+        "flex h-11 w-11 shrink-0 items-center justify-center rounded transition-colors sm:h-8 sm:w-8",
         enabled
           ? "text-muted-foreground hover:bg-white/5 hover:text-primary"
           : "text-muted-foreground/25",

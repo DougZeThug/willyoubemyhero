@@ -18,6 +18,7 @@ import { useMyCollection } from "@/hooks/use-my-collection";
 import { useDustBalance } from "@/hooks/use-dust";
 import { dustLive } from "@/lib/dust";
 import { packedByLabel } from "@/lib/card-pulls";
+import { formatDay } from "@/lib/format";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
 import { VaultSection } from "@/components/vault-section";
 import { VaultHero } from "@/components/vault-hero";
@@ -434,7 +435,7 @@ function PlayersPage() {
           {t.label}
         </div>
         <div
-          className="text-[9px] font-bold uppercase tracking-[0.25em]"
+          className="text-badge font-bold uppercase tracking-[0.08em]"
           style={{ color: TROPHY_RARITY.accent }}
         >
           {trophySizeLabel(t.size)}
@@ -446,12 +447,12 @@ function PlayersPage() {
           support, and better than eight people appearing to finish the same
           afternoon. */}
         {t.via !== "backfill" && (
-          <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
-            {t.completedOn}
+          <div className="text-meta font-semibold text-muted-foreground">
+            {formatDay(t.completedOn)}
           </div>
         )}
         {shelf && (
-          <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+          <div className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
             View set
           </div>
         )}
@@ -499,31 +500,28 @@ function PlayersPage() {
             name={s.name}
             on={isFavourite(favourite)}
             onToggle={() => toggleFavourite(favourite)}
-            className="absolute right-1.5 top-1.5"
+            className="absolute right-0 top-0"
           />
         </div>
         <div className="text-center">
-          <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+          <div className="truncate font-display text-card-name font-black uppercase tracking-wide">
             {s.name}
           </div>
           {/* The level of your copy leads, in its own colour — the same
               hierarchy a special finish takes on a roster tile. */}
           <div
-            className="text-[9px] font-bold uppercase tracking-[0.25em]"
+            className="text-badge font-bold uppercase tracking-[0.08em]"
             style={{ color: secretTierStyle(s.tier).accent }}
           >
             {secretTierCaption(s.tier)}
           </div>
-          <div
-            className="text-[9px] font-bold uppercase tracking-[0.25em]"
-            style={{ color: rarity.border }}
-          >
+          <div className="text-meta font-semibold" style={{ color: rarity.border }}>
             {/* Same vocabulary as card-slab.tsx, so the two halves of the
                 collection speak the same language. */}
             {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
           </div>
           {packedByLabel(s.ownerCount) && (
-            <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+            <div className="text-meta font-semibold text-muted-foreground">
               {packedByLabel(s.ownerCount)}
             </div>
           )}
@@ -582,7 +580,7 @@ function PlayersPage() {
                 <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
               )}
               <span
-                className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                className="text-badge font-bold uppercase tracking-[0.08em]"
                 style={{
                   color: locked
                     ? undefined
@@ -602,7 +600,7 @@ function PlayersPage() {
                 it never reads as one statement with the tick above it —
                 that tick is "you have this", this is "they do". */}
             {packedByLabel(pullCounts.data?.[p.id]) && (
-              <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+              <div className="text-meta font-semibold text-muted-foreground">
                 {packedByLabel(pullCounts.data?.[p.id])}
               </div>
             )}
@@ -617,7 +615,7 @@ function PlayersPage() {
             name={name}
             on={isFavourite(favourite)}
             onToggle={() => toggleFavourite(favourite)}
-            className="absolute right-1.5 top-1.5"
+            className="absolute right-0 top-0"
           />
         )}
       </div>
@@ -632,35 +630,59 @@ function PlayersPage() {
     <>
       {/* Sits with the grid it sorts. Left in the page header it would strand
           above a shelf that is rolled up, controlling nothing you can see. */}
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {SORTS.map((s) => (
-          <button
-            key={s.key}
-            onClick={() => {
-              setSort(s.key);
-              setShuffleSeed(0);
-            }}
-            className={cn(
-              "rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
-              sort === s.key && shuffleSeed === 0
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-            )}
-          >
-            {s.label}
-          </button>
-        ))}
+      {/* The active chip was a colour swap and nothing else, so a screen reader
+          heard four identical controls and no answer to "sorted by what".
+          aria-pressed rather than a radiogroup: it says the same thing, matches
+          the Rearrange toggle below, and keeps these as buttons — the e2e suite
+          reaches them by role, and role="radio" made them vanish from it. */}
+      <div className="mb-3 flex items-center gap-1">
+        {/* A scroller, because the five controls genuinely do not fit: at 44px
+            and 12px the four chips measure 293px against 262px of shelf at
+            320px wide. Same treatment as the card strips — the row stays one
+            row and every chip stays reachable, rather than wrapping into a
+            second 44px band on a screen the audit already faults for spending
+            640px above the first card (§17). */}
+        <div
+          role="group"
+          aria-label="Sort the roster"
+          className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {SORTS.map((s) => (
+            <button
+              key={s.key}
+              aria-pressed={sort === s.key && shuffleSeed === 0}
+              onClick={() => {
+                setSort(s.key);
+                setShuffleSeed(0);
+              }}
+              className={cn(
+                "inline-flex min-h-11 shrink-0 items-center rounded-md px-2.5 text-label font-bold uppercase tracking-[0.08em] transition-colors",
+                sort === s.key && shuffleSeed === 0
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        {/* The word drops below sm so all five controls hold one row at 320px.
+            Losing it costs nothing a label does not already carry, and a second
+            44px row would cost more than the word is worth on a screen that
+            already spends 640px above the first card. */}
         <button
+          aria-pressed={shuffleSeed > 0}
+          aria-label="Shuffle the roster"
           onClick={() => setShuffleSeed((n) => n + 1)}
           className={cn(
-            "ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
+            "ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-label font-bold uppercase tracking-[0.08em] transition-colors",
             shuffleSeed > 0
               ? "bg-primary/15 text-primary"
               : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
           )}
         >
           <Shuffle className="h-3.5 w-3.5" />
-          Shuffle
+          <span className="hidden sm:inline">Shuffle</span>
         </button>
       </div>
 
@@ -729,7 +751,7 @@ function PlayersPage() {
               aria-pressed={rearranging}
               onClick={() => setRearranging((v) => !v)}
               className={cn(
-                "inline-flex min-h-9 items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
+                "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-label font-bold uppercase tracking-[0.08em] transition-colors",
                 rearranging
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:bg-white/5 hover:text-foreground",

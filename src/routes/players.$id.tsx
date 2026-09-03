@@ -507,7 +507,7 @@ function PlayerCardPage() {
         <div className="mb-2 flex items-center justify-between gap-3 sm:mb-4 sm:items-start">
           <Link
             to="/players"
-            className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.3em] text-primary hover:underline sm:pt-1"
+            className="-ml-2 inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Vault
           </Link>
@@ -608,7 +608,7 @@ function PlayerCardPage() {
         <div className="mt-4 text-center">
           <h1 className="font-display text-3xl font-black uppercase leading-none">{name}</h1>
           {ep.participant?.fantasy_team_name && (
-            <div className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">
+            <div className="mt-1 text-meta text-muted-foreground">
               {ep.participant.fantasy_team_name}
             </div>
           )}
@@ -617,7 +617,7 @@ function PlayerCardPage() {
               {myTrophies.map((t) => (
                 <span
                   key={t.collection}
-                  className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest"
+                  className="inline-flex min-h-11 items-center gap-1 rounded-full border px-3 text-label font-bold uppercase tracking-[0.08em]"
                   style={{
                     borderColor: TROPHY_RARITY.border,
                     color: TROPHY_RARITY.accent,
@@ -642,7 +642,7 @@ function PlayerCardPage() {
                   <Link
                     key={`${a.award_type}-${a.award_name}`}
                     to="/awards"
-                    className="inline-flex items-center gap-1 rounded-full border border-warn/50 bg-warn/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-warn hover:bg-warn/20"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-full border border-warn/50 bg-warn/10 px-3 text-label font-bold uppercase tracking-[0.08em] text-warn hover:bg-warn/20"
                   >
                     <span aria-hidden>{cat?.icon ?? "🏅"}</span>
                     {a.award_name}
@@ -710,7 +710,7 @@ function PlayerCardPage() {
             <DropdownMenuTrigger asChild>
               <button
                 aria-label="More actions"
-                className="tier-chip inline-flex items-center rounded-full border px-2.5 py-1.5 sm:hidden"
+                className="tier-chip inline-flex h-11 w-11 items-center justify-center rounded-full border sm:hidden"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
@@ -725,7 +725,7 @@ function PlayerCardPage() {
                   onSelect={a.onClick}
                   role={a.key === "copy" ? undefined : "menuitemcheckbox"}
                   aria-checked={a.key === "copy" ? undefined : !!a.active}
-                  className="gap-2 text-[11px] font-bold uppercase tracking-[0.2em]"
+                  className="min-h-11 gap-2 text-label font-bold uppercase tracking-[0.08em]"
                 >
                   {a.icon}
                   {a.label}
@@ -786,7 +786,7 @@ function PlayerCardPage() {
 
         {qrUrl && (
           <div className="mt-8 flex flex-col items-center gap-2">
-            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
               <QrCode className="h-3.5 w-3.5" /> Scan on the printed card
             </div>
             <img
@@ -907,14 +907,14 @@ function CardRibbon({ rarity, edition }: { rarity: Rarity; edition: Edition }) {
       )}
       <div className="min-w-0 leading-tight">
         <div
-          className="font-display truncate text-[11px] font-black uppercase tracking-[0.25em]"
+          className="font-display truncate text-badge font-black uppercase tracking-[0.08em]"
           style={{ color: c }}
         >
           {badge.headline}
         </div>
         {/* On a finish this is the pull rate and nothing else — the tier is not
             repeated under its own metal. */}
-        <div className="hidden truncate text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground sm:block">
+        <div className="hidden truncate text-meta font-semibold text-muted-foreground sm:block">
           {badge.isEdition ? (editionOddsLabel(edition) ?? "") : badge.sub}
         </div>
       </div>
@@ -948,7 +948,7 @@ function ActionButton({
       className={cn(
         // Tighter on a phone: three chips plus the overflow have to sit on one
         // line, and at the desktop tracking they spill onto a second.
-        "tier-chip inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] transition-colors disabled:opacity-50 sm:px-3.5 sm:tracking-[0.25em]",
+        "tier-chip inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-label font-bold uppercase tracking-[0.08em] transition-colors disabled:opacity-50 sm:px-3.5",
         active && "is-active",
       )}
     >

@@ -869,7 +869,7 @@ function CardPlaceholder({ name, label }: { name: string; label: string }) {
       <div className="font-display text-sm font-black uppercase leading-tight tracking-wide">
         {name}
       </div>
-      <div className="text-[9px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+      <div className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
     </div>

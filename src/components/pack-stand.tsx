@@ -733,8 +733,8 @@ export function PackStand({
             className={cn(
               "font-display font-black uppercase",
               onSecret
-                ? "text-[10px] tracking-[0.3em]"
-                : "text-[9px] tracking-[0.35em] text-muted-foreground/50",
+                ? "text-label tracking-[0.08em]"
+                : "text-label tracking-[0.08em] text-muted-foreground/70",
             )}
             style={{ color: onSecret ? secretRarity.accent : undefined }}
           >
@@ -743,7 +743,7 @@ export function PackStand({
           {/* Kept in the tree at every step — it is what a screen reader and the
               e2e suite both read to know what the card wants — but dimmed to the
               edge of legibility once there is a card to look at instead. */}
-          <p className="mt-1 h-4 text-[10px] leading-snug text-muted-foreground/55">
+          <p className="mt-1 h-5 text-meta leading-snug text-muted-foreground/70">
             {/* Nothing to say over a bare stage — there is no card to tap. */}
             {onStage === null || secretPeeking || (peeking && !onSecret)
               ? ""
@@ -759,7 +759,7 @@ export function PackStand({
           </p>
           {(peeking || secretPeeking) && (
             <p
-              className="mt-1 text-[10px] font-bold uppercase tracking-[0.3em]"
+              className="mt-1 text-label font-bold uppercase tracking-[0.08em]"
               style={{ color: rarity.accent }}
             >
               {onSecret ? "Something else…" : "Last card…"}
@@ -958,7 +958,7 @@ export function PackStand({
                 {onSecret ? (
                   <>
                     <div
-                      className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                      className="text-label font-bold uppercase tracking-[0.08em]"
                       style={{
                         color: secretDuplicate ? undefined : secretTierStyle(secret?.tier).accent,
                       }}
@@ -974,7 +974,7 @@ export function PackStand({
                         rather than beside it — the roster half of this ternary
                         reads `ep!`, which is null on the secret slot. */}
                     {secretSellValue ? (
-                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
+                      <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
                         Sell for {secretSellValue}
                       </div>
                     ) : null}
@@ -993,7 +993,7 @@ export function PackStand({
                       return (
                         <>
                           <div
-                            className="text-[10px] font-bold uppercase tracking-[0.2em]"
+                            className="text-badge font-bold uppercase tracking-[0.08em]"
                             style={{ color: badge.color }}
                           >
                             {badge.headline}
@@ -1002,7 +1002,7 @@ export function PackStand({
                       );
                     })()}
                     {packedByLabel(pullCounts?.[ep!.id]) && (
-                      <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                      <div className="text-meta font-semibold text-muted-foreground">
                         {packedByLabel(pullCounts?.[ep!.id])}
                       </div>
                     )}
@@ -1035,7 +1035,7 @@ export function PackStand({
           type="button"
           onClick={onAdvance}
           disabled={!canAdvance}
-          className="mt-1 min-h-9 rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary disabled:opacity-0"
+          className="mt-1 min-h-11 rounded-full px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-primary focus-visible:text-primary disabled:opacity-0"
         >
           Next
         </button>

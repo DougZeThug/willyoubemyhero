@@ -164,7 +164,7 @@ export function PackSummary({
         transition={{ duration: 0.4 }}
       >
         <h1 className="font-display text-2xl font-black uppercase leading-none">Pack Complete</h1>
-        <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <p className="mt-1 text-meta font-semibold text-muted-foreground">
           {secretSlot === "open"
             ? "That's today's pack, secret and all"
             : "That's today's pack — come back tomorrow"}
@@ -233,7 +233,7 @@ export function PackSummary({
                     return (
                       <>
                         <div
-                          className="text-[9px] font-bold uppercase tracking-[0.2em] sm:text-[10px]"
+                          className="text-badge font-bold uppercase tracking-[0.08em]"
                           style={{ color: badge.color }}
                         >
                           {badge.headline}
@@ -242,7 +242,7 @@ export function PackSummary({
                     );
                   })()}
                   {packedByLabel(pullCounts?.[ep.id]) && (
-                    <div className="text-[8px] font-bold uppercase leading-tight tracking-[0.15em] text-muted-foreground sm:text-[9px]">
+                    <div className="text-meta font-semibold leading-tight text-muted-foreground">
                       {packedByLabel(pullCounts?.[ep.id])}
                     </div>
                   )}
@@ -296,7 +296,7 @@ export function PackSummary({
               breaking one on purpose to re-farm day 3. */}
           {claimable?.tierFloor && (
             <span
-              className="font-display text-[10px] font-black uppercase tracking-[0.18em]"
+              className="font-display text-badge font-black uppercase tracking-[0.08em]"
               style={{ color: secretTierStyle(claimable.tierFloor).accent }}
             >
               {secretTierFloorLabel(claimable.tierFloor)}
@@ -318,9 +318,7 @@ export function PackSummary({
                     avoids one: it announces the reward to whoever is glancing at
                     the phone over your shoulder. */}
                 {claimError && (
-                  <span className="text-[10px] leading-snug text-muted-foreground">
-                    {claimError}
-                  </span>
+                  <span className="text-meta leading-snug text-muted-foreground">{claimError}</span>
                 )}
               </>
             ) : (
@@ -335,14 +333,14 @@ export function PackSummary({
                 {/* Deliberately not "claim your player": thirteen people are on
                     the roster and everyone else is here to watch. An account is
                     something anybody can have, and it is what keeps the card. */}
-                <span className="text-[10px] leading-snug text-muted-foreground">
+                <span className="text-meta leading-snug text-muted-foreground">
                   {claimable.label} is waiting. An account keeps it on every phone you play from.
                 </span>
               </>
             )
           ) : (
             <>
-              <span className="text-[10px] leading-snug text-muted-foreground">
+              <span className="text-meta leading-snug text-muted-foreground">
                 {streak.openedToday
                   ? "Streak alive. Come back tomorrow."
                   : "Open today's pack to keep it alive."}
@@ -351,7 +349,7 @@ export function PackSummary({
                   it. Without it "come back tomorrow" is a request with nothing
                   behind it. */}
               {nextRung && (
-                <span className="text-[10px] leading-snug text-muted-foreground">{nextRung}</span>
+                <span className="text-meta leading-snug text-muted-foreground">{nextRung}</span>
               )}
             </>
           )}
@@ -362,7 +360,7 @@ export function PackSummary({
           card whose job is to be the biggest thing on screen is a distraction;
           here it is the point. */}
       <div className="mx-auto flex max-w-xs items-center justify-between rounded-xl border border-primary/20 px-4 py-2.5">
-        <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <span className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Collected
         </span>
         <span
@@ -382,7 +380,7 @@ export function PackSummary({
           onClick={() => void share()}
           disabled={sharing || shareCards.length === 0}
           className={cn(
-            "inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground",
+            "inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground",
             "hover:border-primary/50 hover:text-primary disabled:opacity-40",
           )}
         >
@@ -451,12 +449,12 @@ function SecretSlotView({
           onClick={onRetry}
           className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
         >
-          <span className="font-display text-xs font-black uppercase tracking-[0.2em]">
+          <span className="font-display text-badge font-black uppercase tracking-[0.08em]">
             No signal
           </span>
           {/* Never a toast: a toast announces a fourth card to whoever is
               glancing at the phone over your shoulder. */}
-          <span className="text-[10px] leading-snug text-muted-foreground">
+          <span className="text-meta leading-snug text-muted-foreground">
             Tap to try again — you haven&apos;t used today&apos;s.
           </span>
         </button>
@@ -487,12 +485,12 @@ function SecretSlotView({
               {card.name}
             </div>
             {duplicate ? (
-              <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+              <div className="text-meta font-semibold text-muted-foreground">
                 Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing off.
               </div>
             ) : (
               <div
-                className="text-[9px] font-bold uppercase tracking-[0.25em]"
+                className="text-badge font-bold uppercase tracking-[0.08em]"
                 style={{ color: rarity.border }}
               >
                 {/* Taught once, on the first secret anyone ever pulls. Without it

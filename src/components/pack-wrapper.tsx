@@ -121,7 +121,7 @@ function PackFace({
           Will YOU Be My Hero?
         </div>
         <div className="font-display text-3xl font-black uppercase leading-none">Draft Combine</div>
-        <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <div className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           {size} cards · {year}
         </div>
       </div>
@@ -815,7 +815,7 @@ export function PackWrapper({
             className="pointer-events-none absolute inset-x-0 flex items-center gap-2 px-3"
             style={{ top: `${stripPct}%`, transform: "translateY(-50%)", opacity: hintOpacity }}
           >
-            <div className="tear-hint rounded-sm bg-primary/90 px-1.5 py-0.5 font-display text-[8px] font-black uppercase tracking-[0.2em] text-background">
+            <div className="tear-hint rounded-sm bg-primary/90 px-1.5 py-0.5 font-display text-label font-black uppercase tracking-[0.08em] text-background">
               Rip
             </div>
             <div className="h-px flex-1 border-t border-dashed border-white/60" />

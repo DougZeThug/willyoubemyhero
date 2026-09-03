@@ -10,6 +10,12 @@ import { cardStats, type StatsBundle } from "@/lib/card-stats";
  * Everything here comes from the event bundle, so the back tells you what the
  * player actually did on the course rather than repeating the front.
  *
+ * Type is sized in `cqw` against the card itself, clamped at both ends. This is
+ * a printed card face, not chrome: at a fixed 8px it was equally unreadable on a
+ * 358px card as on a 114px pack-summary thumb, which is the §16 complaint. The
+ * clamp floor keeps the thumb's ornamental size — nothing is read there — and the
+ * ceiling lands the label scale (12/13px) on the card as it is actually read.
+ *
  * Deliberately plain divs and CSS widths — no recharts. This renders inside a
  * `.holo-face`, which is `rotateY(180deg)` with `backface-visibility: hidden`,
  * and a ResponsiveContainer measures that node as zero-width. Charts belong on a
@@ -49,7 +55,7 @@ export function CardBackPanel({
   );
 
   return (
-    <div className="flex h-full w-full flex-col gap-2 bg-[oklch(0.13_0.02_240)] p-3 text-left">
+    <div className="@container flex h-full w-full flex-col gap-2 bg-[oklch(0.13_0.02_240)] p-3 text-left">
       {/* The headline row. On a special finish that is the metal, printed with
           the odds that produced it: TIER_REASON says what somebody did, and this
           has to say the opposite — that nobody did anything and the card came up
@@ -66,12 +72,12 @@ export function CardBackPanel({
         }}
       >
         <span
-          className="font-display text-[10px] font-black uppercase tracking-[0.25em]"
+          className="font-display text-[clamp(10px,4cqw,13px)] font-black uppercase tracking-[0.08em]"
           style={{ color: badge.color }}
         >
           {badge.headline}
         </span>
-        <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <span className="text-[clamp(8px,3.75cqw,12px)] font-semibold text-muted-foreground">
           {badge.isEdition ? (editionOddsLabel(edition) ?? "") : badge.sub}
         </span>
       </div>
@@ -83,12 +89,12 @@ export function CardBackPanel({
           style={{ borderColor: rarity.border }}
         >
           <span
-            className="font-display text-[10px] font-black uppercase tracking-[0.25em]"
+            className="font-display text-[clamp(10px,4cqw,13px)] font-black uppercase tracking-[0.08em]"
             style={{ color: rarity.accent }}
           >
             {rarity.label}
           </span>
-          <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+          <span className="text-[clamp(8px,3.75cqw,12px)] font-semibold text-muted-foreground">
             {TIER_REASON[rarity.tier] ?? ""}
           </span>
         </div>
@@ -104,7 +110,7 @@ export function CardBackPanel({
       </div>
 
       <div className="rounded border border-white/10 bg-white/[0.03] py-1.5 text-center">
-        <div className="text-[8px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <div className="text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Official Time
         </div>
         <div className="timer-digits tabular text-2xl text-primary">
@@ -113,16 +119,18 @@ export function CardBackPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="mb-1 text-[8px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <div className="mb-1 text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Station Splits
         </div>
         {ladder.length === 0 ? (
-          <p className="text-[9px] text-muted-foreground">Stations not set yet.</p>
+          <p className="text-[clamp(8px,3.75cqw,12px)] text-muted-foreground">
+            Stations not set yet.
+          </p>
         ) : (
           <ul className="space-y-1">
             {ladder.map((row) => (
               <li key={row.id} className="flex items-center gap-1.5">
-                <span className="w-14 shrink-0 truncate text-[8px] font-bold uppercase tracking-wider text-muted-foreground">
+                <span className="w-14 shrink-0 truncate text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   {row.label}
                 </span>
                 <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
@@ -133,13 +141,13 @@ export function CardBackPanel({
                     />
                   )}
                 </span>
-                <span className="w-9 shrink-0 text-right text-[9px] tabular text-foreground/90">
+                <span className="w-9 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] tabular text-foreground/90">
                   {row.ms != null ? formatTime(row.ms) : "—"}
                 </span>
                 {row.deltaMs != null && (
                   <span
                     className={
-                      "w-8 shrink-0 text-right text-[8px] font-bold tabular " +
+                      "w-8 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] font-bold tabular " +
                       (row.deltaMs <= 0 ? "text-primary" : "text-warn")
                     }
                   >
@@ -154,11 +162,11 @@ export function CardBackPanel({
       </div>
 
       {quote ? (
-        <p className="line-clamp-2 border-t border-white/10 pt-1.5 text-[9px] italic leading-snug text-muted-foreground">
+        <p className="line-clamp-2 border-t border-white/10 pt-1.5 text-[clamp(8px,3.75cqw,12px)] italic leading-snug text-muted-foreground">
           “{quote}”
         </p>
       ) : (
-        <p className="border-t border-white/10 pt-1.5 text-center text-[8px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <p className="border-t border-white/10 pt-1.5 text-center text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Will YOU Be My Hero?
         </p>
       )}
@@ -169,7 +177,7 @@ export function CardBackPanel({
 function Vital({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border border-white/10 bg-white/[0.03] py-1 text-center">
-      <div className="text-[7px] font-bold uppercase tracking-[0.25em] text-muted-foreground">
+      <div className="text-[clamp(8px,3.75cqw,12px)] font-bold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
       <div className="font-display text-sm font-black text-foreground">{value}</div>
