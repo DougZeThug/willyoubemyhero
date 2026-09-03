@@ -11,8 +11,15 @@
 // SSR'd HTML: it never executes the module scripts, so the client route chunks —
 // the ones the optimiser has not seen and would re-bundle under a worker — are
 // never requested at all. Warming the half of the graph that was not racing
-// would have been worse than nothing here, since this commit also makes the job
-// blocking.
+// would have been worse than nothing here, since this is also a blocking job.
+//
+// One pass over two routes, not more, because this costs real time on a job with
+// a twenty-minute budget: measured at roughly twenty seconds an entry. A second
+// pass over the same two buys nothing once the first has settled, and the routes
+// NOT listed here — /players/pack, /awards, /league and the rest — are the
+// argument against trying to be exhaustive. This closes the worst window, the
+// very first cold load under two workers. It is not a proof that no route can
+// ever trigger a late re-optimise.
 //
 // This runs after `webServer` is up, because Playwright sets its plugins up
 // before global setup.
@@ -30,17 +37,15 @@ export default async function warmUp(config: FullConfig) {
   const browser = await chromium.launch(use.launchOptions);
   try {
     const page = await browser.newPage({ baseURL: use.baseURL });
-    // Twice over: the first pass sets the optimiser going — and a re-bundle
-    // reloads the page out from under it — and the second proves it has settled.
-    for (let pass = 0; pass < 2; pass++) {
-      for (const path of ENTRY_POINTS) {
-        await page.goto(path);
-        // The route chunks land after hydration, which is the part a plain
-        // document load does not wait for. Bounded and swallowed: the warm-up is
-        // not an assertion, and whether these screens render is smoke.spec.ts's
-        // business.
-        await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-      }
+    for (const path of ENTRY_POINTS) {
+      await page.goto(path);
+      // The route chunks land after hydration, which is the part a document load
+      // does not wait for. `networkidle` is discouraged for assertions and does
+      // settle here — measured at 8-12s against this dev server, well inside the
+      // bound; Playwright does not count Vite's HMR socket as traffic. Bounded
+      // and swallowed anyway: the warm-up is not an assertion, and whether these
+      // screens render is smoke.spec.ts's business.
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
     }
   } finally {
     await browser.close();
