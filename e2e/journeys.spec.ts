@@ -686,7 +686,6 @@ test.describe("opening a pack", () => {
     await expect(sheet).toBeHidden();
   });
 
-
   test("deals a full pack of real roster cards and resumes it after a reload", async ({ page }) => {
     await page.goto("/players/pack");
     await expect(sealedPack(page)).toBeVisible();
