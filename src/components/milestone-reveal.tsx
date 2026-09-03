@@ -194,7 +194,7 @@ export function MilestoneReveal({
 
       <button
         onClick={onDone}
-        className="neon-btn relative z-10 !px-5 !py-2 !text-xs"
+        className="neon-btn-sm relative z-10"
         data-testid="milestone-done"
       >
         {duplicate ? "Another one for the pile" : "Nice"}

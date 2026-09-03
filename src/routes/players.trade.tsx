@@ -366,7 +366,7 @@ function TradePage() {
                       <button
                         onClick={() => accept(offer.id)}
                         disabled={pending === offer.id}
-                        className="neon-btn !px-6 !py-2.5 !text-xs disabled:opacity-50"
+                        className="neon-btn-lg disabled:opacity-50"
                       >
                         Accept
                       </button>
@@ -483,7 +483,7 @@ function TradePage() {
                 <button
                   onClick={propose}
                   disabled={pending === "compose" || give.length === 0 || want.length === 0}
-                  className="neon-btn mt-3 !px-4 !py-2 !text-xs disabled:opacity-40"
+                  className="neon-btn-lg mt-3 disabled:opacity-40"
                 >
                   <ArrowLeftRight className="h-4 w-4" />
                   Send offer

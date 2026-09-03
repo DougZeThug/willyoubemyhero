@@ -75,7 +75,7 @@ export function CollectorSignup({ className }: { className?: string }) {
       <button
         type="submit"
         disabled={busy || name.trim().length < 2}
-        className="neon-btn mt-3 w-full !py-2 !text-xs disabled:opacity-50"
+        className="neon-btn-sm mt-3 w-full disabled:opacity-50"
       >
         {busy ? "Setting up…" : "Start trading"}
       </button>
