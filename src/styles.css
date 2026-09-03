@@ -200,38 +200,76 @@
     240px 240px;
 }
 
-@utility neon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.85rem 1.5rem;
-  border-radius: 9999px;
-  border: 1px solid oklch(0.82 0.14 210 / 55%);
-  background: linear-gradient(180deg, oklch(0.22 0.03 235) 0%, oklch(0.16 0.025 240) 100%);
-  color: var(--color-primary);
-  font-family: var(--font-display);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.95rem;
-  box-shadow:
-    inset 0 0 0 1px oklch(1 0 0 / 4%),
-    0 0 0 1px oklch(0.82 0.14 210 / 15%),
-    var(--glow-primary);
-  transition:
-    transform 120ms ease,
-    box-shadow 120ms ease,
-    background 120ms ease;
-  &:hover {
+/*
+ * Buttons come in three heights — 44 / 48 / 56 (§18). Written as component-layer
+ * rules rather than @utility on purpose: the shared look lives in one selector
+ * list, and a caller's own utilities (w-full, mt-3, disabled:opacity-*) still win
+ * because the utilities layer sorts after components.
+ */
+@layer components {
+  .neon-btn,
+  .neon-btn-sm,
+  .neon-btn-lg {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid oklch(0.82 0.14 210 / 55%);
+    background: linear-gradient(180deg, oklch(0.22 0.03 235) 0%, oklch(0.16 0.025 240) 100%);
+    color: var(--color-primary);
+    font-family: var(--font-display);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: var(--text-button);
+    line-height: var(--text-button--line-height);
+    box-shadow:
+      inset 0 0 0 1px oklch(1 0 0 / 4%),
+      0 0 0 1px oklch(0.82 0.14 210 / 15%),
+      var(--glow-primary);
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease,
+      background 120ms ease;
+  }
+
+  .neon-btn:hover,
+  .neon-btn-sm:hover,
+  .neon-btn-lg:hover {
     background: linear-gradient(180deg, oklch(0.26 0.04 235) 0%, oklch(0.18 0.03 240) 100%);
     box-shadow:
       inset 0 0 0 1px oklch(1 0 0 / 8%),
       0 0 0 1px oklch(0.82 0.14 210 / 30%),
       0 0 30px oklch(0.82 0.14 210 / 55%);
   }
-  &:active {
+
+  .neon-btn:active,
+  .neon-btn-sm:active,
+  .neon-btn-lg:active {
     transform: translateY(1px);
+  }
+
+  .neon-btn:focus-visible,
+  .neon-btn-sm:focus-visible,
+  .neon-btn-lg:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .neon-btn-sm {
+    min-height: 44px;
+    padding: 0 1.125rem;
+  }
+
+  .neon-btn {
+    min-height: 48px;
+    padding: 0 1.5rem;
+  }
+
+  .neon-btn-lg {
+    min-height: 56px;
+    padding: 0 1.75rem;
   }
 }
 
