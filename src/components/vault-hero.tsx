@@ -30,6 +30,7 @@ export function VaultHero({
   dustBalance,
   isMember,
   wasMember,
+  syncError = null,
   streak,
   packWaiting,
   tradeUnread,
