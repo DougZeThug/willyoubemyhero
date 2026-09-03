@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { setMatchMedia } from "@/test/setup";
 import { MilestoneReveal } from "./milestone-reveal";
 import type { SecretCardView } from "@/lib/secret-cards";
