@@ -6,7 +6,7 @@
 
 /*
  * Will YOU Be My Hero? Draft Combine — dark sports-broadcast design system.
- * Broadcast-grade black background, electric green accent, warning amber/red.
+ * Broadcast-grade black ground, electric cyan/teal HUD accents, warning amber/red.
  * Bold condensed display font for scoreboard numerals.
  */
 
@@ -57,8 +57,39 @@
   --color-field-line: var(--field-line);
   --color-warn: var(--warn);
   --color-warn-foreground: var(--warn-foreground);
+  --color-focus: var(--focus);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Barlow Condensed", "Bebas Neue", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Type scale (§16 of the mobile UX audit). Nothing below 11px. */
+  --text-title: 1.875rem;
+  --text-title--line-height: 2rem;
+  --text-section: 1.125rem;
+  --text-section--line-height: 1.375rem;
+  --text-card-name: 0.9375rem;
+  --text-card-name--line-height: 1.125rem;
+  --text-viewer-name: 1.375rem;
+  --text-viewer-name--line-height: 1.5rem;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.375rem;
+  --text-label: 0.75rem;
+  --text-label--line-height: 1rem;
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1rem;
+  --text-badge: 0.8125rem;
+  --text-badge--line-height: 1rem;
+  --text-nav: 0.6875rem;
+  --text-nav--line-height: 0.875rem;
+  --text-button: 0.9375rem;
+  --text-button--line-height: 1.25rem;
+
+  /* Spacing scale (§17). 4pt base, 8pt rhythm. */
+  --spacing-page-x: 1rem;
+  --spacing-section-gap: 1.5rem;
+  --spacing-stack-gap: 0.5rem;
+  --spacing-grid-gap: 0.75rem;
+  --spacing-control-gap: 0.5rem;
 }
 
 :root {
@@ -86,7 +117,10 @@
   --warn-foreground: oklch(0.15 0.02 85);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.82 0.14 210);
+  /* Focus is deliberately not the cyan accent: a ring in --primary reads as the
+     same thing as a selected chip. */
+  --focus: oklch(0.98 0.01 240 / 85%);
+  --ring: var(--focus);
   --field: oklch(0.18 0.04 220);
   --field-line: oklch(0.82 0.14 210 / 10%);
   --chart-1: oklch(0.82 0.14 210);
@@ -133,6 +167,14 @@
     font-feature-settings: "ss01", "tnum";
   }
 
+  /* Keyboard focus is visible everywhere, including raw <button> elements that
+     carry no ring classes of their own. --focus rather than --primary so it never
+     reads as a selected chip. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
   .tabular {
     font-variant-numeric: tabular-nums;
   }
@@ -166,38 +208,76 @@
     240px 240px;
 }
 
-@utility neon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.85rem 1.5rem;
-  border-radius: 9999px;
-  border: 1px solid oklch(0.82 0.14 210 / 55%);
-  background: linear-gradient(180deg, oklch(0.22 0.03 235) 0%, oklch(0.16 0.025 240) 100%);
-  color: var(--color-primary);
-  font-family: var(--font-display);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.95rem;
-  box-shadow:
-    inset 0 0 0 1px oklch(1 0 0 / 4%),
-    0 0 0 1px oklch(0.82 0.14 210 / 15%),
-    var(--glow-primary);
-  transition:
-    transform 120ms ease,
-    box-shadow 120ms ease,
-    background 120ms ease;
-  &:hover {
+/*
+ * Buttons come in three heights — 44 / 48 / 56 (§18). Written as component-layer
+ * rules rather than @utility on purpose: the shared look lives in one selector
+ * list, and a caller's own utilities (w-full, mt-3, disabled:opacity-*) still win
+ * because the utilities layer sorts after components.
+ */
+@layer components {
+  .neon-btn,
+  .neon-btn-sm,
+  .neon-btn-lg {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid oklch(0.82 0.14 210 / 55%);
+    background: linear-gradient(180deg, oklch(0.22 0.03 235) 0%, oklch(0.16 0.025 240) 100%);
+    color: var(--color-primary);
+    font-family: var(--font-display);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: var(--text-button);
+    line-height: var(--text-button--line-height);
+    box-shadow:
+      inset 0 0 0 1px oklch(1 0 0 / 4%),
+      0 0 0 1px oklch(0.82 0.14 210 / 15%),
+      var(--glow-primary);
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease,
+      background 120ms ease;
+  }
+
+  .neon-btn:hover,
+  .neon-btn-sm:hover,
+  .neon-btn-lg:hover {
     background: linear-gradient(180deg, oklch(0.26 0.04 235) 0%, oklch(0.18 0.03 240) 100%);
     box-shadow:
       inset 0 0 0 1px oklch(1 0 0 / 8%),
       0 0 0 1px oklch(0.82 0.14 210 / 30%),
       0 0 30px oklch(0.82 0.14 210 / 55%);
   }
-  &:active {
+
+  .neon-btn:active,
+  .neon-btn-sm:active,
+  .neon-btn-lg:active {
     transform: translateY(1px);
+  }
+
+  .neon-btn:focus-visible,
+  .neon-btn-sm:focus-visible,
+  .neon-btn-lg:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .neon-btn-sm {
+    min-height: 44px;
+    padding: 0 1.125rem;
+  }
+
+  .neon-btn {
+    min-height: 48px;
+    padding: 0 1.5rem;
+  }
+
+  .neon-btn-lg {
+    min-height: 56px;
+    padding: 0 1.75rem;
   }
 }
 

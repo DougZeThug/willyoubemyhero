@@ -135,7 +135,7 @@ export function VaultHero({
                 today, both see the button exactly as it was. */}
             <Link
               to="/players/pack"
-              className={cn("neon-btn relative !px-6 !py-3 !text-sm", packWaiting && "ring-2")}
+              className={cn("neon-btn-lg relative", packWaiting && "ring-2")}
               style={packWaiting ? { ["--tw-ring-color" as string]: SECRET_RARITY.border } : undefined} // prettier-ignore
               aria-label={packWaiting ? "Open today's pack — a secret is waiting" : "Open today's pack"} // prettier-ignore
             >

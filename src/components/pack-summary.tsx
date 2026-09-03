@@ -310,7 +310,7 @@ export function PackSummary({
                   onClick={onClaim}
                   disabled={claiming}
                   data-testid="streak-claim"
-                  className="neon-btn !px-4 !py-2 !text-xs disabled:opacity-40"
+                  className="neon-btn-sm disabled:opacity-40"
                 >
                   {claiming ? "Opening…" : `Claim ${claimable.label}`}
                 </button>
@@ -328,7 +328,7 @@ export function PackSummary({
                 <Link
                   to="/auth"
                   search={{ mode: "signup", next: "/players/pack" }}
-                  className="neon-btn !px-4 !py-2 !text-xs"
+                  className="neon-btn-sm"
                 >
                   Sign in to claim
                 </Link>
@@ -374,7 +374,7 @@ export function PackSummary({
       </div>
 
       <div className="flex flex-wrap justify-center gap-2 pt-1">
-        <Link to="/players" className="neon-btn !px-4 !py-2 !text-xs">
+        <Link to="/players" className="neon-btn-sm">
           <PackageOpen className="h-4 w-4" />
           View collection
         </Link>

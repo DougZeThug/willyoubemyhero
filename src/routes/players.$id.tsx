@@ -544,7 +544,7 @@ function PlayerCardPage() {
               {locked ? (
                 <div className="flex flex-col items-center gap-3">
                   <LockedCard back={cardBack.data?.urls ?? null} name={name} />
-                  <Link to="/players/pack" className="neon-btn !px-4 !py-2 !text-xs">
+                  <Link to="/players/pack" className="neon-btn-sm">
                     <PackageOpen className="h-4 w-4" />
                     Rip a pack to see this card
                   </Link>

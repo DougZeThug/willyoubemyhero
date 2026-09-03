@@ -169,7 +169,7 @@ function ClaimPage() {
                 You can react to cards, post trash talk, and vote on league awards.
               </p>
               <div className="flex flex-col gap-2">
-                <Link to="/players" className="neon-btn !py-2 !text-xs">
+                <Link to="/players" className="neon-btn-sm">
                   Go to the vault
                 </Link>
                 <Button
