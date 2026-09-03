@@ -8,7 +8,6 @@ import { deleteComment, postComment, toggleReaction } from "@/lib/social.functio
 import { useMemberSession } from "@/lib/member-token";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import type { CommentRow, ReactionRow } from "@/hooks/use-event-social";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 const REACTIONS = ["🔥", "💀", "😂", "🐐", "🤡", "🍺"] as const;
@@ -293,7 +292,6 @@ export function CardSocial({
                     </div>
                   )}
                 </AnimatePresence>
-
               </div>
             );
           })}

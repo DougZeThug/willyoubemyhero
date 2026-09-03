@@ -57,9 +57,7 @@ describe("BoughtPullReveal accessibility", () => {
     const opener = document.createElement("button");
     document.body.appendChild(opener);
     opener.focus();
-    const { unmount } = render(
-      <BoughtPullReveal card={card} duplicate={false} onDone={vi.fn()} />,
-    );
+    const { unmount } = render(<BoughtPullReveal card={card} duplicate={false} onDone={vi.fn()} />);
     unmount();
     expect(opener).toHaveFocus();
     opener.remove();
