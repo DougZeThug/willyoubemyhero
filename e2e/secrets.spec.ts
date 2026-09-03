@@ -494,27 +494,20 @@ test.describe("the daily secret", () => {
      * walk to the next card. The same press-until-it-takes shape the fake-clock
      * test in journeys.spec.ts uses.
      *
-     * PRESS ONLY WHILE THE STAND SAYS THE CARD IS FACE-DOWN. Its own copy,
-     * "Tap the card to turn it", is on screen exactly when there is a card on the
-     * stage and it has not been turned — which is the one guard that holds.
-     * `aria-pressed` does not: on HoloCard it tracks flipping the card to its
-     * BACK, so a revealed card still reads "false" and a loop keyed on it presses
-     * again the moment a render is slow. That press flips the card, the swipe
-     * after it finds nothing to throw away, and the stand never advances. Not
-     * hypothetical — that is how this same shape broke journeys.spec.ts on CI.
-     *
-     * The blank hint during the last card's 900ms hold is handled by the same
-     * guard for free: nothing is face-down and nothing is turned, so the loop
-     * simply waits the hold out rather than drumming on it.
+     * The hint is the signal, and it has to be read before every press rather
+     * than after: the stand's own copy is "tap for the back", so a tap on a card
+     * that has already turned flips it rather than doing nothing. `aria-pressed`
+     * is NOT the signal — on HoloCard it tracks that flip, not the reveal, so a
+     * loop keyed on it never terminates. It is only good enough to say "this card
+     * is not currently showing its back", which is the second guard below.
      */
-    const faceDown = page.getByText(/tap the card to turn it/i);
     const hint = page.getByText(/swipe/i).first();
     async function turnCard() {
       await expect
         .poll(
           async () => {
             if (await hint.count()) return true;
-            if (await faceDown.count()) await card.click();
+            if ((await card.getAttribute("aria-pressed")) === "false") await card.click();
             // A beat before deciding whether it took, or the next press lands
             // inside the hold this is waiting out.
             await page.waitForTimeout(400);
