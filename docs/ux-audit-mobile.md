@@ -20,7 +20,7 @@ Priority scale: **Critical** (blocks the emotional loop or usability on a phone)
 
 **Strongest areas**
 
-- **The pack opening** is the best thing in the product. A drag-to-tear wrapper that commits at 60% travel (`src/lib/pack.ts:152-159`), a nine-phase four-second ceremony where every phase has something moving (`src/lib/pack-ceremony.ts:74-86`), a one-card reveal stand with a face-down hold before the flip, a fake "Pack Complete" heading that glitches into "One More Card" for the secret (`src/lib/stand-phase.ts`), tier-scaled ambience, chimes, haptics and confetti, and a resume-where-you-were rule that never loses a card. This is genuinely suspenseful and premium.
+- **The pack opening** is the best thing in the product. A drag-to-tear wrapper that commits at 60% travel (`src/lib/pack.ts:152-159`), an eight-phase four-second ceremony where every phase has something moving (`src/lib/pack-ceremony.ts:74-86`), a one-card reveal stand with a face-down hold before the flip, a fake "Pack Complete" heading that glitches into "One More Card" for the secret (`src/lib/stand-phase.ts`), tier-scaled ambience, chimes, haptics and confetti, and a resume-where-you-were rule that never loses a card. This is genuinely suspenseful and premium.
 - **The card as an object.** Per-tier foil _patterns_ (prismatic, refractor, scanline, hazard, matte, rosette in `src/styles.css:455-572`), an opaque prism ring that marks every secret and survives daylight, an inner metal hairline for editions, pinch-to-zoom to 4×, tap-to-flip with a half-second turn that overshoots, gyro tilt. `src/components/holo-card.tsx` is a serious piece of work.
 - **Integrity of the collecting rules**: spares-only trading with reasons shown, best-finish-wins, set sizes withheld so tomorrow's pull stays a mystery, trophies minted atomically.
 
@@ -171,7 +171,7 @@ Roster card: `/players/$id` (`src/routes/players.$id.tsx`). Secret: a centred di
 
 - **The card is the top 45% of a stats page.** Below it: name, six action chips (three visible + overflow on phones), quote, four stat tiles, station bars, filmstrip, reactions, comments, pack stats, QR. The screen reads as "player profile" more than "examine a collectible".
 - **Action chips are ≈ 27 px tall** (`px-2.5 py-1.5 text-[10px]`, `:948-952`); the phone overflow trigger is ≈ 26 px; zoom buttons 32 px; the back link has no padding. **High.**
-- **Landing on any owned card plays the chime and confetti** (`:230-261`, once per page load). Browsing the vault becomes a machine gun of celebrations and cheapens the pack reveal.
+- **Landing on an owned card replays its reveal cue.** The chime plays the first time each card is opened in a browser session (a module-scoped `revealed` set, `:78`, `:233-234`), and confetti fires only for champion/podium tiers or a Gold+ finish (`:239-240`). So the vault is not a machine gun, but every fresh session re-fires the chime card by card, and a good card re-fires confetti, which spends a little of the pack reveal's currency each time.
 - **No trade entry point.** A card with spares should offer "Offer this card" (goes to Trade with it pre-staged) and a locked card should offer "Ask for a trade" (partner picker filtered to owners). Today trading starts from a blank form.
 - **Provenance is thin**: "Pulled ×3" and "Packed by N". No "first pulled 28 Jul · Gold from a trade with Bob".
 - **Secret sheet**: 16 px close target; card capped at 320 px inside a 92 vw dialog; no full-screen mode; the flip hint is 10 px.
@@ -181,7 +181,7 @@ Roster card: `/players/$id` (`src/routes/players.$id.tsx`). Secret: a centred di
 
 - **Full-screen viewer as the default for a tap.** Tap a tile → the card fills the screen on a dark wash (the ceremony's "room"), name + tier/finish badge beneath, chevrons implicit via swipe, `44 px` close at bottom-left, "Flip" at bottom-centre, "…" at bottom-right (Share, Pin, Compare, Offer). Pull down to dismiss. The stats page becomes a second step ("Details") reached by swiping up or a chip.
 - Reuse the reveal-stand's card sizing rule (`svh`-based) so the card is as big as the pack made it.
-- Fire the landing chime only on the _first_ view of a card after it was acquired (the "new" state from section 12), never on every visit.
+- Key the once-guard on acquisition, not on module lifetime: persist the seen set in the device store so the chime and confetti fire the first time a card is opened after it was acquired and not again on the next reload. Low priority; the current gate already limits it to once per session and to top tiers and finishes.
 - Add **Offer this card** / **Ask for this card** chips wired into the trade builder.
 - Provenance line on the slab plate: acquisition source and date (`card_copies.source` already exists: pull / trade / grant / craft).
 - Secret sheet: same full-screen viewer, same controls, close button at 44 px; keep "no URL".
@@ -211,7 +211,7 @@ Roster card: `/players/$id` (`src/routes/players.$id.tsx`). Secret: a centred di
 **Recommendations**
 
 - **Two-beat reveal for special pulls**: flip to a _dimmed_ face for 250 ms, then bloom the edition frame + shine + second chime. Only for Silver+ finishes, champion/podium tiers and Rare+ secrets, so common pulls stay fast. (`playEditionShine` already exists as a second cue, `players.pack.tsx:566-569`.)
-- **NEW / ×N ribbons** on the stand and the summary: "NEW" for a first pull (from `mine` baseline count 0), "×3" for a duplicate, and the sell-hint on dupes when dust is on (already there for secrets).
+- **NEW / ×N ribbons** on the stand and the summary: for roster cards, "NEW" when the pre-pack baseline count is 0 and "×3" otherwise; for the secret, from the pull result's own `duplicate` flag (the baseline holds no secrets). Sell-hint on dupes when dust is on (already there for secrets).
 - **Summary reflow**: roster cards in a single horizontal snap row at ≥ 140 px each, the secret full-width above them, streak block below, Share as the primary exit next to View collection. Keep the collected counter.
 - **Controls**: Skip and Reveal all at 44 px, 11 px text, 60% opacity; keep Reveal all hidden on the secret step (that call is right). Mute in the same place throughout (bottom-left, 44 px), including on the stand.
 - **Pending secret**: replace the pulse with a wrapped card that "loads" a foil sweep every second and a line that changes at 2 s ("Still sealed…") and 4 s ("Slow signal — it's yours either way").
@@ -341,10 +341,10 @@ Also: the daily secret should be _previewed as a sealed thing_ on home ("A secre
 
 **As built**: no "new" state, by design (`src/components/card-slab.tsx:104`: looking at a card no longer collects it, so there is nothing to mark). The tick + "Not packed yet" split is the only newness cue. Roster duplicates in a pack look like first pulls. The collected counter appears only on the summary. Set completion gets a full ceremony.
 
-**Recommendations** (Priority: High, Effort: Easy)
+**Recommendations** (Priority: High. Effort: Easy for the ribbons; Moderate for the strip, which needs one new read-only server function)
 
-- **"NEW" ribbon on the reveal stand and summary** for a first-ever pull of that roster card or secret, decided from the pre-pack baseline the pack already snapshots (`packBaseline`). **"×3" ribbon** for a duplicate, with the dust sell-hint when dust is on. These are per-pack, on the pack screens only.
-- **"New since last visit" strip on home**: cards acquired (pull, trade, grant, bought) since the last time the vault was opened, from a device-stored timestamp. Tapping a card opens the viewer and clears it; the strip disappears after 24 h. No permanent badges on shelves.
+- **"NEW" ribbon on the reveal stand and summary**, with two predicates because the data lives in two places. Roster cards: the pre-pack baseline the pack already snapshots (`packBaseline`, `src/routes/players.pack.tsx:171`, keyed by `event_participants.id`) — `held === 0` is NEW, `held > 0` is **"×N"** with N from the baseline plus one. The secret: `packBaseline` holds no secrets, so use the pull result's `duplicate` flag (`SecretPullResult`, `src/lib/secret-cards.ts:100-108`) — `false` is NEW, `true` is ×N with N from `getMySecrets` `count`. Dust sell-hint on dupes when dust is on. These are per-pack, on the pack screens only.
+- **"New since last visit" strip on home**: cards acquired (pull, trade, grant, bought) since the last time the vault was opened. A device-stored last-visit timestamp is only half of it: today's client responses carry aggregates only (`MyCardStats.cards` has a count, best edition and first-pull date; `OwnedSecret` the same), so a second copy that arrived by trade, grant or purchase has no timestamp or source to place it. Back the strip with a small member-scoped server function that returns recent acquisitions — `card_copies` rows (`source`, `acquired_on`) and recent `secret_card_pulls` — filtered by the timestamp the device sends. Tapping a card opens the viewer and clears it; the strip disappears after 24 h. No permanent badges on shelves.
 - **First-time-set moment**: the first card from a set you have never held gets one extra line on the stand ("A new set — Pets") and the shelf arrives open (already true) with a one-time soft glow on its header.
 - **Completion** already has the biggest ceremony in the app; keep it, and add the plaque to the "new since last visit" strip so it is reachable after the ceremony is dismissed.
 
@@ -567,11 +567,11 @@ Passing: bottom tabs, Open Pack (46 px), shelf headers (`min-h-11`), dust chip (
 - **Universal back** decoded at 1200 px per locked tile with no lazy attribute (`src/components/pack-card-back.tsx:36-53`).
 - **Fonts**: one render-blocking Google stylesheet requesting seven weights across three families, one of which is unused.
 - **Secret pull wait** up to 6 s behind a pulsing rectangle.
-- **Landing confetti + chime** on every owned card page load (90 particles) while the page is still laying out the stats.
+- **Landing chime + confetti** on the first open of each owned card per session (90 particles for top tiers and Gold+ finishes) while the page is still laying out the stats.
 - `circuit-bg` is a repeating SVG data URI plus two gradients on every route; cheap, but it is also the first thing to drop for a quieter page.
 - 27 unused shadcn primitives and their Radix/recharts/embla/cmdk dependencies remain in the bundle graph; tree-shaking removes most but not all of the CSS and the install weight. Not a user-facing problem; worth a cleanup ticket.
 
-**Recommendations**: skeleton tiles and a fixed-height hero (reserve every line); `thumb` rendition + lazy for locked backs; self-host Barlow Condensed and JetBrains Mono as WOFF2 with `font-display: swap` and drop Inter (or apply it); preload the secret's art the moment the pull resolves (already done for `secret.artUrl`) and show a foil sweep on the sealed card while waiting; move landing confetti to first-view only.
+**Recommendations**: skeleton tiles and a fixed-height hero (reserve every line); `thumb` rendition + lazy for locked backs; self-host Barlow Condensed and JetBrains Mono as WOFF2 with `font-display: swap` and drop Inter (or apply it); preload the secret's art the moment the pull resolves (already done for `secret.artUrl`) and show a foil sweep on the sealed card while waiting; key the landing celebration on first view after acquisition rather than per session.
 
 ---
 
@@ -614,10 +614,10 @@ Passing: bottom tabs, Open Pack (46 px), shelf headers (`min-h-11`), dust chip (
 ### Player card — `/players/$id`
 
 - **Works**: full-width card; zoom/flip/swipe/tilt; the slab and serial plate; locked state with a CTA; filmstrip; share export.
-- **UX**: card is 45% of a 2 100 px stats page; landing confetti every visit; no trade entry; thin provenance; tier badge shown on locked cards (product call B-32 territory).
+- **UX**: card is 45% of a 2 100 px stats page; the landing chime replays each session and confetti re-fires for top cards; no trade entry; thin provenance; tier badge shown on locked cards (product call B-32 territory).
 - **Mobile**: 29 px action chips, 28 px overflow trigger, 32 px zoom buttons, 16 px back link; six reaction chips at 34 px; QR at 140 px on a phone that is the printed card's twin, not its reader.
 - **Visual**: the tier wash is good; chips and tiles use four radii.
-- **Changes**: full-screen viewer first, details second; 44 px controls; first-view-only celebration; "Offer this card" / "Ask for it"; provenance line; hide the QR behind "Printed card" unless the device is desktop.
+- **Changes**: full-screen viewer first, details second; 44 px controls; celebration keyed to first view after acquisition; "Offer this card" / "Ask for it"; provenance line; hide the QR behind "Printed card" unless the device is desktop.
 - **Priority: High.**
 
 ### Secret sheet (dialog from the Vault)
@@ -681,7 +681,7 @@ Passing: bottom tabs, Open Pack (46 px), shelf headers (`min-h-11`), dust chip (
 | 5   | **Pack summary shrinks the cards to ≈ 100 px** and shows no NEW/×N                                                                         | The payoff screen undersells the pull; dupes look like hits                                                            | `pack-summary.tsx:178`                                 | Secret full-width, roster snap row ≥ 140 px, NEW/×N ribbons                                                           | Moderate    |
 | 6   | **Rarity of secrets is a 9 px coloured caption**; base foil = UI cyan; everything glows                                                    | A Mythic and a Common look alike on the shelf; base cards look like buttons                                            | tiles, stand, trade                                    | Level pips, edition corner tab, base hue shift, glow by rank only                                                     | Moderate    |
 | 7   | **The room competes with the card** — circuit background, cyan bloom on every panel and control                                            | Art is not the centrepiece; the page reads as a HUD                                                                    | `styles.css` `circuit-bg`, `hud-glow`, `neon-btn`      | Flat ground on card screens; glow only on the primary CTA and ranked cards                                            | Easy        |
-| 8   | **Card detail is a stats page with a card on top**; celebration fires every visit; no trade entry                                          | Examining a collectible feels like reading a profile; browsing the vault is noisy                                      | `/players/$id`, secret sheet                           | Full-screen viewer first; first-view celebration; "Offer / Ask for this card"                                         | Significant |
+| 8   | **Card detail is a stats page with a card on top**; no trade entry from a card                                                             | Examining a collectible feels like reading a profile; trading starts from a blank form                                 | `/players/$id`, secret sheet                           | Full-screen viewer first; "Offer / Ask for this card"                                                                 | Significant |
 | 9   | **Collection has no dupes on tiles, no filter/sort sheet, no skeleton**                                                                    | Trading decisions start blind; the page pops from locked to owned                                                      | `players.index.tsx`                                    | ×N pip, sort & filter sheet, skeleton tiles                                                                           | Moderate    |
 | 10  | **Feedback surfaces are misplaced or missing**: toasts top-centre, no offline state, unthemed errors, degraded banner on the pack, no undo | Errors look foreign; the best screen gets interrupted; nothing is reversible                                           | `__root.tsx`, `error-page.ts`, `feed-state.tsx`        | Bottom toasts above the bar, offline banner, themed errors, banner hidden while presenting, undo on Decline/Take back | Easy        |
 
@@ -694,7 +694,7 @@ Each is a day or less and touches no data model.
 1. **Type floor**: replace `text-[8px]`/`text-[9px]`/`text-[10px]` with `text-[11px]`/`text-xs` and cap `tracking-[0.3em]` at `0.08em` on labels, across `players.index.tsx`, `pack-summary.tsx`, `pack-stand.tsx`, `trade-offer-card.tsx`, `players.$id.tsx`.
 2. **44 px everywhere**: `min-h-11` on sort chips, partner pills, action chips, Reveal all, Skip, Next, back links, "Claim your player", "Offer waiting"; pad the sound toggle and dialog close to 44 × 44; give `neon-btn` `sm/md/lg` classes and delete the `!px/!py` overrides.
 3. **Roster ×N on tiles** (`players.index.tsx:574-591`) from `collected[id].count`.
-4. **NEW / ×N ribbons** on the stand and summary from the pack baseline.
+4. **NEW / ×N ribbons** on the stand and summary: roster from the pack baseline, the secret from the pull result's `duplicate` flag. (The "new since last visit" strip is not a quick win; see §25 item 1.)
 5. **Streak strip** with the five rungs and the next promise (`nextMilestoneLine`) on the vault hero and sealed pack.
 6. **"Next pack in N h"** on the summary and the hero from `SecretDayStatus.resetsAt`.
 7. **Mute on the stand**, same spot as the sealed screen.
@@ -714,7 +714,7 @@ Each is a day or less and touches no data model.
 
 ## 25. Larger redesign opportunities
 
-1. **Home as "Today"** (§3): a fixed-height state card for the pack, streak and rewards, a new-since-last-visit strip, then the binder. Replaces the hero.
+1. **Home as "Today"** (§3): a fixed-height state card for the pack, streak and rewards, a new-since-last-visit strip backed by an acquisitions query (§12), then the binder. Replaces the hero.
 2. **Collection browser** (§5): sort/filter/density bottom sheet, ×N pips, level pips and edition tabs on tiles, mystery slot per set, skeletons, Complete shelf first. Reuses `VaultSection` and `HoloCard`.
 3. **Full-screen card viewer** (§6): one component for roster cards and secrets — dark room, svh-sized card, swipe, flip, pinch, bottom controls, pull to dismiss; details as a second step. Built from `ZoomPanFrame` + `HoloCard` + the stand's sizing rule.
 4. **Trade builder** (§10): Who → trays → Review, stacked sides, confirm on Accept, Offers/Feed tabs, sticky Make an offer. Server functions unchanged.
