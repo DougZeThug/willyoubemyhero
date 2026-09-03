@@ -23,13 +23,14 @@ import { SECRET_TIER_ORDER, toSecretTier, type SecretTier } from "./secret-rarit
  * so this is only about whether to render the chip and the shop at all. A stale
  * `true` here costs a button that answers "not yet"; it cannot spend anything.
  *
- * Takes `unknown` and narrows here, because `dust_enabled` is not in the
- * generated event type yet: `src/integrations/supabase/types.ts` is
- * `supabase gen types` output and must not be hand-edited. Declaring the
- * parameter as `{ dust_enabled?: boolean }` does not work either — an all-
- * optional type triggers TypeScript's weak-type check and rejects an event that
- * has none of its properties. So the cast lives here, once, rather than at every
- * call site. It stops being needed the next time those types are regenerated.
+ * Takes `unknown` and narrows here rather than typing the parameter. Declaring
+ * it as `{ dust_enabled?: boolean }` does not work — an all-optional type
+ * triggers TypeScript's weak-type check and rejects an event that has none of
+ * its properties — and callers hold the event as whatever their own query gave
+ * them. So the cast lives here, once, rather than at every call site.
+ *
+ * (types.ts has since been regenerated and does carry `dust_enabled`; the
+ * weak-type problem is what keeps this shape, not the drift that started it.)
  */
 export function dustLive(event: unknown): boolean {
   return !!(event as { dust_enabled?: boolean | null } | null | undefined)?.dust_enabled;

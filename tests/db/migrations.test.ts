@@ -435,4 +435,51 @@ describe("migrations", () => {
       ),
     ).toBe(true);
   });
+
+  it("ships the bottom bar whole, which is what makes deploying it a no-op", async () => {
+    const [row] = await sql<{ data_type: string; is_nullable: string; column_default: string }>(`
+      SELECT data_type, is_nullable, column_default FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'nav_hidden'
+    `);
+    expect(row.data_type).toBe("ARRAY");
+    expect(row.is_nullable).toBe("NO");
+    // Empty means the whole bar, so every existing row — including the live one
+    // — comes through this migration with nothing hidden.
+    expect(row.column_default).toContain("{}");
+  });
+
+  it("will not let the vault or the shop off the bar", async () => {
+    // The pin, in the one place a client cannot route around. setNavHidden
+    // refuses both by name too; this is the rule about the data rather than
+    // about one request.
+    await expect(
+      sql(`INSERT INTO public.events (name, year, active, nav_hidden)
+           VALUES ('Pinned', 2029, false, ARRAY['vault'])`),
+    ).rejects.toThrow();
+    await expect(
+      sql(`INSERT INTO public.events (name, year, active, nav_hidden)
+           VALUES ('Pinned', 2029, false, ARRAY['shop'])`),
+    ).rejects.toThrow();
+  });
+
+  it("carries the hidden rows through the public view", async () => {
+    // THREE PLACES, NOT ONE: a column on the table alone is invisible to
+    // getActiveEvent, which reads events_public — and the bar could never hide
+    // anything. Nothing caught that for dust_enabled; this is that check.
+    const rows = await sql<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'events_public'`,
+    );
+    expect(rows.map((r) => r.column_name)).toContain("nav_hidden");
+  });
+
+  it("reads the public event view as the caller, not as its owner", async () => {
+    // security_invoker went missing in 20260828120000's rebuild and came back in
+    // the nav one. Nothing caught it going, which is the whole argument for
+    // asserting it now.
+    const [row] = await sql<{ reloptions: string[] | null }>(
+      `SELECT reloptions FROM pg_class WHERE relname = 'events_public'`,
+    );
+    expect((row.reloptions ?? []).join(",")).toContain("security_invoker=true");
+  });
 });
