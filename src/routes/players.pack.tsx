@@ -33,6 +33,7 @@ import {
   collectCard,
   loadPackState,
   packDealtElsewhere,
+  PACK_STATE_CHANGED,
   retireUnrecorded,
   savePackState,
   todayKey,
@@ -361,7 +362,7 @@ function PackPage() {
    * who claims with cards still face-down has those in no snapshot and adoption
    * never heard about them. The record loop skips these and sends the rest.
    */
-  const carriedAdoptedRef = useRef<readonly string[]>([]);
+  const carriedAdoptedRef = useRef<readonly string[] | undefined>(undefined);
   /**
    * The identity `dealtIds` were actually dealt to.
    *
@@ -514,7 +515,12 @@ function PackPage() {
         replayedRef.current = new Set(replay ? s.revealed : []);
         resumedRef.current = true;
         carriedFromRef.current = s.carriedFrom ?? null;
-        carriedAdoptedRef.current = s.carriedAdopted ?? [];
+        // Left UNDEFINED when the row does not carry the field, which is not the
+        // same fact as an empty list. Empty means adoption looked and took
+        // nothing — a guest who claimed before turning a card — and those ids are
+        // this loop's to file. Absent means a row written before the field
+        // existed, where what adoption took is unknowable.
+        carriedAdoptedRef.current = s.carriedAdopted;
         // A row with no identity predates per-person packs and counted as a match
         // above, so it counts as one here too.
         dealtForRef.current = s.identity ?? identity;
@@ -522,13 +528,23 @@ function PackPage() {
         // The parked ceremony, back from the row. Both homes, because the reveal
         // reads the ref and the save effect reads the state.
         //
-        // Never one owed on a secret that has already been turned: `revealSecret`
-        // is the only thing that fires it and it returns at the door on an
-        // already-revealed card, so restoring it there just leaves a dead field
-        // on the row until the day rolls over.
-        const owed = s.secretRevealed ? null : (s.pendingCompletion ?? null);
-        pendingCompletionRef.current = owed;
-        setPendingCompletion(owed);
+        // One owed on a secret that has ALREADY been turned fires here and now
+        // instead of being parked. `secretRevealed` goes true a beat before the
+        // ceremony does — the card's own burst has to finish first, and the set
+        // resolves behind it — so a reload inside that beat leaves exactly this
+        // shape on the row. Parking it there would strand it forever, because
+        // `revealSecret` is the only thing that fires it and it returns at the
+        // door on an already-revealed card. Firing it now costs nothing the
+        // ordering was protecting: the card has been seen.
+        const owed = s.pendingCompletion ?? null;
+        if (owed && s.secretRevealed) {
+          pendingCompletionRef.current = null;
+          setPendingCompletion(null);
+          setCompletion(owed);
+        } else {
+          pendingCompletionRef.current = owed;
+          setPendingCompletion(owed);
+        }
         revealedRef.current = revealedNow;
         setRevealed(revealedNow);
         setSecretRevealed(!!s.secretRevealed);
@@ -552,7 +568,7 @@ function PackPage() {
         replayedRef.current = new Set();
         resumedRef.current = false;
         carriedFromRef.current = null;
-        carriedAdoptedRef.current = [];
+        carriedAdoptedRef.current = undefined;
         dealtForRef.current = null;
         dealtOnRef.current = null;
         pendingCompletionRef.current = null;
@@ -589,8 +605,21 @@ function PackPage() {
       if (e.key !== null && e.key !== PACK_DEALT_KEY) return;
       setResumeNonce((n) => n + 1);
     };
+    // And a carry in THIS tab, which `storage` never reports — a sign-in runs
+    // `useAccountSync` right here, so the pack the hold below is waiting for can
+    // arrive without a single cross-tab event. Gated on the hold rather than
+    // listened to always: this fires on every write to the pack row, and outside
+    // the hold that is our own save on every card turned. Inside it there are no
+    // saves of ours to hear, because they are suppressed for the whole of it.
+    const ours = () => {
+      if (awaitingCarryRef.current) setResumeNonce((n) => n + 1);
+    };
     window.addEventListener("storage", theirs);
-    return () => window.removeEventListener("storage", theirs);
+    window.addEventListener(PACK_STATE_CHANGED, ours);
+    return () => {
+      window.removeEventListener("storage", theirs);
+      window.removeEventListener(PACK_STATE_CHANGED, ours);
+    };
   }, []);
 
   // A tab left open past midnight used to sit on yesterday's pack forever, which
@@ -732,7 +761,7 @@ function PackPage() {
     // A pack dealt here is nobody's carried pack, whatever the last one was, and
     // it belongs to whoever is holding the phone right now.
     carriedFromRef.current = null;
-    carriedAdoptedRef.current = [];
+    carriedAdoptedRef.current = undefined;
     dealtForRef.current = identity;
     dealtOnRef.current = dayKey;
     setCursor(0);
@@ -1022,7 +1051,15 @@ function PackPage() {
     // file them. Skipping wholesale left them owned by nobody and the next
     // reconcile deleted them off the phone the moment they were turned over.
     const alreadyFiled = carriedAdoptedRef.current;
-    const owed = alreadyFiled.length
+    // A carried row that does not say what adoption took predates the field, and
+    // there is no way to tell "took nothing" from "took the turned cards" after
+    // the fact. Skip the whole pack, which is what the build that wrote such a
+    // row did: a missing pack_open is cheaper than minting every card twice.
+    if (carriedFromRef.current && alreadyFiled === undefined && pid) {
+      recordedForRef.current = actor;
+      return;
+    }
+    const owed = alreadyFiled?.length
       ? dealtIds.filter((id) => !alreadyFiled.includes(id))
       : dealtIds;
     if (owed.length === 0) {
@@ -1378,7 +1415,7 @@ function PackPage() {
       // whoever loads this row next has to know the pack was carried, and that a
       // ceremony is still owed.
       carriedFrom: carriedFromRef.current ?? undefined,
-      carriedAdopted: carriedFromRef.current ? [...carriedAdoptedRef.current] : undefined,
+      carriedAdopted: carriedAdoptedRef.current ? [...carriedAdoptedRef.current] : undefined,
       pendingCompletion: pendingCompletion ?? undefined,
     });
   }, [

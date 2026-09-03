@@ -507,6 +507,22 @@ describe("carrying a pack across a claim", () => {
     expect(row.identity).toBe(MEMBER);
   });
 
+  it("leaves the previous person's unreported pulls where they are", async () => {
+    // A handset that changed hands can still be holding the last member's
+    // unreported ids: `addUnrecorded` replaces the row on an identity change, but
+    // only once the new person's record loop has run, and a claim can beat it
+    // there. Moving that row would hand their cards to the claimer, and
+    // useMyCollection would then hold them out of the prune and show them in a
+    // vault they do not belong in.
+    const mod = await freshModule();
+    await todaysPack(mod);
+    await mod.addUnrecorded({ dayKey: mod.todayKey(), identity: "m:p-bob", ids: [CARD_A] });
+    expect(await mod.carryPackToIdentity(DEVICE, MEMBER, [CARD_A])).toBe(true);
+    const row = (await mod.loadUnrecorded())!;
+    expect(row.identity).toBe("m:p-bob");
+    expect(row.ids).toEqual([CARD_A]);
+  });
+
   it("drops the row outright when the adoption took everything", async () => {
     const mod = await freshModule();
     await todaysPack(mod);

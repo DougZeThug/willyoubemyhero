@@ -541,10 +541,19 @@ export async function carryPackToIdentity(
     // snapshot, and dropping its protection with the rest would leave it unowned
     // the moment it is finally turned over. What is left moves to the member,
     // because a row still carrying the guest's name protects nothing for them.
+    //
+    // ONLY THE ROW THAT IS THIS PERSON'S. A handset that changed hands can be
+    // holding the previous member's unreported pulls — `addUnrecorded` replaces
+    // the row on an identity change, but only once the new person's record loop
+    // has actually run, and a claim can beat it there. Moving that row would hand
+    // somebody else's cards to the claimer, and `useMyCollection` would then hold
+    // them out of the prune and show them in a vault they do not belong in.
     const prior = (await tx.store.get(UNRECORDED_KEY)) as UnrecordedPulls | undefined;
-    const stillOwed = (prior?.ids ?? []).filter((id) => !taken.has(id));
-    if (!prior || stillOwed.length === 0) await tx.store.delete(UNRECORDED_KEY);
-    else await tx.store.put({ ...prior, identity: to, ids: stillOwed }, UNRECORDED_KEY);
+    if (prior && prior.identity === from) {
+      const stillOwed = prior.ids.filter((id) => !taken.has(id));
+      if (stillOwed.length === 0) await tx.store.delete(UNRECORDED_KEY);
+      else await tx.store.put({ ...prior, identity: to, ids: stillOwed }, UNRECORDED_KEY);
+    }
     await tx.done;
     // The mirror moves with the row, which is also what wakes a pack screen open
     // in another tab: it is watching this key, and the identity has changed.

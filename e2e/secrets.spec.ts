@@ -276,6 +276,76 @@ test.describe("the daily secret", () => {
     await expect.poll(async () => (await packRow(page))?.pendingCompletion).toBeUndefined();
   });
 
+  test("fires a set-complete ceremony that a reload caught mid-beat", async ({ page, server }) => {
+    // The ceremony deliberately trails the card: `secretRevealed` goes true, the
+    // secret's own burst runs, and only then does the set resolve behind it. A
+    // reload inside that beat leaves a row that says BOTH that the secret is
+    // turned and that a ceremony is still owed — and parking that on resume
+    // strands it forever, because `revealSecret` is the only thing that fires one
+    // and it returns at the door on an already-revealed card.
+    //
+    // The row is written directly rather than raced for: the beat is 900ms and
+    // reloading inside it by timing would be a coin toss on a loaded runner. What
+    // is being tested is the resume, and this is exactly the row the resume finds.
+    await asMember(page);
+    withSecret(server, { status: { pulledToday: true }, pull: { fresh: false } });
+    await page.goto("/players/pack");
+    // Settled before touching IndexedDB. Reaching into the page mid-hydration is
+    // how this lost its execution context and came back "promise was garbage
+    // collected" rather than an answer.
+    await expect(sealedPack(page)).toBeVisible();
+    await expect(page.getByTestId("collection-complete")).toHaveCount(0);
+
+    const seeded = await page.evaluate(
+      (label: string) =>
+        // Shaped like readPackState in journeys.spec.ts: every handler on the
+        // request itself. A promise settled from `tx.oncomplete` has nothing
+        // holding the transaction, and Playwright collects it out from under us.
+        new Promise<boolean>((resolve) => {
+          const d = new Date();
+          const p = (n: number) => String(n).padStart(2, "0");
+          const open = indexedDB.open("wwbh-cards", 2);
+          open.onsuccess = () => {
+            const db = open.result;
+            const req = db
+              .transaction("pack-state", "readwrite")
+              .objectStore("pack-state")
+              .put(
+                {
+                  dayKey: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+                  ids: ["ep-alice", "ep-bob", "ep-carol"],
+                  revealed: [0, 1, 2],
+                  cursor: 4,
+                  identity: "m:p-alice",
+                  secretRevealed: true,
+                  pendingCompletion: {
+                    collection: "pets",
+                    label,
+                    size: 9,
+                    completedOn: "2026-07-28",
+                  },
+                },
+                "today",
+              );
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+          };
+          open.onerror = () => resolve(false);
+          open.onblocked = () => resolve(false);
+        }),
+      "Pets Of The League",
+    );
+    // Asserted, because a seed that quietly failed would leave this testing that
+    // a sealed pack shows no ceremony.
+    expect(seeded).toBe(true);
+
+    await page.reload();
+    const ceremony = page.getByTestId("collection-complete");
+    await expect(ceremony).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Pets Of The League/i).first()).toBeVisible();
+    await expect(ceremony).toHaveCount(1);
+  });
+
   test("a duplicate reads as a wink, not a failure", async ({ page, server }) => {
     await asMember(page);
     withSecret(server, { pull: { duplicate: true }, status: { pulled: 9 } });
