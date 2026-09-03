@@ -105,6 +105,16 @@ export function VaultHero({
               Your secrets are on your name, not on this phone. Claim again to get them back.
             </p>
           )}
+          {/* Same place and voice as the breadcrumb above: the shelf is empty
+              for a reason, and the reason has an action. */}
+          {syncError && (
+            <p className="mt-2 max-w-xs text-[11px] leading-snug text-muted-foreground">
+              {syncError}{" "}
+              <Link to="/auth" className="font-bold text-primary hover:underline">
+                Try again
+              </Link>
+            </p>
+          )}
           {!isMember && (
             <Link
               to="/claim"
