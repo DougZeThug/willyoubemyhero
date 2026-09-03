@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useModalSurface } from "@/hooks/use-modal-surface";
 import { motion } from "motion/react";
 import { Flame } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
@@ -118,12 +119,10 @@ export function MilestoneReveal({
   }, [phase, duplicate, rarity]);
 
   // Same as BoughtPullReveal: role="dialog" alone still lets Tab fall through to
-  // the nav behind the overlay, so the surface is focusable and takes focus on
-  // arrival. The inert half is already wired by the caller (players.pack.tsx).
-  const surfaceRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    surfaceRef.current?.focus();
-  }, []);
+  // the nav behind the overlay, so the shared hook takes focus, keeps Tab inside
+  // and gives it back on close. The inert half is already wired by the caller
+  // (players.pack.tsx).
+  const surfaceRef = useModalSurface<HTMLDivElement>();
 
   return (
     <div

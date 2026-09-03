@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useModalSurface } from "@/hooks/use-modal-surface";
 import { motion } from "motion/react";
 import { HoloCard } from "@/components/holo-card";
 import { RevealAmbience } from "@/components/reveal-ambience";
@@ -57,16 +58,13 @@ export function BoughtPullReveal({
   const [flipped, setFlipped] = useState(false);
   const rarity = secretFoil(card.foil, card.borderFx);
   const celebratedRef = useRef(false);
-  const surfaceRef = useRef<HTMLDivElement>(null);
   const tier = secretTierStyle(card.tier);
 
   // A user-dismissed full-screen dialog has to own focus while it is open —
   // role="dialog" alone still lets Tab fall through to the nav behind the
-  // overlay. Same pattern the finish celebration uses: the surface is
-  // focusable, takes focus on arrival, and declares itself modal.
-  useEffect(() => {
-    surfaceRef.current?.focus();
-  }, []);
+  // overlay, which is painted and reachable. The shared hook also hands focus
+  // back to whatever opened this.
+  const surfaceRef = useModalSurface<HTMLDivElement>();
 
   useEffect(() => {
     if (celebratedRef.current) return;
