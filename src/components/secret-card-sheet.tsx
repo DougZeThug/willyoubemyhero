@@ -4,6 +4,7 @@ import { HoloCard } from "@/components/holo-card";
 import { playFlip } from "@/lib/card-sfx";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { SecretBackPanel } from "@/components/secret-back-panel";
+import { LevelPips } from "@/components/level-pips";
 import { secretFoil, type OwnedSecret } from "@/lib/secret-cards";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { stepIndex } from "@/lib/zoom";
@@ -45,7 +46,7 @@ export function SecretCardSheet({
   completedCollections?: ReadonlySet<string>;
 }) {
   const card = index == null ? null : (cards[index] ?? null);
-  const rarity = secretFoil(card?.foil, card?.borderFx);
+  const rarity = secretFoil(card?.foil, card?.borderFx, card?.tier);
   const [flipped, setFlipped] = useState(false);
 
   // A new card always lands face up, however the last one was left.
@@ -64,7 +65,7 @@ export function SecretCardSheet({
 
   return (
     <Dialog open={!!card} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[92vw] max-w-[92vw] border-white/10 bg-background/95 p-4 sm:max-w-md md:max-w-lg md:p-6">
+      <DialogContent className="surface-panel w-[92vw] max-w-[92vw] rounded-xl p-4 sm:max-w-md md:max-w-lg md:p-6">
         {card && (
           <>
             <DialogTitle className="font-display text-2xl font-black uppercase leading-none sm:text-3xl">
@@ -125,11 +126,14 @@ export function SecretCardSheet({
             {/* The level of THIS copy, in its own colour, with the rate that
                 produced it. The foil above it is the card's look and says
                 nothing about how lucky the pull was. */}
-            <p
-              className="text-center font-display text-sm font-black uppercase tracking-[0.3em]"
-              style={{ color: secretTierStyle(card.tier).accent }}
-            >
-              {secretTierCaption(card.tier)}
+            <p className="flex flex-col items-center gap-1.5 text-center">
+              <LevelPips tier={card.tier} />
+              <span
+                className="font-display text-sm font-black uppercase tracking-[0.3em]"
+                style={{ color: secretTierStyle(card.tier).accent }}
+              >
+                {secretTierCaption(card.tier)}
+              </span>
             </p>
 
             <div className="flex items-center justify-between text-meta font-semibold text-muted-foreground">

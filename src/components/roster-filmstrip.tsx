@@ -107,7 +107,7 @@ export function RosterFilmstrip({
                 // HoloCard's own placeholder is typeset for a full-size card and
                 // overflows a 64px chip. A card with no art is just a name here.
                 <div
-                  className="hud-bezel flex aspect-[5/7] w-full flex-col items-center justify-center gap-0.5 rounded-lg border p-1 text-center"
+                  className="surface-panel flex aspect-[5/7] w-full flex-col items-center justify-center gap-0.5 rounded-lg border p-1 text-center"
                   style={{ borderColor: entry.rarity.border }}
                 >
                   <span className="font-display text-base font-black uppercase leading-none text-primary/70">

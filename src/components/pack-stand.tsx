@@ -9,6 +9,7 @@ import { cardBadge, type Edition } from "@/lib/card-edition";
 import { swipeDirection } from "@/lib/zoom";
 import { StandDeck, StandEntrance } from "@/components/stand-entrance";
 import { RevealAmbience } from "@/components/reveal-ambience";
+import { LevelPips } from "@/components/level-pips";
 import { ambienceStrength } from "@/lib/reveal-ambience";
 import { burst } from "@/lib/card-confetti";
 import { cue } from "@/lib/card-sfx";
@@ -957,6 +958,11 @@ export function PackStand({
                 </div>
                 {onSecret ? (
                   <>
+                    {/* The pips ride even on a duplicate: the copy in front of
+                        you still rolled a level, and hiding it here would make
+                        the one moment the level is decided the one place it is
+                        not shown. */}
+                    <LevelPips tier={secret?.tier} className="mt-0.5" />
                     <div
                       className="text-label font-bold uppercase tracking-[0.08em]"
                       style={{

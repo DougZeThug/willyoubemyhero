@@ -9,7 +9,7 @@
 export function StatTile({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div
-      className="hud-bezel rounded-md border px-4 py-2 text-center"
+      className="surface-panel rounded-xl border px-4 py-2 text-center"
       style={{ borderColor: "color-mix(in oklab, var(--tier) 30%, oklch(1 0 0 / 10%))" }}
     >
       <div className="text-[9px] font-bold uppercase tracking-[0.3em] text-muted-foreground">

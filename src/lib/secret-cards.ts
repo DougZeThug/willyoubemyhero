@@ -3,6 +3,7 @@
 // Client-safe. Nothing here reaches the database, and nothing here knows how many
 // secret cards exist — the set size is the one number the whole feature withholds.
 import type { BorderFx, Rarity } from "./card-rarity";
+import { toSecretTier } from "./secret-rarity";
 
 /**
  * The look of a secret card.
@@ -539,23 +540,53 @@ export function groupBySecretCollection<T extends { collection?: string | null }
 
 const BORDER_FX_IDS = new Set<string>(SECRET_BORDER_FX_OPTIONS.map((o) => o.id));
 
-// Memo for foil+borderFx combinations, so render sites get referentially stable
-// Rarity objects across renders instead of a fresh spread each call.
+// Memo for foil+borderFx+level combinations, so render sites get referentially
+// stable Rarity objects across renders instead of a fresh spread each call.
 const FX_VARIANTS = new Map<string, Rarity>();
 
-export function secretFoil(id: string | null | undefined, borderFx?: string | null): Rarity {
+/**
+ * The look of one secret card, optionally coloured by the level of the copy in
+ * hand.
+ *
+ * `tier` is the level that was rolled for a specific pull, so it belongs here
+ * and not in the card's stored look: the same card is a common to one person and
+ * a mythic to another. Two things ride on it, both from §8's "rarity by rank":
+ *
+ * - **Legendary and mythic glow.** A shelf where every secret bloomed had no top
+ *   to it; now the top two rungs are the only ones that do.
+ * - **Mythic forces the ring's shimmer**, over whatever the admin picked for the
+ *   card. Hero-only falls out for free — holo-card.tsx only applies
+ *   BORDER_FX_CLASS at hero size, so a vault grid never starts shimmering.
+ *
+ * Callers with no level at all — the admin set editor, previewing a card nobody
+ * has pulled — omit it and get the card's own look untouched.
+ */
+export function secretFoil(
+  id: string | null | undefined,
+  borderFx?: string | null,
+  tier?: string | null,
+): Rarity {
   // hasOwn, not a truthiness check on the lookup: the registry is a plain
   // object, so a stored id like "__proto__" or "constructor" would otherwise
   // resolve to an inherited property and dodge the fallback.
   const known = id != null && Object.hasOwn(SECRET_FOILS, id);
   const base = known ? SECRET_FOILS[id] : SECRET_RARITY;
-  // "spin" is what an absent borderFx already means, so it takes the base object
-  // unchanged — same fallback contract as an unknown id.
-  if (!borderFx || borderFx === "spin" || !BORDER_FX_IDS.has(borderFx)) return base;
-  const key = `${known ? id : "rosette"}.${borderFx}`;
+  const level = tier == null ? null : toSecretTier(tier);
+  const glow = level === "mythic" || level === "legendary";
+  const fx = level === "mythic" ? "shimmer" : borderFx;
+  // "spin" is what an absent borderFx already means, so with nothing else to
+  // change it takes the base object unchanged — same fallback contract as an
+  // unknown id.
+  const plainFx = !fx || fx === "spin" || !BORDER_FX_IDS.has(fx);
+  if (plainFx && !glow) return base;
+  const key = `${known ? id : "rosette"}.${plainFx ? "spin" : fx}.${glow ? "glow" : "flat"}`;
   let variant = FX_VARIANTS.get(key);
   if (!variant) {
-    variant = { ...base, borderFx: borderFx as BorderFx };
+    variant = {
+      ...base,
+      ...(plainFx ? null : { borderFx: fx as BorderFx }),
+      ...(glow && { glow }),
+    };
     FX_VARIANTS.set(key, variant);
   }
   return variant;

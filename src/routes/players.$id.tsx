@@ -484,7 +484,7 @@ function PlayerCardPage() {
     // Every tier-coloured thing below reads `--tier` off this node rather than
     // taking a prop, so one variable retints the whole page.
     <div
-      className="circuit-bg relative min-h-[calc(100dvh-8rem)]"
+      className="card-bg relative min-h-[calc(100dvh-8rem)]"
       style={
         { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
       }
@@ -493,8 +493,10 @@ function PlayerCardPage() {
           channel too and said nothing when it went down — a frozen screen
           with no signal is the exact failure the health states exist for. */}
       {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
-      {/* Tier wash over circuit-bg's own hard-coded cyan bloom. Sits behind the
-          content, so a champion's page glows gold and a DNF's barely glows. */}
+      {/* The one coloured light on this page, and it is the player's own tier
+          rather than the house cyan — a champion's page glows gold and a DNF's
+          barely glows. It used to have card-bg's cyan bloom to fight; now it
+          sits on the flat ground and only has to be seen. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[70vh]"
@@ -859,7 +861,7 @@ function NavButton({
       disabled={disabled}
       aria-label={label}
       className={cn(
-        "hud-bezel absolute top-1/2 hidden -translate-y-1/2 rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 md:block",
+        "surface-panel absolute top-1/2 hidden -translate-y-1/2 rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 md:block",
         className,
       )}
     >

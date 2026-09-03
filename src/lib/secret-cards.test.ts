@@ -158,10 +158,43 @@ describe("secretFoil", () => {
     expect(secretFoil("rosette", null)).toBe(SECRET_RARITY);
   });
 
+  it("forces the shimmer on a mythic, over whatever the admin picked", () => {
+    // The rarest pull in the app gets the loudest ring, and it is not the set
+    // author's call. Hero-only comes for free: holo-card only applies
+    // BORDER_FX_CLASS at hero size, so a vault grid never starts shimmering.
+    expect(secretFoil("rosette", "pulse", "mythic").borderFx).toBe("shimmer");
+    expect(secretFoil("aurora", "steady", "mythic").borderFx).toBe("shimmer");
+    expect(secretFoil("rosette", null, "mythic").borderFx).toBe("shimmer");
+  });
+
+  it("leaves every level below mythic wearing the card's own ring", () => {
+    expect(secretFoil("rosette", "pulse", "legendary").borderFx).toBe("pulse");
+    expect(secretFoil("rosette", "steady", "common").borderFx).toBe("steady");
+  });
+
+  it("glows for legendary and mythic, and for nothing under them", () => {
+    expect(secretFoil("rosette", null, "mythic").glow).toBe(true);
+    expect(secretFoil("rosette", null, "legendary").glow).toBe(true);
+    for (const tier of ["epic", "rare", "common"]) {
+      expect(secretFoil("rosette", null, tier).glow).toBeFalsy();
+    }
+    // The admin set editor previews a card nobody has pulled, so there is no
+    // level to read and the card's own look comes back untouched.
+    expect(secretFoil("rosette", null)).toBe(SECRET_RARITY);
+  });
+
+  it("sends a corrupt level to the bottom rung rather than glowing it", () => {
+    expect(secretFoil("rosette", null, "__proto__").glow).toBeFalsy();
+    expect(secretFoil("rosette", null, "gold").glow).toBeFalsy();
+  });
+
   it("returns referentially stable objects across calls", () => {
     // Render sites call this every render; a fresh spread each time would make
     // the rarity prop churn and defeat holo-card's memo.
     expect(secretFoil("aurora", "pulse")).toBe(secretFoil("aurora", "pulse"));
+    // Including the level, which is part of the memo key now.
+    expect(secretFoil("aurora", "pulse", "mythic")).toBe(secretFoil("aurora", "pulse", "mythic"));
+    expect(secretFoil("aurora", "pulse", "mythic")).not.toBe(secretFoil("aurora", "pulse"));
     expect(secretFoil("ember")).toBe(secretFoil("ember"));
   });
 });

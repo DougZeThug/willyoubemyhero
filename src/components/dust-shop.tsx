@@ -18,6 +18,7 @@ import { secretTierStyle } from "@/lib/secret-rarity";
 import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { getMySecrets } from "@/lib/secret-cards.functions";
 import { BoughtPullReveal } from "@/components/bought-pull-reveal";
+import { LevelPips } from "@/components/level-pips";
 import { PresentationMode } from "@/components/presentation-mode";
 import type { OwnedSecret } from "@/lib/secret-cards";
 import type { ImageUrlSet } from "@/lib/media";
@@ -400,6 +401,9 @@ export function DustShopPanel({
                 <li key={s.pullId} className="flex items-center justify-between gap-3">
                   <span className="min-w-0 truncate text-xs">
                     <span className="font-bold">{s.name}</span>
+                    {/* The level decides what this is worth — the row's whole
+                        point — so it gets the shape as well as the word. */}
+                    <LevelPips tier={s.tier} className="ml-1.5" />
                     <span className="ml-1.5" style={{ color: style.accent }}>
                       {style.label}
                     </span>
@@ -500,8 +504,11 @@ export function DustShopPanel({
           <ul className="space-y-1">
             {SECRET_SELL_LADDER.map(({ tier, value }) => (
               <li key={tier} className="flex items-center justify-between text-xs">
-                <span style={{ color: secretTierStyle(tier).accent }}>
-                  {secretTierStyle(tier).label}
+                <span className="inline-flex items-center gap-1.5">
+                  <LevelPips tier={tier} />
+                  <span style={{ color: secretTierStyle(tier).accent }}>
+                    {secretTierStyle(tier).label}
+                  </span>
                 </span>
                 <span className="font-mono">{value}</span>
               </li>

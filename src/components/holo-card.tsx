@@ -658,6 +658,10 @@ function HoloCardImpl({
   // yields the moment the pointer's own band takes over.
   const idle = rarity.idle && tilt === "hero" && !reduced && !engaged;
 
+  // A hero card is the only thing on screen and is allowed its bloom whatever it
+  // is; in a grid the bloom has to be earned. See the boxShadow below.
+  const blooms = tilt === "hero";
+
   // A named variable rather than part of `Overlays`, because `Overlays` renders on
   // the front *and* on an uploaded back — inlining the ring there would mount two
   // of them on a secret card that has back art.
@@ -691,6 +695,15 @@ function HoloCardImpl({
       />
     );
 
+  // The corner stamp, and the inverse gate to every other one in this file: it
+  // exists *because* a tile is small. At hero size the finish already has a word
+  // and a chip, and a stamp on a card you are holding reads as damage. Listed in
+  // both places editionFrame is, for the same reason.
+  const editionTab =
+    edition === "standard" || tilt === "hero" ? null : (
+      <div className="card-edition-tab" aria-hidden />
+    );
+
   const Overlays = (
     <>
       <div className={cn("holo-foil", `holo-pattern-${rarity.pattern}`)} aria-hidden />
@@ -699,6 +712,7 @@ function HoloCardImpl({
       {engaged && rarity.sparkle > 0 && <div className="holo-sparkle" aria-hidden />}
       {prismEdge}
       {editionFrame}
+      {editionTab}
     </>
   );
 
@@ -768,12 +782,26 @@ function HoloCardImpl({
             transitionTimingFunction: FLIP_CURVE,
             // Additive, so the finish lifts the card's bloom without taking the
             // tier's glow away from it. Both axes get to be visible at once.
-            boxShadow: [
-              `0 0 28px -6px ${rarity.border}`,
-              edn.lift > 0 ? `0 0 ${Math.round(20 + edn.lift * 34)}px -8px ${edn.accent}` : null,
-            ]
-              .filter(Boolean)
-              .join(", "),
+            //
+            // A tile only gets either layer if its rank earned one (§8, "one
+            // scale of glow"): every owned tile used to bloom in its tier
+            // colour, so a shelf of base cards looked exactly as special as a
+            // champion and nothing on the page was the top of anything. A card
+            // at hero size is the exception — it is the only thing on screen,
+            // and the bloom is what the reveal ceremony is made of.
+            //
+            // `undefined` rather than "none" when nothing is earned: the
+            // element's own shadow-2xl still has to lift it off the page, and a
+            // tile with no shadow at all reads as pasted on.
+            boxShadow:
+              [
+                blooms || rarity.glow ? `0 0 28px -6px ${rarity.border}` : null,
+                edn.lift > 0 && (blooms || edn.glow)
+                  ? `0 0 ${Math.round(20 + edn.lift * 34)}px -8px ${edn.accent}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(", ") || undefined,
           }}
         >
           <span id={titleId} className="sr-only">
@@ -845,6 +873,7 @@ function HoloCardImpl({
                   {engaged && <div className="holo-glare" aria-hidden />}
                   {prismEdge}
                   {editionFrame}
+                  {editionTab}
                 </>
               )}
             </div>
@@ -862,7 +891,7 @@ export const HoloCard = memo(HoloCardImpl);
 
 function CardPlaceholder({ name, label }: { name: string; label: string }) {
   return (
-    <div className="hud-bezel flex h-full w-full flex-col items-center justify-center gap-2 bg-[oklch(0.16_0.02_240)] p-4 text-center">
+    <div className="surface-panel flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
       <div className="font-display text-4xl font-black uppercase text-primary/60">
         {initialsOf(name) || "?"}
       </div>

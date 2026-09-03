@@ -116,7 +116,7 @@ function ShopPage() {
 
   if (loading && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="card-bg min-h-[calc(100dvh-8rem)]">
         <div className="mx-auto max-w-6xl px-4 py-6">
           <FeedLoading label="Reading the combine…" />
         </div>
@@ -126,7 +126,7 @@ function ShopPage() {
 
   if (error && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="card-bg min-h-[calc(100dvh-8rem)]">
         <div className="mx-auto max-w-6xl px-4 py-6">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
@@ -135,7 +135,7 @@ function ShopPage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="card-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-6xl px-4 py-6">
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen

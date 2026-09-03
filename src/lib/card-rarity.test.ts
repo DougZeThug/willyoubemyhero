@@ -18,6 +18,43 @@ const ALL_TIERS: RarityTier[] = ["champion", "podium", "stationKing", "penaltyBo
 beforeEach(resetFixtureIds);
 
 describe("rarityStyle", () => {
+  it("still knows exactly the six persisted tier ids", () => {
+    // Written out rather than derived from ALL_TIERS: these strings live in
+    // event_participants.card_rarity, so a rename orphans every row holding the
+    // old one — and an expectation built from the same constant a rename would
+    // move pins nothing. Colours and labels are free to change; the ids are not.
+    for (const id of ["base", "champion", "dnf", "penaltyBox", "podium", "stationKing"]) {
+      expect(rarityStyle(id as RarityTier).tier).toBe(id);
+    }
+    expect(Object.keys(TIER_REASON).sort()).toEqual([
+      "base",
+      "champion",
+      "dnf",
+      "penaltyBox",
+      "podium",
+      "stationKing",
+    ]);
+  });
+
+  it("keeps the base tier off the house cyan", () => {
+    // --primary is oklch(0.82 0.14 210) and base's foil and accent used to be
+    // exactly that, so a base card and a button were the same object on screen.
+    // The regression is somebody re-syncing them "back" to the brand colour.
+    const base = rarityStyle("base");
+    expect(base.holoA).not.toBe("oklch(0.82 0.14 210)");
+    expect(base.accent).not.toBe("oklch(0.82 0.14 210)");
+  });
+
+  it("glows for the top two tiers and nothing below them", () => {
+    // One scale of glow (§8): the tile bloom is what makes a champion special,
+    // and it only does that while the rest of the shelf stays flat.
+    expect(rarityStyle("champion").glow).toBe(true);
+    expect(rarityStyle("podium").glow).toBe(true);
+    for (const tier of ["stationKing", "base", "penaltyBox", "dnf"] as const) {
+      expect(rarityStyle(tier).glow).toBeFalsy();
+    }
+  });
+
   it("returns a style for every tier, with the tier echoed back", () => {
     for (const tier of ALL_TIERS) {
       const style = rarityStyle(tier);

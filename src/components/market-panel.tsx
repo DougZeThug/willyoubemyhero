@@ -12,6 +12,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { TradeItemTile, type RosterCardLookup } from "@/components/trade-offer-card";
+import { LevelPips } from "@/components/level-pips";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { marketListingsKey, myStallKey, useMarketListings, useMyStall } from "@/hooks/use-market";
 import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
@@ -377,6 +378,10 @@ export function MarketPanel({
                     >
                       {busy ? "…" : broke ? `${listing.price} dust` : `Buy · ${listing.price}`}
                     </Button>
+                    {/* No pips here: the tile above is a TradeItemTile and draws
+                        them under the name already. This line is the seller-side
+                        meta, and a second row of the same diamonds would read as
+                        two different facts. */}
                     {meta.label && (
                       <span
                         className="text-[9px] font-bold uppercase tracking-[0.2em]"
@@ -561,6 +566,9 @@ function StallLine({
   return (
     <span className="min-w-0 truncate text-xs">
       <span className="font-bold">{title}</span>
+      {/* Only a secret has a level; itemMeta collapses a finish and a level into
+          the same {label, accent} shape, so the discriminator has to be here. */}
+      {listing.item.kind === "secret" && <LevelPips tier={listing.item.tier} className="ml-1.5" />}
       {meta.label && (
         <span className="ml-1.5" style={{ color: meta.accent }}>
           {meta.label}

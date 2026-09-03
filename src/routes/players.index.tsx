@@ -23,6 +23,7 @@ import { SecretCardSheet } from "@/components/secret-card-sheet";
 import { VaultSection } from "@/components/vault-section";
 import { VaultHero } from "@/components/vault-hero";
 import { FavouriteButton } from "@/components/favourite-button";
+import { LevelPips } from "@/components/level-pips";
 import {
   groupBySecretCollection,
   secretFoil,
@@ -482,7 +483,7 @@ function PlayersPage() {
   };
 
   const secretTile = (s: OwnedSecret) => {
-    const rarity = secretFoil(s.foil, s.borderFx);
+    const rarity = secretFoil(s.foil, s.borderFx, s.tier);
     const favourite = secretFavouriteId(s.id);
     return (
       <div key={s.id} className="flex flex-col gap-2">
@@ -508,7 +509,10 @@ function PlayersPage() {
             {s.name}
           </div>
           {/* The level of your copy leads, in its own colour — the same
-              hierarchy a special finish takes on a roster tile. */}
+              hierarchy a special finish takes on a roster tile. The pips go
+              above the word rather than below it because at this size they are
+              the thing that is actually read. */}
+          <LevelPips tier={s.tier} className="mt-0.5" />
           <div
             className="text-badge font-bold uppercase tracking-[0.08em]"
             style={{ color: secretTierStyle(s.tier).accent }}
@@ -705,7 +709,7 @@ function PlayersPage() {
   );
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="card-bg min-h-[calc(100dvh-8rem)]">
       <div className="mx-auto max-w-6xl px-4 py-6">
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing at all when it went down — a frozen

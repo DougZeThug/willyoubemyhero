@@ -17,7 +17,7 @@ export function FeedLoading({
   className?: string;
 }) {
   return (
-    <Card className={cn("hud-bezel border-primary/20", className)}>
+    <Card className={cn("surface-panel rounded-xl border-primary/20", className)}>
       <CardContent className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
         <RefreshCw className="h-4 w-4 animate-spin text-primary/70" />
         {label}
@@ -36,7 +36,7 @@ export function FeedError({
   className?: string;
 }) {
   return (
-    <Card className={cn("hud-bezel border-warn/50", className)}>
+    <Card className={cn("surface-panel rounded-xl border-warn/50", className)}>
       <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
         <WifiOff className="h-6 w-6 text-warn" />
         <div>

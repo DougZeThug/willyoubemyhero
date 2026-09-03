@@ -47,8 +47,10 @@ export function VaultSection({
   children: ReactNode;
 }) {
   // A themed shelf is a lit panel rather than a hairline box: one even fill of
-  // the set's colour behind the cards, a border in the same colour, and a glow
-  // only while it is open — a page of rolled-up shelves all glowing is noise.
+  // the set's colour behind the cards, a border in the same colour, and while it
+  // is open an inner ring in that colour rather than an outer bloom. The bloom
+  // was one of the glows competing with the foil on this exact screen (§15), and
+  // a ring says "this one is open" without spilling light onto the cards.
   const themed = !!accent;
   const style = accent
     ? ({
@@ -56,7 +58,7 @@ export function VaultSection({
         background: `color-mix(in oklab, ${accent} 10%, var(--card))`,
         borderColor: `color-mix(in oklab, ${accent} 35%, transparent)`,
         boxShadow: open
-          ? `inset 0 1px 0 oklch(1 0 0 / 6%), 0 0 24px -6px color-mix(in oklab, ${accent} 55%, transparent)`
+          ? `inset 0 0 0 2px color-mix(in oklab, ${accent} 45%, transparent), inset 0 1px 0 oklch(1 0 0 / 6%)`
           : "inset 0 1px 0 oklch(1 0 0 / 6%)",
       } as CSSProperties)
     : undefined;
@@ -65,8 +67,10 @@ export function VaultSection({
     <Collapsible open={open} onOpenChange={onOpenChange} asChild>
       <section
         className={cn(
-          "mb-3 rounded-lg border last:mb-0 transition-shadow",
-          themed ? "border" : "border-white/10",
+          "mb-3 rounded-xl border last:mb-0 transition-shadow",
+          // An untinted shelf — the roster, favourites, trophies — is the plain
+          // surface every other panel on a card screen now uses.
+          themed ? "border" : "surface-panel",
         )}
         style={style}
       >

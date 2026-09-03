@@ -80,6 +80,19 @@ export function secretTierRank(tier: string | null | undefined): number {
 }
 
 /**
+ * How many pips a level lights: 5 for mythic down to 1 for common. The inverse
+ * of the rank, and derived from the ladder's own length so a sixth rung moves it
+ * rather than needing to be found here.
+ *
+ * Routed through toSecretTier rather than taking secretTierRank's out-of-band
+ * answer: an unrecognised string would otherwise light *zero* pips, and an empty
+ * row of diamonds reads as a card that failed to render, not as a common.
+ */
+export function secretTierLevel(tier: string | null | undefined): number {
+  return SECRET_TIER_ORDER.length - secretTierRank(toSecretTier(tier));
+}
+
+/**
  * Best wins, never down. A second copy that rolled worse is a duplicate, not a
  * downgrade. The identical rule runs in Postgres inside `pull_secret_card`,
  * because the vault and the ledger have to agree about which copy you own.

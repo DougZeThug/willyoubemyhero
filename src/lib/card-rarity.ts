@@ -59,8 +59,8 @@ export type Rarity = {
    * Opaque tier colour for page chrome — stat tiles, buttons, ambient glow.
    *
    * Deliberately not `border`: two tiers use a translucent white there (`base`
-   * at 12%, `dnf` at 8%) precisely so their bezel disappears into the card, and
-   * text or a glow in that colour would be invisible.
+   * at 24%, `dnf` at 8%) precisely so their bezel stays quiet against the card,
+   * and text or a glow in that colour would be invisible.
    */
   accent: string;
   /** Foil texture. See FoilPattern. */
@@ -84,6 +84,16 @@ export type Rarity = {
    * existing Rarity literal keeps its behaviour.
    */
   borderFx?: BorderFx;
+  /**
+   * Whether a tile of this card blooms in its own colour.
+   *
+   * One scale of glow across the app (§8): only the top of each ladder gets one
+   * — champion and podium here, gold and platinum in card-edition.ts, legendary
+   * and mythic in secret-cards.ts. Every owned tile used to glow in its tier
+   * colour, which made a shelf of base cards look exactly as special as a
+   * champion. A hero-sized card is exempt; see the gate in holo-card.tsx.
+   */
+  glow?: boolean;
   /** Ranked best-to-worst, for sorting the vault. */
   rank: number;
 };
@@ -103,6 +113,7 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     accent: "oklch(0.88 0.17 90)",
     pattern: "prismatic",
     idle: true,
+    glow: true,
     rank: 0,
   },
   podium: {
@@ -115,6 +126,7 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
     accent: "oklch(0.85 0.14 95)",
     pattern: "refractor",
     idle: true,
+    glow: true,
     rank: 1,
   },
   stationKing: {
@@ -131,13 +143,19 @@ const RARITY: Record<RarityTier, Omit<Rarity, "tier">> = {
   },
   base: {
     label: "Base",
-    holoA: "oklch(0.82 0.14 210)",
-    holoB: "oklch(0.75 0.13 195)",
+    // Rotated 20° off --primary (210) toward teal-green, keeping the same
+    // lightness and chroma ladder and the same 15° gap between the two stops.
+    // The hue is the whole point: these were byte-identical to --primary and
+    // --accent, so a base card and a button were the same object on screen and
+    // the app looked like a card that had not loaded.
+    holoA: "oklch(0.82 0.14 190)",
+    holoB: "oklch(0.75 0.13 175)",
     strength: 0.8,
     sparkle: 0.35,
-    border: "oklch(1 0 0 / 12%)",
-    // The house cyan — a base card is the app's default look, not a downgrade.
-    accent: "oklch(0.82 0.14 210)",
+    // 24%, not 12%: at 12% the bezel disappeared and a base card had no edge at
+    // all, which is a different thing from a modest one.
+    border: "oklch(1 0 0 / 24%)",
+    accent: "oklch(0.82 0.14 190)",
     pattern: "refractor",
     idle: false,
     rank: 3,

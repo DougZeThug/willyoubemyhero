@@ -89,6 +89,15 @@ export type EditionStyle = {
    * should stop the garden.
    */
   lift: number;
+  /**
+   * Whether a tile in this finish blooms in its metal.
+   *
+   * `lift` is a scale and every metal has some of it, which meant a bronze tile
+   * glowed too and the grid had no top. This is the top of the ladder only —
+   * the same rule Rarity.glow states for tiers. Hero-sized cards are exempt;
+   * see the gate in holo-card.tsx.
+   */
+  glow: boolean;
 };
 
 const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
@@ -104,6 +113,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     // default look, not a downgrade.
     accent: "oklch(0.82 0.14 210)",
     lift: 0,
+    glow: false,
   },
   bronze: {
     metalA: "oklch(0.7 0.1 55)",
@@ -114,6 +124,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     // Darker and far less chromatic than penaltyBox's amber, which is the only
     // thing keeping the two apart at a glance.
     lift: 0.05,
+    glow: false,
   },
   silver: {
     label: "Silver",
@@ -122,6 +133,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     specular: "oklch(0.98 0.004 250)",
     accent: "oklch(0.86 0.012 250)",
     lift: 0.12,
+    glow: false,
   },
   gold: {
     label: "Gold",
@@ -130,6 +142,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     specular: "oklch(0.99 0.05 92)",
     accent: "oklch(0.84 0.14 82)",
     lift: 0.26,
+    glow: true,
   },
   platinum: {
     label: "Platinum",
@@ -145,6 +158,7 @@ const EDITIONS: Record<Edition, Omit<EditionStyle, "edition">> = {
     // Large enough that a platinum on the dimmest tier still clears the second
     // core threshold in reveal-ambience. A 0.5% pull has to land in the room.
     lift: 0.5,
+    glow: true,
   },
 };
 

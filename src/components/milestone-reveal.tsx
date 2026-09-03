@@ -80,7 +80,7 @@ export function MilestoneReveal({
   // tap-to-read stats panel afterwards, exactly like the daily pull.
   const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
-  const rarity = secretFoil(card.foil, card.borderFx);
+  const rarity = secretFoil(card.foil, card.borderFx, card.tier);
   const days = useCountUp(phase === "flare" ? streak : null, COUNT_MS);
   const celebratedRef = useRef(false);
 

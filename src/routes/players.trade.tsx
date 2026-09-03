@@ -295,7 +295,7 @@ function TradePage() {
   // as "signed out" until the query below has something to say.
   if (!me) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="card-bg min-h-[calc(100dvh-8rem)]">
         <div className="mx-auto max-w-3xl px-4 py-6">
           <Header />
           {/* Signed in but nobody yet: they are not on the roster, so a paper
@@ -324,7 +324,7 @@ function TradePage() {
   const recent = offers.data?.recent ?? [];
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="card-bg min-h-[calc(100dvh-8rem)]">
       {/* Outside the page column and above everything, the same way the pack
           screen mounts it. Shifting the queue on dismiss is what plays the second
           one when a single trade closed two sets. */}
@@ -424,7 +424,7 @@ function TradePage() {
         {/* ---------- Compose ---------- */}
         <section className="mb-6">
           <SectionTitle icon={<ArrowLeftRight className="h-3.5 w-3.5" />} label="Make an offer" />
-          <div className="hud-bezel rounded-lg border border-white/10 p-3">
+          <div className="surface-panel rounded-xl border p-3">
             <div
               role="group"
               aria-label="Who to trade with"
@@ -451,14 +451,17 @@ function TradePage() {
                     }}
                     className={cn(
                       "inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] transition-all active:scale-95",
+                      // Selection is a 2px ring, not a bloom (§15). The ring was
+                      // already here at 1px under a glow doing the same job
+                      // twice; it now does it alone and reads harder for it.
                       p.id === theirId
-                        ? "relative border border-primary/60 bg-primary/10 text-primary shadow-[0_0_12px_-2px_oklch(0.7_0.2_210/0.4)] ring-1 ring-primary/20"
+                        ? "relative border border-primary/60 bg-primary/10 text-primary ring-2 ring-primary/50"
                         : "border border-white/10 bg-white/5 shadow-inner text-muted-foreground hover:border-primary/40 hover:text-primary",
                     )}
                   >
                     {p.id === theirId ? (
                       <span className="flex items-center gap-1.5">
-                        <span className="h-1 w-1 rounded-full bg-success shadow-[0_0_4px_oklch(0.72_0.22_145)]" />
+                        <span className="h-1 w-1 rounded-full bg-success" />
                         {p.name}
                       </span>
                     ) : (
@@ -531,7 +534,7 @@ function TradePage() {
         {(feed.data ?? []).length > 0 && (
           <section>
             <SectionTitle label="Around the league" />
-            <div className="hud-bezel hud-glow max-h-72 overflow-y-auto rounded-lg border border-primary/30">
+            <div className="surface-panel max-h-72 overflow-y-auto rounded-xl border">
               <ul className="divide-y divide-white/10">
                 {(feed.data ?? []).map((t) => (
                   <li key={t.id} className="px-3 py-2.5 text-meta leading-relaxed text-foreground">
