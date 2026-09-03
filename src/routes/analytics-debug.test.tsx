@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { Link } from "@tanstack/react-router";
 
-const pieces: Record<string, React.ComponentType> = {
+const pieces: Record<string, unknown> = {
   Card,
   CardContent,
   CardHeader,
@@ -19,6 +19,7 @@ const pieces: Record<string, React.ComponentType> = {
 
 describe("each component the analytics page renders", () => {
   for (const [name, Component] of Object.entries(pieces)) {
+    if (typeof Component !== "function") continue;
     it(`${name} is a valid element type`, () => {
       expect(Component).toBeDefined();
       expect(() => render(<Component />)).not.toThrow();

@@ -219,3 +219,8 @@ function AnalyticsPage() {
     </div>
   );
 }
+
+// The test files in this folder import the page component as the module's
+// default. Route files normally export only `Route`, so re-export the
+// component explicitly to keep those imports typed and resolvable.
+export default AnalyticsPage;
