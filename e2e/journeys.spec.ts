@@ -283,6 +283,17 @@ test.describe("a player's card", () => {
     // the page shows it took the answer rather than just closing the form.
     await expect(prompt).toBeHidden();
     await expect(page.getByPlaceholder(/talk your talk, garden guest/i)).toBeVisible();
+
+    // The load-bearing half, and until now the unasserted one: the stashed tap
+    // is replayed, so the guest does not have to react a second time. Exactly
+    // once — twice would mean they did.
+    //
+    // Read off the calls rather than the count beside the emoji, because that
+    // count is optimistic and the stubbed refresh takes it straight back off
+    // again — an assertion on it would pass or fail on timing, not behaviour.
+    await expect
+      .poll(() => server.calls.filter((c) => c.includes("toggleReaction")).length)
+      .toBe(1);
   });
 });
 
