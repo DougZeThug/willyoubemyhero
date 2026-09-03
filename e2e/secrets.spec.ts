@@ -413,11 +413,46 @@ test.describe("the daily secret", () => {
       await page.mouse.up();
     }
 
+    /**
+     * Turn the card on the stand, pressing until it takes.
+     *
+     * One tap is not enough on a loaded runner. `revealAt` holds its re-entrancy
+     * latch for the whole of the previous card's celebration — deliberately: it
+     * is what stops a double tap running two ceremonies over one card, two chimes
+     * and two writes into the collection — so a tap that lands while confetti is
+     * still in the air is swallowed on purpose, and that window can outlast the
+     * walk to the next card. The same press-until-it-takes shape the fake-clock
+     * test in journeys.spec.ts uses.
+     *
+     * The hint is the signal, and it has to be read before every press rather
+     * than after: the stand's own copy is "tap for the back", so a tap on a card
+     * that has already turned flips it rather than doing nothing. `aria-pressed`
+     * is NOT the signal — on HoloCard it tracks that flip, not the reveal, so a
+     * loop keyed on it never terminates. It is only good enough to say "this card
+     * is not currently showing its back", which is the second guard below.
+     */
+    const hint = page.getByText(/swipe/i).first();
+    async function turnCard() {
+      await expect
+        .poll(
+          async () => {
+            if (await hint.count()) return true;
+            if ((await card.getAttribute("aria-pressed")) === "false") await card.click();
+            // A beat before deciding whether it took, or the next press lands
+            // inside the hold this is waiting out.
+            await page.waitForTimeout(400);
+            return (await hint.count()) > 0;
+          },
+          { timeout: 25_000, intervals: [200] },
+        )
+        .toBe(true);
+    }
+
     // Walk the roster by hand, turning each card and throwing it away.
     for (let n = 1; n <= 3; n++) {
       await expect(step).toHaveText(`${n} / 3`);
-      await card.click();
-      await expect(page.getByText(/swipe/i).first()).toBeVisible({ timeout: 15_000 });
+      await turnCard();
+      await expect(hint).toBeVisible({ timeout: 15_000 });
       const name = await card.getAttribute("aria-labelledby");
       const third = n === 3 ? await page.locator(`#${name}`).innerText() : null;
       await swipeNext();
