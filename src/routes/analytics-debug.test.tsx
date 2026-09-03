@@ -20,9 +20,12 @@ const pieces: Record<string, unknown> = {
 describe("each component the analytics page renders", () => {
   for (const [name, Component] of Object.entries(pieces)) {
     if (typeof Component !== "function") continue;
+    // The map holds arbitrary values; only function components reach JSX here,
+    // and TS can't narrow Object.entries values past Function.
+    const Renderable = Component as React.ComponentType;
     it(`${name} is a valid element type`, () => {
-      expect(Component).toBeDefined();
-      expect(() => render(<Component />)).not.toThrow();
+      expect(Renderable).toBeDefined();
+      expect(() => render(<Renderable />)).not.toThrow();
     });
   }
 });
