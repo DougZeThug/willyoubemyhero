@@ -1,11 +1,7 @@
-// The three states the analytics screen can land in once the splits read comes
-// back: failed, legitimately empty, and stations-with-no-finishes. Regression
-// coverage for the stationAverages gate — the card used to render zero-value
-// bars over a failed read instead of saying so.
+// Does mocking lucide-react with simple stubs fix the two empty-splits tests?
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { guardedModule } from "@/test/jsx-guard";
 import AnalyticsPage from "./analytics";
 import { EVENT_ID, makeBundle, makeStation } from "@/test/fixtures";
 
@@ -19,15 +15,11 @@ vi.mock("@/lib/media.functions", () => ({
   listArchives: vi.fn(async () => []),
 }));
 
-// useServerFn only exists to bind a server function to the router; in a test
-// the function itself is already callable.
 vi.mock("@tanstack/react-start", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return { ...actual, useServerFn: (fn: unknown) => fn };
 });
 
-// The route imports createFileRoute and Link from the router; keep the real
-// exports and only stub the pieces that need a browser to exist.
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
@@ -42,30 +34,30 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(() => ({ data: undefined })),
 }));
 
-// The charts need a viewport; jsdom gives them none, so let the container pass
-// its children straight through while the real chart pieces stay intact.
+// Stub the classic-runtime icon and chart libraries: their precompiled dists
+// create elements through React.createElement, and a stubbed module cannot
+// hand React an undefined element type.
+vi.mock("lucide-react", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const stubs: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(actual)) {
+    if (typeof value === "function") {
+      stubs[name] = (props: Record<string, unknown>) => (
+        <svg data-lucide-stub={name} {...props} />
+      );
+    } else {
+      stubs[name] = value;
+    }
+  }
+  return stubs;
+});
+
 vi.mock("recharts", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
     ResponsiveContainer: ({ children }: { children: ReactNode }) => <>{children}</>,
   };
-});
-
-// Name the undefined element instead of letting React report only "got:
-// undefined" — the guard logs the props every time the runtime is handed a
-// null/undefined element type. The dev transform pulls the dev runtime.
-vi.mock("react/jsx-runtime", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return guardedModule(actual);
-});
-vi.mock("react/jsx-dev-runtime", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return guardedModule(actual);
-});
-vi.mock("react/jsx-dev-runtime", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return guardedModule(actual);
 });
 
 function healthyBundle() {
