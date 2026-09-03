@@ -17,7 +17,14 @@ const FIXED_REASON: Partial<Record<NavRowId, string>> = {
 };
 
 /**
- * What the bottom bar carries.
+ * Which rows the navigation carries.
+ *
+ * BOTH NAVS, not just the phone's. `navTabs` feeds the bottom bar and the header
+ * on a wide screen from one list, which is how the shop has always worked — a
+ * destination present in one nav and missing from the other would be two
+ * different apps for the same league, and activeTab would light a tab a phone
+ * does not have. The copy here says so; an earlier draft called this the bottom
+ * bar and was wrong about its own reach.
  *
  * SWITCHES OVER A DRAFT, ONE SAVE — the stations panel's shape rather than the
  * dust panel's pair of buttons. Dust objects to a control that "commits the
@@ -70,9 +77,9 @@ export function NavRowsPanel({
   async function save() {
     if (
       !confirm(
-        `Save the bar as ${shape}? That is what everybody's phone shows. Anything ` +
-          `you take off it still works — links, bookmarks and the QR code all still ` +
-          `reach it, it just has no tab.`,
+        `Save the nav as ${shape}? That is what everybody sees, on a phone and on a ` +
+          `laptop. Anything you take off still works — links, bookmarks and the QR code ` +
+          `all still reach it, it just has no tab.`,
       )
     ) {
       return;
@@ -83,7 +90,7 @@ export function NavRowsPanel({
       // The list rides on the active event, which is the query the bar reads and
       // the one this panel is seeded from — one key refreshes both.
       await qc.invalidateQueries({ queryKey: ["active-event"] });
-      toast.success(`Bar saved — ${preview.length} row${preview.length === 1 ? "" : "s"}`);
+      toast.success(`Nav saved — ${preview.length} row${preview.length === 1 ? "" : "s"}`);
     } catch {
       toast.error("Could not change that");
     } finally {
@@ -94,12 +101,13 @@ export function NavRowsPanel({
   return (
     <AdminSection
       icon={<PanelBottom className="h-4 w-4 shrink-0" />}
-      title="Bottom Bar"
+      title="Navigation"
       meta={`${saved.length} row${saved.length === 1 ? "" : "s"}`}
     >
       <p className="text-sm text-muted-foreground">
-        What the bar on everybody&apos;s phone carries. Switching a row off takes the tab away and
-        nothing else — the screen behind it still answers.
+        Which rows the nav carries — the phone&apos;s bottom bar and the header on a wide screen,
+        which hold the same set. Switching one off takes the tab away and nothing else: the screen
+        behind it still answers.
       </p>
 
       <ul className="mt-3 space-y-1">
@@ -149,7 +157,7 @@ export function NavRowsPanel({
           disabled={!dirty || busy}
           className="min-h-11 w-full sm:min-h-0"
         >
-          {busy ? "Saving…" : dirty ? "Save the bar" : "Saved"}
+          {busy ? "Saving…" : dirty ? "Save the nav" : "Saved"}
         </Button>
       </div>
     </AdminSection>
