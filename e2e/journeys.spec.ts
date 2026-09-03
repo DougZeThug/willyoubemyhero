@@ -481,40 +481,13 @@ test.describe("opening a pack", () => {
   });
 
   test("counts a card once however many times it is tapped mid-ceremony", async ({ page }) => {
-    /**
-     * Tap the card on the stand until the tap takes, `took` being what says so.
-     *
-     * One tap is not enough on a loaded runner, and the reason is the very latch
-     * this test is about: `revealAt` holds it for the whole of the PREVIOUS
-     * card's celebration, so a tap landing while confetti is still in the air is
-     * swallowed on purpose. Walk the stand fast enough and the first tap on the
-     * next card lands inside that window, and the test then waits out its
-     * timeout for a card that was never turned.
-     *
-     * `took` is read before every press, never after, because a tap on a card
-     * that has already turned flips it to its back rather than doing nothing.
-     */
-    async function pressUntil(took: ReturnType<typeof swipeHint>) {
-      await expect
-        .poll(
-          async () => {
-            if (await took.count()) return true;
-            await standCard(page).click();
-            await page.waitForTimeout(250);
-            return (await took.count()) > 0;
-          },
-          { timeout: 20_000, intervals: [200] },
-        )
-        .toBe(true);
-    }
-
     await page.goto("/players/pack");
     await tearPack(page);
 
     // Walk to the last card, which is the one that holds before it turns.
     for (const n of [1, 2]) {
       await expect(standStep(page)).toHaveText(`${n} / 3`);
-      await pressUntil(swipeHint(page));
+      await standCard(page).click();
       await expect(swipeHint(page)).toBeVisible();
       await swipeNext(page);
     }
@@ -524,12 +497,31 @@ test.describe("opening a pack", () => {
     // that window used to start another ceremony over the same card.
     //
     // The first tap has to actually start that hold, or all three bounce off the
-    // previous card's celebration and nothing is being tested. "Last card…" is
-    // the hold on screen — it shows for exactly as long as the card is held
-    // face-down — so pressing until it appears puts the two forced taps below
-    // inside the window they are meant to be inside.
+    // previous card's celebration — `revealAt` holds the very latch this test is
+    // about for the whole of it — and nothing below is testing anything.
+    //
+    // "Last card…" is that hold on screen: it renders for exactly as long as the
+    // card is held face-down. Pressing until it appears is safe in a way the same
+    // loop would NOT be around the walk above, and the difference is worth
+    // stating. Here an extra press lands on a card that is still face-down and is
+    // swallowed by the latch, which is the scenario. There it would land on a
+    // card that has already turned, and the stand's own copy is "tap for the
+    // back" — it would flip the card and the swipe that follows would find
+    // nothing to throw away. That is not hypothetical: it is what this test did
+    // on CI when the walk was written that way.
     const card = standCard(page);
-    await pressUntil(page.getByText(/last card/i));
+    const holding = page.getByText(/last card/i);
+    await expect
+      .poll(
+        async () => {
+          if (await holding.count()) return true;
+          await card.click();
+          await page.waitForTimeout(250);
+          return (await holding.count()) > 0;
+        },
+        { timeout: 20_000, intervals: [200] },
+      )
+      .toBe(true);
     await card.click({ force: true });
     await card.click({ force: true });
 
