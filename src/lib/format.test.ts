@@ -263,7 +263,11 @@ describe("formatDay", () => {
     try {
       expect(formatDay("2026-07-28")).toBe("28 Jul");
     } finally {
-      process.env.TZ = tz;
+      // Not a plain reassignment: env values are coerced to strings, so when TZ
+      // started out unset this would restore it as the literal "undefined" and
+      // hand every later test in this worker a bogus zone.
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
     }
   });
 

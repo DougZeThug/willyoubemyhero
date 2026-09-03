@@ -452,14 +452,39 @@ describe("migrations", () => {
     // The pin, in the one place a client cannot route around. setNavHidden
     // refuses both by name too; this is the rule about the data rather than
     // about one request.
+    //
+    // Matched on the constraint name rather than on "it threw": a bare
+    // rejects.toThrow() passes just as happily if the CHECK is dropped and the
+    // INSERT fails for some unrelated reason, which is the failure this test is
+    // least able to notice.
     await expect(
       sql(`INSERT INTO public.events (name, year, active, nav_hidden)
            VALUES ('Pinned', 2029, false, ARRAY['vault'])`),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/events_nav_hidden_hideable/);
     await expect(
       sql(`INSERT INTO public.events (name, year, active, nav_hidden)
            VALUES ('Pinned', 2029, false, ARRAY['shop'])`),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/events_nav_hidden_hideable/);
+  });
+
+  it("stores a toggleable row and hands it back through the public view", async () => {
+    // The control the rejections above need: without it they would still pass
+    // against a constraint that refused everything, and nothing would prove a
+    // hidden row actually survives the trip the app reads it over.
+    const [row] = await sql<{ id: string }>(
+      `INSERT INTO public.events (name, year, active, nav_hidden)
+         VALUES ('Bar', 2029, false, ARRAY['board', 'league'])
+       RETURNING id`,
+    );
+    try {
+      const [seen] = await sql<{ nav_hidden: string[] }>(
+        "SELECT nav_hidden FROM public.events_public WHERE id = $1",
+        [row.id],
+      );
+      expect(seen.nav_hidden).toEqual(["board", "league"]);
+    } finally {
+      await sql("DELETE FROM public.events WHERE id = $1", [row.id]);
+    }
   });
 
   it("carries the hidden rows through the public view", async () => {

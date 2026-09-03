@@ -74,7 +74,11 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold leading-none tracking-tight", className)}
+    // pr-11 reserves the close button's 44px: the button is positioned against
+    // the content box, so without it a long title runs under the glyph and its
+    // hit target — visible on the secret sheet, which pairs p-4 with a text-2xl
+    // uppercase card name.
+    className={cn("pr-11 text-lg font-semibold leading-none tracking-tight", className)}
     {...props}
   />
 ));
