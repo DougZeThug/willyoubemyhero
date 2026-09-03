@@ -246,10 +246,9 @@ describe("reactions", () => {
 
   it("names who reacted on the chip itself, rather than behind a 20px ⓘ", async () => {
     await renderSocial({ reactions: [reaction()] });
-    const chip = await screen.findByRole("button", {
-      name: "React with 🔥. Reacted by Alice",
-    });
+    const chip = await screen.findByRole("button", { name: "React with 🔥" });
     expect(chip).toHaveAttribute("title", "Alice");
+    expect(chip).toHaveAttribute("aria-description", "Reacted by Alice");
     expect(screen.queryByRole("button", { name: "Who reacted with 🔥" })).toBeNull();
   });
 });

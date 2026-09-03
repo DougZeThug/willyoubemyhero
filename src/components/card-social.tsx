@@ -243,10 +243,11 @@ export function CardSocial({
                   // tappable thing inside a tappable chip. They live on the chip
                   // itself now: read out by a screen reader, and on a long press
                   // by the browser's own tooltip, with no double-firing.
-                  aria-label={
+                  aria-label={`React with ${emoji}`}
+                  aria-description={
                     list.length > 0
-                      ? `React with ${emoji}. Reacted by ${list.map((r) => labelFor(r)).join(", ")}`
-                      : `React with ${emoji}`
+                      ? `Reacted by ${list.map((r) => labelFor(r)).join(", ")}`
+                      : undefined
                   }
                   title={list.length > 0 ? list.map((r) => labelFor(r)).join(", ") : undefined}
                   className={cn(
