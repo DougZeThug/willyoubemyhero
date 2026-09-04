@@ -10,6 +10,7 @@ import { swipeDirection } from "@/lib/zoom";
 import { StandDeck, StandEntrance } from "@/components/stand-entrance";
 import { RevealAmbience } from "@/components/reveal-ambience";
 import { LevelPips } from "@/components/level-pips";
+import { PullRibbon } from "@/components/pull-ribbon";
 import { ambienceStrength } from "@/lib/reveal-ambience";
 import { burst } from "@/lib/card-confetti";
 import { cue } from "@/lib/card-sfx";
@@ -138,6 +139,9 @@ export function PackStand({
   secretRevealed,
   secretDuplicate,
   secretSellValue,
+  copies,
+  secretCopies,
+  sellValues,
   secretPeeking,
   peeking,
   busy,
@@ -181,6 +185,23 @@ export function PackStand({
    * is the one you are not going to be selling.
    */
   secretSellValue: number | null;
+  /**
+   * Copies held of each roster card once it is turned, by event_participant id.
+   *
+   * Resolved by the route from the snapshot the pack was dealt against — never
+   * from the live collection, which already carries this pull. Optional, and a
+   * card missing from it simply gets no ribbon: a stand that guessed would call
+   * a third copy a first.
+   */
+  copies?: Record<string, number>;
+  /** The same number for the secret, whose count lives on the server. */
+  secretCopies?: number;
+  /**
+   * What a spare roster copy is worth, by card id. Only ever holds duplicates,
+   * and only while the commissioner has dust switched on — the route does that
+   * gating, exactly as it does for `secretSellValue`.
+   */
+  sellValues?: Record<string, number>;
   secretPeeking: boolean;
   peeking: boolean;
   /** True while "Reveal all" is driving, so a tap cannot cut across it. */
@@ -583,6 +604,51 @@ export function PackStand({
           ? "One More Card"
           : `${shownIndex + 1} / ${pack.length}`;
 
+  /**
+   * The number the ribbon prints for whatever is on the mark.
+   *
+   * Null rather than 1 when the caller has not answered: a stand that assumed
+   * would stamp NEW on a card it knows nothing about, which is the one mistake
+   * this ribbon must never make.
+   */
+  const standCopies = onSecret ? secretCopies : copies?.[ep?.id ?? ""];
+
+  /**
+   * How long the fourth card has been in the air, in copy rather than seconds.
+   *
+   * The wait is bounded at six seconds by the route and ends in a retry, but for
+   * the whole of it the line under the card used to say one unchanging thing. A
+   * sentence that has not moved in five seconds reads as a screen that has
+   * stopped, and this is the moment — a phone in a garden, one bar — where that
+   * is exactly the fear.
+   *
+   * So the copy admits the wait as it goes, and the last rung promises the
+   * outcome rather than the speed: the pull is a server-side row, and it lands
+   * whether or not this device is still watching for it. Presentation only —
+   * the timeout, the retry and the slot itself belong to the route and are
+   * untouched.
+   */
+  const waiting = onSecret && secretSlot === "pending";
+  const [waitStage, setWaitStage] = useState(0);
+  useEffect(() => {
+    if (!waiting) {
+      setWaitStage(0);
+      return;
+    }
+    const slow = setTimeout(() => setWaitStage(1), 2000);
+    const slower = setTimeout(() => setWaitStage(2), 4000);
+    return () => {
+      clearTimeout(slow);
+      clearTimeout(slower);
+    };
+  }, [waiting]);
+  const waitLine =
+    waitStage === 0
+      ? "Checking the wrapper…"
+      : waitStage === 1
+        ? "Still sealed…"
+        : "Slow signal — it's yours either way";
+
   return (
     // The camera shakes when the secret lands, and the *scene* is what shakes —
     // moving the card alone reads as the card wobbling, where moving everything
@@ -750,7 +816,7 @@ export function PackStand({
               ? ""
               : onSecret
                 ? secretSlot === "pending"
-                  ? "Checking the wrapper…"
+                  ? waitLine
                   : isRevealed
                     ? "Swipe to see the whole pack"
                     : "Not on the roster. One a day, and it's yours for good."
@@ -844,7 +910,9 @@ export function PackStand({
                 className="absolute inset-0"
               >
                 {onSecret && secretSlot === "pending" ? (
-                  <div className="wax-foil flex h-full w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
+                  // `relative` is load-bearing: the sweep is an ::after pinned to
+                  // this box, and without it it would pin to the page.
+                  <div className="wax-foil pack-seal-wait relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-white/15" />
                 ) : onSecret && !secret ? null : (
                   <motion.div
                     // The layout id is what carries this card into its column when the
@@ -937,6 +1005,18 @@ export function PackStand({
             )}
           </AnimatePresence>
 
+          {/* Whether this one is new, stamped on the frame rather than added to
+              the four lines of caption below it.
+
+              A sibling of the card, never a child: the card carries a layoutId
+              and flies to its column on the summary, and a projected subtree
+              drags its children through the same distortion. Only once the card
+              is actually face up — a ribbon on a back is the answer before the
+              question. `settled` and not just `isRevealed`, which goes true on
+              the tap: without it the stamp lands on a card still edge-on and
+              answers halfway through its own turn. */}
+          {isRevealed && settled && standCopies != null && <PullRibbon copies={standCopies} />}
+
           {/* The deck arriving, over the top of the card it is becoming. */}
           {entry && landing && (
             <StandEntrance
@@ -1023,6 +1103,15 @@ export function PackStand({
                         {packedByLabel(pullCounts?.[ep!.id])}
                       </div>
                     )}
+                    {/* The same offer the secret's duplicate gets, in the same
+                        words, because it is the same ledger. The route only puts
+                        a card in this map when it is a spare and dust is on, so
+                        reaching it at all is the decision. */}
+                    {sellValues?.[ep!.id] ? (
+                      <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
+                        Sell for {sellValues[ep!.id]}
+                      </div>
+                    ) : null}
                   </>
                 )}
               </motion.div>

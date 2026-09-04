@@ -3,13 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, PackageOpen, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, PackageOpen } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import {
   mySecretsKey,
   secretStatusKey,
+  useMySecrets,
   useSecretActor,
   useSecretStatus,
 } from "@/hooks/use-daily-secret";
@@ -20,6 +21,7 @@ import { PackOpening } from "@/components/pack-opening";
 import { PackStand } from "@/components/pack-stand";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
 import { PackSummary } from "@/components/pack-summary";
+import { SoundToggle } from "@/components/sound-toggle";
 import { StreakFlame } from "@/components/streak-flame";
 import { MilestoneReveal } from "@/components/milestone-reveal";
 import { CollectionComplete } from "@/components/collection-complete";
@@ -42,13 +44,7 @@ import {
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import {
-  playEditionShine,
-  playReveal,
-  playSecretRiser,
-  playTear,
-  useCardSfx,
-} from "@/lib/card-sfx";
+import { playEditionShine, playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
 import { pullSecretCard } from "@/lib/secret-cards.functions";
 import {
@@ -61,7 +57,7 @@ import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { deviceId, usePackIdentity } from "@/lib/device-id";
 import { dealPack, packSeed, packStage, resumeCursor, type SecretSlot } from "@/lib/pack";
 import { editionCelebrates, type Edition } from "@/lib/card-edition";
-import { dustLive, secretSellValue } from "@/lib/dust";
+import { dustLive, MILL_BY_EDITION, secretSellValue } from "@/lib/dust";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { recordCardPulls } from "@/lib/card-pulls.functions";
@@ -169,7 +165,6 @@ function PackPage() {
   // `useMyCollection` below and what the render bails out on.
   const eventFailed =
     (!!error && (!event || !bundle)) || failedTables.includes("event_participants");
-  const sfx = useCardSfx();
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never a player's — see the note on useEventCardBack. The
   // wrapper is shown before anything has been dealt, so a per-player back here
@@ -315,6 +310,21 @@ function PackPage() {
    * the pull they represent was recorded the first time round.
    */
   const replayedRef = useRef<Set<number>>(new Set());
+  /**
+   * Indices this pack had already turned when the screen loaded.
+   *
+   * A narrower fact than `resumedRef`, and the ribbon is the only thing that
+   * needs it. `revealAt` never counts these cards — they are either already
+   * turned, or replayed and skipped — but `rosterCopies` counts every card in
+   * the pack, so it is the one place that has to know a pull the previous
+   * session already banked. Without it a guest who reloads mid-pack reads ×2 on
+   * a card they own exactly one of.
+   *
+   * Banked, not face-up. A replayed pack turns its cards down again for the
+   * theatre without giving back the pulls behind them, so this follows the
+   * stored row rather than what is on screen.
+   */
+  const resumedRevealedRef = useRef<Set<number>>(new Set());
   /**
    * This pack was already open when the screen loaded.
    *
@@ -513,6 +523,14 @@ function PackPage() {
         // *is* the collection, so a replayed pull would inflate "Pulled ×N" for
         // good.
         replayedRef.current = new Set(replay ? s.revealed : []);
+        // `s.revealed` and not `revealedNow`, which are different questions: that
+        // one is what shows face-up, this one is whose pull the collection has
+        // already banked. They agree everywhere except a replay, where the cards
+        // are turned face-down again for the theatre and their pulls are very much
+        // still counted — which is what `replayedRef` above exists to say. Reading
+        // the visual set here handed a replaying guest a floor of zero on every
+        // card and stamped the whole pack one copy too high.
+        resumedRevealedRef.current = new Set(s.revealed);
         resumedRef.current = true;
         carriedFromRef.current = s.carriedFrom ?? null;
         // Left UNDEFINED when the row does not carry the field, which is not the
@@ -566,6 +584,7 @@ function PackPage() {
         setDealtIds(null);
         revealedRef.current = [];
         replayedRef.current = new Set();
+        resumedRevealedRef.current = new Set();
         resumedRef.current = false;
         carriedFromRef.current = null;
         carriedAdoptedRef.current = undefined;
@@ -757,6 +776,7 @@ function PackPage() {
     setDealtIds(ids);
     revealedRef.current = [];
     replayedRef.current = new Set();
+    resumedRevealedRef.current = new Set();
     resumedRef.current = false;
     // A pack dealt here is nobody's carried pack, whatever the last one was, and
     // it belongs to whoever is holding the phone right now.
@@ -1340,6 +1360,92 @@ function PackPage() {
       ? secretSellValue(secret.tier)
       : null;
 
+  /**
+   * How many of each card in this pack you hold once it is turned, for the ribbon.
+   *
+   * Counted from `packBaseline` and never from `collected`. The live collection
+   * already carries this pull the moment `markCollected` fires — which is before
+   * the ribbon paints — so reading it here would stamp ×2 on a card nobody owned
+   * a second ago, and on every card in the pack.
+   *
+   * Nothing at all until the snapshot exists. With no baseline every card
+   * computes to a floor of zero and the whole pack reads NEW — a confident wrong
+   * answer, where an absent ribbon is merely quiet. The consumers already treat a
+   * missing entry as "say nothing".
+   *
+   * Whether the pull is ALREADY in that snapshot is the whole question, and it
+   * has two answers rather than one:
+   *
+   *   - A member's `recordCardPulls` fired in the session that tore this pack, so
+   *     the server has all three and their reconciled snapshot carries every one
+   *     of them, turned or not.
+   *   - A guest has no server row. Their local store is the collection, and it
+   *     only holds the cards they actually turned before the reload.
+   *
+   * So a resumed guest is counted per card, not wholesale. Reading this the way
+   * `revealAt` does — member-only — inflated every card a guest had already
+   * turned, and a first pull came back from a reload wearing ×2.
+   *
+   * `revealAt` needs no such term and is right as it stands: it only ever runs on
+   * a card being turned now, which is by definition one the previous session did
+   * not bank. This counts every card in the pack, which is why it is the only
+   * place that has to know.
+   */
+  const rosterCopies = useMemo(() => {
+    if (!packBaseline) return {};
+    const out: Record<string, number> = {};
+    pack.forEach((ep, i) => {
+      const banked =
+        resumedRef.current && (!!me?.participantId || resumedRevealedRef.current.has(i));
+      const held = packBaseline[ep.id]?.count ?? 0;
+      out[ep.id] = banked ? Math.max(held, 1) : held + 1;
+    });
+    return out;
+    // Both refs are settled by the time a card can be turned — they are written at
+    // deal and at resume, both of which are behind the tear — so they are read
+    // here rather than tracked, which is also how `revealAt` reads `resumedRef`.
+  }, [pack, packBaseline, me?.participantId]);
+
+  /**
+   * The secret's own copy count. `packBaseline` holds no secrets.
+   *
+   * The predicate is the pull's `duplicate` flag, which is the only thing that
+   * knows; this is just the number printed beside it. `getMySecrets` is
+   * invalidated by the pull itself, so it answers with this copy already counted
+   * — and two is the floor while that refetch is still in the air, because a
+   * duplicate is by definition never your first.
+   */
+  const mySecrets = useMySecrets(actor);
+  const secretCopies = !secretDuplicate
+    ? 1
+    : Math.max(2, mySecrets.data?.cards.find((c) => c.id === secret?.id)?.count ?? 0);
+
+  /**
+   * What a spare roster card is worth, by card id. The same line the secret gets.
+   *
+   * Gated exactly as `sellValue` is — duplicates only, members only, silent while
+   * dust is off — because it is the same promise about the same ledger.
+   *
+   * `MILL_BY_EDITION` rather than `millValue`, and that is safe here rather than
+   * optimistic: `editions` on this route is the map `record_card_pulls` handed
+   * back, so every finish in it is one Postgres decided. A finish this map does
+   * not carry falls back to standard, whose rung is the untrusted floor anyway.
+   */
+  const rosterSellValues = useMemo(() => {
+    if (!me?.participantId || !dustLive(event)) return {};
+    const out: Record<string, number> = {};
+    for (const ep of pack) {
+      // `Object.hasOwn`, not `?? "standard"`, and for the same reason `revealAt`
+      // checks `known`: until the recording answers, a card has no finish, and
+      // defaulting one here would price a platinum duplicate at the standard
+      // rung and then quietly quadruple the offer a moment later. No number is
+      // better than a number that moves.
+      if ((rosterCopies[ep.id] ?? 1) > 1 && Object.hasOwn(editions, ep.id))
+        out[ep.id] = MILL_BY_EDITION[editions[ep.id]];
+    }
+    return out;
+  }, [pack, rosterCopies, editions, me?.participantId, event]);
+
   async function revealSecret() {
     // revealingRef first: the secret holds for 1600ms before it turns, and
     // `secretRevealed` is still false for every one of them.
@@ -1594,15 +1700,24 @@ function PackPage() {
   // finished. Released on `complete`, which is a page again — a collection
   // summary with links out of it wants its navigation back.
   const presenting = stage === "opening" || stage === "revealing";
+  // What "presentation mode is active" actually means on this route: the pack's
+  // own ceremony, plus the milestone reveal, which claims the screen the same way
+  // from a different trigger. Three things key off it and they must not drift.
+  const presentingAny = presenting || milestoneReveal !== null;
 
   return (
     <div className="card-bg min-h-[calc(100dvh-8rem)]">
       {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
-          with no signal is the exact failure the health states exist for. */}
-      {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
-      <PresentationMode active={presenting || milestoneReveal !== null} />
-      <PresentationStage active={presenting || milestoneReveal !== null} />
+          with no signal is the exact failure the health states exist for.
+
+          Silent while the ceremony has the screen, though. Tiers really can move
+          under you mid-pack, but a warning strip over the one moment this app is
+          asking for your attention is noise, and the pack is not where anybody
+          can act on it. It comes back the instant the summary lands. */}
+      {!presentingAny && (realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+      <PresentationMode active={presentingAny} />
+      <PresentationStage active={presentingAny} />
       {/* Mounted here rather than inside the summary: the stage above uses
           backdrop-filter, which is a grouping property, so anything it wraps
           loses its 3D and the card would flip flat. */}
@@ -1624,6 +1739,15 @@ function PackPage() {
           onDone={() => setMilestoneReveal(null)}
         />
       )}
+      {/* The one control that has to survive the whole pack.
+
+          Fixed and outside the content wrapper on purpose: it is above the
+          presentation stage's z-0 scrim, and it is in none of the three motion
+          wrappers that fade for the tear, so it is reachable on the sealed
+          screen, mid-reveal and on the summary alike — the same corner every
+          time. Lifted to clear the mobile tab bar, which is fixed at the bottom
+          and only exists below md. */}
+      <SoundToggle className="fixed bottom-[calc(env(safe-area-inset-bottom)+3.75rem)] left-1 z-40 rounded-full border border-white/10 bg-background/70 backdrop-blur-sm md:bottom-4" />
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-3 sm:py-6">
         {/* Same gate as the vault, and here for the same reason: a pack opened
             before they pick a name lands on the device, not on them. Kept out of
@@ -1662,19 +1786,10 @@ function PackPage() {
               >
                 <ArrowLeft className="h-3.5 w-3.5" /> Vault
               </Link>
-              {/* The sound switch used to live on exactly one screen, behind an
-                  overflow menu on a phone — a screen away from the ceremony it
-                  silences. This is that ceremony, and this is the last moment
-                  before it starts. */}
-              <button
-                type="button"
-                onClick={sfx.toggle}
-                aria-pressed={!sfx.muted}
-                aria-label={sfx.muted ? "Turn sound on" : "Turn sound off"}
-                className="flex h-11 w-11 items-center justify-center text-muted-foreground transition-colors hover:text-primary"
-              >
-                {sfx.muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-              </button>
+              {/* The sound switch used to be here, beside the Vault link. It is
+                  fixed to the corner of the screen now — see SoundToggle above.
+                  This row fades to zero and goes inert when the tear commits, so
+                  a mute living in it was gone for the whole ceremony. */}
             </div>
             {/* Height-matched to the Collected block beside it, so the row still
                 gives back none of its 90px when it fades for the tear. */}
@@ -1778,6 +1893,9 @@ function PackPage() {
               secretRevealed={secretRevealed}
               secretDuplicate={secretDuplicate}
               secretSellValue={sellValue}
+              copies={rosterCopies}
+              secretCopies={secretCopies}
+              sellValues={rosterSellValues}
               secretPeeking={secretPeeking}
               peeking={peeking}
               busy={autoRunning}
@@ -1827,7 +1945,11 @@ function PackPage() {
             secret={secret}
             secretRarity={secretRarity}
             secretDuplicate={secretDuplicate}
+            secretSellValue={sellValue}
             secretPulled={status.data?.pulled ?? 0}
+            copies={rosterCopies}
+            secretCopies={secretCopies}
+            sellValues={rosterSellValues}
             collected={collectedCount}
             total={total}
             eventYear={event?.year ?? null}

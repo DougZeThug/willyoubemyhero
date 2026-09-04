@@ -7,6 +7,7 @@ import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { SharePack, type SharePackCard } from "@/components/share-pack-graphic";
 import { LevelPips } from "@/components/level-pips";
+import { PullRibbon } from "@/components/pull-ribbon";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { packedByLabel } from "@/lib/card-pulls";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
@@ -56,7 +57,11 @@ export function PackSummary({
   secret,
   secretRarity,
   secretDuplicate,
+  secretSellValue,
   secretPulled,
+  copies,
+  secretCopies,
+  sellValues,
   collected,
   total,
   eventYear,
@@ -81,8 +86,28 @@ export function PackSummary({
   secret: SecretCardView | null;
   secretRarity: Rarity;
   secretDuplicate: boolean;
+  /**
+   * What the secret's spare copy would fetch, or null for nothing to say.
+   *
+   * The stand has carried this line since the dupe economy landed; the summary
+   * never did, so the offer vanished the moment the sequence ended. Same value,
+   * same gating — the route decides, this only prints.
+   */
+  secretSellValue?: number | null;
   /** How many secrets this person has ever pulled, for the first-timer line. */
   secretPulled: number;
+  /**
+   * Copies held of each roster card, by event_participant id, this pull counted.
+   *
+   * From the route's pre-pack snapshot, not the live collection — see the note on
+   * `rosterCopies` there. Optional, and a card missing from it gets no ribbon
+   * rather than a guessed one.
+   */
+  copies?: Record<string, number>;
+  /** The same number for the secret, whose count lives on the server. */
+  secretCopies?: number;
+  /** What each spare roster copy is worth. Duplicates only, and only while dust is on. */
+  sellValues?: Record<string, number>;
   collected: number;
   total: number;
   eventYear: number | null;
@@ -172,17 +197,57 @@ export function PackSummary({
         </p>
       </motion.div>
 
-      {/* One row of three, deliberately small. The fourth slot below is the
-          payoff and has to be reachable without a long scroll on a phone, so the
-          roster trio reads as the supporting row rather than competing with it
-          for height. */}
-      <div className="mx-auto grid max-w-sm grid-cols-3 items-start gap-2 sm:max-w-lg sm:gap-3">
+      {/* The fourth card first, and full width.
+
+          It was under the roster trio, which put the one card nobody else has
+          below three cards several people do. Order is the loudest thing a
+          summary says. */}
+      <SecretSlotView
+        slot={secretSlot}
+        card={secret}
+        rarity={secretRarity}
+        duplicate={secretDuplicate}
+        sellValue={secretSellValue ?? null}
+        copies={secretCopies}
+        pulledCount={secretPulled}
+        universalBack={universalBack}
+        onRetry={onRetrySecret}
+      />
+
+      {/* The three, in a row you scroll rather than a grid you squint at.
+
+          They used to be a three-column grid inside a max-w-sm: 80px wide at 320
+          and 100 at 390, against the 315 the same card had on the stand a second
+          earlier. The pack got *smaller* at the payoff, which is backwards. A
+          snap row holds every card at a readable size and spends horizontal
+          space — which a phone has more of than it has vertical — instead of
+          shrinking to fit three across a width that cannot take three.
+
+          Bled to the screen edges so a card can scroll flush to it; a snap row
+          that stops 16px short reads as a clipped grid. */}
+      <div
+        className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1"
+        // The row is the scroller, so it owns the scrollbar rather than the page.
+        style={{ scrollbarWidth: "none" }}
+      >
         {pack.map((ep, i) => {
           const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
           const edition = editions[ep.id] ?? "standard";
           const name = ep.participant?.name ?? "—";
+          const held = copies?.[ep.id];
           return (
-            <div key={ep.id} className="flex flex-col gap-1">
+            <div
+              key={ep.id}
+              // The floor the audit asked for, and the one the e2e suite
+              // measures. `min-width` rather than `shrink-0` carries it, and the
+              // difference matters: min-width beats flex-shrink outright, so the
+              // row overflows and scrolls at 390 rather than squeezing three
+              // cards into a width that cannot hold them. `flex-1` on top so a
+              // desktop still fills its row instead of leaving three narrow
+              // cards adrift in it.
+              data-testid="summary-card"
+              className="flex min-w-[140px] flex-1 snap-start flex-col gap-1"
+            >
               {/* The card owns its own button semantics — wrapping it in another
                   button would nest interactive elements. The layout id is shared
                   with the stand, so the card flies from where it was examined
@@ -190,7 +255,7 @@ export function PackSummary({
               <motion.div
                 layoutId={`pack-card-${ep.id}`}
                 transition={{ type: "spring", stiffness: 260, damping: 28, delay: i * 0.06 }}
-                className="rounded-xl"
+                className="relative rounded-xl"
               >
                 <HoloCard
                   frontUrl={cards?.[ep.id]?.front ?? null}
@@ -198,10 +263,22 @@ export function PackSummary({
                   name={name}
                   rarity={rarity}
                   edition={edition}
+                  // The row scrolls sideways now, and drag-tilt cannot share that
+                  // axis with it. A tilting card sets `touch-action: pan-y`, which
+                  // hands the browser the vertical pan and keeps the horizontal
+                  // one for itself — so a thumb dragging across a card tilted it
+                  // and the row underneath never moved. touch-action is read once
+                  // at gesture start and is final, so there is no arrangement
+                  // where both work. Scrolling wins: these are thumbnails in a
+                  // scrolling row, which is the case this prop exists for.
+                  touchTilt={false}
                   backContent={
                     <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} edition={edition} />
                   }
                 />
+                {/* Only once it has been turned. An unturned column is a card
+                    still in the sequence, and its ribbon would answer early. */}
+                {revealed.includes(i) && held != null && <PullRibbon copies={held} />}
               </motion.div>
               {revealed.includes(i) && (
                 <motion.div
@@ -209,12 +286,12 @@ export function PackSummary({
                   animate={{ opacity: 1 }}
                   className="text-center"
                 >
-                  {/* Two lines at most: at three-up the column is narrow, and the
-                      grid's items-start absorbs uneven rows. */}
+                  {/* Two lines at most. The column is 140px now rather than 80,
+                      which is what lets these read at 12px instead of 8. */}
                   <Link
                     to="/players/$id"
                     params={{ id: ep.id }}
-                    className="block line-clamp-2 font-display text-[11px] font-black uppercase leading-tight tracking-wide hover:text-primary sm:text-sm"
+                    className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary"
                   >
                     {name}
                   </Link>
@@ -232,14 +309,12 @@ export function PackSummary({
                       edition,
                     );
                     return (
-                      <>
-                        <div
-                          className="text-badge font-bold uppercase tracking-[0.08em]"
-                          style={{ color: badge.color }}
-                        >
-                          {badge.headline}
-                        </div>
-                      </>
+                      <div
+                        className="text-label font-bold uppercase tracking-[0.08em]"
+                        style={{ color: badge.color }}
+                      >
+                        {badge.headline}
+                      </div>
                     );
                   })()}
                   {packedByLabel(pullCounts?.[ep.id]) && (
@@ -247,22 +322,19 @@ export function PackSummary({
                       {packedByLabel(pullCounts?.[ep.id])}
                     </div>
                   )}
+                  {/* The same offer the stand makes on a spare, in the same
+                      words. It used to end with the sequence. */}
+                  {sellValues?.[ep.id] ? (
+                    <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
+                      Sell for {sellValues[ep.id]}
+                    </div>
+                  ) : null}
                 </motion.div>
               )}
             </div>
           );
         })}
       </div>
-
-      <SecretSlotView
-        slot={secretSlot}
-        card={secret}
-        rarity={secretRarity}
-        duplicate={secretDuplicate}
-        pulledCount={secretPulled}
-        universalBack={universalBack}
-        onRetry={onRetrySecret}
-      />
 
       {/* Above the running total, because a reward you just earned outranks a
           number that only went up by one. Absent entirely at streak zero: a first
@@ -372,18 +444,24 @@ export function PackSummary({
         </span>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-2 pt-1">
-        <Link to="/players" className="neon-btn-sm">
+      {/* The two ways out, both at 56px.
+
+          Share used to be a bordered ghost beside a small primary, which is the
+          hierarchy backwards: sharing the pack is the thing the group actually
+          does with it. Both are first-class now.
+
+          Stacked rather than side by side, and that is a width decision rather
+          than a taste one: two 56px pills with 1.75rem of padding each do not
+          fit across 320px without one of them truncating its own label. */}
+      <div className="mx-auto flex max-w-xs flex-col gap-2 pt-1">
+        <Link to="/players" className="neon-btn-lg w-full">
           <PackageOpen className="h-4 w-4" />
           View collection
         </Link>
         <button
           onClick={() => void share()}
           disabled={sharing || shareCards.length === 0}
-          className={cn(
-            "inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground",
-            "hover:border-primary/50 hover:text-primary disabled:opacity-40",
-          )}
+          className="neon-btn-lg w-full disabled:opacity-40"
         >
           {shared ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
           {sharing ? "Rendering…" : shared ? "Shared" : "Share pack"}
@@ -418,6 +496,8 @@ function SecretSlotView({
   card,
   rarity,
   duplicate,
+  sellValue,
+  copies,
   pulledCount,
   universalBack,
   onRetry,
@@ -426,6 +506,8 @@ function SecretSlotView({
   card: SecretCardView | null;
   rarity: Rarity;
   duplicate: boolean;
+  sellValue: number | null;
+  copies: number | undefined;
   pulledCount: number;
   universalBack: ImageUrlSet | null;
   onRetry: () => void;
@@ -433,9 +515,15 @@ function SecretSlotView({
   if (slot === "hidden") return null;
 
   return (
-    // Wider than a board card. The fourth slot has to stay visibly the biggest
-    // thing here or it stops reading as the thing nobody else on the roster has.
-    <div className="mx-auto flex w-full max-w-[240px] flex-col items-center gap-2 pt-2">
+    // The stand's cap, 320px, so the card is the same size at rest as it was at
+    // the moment it turned rather than shrinking by a third on the handover.
+    //
+    // What is deliberately NOT carried over is the stand's viewport-height clamp
+    // (`min(320px, calc((100svh-19rem)*5/7))`). That exists because the stand has
+    // to fit the card, its name and the step dots on one screen with nothing
+    // scrolling. This page scrolls, so the clamp would only ever make the card
+    // smaller for no reason on a short phone.
+    <div className="mx-auto flex w-full max-w-[320px] flex-col items-center gap-2 pt-2">
       <div className="text-center">
         <h2
           className="font-display text-sm font-black uppercase tracking-[0.2em]"
@@ -460,7 +548,9 @@ function SecretSlotView({
           </span>
         </button>
       ) : slot === "pending" ? (
-        <div className="wax-foil flex aspect-[5/7] w-full animate-pulse items-center justify-center rounded-xl border border-white/15" />
+        // The same sealed-back sweep the stand shows, for the window where the
+        // sequence has ended and the pull is still in the air.
+        <div className="wax-foil pack-seal-wait relative flex aspect-[5/7] w-full items-center justify-center overflow-hidden rounded-xl border border-white/15" />
       ) : card ? (
         <>
           {/* w-full is load-bearing: the column above centres its items, which
@@ -480,6 +570,9 @@ function SecretSlotView({
               tilt="hero"
               backContent={<SecretBackPanel card={card} rarity={rarity} />}
             />
+            {/* The secret's count is the only one on this screen the baseline
+                cannot answer — it comes from the pull's own duplicate flag. */}
+            {copies != null && <PullRibbon copies={copies} />}
           </motion.div>
           <div className="text-center">
             <div className="truncate font-display text-xs font-black uppercase tracking-wide">
@@ -492,9 +585,20 @@ function SecretSlotView({
                 them and naming it here too would say it twice. */}
             <LevelPips tier={card.tier} namesLevel className="mt-0.5" />
             {duplicate ? (
-              <div className="text-meta font-semibold text-muted-foreground">
-                Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing off.
-              </div>
+              <>
+                <div className="text-meta font-semibold text-muted-foreground">
+                  Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing
+                  off.
+                </div>
+                {/* Carried over from the stand, which was the only place it ever
+                    appeared — so the answer to "what do I do with a spare"
+                    disappeared at exactly the screen that has the shop link. */}
+                {sellValue ? (
+                  <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
+                    Sell for {sellValue}
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div
                 className="text-badge font-bold uppercase tracking-[0.08em]"

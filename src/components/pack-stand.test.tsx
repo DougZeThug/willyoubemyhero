@@ -483,3 +483,115 @@ describe("the finish on the stand", () => {
     expect(container.querySelector(".card-edition")).toBeNull();
   });
 });
+
+/**
+ * Whether the pull is new, which the stand never used to say for a roster card.
+ *
+ * Two predicates, because the data lives in two places: a roster card's count
+ * comes from the snapshot the pack was dealt against, and the secret's from the
+ * pull's own duplicate flag. Both arrive here as one number, so what is pinned
+ * is the sentence the number turns into.
+ *
+ * `getByRole("img")` rather than the text: the glyph is aria-hidden and the label
+ * is the thing a person standing in a garden with VoiceOver on actually gets.
+ */
+describe("the NEW / ×N ribbon", () => {
+  /** The stand parked on the secret, without waiting out the twist to get there. */
+  const atSecret = (over: Partial<React.ComponentProps<typeof PackStand>> = {}) =>
+    renderStand({
+      cursor: PACK.length,
+      secretSlot: "open",
+      secret: SECRET,
+      secretRevealed: true,
+      ...over,
+    });
+
+  /**
+   * The stamp, once the card has finished turning.
+   *
+   * Async because it genuinely is: the ribbon waits for `settled`, which lands a
+   * flip after the tap (540ms for a roster card, 1140ms for the secret). The
+   * budget clears both with room to spare.
+   */
+  const ribbon = (name: string | RegExp) => screen.findByRole("img", { name }, { timeout: 3000 });
+
+  /** Real timers, for the same reason the twist above uses them. */
+  const waitOutTheFlip = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 700));
+    });
+
+  it("says nothing at all before the card is turned", async () => {
+    // Same rule the badge follows. A ribbon on a face-down card answers the
+    // question the flip exists to ask.
+    renderStand({ copies: { "ep-1": 1 } });
+    expect(screen.queryByRole("img", { name: /new card|you now hold/i })).toBeNull();
+  });
+
+  it("waits for the turn to finish rather than stamping a card edge-on", async () => {
+    // `isRevealed` goes true on the tap, half a second before there is a face to
+    // read. A ribbon that followed it announced the answer over a card still
+    // rotating — the same beat the badge deliberately waits out.
+    renderStand({ revealed: [0], copies: { "ep-1": 3 } });
+    expect(screen.queryByRole("img", { name: /you now hold/i })).toBeNull();
+    expect(await ribbon("You now hold 3 of this card")).toBeInTheDocument();
+  });
+
+  it("calls a roster card held zero times NEW", async () => {
+    renderStand({ revealed: [0], copies: { "ep-1": 1 } });
+    expect(await ribbon("New card")).toBeInTheDocument();
+  });
+
+  it("counts a roster card already held twice as the third copy", async () => {
+    // held === 2 at deal time, so the card in your hand is the third.
+    renderStand({ revealed: [0], copies: { "ep-1": 3 } });
+    expect(await ribbon("You now hold 3 of this card")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "New card" })).toBeNull();
+  });
+
+  it("reads the count for the card actually on the stand", async () => {
+    // Keyed by card id rather than cursor position, for the same reason the
+    // finish is: the pity swap makes slot order and card identity different
+    // things.
+    renderStand({ cursor: 1, revealed: [1], copies: { "ep-1": 4, "ep-2": 1 } });
+    expect(await ribbon("New card")).toBeInTheDocument();
+  });
+
+  it("shows nothing for a card the caller could not count", async () => {
+    // Silence beats a guess: assuming 1 here would stamp NEW on a card this
+    // component knows nothing about.
+    renderStand({ revealed: [0], copies: {} });
+    await waitOutTheFlip();
+    expect(screen.queryByRole("img", { name: /new card|you now hold/i })).toBeNull();
+  });
+
+  it("calls a secret that is not a duplicate NEW", async () => {
+    atSecret({ secretDuplicate: false, secretCopies: 1 });
+    expect(await ribbon("New card")).toBeInTheDocument();
+  });
+
+  it("counts a duplicate secret", async () => {
+    atSecret({ secretDuplicate: true, secretCopies: 2 });
+    expect(await ribbon("You now hold 2 of this card")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "New card" })).toBeNull();
+  });
+});
+
+/** The spare roster copy is worth something, and this is where that is said. */
+describe("the roster sell hint", () => {
+  const worth = () =>
+    screen.queryAllByText(/^Sell for \d+$/).filter((el) => !el.closest(".sr-only"));
+
+  it("offers a price for a spare when dust is on", () => {
+    renderStand({ revealed: [0], copies: { "ep-1": 2 }, sellValues: { "ep-1": 40 } });
+    expect(worth()).toHaveLength(1);
+    expect(worth()[0]).toHaveTextContent("Sell for 40");
+  });
+
+  it("stays quiet when the route offers no price", () => {
+    // Which covers all three of the route's gates at once — a first copy, a
+    // guest, and dust switched off all arrive here as an empty map.
+    renderStand({ revealed: [0], copies: { "ep-1": 1 }, sellValues: {} });
+    expect(worth()).toHaveLength(0);
+  });
+});

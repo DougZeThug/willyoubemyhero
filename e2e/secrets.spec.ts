@@ -357,6 +357,47 @@ test.describe("the daily secret", () => {
     await expect(page.getByText(/whole set/i)).toBeVisible();
   });
 
+  test("stamps a first pull NEW", async ({ page, server }) => {
+    await asMember(page);
+    withSecret(server);
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await revealAll(page);
+
+    await expect(page.getByText(/one more card/i)).toBeVisible({ timeout: 15_000 });
+    // The roster is dealt against an empty collection here — `getMyCardStats`
+    // defaults to null on purpose, and a shaped value would prune the pack — so
+    // every card in it, the secret included, is a first.
+    await expect(
+      page.getByRole("img", { name: "New card" }).filter({ visible: true }).first(),
+    ).toBeVisible();
+    await expect(page.getByRole("img", { name: /you now hold/i })).toHaveCount(0);
+  });
+
+  test("counts a duplicate secret rather than just winking at it", async ({ page, server }) => {
+    await asMember(page);
+    withSecret(server, { pull: { duplicate: true }, status: { pulled: 9 } });
+    // The number beside the wink. The pull's own `duplicate` flag is the
+    // predicate; this is where the count comes from, and the route invalidates
+    // it on the pull so it answers with this copy already in it.
+    // Three rather than two, deliberately. The route floors a duplicate's count
+    // at 2 for the window where this query has not answered yet, so stubbing 2
+    // would pass whether or not the count was ever read. Three is above the floor
+    // and can only come from here.
+    server.set("getMySecrets", {
+      pulled: 1,
+      cards: [{ ...SECRET_CARD, firstPulledOn: "2026-07-28", count: 3, ownerCount: 1 }],
+    });
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await revealAll(page);
+
+    await expect(page.getByText(/already yours/i)).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("img", { name: "You now hold 3 of this card" }).filter({ visible: true }),
+    ).toHaveCount(1);
+  });
+
   test("reveal all waits for a pull that was still in the air when it started", async ({
     page,
     server,

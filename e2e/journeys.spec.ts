@@ -606,6 +606,77 @@ test.describe("opening a pack", () => {
     expect(state.revealed.slice().sort()).toEqual([0, 1, 2]);
   });
 
+  test("does not re-count a replayed pack's pulls on the ribbons", async ({ page }) => {
+    // The pre-stand migration path, which is the one place a card is turned
+    // face-down again without its pull being given back. A row with no cursor
+    // and everything revealed is what that old screen wrote; the stand replays
+    // it as theatre and `replayedRef` stops the pulls being counted twice.
+    //
+    // A GUEST, deliberately: a member's pulls come back from the server, so the
+    // baseline carries them whatever the row says. A guest's collection is the
+    // local store, and the row is the only record of what it already banked.
+    // Reading the on-screen revealed set instead of the stored one handed every
+    // card a floor of zero here and stamped a first pull ×2.
+    await page.addInitScript(() => {
+      const d = new Date();
+      const p2 = (n: number) => String(n).padStart(2, "0");
+      const dayKey = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+      const open = indexedDB.open("wwbh-cards", 2);
+      open.onupgradeneeded = () => {
+        const db = open.result;
+        for (const name of ["collected", "card-meta", "pack-state"]) {
+          if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+        }
+      };
+      open.onsuccess = () => {
+        const db = open.result;
+        // One copy of each, which is what the pack itself banked last session.
+        const tx = db.transaction(["collected", "pack-state"], "readwrite");
+        const held = tx.objectStore("collected");
+        for (const id of ["ep-alice", "ep-bob", "ep-carol"]) {
+          held.put({ eventParticipantId: id, pulledAt: Date.now(), count: 1, tier: "base" }, id);
+        }
+        // No cursor and everything revealed: the shape only the old screen wrote.
+        tx.objectStore("pack-state").put(
+          { dayKey, ids: ["ep-alice", "ep-bob", "ep-carol"], revealed: [0, 1, 2] },
+          "today",
+        );
+      };
+    });
+
+    await page.goto("/players/pack");
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    // Held one, pulled once — so every card is the copy they already own, not a
+    // second one. Nothing here may read ×2.
+    await expect(page.getByRole("img", { name: /you now hold/i })).toHaveCount(0);
+    await expect(page.getByRole("img", { name: "New card" })).toHaveCount(PACK_SIZE);
+  });
+
+  test("keeps the summary's cards big enough to read", async ({ page }) => {
+    // The pack used to get SMALLER at the payoff: a three-column grid put the
+    // roster cards at ~100px on a phone, a second after the stand had shown the
+    // same card at 315. They are a snap row now, so they keep a readable size
+    // and the row scrolls instead of the cards shrinking.
+    //
+    // 390 is the mobile project's own width (iPhone 13), which is the width the
+    // floor was chosen for; the desktop project is wider and passes the same
+    // assertion for free.
+    await page.setViewportSize({ width: 390, height: 780 });
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    const columns = page.getByTestId("summary-card");
+    await expect(columns).toHaveCount(PACK_SIZE);
+    for (let i = 0; i < PACK_SIZE; i += 1) {
+      const box = (await columns.nth(i).boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(140);
+    }
+  });
+
   test("turns the cards it deals face-up in the vault, and only those", async ({ page }) => {
     await page.goto("/players/pack");
     await tearPack(page);
