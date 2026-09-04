@@ -606,6 +606,29 @@ test.describe("opening a pack", () => {
     expect(state.revealed.slice().sort()).toEqual([0, 1, 2]);
   });
 
+  test("keeps the summary's cards big enough to read", async ({ page }) => {
+    // The pack used to get SMALLER at the payoff: a three-column grid put the
+    // roster cards at ~100px on a phone, a second after the stand had shown the
+    // same card at 315. They are a snap row now, so they keep a readable size
+    // and the row scrolls instead of the cards shrinking.
+    //
+    // 390 is the mobile project's own width (iPhone 13), which is the width the
+    // floor was chosen for; the desktop project is wider and passes the same
+    // assertion for free.
+    await page.setViewportSize({ width: 390, height: 780 });
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    const columns = page.getByTestId("summary-card");
+    await expect(columns).toHaveCount(PACK_SIZE);
+    for (let i = 0; i < PACK_SIZE; i += 1) {
+      const box = (await columns.nth(i).boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(140);
+    }
+  });
+
   test("turns the cards it deals face-up in the vault, and only those", async ({ page }) => {
     await page.goto("/players/pack");
     await tearPack(page);

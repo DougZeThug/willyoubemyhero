@@ -1012,6 +1012,48 @@
   }
 }
 
+/* The wait for the fourth card, while the pull is still in the air.
+
+   This slot used to be `animate-pulse` — a rectangle fading in and out, which
+   reads as a placeholder for something that has not loaded rather than as a card
+   that has not been opened. On a garden network it is the likeliest bad moment in
+   the product and it looked like a bug.
+
+   So: a light sweeping the wax once a second, the way you would turn a sealed
+   pack over in your hands. Same band as the duplicate's wink above, run on a
+   loop instead of once, and dimmer — this one has to survive six seconds of
+   looking at it, where that one is gone in under one. */
+.pack-seal-wait::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: linear-gradient(115deg, transparent 40%, oklch(1 0 0 / 32%) 50%, transparent 60%);
+  background-size: 300% 300%;
+  animation: pack-seal-sweep 1s linear infinite;
+}
+
+@keyframes pack-seal-sweep {
+  from {
+    background-position: 130% 50%;
+  }
+  to {
+    background-position: -30% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Held still rather than hidden. The sweep is the only thing on screen saying
+     the wait is alive, so what replaces it is a faint steady sheen, not nothing. */
+  .pack-seal-wait::after {
+    animation: none;
+    background-position: 50% 50%;
+    opacity: 0.5;
+  }
+}
+
 /* Wet specular hotspot that follows the finger. */
 @utility holo-glare {
   position: absolute;
