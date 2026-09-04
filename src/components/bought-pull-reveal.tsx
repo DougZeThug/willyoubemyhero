@@ -56,7 +56,7 @@ export function BoughtPullReveal({
 }) {
   const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
-  const rarity = secretFoil(card.foil, card.borderFx);
+  const rarity = secretFoil(card.foil, card.borderFx, card.tier);
   const celebratedRef = useRef(false);
   const tier = secretTierStyle(card.tier);
 

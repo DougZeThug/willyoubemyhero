@@ -56,7 +56,7 @@ export function CollectorSignup({ className }: { className?: string }) {
   return (
     <form
       onSubmit={submit}
-      className={cn("hud-bezel rounded-lg border border-primary/30 p-4", className)}
+      className={cn("surface-panel rounded-xl border border-primary/30 p-4", className)}
     >
       <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-primary">
         Pick a trading name

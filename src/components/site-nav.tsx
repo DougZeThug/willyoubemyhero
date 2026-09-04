@@ -160,13 +160,7 @@ export function SiteNav() {
                     active === l.to ? "text-primary" : "text-muted-foreground",
                   )}
                 >
-                  <Icon
-                    className={cn(
-                      "h-5 w-5",
-                      active === l.to && "drop-shadow-[0_0_6px_var(--color-primary)]",
-                    )}
-                    strokeWidth={1.75}
-                  />
+                  <Icon className="h-5 w-5" strokeWidth={1.75} />
                   {l.label}
                   {/* Offset from the icon rather than the tile, so it reads as a
                       badge on the glyph instead of drifting into the neighbour. */}
@@ -176,10 +170,16 @@ export function SiteNav() {
                       color={waiting.color}
                     />
                   )}
+                  {/* The bar alone, no bloom (§15). Cyan is the interactive
+                      colour and it keeps its glow on the primary CTA only —
+                      everywhere else it was a second light source competing
+                      with the card art. The colour change on the icon and the
+                      label already carries "you are here"; the bar makes it
+                      unmissable without lighting the room. */}
                   {active === l.to && (
                     <span
                       aria-hidden
-                      className="absolute -top-px left-1/2 h-[2px] w-10 -translate-x-1/2 rounded-full bg-primary shadow-[0_0_10px_var(--color-primary)]"
+                      className="absolute -top-px left-1/2 h-[2px] w-10 -translate-x-1/2 rounded-full bg-primary"
                     />
                   )}
                 </Link>
@@ -209,11 +209,14 @@ function WaitingDot({ className, color }: { className?: string; color?: string }
     <span
       aria-hidden
       className={cn(
-        "absolute h-2.5 w-2.5 rounded-full",
-        !color && "bg-primary shadow-[0_0_8px_var(--color-primary)]",
+        // A dark hairline instead of a bloom: the dot sits on a glyph, and it
+        // needs to survive a light pixel underneath it, which is what the glow
+        // was actually doing. A ring does that for one pixel instead of eight.
+        "absolute h-2.5 w-2.5 rounded-full ring-1 ring-background",
+        !color && "bg-primary",
         className,
       )}
-      style={color ? { background: color, boxShadow: `0 0 8px ${color}` } : undefined}
+      style={color ? { background: color } : undefined}
     />
   );
 }

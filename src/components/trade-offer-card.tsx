@@ -5,8 +5,9 @@ import { SealedBack } from "@/components/pack-card-back";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
 import type { ImageUrlSet } from "@/lib/media";
-import { SECRET_RARITY } from "@/lib/secret-cards";
+import { secretFoil } from "@/lib/secret-cards";
 import { secretTierStyle } from "@/lib/secret-rarity";
+import { LevelPips } from "@/components/level-pips";
 import { offerStatusLabel, tradeItemsLabel, type TradeItemView, type TradeOfferView } from "@/lib/trades"; // prettier-ignore
 import { cn } from "@/lib/utils";
 
@@ -70,7 +71,10 @@ export function TradeItemTile({
   const width = TILE_WIDTH[size];
   const big = size === "lg";
   const roster = item.kind === "roster" ? lookup(item.eventParticipantId) : null;
-  const tier = item.kind === "secret" ? secretTierStyle(item.tier) : null;
+  // Two reads of the same field: the style for the word, the raw level for the
+  // pips. Kept as one narrowing here rather than repeated in the JSX below.
+  const level = item.kind === "secret" ? item.tier : null;
+  const tier = level == null ? null : secretTierStyle(level);
   const name = item.kind === "roster" ? (roster?.name ?? "—") : item.name;
 
   // The finish on THIS copy, which is the thing a trade now actually moves — so
@@ -89,7 +93,14 @@ export function TradeItemTile({
         flipped={concealed ? false : undefined}
         backContent={concealed ? <SealedBack /> : undefined}
         name={name}
-        rarity={item.kind === "roster" ? (roster?.rarity ?? rarityStyle("base")) : SECRET_RARITY}
+        // secretFoil with no foil id IS SECRET_RARITY — a trade item carries no
+        // stored look — but routed through it so a legendary or mythic copy
+        // picks up the glow the rest of the app gives it.
+        rarity={
+          item.kind === "roster"
+            ? (roster?.rarity ?? rarityStyle("base"))
+            : secretFoil(null, null, level)
+        }
         edition={item.kind === "roster" ? item.edition : undefined}
         // Subtle in a picker strip, where eight foils at once are noise. A live
         // offer is one card a side, so it gets the real shine.
@@ -106,12 +117,15 @@ export function TradeItemTile({
           {name}
         </div>
         {tier && (
-          <div
-            className="text-badge font-bold uppercase tracking-[0.08em]"
-            style={{ color: tier.accent }}
-          >
-            {tier.label}
-          </div>
+          <>
+            <LevelPips tier={level} className="mt-0.5" />
+            <div
+              className="text-badge font-bold uppercase tracking-[0.08em]"
+              style={{ color: tier.accent }}
+            >
+              {tier.label}
+            </div>
+          </>
         )}
         {/* Says why the art is hidden, so a face-down tile reads as a rule rather
             than as missing artwork. */}
@@ -232,21 +246,24 @@ export function TradeOfferCard({
   const rejected =
     offer.status === "declined" || offer.status === "cancelled" || offer.status === "voided";
 
-  // A live offer is the loudest thing on the screen: ringed, glowing, big cards.
-  // A settled one is a receipt, so it stays the quiet bezel it always was.
+  // A live offer is the loudest thing on the screen: ringed, big cards. A
+  // settled one is a receipt.
   const size = pending ? "lg" : "sm";
 
   return (
     <article
       className={cn(
-        "hud-bezel rounded-xl p-4",
-        pending
-          ? "hud-glow border-2 border-primary/70"
-          : accepted
-            ? "hud-glow border-2 border-success/70"
-            : rejected
-              ? "hud-glow border-2 border-destructive/70"
-              : "border border-white/10 p-3",
+        "surface-panel rounded-xl border p-4",
+        // A ring, not a bloom (§15). All three states used to glow, and all
+        // three used hud-glow — which is the cyan --glow-primary — so an
+        // accepted offer and a declined one bloomed the same colour as each
+        // other and disagreed with their own borders. The status now lives in
+        // the chip below, which is the only thing on this card that is coloured
+        // by it.
+        pending && "ring-2 ring-primary/50",
+        // The tighter padding a status outside the known five would have got
+        // before, kept rather than quietly widened.
+        !pending && !accepted && !rejected && "p-3",
       )}
     >
       <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -258,10 +275,19 @@ export function TradeOfferCard({
         >
           {iAmProposer ? `You → ${nameOf(theirId)}` : `${nameOf(theirId)} → You`}
         </h3>
+        {/* The status, and now the only thing wearing its colour. A settled
+            offer is still legible in one glance, without a bloom the size of
+            the card behind it. */}
         <span
           className={cn(
             "shrink-0 rounded-full border px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em]",
-            pending ? "border-primary/50 text-primary" : "border-white/15 text-muted-foreground",
+            pending
+              ? "border-primary/50 bg-primary/10 text-primary"
+              : accepted
+                ? "border-success/50 bg-success/10 text-success"
+                : rejected
+                  ? "border-destructive/50 bg-destructive/10 text-destructive"
+                  : "border-white/15 text-muted-foreground",
           )}
         >
           {offerStatusLabel(offer.status)}
@@ -305,18 +331,8 @@ export function TradeOfferCard({
           className="shrink-0 flex flex-col items-center justify-center text-primary"
           aria-hidden
         >
-          <ArrowRight
-            className={cn(
-              "drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
-              pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground",
-            )}
-          />
-          <ArrowLeft
-            className={cn(
-              "drop-shadow-[0_0_10px_oklch(0.82_0.14_210/60%)]",
-              pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground",
-            )}
-          />
+          <ArrowRight className={cn(pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground")} />
+          <ArrowLeft className={cn(pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground")} />
         </div>
         <div className="min-w-0 flex-1">
           {/* Their side only: what you are being offered can include art you have

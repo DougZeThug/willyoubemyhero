@@ -96,6 +96,14 @@
   --radius: 0.5rem;
   /* Broadcast dark, cool cyan/teal HUD system. Dark-first, no light mode. */
   --background: oklch(0.14 0.02 240);
+  /* Two grounds, on purpose. --background plus circuit-bg is the broadcast HUD
+     register and belongs to the League, Board, Live and TV screens. --bg is the
+     card screens' ground: flatter and a shade darker, so a page of foil reads as
+     a binder under a desk lamp rather than a second light source. */
+  --bg: oklch(0.13 0.015 240);
+  /* Every shelf, panel and sheet on a card screen. One value, so a screen is not
+     four different greys that each arrived with their own component. */
+  --surface: oklch(0.17 0.02 240);
   --foreground: oklch(0.98 0.005 240);
   --card: oklch(0.19 0.02 240);
   --card-foreground: oklch(0.98 0.005 240);
@@ -206,6 +214,31 @@
     auto,
     auto,
     240px 240px;
+}
+
+/* The card screens' ground. One soft vignette at the top and nothing else: the
+   circuit trace and its cyan bloom were competing with the foil for the same
+   light, and the base tier's own foil used to be that exact cyan. */
+@utility card-bg {
+  background-color: var(--bg);
+  background-image: radial-gradient(
+    ellipse 120% 55% at 50% 0%,
+    oklch(0.26 0.03 235 / 55%) 0%,
+    transparent 65%
+  );
+  background-repeat: no-repeat;
+}
+
+/* Shelves, panels and sheets. The fill only, exactly as hud-bezel sets only its
+   gradient: callers keep their own `rounded-xl border`, and several of them
+   carry a tinted border on purpose (feed-state's warn, the set shelf's accent).
+   A border-color here would be a second utility racing theirs, and Tailwind
+   sorts utilities by its own rules rather than by the order they are written in
+   a className — so the winner would depend on nothing legible from the caller.
+   A bare `border` already resolves to --border, 10% white, which is the 8% the
+   audit asks for to within a value nobody can see. */
+@utility surface-panel {
+  background: var(--surface);
 }
 
 /*
@@ -891,6 +924,38 @@
    is the same cost .holo-idle exists to avoid. */
 .card-edition-platinum.is-sheening {
   animation: card-edition-sheen 5.5s linear infinite;
+}
+
+/* The finish as a shape, at tile size, where the word is the thing that fails.
+   A tile prints the finish at 13px if it prints it at all, and standard — seven
+   copies in ten — prints nothing, so the ones that do stand out only as more
+   small text. A corner stamp is the parallel's own convention and it survives a
+   thumbnail. Hero cards do not get one: the word and the chip are already there,
+   and a stamp on a card you are holding reads as damage.
+
+   Same three custom properties the frame above uses, so the tab and the frame
+   can never be different metals. Plain rule, not @utility, for the same reason
+   .card-edition is one. */
+.card-edition-tab {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  /* The card's own corner, so the stamp curves with it. A clip-path triangle
+     was the obvious way to cut the 45° and it is the wrong one: clip-path
+     ignores border-radius, so the tab's square corner sat proud of the rounded
+     card underneath it. A hard-stopped gradient cuts the same diagonal and
+     still respects the radius. */
+  border-top-right-radius: inherit;
+  background: linear-gradient(
+    225deg,
+    var(--edn-spec, oklch(0.98 0.004 250)) 0%,
+    var(--edn-a, oklch(0.88 0.012 250)) 30%,
+    var(--edn-b, oklch(0.64 0.015 255)) 50%,
+    transparent 50%
+  );
 }
 
 @keyframes card-edition-sheen {

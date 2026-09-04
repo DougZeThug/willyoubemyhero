@@ -6,6 +6,7 @@ import {
   bestSecretTier,
   secretTierCaption,
   secretTierFloorLabel,
+  secretTierLevel,
   secretTierRank,
   toSecretTier,
 } from "./secret-rarity";
@@ -22,6 +23,26 @@ describe("secret rarity ladder", () => {
     // Anything unrecognised sorts last, which is what lets bestSecretTier
     // upgrade a corrupt stored string rather than preserving it forever.
     expect(secretTierRank("__proto__")).toBe(SECRET_TIER_ORDER.length);
+  });
+
+  it("counts pips from the bottom, so five is the top of the ladder", () => {
+    // The inverse of the rank, and what LevelPips draws. Five and one are read
+    // off the ladder's own length rather than written out, so a sixth rung moves
+    // the count instead of quietly leaving mythic at five.
+    expect(secretTierLevel("mythic")).toBe(SECRET_TIER_ORDER.length);
+    expect(secretTierLevel("legendary")).toBe(4);
+    expect(secretTierLevel("epic")).toBe(3);
+    expect(secretTierLevel("rare")).toBe(2);
+    expect(secretTierLevel("common")).toBe(1);
+  });
+
+  it("lights one pip for a level it does not recognise, never zero", () => {
+    // secretTierRank answers out of band for these so bestSecretTier can upgrade
+    // them; taking that answer straight would draw an empty row of diamonds,
+    // which reads as a card that failed to render rather than as a common.
+    expect(secretTierLevel("__proto__")).toBe(1);
+    expect(secretTierLevel(null)).toBe(1);
+    expect(secretTierLevel(undefined)).toBe(1);
   });
 
   it("keeps the better copy and never downgrades", () => {

@@ -21,18 +21,17 @@ import { hydrateCardSfxMuted } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+    <div className="card-bg flex min-h-screen items-center justify-center px-4">
+      <div className="surface-panel w-full max-w-md rounded-xl border p-6 text-center">
+        <h1 className="font-display text-7xl font-black leading-none text-primary/70">404</h1>
+        <h2 className="mt-4 font-display text-section font-black uppercase tracking-wide">
+          Page not found
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           The page you're looking for doesn't exist or has been moved.
         </p>
         <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
+          <Link to="/" className="neon-btn-sm">
             Go home
           </Link>
         </div>
@@ -49,10 +48,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+    <div className="card-bg flex min-h-screen items-center justify-center px-4">
+      <div className="surface-panel w-full max-w-md rounded-xl border p-6 text-center">
+        <h1 className="font-display text-section font-black uppercase tracking-wide">
+          This page didn&apos;t load
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
@@ -63,13 +62,15 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="neon-btn-sm"
           >
             Try again
           </button>
+          {/* A raw anchor, not a Link: this is the way out of a router tree that
+              has already thrown, and a client-side navigation would stay in it. */}
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-white/15 px-4 text-button font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
           >
             Go home
           </a>

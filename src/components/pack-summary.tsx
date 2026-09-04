@@ -6,6 +6,7 @@ import { HoloCard } from "@/components/holo-card";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { SharePack, type SharePackCard } from "@/components/share-pack-graphic";
+import { LevelPips } from "@/components/level-pips";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { packedByLabel } from "@/lib/card-pulls";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
@@ -484,6 +485,12 @@ function SecretSlotView({
             <div className="truncate font-display text-xs font-black uppercase tracking-wide">
               {card.name}
             </div>
+            {/* The only level cue this slot has ever carried, which is also why
+                it is the one place the pips name the level as well as count it:
+                the line below is the teaching copy about what a secret *is* and
+                never says "Mythic". Everywhere else a level word sits beside
+                them and naming it here too would say it twice. */}
+            <LevelPips tier={card.tier} namesLevel className="mt-0.5" />
             {duplicate ? (
               <div className="text-meta font-semibold text-muted-foreground">
                 Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing off.

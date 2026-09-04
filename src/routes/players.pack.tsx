@@ -1323,7 +1323,7 @@ function PackPage() {
     [claimFn, qc, actor],
   );
 
-  const secretRarity = secretFoil(secret?.foil, secret?.borderFx);
+  const secretRarity = secretFoil(secret?.foil, secret?.borderFx, secret?.tier);
 
   /**
    * What this copy would fetch in the shop, for the line under a duplicate.
@@ -1568,7 +1568,7 @@ function PackPage() {
   // The same shape /leaderboard and /analytics use for a read they cannot make.
   if (eventFailed) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="card-bg min-h-[calc(100dvh-8rem)]">
         <div className="mx-auto max-w-4xl px-4 py-10">
           <FeedError
             message="Your cards are safe on this phone — today's pack needs the roster before it can be dealt."
@@ -1596,7 +1596,7 @@ function PackPage() {
   const presenting = stage === "opening" || stage === "revealing";
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="card-bg min-h-[calc(100dvh-8rem)]">
       {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
           with no signal is the exact failure the health states exist for. */}
