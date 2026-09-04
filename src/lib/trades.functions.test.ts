@@ -754,10 +754,11 @@ describe("getTradeSpares and the catalogue", () => {
     return callServerFn<TradeSpares>(getTradeSpares, { data: { participantId }, headers });
   }
 
-  it("ships neither the name nor the art of a counterparty's secret you have never pulled", async () => {
-    // This used to hand every face over and rely on the tile to turn it down —
-    // so one GET per member walked most of the league's catalogue with signed
-    // art, which is the enumeration secret_cards is server-only to prevent.
+  it("hides the art but not the name or tier of a counterparty's secret you have never pulled", async () => {
+    // The face stays concealed, but a member cannot judge an offer from
+    // "Secret card" alone — the name and rarity have to travel so the tile can
+    // render a face-down slot that still says something useful. The art is
+    // protected by only signing URLs for cards the viewer actually holds.
     withDb({
       "event_participants.select": { data: [] },
       "card_copies.select": { data: [] },
@@ -772,17 +773,26 @@ describe("getTradeSpares and the catalogue", () => {
         // The asker's own holdings: s2 and nothing else.
         { data: [{ secret_card_id: "s2" }] },
       ],
-      "secret_cards.select": { data: [{ id: "s2", name: "Tucker", art_path: "secrets/tucker.webp" }] }, // prettier-ignore
+      "secret_cards.select": {
+        data: [
+          { id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/gary-unowned.webp" }, // prettier-ignore
+          { id: "s2", name: "Tucker", art_path: "secrets/tucker.webp" }, // prettier-ignore
+        ],
+      },
       "storage.createSignedUrl": { data: { signedUrl: "https://signed/tucker" } },
     });
     const res = await spares(THEM, asMe());
     expect(res.secrets).toEqual([
-      { pullId: PULL_ID, name: "Secret card", artUrl: null, tier: "mythic", lastCopy: true, viewerOwns: false }, // prettier-ignore
+      {
+        pullId: PULL_ID,
+        name: "Gary the Grill",
+        artUrl: null,
+        tier: "mythic",
+        lastCopy: true,
+        viewerOwns: false,
+      }, // prettier-ignore
       { pullId: "p2", name: "Tucker", artUrl: "https://signed/tucker", tier: "rare", lastCopy: true, viewerOwns: true }, // prettier-ignore
     ]);
-    // Not looked up, let alone signed: the unowned card's id never reaches the
-    // catalogue query at all.
-    expect(JSON.stringify(mock.callsFor("secret_cards", "select"))).not.toContain(SECRET_ID);
   });
 
   it("still shows you every face on your own side of the table", async () => {
