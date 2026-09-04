@@ -156,6 +156,27 @@
     oklch(0.82 0.14 210 / 22%) 0%,
     transparent 60%
   );
+  /* The floor for anything that floats over the bottom of the screen — the
+     toaster and the offline banner. The tab bar is ~58px plus the home
+     indicator and both clear it by the same amount, so its height is one number
+     rather than one per floating thing.
+
+     A custom property rather than a media query on the toaster itself: sonner
+     writes its own `--offset-bottom` as an INLINE style, which no stylesheet
+     rule can outrank, and its mobile breakpoint is 600px where the nav's is
+     768px. It is handed this variable, so the media query below is what
+     actually decides the number. */
+  --above-tab-bar: calc(5rem + env(safe-area-inset-bottom));
+  /* The same slot with the offline banner already standing in it. */
+  --above-offline-banner: calc(7.75rem + env(safe-area-inset-bottom));
+}
+
+/* md, where the bottom bar is `md:hidden` and the clearance goes with it. */
+@media (min-width: 48rem) {
+  :root {
+    --above-tab-bar: 1rem;
+    --above-offline-banner: 3.75rem;
+  }
 }
 
 @layer base {
@@ -1243,4 +1264,53 @@
       oklch(0.16 0.03 240) 100%
     );
   background-blend-mode: overlay, normal;
+}
+
+/*
+ * The wait a shelf of cards makes you sit through, drawn honestly.
+ *
+ * A slow sweep rather than shadcn's 1s `animate-pulse`: a dozen tiles breathing
+ * in unison reads as a strobe on a phone held at arm's length, and this covers a
+ * round trip somebody is actually watching. Callers pair it with `animate-none`
+ * so the primitive's own pulse gives way — the sweep lives on the pseudo-element,
+ * which that utility cannot reach.
+ */
+@layer components {
+  .skeleton-sweep {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .skeleton-sweep::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      oklch(0.82 0.14 210 / 12%) 50%,
+      transparent 80%
+    );
+    background-size: 220% 100%;
+    animation: skeleton-sweep 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 160% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still a placeholder, just a still one. The fill is what says "not here
+     yet"; the sweep is only the flourish — the same trade the prism edge and
+     the streak flame make above. */
+  .skeleton-sweep::after {
+    animation: none;
+    background-position: 50% 0;
+  }
 }

@@ -20,6 +20,7 @@ import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { tradeSparesKey } from "@/hooks/use-trades";
+import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import { houseFloor, marketStatusLabel, MARKET_PRICE_MAX, MARKET_PRICE_MIN } from "@/lib/market";
@@ -152,6 +153,11 @@ export function MarketPanel({
     staleTime: 15_000,
     retry: false,
   });
+
+  // Buying, listing and taking a card down all reach a server. Offline they can
+  // only fail, and dust moving is the one thing on these screens nobody would
+  // want to have to guess about — so they go quiet with the reason on them.
+  const offline = !useIsOnline();
 
   const [buying, setBuying] = useState<string | null>(null);
   const [pulling, setPulling] = useState<string | null>(null);
@@ -370,7 +376,8 @@ export function MarketPanel({
                       // Said on the button rather than discovered on tap: the RPC
                       // would refuse this anyway, and being told the price you
                       // cannot meet is more use than a toast that says no.
-                      disabled={broke || busy}
+                      disabled={broke || busy || offline}
+                      {...offlineReason(offline)}
                       onClick={() => {
                         setBuying(listing.id);
                         buy.mutate(listing);
@@ -419,7 +426,8 @@ export function MarketPanel({
                   size="sm"
                   variant="outline"
                   className="shrink-0"
-                  disabled={pulling === listing.id && pull.isPending}
+                  disabled={(pulling === listing.id && pull.isPending) || offline}
+                  {...offlineReason(offline)}
                   onClick={() => {
                     setPulling(listing.id);
                     pull.mutate(listing.id);
@@ -535,7 +543,8 @@ export function MarketPanel({
                   </p>
                   <Button
                     className="w-full"
-                    disabled={!priceOk || putUp.isPending}
+                    disabled={!priceOk || putUp.isPending || offline}
+                    {...offlineReason(offline)}
                     onClick={confirmList}
                   >
                     {putUp.isPending ? "…" : priceOk ? `List for ${asking}` : "Name a price"}

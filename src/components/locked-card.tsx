@@ -50,11 +50,17 @@ export function LockedCard({
   back,
   name,
   className,
+  inGrid = false,
 }: {
   /** The *event's* universal back, never the player's own — that one is the reveal. */
   back: ImageUrlSet | null;
   name: string;
   className?: string;
+  /**
+   * Set by the vault, where a dozen of these render at once. The card page draws
+   * one at full width and leaves it off. See the prop on `PackCardBack`.
+   */
+  inGrid?: boolean;
 }) {
   return (
     <div
@@ -73,7 +79,7 @@ export function LockedCard({
         boxShadow: `0 0 28px -6px ${LOCKED_RARITY.border}`,
       }}
     >
-      <PackCardBack art={back} />
+      <PackCardBack art={back} inGrid={inGrid} />
     </div>
   );
 }

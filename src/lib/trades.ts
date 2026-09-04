@@ -202,6 +202,21 @@ export function offerStatusLabel(status: string): string {
 }
 
 /**
+ * How long a declined or pulled-back offer can still be put back.
+ *
+ * Twelve times the five seconds the Undo toast is on screen, because the toast
+ * is the floor and not the ceiling: somebody who swipes it away and then thinks
+ * better of it deserves the same second chance as somebody who tapped in time,
+ * and a phone that lost signal on the way to the handler should not spend the
+ * whole window in flight. Long enough to be forgiving; short enough that the
+ * other side has not had time to build a reply around the no.
+ *
+ * Read by `reopenTradeOffer`, and passed to the RPC rather than hard-coded
+ * there so the two cannot drift.
+ */
+export const TRADE_UNDO_WINDOW_SECONDS = 60;
+
+/**
  * "2 cards + Tucker" — what one side handed over, from the public summary.
  *
  * Secrets are named now: accept_trade_offer records the card's name, because the

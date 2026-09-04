@@ -9,7 +9,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
 import { callServerFn, memberHeaders } from "@/test/server-fn";
 import { signMemberToken } from "./session.server";
-import { leagueDay, type TradeOfferView, type TradeSpares } from "./trades";
+import {
+  leagueDay,
+  TRADE_UNDO_WINDOW_SECONDS,
+  type TradeOfferView,
+  type TradeSpares,
+} from "./trades";
 
 let mock = createSupabaseMock();
 
@@ -534,6 +539,60 @@ describe("declineTradeOffer and cancelTradeOffer", () => {
       reason: "resolved",
     });
     expect(await cancel({ offerId: OFFER_ID }, asMe())).toEqual({ ok: false, reason: "resolved" });
+  });
+});
+
+describe("reopenTradeOffer", () => {
+  async function reopen(data: unknown, headers?: Record<string, string>) {
+    const { reopenTradeOffer } = await import("./trades.functions");
+    return callServerFn(reopenTradeOffer, { data, headers });
+  }
+
+  it("refuses a caller with no member token", async () => {
+    await expect(reopen({ offerId: OFFER_ID })).rejects.toThrow("Claim your player first");
+  });
+
+  it("names the token holder as the actor, never the payload", async () => {
+    // The whole guard, as far as this handler is concerned: everything about WHO
+    // may undo WHAT is decided inside the RPC, and it decides it from this id.
+    // Passing anything from the request here would let somebody restore an offer
+    // that was declined at them.
+    withDb({ "rpc.reopen_trade_offer": { data: { ok: true, counterpartyId: THEM } } });
+    await reopen({ offerId: OFFER_ID, actorId: SOMEBODY_ELSE }, asMe());
+    expect(mock.rpcCalls("reopen_trade_offer")).toEqual([
+      { _offer_id: OFFER_ID, _actor_id: ME, _within_seconds: TRADE_UNDO_WINDOW_SECONDS },
+    ]);
+  });
+
+  it("nudges the counterparty the RPC names", async () => {
+    // Their phone was told the offer had gone away, and is now the one screen in
+    // the league that disagrees with the database.
+    withDb({ "rpc.reopen_trade_offer": { data: { ok: true, counterpartyId: THEM } } });
+    expect(await reopen({ offerId: OFFER_ID }, asMe())).toEqual({
+      ok: true,
+      counterpartyId: THEM,
+    });
+    expect(nudged()).toEqual([THEM]);
+  });
+
+  it("nudges nobody when the undo did not take", async () => {
+    // Three ways to miss, and none of them changed anything: poking the other
+    // side about an offer that is still settled is worse than saying nothing.
+    for (const reason of ["resolved", "expired", "stale"] as const) {
+      sendTradeNudge.mockClear();
+      withDb({ "rpc.reopen_trade_offer": { data: { ok: false, reason } } });
+      expect(await reopen({ offerId: OFFER_ID }, asMe())).toEqual({ ok: false, reason });
+      expect(nudged()).toEqual([]);
+    }
+  });
+
+  it("surfaces an RPC error as a thrown message", async () => {
+    // "Not your offer" is a raise on the SQL side — somebody hand-posting an id
+    // that was never theirs to answer — and the screen shows it as an error toast
+    // rather than as a soft outcome.
+    withDb({ "rpc.reopen_trade_offer": { error: { message: "Not your offer" } } });
+    await expect(reopen({ offerId: OFFER_ID }, asMe())).rejects.toThrow("Not your offer");
+    expect(nudged()).toEqual([]);
   });
 });
 

@@ -114,6 +114,19 @@ export type AcceptTradeOfferResult =
     }
   | { ok: false; reason: "resolved" | "voided" };
 
+/**
+ * What public.reopen_trade_offer returns.
+ *
+ * Three soft failures, and each one is a different sentence worth saying:
+ * `resolved` is an offer that is no longer declined or cancelled — a second tap,
+ * or the other side having moved on; `expired` is an undo that arrived after the
+ * window; `stale` is a staked card that has since been burnt, sold or traded, so
+ * putting the offer back would only queue up a void. Anything else raises.
+ */
+export type ReopenTradeOfferResult =
+  | { ok: true; counterpartyId: string }
+  | { ok: false; reason: "resolved" | "expired" | "stale" };
+
 export function tradesDb(): SupabaseClient {
   return supabaseAdmin as unknown as SupabaseClient;
 }

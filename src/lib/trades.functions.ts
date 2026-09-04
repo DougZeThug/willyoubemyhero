@@ -6,7 +6,7 @@ import { signPath } from "./media.functions";
 import { VARIANT_WIDTHS } from "./media";
 import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
-import { leagueDay } from "./trades";
+import { leagueDay, TRADE_UNDO_WINDOW_SECONDS } from "./trades";
 import type {
   BlockedSpare,
   SecretSpare,
@@ -20,6 +20,7 @@ import type {
   AcceptTradeOfferResult,
   CardCopyRow,
   CreateTradeOfferResult,
+  ReopenTradeOfferResult,
   TradeOfferItemRow,
   TradeOfferRow,
   TradeRow,
@@ -62,6 +63,17 @@ async function admin() {
 async function db() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
+}
+
+/**
+ * The same client, widened, for the one RPC `types.ts` has not been regenerated
+ * against yet. The escape hatch trades-rows.ts opens and market.functions.ts
+ * takes in the same shape — dynamically, inside the handler, so the top-level
+ * `client.server` import over there never reaches the bundle.
+ */
+async function untypedDb() {
+  const { tradesDb } = await import("./trades-rows");
+  return tradesDb();
 }
 
 /**
@@ -719,6 +731,39 @@ export const cancelTradeOffer = createServerFn({ method: "POST" })
     if (!row) return { ok: false as const, reason: "resolved" as const };
     await nudge(row.recipient_id);
     return { ok: true as const };
+  });
+
+/**
+ * Put a declined or cancelled offer back, for the person who answered it.
+ *
+ * The Undo behind the toast the two resolutions above raise. Neither of them
+ * moved a card, which is the whole reason this is offerable at all — see the
+ * migration for the four conditions, all of them enforced under lock inside
+ * `reopen_trade_offer` rather than here, because a handler cannot hold one.
+ *
+ * The actor is the token holder, as everywhere else in this file; the offer id
+ * is the only thing the payload gets to name, and the RPC re-derives who was
+ * entitled to undo it.
+ */
+export const reopenTradeOffer = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    const sb = await untypedDb();
+
+    const { data: result, error } = await sb.rpc("reopen_trade_offer", {
+      _offer_id: data.offerId,
+      _actor_id: me,
+      _within_seconds: TRADE_UNDO_WINDOW_SECONDS,
+    });
+    if (error) throw new Error(error.message);
+
+    const reopened = result as ReopenTradeOfferResult;
+    // Only once it actually went back. The counterparty comes out of the RPC
+    // rather than off a second read: their phone was told the offer had gone
+    // away and is the one screen that now disagrees with the database.
+    if (reopened.ok) await nudge(reopened.counterpartyId);
+    return reopened;
   });
 
 /** How many completed trades the feed carries. */

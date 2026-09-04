@@ -196,7 +196,7 @@ test.describe("results", () => {
     server.set("getEventBundle", TIERS_AGAINST_NAMES);
     // A member, so readiness genuinely waits on the server — and held there, so
     // the reconciling window is wide enough to read rather than a frame to race.
-    // This is the window the leak lived in: every card is face-down, and a sort
+    // This is the window the leak lived in: every card was face-down, and a sort
     // that asked for their real ranks anyway put the champion first under a grid
     // of identical backs until the answer landed.
     await page.addInitScript(
@@ -207,16 +207,25 @@ test.describe("results", () => {
       [MEMBER_KEY, `m.p-alice.${Date.now() + 60 * 60_000}.signature`] as const,
     );
     server.set("getMyCardStats", { cards: [], packsOpened: 0, firstPackOn: null });
-    server.delay("getMyCardStats", 20_000);
+    server.delay("getMyCardStats", 3000);
 
     await page.goto("/players");
 
-    // Wait for the grid before touching the sort. The buttons ship in the SSR
-    // html and the roster does not, so a click any earlier lands on an
-    // unhydrated button, does nothing, and leaves the grid in its default name
-    // order — which is the order this test asserts. It would have passed against
-    // the leak it exists to catch.
+    // The window itself, which the skeletons closed from the other end: while
+    // the answer is out there is no grid to order at all, so there is nothing
+    // for a sort to name. Asserted rather than assumed — a shelf that went back
+    // to drawing backs here would reopen the leak below.
+    await expect(page.getByTestId("card-skeleton")).toHaveCount(PLAYERS.length);
     const slots = page.locator('[role="img"][aria-label$="not packed yet"]');
+    await expect(slots).toHaveCount(0);
+
+    // Then the answer lands: nobody owns anything, so every slot is face-down
+    // for real and the sentinel rank is still the only rank any of them has.
+    // Waiting for the grid also matters for the click — the sort buttons ship in
+    // the SSR html and the roster does not, so a click any earlier lands on an
+    // unhydrated button, does nothing, and leaves the grid in its default name
+    // order, which is the order this test asserts. It would have passed against
+    // the leak it exists to catch.
     await expect(slots).toHaveCount(PLAYERS.length);
     await page.getByRole("button", { name: /^rarity$/i }).click();
 

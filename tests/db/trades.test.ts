@@ -28,6 +28,7 @@ const OTHER_DAY = "2026-01-02";
 
 type OfferResult = { ok: boolean; offerId: string };
 type AcceptResult = { ok: boolean; reason?: string; tradeId?: string };
+type ReopenResult = { ok: boolean; reason?: string; counterpartyId?: string };
 type Item = { kind: "roster"; cardCopyId: string } | { kind: "secret"; secretPullId: string };
 
 /** A roster item names a COPY now, exactly as a secret item names a ledger row. */
@@ -137,6 +138,30 @@ async function accept(offerId: string, recipientId: string): Promise<AcceptResul
     [offerId, recipientId],
   );
   return row.accept_trade_offer;
+}
+
+/**
+ * Resolve an offer the way the handlers do — one guarded UPDATE, no RPC.
+ *
+ * Written out here rather than reached for through the server function, because
+ * what these tests are about is the state those two writes leave behind for
+ * `reopen_trade_offer` to find.
+ */
+async function settle(offerId: string, status: "declined" | "cancelled", agoSeconds = 0) {
+  await sql(
+    `UPDATE public.trade_offers
+        SET status = $2, resolved_at = now() - make_interval(secs => $3::int)
+      WHERE id = $1`,
+    [offerId, status, agoSeconds],
+  );
+}
+
+async function reopen(offerId: string, actorId: string, withinSeconds = 60): Promise<ReopenResult> {
+  const [row] = await sql<{ reopen_trade_offer: ReopenResult }>(
+    "SELECT public.reopen_trade_offer($1, $2, $3)",
+    [offerId, actorId, withinSeconds],
+  );
+  return row.reopen_trade_offer;
 }
 
 async function pullCount(participantId: string, ep: string): Promise<number | null> {
@@ -1107,5 +1132,120 @@ describe("two accepts racing over one spare", () => {
       "SELECT status FROM public.trade_offers ORDER BY status",
     );
     expect(statuses.map((s) => s.status)).toEqual(["accepted", "voided"]);
+  });
+});
+
+describe("reopen_trade_offer", () => {
+  /** Alice offers Bob a spare, Bob says no. The state every case below starts from. */
+  async function declined() {
+    const { aliceCard, bobCard, aliceCopies, bobCopies } = await twoSpares();
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
+    );
+    await settle(offerId, "declined");
+    return { offerId, aliceCard, bobCard, aliceCopies, bobCopies };
+  }
+
+  it("puts a declined offer back for the person who declined it", async () => {
+    const { offerId } = await declined();
+
+    expect(await reopen(offerId, IDS.bob)).toEqual({ ok: true, counterpartyId: IDS.alice });
+    expect(await offerStatus(offerId)).toBe("pending");
+    // A pending offer carries no resolution date, so the reopened one must not
+    // either — getMyTradeOffers sorts the recent shelf on it, and a pending offer
+    // with a resolved_at would file itself under settled.
+    expect(
+      await sql("SELECT resolved_at FROM public.trade_offers WHERE id = $1", [offerId]),
+    ).toEqual([{ resolved_at: null }]);
+
+    // And it is a real offer again, not just a row that says pending.
+    expect(await accept(offerId, IDS.bob)).toMatchObject({ ok: true });
+  });
+
+  it("puts a cancelled offer back for the person who pulled it", async () => {
+    const { aliceCopies, bobCopies } = await twoSpares();
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
+    );
+    await settle(offerId, "cancelled");
+
+    expect(await reopen(offerId, IDS.alice)).toEqual({ ok: true, counterpartyId: IDS.bob });
+    expect(await offerStatus(offerId)).toBe("pending");
+  });
+
+  it("refuses the other side of the same offer", async () => {
+    // The direction is the point. Alice must not be able to un-decline an offer
+    // Bob declined — that would put her own offer back in his inbox after he had
+    // answered it, which is nagging with extra steps.
+    const { offerId } = await declined();
+    await expect(reopen(offerId, IDS.alice)).rejects.toThrow(/not your offer/i);
+    expect(await offerStatus(offerId)).toBe("declined");
+  });
+
+  it("refuses somebody who is not in the trade at all", async () => {
+    const { offerId } = await declined();
+    await expect(reopen(offerId, IDS.carol)).rejects.toThrow(/not your offer/i);
+    expect(await offerStatus(offerId)).toBe("declined");
+  });
+
+  it("says so rather than raising when the offer has moved on", async () => {
+    // Pending, accepted and voided are all somebody else's answer, and none of
+    // them is ours to overwrite. A person gets a sentence, not a stack trace.
+    const { aliceCopies, bobCopies } = await twoSpares();
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
+    );
+    expect(await reopen(offerId, IDS.bob)).toEqual({ ok: false, reason: "resolved" });
+
+    await accept(offerId, IDS.bob);
+    expect(await reopen(offerId, IDS.bob)).toEqual({ ok: false, reason: "resolved" });
+    expect(await offerStatus(offerId)).toBe("accepted");
+  });
+
+  it("closes the window", async () => {
+    const { offerId } = await declined();
+    await settle(offerId, "declined", 61);
+
+    expect(await reopen(offerId, IDS.bob)).toEqual({ ok: false, reason: "expired" });
+    expect(await offerStatus(offerId)).toBe("declined");
+  });
+
+  it("refuses once a staked card has been spent", async () => {
+    // A minute is long enough to go and burn a spare. Putting the offer back
+    // with a card that has gone would only queue up a void on the next tap, and
+    // spend the other person's attention on a swap that cannot happen.
+    const { offerId, aliceCard, aliceCopies } = await declined();
+    await sql("DELETE FROM public.card_copies WHERE id = $1", [aliceCopies[1]]);
+    await sql("SELECT public.resync_card_pull($1, $2)", [IDS.alice, aliceCard]);
+
+    expect(await reopen(offerId, IDS.bob)).toEqual({ ok: false, reason: "stale" });
+    // Left settled rather than voided, which is where this parts company with
+    // accept: accept has to void because it is the last chance to stop a
+    // half-finished swap. Nothing here is half-finished.
+    expect(await offerStatus(offerId)).toBe("declined");
+  });
+
+  it("refuses once one side has been emptied out from under it", async () => {
+    // The trade_has_both_sides case, which cascades rather than being anybody's
+    // decision: trade_offer_items follows card_copies, which follows
+    // event_participants. An offer put back with one side gone is a gift.
+    const { offerId, bobCopies } = await declined();
+    await sql("DELETE FROM public.card_copies WHERE id = ANY($1::uuid[])", [bobCopies]);
+
+    expect(await reopen(offerId, IDS.bob)).toEqual({ ok: false, reason: "stale" });
+    expect(await offerStatus(offerId)).toBe("declined");
+  });
+
+  it("raises on an offer that does not exist", async () => {
+    await expect(reopen(IDS.outsider, IDS.bob)).rejects.toThrow(/offer not found/i);
   });
 });

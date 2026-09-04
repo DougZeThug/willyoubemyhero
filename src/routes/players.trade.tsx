@@ -19,6 +19,7 @@ import {
   cancelTradeOffer,
   createTradeOffer,
   declineTradeOffer,
+  reopenTradeOffer,
 } from "@/lib/trades.functions";
 import {
   tradeFeedKey,
@@ -51,6 +52,7 @@ import { CollectorSignup } from "@/components/collector-signup";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
+import { offlineReason, useIsOnline } from "@/hooks/use-online";
 
 export const Route = createFileRoute("/players/trade")({
   head: () => ({
@@ -84,6 +86,11 @@ function TradePage() {
   // pulled yet is shown as, so it must give nothing about that card away.
   const cardBack = useEventCardBack(event?.id ?? null);
   const backUrl = cardBack.data?.urls ?? null;
+  // Every control on this screen moves cards on a server. Offline they can only
+  // fail, and a trade that fails silently reads as one that happened — so they
+  // go quiet with the reason on them rather than throwing a toast a second
+  // later. Reading the inbox still works: that half is cache.
+  const offline = !useIsOnline();
 
   const myId = me?.participantId ?? null;
   const offers = useTradeOffers(myId);
@@ -117,6 +124,7 @@ function TradePage() {
   const declineFn = useServerFn(declineTradeOffer);
   const cancelFn = useServerFn(cancelTradeOffer);
   const proposeFn = useServerFn(createTradeOffer);
+  const reopenFn = useServerFn(reopenTradeOffer);
 
   // The same list /claim reads, but a different column of it: `reachable`, which
   // is "claimed a code OR signed into an account". create_trade_offer applies the
@@ -226,12 +234,47 @@ function TradePage() {
     }
   }
 
+  /**
+   * Put back an offer this device has just declined or pulled.
+   *
+   * The one reversible answer in the app, which is why it is the only one that
+   * gets an Undo (§19): neither decline nor cancel moves a card, so
+   * `reopen_trade_offer` is a status flip and not a re-trade. Every condition —
+   * that it is still declined or cancelled, that this is the person who answered
+   * it, that it is inside the window, and that every staked card is still held —
+   * is decided under lock in the RPC. This only reports.
+   */
+  async function undoResolve(offerId: string, kind: "decline" | "cancel") {
+    try {
+      const res = await reopenFn({ data: { offerId } });
+      if (res.ok) toast.success(kind === "decline" ? "Offer's back" : "Offer's out there again");
+      else if (res.reason === "stale") toast.error("One of those cards has already moved on");
+      else if (res.reason === "expired") toast("Too late to undo that one");
+      else toast("That offer was already settled");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not undo that");
+    } finally {
+      // Whatever happened, both screens are now wrong about this offer.
+      await refreshMine();
+    }
+  }
+
   async function resolve(offerId: string, kind: "decline" | "cancel") {
     setPending(offerId);
     try {
       const res = await (kind === "decline" ? declineFn : cancelFn)({ data: { offerId } });
-      if (res.ok) toast.success(kind === "decline" ? "Declined" : "Offer pulled");
-      else toast("That offer was already settled");
+      if (res.ok) {
+        // Five seconds on screen against a sixty-second window in the RPC: the
+        // toast is the prompt, not the deadline. Offered on the success path
+        // only — an offer somebody else already settled has nothing to put back.
+        toast.success(kind === "decline" ? "Declined" : "Offer pulled", {
+          duration: 5000,
+          action: {
+            label: "Undo",
+            onClick: () => void undoResolve(offerId, kind),
+          },
+        });
+      } else toast("That offer was already settled");
       await refreshMine();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not do that");
@@ -370,14 +413,16 @@ function TradePage() {
                     <>
                       <button
                         onClick={() => accept(offer.id)}
-                        disabled={pending === offer.id}
+                        disabled={pending === offer.id || offline}
+                        {...offlineReason(offline)}
                         className="neon-btn-lg disabled:opacity-50"
                       >
                         Accept
                       </button>
                       <button
                         onClick={() => resolve(offer.id, "decline")}
-                        disabled={pending === offer.id}
+                        disabled={pending === offer.id || offline}
+                        {...offlineReason(offline)}
                         className="inline-flex min-h-11 items-center rounded-full border border-white/10 px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
                       >
                         Decline
@@ -409,7 +454,8 @@ function TradePage() {
                   actions={
                     <button
                       onClick={() => resolve(offer.id, "cancel")}
-                      disabled={pending === offer.id}
+                      disabled={pending === offer.id || offline}
+                      {...offlineReason(offline)}
                       className="inline-flex min-h-11 items-center rounded-full border border-primary/40 px-6 text-label font-bold uppercase tracking-[0.08em] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                     >
                       Take it back
@@ -497,7 +543,10 @@ function TradePage() {
                 />
                 <button
                   onClick={propose}
-                  disabled={pending === "compose" || give.length === 0 || want.length === 0}
+                  disabled={
+                    pending === "compose" || give.length === 0 || want.length === 0 || offline
+                  }
+                  {...offlineReason(offline)}
                   className="neon-btn-lg mt-3 disabled:opacity-40"
                 >
                   <ArrowLeftRight className="h-4 w-4" />

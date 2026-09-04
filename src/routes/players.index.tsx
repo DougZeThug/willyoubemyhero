@@ -7,6 +7,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { LOCKED_EDITION, LockedCard } from "@/components/locked-card";
+import { CardSkeleton } from "@/components/card-skeleton";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
@@ -91,6 +92,17 @@ const SORTS: { key: SortKey; label: string }[] = [
  * which run 0..9.
  */
 const LOCKED_RARITY_RANK = 99;
+
+/**
+ * How many placeholders to draw before the roster itself has arrived.
+ *
+ * Six is two rows on a phone and one and a half on a tablet — enough to read as
+ * a shelf rather than a stray tile, and short of a full roster so a small league
+ * does not watch four of them evaporate. Once the bundle lands the real count
+ * takes over, which is the common case: the roster is public and cached, and it
+ * is the *collection* query underneath it that keeps everyone waiting.
+ */
+const SKELETON_TILES = 6;
 
 function PlayersPage() {
   const { event, bundle, error, realtimeDegraded } = useEventBundle();
@@ -553,6 +565,7 @@ function PlayersPage() {
             <LockedCard
               back={cardBack.data?.urls ?? null}
               name={name}
+              inGrid
               className="transition-transform group-hover:scale-[1.02]"
             />
           ) : (
@@ -690,10 +703,26 @@ function PlayersPage() {
         </button>
       </div>
 
-      {/* An empty roster and a roster whose every card is pinned upstairs look
-          identical in the markup and mean opposite things, so they are two
+      {/* Four states, in the order they can be true. Placeholders come first and
+          cover the wait `isLocked` describes above — every slot face-down
+          because the answer is not in yet rather than because the card is
+          unpulled; drawing the backs through it and popping the owned ones open
+          is a reveal in the wrong place (see card-skeleton.tsx). After that, an
+          empty roster and a roster whose every card is pinned upstairs look
+          identical in the markup and mean opposite things, so they stay two
           separate states rather than one shrug. */}
-      {rows.length === 0 ? (
+      {!ready ? (
+        <>
+          <p role="status" className="sr-only">
+            Counting your collection…
+          </p>
+          {cardGrid(
+            Array.from({ length: rows.length || SKELETON_TILES }, (_, i) => (
+              <CardSkeleton key={i} />
+            )),
+          )}
+        </>
+      ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
           <Layers className="h-6 w-6 opacity-50" />
           No participants yet.
