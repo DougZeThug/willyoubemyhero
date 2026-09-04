@@ -12,11 +12,23 @@ import {
   orderSections,
   ROSTER_SECTION,
   secretSectionId,
+  FAVOURITES_SECTION,
   setVaultLayout,
+  TROPHIES_SECTION,
   useVaultLayout,
+  useVaultPrefs,
 } from "./vault-layout";
 
 const KEY = "wwbh:vault-layout";
+
+/** The defaults every stored record now carries, so a test can vary one field. */
+const EMPTY_LAYOUT = {
+  order: [] as string[],
+  collapsed: [] as string[],
+  sort: "name" as const,
+  filter: "all" as const,
+  density: 2 as const,
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -180,8 +192,99 @@ describe("useVaultLayout", () => {
 
   it("hands a caller a fresh set rather than one it can mutate into the store", () => {
     const { result } = renderHook(() => useVaultLayout(present));
-    act(() => setVaultLayout({ order: [], collapsed: [ROSTER_SECTION] }));
+    act(() => setVaultLayout({ ...EMPTY_LAYOUT, collapsed: [ROSTER_SECTION] }));
     result.current.collapsed.delete(ROSTER_SECTION);
     expect(JSON.parse(window.localStorage.getItem(KEY)!).collapsed).toEqual([ROSTER_SECTION]);
+  });
+});
+
+describe("useVaultPrefs", () => {
+  it("starts on the defaults, so the server and the first client render agree", () => {
+    const { result } = renderHook(() => useVaultPrefs());
+    expect(result.current.sort).toBe("name");
+    expect(result.current.filter).toBe("all");
+    expect(result.current.density).toBe(2);
+  });
+
+  it("remembers each choice on this device", () => {
+    const { result } = renderHook(() => useVaultPrefs());
+    act(() => result.current.setSort("newest"));
+    act(() => result.current.setFilter("spares"));
+    act(() => result.current.setDensity(3));
+    expect(result.current.sort).toBe("newest");
+    expect(result.current.filter).toBe("spares");
+    expect(result.current.density).toBe(3);
+    const stored = JSON.parse(window.localStorage.getItem(KEY)!);
+    expect(stored).toMatchObject({ sort: "newest", filter: "spares", density: 3 });
+  });
+
+  it("loads a layout written before these fields existed", () => {
+    // Every device that has ever arranged a shelf has one of these. A sort of
+    // `undefined` would leave the grid in no order at all.
+    window.localStorage.setItem(KEY, JSON.stringify({ order: [], collapsed: [ROSTER_SECTION] }));
+    const { result } = renderHook(() => useVaultPrefs());
+    expect(result.current.sort).toBe("name");
+    expect(result.current.filter).toBe("all");
+    expect(result.current.density).toBe(2);
+  });
+
+  it("falls back to the default rather than trusting junk under the key", () => {
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({ order: [], collapsed: [], sort: "hottest", filter: 7, density: 9 }),
+    );
+    const { result } = renderHook(() => useVaultPrefs());
+    expect(result.current.sort).toBe("name");
+    expect(result.current.filter).toBe("all");
+    expect(result.current.density).toBe(2);
+  });
+
+  it("does not scatter the arrangement when a reading choice changes", () => {
+    // The two hooks write the same record. A setter that dropped the order would
+    // undo a rearrange the moment somebody changed the sort.
+    const { result: prefs } = renderHook(() => useVaultPrefs());
+    const { result: layout } = renderHook(() =>
+      useVaultLayout([secretSectionId("cornhole"), ROSTER_SECTION]),
+    );
+    act(() => layout.current.move(ROSTER_SECTION, -1));
+    act(() => prefs.current.setSort("rarity"));
+    expect(layout.current.order).toEqual([ROSTER_SECTION, secretSectionId("cornhole")]);
+    expect(JSON.parse(window.localStorage.getItem(KEY)!).order).toEqual([
+      ROSTER_SECTION,
+      secretSectionId("cornhole"),
+    ]);
+  });
+
+  it("carries a choice across to another view of the same vault", () => {
+    const a = renderHook(() => useVaultPrefs());
+    const b = renderHook(() => useVaultPrefs());
+    act(() => a.result.current.setDensity(3));
+    expect(b.result.current.density).toBe(3);
+  });
+});
+
+describe("the default shelf order", () => {
+  // What this pins is the MERGE, not the route: that a device with no stored
+  // arrangement gets the sections in exactly the order the page presented them,
+  // trophy case and all. The order itself is a product decision — the Complete
+  // shelf above the sets it is the answer to (§13), the roster last because it
+  // is the one shelf everybody knows by heart — and it lives in the route,
+  // where e2e/secrets.spec.ts is what actually catches it moving.
+  const present = [
+    FAVOURITES_SECTION,
+    TROPHIES_SECTION,
+    secretSectionId("pets"),
+    secretSectionId("cornhole"),
+    ROSTER_SECTION,
+  ];
+
+  it("puts Complete above the set shelves and the roster last", () => {
+    expect(orderSections(present, [])).toEqual(present);
+  });
+
+  it("still lets a device that has arranged its own shelves win", () => {
+    // The default is where a shelf STARTS, never where it is held.
+    const mine = [ROSTER_SECTION, TROPHIES_SECTION];
+    expect(orderSections(present, mine).slice(0, 2)).toEqual(mine);
   });
 });

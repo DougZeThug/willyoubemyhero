@@ -12,14 +12,65 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 const KEY = "wwbh:vault-layout";
 const CHANGED = "wwbh:vault-layout-changed";
 
+/**
+ * How the roster grid is ordered. `shuffle` is the odd one out and stays in the
+ * list anyway: its SEED is deliberately not stored — a frozen shuffle is not a
+ * shuffle — so a device that reloads on it gets a fresh deal, which is what the
+ * control has always meant.
+ */
+export type VaultSort = "name" | "order" | "pick" | "rarity" | "newest" | "shuffle";
+
+/** Which roster cards the grid draws. Single-choice: owned and missing are opposites. */
+export type VaultFilter = "all" | "owned" | "missing" | "spares";
+
+/** Cards per row on a phone. Two is the default the 5:7 tile was sized for (§5). */
+export type VaultDensity = 2 | 3;
+
 export type VaultLayout = {
   /** Section ids, in the order this device arranged them. Ids never seen are absent. */
   order: readonly string[];
   /** Ids that are rolled up. Closed rather than open — see the note on read(). */
   collapsed: readonly string[];
+  sort: VaultSort;
+  filter: VaultFilter;
+  density: VaultDensity;
 };
 
-const EMPTY: VaultLayout = { order: [], collapsed: [] };
+/**
+ * The sort list, in the order the sheet offers it, with the words on the buttons.
+ *
+ * Here rather than in the sheet so the ids the store coerces against and the ids
+ * a person can actually pick are one list. Two lists is how a sort gets added to
+ * the UI, stored, and then silently reset to Name on the next load.
+ */
+export const VAULT_SORTS: readonly { key: VaultSort; label: string }[] = [
+  { key: "name", label: "Name" },
+  { key: "order", label: "Order" },
+  { key: "pick", label: "Pick" },
+  { key: "rarity", label: "Rarity" },
+  // The only sort that reads the collection rather than the roster row: it asks
+  // when YOU first pulled the card, so a locked slot has no answer.
+  { key: "newest", label: "Newest" },
+  { key: "shuffle", label: "Shuffle" },
+];
+
+export const VAULT_FILTERS: readonly { key: VaultFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "owned", label: "Owned" },
+  { key: "missing", label: "Missing" },
+  { key: "spares", label: "Spares" },
+];
+
+const SORTS: readonly VaultSort[] = VAULT_SORTS.map((s) => s.key);
+const FILTERS: readonly VaultFilter[] = VAULT_FILTERS.map((f) => f.key);
+
+const EMPTY: VaultLayout = {
+  order: [],
+  collapsed: [],
+  sort: "name",
+  filter: "all",
+  density: 2,
+};
 
 /** The roster grid's section id. Stored, so it is add-only like a collection id. */
 export const ROSTER_SECTION = "roster";
@@ -59,6 +110,16 @@ function strings(value: unknown): string[] {
 }
 
 /**
+ * Anything unrecognised falls back to the default, which is the same call
+ * `strings` makes above and matters more here: these three fields did not exist
+ * before the sort sheet, so every layout stored by an older build is missing all
+ * of them, and a sort of `undefined` would leave the grid in no order at all.
+ */
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+/**
  * Collapsed ids are stored, not open ones, so a set appearing for the first time
  * — somebody's first Pets pull — arrives open. Storing open ids would hide every
  * new shelf behind a tap nobody knows to make.
@@ -70,8 +131,14 @@ function read(): VaultLayout {
     if (!raw) return EMPTY;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return EMPTY;
-    const { order, collapsed } = parsed as Record<string, unknown>;
-    return { order: strings(order), collapsed: strings(collapsed) };
+    const { order, collapsed, sort, filter, density } = parsed as Record<string, unknown>;
+    return {
+      order: strings(order),
+      collapsed: strings(collapsed),
+      sort: oneOf(sort, SORTS, EMPTY.sort),
+      filter: oneOf(filter, FILTERS, EMPTY.filter),
+      density: density === 3 ? 3 : 2,
+    };
   } catch {
     // Blocked storage, or something else wrote junk under our key. Either way the
     // default layout is a working page.
@@ -139,6 +206,80 @@ export function moveSection(order: readonly string[], id: string, delta: number)
  * already settles once when the collection reconciles; this settles with it.
  */
 export function useVaultLayout(present: readonly string[]) {
+  const layout = useStoredLayout();
+
+  const order = useMemo(() => orderSections(present, layout.order), [present, layout.order]);
+  const collapsed = useMemo(() => new Set(layout.collapsed), [layout.collapsed]);
+
+  const toggle = useCallback((id: string) => {
+    // BOTH halves off `current`. Deciding from the render's snapshot and
+    // writing from the module value is how a shelf another tab just collapsed
+    // gets its id written twice, or a toggle turns into a no-op.
+    const next = current.collapsed.includes(id)
+      ? current.collapsed.filter((x) => x !== id)
+      : [...current.collapsed, id];
+    // `current` and not the render's `layout`, throughout these setters. The
+    // record now carries the reading preferences as well as the arrangement,
+    // and two hooks write it — so a setter spreading the snapshot it was
+    // rendered with can silently undo a write that landed after that render.
+    // The module value is the last thing actually written, which is the only
+    // thing a merge should be built on.
+    //
+    // Keeps the STORED order rather than the merged one: opening a shelf is
+    // not a statement about where it sits, and pinning the order here would
+    // freeze a layout the owner never arranged.
+    setVaultLayout({ ...current, collapsed: next });
+  }, []);
+
+  const move = useCallback(
+    (id: string, delta: number) => {
+      // The merged order, so the first move pins everything currently on screen
+      // instead of writing a one-item list the merge would scatter next time.
+      setVaultLayout({ ...current, order: moveSection(order, id, delta) });
+    },
+    [order],
+  );
+
+  return { order, collapsed, toggle, move };
+}
+
+/**
+ * How the binder READS — sort, filter, density — without the arrangement.
+ *
+ * Its own hook because of where the two are needed. The arrangement needs the
+ * list of sections on screen, and that list is only known after the grid has
+ * been built; the sort is what BUILDS the grid. One hook taking `present` could
+ * only ever be called after the thing it has to come before. Both read the same
+ * record, the same module value and the same event, so they cannot disagree.
+ */
+export function useVaultPrefs() {
+  const layout = useStoredLayout();
+
+  // One setter per field rather than a general `patch`, so a caller cannot write
+  // a layout it did not mean to — the order and the collapsed list are the two
+  // things on this record that are expensive to lose, and neither is this hook's
+  // to touch.
+  const setSort = useCallback((sort: VaultSort) => setVaultLayout({ ...current, sort }), []);
+  const setFilter = useCallback(
+    (filter: VaultFilter) => setVaultLayout({ ...current, filter }),
+    [],
+  );
+  const setDensity = useCallback(
+    (density: VaultDensity) => setVaultLayout({ ...current, density }),
+    [],
+  );
+
+  return {
+    sort: layout.sort,
+    filter: layout.filter,
+    density: layout.density,
+    setSort,
+    setFilter,
+    setDensity,
+  };
+}
+
+function useStoredLayout(): VaultLayout {
   const [layout, setLayout] = useState<VaultLayout>(EMPTY);
 
   useEffect(() => {
@@ -160,30 +301,5 @@ export function useVaultLayout(present: readonly string[]) {
     };
   }, []);
 
-  const order = useMemo(() => orderSections(present, layout.order), [present, layout.order]);
-  const collapsed = useMemo(() => new Set(layout.collapsed), [layout.collapsed]);
-
-  const toggle = useCallback(
-    (id: string) => {
-      const next = collapsed.has(id)
-        ? layout.collapsed.filter((x) => x !== id)
-        : [...layout.collapsed, id];
-      // Keeps `layout.order` rather than the merged one: opening a shelf is not a
-      // statement about where it sits, and pinning the order here would freeze a
-      // layout the owner never arranged.
-      setVaultLayout({ order: layout.order, collapsed: next });
-    },
-    [collapsed, layout],
-  );
-
-  const move = useCallback(
-    (id: string, delta: number) => {
-      // The merged order, so the first move pins everything currently on screen
-      // instead of writing a one-item list the merge would scatter next time.
-      setVaultLayout({ order: moveSection(order, id, delta), collapsed: layout.collapsed });
-    },
-    [order, layout.collapsed],
-  );
-
-  return { order, collapsed, toggle, move };
+  return layout;
 }

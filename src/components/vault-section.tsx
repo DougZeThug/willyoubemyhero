@@ -23,6 +23,7 @@ export function VaultSection({
   canMoveDown,
   onMove,
   rearranging = false,
+  action,
   children,
 }: {
   title: string;
@@ -44,6 +45,14 @@ export function VaultSection({
    * exists to remove.
    */
   rearranging?: boolean;
+  /**
+   * One control belonging to this shelf, drawn in its header.
+   *
+   * The roster's "Sort & filter" chip, and only ever a sibling of the trigger —
+   * nested, every tap on it would roll the shelf up as well, which is the same
+   * lesson the move buttons below learned.
+   */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   // A themed shelf is a lit panel rather than a hairline box: one even fill of
@@ -107,6 +116,8 @@ export function VaultSection({
               />
             </span>
           </CollapsibleTrigger>
+
+          {action}
 
           {rearranging && (
             // A divider and real space, so the arrows read as their own control

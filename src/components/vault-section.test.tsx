@@ -106,3 +106,31 @@ describe("VaultSection", () => {
     expect(screen.getByRole("heading", { name: "Roster" }).style.color).toBe("");
   });
 });
+
+describe("the shelf's own control", () => {
+  it("draws nothing extra when a shelf has none", () => {
+    renderSection({ action: undefined });
+    expect(screen.getByRole("button", { name: "Cornhole Collection" })).toBeInTheDocument();
+  });
+
+  it("draws it beside the trigger and never inside it", () => {
+    // Nested, every tap on the roster's "Sort & filter" chip would roll the
+    // shelf up as well — the same lesson the move buttons learned.
+    renderSection({ action: <button type="button">Sort &amp; filter</button> });
+    const trigger = screen.getByRole("button", { name: "Cornhole Collection" });
+    const action = screen.getByRole("button", { name: "Sort & filter" });
+    expect(action).toBeInTheDocument();
+    expect(trigger.contains(action)).toBe(false);
+  });
+
+  it("keeps it reachable while the shelves are being rearranged", () => {
+    // It is where Rearrange gets turned back off, so hiding it here would
+    // strand the mode it started.
+    renderSection({
+      rearranging: true,
+      action: <button type="button">Sort &amp; filter</button>,
+    });
+    expect(screen.getByRole("button", { name: "Sort & filter" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Move Cornhole Collection up" })).toBeInTheDocument();
+  });
+});

@@ -206,7 +206,11 @@ function AuthPage() {
             Trading needs an account — it's how the other player knows who they're swapping with.
           </p>
         )}
-        {next === "/players/pack" && (
+        {/* Both, because the rung can now be claimed from home as well as from
+            the pack summary (§11) — and somebody who arrived here from a "Sign
+            in to claim" needs the reason on the page they landed on, whichever
+            of the two sent them. */}
+        {(next === "/players/pack" || next === "/players") && (
           <p className="mt-2 text-sm font-bold text-primary">
             Your streak reward is waiting — an account is what keeps the card once you take it.
           </p>
