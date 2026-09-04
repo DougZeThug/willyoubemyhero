@@ -33,8 +33,27 @@ export function SealedBack() {
  * `role="button" aria-pressed` on anything with a back, which is the exact
  * selector the e2e suite uses to find the card on the stand.
  */
-export function PackCardBack({ art, className }: { art: ImageUrlSet | null; className?: string }) {
-  const url = urlFromSet(art);
+export function PackCardBack({
+  art,
+  className,
+  inGrid = false,
+}: {
+  art: ImageUrlSet | null;
+  className?: string;
+  /**
+   * Set by the vault's locked slots, and by nothing in the ceremony.
+   *
+   * A shelf holds one of these per card nobody has packed yet, and every one of
+   * them was decoding the same 1200px back — a full-size image per slot for a
+   * picture the eye reads as "shut" at any size (§21). In a grid this takes the
+   * 320px rendition and defers anything below the fold. The pack's own cards keep
+   * `large` and eager: there are three of them, they are the size of the screen,
+   * and a back that pops in mid-tear is a visible seam in the one animation this
+   * app is built around.
+   */
+  inGrid?: boolean;
+}) {
+  const url = urlFromSet(art, inGrid ? "thumb" : "large");
   return (
     <div className={cn("h-full w-full overflow-hidden rounded-xl", className)}>
       {url ? (
@@ -43,6 +62,7 @@ export function PackCardBack({ art, className }: { art: ImageUrlSet | null; clas
           alt=""
           aria-hidden
           draggable={false}
+          loading={inGrid ? "lazy" : "eager"}
           className="h-full w-full object-cover"
         />
       ) : (

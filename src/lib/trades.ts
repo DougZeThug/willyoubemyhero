@@ -202,6 +202,22 @@ export function offerStatusLabel(status: string): string {
 }
 
 /**
+ * How long a declined or pulled-back offer can still be put back.
+ *
+ * Twelve times the five seconds the toast is on screen, and the gap is slack
+ * rather than a second chance: the toast is the only way to reach this, so the
+ * window is not an offer to somebody who dismissed it. What it buys is the time
+ * between the tap and the handler — a phone on one bar, a tab backgrounded
+ * mid-request, a retry — none of which should be able to spend a five-second
+ * budget. Short enough, still, that the other side has not had time to build a
+ * reply around the no.
+ *
+ * Read by `reopenTradeOffer`, and passed to the RPC rather than hard-coded
+ * there so the two cannot drift.
+ */
+export const TRADE_UNDO_WINDOW_SECONDS = 60;
+
+/**
  * "2 cards + Tucker" — what one side handed over, from the public summary.
  *
  * Secrets are named now: accept_trade_offer records the card's name, because the

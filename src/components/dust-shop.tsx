@@ -20,6 +20,7 @@ import { getMySecrets } from "@/lib/secret-cards.functions";
 import { BoughtPullReveal } from "@/components/bought-pull-reveal";
 import { LevelPips } from "@/components/level-pips";
 import { PresentationMode } from "@/components/presentation-mode";
+import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import type { OwnedSecret } from "@/lib/secret-cards";
 import type { ImageUrlSet } from "@/lib/media";
 import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
@@ -315,6 +316,10 @@ export function DustShopPanel({
 
   const canAfford = (balance ?? 0) >= DUST_PRICES.bonusPull;
   const canReroll = (balance ?? 0) >= DUST_PRICES.reroll;
+  // Every button in this panel spends dust against a server. Offline they can
+  // only fail, and a burn that looks like it went through is the worst of the
+  // three ways this could read.
+  const offline = !useIsOnline();
 
   return (
     <div className="space-y-6">
@@ -327,7 +332,8 @@ export function DustShopPanel({
         </p>
         <Button
           className="mt-3 w-full"
-          disabled={!canAfford || buy.isPending}
+          disabled={!canAfford || buy.isPending || offline}
+          {...offlineReason(offline)}
           onClick={() => buy.mutate()}
         >
           {buy.isPending ? "Pulling…" : `Buy for ${DUST_PRICES.bonusPull}`}
@@ -367,7 +373,8 @@ export function DustShopPanel({
                   <Button
                     variant="outline"
                     className="min-h-11 shrink-0"
-                    disabled={mill.isPending}
+                    disabled={mill.isPending || offline}
+                    {...offlineReason(offline)}
                     onClick={() => {
                       setBurning(r.copyId);
                       mill.mutate(r.copyId);
@@ -412,7 +419,8 @@ export function DustShopPanel({
                   <Button
                     variant="outline"
                     className="min-h-11 shrink-0"
-                    disabled={sell.isPending}
+                    disabled={sell.isPending || offline}
+                    {...offlineReason(offline)}
                     onClick={() => {
                       // The card genuinely leaves the collection when it is the
                       // only one, which is what `lastCopy` is carried for. Same
@@ -466,7 +474,8 @@ export function DustShopPanel({
                   <Button
                     variant="outline"
                     className="min-h-11 shrink-0"
-                    disabled={!canReroll || reroll.isPending}
+                    disabled={!canReroll || reroll.isPending || offline}
+                    {...offlineReason(offline)}
                     onClick={() => {
                       setRolling(r.copyId);
                       reroll.mutate(r.copyId);

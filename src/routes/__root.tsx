@@ -15,8 +15,11 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteNav } from "@/components/site-nav";
 import { PresentationProvider } from "@/components/presentation-mode";
+import { OfflineBanner } from "@/components/offline-banner";
 import { AccountBridge } from "@/components/account-bridge";
 import { TrophyCeremonyHost } from "@/components/trophy-ceremony-host";
+import { useIsPresenting } from "@/hooks/use-presentation";
+import { useIsOnline } from "@/hooks/use-online";
 import { hydrateCardSfxMuted } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
@@ -215,8 +218,49 @@ function RootComponent() {
             <Outlet />
           </main>
         </div>
+        <ShellFeedback />
       </PresentationProvider>
-      <Toaster position="top-center" richColors closeButton theme="dark" />
     </QueryClientProvider>
+  );
+}
+
+/**
+ * The two things that float over every screen: what just happened, and why the
+ * buttons have gone quiet.
+ *
+ * One component because they share a slot. The banner stands in the strip above
+ * the tab bar and the toaster stacks on top of it, so the offset the toaster
+ * gets depends on whether the banner is there — which is a thing to decide once,
+ * here, rather than a number copied into two files.
+ *
+ * Inside `PresentationProvider` rather than beside it, which is the whole reason
+ * this is a component at all: `useIsPresenting` is a context read, and a screen
+ * playing something cinematic gets the device to itself. The nav is already
+ * faded and inert under a ceremony (see SiteNav); a toast landing over the card
+ * you just pulled would be the one piece of chrome that ignored that.
+ */
+function ShellFeedback() {
+  const presenting = useIsPresenting();
+  const online = useIsOnline();
+  if (presenting) return null;
+
+  // Both offsets, and the same value in each: sonner switches to `mobileOffset`
+  // below 600px while the tab bar it is clearing survives to 768px, so the
+  // breakpoint that matters is inside the custom property rather than in sonner.
+  const offset = { bottom: online ? "var(--above-tab-bar)" : "var(--above-offline-banner)" };
+  return (
+    <>
+      {!online && <OfflineBanner />}
+      {/* bottom-center, not top: a phone is held by its bottom half, and a toast
+          that reports a trade belongs next to the thumb that just made it. */}
+      <Toaster
+        position="bottom-center"
+        richColors
+        closeButton
+        theme="dark"
+        offset={offset}
+        mobileOffset={offset}
+      />
+    </>
   );
 }

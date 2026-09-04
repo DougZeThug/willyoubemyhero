@@ -7,6 +7,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { LOCKED_EDITION, LockedCard } from "@/components/locked-card";
+import { CardSkeleton } from "@/components/card-skeleton";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
@@ -92,8 +93,21 @@ const SORTS: { key: SortKey; label: string }[] = [
  */
 const LOCKED_RARITY_RANK = 99;
 
+/**
+ * How many placeholders to draw while even the roster is still unknown.
+ *
+ * Six is two rows on a phone — enough to read as a shelf rather than a stray
+ * tile. It cannot be the right number, because the number is the thing not yet
+ * known: a league smaller than this watches a couple of placeholders disappear
+ * when the bundle lands, which is a smaller lie than a shelf that reads as
+ * empty. The moment the roster is in, `rows.length` takes over, and that is the
+ * common case — the roster is public and cached, and it is the *collection*
+ * query underneath it that keeps everyone waiting.
+ */
+const SKELETON_TILES = 6;
+
 function PlayersPage() {
-  const { event, bundle, error, realtimeDegraded } = useEventBundle();
+  const { event, bundle, error, loading: eventLoading, realtimeDegraded } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
   // Hoisted once for the whole grid, and the *event's* back rather than each
   // player's — see the note on useEventCardBack. A player's own back on their
@@ -166,10 +180,14 @@ function PlayersPage() {
   // and cannot also be what the collection is asked about. The hook only ever
   // builds a Set from this, so the order the grid happens to be in is irrelevant.
   const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
-  // The third argument is what stops a failed event read locking the vault: with
-  // no id the stats query never runs, so without it `mine.ready` never turns true
-  // and every slot below renders face-down for good.
-  const mine = useMyCollection(event?.id ?? null, rosterIds, !!error && !event);
+  // The third argument is what stops a missing event locking the vault: with no
+  // id the stats query never runs, so without it `mine.ready` never turns true
+  // and every slot below renders face-down for good. It covers BOTH ways an id
+  // fails to arrive — a read that broke, and a read that answered "no combine on"
+  // — because the difference does not matter to a collection that is never going
+  // to be reconciled against a server. `eventLoading` is the only part that
+  // does: while it is true the answer is still coming.
+  const mine = useMyCollection(event?.id ?? null, rosterIds, !event && !eventLoading);
   const collected = mine.collection;
   // A phone that has just signed in has no member token yet, so the collection
   // settles off the local store alone and the counter would state "0 collected"
@@ -178,6 +196,23 @@ function PlayersPage() {
   // never disagree about whether the answer is known.
   const sync = useAccountSyncState();
   const ready = mine.ready && sync.status !== "syncing";
+  /**
+   * Whether the shelf below knows what it is drawing.
+   *
+   * BOTH answers, not just the collection's. `ready` says which cards are yours;
+   * the bundle says which cards exist, and it arrives on its own schedule behind
+   * a second request. Either one landing first showed its own wrong state for a
+   * frame — a guest whose IndexedDB read beats the network got "No participants
+   * yet" under a heading, then the whole grid — which is the shift the
+   * placeholders exist to remove rather than to relocate.
+   *
+   * `loading` rather than "the bundle has not arrived", and the difference is
+   * the whole out-of-season case: with no active combine the bundle query never
+   * runs and never will, so an absent bundle would leave placeholders up for
+   * good instead of saying there is nobody on the roster. `loading` is false the
+   * moment both queries have settled, however they settled.
+   */
+  const shelfWaiting = !ready || eventLoading;
 
   /**
    * Whether a slot renders face-down — and the only thing the rarity sort is
@@ -553,6 +588,7 @@ function PlayersPage() {
             <LockedCard
               back={cardBack.data?.urls ?? null}
               name={name}
+              inGrid
               className="transition-transform group-hover:scale-[1.02]"
             />
           ) : (
@@ -690,10 +726,26 @@ function PlayersPage() {
         </button>
       </div>
 
-      {/* An empty roster and a roster whose every card is pinned upstairs look
-          identical in the markup and mean opposite things, so they are two
+      {/* Four states, in the order they can be true. Placeholders come first and
+          cover the wait `shelfWaiting` describes above — every slot face-down
+          because the answer is not in yet rather than because the card is
+          unpulled; drawing the backs through it and popping the owned ones open
+          is a reveal in the wrong place (see card-skeleton.tsx). After that, an
+          empty roster and a roster whose every card is pinned upstairs look
+          identical in the markup and mean opposite things, so they stay two
           separate states rather than one shrug. */}
-      {rows.length === 0 ? (
+      {shelfWaiting ? (
+        <>
+          <p role="status" className="sr-only">
+            Counting your collection…
+          </p>
+          {cardGrid(
+            Array.from({ length: rows.length || SKELETON_TILES }, (_, i) => (
+              <CardSkeleton key={i} />
+            )),
+          )}
+        </>
+      ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
           <Layers className="h-6 w-6 opacity-50" />
           No participants yet.

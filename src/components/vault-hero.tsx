@@ -68,38 +68,68 @@ export function VaultHero({
               Collection
             </span>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* EVERY SLOT BELOW IS RESERVED WHETHER OR NOT IT HAS ANYTHING IN IT,
+              and that is the whole point of the min-heights on this block (§21).
+              This header grows through five independent query results — dust,
+              packs, secrets, streak, offers — and each one landing used to push
+              the shelves down under a thumb that was already reaching for a
+              card. An empty line costs 16px; a grid that jumps costs a mistap.
+
+              The chip needs its own BOX and not just a taller row, which is the
+              one slot here where a min-height is not enough. DustChip renders
+              nothing until the balance is known — a "0" that becomes "140" reads
+              as having just lost something — and this row wraps, so at a width
+              where the chip does not fit beside the heading the row goes from one
+              line to two the moment the number lands, and a min-height that
+              reserved the unwrapped case would let the shelf move anyway.
+
+              8rem covers a THREE-DIGIT balance and no more, which is what the
+              measurements support and all this claims. Rendered, the chip is
+              126px at three digits, 143 at four and 153 at five, against a 179px
+              heading and a row of 288–344px. So a balance in the hundreds — the
+              ordinary one, when a bonus pull costs 150 — reserves exactly right
+              and the row never moves. Four digits or more still flips it once,
+              at 360–390, when the number lands.
+
+              Reserving for those is worse, and this is the arithmetic that says
+              so: 179 + 12 + 144 = 335 against a row that measures 328 at 360 and
+              334 at 390, so a box wide enough for a four-digit chip wraps the
+              row PERMANENTLY on the commonest phone widths. Everybody would pay
+              a second line above the fold — on the screen §17 already faults for
+              its height — to spare a rare balance one reflow. */}
+          <div className="mt-1 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="font-display text-3xl font-black uppercase leading-none">The Vault</h1>
-            {dustOn && <DustChip balance={dustBalance} to="/players/shop" />}
+            {dustOn && (
+              <div className="flex min-h-11 min-w-32 items-center">
+                <DustChip balance={dustBalance} to="/players/shop" />
+              </div>
+            )}
           </div>
           {/* The collected count waits for `ready`. It used to be read straight
               off IndexedDB, which had been inflated to the whole roster by the
               old collect-on-sight behaviour — rendering it early would show
               that number for a frame before it snapped down to the real one. */}
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 min-h-4 text-xs text-muted-foreground">
             {printed} of {rosterSize} cards printed
             {ready && collectedCount > 0 && ` · ${collectedCount} collected`}
           </p>
-          {ready && packsOpenedLabel(packsOpened) && (
-            <p className="mt-1 text-xs text-muted-foreground">{packsOpenedLabel(packsOpened)}</p>
-          )}
+          <div className="mt-1 min-h-4 text-xs text-muted-foreground">
+            {ready && packsOpenedLabel(packsOpened)}
+          </div>
           {/* Only ever rendered above zero. "0 secrets pulled" would announce
               that a set exists at all, which is the one thing withheld — and
               the caller's `?? 0` keeps a zero from flashing during the loading
-              frame. */}
-          {secretsPulled > 0 && (
-            <p className="mt-1 text-xs font-bold" style={{ color: SECRET_RARITY.accent }}>
-              {secretsPulledLabel(secretsPulled)}
-            </p>
-          )}
+              frame. The reserved box says nothing either way: it is empty, not
+              a zero. */}
+          <div className="mt-1 min-h-4 text-xs font-bold" style={{ color: SECRET_RARITY.accent }}>
+            {secretsPulled > 0 && secretsPulledLabel(secretsPulled)}
+          </div>
           {/* The daily loop's nudge, on the screen the app opens to rather than
               only on the pack. Same amber as the flame beside it, and silent at
               zero for the same reason as the secrets line above. */}
-          {streakSentence && (
-            <p className="mt-1 text-xs font-bold" style={{ color: "oklch(0.82 0.19 85)" }}>
-              {streakSentence}
-            </p>
-          )}
+          <div className="mt-1 min-h-4 text-xs font-bold" style={{ color: "oklch(0.82 0.19 85)" }}>
+            {streakSentence}
+          </div>
           {!isMember && wasMember && (
             <p className="mt-2 max-w-xs text-[11px] leading-snug text-muted-foreground">
               Your secrets are on your name, not on this phone. Claim again to get them back.
@@ -126,8 +156,17 @@ export function VaultHero({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {streak && <StreakFlame streak={streak} />}
-          <div className="flex flex-col items-end gap-2">
+          {/* The flame's slot, kept whether or not there is a streak in it. The
+              shift this one causes is sideways rather than down — the group is
+              flush right, so the flame grows into the gap beside the button —
+              and at 320px it is what decides whether this row wraps under the
+              heading at all. */}
+          <div className="min-h-10 w-13 shrink-0">{streak && <StreakFlame streak={streak} />}</div>
+          {/* 6.75rem is the button (56) plus the gap (8) plus the pill (44), so
+              an offer landing while somebody is reading the shelf below cannot
+              push it. In the common case it costs nothing at all: the text
+              column beside it is already taller. */}
+          <div className="flex min-h-27 flex-col items-end gap-2">
             {/* The daily loop's alarm clock. Nothing else brings anyone back on
                 a random Tuesday, so it is the biggest thing in the header now
                 that the pills it shared the row with have gone to the nav.

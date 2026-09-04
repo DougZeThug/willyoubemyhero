@@ -20,6 +20,7 @@ import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { urlFromSet } from "@/lib/media";
+import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { cn } from "@/lib/utils";
 
 type SummaryParticipant = {
@@ -123,6 +124,12 @@ export function PackSummary({
   onClaim: () => void;
   onRetrySecret: () => void;
 }) {
+  // The claim mints a card on the server, so it cannot be taken in a dead spot.
+  // Read here rather than passed in: the button is the only thing on this screen
+  // that reaches out, and the route above it has nothing else to do with the
+  // answer.
+  const offline = !useIsOnline();
+
   // Rendered off-screen and rasterised on demand. Kept mounted rather than
   // conditionally rendered: html-to-image measures the node, and a node that
   // arrives in the same tick as the click has no layout yet.
@@ -381,7 +388,8 @@ export function PackSummary({
               <>
                 <button
                   onClick={onClaim}
-                  disabled={claiming}
+                  disabled={claiming || offline}
+                  {...offlineReason(offline)}
                   data-testid="streak-claim"
                   className="neon-btn-sm disabled:opacity-40"
                 >

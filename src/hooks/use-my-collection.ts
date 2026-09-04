@@ -86,13 +86,14 @@ export type MyCollection = {
  *
  * @param rosterIds the event's `event_participants.id`s. Cards outside it are left
  *   alone — another event's collection is not this event's business.
- * @param eventFailed the active-event read failed, as opposed to not having
- *   answered yet. See `settled` below for what hung without it.
+ * @param noEventComing there will never be an event id — the read failed, or it
+ *   succeeded and there is no combine on — as opposed to not having answered
+ *   yet. See `settled` below for what hung without it.
  */
 export function useMyCollection(
   eventId: string | null | undefined,
   rosterIds: readonly string[],
-  eventFailed = false,
+  noEventComing = false,
 ): MyCollection {
   const member = useMemberSession();
   const participantId = member?.participantId ?? null;
@@ -182,12 +183,18 @@ export function useMyCollection(
   // the signal that the member session is now trustworthy.
   //
   // A member with no event id is the case that used to hang here forever: the
-  // stats query is gated on one, so with the active-event read down it never
-  // runs, never succeeds and never errors. The screens read that as "still
-  // reconciling" and lock every card face-down without saying why. `eventFailed`
-  // is the caller distinguishing a read that failed from one that is merely slow;
-  // the merge then runs against no server answer at all, which by its first rule
-  // hands the local store back untouched and prunes nothing.
+  // stats query is gated on one, so with no active-event id it never runs, never
+  // succeeds and never errors. The screens read that as "still reconciling" and
+  // lock every card face-down without saying why. `noEventComing` is the caller
+  // saying an id is not on its way; the merge then runs against no server answer
+  // at all, which by its first rule hands the local store back untouched and
+  // prunes nothing.
+  //
+  // TWO WAYS TO GET THERE and the hook cannot tell them apart, which is why it
+  // is the caller's flag: the read FAILED, or it succeeded and there is no
+  // combine on. Out of season is the commoner of the two and was missed at first
+  // — the flag was called `eventFailed` and only an error set it, so a member
+  // between combines reconciled forever.
   //
   // `unrecordedLoaded` is the second half of `localLoaded`, and it is here for
   // the same reason: these are two separate IndexedDB reads, and reconciling
@@ -196,7 +203,7 @@ export function useMyCollection(
   const settled =
     localLoaded &&
     unrecordedLoaded &&
-    (!participantId || stats.isSuccess || stats.isError || (eventFailed && !eventId));
+    (!participantId || stats.isSuccess || stats.isError || (noEventComing && !eventId));
 
   const roster = useMemo(() => new Set(rosterIds), [rosterIds]);
 

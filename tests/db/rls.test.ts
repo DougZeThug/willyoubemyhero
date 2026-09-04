@@ -521,6 +521,57 @@ describe("anon has no write grant anywhere", () => {
   });
 });
 
+describe("the trading RPCs are service_role only", () => {
+  // Every one of these is SECURITY DEFINER, so it runs as its owner and an
+  // EXECUTE grant left open is a way straight past the table denials above: the
+  // function IS the bypass, and the REVOKE beside its definition is the only
+  // thing standing there. Four of them, and they are the undo path — the RPC
+  // added with it plus the three it leans on to decide whether an undo is
+  // allowed. The rest of the schema's definer functions predate this block.
+  const TRADE_RPCS: [label: string, call: string, params: unknown[]][] = [
+    // Flips an offer's status, which is the same write the table test above
+    // denies directly. Reachable from anon, this would be a way to put somebody
+    // else's declined offer back in their inbox as often as you liked.
+    ["put a settled offer back", "SELECT public.reopen_trade_offer($1, $2, 60)", [OFFER_ID, IDS.bob]], // prettier-ignore
+    // Read-only, and each one still answers a question about somebody's private
+    // collection — which of your cards you hold two of, and what an offer stakes.
+    ["ask whether a card is a spare", "SELECT public.trade_item_is_spare($1, 'roster', $2, NULL)", [IDS.alice, COPY_ID]], // prettier-ignore
+    ["ask what an offer stakes", "SELECT public.trade_leaves_a_copy($1)", [OFFER_ID]], // prettier-ignore
+    ["ask whether an offer has two sides", "SELECT public.trade_has_both_sides($1)", [OFFER_ID]], // prettier-ignore
+  ];
+
+  it.each(TRADE_RPCS)("anon cannot %s", async (_label, call, params) => {
+    expect(await isDenied("anon", call, params)).toBe(true);
+  });
+
+  it.each(TRADE_RPCS)("authenticated cannot %s either", async (_label, call, params) => {
+    expect(await isDenied("authenticated", call, params)).toBe(true);
+  });
+
+  // The positive control, over the SAME list rather than a representative of it.
+  // A mistyped name raises "function does not exist", which `isDenied` counts as
+  // a denial like any other error — so every row above would pass for the wrong
+  // reason, and only the row that also has to SUCCEED can catch it.
+  //
+  // Every call here is chosen to return rather than raise: reopen finds OFFER_ID
+  // still pending and answers `resolved`, and the other three are plain
+  // predicates that take any input.
+  it.each(TRADE_RPCS)(
+    "service_role can %s, which is the point of the grant",
+    async (_label, call, params) => {
+      // Seeded here rather than leaned on from the block above: reopen_trade_offer
+      // raises on an offer that does not exist, which would fail this control for a
+      // reason that has nothing to do with grants.
+      await sql(
+        `INSERT INTO public.trade_offers (id, event_id, proposer_id, recipient_id)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+        [OFFER_ID, IDS.event, IDS.alice, IDS.bob],
+      );
+      expect(await isDenied("service_role", call, params)).toBe(false);
+    },
+  );
+});
+
 describe("service_role", () => {
   it("bypasses RLS, which is why the server-side guards carry the whole load", async () => {
     const rows = await asRole<{ n: string }>(
