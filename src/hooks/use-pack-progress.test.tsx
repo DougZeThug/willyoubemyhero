@@ -16,6 +16,34 @@ async function seed(row: Record<string, unknown>) {
   await savePackState(row as never);
 }
 
+/**
+ * Write the pack row WITHOUT announcing it.
+ *
+ * `savePackState` dispatches PACK_STATE_CHANGED, which is a listener this hook
+ * registers — so seeding through it wakes the hook by the same-window path and
+ * any test using it to stand in for "another tab wrote this" is testing the
+ * wrong listener. Raw IndexedDB is the only way to produce the state the other
+ * tab actually leaves behind: a row on disk and nothing said about it.
+ */
+function seedSilently(row: Record<string, unknown>) {
+  return new Promise<void>((resolve, reject) => {
+    const open = indexedDB.open("wwbh-cards", 2);
+    open.onupgradeneeded = () => {
+      const db = open.result;
+      for (const name of ["collected", "card-meta", "pack-state"]) {
+        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+      }
+    };
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction("pack-state", "readwrite");
+      tx.objectStore("pack-state").put(row, "today");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+
 async function mountHook(secretOwed = false) {
   const { usePackProgress } = await import("./use-pack-progress");
   return renderHook(() => usePackProgress(secretOwed));
@@ -195,15 +223,20 @@ describe("usePackProgress", () => {
     const { result } = await mountHook();
     await waitFor(() => expect(result.current.left).toBe(2));
 
-    // The other tab keeps going. IndexedDB fires nothing; the mirror does not
-    // move; nothing tells this tab at all.
-    await seed({
+    // The other tab keeps going, and says nothing — seeded straight into
+    // IndexedDB, because writing through savePackState would announce it on the
+    // very listener this test exists to prove is not the one doing the work.
+    await seedSilently({
       dayKey: todayKey(),
       ids: ["a", "b", "c"],
       revealed: [0, 1, 2],
       cursor: 3,
       identity: `d:${DEVICE}`,
     });
+    // Still stale, which is the half that makes the assertion below mean
+    // something: without this the test passes with the visibility path deleted.
+    expect(result.current.left).toBe(2);
+
     act(() => {
       document.dispatchEvent(new Event("visibilitychange"));
     });

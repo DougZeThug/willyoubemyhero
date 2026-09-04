@@ -135,11 +135,24 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
           if (res.reason === "claimed") await invalidateActor(mine);
           return;
         }
-        // Re-keyed rather than added to when the run underneath has moved on.
+        // Keyed on the run the SERVER recorded this claim against, falling back
+        // to the one this render was looking at. The two differ when the run
+        // turned over while the request was in the air, and the server's is the
+        // one the claim is actually filed under — key it wrong and the latch
+        // belongs to a run nobody is standing on, so the rung comes straight
+        // back.
+        //
+        // The fallback is not belt-and-braces. Keyed on `res.startedOn` ALONE, a
+        // response that does not carry the field keys the latch to `undefined`,
+        // which matches no run at all — so the latch silently stops latching and
+        // the ceremony replays on the next refetch, which is the one thing it
+        // exists to prevent. Same call `tierFloor` above makes about not letting
+        // an older server's answer decide what this screen does.
+        const claimedRun = res.startedOn ?? run;
         claimedRef.current =
-          claimedRef.current.run === run
-            ? { run, days: new Set(claimedRef.current.days).add(days) }
-            : { run, days: new Set([days]) };
+          claimedRef.current.run === claimedRun
+            ? { run: claimedRun, days: new Set(claimedRef.current.days).add(days) }
+            : { run: claimedRun, days: new Set([days]) };
         setMilestoneReveal({
           milestone: res.milestone,
           streak: res.streak,

@@ -21,6 +21,9 @@ import { useMilestoneClaim } from "./use-milestone-claim";
 
 const CARD = { id: "s-1", name: "The Gazebo", tier: "rare" } as never;
 
+/** The run every fixture below is standing on, and what the server files against. */
+const RUN = "2026-08-21";
+
 function streak(over: Partial<StreakStatus> = {}): StreakStatus {
   const current = over.current ?? 14;
   return {
@@ -123,7 +126,14 @@ describe("claiming", () => {
     // earned-and-unclaimed. `claimedRef` is what stops the button re-arming and
     // the ceremony firing a second time over the top of the first.
     claimFn.mockReset();
-    claimFn.mockResolvedValue({ ok: true, milestone: 3, streak: 3, duplicate: false, card: CARD });
+    claimFn.mockResolvedValue({
+      ok: true,
+      milestone: 3,
+      streak: 3,
+      startedOn: RUN,
+      duplicate: false,
+      card: CARD,
+    });
     const stale = streak({ current: 3 });
     const { result, rerender } = mount("m:alice", stale);
     await act(async () => {
@@ -143,7 +153,14 @@ describe("claiming", () => {
     // re-earnable. A latch keyed on days alone remembered the old run and
     // suppressed a button the server was correctly offering.
     claimFn.mockReset();
-    claimFn.mockResolvedValue({ ok: true, milestone: 3, streak: 3, duplicate: false, card: CARD });
+    claimFn.mockResolvedValue({
+      ok: true,
+      milestone: 3,
+      streak: 3,
+      startedOn: RUN,
+      duplicate: false,
+      card: CARD,
+    });
     const { result, rerender } = mount("m:alice", streak({ current: 3 }));
     await act(async () => {
       await result.current.claim(3);
@@ -154,13 +171,49 @@ describe("claiming", () => {
     await waitFor(() => expect(result.current.claimable?.days).toBe(3));
   });
 
+  it("latches on the run the SERVER filed the claim against", async () => {
+    // The run turned over while the request was in the air. The server's answer
+    // is the one the claim is actually recorded under, so that is what the latch
+    // has to be keyed on — keyed on the render's run it would belong to a run
+    // nobody is standing on, and the rung would come straight back.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({
+      ok: true,
+      milestone: 3,
+      streak: 3,
+      startedOn: "2026-09-01",
+      duplicate: false,
+      card: CARD,
+    });
+    const { result, rerender } = mount("m:alice", streak({ current: 3 }));
+    await act(async () => {
+      await result.current.claim(3);
+    });
+    // The status catches up to the run the claim landed on.
+    rerender({ a: "m:alice", s: streak({ current: 3, startedOn: "2026-09-01" }) });
+    expect(result.current.claimable).toBeNull();
+  });
+
+  it("still latches when the response carries no run at all", async () => {
+    // An older server answering. Keyed on `res.startedOn` alone this would key
+    // the latch to `undefined`, which matches no run — so the latch would stop
+    // latching entirely and the ceremony would replay on the next refetch, which
+    // is the one thing it exists to prevent.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({ ok: true, milestone: 3, streak: 3, duplicate: false, card: CARD });
+    const { result, rerender } = mount("m:alice", streak({ current: 3 }));
+    await act(async () => {
+      await result.current.claim(3);
+    });
+    rerender({ a: "m:alice", s: streak({ current: 3 }) });
+    expect(result.current.claimable).toBeNull();
+  });
+
   it("asks again when the server says the rung is already collected", async () => {
     // Another device took it, or the first attempt's response was lost. Either
     // way everything this screen believes about the ladder is a response behind.
     claimFn.mockReset();
     claimFn.mockResolvedValue({ ok: false, reason: "claimed" });
-    const { client } = createQueryWrapper();
-    void client;
     const { result } = mount("m:alice", streak({ current: 3 }));
     await act(async () => {
       await result.current.claim(3);
@@ -205,7 +258,14 @@ describe("a phone changing hands", () => {
     // Real in this league. The next person's milestones are their own, and a
     // reveal left up would be showing them somebody else's card.
     claimFn.mockReset();
-    claimFn.mockResolvedValue({ ok: true, milestone: 3, streak: 3, duplicate: false, card: CARD });
+    claimFn.mockResolvedValue({
+      ok: true,
+      milestone: 3,
+      streak: 3,
+      startedOn: RUN,
+      duplicate: false,
+      card: CARD,
+    });
     const s = streak({ current: 3 });
     const { result, rerender } = mount("m:alice", s);
     await act(async () => {

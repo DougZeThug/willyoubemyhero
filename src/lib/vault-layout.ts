@@ -211,25 +211,25 @@ export function useVaultLayout(present: readonly string[]) {
   const order = useMemo(() => orderSections(present, layout.order), [present, layout.order]);
   const collapsed = useMemo(() => new Set(layout.collapsed), [layout.collapsed]);
 
-  const toggle = useCallback(
-    (id: string) => {
-      const next = collapsed.has(id)
-        ? current.collapsed.filter((x) => x !== id)
-        : [...current.collapsed, id];
-      // `current` and not the render's `layout`, throughout these setters. The
-      // record now carries the reading preferences as well as the arrangement,
-      // and two hooks write it — so a setter spreading the snapshot it was
-      // rendered with can silently undo a write that landed after that render.
-      // The module value is the last thing actually written, which is the only
-      // thing a merge should be built on.
-      //
-      // Keeps the STORED order rather than the merged one: opening a shelf is
-      // not a statement about where it sits, and pinning the order here would
-      // freeze a layout the owner never arranged.
-      setVaultLayout({ ...current, collapsed: next });
-    },
-    [collapsed],
-  );
+  const toggle = useCallback((id: string) => {
+    // BOTH halves off `current`. Deciding from the render's snapshot and
+    // writing from the module value is how a shelf another tab just collapsed
+    // gets its id written twice, or a toggle turns into a no-op.
+    const next = current.collapsed.includes(id)
+      ? current.collapsed.filter((x) => x !== id)
+      : [...current.collapsed, id];
+    // `current` and not the render's `layout`, throughout these setters. The
+    // record now carries the reading preferences as well as the arrangement,
+    // and two hooks write it — so a setter spreading the snapshot it was
+    // rendered with can silently undo a write that landed after that render.
+    // The module value is the last thing actually written, which is the only
+    // thing a merge should be built on.
+    //
+    // Keeps the STORED order rather than the merged one: opening a shelf is
+    // not a statement about where it sits, and pinning the order here would
+    // freeze a layout the owner never arranged.
+    setVaultLayout({ ...current, collapsed: next });
+  }, []);
 
   const move = useCallback(
     (id: string, delta: number) => {
