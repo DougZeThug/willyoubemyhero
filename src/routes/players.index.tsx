@@ -107,7 +107,7 @@ const LOCKED_RARITY_RANK = 99;
 const SKELETON_TILES = 6;
 
 function PlayersPage() {
-  const { event, bundle, error, realtimeDegraded } = useEventBundle();
+  const { event, bundle, error, loading: eventLoading, realtimeDegraded } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
   // Hoisted once for the whole grid, and the *event's* back rather than each
   // player's — see the note on useEventCardBack. A player's own back on their
@@ -202,10 +202,13 @@ function PlayersPage() {
    * yet" under a heading, then the whole grid — which is the shift the
    * placeholders exist to remove rather than to relocate.
    *
-   * A failed event read is not a wait: `error` with no bundle is a shelf that is
-   * never going to fill, and it has a banner of its own at the top of the page.
+   * `loading` rather than "the bundle has not arrived", and the difference is
+   * the whole out-of-season case: with no active combine the bundle query never
+   * runs and never will, so an absent bundle would leave placeholders up for
+   * good instead of saying there is nobody on the roster. `loading` is false the
+   * moment both queries have settled, however they settled.
    */
-  const shelfWaiting = !ready || (!bundle && !error);
+  const shelfWaiting = !ready || eventLoading;
 
   /**
    * Whether a slot renders face-down — and the only thing the rarity sort is

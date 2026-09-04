@@ -49,17 +49,18 @@
 -- than a line inside create_trade_offer: that RPC is a hundred lines of
 -- validation this migration has no business restating, and a counter somebody
 -- has to remember to keep is a counter that drifts.
+--
+-- NULLABLE, AND DELIBERATELY NOT BACKFILLED. An offer that already existed when
+-- this migration ran has no recoverable creation count — counting its rows now
+-- would enshrine whatever survived, which is exactly the reduced offer the
+-- column exists to catch. NULL says "unknown" and the reopen refuses on it, so
+-- offers that predate the feature simply cannot be undone. Nobody loses
+-- anything they had: until this migration, nothing could.
 ALTER TABLE public.trade_offers
-  ADD COLUMN IF NOT EXISTS staked_count integer NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS staked_count integer;
 
 COMMENT ON COLUMN public.trade_offers.staked_count IS
-  'How many items the offer was created with. Never decremented: it is the baseline reopen_trade_offer compares the surviving trade_offer_items against, so a stake lost to a cascade is visible.';
-
--- Idempotent both ways: a replay from empty has no offers to count, and a second
--- run finds every count already right and matches nothing.
-UPDATE public.trade_offers o
-   SET staked_count = (SELECT count(*) FROM public.trade_offer_items i WHERE i.offer_id = o.id)
- WHERE o.staked_count = 0;
+  'How many items the offer was created with, or NULL for an offer that predates the column. Never decremented: it is the baseline reopen_trade_offer compares the surviving trade_offer_items against, so a stake lost to a cascade is visible. NULL is refused rather than guessed.';
 
 CREATE OR REPLACE FUNCTION public.count_trade_offer_stake() RETURNS trigger
 LANGUAGE plpgsql
@@ -67,7 +68,13 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  UPDATE public.trade_offers SET staked_count = staked_count + 1 WHERE id = NEW.offer_id;
+  -- COALESCE because the offer row is inserted before its items and so starts at
+  -- NULL; every item then counts itself. A row that predates this trigger never
+  -- gains an item — nothing inserts into trade_offer_items after create — so
+  -- there is no path from "unknown" to a number that was not counted here.
+  UPDATE public.trade_offers
+     SET staked_count = COALESCE(staked_count, 0) + 1
+   WHERE id = NEW.offer_id;
   RETURN NEW;
 END;
 $$;
@@ -152,7 +159,9 @@ BEGIN
   ) OR NOT public.trade_leaves_a_copy(_offer_id)
     OR NOT public.trade_has_both_sides(_offer_id)
     -- And the offer is still the whole offer. The three above all ask about the
-    -- items that remain; this is the one that notices an item that does not.
+    -- items that remain; this is the one that notices an item that does not —
+    -- and refuses outright on an offer old enough to have no baseline at all.
+    OR _offer.staked_count IS NULL
     OR (SELECT count(*) FROM public.trade_offer_items WHERE offer_id = _offer_id)
          <> _offer.staked_count THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'stale');

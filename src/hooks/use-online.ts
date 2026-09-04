@@ -48,6 +48,22 @@ export function useIsOnline(): boolean {
 }
 
 /**
+ * The same answer as `useIsOnline`, read once, outside a render.
+ *
+ * For code that outlives the component that scheduled it. A toast raised by a
+ * route is mounted at the app ROOT, so its action can still fire after that
+ * route has unmounted — and any React value its closure captured, a ref updated
+ * by an effect included, has been frozen since. This asks the browser at the
+ * moment of the tap instead.
+ *
+ * Guarded for the same reason the hook starts optimistic: `navigator` does not
+ * exist during SSR, and nothing that runs there should decide it is offline.
+ */
+export function isOnlineNow(): boolean {
+  return typeof navigator === "undefined" || navigator.onLine;
+}
+
+/**
  * What to spread onto a control that cannot run without a connection.
  *
  * THE BANNER IS WHAT ACTUALLY TELLS ANYBODY, and that is worth being clear

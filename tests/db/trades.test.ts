@@ -1305,6 +1305,17 @@ describe("reopen_trade_offer", () => {
     expect(await offerStatus(offerId)).toBe("declined");
   });
 
+  it("refuses an offer old enough to have no baseline", async () => {
+    // What a row that predates the column looks like. Nothing can be recovered
+    // about what it was created with, so the undo declines rather than trusting
+    // whatever survived — which is the very thing the count exists to doubt.
+    const { offerId } = await declined();
+    await sql("UPDATE public.trade_offers SET staked_count = NULL WHERE id = $1", [offerId]);
+
+    expect(await reopen(offerId, IDS.bob)).toEqual({ ok: false, reason: "stale" });
+    expect(await offerStatus(offerId)).toBe("declined");
+  });
+
   it("raises on an offer that does not exist", async () => {
     await expect(reopen(IDS.outsider, IDS.bob)).rejects.toThrow(/offer not found/i);
   });

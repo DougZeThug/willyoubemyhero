@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -52,7 +52,7 @@ import { CollectorSignup } from "@/components/collector-signup";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
-import { OFFLINE_MESSAGE, offlineReason, useIsOnline } from "@/hooks/use-online";
+import { isOnlineNow, OFFLINE_MESSAGE, offlineReason, useIsOnline } from "@/hooks/use-online";
 
 export const Route = createFileRoute("/players/trade")({
   head: () => ({
@@ -91,14 +91,6 @@ function TradePage() {
   // go quiet with the reason on them rather than throwing a toast a second
   // later. Reading the inbox still works: that half is cache.
   const offline = !useIsOnline();
-  // The Undo toast outlives the render that raised it, so the closure inside it
-  // cannot read `offline` — that would be the value from the moment the offer
-  // was declined, not from the moment Undo was tapped, and the signal dropping
-  // in between is exactly the case worth catching.
-  const offlineRef = useRef(offline);
-  useEffect(() => {
-    offlineRef.current = offline;
-  }, [offline]);
 
   const myId = me?.participantId ?? null;
   const offers = useTradeOffers(myId);
@@ -256,7 +248,12 @@ function TradePage() {
     // Quiet for the same reason every other write on this screen is: offline it
     // can only fail, and an Undo that appears to have worked is worse than one
     // that says it cannot.
-    if (offlineRef.current) {
+    //
+    // Asked of the browser rather than read off `offline`, because the toast is
+    // mounted at the app root and outlives this route: walk back to the vault
+    // with it still up and every React value this closure captured stops moving,
+    // including a ref an effect here was keeping current.
+    if (!isOnlineNow()) {
       toast(OFFLINE_MESSAGE);
       return;
     }
