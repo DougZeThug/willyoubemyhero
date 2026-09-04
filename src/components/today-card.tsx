@@ -113,8 +113,15 @@ export function TodayCard({
       </h2>
 
       {/* The primary slot. One height across all four states, which is what stops
-          the shelves moving when IndexedDB finally answers. */}
-      <div className="mt-2 flex min-h-14 items-center gap-2">
+          the shelves moving when IndexedDB finally answers.
+
+          The offer pill shares this row rather than taking a band of its own,
+          and that is the difference between reserving space and leaving a hole:
+          a slot nobody has an offer in is empty on almost every load, and 44px
+          of nothing between the button and the streak is what pushed the first
+          card off a 320px screen. Beside the button it costs nothing when it is
+          absent and still cannot move anything when it lands. */}
+      <div className="mt-2 flex min-h-14 flex-wrap items-center justify-between gap-2">
         {pack.state === "loading" ? (
           // Not "sealed" while we do not know. Painting "Open today's pack" over
           // a pack somebody is halfway through, then swapping the label under
@@ -159,19 +166,10 @@ export function TodayCard({
             )}
           </Link>
         )}
-      </div>
 
-      {/* The done state's second line, and the only place the old streak sentence
-          survives — it is the reason to come back tomorrow, said on the day you
-          have already been. */}
-      <div className="mt-1 min-h-4 text-xs font-bold" style={{ color: AMBER }}>
-        {pack.state === "done" && streak ? streakLine(streak) : null}
-      </div>
-
-      {/* Only when there is something to answer. The Trade tab carries the same
-          news permanently, but its dot is easy to miss under a thumb on the
-          screen you are already looking at. */}
-      <div className="mt-1 flex min-h-11 items-center">
+        {/* Only when there is something to answer. The Trade tab carries the
+            same news permanently, but its dot is easy to miss under a thumb on
+            the screen you are already looking at. */}
         {tradeUnread > 0 && (
           <Link
             to="/players/trade"
@@ -181,6 +179,13 @@ export function TodayCard({
             Offer waiting
           </Link>
         )}
+      </div>
+
+      {/* The done state's second line, and the only place the old streak sentence
+          survives — it is the reason to come back tomorrow, said on the day you
+          have already been. */}
+      <div className="mt-1 min-h-4 text-xs font-bold" style={{ color: AMBER }}>
+        {pack.state === "done" && streak ? streakLine(streak) : null}
       </div>
 
       {(running || streakPending) && (
