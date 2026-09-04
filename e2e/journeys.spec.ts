@@ -227,6 +227,13 @@ test.describe("results", () => {
     // order, which is the order this test asserts. It would have passed against
     // the leak it exists to catch.
     await expect(slots).toHaveCount(PLAYERS.length);
+    // Sorting lives in a bottom sheet now, so the chip comes first. The wait
+    // above still matters for the same reason: the header ships in the SSR html
+    // and the roster does not, so a tap any earlier lands on an unhydrated
+    // control, does nothing, and leaves the grid in its default name order —
+    // which is the order this test asserts, so it would pass against the leak it
+    // exists to catch.
+    await page.getByRole("button", { name: /sort and filter/i }).click();
     await page.getByRole("button", { name: /^rarity$/i }).click();
 
     // Every slot is face-down, so every slot shares the sentinel rank and the

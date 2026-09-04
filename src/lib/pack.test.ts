@@ -3,12 +3,16 @@
 // not true before: the seed carried no identity at all.
 import { describe, expect, it } from "vitest";
 import {
+  cardsLeft,
   dealPack,
+  nextLocalMidnight,
+  nextPackLabel,
   packSeed,
   packStage,
   resumeCursor,
   TEAR,
   tearProgress,
+  todayPackState,
   type SecretSlot,
 } from "./pack";
 
@@ -201,5 +205,133 @@ describe("tearProgress", () => {
 
   it("survives a zero-width pack instead of dividing by it", () => {
     expect(tearProgress(0, 50, 0)).toBe(0);
+  });
+});
+
+describe("cardsLeft", () => {
+  const args = { ids: 3, revealed: 0, secretRevealed: false, secretPending: false };
+
+  it("counts the roster cards still face-down", () => {
+    expect(cardsLeft({ ...args, revealed: 1 })).toBe(2);
+  });
+
+  it("counts the secret's slot only when one is actually coming", () => {
+    // A guest with no actor, a spent day and an empty set all land here, and none
+    // of them should be promised a fourth card.
+    expect(cardsLeft({ ...args, revealed: 3, secretPending: false })).toBe(0);
+    expect(cardsLeft({ ...args, revealed: 3, secretPending: true })).toBe(1);
+  });
+
+  it("stops counting a secret once it has been turned", () => {
+    expect(cardsLeft({ ...args, revealed: 3, secretPending: true, secretRevealed: true })).toBe(0);
+  });
+
+  it("never goes negative on a row that revealed more than it dealt", () => {
+    expect(cardsLeft({ ...args, ids: 2, revealed: 5 })).toBe(0);
+  });
+});
+
+describe("todayPackState", () => {
+  const row = { dayKey: "2026-09-04", ids: ["a", "b", "c"], revealed: [], cursor: 0, identity: "d:1" }; // prettier-ignore
+  const args = { row, dayKey: "2026-09-04", identity: "d:1", secretPending: false };
+
+  it("is sealed with no row at all", () => {
+    expect(todayPackState({ ...args, row: null })).toEqual({ state: "sealed" });
+  });
+
+  it("is sealed once the day has turned", () => {
+    expect(todayPackState({ ...args, dayKey: "2026-09-05" })).toEqual({ state: "sealed" });
+  });
+
+  it("is sealed for whoever picked the phone up next", () => {
+    // Packs are per-person, and a handset changes hands in this league.
+    expect(todayPackState({ ...args, identity: "m:p-alice" })).toEqual({ state: "sealed" });
+  });
+
+  it("treats a row with no identity as this device's", () => {
+    // Written before per-person packs. Calling it somebody else's would take the
+    // cards off the screen of anybody mid-reveal on the day this ships.
+    const legacy = { dayKey: "2026-09-04", ids: ["a", "b"], revealed: [0], cursor: 1 };
+    expect(todayPackState({ ...args, row: legacy })).toEqual({ state: "torn", left: 1 });
+  });
+
+  it("is torn while cards are still face-down", () => {
+    expect(todayPackState({ ...args, row: { ...row, revealed: [0] } })).toEqual({
+      state: "torn",
+      left: 2,
+    });
+  });
+
+  it("is done once the whole pack is turned", () => {
+    expect(todayPackState({ ...args, row: { ...row, revealed: [0, 1, 2], cursor: 3 } })).toEqual({
+      state: "done",
+    });
+  });
+
+  it("still owes the secret when one is waiting", () => {
+    expect(
+      todayPackState({
+        ...args,
+        secretPending: true,
+        row: { ...row, revealed: [0, 1, 2], cursor: 3 },
+      }),
+    ).toEqual({ state: "torn", left: 1 });
+  });
+
+  it("calls a pre-stand row torn, because that is what the pack screen does with it", () => {
+    // No cursor and everything revealed is the shape the old ceremony wrote, and
+    // the pack replays it through the stand — turning every card face-down again.
+    // "Done" here would have the two screens disagree about whether there is
+    // anything left to open.
+    const preStand = { dayKey: "2026-09-04", ids: ["a", "b", "c"], revealed: [0, 1, 2] };
+    expect(todayPackState({ ...args, row: preStand })).toEqual({ state: "torn", left: 3 });
+  });
+
+  it("is sealed for a row that dealt nothing", () => {
+    expect(todayPackState({ ...args, row: { ...row, ids: [] } })).toEqual({ state: "sealed" });
+  });
+});
+
+describe("nextPackLabel", () => {
+  const now = Date.parse("2026-09-04T18:00:00Z");
+
+  it("rounds hours UP, so the clock never breaks the promise it printed", () => {
+    expect(nextPackLabel("2026-09-04T23:50:00Z", now)).toBe("Next pack in 6h");
+  });
+
+  it("drops to minutes inside the last hour", () => {
+    expect(nextPackLabel("2026-09-04T18:12:00Z", now)).toBe("Next pack in 12m");
+  });
+
+  it("never says zero minutes", () => {
+    expect(nextPackLabel("2026-09-04T18:00:20Z", now)).toBe("Next pack in 1m");
+  });
+
+  it("says so once the instant has passed", () => {
+    expect(nextPackLabel("2026-09-04T17:00:00Z", now)).toBe("Next pack any moment now");
+  });
+
+  it("falls back to tomorrow when nobody has told us", () => {
+    // Every device with no actor: the server tells a stranger nothing.
+    expect(nextPackLabel(null, now)).toBe("Next pack tomorrow");
+    expect(nextPackLabel("not a date", now)).toBe("Next pack tomorrow");
+  });
+});
+
+describe("nextLocalMidnight", () => {
+  it("is the next midnight where the phone is standing", () => {
+    const now = new Date(2026, 8, 4, 18, 30).getTime();
+    const at = new Date(nextLocalMidnight(now));
+    expect(at.getFullYear()).toBe(2026);
+    expect(at.getMonth()).toBe(8);
+    expect(at.getDate()).toBe(5);
+    expect(at.getHours()).toBe(0);
+    expect(at.getMinutes()).toBe(0);
+  });
+
+  it("rolls the month rather than landing on the 32nd", () => {
+    const at = new Date(nextLocalMidnight(new Date(2026, 8, 30, 23, 59).getTime()));
+    expect(at.getMonth()).toBe(9);
+    expect(at.getDate()).toBe(1);
   });
 });

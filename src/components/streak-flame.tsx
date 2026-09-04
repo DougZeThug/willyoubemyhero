@@ -15,16 +15,34 @@ import type { Streak } from "@/lib/streaks";
  * Its own test id, never `collected-count`: two nodes carrying that one on a
  * single screen is a trap the e2e suite would walk into.
  */
-export function StreakFlame({ streak, className }: { streak: Streak; className?: string }) {
+export function StreakFlame({
+  streak,
+  className,
+  compact = false,
+}: {
+  streak: Streak;
+  className?: string;
+  /**
+   * Just the flame.
+   *
+   * The Today card's streak strip prints "Day 5" beside this in words, so the
+   * caption and the bare number here would be the same fact said three times in
+   * a row. The flame itself still carries the pulse, which is the part that is
+   * not a number.
+   */
+  compact?: boolean;
+}) {
   // Nothing to say at zero, same rule as streakLine and packedByLabel. A streak
   // nobody has is not worth a third of a phone-width header row.
   if (streak.current === 0) return null;
 
   return (
     <div className={cn("text-center", className)} data-testid="streak-flame">
-      <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
-        Streak
-      </div>
+      {!compact && (
+        <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+          Streak
+        </div>
+      )}
       <div className="flex items-center justify-center gap-1">
         <Flame
           aria-hidden
@@ -39,9 +57,14 @@ export function StreakFlame({ streak, className }: { streak: Streak; className?:
             } as React.CSSProperties
           }
         />
-        <span className="font-display text-lg font-black" style={{ color: "oklch(0.82 0.19 85)" }}>
-          {streak.current}
-        </span>
+        {!compact && (
+          <span
+            className="font-display text-lg font-black"
+            style={{ color: "oklch(0.82 0.19 85)" }}
+          >
+            {streak.current}
+          </span>
+        )}
       </div>
     </div>
   );

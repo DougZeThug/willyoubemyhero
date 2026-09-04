@@ -109,3 +109,92 @@ test.describe("pinning cards to the top", () => {
     await expect(aliceIn(rosterShelf(page))).toBeVisible();
   });
 });
+
+/**
+ * How the binder reads, and where it starts.
+ *
+ * The sort chips, Rearrange and the four counters above them were most of the
+ * ~640px the audit measured before the first card at 390 (§3, §17). These are
+ * the two halves of the fix: one control instead of six, and a floor under how
+ * far down the page the binder is allowed to begin.
+ */
+test.describe("sort & filter", () => {
+  test("keeps every reading choice on this device", async ({ page, server }) => {
+    await asMember(page);
+    server.set("getMyCardStats", OWNS_ALICE);
+    await page.goto("/players");
+    // The shelf header ships in the SSR html and the grid does not, so waiting
+    // for a tile is waiting for hydration. A tap any earlier lands on a button
+    // React has not adopted yet and does nothing at all — the same trap the
+    // rarity-sort journey documents.
+    await expect(aliceIn(rosterShelf(page))).toBeVisible();
+
+    await page.getByRole("button", { name: /sort and filter/i }).click();
+    await page.getByRole("button", { name: "Newest" }).click();
+    await page.getByRole("button", { name: "Owned" }).click();
+    await page.getByRole("button", { name: "3 across" }).click();
+    await page.keyboard.press("Escape");
+
+    // Owned, so the twelve face-down slots are gone and only Alice is left.
+    await expect(page.getByRole("img", { name: /not packed yet/ })).toHaveCount(0);
+    await expect(aliceIn(rosterShelf(page))).toBeVisible();
+
+    await page.reload();
+    await expect(aliceIn(rosterShelf(page))).toBeVisible();
+    await page.getByRole("button", { name: /sort and filter/i }).click();
+    for (const [name, pressed] of [
+      ["Newest", "true"],
+      ["Owned", "true"],
+      ["3 across", "true"],
+      ["Name", "false"],
+    ] as const) {
+      await expect(page.getByRole("button", { name })).toHaveAttribute("aria-pressed", pressed);
+    }
+  });
+
+  test("says why a shelf is empty rather than looking like it lost cards", async ({
+    page,
+    server,
+  }) => {
+    await asMember(page);
+    server.set("getMyCardStats", OWNS_ALICE);
+    await page.goto("/players");
+    await expect(aliceIn(rosterShelf(page))).toBeVisible();
+    await page.getByRole("button", { name: /sort and filter/i }).click();
+    await page.getByRole("button", { name: "Spares" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText(/no spares yet/i)).toBeVisible();
+  });
+
+  test("puts a copy count on a card somebody holds more than one of", async ({ page, server }) => {
+    // The one number that makes a card TRADEABLE, and until now it appeared only
+    // on secrets and on the detail slab — nowhere near where trading decisions
+    // start (§5).
+    await asMember(page);
+    server.set("getMyCardStats", {
+      ...OWNS_ALICE,
+      cards: [{ ...OWNS_ALICE.cards[0], pullCount: 3 }],
+    });
+    await page.goto("/players");
+    await expect(rosterShelf(page).getByText("×3")).toBeVisible();
+    // Never on a face-down slot: there is no copy to count, and a pip there
+    // would say the slot is yours.
+    await expect(rosterShelf(page).getByText(/^×\d+$/)).toHaveCount(1);
+  });
+
+  test("starts the binder inside the first screen at 390", async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "mobile",
+      "A fold is a phone measurement; the desktop project is 720 tall and passes for free.",
+    );
+    // 390x844 is the mobile project's own size (iPhone 13), and the width every
+    // number in §17 was measured at. Before this the vault spent ~640px of
+    // header and, at 320, showed no card at all.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/players");
+    const firstTile = rosterShelf(page).getByRole("link", { name: /^Alice Ace/ });
+    await expect(firstTile).toBeVisible();
+    const box = (await firstTile.boundingBox())!;
+    expect(box.y).toBeLessThan(844);
+  });
+});

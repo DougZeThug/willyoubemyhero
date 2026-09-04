@@ -621,7 +621,9 @@ test.describe("the vault's secret shelf", () => {
     });
     await page.goto("/players");
 
-    await expect(page.getByText("3 secrets pulled")).toBeVisible();
+    // The counter stack became one summary line under the Today card (§13).
+    // "across 2 sets" is how many sets these came FROM — never how many exist.
+    await expect(page.getByText(/Secrets 3 across 1 set/)).toBeVisible();
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible();
     await expect(page.getByText("Pulled ×2")).toBeVisible();
 
@@ -686,5 +688,123 @@ test.describe("the vault's secret shelf", () => {
     });
     await page.goto("/players");
     await expect(page.getByRole("link", { name: /^open today's pack$/i })).toBeVisible();
+  });
+});
+
+/**
+ * The Today card's three states, in a browser.
+ *
+ * The pack row is seeded straight into IndexedDB from an init script — the same
+ * trick the pack journeys use — because that row IS the state: the vault only
+ * ever reads it, and there is no other way to arrive on a half-open pack without
+ * playing one through.
+ */
+test.describe("the vault's Today card", () => {
+  /** Write a pack row for today, as this device. */
+  async function seedPack(page: Page, revealed: number[], secretRevealed = false) {
+    await page.addInitScript(
+      ([turned, secret]) => {
+        const d = new Date();
+        const p2 = (n: number) => String(n).padStart(2, "0");
+        const dayKey = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+        const open = indexedDB.open("wwbh-cards", 2);
+        open.onupgradeneeded = () => {
+          const db = open.result;
+          for (const name of ["collected", "card-meta", "pack-state"]) {
+            if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+          }
+        };
+        open.onsuccess = () => {
+          open.result
+            .transaction("pack-state", "readwrite")
+            .objectStore("pack-state")
+            .put(
+              {
+                dayKey,
+                ids: ["ep-alice", "ep-bob", "ep-carol"],
+                revealed: turned,
+                cursor: (turned as number[]).length,
+                secretRevealed: secret,
+                // No identity, which counts as this device's — the row shape a
+                // pack written before per-person packs has, and the one an init
+                // script can write without knowing the minted device id.
+              },
+              "today",
+            );
+        };
+      },
+      [revealed, secretRevealed] as const,
+    );
+  }
+
+  test("offers the pack while it is still sealed", async ({ page }) => {
+    await page.goto("/players");
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /^open today's pack$/i }),
+    ).toBeVisible();
+  });
+
+  test("asks somebody to finish a pack they walked away from", async ({ page }) => {
+    await seedPack(page, [0]);
+    await page.goto("/players");
+    await expect(page.getByRole("link", { name: "Finish your pack · 2 cards left" })).toBeVisible();
+  });
+
+  test("counts down to the next one once today's is spent", async ({ page, server }) => {
+    // A day that resets far enough ahead that the countdown is stable however
+    // long the run takes.
+    server.set("getSecretStatus", {
+      claimed: true,
+      day: "2026-07-28",
+      pulledToday: true,
+      pulled: 1,
+      available: false,
+      resetsAt: new Date(Date.now() + 6 * 3_600_000).toISOString(),
+    });
+    await seedPack(page, [0, 1, 2], true);
+    await page.goto("/players");
+    await expect(page.getByText(/^next pack in \d+h$/i)).toBeVisible();
+    // And no pack control at all: the Pack tab is one tap away, so a second
+    // route to the same screen here would be the nav drawn twice.
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /open today's pack/i }),
+    ).toHaveCount(0);
+  });
+
+  test("draws the streak ladder and claims a rung without leaving home", async ({
+    page,
+    server,
+  }) => {
+    await asMember(page);
+    server.set("getStreakStatus", {
+      kind: "member",
+      current: 3,
+      startedOn: "2026-07-26",
+      lastOpenedOn: "2026-07-28",
+      openedToday: true,
+      today: "2026-07-28",
+      canClaim: true,
+      milestones: [
+        { days: 3, label: "Three Days", blurb: "A bonus secret, on the house.", tierFloor: null, earned: true, claimed: false }, // prettier-ignore
+        { days: 7, label: "One Week", blurb: "Seven days straight. Rare or better.", tierFloor: "rare", earned: false, claimed: false }, // prettier-ignore
+      ],
+    });
+    // Deliberately absent from DEFAULT_RESPONSES, so nothing reaches the payout
+    // unless a test means it to.
+    server.set("claimStreakMilestone", {
+      ok: true,
+      milestone: 3,
+      streak: 3,
+      startedOn: "2026-07-26",
+      duplicate: false,
+      card: SECRET_CARD,
+    });
+
+    await page.goto("/players");
+    await expect(page.getByText("Day 3")).toBeVisible();
+    await page.getByRole("button", { name: "Claim Three Days" }).click();
+    // The same ceremony the pack summary opens, from a surface the stand is long
+    // gone from.
+    await expect(page.getByTestId("milestone-reveal")).toBeVisible({ timeout: 20_000 });
   });
 });

@@ -592,7 +592,15 @@ export function secretFoil(
   return variant;
 }
 
-/** "3 secrets pulled" / "1 secret pulled". Never rendered at zero — see the vault. */
+/**
+ * "3 secrets pulled" / "1 secret pulled". Never rendered at zero, on the same
+ * rule as packedByLabel: a count of something you have none of announces that
+ * the thing exists.
+ *
+ * The vault says this as part of one summary line now (vault-summary.ts), so
+ * nothing calls this today. Kept because the profile block §13 asks for repeats
+ * the same numbers, and because the rule above is the point of the function.
+ */
 export function secretsPulledLabel(n: number): string {
   return `${n} secret${n === 1 ? "" : "s"} pulled`;
 }

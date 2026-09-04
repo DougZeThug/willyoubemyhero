@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Shuffle, Layers, Check, ArrowUpDown, Medal } from "lucide-react";
+import { Layers, Check, Medal } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
@@ -23,6 +23,10 @@ import { formatDay } from "@/lib/format";
 import { SecretCardSheet } from "@/components/secret-card-sheet";
 import { VaultSection } from "@/components/vault-section";
 import { VaultHero } from "@/components/vault-hero";
+import { TodayCard } from "@/components/today-card";
+import { VaultSortChip, VaultSortSheet } from "@/components/vault-sort-sheet";
+import { MilestoneReveal } from "@/components/milestone-reveal";
+import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
 import { FavouriteButton } from "@/components/favourite-button";
 import { LevelPips } from "@/components/level-pips";
 import {
@@ -39,6 +43,8 @@ import {
   secretSectionId,
   TROPHIES_SECTION,
   useVaultLayout,
+  useVaultPrefs,
+  type VaultSort,
 } from "@/lib/vault-layout";
 import { useCollectionTrophies } from "@/hooks/use-collection-trophies";
 import {
@@ -57,6 +63,12 @@ import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { useAccountSyncState } from "@/lib/account-sync-state";
+import { usePackProgress } from "@/hooks/use-pack-progress";
+import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
+import { useIsOnline } from "@/hooks/use-online";
+import { nextLocalMidnight } from "@/lib/pack";
+import { vaultSummaryLine } from "@/lib/vault-summary";
+import { urlFromSet } from "@/lib/media";
 
 export const Route = createFileRoute("/players/")({
   head: () => ({
@@ -72,15 +84,6 @@ export const Route = createFileRoute("/players/")({
   }),
   component: PlayersPage,
 });
-
-type SortKey = "name" | "order" | "pick" | "rarity";
-
-const SORTS: { key: SortKey; label: string }[] = [
-  { key: "name", label: "Name" },
-  { key: "order", label: "Order" },
-  { key: "pick", label: "Pick" },
-  { key: "rarity", label: "Rarity" },
-];
 
 /**
  * Where a card you have not packed sits in the rarity sort.
@@ -113,8 +116,14 @@ function PlayersPage() {
   // player's — see the note on useEventCardBack. A player's own back on their
   // locked slot would be half the reveal, printed on the thing hiding it.
   const cardBack = useEventCardBack(event?.id ?? null);
-  const [sort, setSort] = useState<SortKey>("name");
+  // The SEED is ephemeral on purpose while the sort itself is stored: a frozen
+  // shuffle is not a shuffle, so a device that reloads on it gets a fresh deal.
   const [shuffleSeed, setShuffleSeed] = useState(0);
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
+  // How this device reads the binder. Read here rather than beside the shelf
+  // arrangement below, because the sort is what builds the grid the arrangement
+  // is then computed from — see useVaultPrefs.
+  const { sort, filter, density, setSort, setFilter, setDensity } = useVaultPrefs();
   const member = useMemberSession();
   // Members only: dust_ledger is keyed on a participant, so a guest has no
   // balance to show and the hook stays disabled rather than asking and being
@@ -156,7 +165,18 @@ function PlayersPage() {
   // builds a real streak too, and claim_guest_packs carries it over when they
   // finally put a name to the phone. StreakStatus is a Streak with the milestone
   // ladder bolted on, which is more than the header needs and costs nothing.
-  const streak = useStreakStatus(actor).data ?? null;
+  const streakQuery = useStreakStatus(actor);
+  const streak = streakQuery.data ?? null;
+  // Whether an answer is still coming, which is what decides if the Today card
+  // reserves the strip's slot. `isPending` alone would be true forever for a
+  // device with no actor, where the query never runs at all — and that person
+  // has no streak to wait for, so the slot should collapse rather than sit
+  // empty above the shelves.
+  const streakPending = !!actor && streakQuery.isPending;
+  // Claiming a rung from home. The same hook the pack summary's button uses, so
+  // a milestone cannot pay twice or show its reveal on two screens at once.
+  const milestone = useMilestoneClaim(actor, streak);
+  const offline = !useIsOnline();
   const pullCounts = useCardPullCounts(event?.id ?? null);
   // An index rather than the card itself: the sheet swipes between secrets, so it
   // needs to know where in the shelf the open one sits.
@@ -227,11 +247,26 @@ function PlayersPage() {
 
   const rows = useMemo(() => {
     const list = [...(bundle?.participants ?? [])];
-    // Seeded, so a realtime bundle update during the combine doesn't silently
-    // reorder the grid under the user's thumb.
-    if (shuffleSeed > 0) return shuffle(list, seededRng(`${event?.id ?? ""}:${shuffleSeed}`));
     const byName = (a: (typeof list)[number]) => a.participant?.name ?? "";
     switch (sort) {
+      case "shuffle":
+        // Seeded, so a realtime bundle update during the combine doesn't silently
+        // reorder the grid under the user's thumb.
+        return shuffle(list, seededRng(`${event?.id ?? ""}:${shuffleSeed}`));
+      case "newest": {
+        // The date you FIRST pulled each card, newest first. There is no
+        // per-copy timestamp anywhere — the schema records when a card was first
+        // pulled and nothing about the second — so this is "recently discovered"
+        // and not "recently acquired", which is what §12 wants a server function
+        // for and does not have yet.
+        //
+        // A locked slot has no date at all and sorts last, on the same rule as
+        // the rarity sentinel below: a sort that floated the unpulled cards to
+        // one end would be telling you which they are.
+        const pulled = (p: (typeof list)[number]) =>
+          isLocked(p.id) ? -1 : (collected[p.id]?.pulledAt ?? 0);
+        return list.sort((a, b) => pulled(b) - pulled(a) || byName(a).localeCompare(byName(b)));
+      }
       case "order":
         return list.sort((a, b) => a.running_order - b.running_order);
       case "pick":
@@ -272,12 +307,41 @@ function PlayersPage() {
     }
   }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked, collected]);
 
-  const withCards = rows.filter((p) => cards.data?.[p.id]?.front).length;
-  // The hero turns this into an "Offer waiting" pill, and only above zero. The
+  /**
+   * The roster the shelf actually draws.
+   *
+   * Filtering happens here and nowhere else — the Favourites shelf is a shelf you
+   * built by hand and a filter must not empty it, and the secret shelves have no
+   * "missing" to speak of at all (that is the one thing this app never says).
+   */
+  const filterRoster = useCallback(
+    (list: typeof rows) => {
+      switch (filter) {
+        case "owned":
+          return list.filter((p) => !isLocked(p.id));
+        case "missing":
+          return list.filter((p) => isLocked(p.id));
+        case "spares":
+          return list.filter((p) => !isLocked(p.id) && (collected[p.id]?.count ?? 0) > 1);
+        default:
+          return list;
+      }
+    },
+    [filter, isLocked, collected],
+  );
+
+  // The Today card turns this into an "Offer waiting" pill, and only above zero. The
   // Trade tab carries the same news permanently, but its dot is easy to miss
   // under a thumb on the screen you are already looking at.
   const tradeUnread = useTradeBadge();
   const packWaiting = secretWaiting(secretStatus.data);
+  // Read, never written: dealing still belongs to the pack screen, which is what
+  // keeps one pack a day one pack a day.
+  const packProgress = usePackProgress(packWaiting);
+  // The secret's reset is the only one the server vouches for; the device's own
+  // midnight is the one the pack actually re-seals on. See TodayCard's prop doc —
+  // these are two clocks and the fallback is the more accurate of the two.
+  const nextPackAt = secretStatus.data?.resetsAt ?? nextLocalMidnight(packProgress.now);
 
   const ownedSecrets = useMemo(() => secrets.data?.cards ?? [], [secrets.data]);
   const { ids: favouriteIds, isFavourite, toggle: toggleFavourite } = useVaultFavourites();
@@ -320,15 +384,28 @@ function PlayersPage() {
   // A pinned card moves rather than appearing twice, so the shelves below are
   // what is left over.
   const pinnedIds = useMemo(() => new Set(favourites.map((f) => f.key)), [favourites]);
-  const rosterRows = useMemo(
+  const unpinnedRows = useMemo(
     () => rows.filter((p) => !pinnedIds.has(rosterFavouriteId(p.id))),
     [rows, pinnedIds],
   );
+  const rosterRows = useMemo(() => filterRoster(unpinnedRows), [filterRoster, unpinnedRows]);
 
   // Only sets this person owns something from ever become a shelf. An empty
   // "Pets" header leaks the shape of the set they have not pulled yet, which is
   // the one thing the whole feature withholds — and a set whose every card is
   // pinned upstairs drops out here by exactly the same rule.
+  /**
+   * How many sets the secrets you hold came FROM.
+   *
+   * Its own grouping rather than `secretGroups.length` below, because that one
+   * has the pinned cards taken out of it — and pinning a card does not un-visit
+   * the set it came from. Never how many sets exist.
+   */
+  const secretSetCount = useMemo(
+    () => groupBySecretCollection(ownedSecrets, collections.data?.collections).length,
+    [ownedSecrets, collections.data],
+  );
+
   const secretGroups = useMemo(
     () =>
       groupBySecretCollection(
@@ -379,9 +456,20 @@ function PlayersPage() {
       })),
       // Last by default: the roster is the one shelf you already know by heart,
       // so the sets you are collecting lead the page.
-      { kind: "roster" as const, id: ROSTER_SECTION, title: "Roster", meta: rosterRows.length },
+      {
+        kind: "roster" as const,
+        id: ROSTER_SECTION,
+        title: "Roster",
+        // "3 of 13" while a filter is on, so a shelf showing a subset never
+        // reads as a shelf that has lost cards. A roster denominator is the one
+        // this app has always been allowed: thirteen people, publicly.
+        meta:
+          rosterRows.length === unpinnedRows.length
+            ? rosterRows.length
+            : `${rosterRows.length} of ${unpinnedRows.length}`,
+      },
     ],
-    [favourites, myTrophies, rosterRows.length, secretGroups],
+    [favourites, myTrophies, rosterRows.length, unpinnedRows.length, secretGroups],
   );
 
   const presentIds = useMemo(() => sections.map((x) => x.id), [sections]);
@@ -574,6 +662,7 @@ function PlayersPage() {
     const rarity = rarities.get(p.id) ?? rarityStyle("base");
     const name = p.participant?.name ?? "—";
     const locked = isLocked(p.id);
+    const copies = collected[p.id]?.count ?? 0;
     const favourite = rosterFavouriteId(p.id);
     const tileBadge = cardBadge(
       { label: rarity.label, reason: "", accent: rarity.accent },
@@ -582,31 +671,48 @@ function PlayersPage() {
     return (
       <div key={p.id} className="relative">
         <Link to="/players/$id" params={{ id: p.id }} className="group block focus:outline-none">
-          {/* The link survives the lock: the detail page is gated too, and
-              it is where someone finds out what they are missing. */}
-          {locked ? (
-            <LockedCard
-              back={cardBack.data?.urls ?? null}
-              name={name}
-              inGrid
-              className="transition-transform group-hover:scale-[1.02]"
-            />
-          ) : (
-            <HoloCard
-              frontUrl={urls?.front ?? null}
-              backUrl={null}
-              name={name}
-              rarity={rarity}
-              // The finish belongs to your copy, so it comes from the
-              // collection, not the roster row. Same expression the label
-              // below uses — the two must never disagree. It is already the
-              // best copy you hold: resync_card_pull writes card_pulls.edition
-              // as the top-ranked edition across every row in card_copies.
-              edition={toEdition(collected[p.id]?.edition)}
-              intensity="subtle"
-              className="transition-transform group-hover:scale-[1.02]"
-            />
-          )}
+          {/* Its own positioned box, so the pip below sits on the CARD rather
+              than at the bottom of the caption under it. */}
+          <div className="relative">
+            {/* The link survives the lock: the detail page is gated too, and
+                it is where someone finds out what they are missing. */}
+            {locked ? (
+              <LockedCard
+                back={cardBack.data?.urls ?? null}
+                name={name}
+                inGrid
+                className="transition-transform group-hover:scale-[1.02]"
+              />
+            ) : (
+              <HoloCard
+                frontUrl={urls?.front ?? null}
+                backUrl={null}
+                name={name}
+                rarity={rarity}
+                // The finish belongs to your copy, so it comes from the
+                // collection, not the roster row. Same expression the label
+                // below uses — the two must never disagree. It is already the
+                // best copy you hold: resync_card_pull writes card_pulls.edition
+                // as the top-ranked edition across every row in card_copies.
+                edition={toEdition(collected[p.id]?.edition)}
+                intensity="subtle"
+                className="transition-transform group-hover:scale-[1.02]"
+              />
+            )}
+            {/* The physical stack cue, and the one number that makes a card
+                TRADEABLE — until now it appeared only on secrets and on the
+                detail slab, which is nowhere near where trading decisions start
+                (§5). Never on a locked slot: there is no copy to count, and a
+                pip there would say the slot is yours. */}
+            {!locked && copies > 1 && (
+              <span
+                className="absolute bottom-1 right-1 rounded-full bg-background/85 px-1.5 py-0.5 text-badge font-black leading-none tabular-nums text-primary ring-1 ring-primary/40"
+                aria-label={`${copies} copies`}
+              >
+                ×{copies}
+              </span>
+            )}
+          </div>
           <div className="mt-2 text-center">
             <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
               {name}
@@ -662,78 +768,53 @@ function PlayersPage() {
     );
   };
 
+  /**
+   * Every shelf, at whatever size this device reads at.
+   *
+   * The density is deliberately not roster-only even though its control lives on
+   * the roster's header: it is how big you like cards, and a binder whose pages
+   * were different sizes would be a strange binder. Only the phone breakpoint
+   * moves — above `sm` there is room for three or four either way.
+   */
   const cardGrid = (tiles: React.ReactNode) => (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{tiles}</div>
+    <div
+      className={cn(
+        "grid gap-4 sm:grid-cols-3 lg:grid-cols-4",
+        density === 3 ? "grid-cols-3" : "grid-cols-2",
+      )}
+    >
+      {tiles}
+    </div>
   );
+
+  /**
+   * Why the roster shelf is empty, when it is.
+   *
+   * A filter that matched nothing is not the same as a shelf whose cards are all
+   * pinned upstairs, and neither is "you have not packed anything" — each has a
+   * different next move, so each gets its own sentence.
+   */
+  const emptyRosterLine =
+    unpinnedRows.length === 0
+      ? "Every card is pinned to Favourites."
+      : filter === "spares"
+        ? "No spares yet. A second copy of a card turns up here."
+        : filter === "missing"
+          ? "Nothing missing — you have packed every card."
+          : filter === "owned"
+            ? "Nothing packed yet. Open today's pack."
+            : "Every card is pinned to Favourites.";
 
   const rosterBody = (
     <>
-      {/* Sits with the grid it sorts. Left in the page header it would strand
-          above a shelf that is rolled up, controlling nothing you can see. */}
-      {/* The active chip was a colour swap and nothing else, so a screen reader
-          heard four identical controls and no answer to "sorted by what".
-          aria-pressed rather than a radiogroup: it says the same thing, matches
-          the Rearrange toggle below, and keeps these as buttons — the e2e suite
-          reaches them by role, and role="radio" made them vanish from it. */}
-      <div className="mb-3 flex items-center gap-1">
-        {/* A scroller, because the five controls genuinely do not fit: at 44px
-            and 12px the four chips measure 293px against 262px of shelf at
-            320px wide. Same treatment as the card strips — the row stays one
-            row and every chip stays reachable, rather than wrapping into a
-            second 44px band on a screen the audit already faults for spending
-            640px above the first card (§17). */}
-        <div
-          role="group"
-          aria-label="Sort the roster"
-          className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {SORTS.map((s) => (
-            <button
-              key={s.key}
-              aria-pressed={sort === s.key && shuffleSeed === 0}
-              onClick={() => {
-                setSort(s.key);
-                setShuffleSeed(0);
-              }}
-              className={cn(
-                "inline-flex min-h-11 shrink-0 items-center rounded-md px-2.5 text-label font-bold uppercase tracking-[0.08em] transition-colors",
-                sort === s.key && shuffleSeed === 0
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        {/* The word drops below sm so all five controls hold one row at 320px.
-            Losing it costs nothing a label does not already carry, and a second
-            44px row would cost more than the word is worth on a screen that
-            already spends 640px above the first card. */}
-        <button
-          aria-pressed={shuffleSeed > 0}
-          aria-label="Shuffle the roster"
-          onClick={() => setShuffleSeed((n) => n + 1)}
-          className={cn(
-            "ml-auto inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-label font-bold uppercase tracking-[0.08em] transition-colors",
-            shuffleSeed > 0
-              ? "bg-primary/15 text-primary"
-              : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-          )}
-        >
-          <Shuffle className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Shuffle</span>
-        </button>
-      </div>
-
       {/* Four states, in the order they can be true. Placeholders come first and
           cover the wait `shelfWaiting` describes above — every slot face-down
           because the answer is not in yet rather than because the card is
           unpulled; drawing the backs through it and popping the owned ones open
           is a reveal in the wrong place (see card-skeleton.tsx). After that, an
-          empty roster and a roster whose every card is pinned upstairs look
-          identical in the markup and mean opposite things, so they stay two
-          separate states rather than one shrug. */}
+          empty roster, a roster whose every card is pinned upstairs and a filter
+          that matched nothing look identical in the markup and mean three
+          different things, so they stay separate states rather than one shrug. */}
       {shelfWaiting ? (
         <>
           <p role="status" className="sr-only">
@@ -751,14 +832,30 @@ function PlayersPage() {
           No participants yet.
         </div>
       ) : rosterRows.length === 0 ? (
-        <p className="p-6 text-center text-xs text-muted-foreground">
-          Every card is pinned to Favourites.
-        </p>
+        <p className="p-6 text-center text-xs text-muted-foreground">{emptyRosterLine}</p>
       ) : (
         cardGrid(rosterRows.map(rosterTile))
       )}
     </>
   );
+
+  // The vault's own summary, under the card that says what to do next. One line
+  // instead of the four-counter stack: how much of the ROSTER you hold (public,
+  // so a fraction is fine), how many secrets you have found and across how many
+  // sets — never how many exist — and how many sets you have finished.
+  const summary = ready
+    ? vaultSummaryLine({
+        rosterHeld: mine.collectedCount,
+        rosterSize: rows.length,
+        secrets: secrets.data?.pulled ?? 0,
+        sets: secretSetCount,
+        complete: myTrophies.length,
+      })
+    : null;
+
+  // A claim's reveal takes the whole screen the way the pack's ceremony does, so
+  // it claims the chrome the same way.
+  const presenting = milestone.milestoneReveal !== null;
 
   return (
     <div className="card-bg min-h-[calc(100dvh-8rem)]">
@@ -766,29 +863,58 @@ function PlayersPage() {
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing at all when it went down — a frozen
           screen with no signal is the exact failure the health states exist
-          for. */}
-        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+          for. Silent while a reveal has the screen, as on the pack. */}
+        {!presenting && (realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+        <PresentationMode active={presenting} />
+        <PresentationStage active={presenting} />
+        {/* A sibling of the stage, never inside it: `backdrop-filter` is a
+            grouping property and flattens the 3D the card turns in. Same
+            arrangement as players.pack.tsx, for the same reason. */}
+        {milestone.milestoneReveal && (
+          <MilestoneReveal
+            milestone={milestone.milestoneReveal.milestone}
+            streak={milestone.milestoneReveal.streak}
+            card={milestone.milestoneReveal.card}
+            tierFloor={milestone.milestoneReveal.tierFloor}
+            duplicate={milestone.milestoneReveal.duplicate}
+            universalBack={urlFromSet(cardBack.data?.urls) ? (cardBack.data?.urls ?? null) : null}
+            onDone={milestone.dismiss}
+          />
+        )}
 
         {/* Signed in with no player yet: their pulls are filed against this
             handset and nobody can trade with them until they name themselves.
             The vault is where they land, so it is where the prompt belongs. */}
         <CollectorSignupGate className="mb-5" />
         <VaultHero
-          printed={withCards}
-          rosterSize={rows.length}
-          ready={ready}
-          collectedCount={mine.collectedCount}
-          packsOpened={mine.packsOpened}
-          secretsPulled={secrets.data?.pulled ?? 0}
           dustOn={dustOn}
           dustBalance={dust.data?.balance}
           isMember={!!member}
           wasMember={wasMember}
           syncError={sync.status === "error" ? sync.message : null}
-          streak={streak}
+        />
+
+        <TodayCard
+          pack={packProgress}
           packWaiting={packWaiting}
+          nextPackAt={nextPackAt}
+          now={packProgress.now}
+          streak={streak}
+          streakPending={streakPending}
+          claimable={milestone.claimable}
+          canClaim={streak?.canClaim ?? false}
+          claiming={milestone.claiming}
+          claimError={milestone.claimError}
+          offline={offline}
+          onClaim={() => {
+            if (milestone.claimable) void milestone.claim(milestone.claimable.days);
+          }}
           tradeUnread={tradeUnread}
         />
+
+        {/* Reserved whether or not the collection has reconciled, so the shelves
+            below do not step down by a line when it does. */}
+        <p className="mb-4 min-h-4 text-xs text-muted-foreground">{summary}</p>
 
         <SecretCardSheet
           cards={visibleSecrets}
@@ -798,29 +924,26 @@ function PlayersPage() {
           completedCollections={myCompleted}
         />
 
-        {/* One toggle for the whole vault, rather than arrows living permanently
-            beside every collapse header. */}
-        {order.length > 1 && (
-          <div className="mb-2 flex justify-end">
-            <button
-              type="button"
-              aria-pressed={rearranging}
-              onClick={() => setRearranging((v) => !v)}
-              className={cn(
-                "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-label font-bold uppercase tracking-[0.08em] transition-colors",
-                rearranging
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-              )}
-            >
-              <ArrowUpDown className="h-3.5 w-3.5" />
-              {rearranging ? "Done" : "Rearrange"}
-            </button>
-          </div>
-        )}
+        <VaultSortSheet
+          open={sortSheetOpen}
+          onOpenChange={setSortSheetOpen}
+          sort={sort}
+          onSort={(next: VaultSort) => {
+            setSort(next);
+            // Pressing Shuffle again is a NEW order, not a no-op — which is the
+            // one way this control differs from the other five.
+            if (next === "shuffle") setShuffleSeed((n) => n + 1);
+          }}
+          filter={filter}
+          onFilter={setFilter}
+          density={density}
+          onDensity={setDensity}
+          rearranging={rearranging}
+          onRearranging={setRearranging}
+        />
 
         {/* Secrets keep shelves of their own rather than being interleaved into
-            the roster: every SortKey branch reads a field a secret does not have,
+            the roster: every roster sort reads a field a secret does not have,
             and editorially a secret is not a roster card. Now that the shelves
             sit as peers, the accent on their headers is what says so. Nothing is
             rendered at zero — no header, no slots, no silhouettes. An unpulled
@@ -851,6 +974,17 @@ function PlayersPage() {
                 canMoveDown={i < order.length - 1}
                 onMove={(delta) => move(id, delta)}
                 rearranging={rearranging}
+                // The one control the sort sheet is behind, on the shelf it
+                // sorts. In the page header it would sit above a shelf that can
+                // be rolled up, controlling nothing you can see.
+                action={
+                  section.kind === "roster" ? (
+                    <VaultSortChip
+                      onOpen={() => setSortSheetOpen(true)}
+                      active={sort !== "name" || filter !== "all" || density !== 2}
+                    />
+                  ) : undefined
+                }
               >
                 {section.kind === "roster"
                   ? rosterBody

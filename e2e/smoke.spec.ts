@@ -210,10 +210,12 @@ const TAP_TARGET_ROUTES: {
 }[] = [
   {
     path: "/players",
-    // The sort row lives inside the roster shelf's body, so it only exists once
-    // the bundle has landed and the grid has rendered.
+    // The sort control lives on the roster shelf's header, so it only exists
+    // once the sections have been built — which needs the bundle. Shuffle used
+    // to be the wait here; it is inside the sheet now and not on the page at
+    // all until the sheet is opened.
     settle: async (page) => {
-      await expect(page.getByRole("button", { name: /shuffle/i })).toBeVisible();
+      await expect(page.getByRole("button", { name: /sort and filter/i })).toBeVisible();
     },
   },
   {

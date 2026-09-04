@@ -164,3 +164,106 @@ export function tearProgress(startX: number, x: number, width: number): number {
   const p = (x - startX) / (width * TEAR.span);
   return p < 0 ? 0 : p > 1 ? 1 : p;
 }
+
+/**
+ * How much of today's pack is still face-down, for the vault's Today card.
+ *
+ * The fourth slot only counts when a secret is genuinely coming — `secretPending`
+ * is the caller's `secretWaiting(status)`, so a guest with no actor, a spent day
+ * and an empty set all leave it out rather than promising a card that is not
+ * there. Same rule `secretTakesTheStand` applies on the pack screen, asked from
+ * the one piece of state a screen that is not the pack can actually see.
+ */
+export function cardsLeft(args: {
+  ids: number;
+  revealed: number;
+  secretRevealed: boolean;
+  secretPending: boolean;
+}): number {
+  const { ids, revealed, secretRevealed, secretPending } = args;
+  const roster = Math.max(0, ids - revealed);
+  return roster + (secretPending && !secretRevealed ? 1 : 0);
+}
+
+/** What the vault says about today's pack: sealed, torn open, or spent. */
+export type TodayPack = { state: "sealed" } | { state: "torn"; left: number } | { state: "done" };
+
+/**
+ * Read a stored pack row as one of three states, from a screen that is not the
+ * pack.
+ *
+ * The match rule is the resume effect's, not a looser one (players.pack.tsx:503):
+ * a row for another day or another identity is not this pack, and a row carrying
+ * no identity at all predates per-person packs and counts as a match — so nobody
+ * mid-reveal sees the vault call their pack sealed.
+ *
+ * The replay case is the subtle one. A row with no cursor and everything
+ * revealed is what the pre-stand ceremony wrote, and the pack screen turns those
+ * cards face-down again to play them through the stand (`replay`, :517). Calling
+ * that "done" here would have the two screens disagree about whether there is
+ * anything left to open, so it is `torn` with the whole pack still to turn.
+ */
+export function todayPackState(args: {
+  row: {
+    dayKey: string;
+    ids: readonly string[];
+    revealed: readonly number[];
+    secretRevealed?: boolean;
+    cursor?: number;
+    identity?: string;
+  } | null;
+  dayKey: string;
+  identity: string;
+  secretPending: boolean;
+}): TodayPack {
+  const { row, dayKey, identity, secretPending } = args;
+  const mine = row?.identity == null || row.identity === identity;
+  if (!row || row.dayKey !== dayKey || !mine || row.ids.length === 0) return { state: "sealed" };
+
+  const replay = row.cursor === undefined && row.revealed.length >= row.ids.length;
+  const left = cardsLeft({
+    ids: row.ids.length,
+    revealed: replay ? 0 : row.revealed.length,
+    secretRevealed: !replay && !!row.secretRevealed,
+    secretPending,
+  });
+  return left > 0 ? { state: "torn", left } : { state: "done" };
+}
+
+/** An hour in milliseconds, for the countdown below. */
+const HOUR_MS = 3_600_000;
+
+/**
+ * "Next pack in 6h" — the one thing `SecretDayStatus.resetsAt` has always been
+ * fetched for and never rendered (§3).
+ *
+ * Hours are rounded UP, because a countdown that says 5 when 5h 50m remain reads
+ * as a promise the clock then breaks. Under the hour it drops to minutes, which
+ * is the only range where the difference is worth a phone screen.
+ *
+ * The instant itself is an approximation and the caller's comment says why: the
+ * secret rolls over on the league's midnight and the pack on the device's, so
+ * these are two clocks and this prints whichever the caller had.
+ */
+export function nextPackLabel(nextPackAt: string | null, now: number): string {
+  if (!nextPackAt) return "Next pack tomorrow";
+  const at = Date.parse(nextPackAt);
+  if (Number.isNaN(at)) return "Next pack tomorrow";
+  const ms = at - now;
+  if (ms <= 0) return "Next pack any moment now";
+  if (ms < HOUR_MS) return `Next pack in ${Math.max(1, Math.ceil(ms / 60_000))}m`;
+  return `Next pack in ${Math.ceil(ms / HOUR_MS)}h`;
+}
+
+/**
+ * Midnight tonight, where this phone is standing, as an ISO instant.
+ *
+ * The fallback for `resetsAt` being null — which is every device with no actor
+ * yet, because the server tells a stranger nothing. It is also the clock the
+ * pack genuinely re-seals on (`todayKey`), so this is the more accurate of the
+ * two answers and only the less available one.
+ */
+export function nextLocalMidnight(now: number): string {
+  const d = new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).toISOString();
+}
