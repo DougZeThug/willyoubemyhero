@@ -75,12 +75,22 @@ export function VaultHero({
               the shelves down under a thumb that was already reaching for a
               card. An empty line costs 16px; a grid that jumps costs a mistap.
 
-              The chip's own row is 44px because the chip is: it is a Link with a
-              real touch target, and it wraps below the heading at 320px, which
-              is the case that moved the most. */}
+              The chip needs its own BOX and not just a taller row, which is the
+              one slot here where a min-height is not enough. DustChip renders
+              nothing until the balance is known — a "0" that becomes "140" reads
+              as having just lost something — and this row wraps, so at any width
+              where the chip does not fit beside the heading the row goes from one
+              line to two the moment the number lands. A min-height reserves the
+              unwrapped case and the shelf moves anyway. The box is drawn as soon
+              as dust is on, so the wrap is decided once and does not depend on an
+              answer still in flight. */}
           <div className="mt-1 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="font-display text-3xl font-black uppercase leading-none">The Vault</h1>
-            {dustOn && <DustChip balance={dustBalance} to="/players/shop" />}
+            {dustOn && (
+              <div className="flex min-h-11 min-w-25 items-center">
+                <DustChip balance={dustBalance} to="/players/shop" />
+              </div>
+            )}
           </div>
           {/* The collected count waits for `ready`. It used to be read straight
               off IndexedDB, which had been inflated to the whole roster by the
