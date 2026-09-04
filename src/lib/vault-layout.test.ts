@@ -264,10 +264,12 @@ describe("useVaultPrefs", () => {
 });
 
 describe("the default shelf order", () => {
-  // Pinned here rather than left to the route, because it is a product decision
-  // and not a coincidence of the array literal it lives in: the trophy case goes
-  // ABOVE the sets it is the answer to (§13), and the roster — the one shelf
-  // everybody knows by heart — goes last so the sets you are collecting lead.
+  // What this pins is the MERGE, not the route: that a device with no stored
+  // arrangement gets the sections in exactly the order the page presented them,
+  // trophy case and all. The order itself is a product decision — the Complete
+  // shelf above the sets it is the answer to (§13), the roster last because it
+  // is the one shelf everybody knows by heart — and it lives in the route,
+  // where e2e/secrets.spec.ts is what actually catches it moving.
   const present = [
     FAVOURITES_SECTION,
     TROPHIES_SECTION,

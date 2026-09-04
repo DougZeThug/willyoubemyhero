@@ -15,6 +15,7 @@ import {
   todayPackState,
   type SecretSlot,
 } from "./pack";
+import { secretOwed, secretWaiting } from "./secret-cards";
 
 const EVENT = "00000000-0000-4000-8000-0000000000ff";
 const DAY = "2026-07-28";
@@ -209,21 +210,21 @@ describe("tearProgress", () => {
 });
 
 describe("cardsLeft", () => {
-  const args = { ids: 3, revealed: 0, secretRevealed: false, secretPending: false };
+  const args = { ids: 3, revealed: 0, secretRevealed: false, secretOwed: false };
 
   it("counts the roster cards still face-down", () => {
     expect(cardsLeft({ ...args, revealed: 1 })).toBe(2);
   });
 
-  it("counts the secret's slot only when one is actually coming", () => {
+  it("counts the secret's slot only when one is actually owed", () => {
     // A guest with no actor, a spent day and an empty set all land here, and none
     // of them should be promised a fourth card.
-    expect(cardsLeft({ ...args, revealed: 3, secretPending: false })).toBe(0);
-    expect(cardsLeft({ ...args, revealed: 3, secretPending: true })).toBe(1);
+    expect(cardsLeft({ ...args, revealed: 3, secretOwed: false })).toBe(0);
+    expect(cardsLeft({ ...args, revealed: 3, secretOwed: true })).toBe(1);
   });
 
   it("stops counting a secret once it has been turned", () => {
-    expect(cardsLeft({ ...args, revealed: 3, secretPending: true, secretRevealed: true })).toBe(0);
+    expect(cardsLeft({ ...args, revealed: 3, secretOwed: true, secretRevealed: true })).toBe(0);
   });
 
   it("never goes negative on a row that revealed more than it dealt", () => {
@@ -233,7 +234,7 @@ describe("cardsLeft", () => {
 
 describe("todayPackState", () => {
   const row = { dayKey: "2026-09-04", ids: ["a", "b", "c"], revealed: [], cursor: 0, identity: "d:1" }; // prettier-ignore
-  const args = { row, dayKey: "2026-09-04", identity: "d:1", secretPending: false };
+  const args = { row, dayKey: "2026-09-04", identity: "d:1", secretOwed: false };
 
   it("is sealed with no row at all", () => {
     expect(todayPackState({ ...args, row: null })).toEqual({ state: "sealed" });
@@ -272,7 +273,7 @@ describe("todayPackState", () => {
     expect(
       todayPackState({
         ...args,
-        secretPending: true,
+        secretOwed: true,
         row: { ...row, revealed: [0, 1, 2], cursor: 3 },
       }),
     ).toEqual({ state: "torn", left: 1 });
@@ -333,5 +334,48 @@ describe("nextLocalMidnight", () => {
     const at = new Date(nextLocalMidnight(new Date(2026, 8, 30, 23, 59).getTime()));
     expect(at.getMonth()).toBe(9);
     expect(at.getDate()).toBe(1);
+  });
+});
+
+describe("secretOwed against secretWaiting", () => {
+  // The distinction the vault got wrong: the pack pulls its secret the moment it
+  // is torn, so `secretWaiting` — which is right for the ring on the button —
+  // goes false while the card is still face-down on the stand.
+  const base = { claimed: true, day: "2026-09-04", pulled: 1, resetsAt: null };
+
+  it("both say yes before the pack is torn", () => {
+    const status = { ...base, pulledToday: false, available: true };
+    expect(secretWaiting(status)).toBe(true);
+    expect(secretOwed(status)).toBe(true);
+  });
+
+  it("they part the moment the pull lands", () => {
+    // THE BUG. Counting with secretWaiting here called a pack with an unturned
+    // secret finished and took away the link back to it.
+    const status = { ...base, pulledToday: true, available: false };
+    expect(secretWaiting(status)).toBe(false);
+    expect(secretOwed(status)).toBe(true);
+  });
+
+  it("both say no on a day with nothing left to find", () => {
+    const status = { ...base, pulledToday: false, available: false, pulled: 0 };
+    expect(secretWaiting(status)).toBe(false);
+    expect(secretOwed(status)).toBe(false);
+  });
+
+  it("both say no to a device the server does not know", () => {
+    expect(secretOwed(null)).toBe(false);
+    expect(secretOwed(undefined)).toBe(false);
+    expect(secretOwed({ ...base, claimed: false, pulledToday: true, available: true })).toBe(false);
+  });
+
+  it("counts a pulled-but-unturned secret as a card still to see", () => {
+    const row = { dayKey: "d", ids: ["a", "b", "c"], revealed: [0, 1, 2], cursor: 3 };
+    const args = { row, dayKey: "d", identity: "d:1" };
+    expect(todayPackState({ ...args, secretOwed: true })).toEqual({ state: "torn", left: 1 });
+    // And done once it has been turned.
+    expect(
+      todayPackState({ ...args, row: { ...row, secretRevealed: true }, secretOwed: true }),
+    ).toEqual({ state: "done" });
   });
 });

@@ -619,3 +619,25 @@ export function secretsPulledLabel(n: number): string {
 export function secretWaiting(status: SecretDayStatus | null | undefined): boolean {
   return !!status?.claimed && !status.pulledToday && status.available;
 }
+
+/**
+ * Does today's pack still owe a fourth card — pulled or not?
+ *
+ * A DIFFERENT QUESTION from `secretWaiting`, and the difference is the whole
+ * reason this exists. That one asks "is there something to come and get", so it
+ * goes false the instant the pull lands — which is right for the ring on the
+ * button and wrong for anything counting what is left to TURN OVER, because the
+ * pack pulls the secret the moment it is torn and the card then sits face-down
+ * on the stand for as long as the user takes.
+ *
+ * A vault reading `secretWaiting` therefore counted a spent-but-unrevealed
+ * secret as nothing and called a half-finished pack done. `pulledToday` is what
+ * closes that: it means the card exists and is theirs, whether or not they have
+ * looked at it. Whether it has been LOOKED at is on the pack row, not here.
+ *
+ * Leaks nothing more than its sibling: every field is already scoped to whoever
+ * is asking, and a stranger with no status is false.
+ */
+export function secretOwed(status: SecretDayStatus | null | undefined): boolean {
+  return !!status?.claimed && (status.available || status.pulledToday);
+}

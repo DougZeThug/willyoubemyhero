@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePackIdentity } from "@/lib/device-id";
-import { loadPackState, PACK_DEALT_KEY, PACK_STATE_CHANGED, todayKey } from "@/lib/card-collection";
-import { todayPackState, type TodayPack } from "@/lib/pack";
+import {
+  loadPackState,
+  PACK_DEALT_KEY,
+  PACK_STATE_CHANGED,
+  todayKey,
+  type PackState,
+} from "@/lib/card-collection";
+import { todayPackState } from "@/lib/pack";
 
 /**
  * Today's pack, read from a screen that is not the pack.
@@ -28,20 +34,36 @@ export type PackProgress = {
 
 const DAY_TICK_MS = 60_000;
 
-export function usePackProgress(secretPending: boolean): PackProgress {
+export function usePackProgress(secretOwed: boolean): PackProgress {
   const identity = usePackIdentity();
   const [dayKey, setDayKey] = useState(todayKey);
   const [now, setNow] = useState(() => Date.now());
-  const [pack, setPack] = useState<TodayPack | null>(null);
+  // The ROW, not the derived state. `secretOwed` can flip long after the read —
+  // the pack pulls its secret the moment it is torn — and re-reading IndexedDB
+  // for a question that is pure arithmetic over a row we already hold would
+  // blank the card for a frame every time the secret query settles.
+  //
+  // `undefined` is "not read yet" and `null` is "read, and there is no pack",
+  // which are different answers and only one of them is `loading`.
+  const [row, setRow] = useState<PackState | null | undefined>(undefined);
   const [nonce, setNonce] = useState(0);
+
+  const reread = useCallback(() => setNonce((n) => n + 1), []);
 
   /**
    * The day rolls over on a poll, not a timer, for the reason players.pack.tsx
    * gives for the same interval: a phone suspends timers when it sleeps, and the
    * one that mattered was always scheduled for exactly the moment the screen was
    * off. The poll doubles as the clock behind "Next pack in 6h" — hours, so once
-   * a minute is more than enough — and `visibilitychange` is what makes coming
-   * back to the app feel instant rather than up to a minute stale.
+   * a minute is more than enough.
+   *
+   * COMING BACK TO THE TAB RE-READS THE ROW, and that is not belt-and-braces.
+   * The two events below cover a tear and nothing after it: `PACK_STATE_CHANGED`
+   * is same-window only, and the localStorage mirror is written once per pack by
+   * design (`markPackDealt` no-ops on an unchanged value), so every reveal AFTER
+   * the first in another tab is silent here. Without this, a vault left open
+   * beside the pack shows the count it had when the pack was torn, for the rest
+   * of the day.
    */
   useEffect(() => {
     const check = () => {
@@ -51,15 +73,18 @@ export function usePackProgress(secretPending: boolean): PackProgress {
         return prev === next ? prev : next;
       });
     };
+    const onVisible = () => {
+      check();
+      // Only on the way back in. A read on the way out is a read nobody sees.
+      if (document.visibilityState === "visible") reread();
+    };
     const id = setInterval(check, DAY_TICK_MS);
-    document.addEventListener("visibilitychange", check);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(id);
-      document.removeEventListener("visibilitychange", check);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
-
-  const reread = useCallback(() => setNonce((n) => n + 1), []);
+  }, [reread]);
 
   /**
    * Both halves of "the pack changed", because neither covers the other.
@@ -87,15 +112,20 @@ export function usePackProgress(secretPending: boolean): PackProgress {
     // somebody is mid-reveal on sealed.
     if (identity == null) return;
     let cancelled = false;
-    void loadPackState().then((row) => {
+    // Cleared BEFORE the read, so a phone that has just changed hands — or a tab
+    // that has just crossed midnight — says "I don't know yet" rather than going
+    // on showing the last person's pack until IndexedDB answers.
+    setRow(undefined);
+    void loadPackState().then((next) => {
       if (cancelled) return;
-      setPack(todayPackState({ row, dayKey, identity, secretPending }));
+      setRow(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [identity, dayKey, secretPending, nonce]);
+  }, [identity, dayKey, nonce]);
 
-  if (!pack) return { state: "loading", left: 0, now };
+  if (row === undefined || identity == null) return { state: "loading", left: 0, now };
+  const pack = todayPackState({ row, dayKey, identity, secretOwed });
   return { state: pack.state, left: pack.state === "torn" ? pack.left : 0, now };
 }

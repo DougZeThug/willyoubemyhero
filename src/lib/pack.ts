@@ -168,21 +168,24 @@ export function tearProgress(startX: number, x: number, width: number): number {
 /**
  * How much of today's pack is still face-down, for the vault's Today card.
  *
- * The fourth slot only counts when a secret is genuinely coming — `secretPending`
- * is the caller's `secretWaiting(status)`, so a guest with no actor, a spent day
- * and an empty set all leave it out rather than promising a card that is not
- * there. Same rule `secretTakesTheStand` applies on the pack screen, asked from
- * the one piece of state a screen that is not the pack can actually see.
+ * The fourth slot only counts when one is genuinely owed — `secretOwed` is the
+ * caller's `secretOwed(status)`, so a guest with no actor, a day whose set is
+ * spent and a device that has already turned the card all leave it out rather
+ * than promising a card that is not coming. NOT `secretWaiting`, which goes
+ * false the moment the pull lands and would call a pack with an unturned secret
+ * on the stand finished. Same rule `secretTakesTheStand` applies on the pack
+ * screen, asked from the one piece of state a screen that is not the pack can
+ * actually see.
  */
 export function cardsLeft(args: {
   ids: number;
   revealed: number;
   secretRevealed: boolean;
-  secretPending: boolean;
+  secretOwed: boolean;
 }): number {
-  const { ids, revealed, secretRevealed, secretPending } = args;
+  const { ids, revealed, secretRevealed, secretOwed } = args;
   const roster = Math.max(0, ids - revealed);
-  return roster + (secretPending && !secretRevealed ? 1 : 0);
+  return roster + (secretOwed && !secretRevealed ? 1 : 0);
 }
 
 /** What the vault says about today's pack: sealed, torn open, or spent. */
@@ -214,9 +217,9 @@ export function todayPackState(args: {
   } | null;
   dayKey: string;
   identity: string;
-  secretPending: boolean;
+  secretOwed: boolean;
 }): TodayPack {
-  const { row, dayKey, identity, secretPending } = args;
+  const { row, dayKey, identity, secretOwed } = args;
   const mine = row?.identity == null || row.identity === identity;
   if (!row || row.dayKey !== dayKey || !mine || row.ids.length === 0) return { state: "sealed" };
 
@@ -225,7 +228,7 @@ export function todayPackState(args: {
     ids: row.ids.length,
     revealed: replay ? 0 : row.revealed.length,
     secretRevealed: !replay && !!row.secretRevealed,
-    secretPending,
+    secretOwed,
   });
   return left > 0 ? { state: "torn", left } : { state: "done" };
 }

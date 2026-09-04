@@ -117,17 +117,55 @@ describe("claiming", () => {
     });
   });
 
-  it("does not replay a reveal when the query refetches on focus", async () => {
-    // `claimedRef` is what stops that: the rung comes back still unclaimed for a
-    // moment, and without the latch the ceremony fires again over the top.
+  it("does not offer the rung again when the query refetches still showing it unclaimed", async () => {
+    // The real shape of the race: the claim lands, the status refetches on focus
+    // BEFORE the server's write is reflected in it, and the rung comes back
+    // earned-and-unclaimed. `claimedRef` is what stops the button re-arming and
+    // the ceremony firing a second time over the top of the first.
     claimFn.mockReset();
     claimFn.mockResolvedValue({ ok: true, milestone: 3, streak: 3, duplicate: false, card: CARD });
-    const { result } = mount("m:alice", streak({ current: 3 }));
+    const stale = streak({ current: 3 });
+    const { result, rerender } = mount("m:alice", stale);
     await act(async () => {
       await result.current.claim(3);
     });
     act(() => result.current.dismiss());
+
+    // The refetch: a NEW object, same run, rung still reading unclaimed.
+    rerender({ a: "m:alice", s: streak({ current: 3 }) });
     expect(result.current.claimable).toBeNull();
+    expect(result.current.milestoneReveal).toBeNull();
+  });
+
+  it("offers the rung again once the run has been broken and rebuilt", async () => {
+    // A rebuilt run is a NEW run and every rung is earnable on it again — the
+    // claim is keyed on the day the run started, which is what keeps the ladder
+    // re-earnable. A latch keyed on days alone remembered the old run and
+    // suppressed a button the server was correctly offering.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({ ok: true, milestone: 3, streak: 3, duplicate: false, card: CARD });
+    const { result, rerender } = mount("m:alice", streak({ current: 3 }));
+    await act(async () => {
+      await result.current.claim(3);
+    });
+    expect(result.current.claimable).toBeNull();
+
+    rerender({ a: "m:alice", s: streak({ current: 3, startedOn: "2026-09-20" }) });
+    await waitFor(() => expect(result.current.claimable?.days).toBe(3));
+  });
+
+  it("asks again when the server says the rung is already collected", async () => {
+    // Another device took it, or the first attempt's response was lost. Either
+    // way everything this screen believes about the ladder is a response behind.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({ ok: false, reason: "claimed" });
+    const { client } = createQueryWrapper();
+    void client;
+    const { result } = mount("m:alice", streak({ current: 3 }));
+    await act(async () => {
+      await result.current.claim(3);
+    });
+    expect(result.current.claimError).toMatch(/already collected/i);
   });
 
   it("says every refusal on the button and never as a toast", async () => {

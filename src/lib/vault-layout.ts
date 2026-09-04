@@ -214,23 +214,30 @@ export function useVaultLayout(present: readonly string[]) {
   const toggle = useCallback(
     (id: string) => {
       const next = collapsed.has(id)
-        ? layout.collapsed.filter((x) => x !== id)
-        : [...layout.collapsed, id];
-      // Keeps `layout.order` rather than the merged one: opening a shelf is not a
-      // statement about where it sits, and pinning the order here would freeze a
-      // layout the owner never arranged.
-      setVaultLayout({ ...layout, collapsed: next });
+        ? current.collapsed.filter((x) => x !== id)
+        : [...current.collapsed, id];
+      // `current` and not the render's `layout`, throughout these setters. The
+      // record now carries the reading preferences as well as the arrangement,
+      // and two hooks write it — so a setter spreading the snapshot it was
+      // rendered with can silently undo a write that landed after that render.
+      // The module value is the last thing actually written, which is the only
+      // thing a merge should be built on.
+      //
+      // Keeps the STORED order rather than the merged one: opening a shelf is
+      // not a statement about where it sits, and pinning the order here would
+      // freeze a layout the owner never arranged.
+      setVaultLayout({ ...current, collapsed: next });
     },
-    [collapsed, layout],
+    [collapsed],
   );
 
   const move = useCallback(
     (id: string, delta: number) => {
       // The merged order, so the first move pins everything currently on screen
       // instead of writing a one-item list the merge would scatter next time.
-      setVaultLayout({ ...layout, order: moveSection(order, id, delta) });
+      setVaultLayout({ ...current, order: moveSection(order, id, delta) });
     },
-    [order, layout],
+    [order],
   );
 
   return { order, collapsed, toggle, move };
@@ -252,14 +259,14 @@ export function useVaultPrefs() {
   // a layout it did not mean to — the order and the collapsed list are the two
   // things on this record that are expensive to lose, and neither is this hook's
   // to touch.
-  const setSort = useCallback((sort: VaultSort) => setVaultLayout({ ...layout, sort }), [layout]);
+  const setSort = useCallback((sort: VaultSort) => setVaultLayout({ ...current, sort }), []);
   const setFilter = useCallback(
-    (filter: VaultFilter) => setVaultLayout({ ...layout, filter }),
-    [layout],
+    (filter: VaultFilter) => setVaultLayout({ ...current, filter }),
+    [],
   );
   const setDensity = useCallback(
-    (density: VaultDensity) => setVaultLayout({ ...layout, density }),
-    [layout],
+    (density: VaultDensity) => setVaultLayout({ ...current, density }),
+    [],
   );
 
   return {

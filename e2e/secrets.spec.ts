@@ -622,7 +622,7 @@ test.describe("the vault's secret shelf", () => {
     await page.goto("/players");
 
     // The counter stack became one summary line under the Today card (§13).
-    // "across 2 sets" is how many sets these came FROM — never how many exist.
+    // "across 1 set" is how many sets these came FROM — never how many exist.
     await expect(page.getByText(/Secrets 3 across 1 set/)).toBeVisible();
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible();
     await expect(page.getByText("Pulled ×2")).toBeVisible();
@@ -638,6 +638,36 @@ test.describe("the vault's secret shelf", () => {
     await expect(body).not.toContainText(/of \d+ secrets/i);
     await expect(body).not.toContainText(/\?\?\?/);
     await expect(body).not.toContainText(/\d+ \/ \d+ secrets/i);
+  });
+
+  test("keeps the trophy case above the sets it is the answer to", async ({ page, server }) => {
+    // The default shelf order, on the only surface that can actually see it.
+    // The unit test next door pins the merge; this pins the decision (§13).
+    await asMember(page);
+    server.set("getMySecrets", {
+      pulled: 1,
+      cards: [{ ...SECRET_CARD, firstPulledOn: "2026-07-28", count: 1, ownerCount: 1 }],
+    });
+    server.set("getCollectionTrophies", {
+      trophies: [
+        {
+          participantId: "p-alice",
+          collection: "pets",
+          label: "Legacy Pets",
+          size: 4,
+          completedOn: "2026-07-28",
+          via: "pull",
+        },
+      ],
+    });
+    await page.goto("/players");
+
+    const headings = page.getByRole("heading", { level: 2 });
+    await expect(headings.filter({ hasText: "Complete" })).toBeVisible();
+    const order = await headings.allTextContents();
+    expect(order.indexOf("Complete")).toBeLessThan(order.indexOf("Secrets"));
+    // And the roster last, so the sets you are collecting lead the page.
+    expect(order.indexOf("Roster")).toBe(order.length - 1);
   });
 
   test("says nothing at all to someone who has pulled none", async ({ page }) => {

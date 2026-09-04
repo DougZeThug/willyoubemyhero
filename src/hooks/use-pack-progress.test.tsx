@@ -16,9 +16,9 @@ async function seed(row: Record<string, unknown>) {
   await savePackState(row as never);
 }
 
-async function mountHook(secretPending = false) {
+async function mountHook(secretOwed = false) {
   const { usePackProgress } = await import("./use-pack-progress");
-  return renderHook(() => usePackProgress(secretPending));
+  return renderHook(() => usePackProgress(secretOwed));
 }
 
 beforeEach(() => {
@@ -178,6 +178,36 @@ describe("usePackProgress", () => {
       vi.advanceTimersByTime(61_000);
     });
     await waitFor(() => expect(result.current.state).toBe("sealed"));
+  });
+
+  it("re-reads the row when the tab comes back into view", async () => {
+    // The two events above cover a tear and nothing after it: PACK_STATE_CHANGED
+    // is same-window, and the localStorage mirror is written once per pack by
+    // design. Without this, a vault left open beside the pack shows the count it
+    // had when the pack was torn for the rest of the day.
+    await seed({
+      dayKey: todayKey(),
+      ids: ["a", "b", "c"],
+      revealed: [0],
+      cursor: 1,
+      identity: `d:${DEVICE}`,
+    });
+    const { result } = await mountHook();
+    await waitFor(() => expect(result.current.left).toBe(2));
+
+    // The other tab keeps going. IndexedDB fires nothing; the mirror does not
+    // move; nothing tells this tab at all.
+    await seed({
+      dayKey: todayKey(),
+      ids: ["a", "b", "c"],
+      revealed: [0, 1, 2],
+      cursor: 3,
+      identity: `d:${DEVICE}`,
+    });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(result.current.state).toBe("done"));
   });
 
   it("ignores a storage event about something else entirely", async () => {

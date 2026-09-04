@@ -32,6 +32,7 @@ import { LevelPips } from "@/components/level-pips";
 import {
   groupBySecretCollection,
   secretFoil,
+  secretOwed,
   secretWaiting,
   SECRET_RARITY,
   VAULT_UNSORTED_LABEL,
@@ -57,7 +58,7 @@ import {
 import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
 import { getSecretCollections } from "@/lib/secret-cards.functions";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
-import { seededRng, shuffle } from "@/lib/format";
+import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { CollectorSignupGate } from "@/components/collector-signup";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
@@ -116,9 +117,22 @@ function PlayersPage() {
   // player's — see the note on useEventCardBack. A player's own back on their
   // locked slot would be half the reveal, printed on the thing hiding it.
   const cardBack = useEventCardBack(event?.id ?? null);
-  // The SEED is ephemeral on purpose while the sort itself is stored: a frozen
-  // shuffle is not a shuffle, so a device that reloads on it gets a fresh deal.
-  const [shuffleSeed, setShuffleSeed] = useState(0);
+  /**
+   * The SEED is ephemeral on purpose while the sort itself is stored: a frozen
+   * shuffle is not a shuffle, so a device that reloads on it gets a fresh deal.
+   *
+   * Which means it has to be minted, not counted from zero. A counter starting
+   * at 0 on every mount made `evt:0` the seed of every reload, so the "fresh
+   * deal" this comment promises was the same deal every time — the one order
+   * the persisted sort could never escape.
+   *
+   * Minted lazily rather than during render, and safe against hydration for a
+   * reason worth writing down: `useVaultPrefs` starts at the default and settles
+   * from an effect, so `sort` is "name" on the server AND on the first client
+   * render. The shuffle branch is not taken until after hydration, which is the
+   * only moment a server seed and a client seed could have disagreed.
+   */
+  const [shuffleSeed, setShuffleSeed] = useState(newSeed);
   const [sortSheetOpen, setSortSheetOpen] = useState(false);
   // How this device reads the binder. Read here rather than beside the shelf
   // arrangement below, because the sort is what builds the grid the arrangement
@@ -337,7 +351,13 @@ function PlayersPage() {
   const packWaiting = secretWaiting(secretStatus.data);
   // Read, never written: dealing still belongs to the pack screen, which is what
   // keeps one pack a day one pack a day.
-  const packProgress = usePackProgress(packWaiting);
+  //
+  // `secretOwed`, NOT `packWaiting`, and the two are deliberately different
+  // questions. The pack pulls its secret the moment it is torn, so `packWaiting`
+  // — the ring on the button — goes false while the card is still sitting
+  // face-down on the stand. Counting with it called a pack with an unturned
+  // secret finished and took away the link back to it.
+  const packProgress = usePackProgress(secretOwed(secretStatus.data));
   // The secret's reset is the only one the server vouches for; the device's own
   // midnight is the one the pack actually re-seals on. See TodayCard's prop doc —
   // these are two clocks and the fallback is the more accurate of the two.
@@ -463,13 +483,14 @@ function PlayersPage() {
         // "3 of 13" while a filter is on, so a shelf showing a subset never
         // reads as a shelf that has lost cards. A roster denominator is the one
         // this app has always been allowed: thirteen people, publicly.
+        // Off the FILTER and not off the two lengths. "Owned" while you own
+        // everything matches every card, and a bare count there would read as
+        // the whole shelf while a filter was quietly on.
         meta:
-          rosterRows.length === unpinnedRows.length
-            ? rosterRows.length
-            : `${rosterRows.length} of ${unpinnedRows.length}`,
+          filter === "all" ? rosterRows.length : `${rosterRows.length} of ${unpinnedRows.length}`,
       },
     ],
-    [favourites, myTrophies, rosterRows.length, unpinnedRows.length, secretGroups],
+    [favourites, myTrophies, rosterRows.length, unpinnedRows.length, filter, secretGroups],
   );
 
   const presentIds = useMemo(() => sections.map((x) => x.id), [sections]);
@@ -797,13 +818,18 @@ function PlayersPage() {
   const emptyRosterLine =
     unpinnedRows.length === 0
       ? "Every card is pinned to Favourites."
-      : filter === "spares"
-        ? "No spares yet. A second copy of a card turns up here."
-        : filter === "missing"
-          ? "Nothing missing — you have packed every card."
-          : filter === "owned"
-            ? "Nothing packed yet. Open today's pack."
-            : "Every card is pinned to Favourites.";
+      : // Matches upstairs but not down here: the cards this filter is asking
+        // for exist, they are just all on the Favourites shelf. "No spares yet"
+        // would be a flat lie to somebody who has just pinned their only spare.
+        filterRoster(rows).length > 0
+        ? "Every matching card is pinned to Favourites."
+        : filter === "spares"
+          ? "No spares yet. A second copy of a card turns up here."
+          : filter === "missing"
+            ? "Nothing missing — you have packed every card."
+            : filter === "owned"
+              ? "Nothing packed yet. Open today's pack."
+              : "Every card is pinned to Favourites.";
 
   const rosterBody = (
     <>
@@ -932,7 +958,7 @@ function PlayersPage() {
             setSort(next);
             // Pressing Shuffle again is a NEW order, not a no-op — which is the
             // one way this control differs from the other five.
-            if (next === "shuffle") setShuffleSeed((n) => n + 1);
+            if (next === "shuffle") setShuffleSeed(newSeed());
           }}
           filter={filter}
           onFilter={setFilter}

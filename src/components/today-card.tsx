@@ -79,10 +79,16 @@ export function TodayCard({
    * Whether a streak answer is still coming.
    *
    * The strip's slot is reserved while it is true and gone once the answer is
-   * known to be zero. Reserving it forever would spend 44px of a screen the
-   * audit already faults for its height on somebody who has never opened a pack;
-   * never reserving it would drop the shelves by that much the moment the query
-   * lands, which is the shift the min-heights exist to remove.
+   * known to be zero. Reserving it forever would spend the height on somebody
+   * who has never opened a pack, on a screen the audit already faults for its
+   * height; never reserving it would drop the shelves by that much the moment
+   * the query lands, which is the shift the min-heights exist to remove.
+   *
+   * The reservation is TWO ROWS, because that is what the strip measures at
+   * phone widths: the flame, the day and the five rungs fill a line on their
+   * own, and the promise sits under them. A claimable rung adds a third — but it
+   * arrives in the same response as the streak itself, so that is one settle and
+   * not a second one.
    */
   streakPending?: boolean;
   claimable?: StreakMilestoneStatus | null;
@@ -173,10 +179,17 @@ export function TodayCard({
         {tradeUnread > 0 && (
           <Link
             to="/players/trade"
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-primary/50 px-3 text-label font-bold uppercase tracking-[0.08em] text-primary"
+            // The words drop below sm, the same treatment the sort chips used to
+            // take, and here it is what makes the claim above TRUE. In the done
+            // state the pack pill is ~200px; a 130px pill beside it exceeds the
+            // ~294px a 320px screen has to give and wraps to a second line —
+            // moving the streak down by 56px, which is exactly the shift this
+            // card exists to prevent. Icon-only it is 44px and always fits.
+            aria-label="Offer waiting — open the Trading Post"
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border border-primary/50 px-3 text-label font-bold uppercase tracking-[0.08em] text-primary"
           >
             <ArrowLeftRight aria-hidden className="h-3.5 w-3.5" />
-            Offer waiting
+            <span className="hidden sm:inline">Offer waiting</span>
           </Link>
         )}
       </div>
@@ -189,7 +202,7 @@ export function TodayCard({
       </div>
 
       {(running || streakPending) && (
-        <div className="mt-1 min-h-11" data-testid="streak-slot">
+        <div className="mt-1 min-h-16" data-testid="streak-slot">
           {running && (
             <StreakStrip
               streak={streak}
