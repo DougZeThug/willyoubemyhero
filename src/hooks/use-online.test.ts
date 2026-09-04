@@ -1,9 +1,11 @@
 // Whether the app thinks it can reach anything, and what it says when it cannot.
 //
-// Small enough to read in one go and worth pinning anyway: three of the four
-// behaviours below are the ones that bite on a phone rather than at a desk — a
-// device that was already offline before the page loaded, a signal that comes
-// back, and the SSR pass where `navigator` does not exist at all.
+// Small enough to read in one go and worth pinning anyway: the two that bite on
+// a phone rather than at a desk are a device that was already offline before the
+// page loaded — neither event ever fires for it — and a signal that comes back.
+// The SSR pass, where `navigator` does not exist at all, is covered by the
+// initial state being a constant and not by anything here: jsdom cannot be made
+// to un-define its own navigator.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { OFFLINE_MESSAGE, offlineReason, useIsOnline } from "./use-online";

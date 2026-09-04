@@ -17,16 +17,64 @@
 --   3. it happened inside the undo window. The handler passes it in, so
 --      TRADE_UNDO_WINDOW_SECONDS in src/lib/trades.ts is the one number the app
 --      goes by; the DEFAULT below is only there for a hand-written call;
---   4. every staked card is still exactly where it was, judged by the same
---      triple accept_trade_offer re-validates with. A minute is long enough to
---      burn a spare or sell a secret, and an offer put back missing a card is an
---      offer that can only void on the next tap — which would spend the other
---      person's attention on a swap that was never going to happen.
+--   4. every staked card is still exactly where it was — BOTH that each one is
+--      still a spare its own side holds, judged by the same triple
+--      accept_trade_offer re-validates with, AND that none of them has gone
+--      missing altogether (see the count below). A minute is long enough to
+--      burn a spare or sell a secret, and an offer put back short of a card is
+--      an offer nobody agreed to.
 --
 -- Deliberately NOT a void on failure, which is the one place this parts company
 -- with accept: accept has to void because it is the last chance to stop a
 -- half-finished swap, whereas a stale undo simply leaves the offer settled,
 -- which it already correctly was.
+
+-- ============ WHAT THE OFFER WAS WHEN IT WAS MADE ============
+-- Condition 4 above cannot be answered from the surviving item rows alone, and
+-- this is the column that lets it be.
+--
+-- trade_offer_items cascades from card_copies and secret_card_pulls, which
+-- cascade in turn from event_participants and participants — so a commissioner
+-- removing a rostered player silently deletes some of a settled offer's stakes,
+-- with nobody touching the offer. Every check the reopen makes is about what is
+-- LEFT: each remaining item can still be a spare, and trade_has_both_sides only
+-- asks for one item a side. So a two-for-two that lost one of its four would
+-- come back as a one-for-two, and the next tap would execute a trade neither
+-- person agreed to. accept_trade_offer can live with that gap because a pending
+-- offer is a live proposal either way; an undo cannot, because its whole promise
+-- is that it puts back exactly what was there.
+--
+-- Recorded once at creation and never decremented, so a cascade is visible as a
+-- disagreement rather than having to be caught as it happens. A trigger rather
+-- than a line inside create_trade_offer: that RPC is a hundred lines of
+-- validation this migration has no business restating, and a counter somebody
+-- has to remember to keep is a counter that drifts.
+ALTER TABLE public.trade_offers
+  ADD COLUMN IF NOT EXISTS staked_count integer NOT NULL DEFAULT 0;
+
+COMMENT ON COLUMN public.trade_offers.staked_count IS
+  'How many items the offer was created with. Never decremented: it is the baseline reopen_trade_offer compares the surviving trade_offer_items against, so a stake lost to a cascade is visible.';
+
+-- Idempotent both ways: a replay from empty has no offers to count, and a second
+-- run finds every count already right and matches nothing.
+UPDATE public.trade_offers o
+   SET staked_count = (SELECT count(*) FROM public.trade_offer_items i WHERE i.offer_id = o.id)
+ WHERE o.staked_count = 0;
+
+CREATE OR REPLACE FUNCTION public.count_trade_offer_stake() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.trade_offers SET staked_count = staked_count + 1 WHERE id = NEW.offer_id;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trade_offer_items_count
+  AFTER INSERT ON public.trade_offer_items
+  FOR EACH ROW EXECUTE FUNCTION public.count_trade_offer_stake();
 
 CREATE OR REPLACE FUNCTION public.reopen_trade_offer(
   _offer_id       uuid,
@@ -102,7 +150,11 @@ BEGIN
              CASE i.giver_side WHEN 'proposer' THEN _offer.proposer_id ELSE _offer.recipient_id END,
              i.kind, i.card_copy_id, i.secret_pull_id)
   ) OR NOT public.trade_leaves_a_copy(_offer_id)
-    OR NOT public.trade_has_both_sides(_offer_id) THEN
+    OR NOT public.trade_has_both_sides(_offer_id)
+    -- And the offer is still the whole offer. The three above all ask about the
+    -- items that remain; this is the one that notices an item that does not.
+    OR (SELECT count(*) FROM public.trade_offer_items WHERE offer_id = _offer_id)
+         <> _offer.staked_count THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'stale');
   END IF;
 

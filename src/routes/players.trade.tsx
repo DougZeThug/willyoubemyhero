@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -52,7 +52,7 @@ import { CollectorSignup } from "@/components/collector-signup";
 import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
-import { offlineReason, useIsOnline } from "@/hooks/use-online";
+import { OFFLINE_MESSAGE, offlineReason, useIsOnline } from "@/hooks/use-online";
 
 export const Route = createFileRoute("/players/trade")({
   head: () => ({
@@ -91,6 +91,14 @@ function TradePage() {
   // go quiet with the reason on them rather than throwing a toast a second
   // later. Reading the inbox still works: that half is cache.
   const offline = !useIsOnline();
+  // The Undo toast outlives the render that raised it, so the closure inside it
+  // cannot read `offline` — that would be the value from the moment the offer
+  // was declined, not from the moment Undo was tapped, and the signal dropping
+  // in between is exactly the case worth catching.
+  const offlineRef = useRef(offline);
+  useEffect(() => {
+    offlineRef.current = offline;
+  }, [offline]);
 
   const myId = me?.participantId ?? null;
   const offers = useTradeOffers(myId);
@@ -245,6 +253,13 @@ function TradePage() {
    * is decided under lock in the RPC. This only reports.
    */
   async function undoResolve(offerId: string, kind: "decline" | "cancel") {
+    // Quiet for the same reason every other write on this screen is: offline it
+    // can only fail, and an Undo that appears to have worked is worse than one
+    // that says it cannot.
+    if (offlineRef.current) {
+      toast(OFFLINE_MESSAGE);
+      return;
+    }
     try {
       const res = await reopenFn({ data: { offerId } });
       if (res.ok) toast.success(kind === "decline" ? "Offer's back" : "Offer's out there again");
@@ -264,9 +279,10 @@ function TradePage() {
     try {
       const res = await (kind === "decline" ? declineFn : cancelFn)({ data: { offerId } });
       if (res.ok) {
-        // Five seconds on screen against a sixty-second window in the RPC: the
-        // toast is the prompt, not the deadline. Offered on the success path
-        // only — an offer somebody else already settled has nothing to put back.
+        // Five seconds on screen, against the longer window the RPC allows: the
+        // toast is the prompt, and the slack behind it is what a slow round trip
+        // and a backgrounded tab need. Offered on the success path only — an
+        // offer somebody else already settled has nothing to put back.
         toast.success(kind === "decline" ? "Declined" : "Offer pulled", {
           duration: 5000,
           action: {

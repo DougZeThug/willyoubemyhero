@@ -50,10 +50,20 @@ export function useIsOnline(): boolean {
 /**
  * What to spread onto a control that cannot run without a connection.
  *
- * Both attributes, and deliberately: `title` is the tooltip a desktop pointer
- * gets, `aria-description` is the one a screen reader reads out. A disabled
- * button with no stated reason is the failure this exists to avoid — the
- * audit's §19 line about offline being shown "nothing at all".
+ * THE BANNER IS WHAT ACTUALLY TELLS ANYBODY, and that is worth being clear
+ * about: these controls are natively `disabled`, and a disabled button does not
+ * dispatch pointer events, so the `title` will not raise a tooltip on most
+ * browsers. It is set anyway because it costs nothing and some do.
+ *
+ * `aria-description` is the half that earns its place. A disabled control stays
+ * in the accessibility tree — it leaves the tab order, it is not removed — so a
+ * screen reader arrowing over the button reads the reason on the button rather
+ * than having to go and find the banner.
+ *
+ * The alternative, `aria-disabled` with a click guard, keeps the control
+ * focusable and makes the tooltip work, at the cost of a button that takes
+ * focus and does nothing. Not worth it while a banner is on screen saying the
+ * same sentence.
  */
 export function offlineReason(offline: boolean) {
   return offline ? { title: OFFLINE_MESSAGE, "aria-description": OFFLINE_MESSAGE } : {};

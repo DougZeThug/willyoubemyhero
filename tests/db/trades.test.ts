@@ -1234,6 +1234,66 @@ describe("reopen_trade_offer", () => {
     expect(await offerStatus(offerId)).toBe("declined");
   });
 
+  it("refuses once ONE of several staked cards has gone, with both sides intact", async () => {
+    // The case the other three checks all miss, because all three ask about the
+    // items that remain. A two-for-two that loses one of Alice's cards still has
+    // an item on each side, and every surviving item is still a spare — so
+    // without the count it would reopen as a one-for-two, and the next tap would
+    // execute a trade neither of them agreed to.
+    const [aliceCard, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    // Three of each, so staking two still leaves a copy behind on both sides.
+    const aliceCopies = await giveRoster(IDS.alice, aliceCard, 3);
+    const bobCopies = await giveRoster(IDS.bob, bobCard, 3);
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(aliceCopies[0]), copy(aliceCopies[1])],
+      [copy(bobCopies[0]), copy(bobCopies[1])],
+    );
+    await settle(offerId, "declined");
+
+    // One stake cascades away — what removing a rostered player does — leaving
+    // three items and a still-valid-looking offer.
+    await sql("DELETE FROM public.card_copies WHERE id = $1", [aliceCopies[0]]);
+    await sql("SELECT public.resync_card_pull($1, $2)", [IDS.alice, aliceCard]);
+    expect(
+      await sql("SELECT count(*)::int AS n FROM public.trade_offer_items WHERE offer_id = $1", [
+        offerId,
+      ]),
+    ).toEqual([{ n: 3 }]);
+    // Both sides survive and every remaining card is still a spare, so the three
+    // older checks would wave this through on their own.
+    expect(await sql("SELECT public.trade_has_both_sides($1) AS ok", [offerId])).toEqual([
+      { ok: true },
+    ]);
+
+    expect(await reopen(offerId, IDS.bob)).toEqual({ ok: false, reason: "stale" });
+    expect(await offerStatus(offerId)).toBe("declined");
+  });
+
+  it("counts the stake at creation and never lets it drift downwards", async () => {
+    // The baseline the check above rests on, asserted directly: the column is
+    // written by a trigger on the items rather than by create_trade_offer, and a
+    // cascade must not quietly take it down with the row it deletes.
+    const { aliceCopies, bobCopies } = await twoSpares();
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
+    );
+    expect(
+      await sql("SELECT staked_count FROM public.trade_offers WHERE id = $1", [offerId]),
+    ).toEqual([{ staked_count: 2 }]);
+
+    await sql("DELETE FROM public.card_copies WHERE id = $1", [aliceCopies[0]]);
+    expect(
+      await sql("SELECT staked_count FROM public.trade_offers WHERE id = $1", [offerId]),
+    ).toEqual([{ staked_count: 2 }]);
+  });
+
   it("refuses once one side has been emptied out from under it", async () => {
     // The trade_has_both_sides case, which cascades rather than being anybody's
     // decision: trade_offer_items follows card_copies, which follows

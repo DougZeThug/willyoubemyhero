@@ -94,13 +94,15 @@ const SORTS: { key: SortKey; label: string }[] = [
 const LOCKED_RARITY_RANK = 99;
 
 /**
- * How many placeholders to draw before the roster itself has arrived.
+ * How many placeholders to draw while even the roster is still unknown.
  *
- * Six is two rows on a phone and one and a half on a tablet — enough to read as
- * a shelf rather than a stray tile, and short of a full roster so a small league
- * does not watch four of them evaporate. Once the bundle lands the real count
- * takes over, which is the common case: the roster is public and cached, and it
- * is the *collection* query underneath it that keeps everyone waiting.
+ * Six is two rows on a phone — enough to read as a shelf rather than a stray
+ * tile. It cannot be the right number, because the number is the thing not yet
+ * known: a league smaller than this watches a couple of placeholders disappear
+ * when the bundle lands, which is a smaller lie than a shelf that reads as
+ * empty. The moment the roster is in, `rows.length` takes over, and that is the
+ * common case — the roster is public and cached, and it is the *collection*
+ * query underneath it that keeps everyone waiting.
  */
 const SKELETON_TILES = 6;
 
@@ -190,6 +192,20 @@ function PlayersPage() {
   // never disagree about whether the answer is known.
   const sync = useAccountSyncState();
   const ready = mine.ready && sync.status !== "syncing";
+  /**
+   * Whether the shelf below knows what it is drawing.
+   *
+   * BOTH answers, not just the collection's. `ready` says which cards are yours;
+   * the bundle says which cards exist, and it arrives on its own schedule behind
+   * a second request. Either one landing first showed its own wrong state for a
+   * frame — a guest whose IndexedDB read beats the network got "No participants
+   * yet" under a heading, then the whole grid — which is the shift the
+   * placeholders exist to remove rather than to relocate.
+   *
+   * A failed event read is not a wait: `error` with no bundle is a shelf that is
+   * never going to fill, and it has a banner of its own at the top of the page.
+   */
+  const shelfWaiting = !ready || (!bundle && !error);
 
   /**
    * Whether a slot renders face-down — and the only thing the rarity sort is
@@ -704,14 +720,14 @@ function PlayersPage() {
       </div>
 
       {/* Four states, in the order they can be true. Placeholders come first and
-          cover the wait `isLocked` describes above — every slot face-down
+          cover the wait `shelfWaiting` describes above — every slot face-down
           because the answer is not in yet rather than because the card is
           unpulled; drawing the backs through it and popping the owned ones open
           is a reveal in the wrong place (see card-skeleton.tsx). After that, an
           empty roster and a roster whose every card is pinned upstairs look
           identical in the markup and mean opposite things, so they stay two
           separate states rather than one shrug. */}
-      {!ready ? (
+      {shelfWaiting ? (
         <>
           <p role="status" className="sr-only">
             Counting your collection…

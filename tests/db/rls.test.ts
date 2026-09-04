@@ -548,13 +548,28 @@ describe("the trading RPCs are service_role only", () => {
     expect(await isDenied("authenticated", call, params)).toBe(true);
   });
 
-  it("service_role can, which is the whole point of the grant", async () => {
-    // The positive control. Without it a typo in the function name would make
-    // every denial above pass for the wrong reason.
-    expect(
-      await isDenied("service_role", "SELECT public.trade_has_both_sides($1)", [OFFER_ID]),
-    ).toBe(false);
-  });
+  // The positive control, over the SAME list rather than a representative of it.
+  // A mistyped name raises "function does not exist", which `isDenied` counts as
+  // a denial like any other error — so every row above would pass for the wrong
+  // reason, and only the row that also has to SUCCEED can catch it.
+  //
+  // Every call here is chosen to return rather than raise: reopen finds OFFER_ID
+  // still pending and answers `resolved`, and the other three are plain
+  // predicates that take any input.
+  it.each(TRADE_RPCS)(
+    "service_role can %s, which is the point of the grant",
+    async (_label, call, params) => {
+      // Seeded here rather than leaned on from the block above: reopen_trade_offer
+      // raises on an offer that does not exist, which would fail this control for a
+      // reason that has nothing to do with grants.
+      await sql(
+        `INSERT INTO public.trade_offers (id, event_id, proposer_id, recipient_id)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+        [OFFER_ID, IDS.event, IDS.alice, IDS.bob],
+      );
+      expect(await isDenied("service_role", call, params)).toBe(false);
+    },
+  );
 });
 
 describe("service_role", () => {
