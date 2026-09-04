@@ -1012,8 +1012,10 @@ export function PackStand({
               and flies to its column on the summary, and a projected subtree
               drags its children through the same distortion. Only once the card
               is actually face up — a ribbon on a back is the answer before the
-              question. */}
-          {isRevealed && standCopies != null && <PullRibbon copies={standCopies} />}
+              question. `settled` and not just `isRevealed`, which goes true on
+              the tap: without it the stamp lands on a card still edge-on and
+              answers halfway through its own turn. */}
+          {isRevealed && settled && standCopies != null && <PullRibbon copies={standCopies} />}
 
           {/* The deck arriving, over the top of the card it is becoming. */}
           {entry && landing && (

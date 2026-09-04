@@ -311,6 +311,17 @@ function PackPage() {
    */
   const replayedRef = useRef<Set<number>>(new Set());
   /**
+   * Indices this pack had already turned when the screen loaded.
+   *
+   * A narrower fact than `resumedRef`, and the ribbon is the only thing that
+   * needs it. `revealAt` never sees these cards — they are turned, and it only
+   * runs on a card being turned now — but `rosterCopies` counts every card in
+   * the pack, so it is the one place that has to know a pull the previous
+   * session already banked. Without it a guest who reloads mid-pack reads ×2 on
+   * a card they own exactly one of.
+   */
+  const resumedRevealedRef = useRef<Set<number>>(new Set());
+  /**
    * This pack was already open when the screen loaded.
    *
    * Which means `recordCardPulls` ran in whatever session tore it, so for a
@@ -508,6 +519,7 @@ function PackPage() {
         // *is* the collection, so a replayed pull would inflate "Pulled ×N" for
         // good.
         replayedRef.current = new Set(replay ? s.revealed : []);
+        resumedRevealedRef.current = new Set(revealedNow);
         resumedRef.current = true;
         carriedFromRef.current = s.carriedFrom ?? null;
         // Left UNDEFINED when the row does not carry the field, which is not the
@@ -561,6 +573,7 @@ function PackPage() {
         setDealtIds(null);
         revealedRef.current = [];
         replayedRef.current = new Set();
+        resumedRevealedRef.current = new Set();
         resumedRef.current = false;
         carriedFromRef.current = null;
         carriedAdoptedRef.current = undefined;
@@ -752,6 +765,7 @@ function PackPage() {
     setDealtIds(ids);
     revealedRef.current = [];
     replayedRef.current = new Set();
+    resumedRevealedRef.current = new Set();
     resumedRef.current = false;
     // A pack dealt here is nobody's carried pack, whatever the last one was, and
     // it belongs to whoever is holding the phone right now.
@@ -1343,23 +1357,42 @@ function PackPage() {
    * the ribbon paints — so reading it here would stamp ×2 on a card nobody owned
    * a second ago, and on every card in the pack.
    *
-   * The resumed-member case is the same exception `revealAt` makes below, and for
-   * the same reason: `recordCardPulls` fired in the session that tore this pack,
-   * so that person's snapshot already contains the pull and adding one to it
-   * would count it twice. Both places have to agree or the ribbon and the counter
-   * beside it say different numbers about the same card.
+   * Nothing at all until the snapshot exists. With no baseline every card
+   * computes to a floor of zero and the whole pack reads NEW — a confident wrong
+   * answer, where an absent ribbon is merely quiet. The consumers already treat a
+   * missing entry as "say nothing".
+   *
+   * Whether the pull is ALREADY in that snapshot is the whole question, and it
+   * has two answers rather than one:
+   *
+   *   - A member's `recordCardPulls` fired in the session that tore this pack, so
+   *     the server has all three and their reconciled snapshot carries every one
+   *     of them, turned or not.
+   *   - A guest has no server row. Their local store is the collection, and it
+   *     only holds the cards they actually turned before the reload.
+   *
+   * So a resumed guest is counted per card, not wholesale. Reading this the way
+   * `revealAt` does — member-only — inflated every card a guest had already
+   * turned, and a first pull came back from a reload wearing ×2.
+   *
+   * `revealAt` needs no such term and is right as it stands: it only ever runs on
+   * a card being turned now, which is by definition one the previous session did
+   * not bank. This counts every card in the pack, which is why it is the only
+   * place that has to know.
    */
   const rosterCopies = useMemo(() => {
-    const counted = resumedRef.current && !!me?.participantId;
+    if (!packBaseline) return {};
     const out: Record<string, number> = {};
-    for (const ep of pack) {
-      const held = packBaseline?.[ep.id]?.count ?? 0;
-      out[ep.id] = counted ? Math.max(held, 1) : held + 1;
-    }
+    pack.forEach((ep, i) => {
+      const banked =
+        resumedRef.current && (!!me?.participantId || resumedRevealedRef.current.has(i));
+      const held = packBaseline[ep.id]?.count ?? 0;
+      out[ep.id] = banked ? Math.max(held, 1) : held + 1;
+    });
     return out;
-    // `resumedRef` is settled by the time a card can be turned — it is written at
-    // deal and at resume, both of which are behind the tear — so it is read here
-    // rather than tracked, which is also how `revealAt` reads it.
+    // Both refs are settled by the time a card can be turned — they are written at
+    // deal and at resume, both of which are behind the tear — so they are read
+    // here rather than tracked, which is also how `revealAt` reads `resumedRef`.
   }, [pack, packBaseline, me?.participantId]);
 
   /**
@@ -1391,8 +1424,13 @@ function PackPage() {
     if (!me?.participantId || !dustLive(event)) return {};
     const out: Record<string, number> = {};
     for (const ep of pack) {
-      if ((rosterCopies[ep.id] ?? 1) > 1)
-        out[ep.id] = MILL_BY_EDITION[editions[ep.id] ?? "standard"];
+      // `Object.hasOwn`, not `?? "standard"`, and for the same reason `revealAt`
+      // checks `known`: until the recording answers, a card has no finish, and
+      // defaulting one here would price a platinum duplicate at the standard
+      // rung and then quietly quadruple the offer a moment later. No number is
+      // better than a number that moves.
+      if ((rosterCopies[ep.id] ?? 1) > 1 && Object.hasOwn(editions, ep.id))
+        out[ep.id] = MILL_BY_EDITION[editions[ep.id]];
     }
     return out;
   }, [pack, rosterCopies, editions, me?.participantId, event]);

@@ -263,6 +263,15 @@ export function PackSummary({
                   name={name}
                   rarity={rarity}
                   edition={edition}
+                  // The row scrolls sideways now, and drag-tilt cannot share that
+                  // axis with it. A tilting card sets `touch-action: pan-y`, which
+                  // hands the browser the vertical pan and keeps the horizontal
+                  // one for itself — so a thumb dragging across a card tilted it
+                  // and the row underneath never moved. touch-action is read once
+                  // at gesture start and is final, so there is no arrangement
+                  // where both work. Scrolling wins: these are thumbnails in a
+                  // scrolling row, which is the case this prop exists for.
+                  touchTilt={false}
                   backContent={
                     <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} edition={edition} />
                   }
