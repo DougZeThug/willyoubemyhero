@@ -495,8 +495,9 @@ function PlayerCardPage() {
       {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
       {/* The one coloured light on this page, and it is the player's own tier
           rather than the house cyan — a champion's page glows gold and a DNF's
-          barely glows. It used to have card-bg's cyan bloom to fight; now it
-          sits on the flat ground and only has to be seen. */}
+          barely glows. It used to sit over circuit-bg, whose own hard-coded
+          cyan bloom it had to wash out; card-bg has no bloom of its own, so
+          this now lands on a flat ground and only has to be seen. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[70vh]"

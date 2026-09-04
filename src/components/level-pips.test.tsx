@@ -12,15 +12,33 @@ function filledCount(container: HTMLElement): number {
 
 describe("LevelPips", () => {
   it.each([
-    ["mythic", 5, "Mythic, 5 of 5"],
-    ["legendary", 4, "Legendary, 4 of 5"],
-    ["epic", 3, "Epic, 3 of 5"],
-    ["rare", 2, "Rare, 2 of 5"],
-    ["common", 1, "Common, 1 of 5"],
-  ])("lights %s as %i pips, labelled %s", (tier, lit, label) => {
+    ["mythic", 5],
+    ["legendary", 4],
+    ["epic", 3],
+    ["rare", 2],
+    ["common", 1],
+  ])("lights %s as %i pips, and says so", (tier, lit) => {
     const { container } = render(<LevelPips tier={tier} />);
-    expect(screen.getByRole("img", { name: label })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: `Level ${lit} of 5` })).toBeInTheDocument();
     expect(filledCount(container)).toBe(lit);
+  });
+
+  it.each([
+    ["mythic", "Mythic, 5 of 5"],
+    ["epic", "Epic, 3 of 5"],
+    ["common", "Common, 1 of 5"],
+  ])("names %s in the label when asked to", (tier, label) => {
+    render(<LevelPips tier={tier} namesLevel />);
+    expect(screen.getByRole("img", { name: label })).toBeInTheDocument();
+  });
+
+  it("does not name the level by default, because a word is written beside it", () => {
+    // Seven of the eight render sites print the level next to the pips. A
+    // self-describing label there reads "Mythic, 5 of 5" and then, one node
+    // later, "Mythic · 0.5% pull" — the same word twice. The count is the only
+    // thing the pips add, so by default it is the only thing they announce.
+    render(<LevelPips tier="mythic" />);
+    expect(screen.queryByRole("img", { name: /mythic/i })).toBeNull();
   });
 
   it("always draws the whole ladder, so four filled reads as four of five", () => {
@@ -33,7 +51,7 @@ describe("LevelPips", () => {
   it("draws one pip for a level it does not recognise, never none", () => {
     // A row of empty diamonds reads as a card that failed to render. A corrupt
     // value has to land on the bottom rung, the way toSecretTier already does.
-    const { container } = render(<LevelPips tier="__proto__" />);
+    const { container } = render(<LevelPips tier="__proto__" namesLevel />);
     expect(screen.getByRole("img", { name: "Common, 1 of 5" })).toBeInTheDocument();
     expect(filledCount(container)).toBe(1);
   });

@@ -18,10 +18,23 @@ import { cn } from "@/lib/utils";
  */
 export function LevelPips({
   tier,
+  namesLevel = false,
   className,
 }: {
   /** The stored level of one pull. Anything unrecognised draws a single pip. */
   tier: string | null | undefined;
+  /**
+   * Name the level in the pips' label, as well as counting it.
+   *
+   * Off by default because almost every site writes the level beside the pips
+   * already, and a self-describing label there says it twice: a screen reader
+   * would read "Mythic, 5 of 5" and then the very next node, "Mythic · 0.5%
+   * pull". The count is what the pips add over that word, so the count is all
+   * they announce. Set this where the pips are the only level cue on screen —
+   * today that is the pack summary's secret slot, whose caption teaches what a
+   * secret is and never names the level.
+   */
+  namesLevel?: boolean;
   className?: string;
 }) {
   const style = secretTierStyle(tier);
@@ -31,9 +44,11 @@ export function LevelPips({
   return (
     <span
       // One label for the row, not five: a screen reader should hear the level,
-      // not count diamonds. Matches how the card's own sr-only line reads.
+      // not count diamonds.
       role="img"
-      aria-label={`${style.label}, ${level} of ${total}`}
+      aria-label={
+        namesLevel ? `${style.label}, ${level} of ${total}` : `Level ${level} of ${total}`
+      }
       className={cn("inline-flex items-center gap-[3px] align-middle", className)}
     >
       {Array.from({ length: total }, (_, i) => (

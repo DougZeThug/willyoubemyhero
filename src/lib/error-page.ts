@@ -19,7 +19,10 @@ export function renderErrorPage(): string {
     <meta charset="utf-8" />
     <title>This page didn't load</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0a1420" />
+    <!-- --bg as hex, because a meta tag cannot read a custom property and
+         browsers still want sRGB here. Deliberately not __root.tsx's #0a1420:
+         that is the app shell's chrome, and this document's ground is --bg. -->
+    <meta name="theme-color" content="#03080d" />
     <style>
       :root { color-scheme: dark; }
       body { font: 15px/1.5 system-ui, -apple-system, sans-serif; background: oklch(0.13 0.015 240); color: oklch(0.97 0.005 240); display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1.5rem; }
