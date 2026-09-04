@@ -314,11 +314,15 @@ function PackPage() {
    * Indices this pack had already turned when the screen loaded.
    *
    * A narrower fact than `resumedRef`, and the ribbon is the only thing that
-   * needs it. `revealAt` never sees these cards — they are turned, and it only
-   * runs on a card being turned now — but `rosterCopies` counts every card in
+   * needs it. `revealAt` never counts these cards — they are either already
+   * turned, or replayed and skipped — but `rosterCopies` counts every card in
    * the pack, so it is the one place that has to know a pull the previous
    * session already banked. Without it a guest who reloads mid-pack reads ×2 on
    * a card they own exactly one of.
+   *
+   * Banked, not face-up. A replayed pack turns its cards down again for the
+   * theatre without giving back the pulls behind them, so this follows the
+   * stored row rather than what is on screen.
    */
   const resumedRevealedRef = useRef<Set<number>>(new Set());
   /**
@@ -519,7 +523,14 @@ function PackPage() {
         // *is* the collection, so a replayed pull would inflate "Pulled ×N" for
         // good.
         replayedRef.current = new Set(replay ? s.revealed : []);
-        resumedRevealedRef.current = new Set(revealedNow);
+        // `s.revealed` and not `revealedNow`, which are different questions: that
+        // one is what shows face-up, this one is whose pull the collection has
+        // already banked. They agree everywhere except a replay, where the cards
+        // are turned face-down again for the theatre and their pulls are very much
+        // still counted — which is what `replayedRef` above exists to say. Reading
+        // the visual set here handed a replaying guest a floor of zero on every
+        // card and stamped the whole pack one copy too high.
+        resumedRevealedRef.current = new Set(s.revealed);
         resumedRef.current = true;
         carriedFromRef.current = s.carriedFrom ?? null;
         // Left UNDEFINED when the row does not carry the field, which is not the
