@@ -151,16 +151,12 @@ async function hydrateSecrets(
   if (rows.length === 0) return out;
 
   const sb = await db();
-  // Only the cards whose face may be shown are even looked up. Not fetching the
-  // rest is the clearer statement of the rule, and saves signing art nobody may
-  // see.
-  const cardIds = [
-    ...new Set(
-      rows.flatMap((r) =>
-        !concealUnowned || viewerCardIds.has(r.secret_card_id) ? [r.secret_card_id] : [],
-      ),
-    ),
-  ];
+  // Names are public enough to judge an offer; the art is what stays hidden.
+  // We fetch every card referenced by rows the caller is already entitled to see,
+  // but only sign URLs for the ones they actually hold (or when concealment is
+  // off entirely). That keeps the catalogue enumeration protection intact while
+  // still letting a member read "Dragon, mythic" on a face-down tile.
+  const cardIds = [...new Set(rows.map((r) => r.secret_card_id))];
   const { data: cards } = cardIds.length
     ? await sb
         .from("secret_cards")
@@ -174,11 +170,10 @@ async function hydrateSecrets(
     rows.map(async (row) => {
       const owns = viewerCardIds.has(row.secret_card_id);
       const shown = !concealUnowned || owns;
-      const card = shown ? byId.get(row.secret_card_id) : undefined;
+      const card = byId.get(row.secret_card_id);
       out.set(row.id, {
         pullId: row.id,
-        // A retired card still trades; it just has no row left to name it — and
-        // a concealed one reads the same, so the two cannot be told apart.
+        // A retired card still trades; it just has no row left to name it.
         name: card?.name ?? "Secret card",
         // thumb rather than large: these are tiles in a picker, not the reveal.
         artUrl: shown ? await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb) : null,
