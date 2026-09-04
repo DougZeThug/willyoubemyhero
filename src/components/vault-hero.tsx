@@ -78,16 +78,23 @@ export function VaultHero({
               The chip needs its own BOX and not just a taller row, which is the
               one slot here where a min-height is not enough. DustChip renders
               nothing until the balance is known — a "0" that becomes "140" reads
-              as having just lost something — and this row wraps, so at any width
+              as having just lost something — and this row wraps, so at a width
               where the chip does not fit beside the heading the row goes from one
-              line to two the moment the number lands. A min-height reserves the
-              unwrapped case and the shelf moves anyway. The box is drawn as soon
-              as dust is on, so the wrap is decided once and does not depend on an
-              answer still in flight. */}
+              line to two the moment the number lands, and a min-height that
+              reserved the unwrapped case would let the shelf move anyway.
+
+              8rem is measured, not guessed: the chip is 126px at three digits
+              (143 at four, 153 at five) against a 179px heading and a 288–334px
+              row, so this holds the wrap steady for every balance this league
+              will realistically see. It is deliberately NOT sized for the widest
+              possible chip — 152px would push the row past its width at 360 and
+              wrap it permanently, costing everybody a second line to spare a
+              five-figure balance one reflow. A balance past four digits can
+              still flip the wrap once, at one narrow band of widths. */}
           <div className="mt-1 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="font-display text-3xl font-black uppercase leading-none">The Vault</h1>
             {dustOn && (
-              <div className="flex min-h-11 min-w-25 items-center">
+              <div className="flex min-h-11 min-w-32 items-center">
                 <DustChip balance={dustBalance} to="/players/shop" />
               </div>
             )}
