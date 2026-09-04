@@ -397,6 +397,34 @@ describe("landing with nothing to catch", () => {
   });
 });
 
+describe("the level on the stand", () => {
+  /** The stand, on the secret's step, with the card turned over. */
+  const onSecret = {
+    secretSlot: "open" as const,
+    secret: SECRET,
+    secretRevealed: true,
+    cursor: PACK.length,
+  };
+
+  it("announces the level beside the pips on a fresh pull", () => {
+    // The caption says it in words, so the pips only add the rank. Saying both
+    // would read "Mythic, 5 of 5" and then "Mythic · 0.5% pull" to a screen
+    // reader — the same word twice, one node apart.
+    renderStand(onSecret);
+    expect(screen.getByRole("img", { name: /^Level \d of \d$/ })).toBeInTheDocument();
+  });
+
+  it("still names the level when a duplicate replaces the caption", () => {
+    // The regression this pins: on a duplicate the caption becomes "Already
+    // yours — this one's just showing off", which never says the level. With
+    // the pips announcing only a rank, the one moment the level is decided
+    // became the one place a screen reader could not hear it.
+    renderStand({ ...onSecret, secretDuplicate: true });
+    expect(screen.getByText(/already yours/i)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /^Common, \d of \d$/ })).toBeInTheDocument();
+  });
+});
+
 describe("the finish on the stand", () => {
   /**
    * The printed chip only, excluding HoloCard's own sr-only title.

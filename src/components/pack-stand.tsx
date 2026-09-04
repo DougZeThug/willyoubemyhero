@@ -961,8 +961,19 @@ export function PackStand({
                     {/* The pips ride even on a duplicate: the copy in front of
                         you still rolled a level, and hiding it here would make
                         the one moment the level is decided the one place it is
-                        not shown. */}
-                    <LevelPips tier={secret?.tier} className="mt-0.5" />
+                        not shown.
+
+                        `namesLevel` follows the caption below, which is the only
+                        other thing here that says the level out loud — and on a
+                        duplicate it is replaced by a line that never names it.
+                        Without this the pips would announce "Level 5 of 5" and a
+                        screen reader would never hear "Mythic" at all, which is
+                        exactly the hiding this comment exists to forbid. */}
+                    <LevelPips
+                      tier={secret?.tier}
+                      namesLevel={secretDuplicate}
+                      className="mt-0.5"
+                    />
                     <div
                       className="text-label font-bold uppercase tracking-[0.08em]"
                       style={{
