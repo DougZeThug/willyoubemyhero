@@ -83,14 +83,20 @@ export function VaultHero({
               line to two the moment the number lands, and a min-height that
               reserved the unwrapped case would let the shelf move anyway.
 
-              8rem is measured, not guessed: the chip is 126px at three digits
-              (143 at four, 153 at five) against a 179px heading and a 288–334px
-              row, so this holds the wrap steady for every balance this league
-              will realistically see. It is deliberately NOT sized for the widest
-              possible chip — 152px would push the row past its width at 360 and
-              wrap it permanently, costing everybody a second line to spare a
-              five-figure balance one reflow. A balance past four digits can
-              still flip the wrap once, at one narrow band of widths. */}
+              8rem covers a THREE-DIGIT balance and no more, which is what the
+              measurements support and all this claims. Rendered, the chip is
+              126px at three digits, 143 at four and 153 at five, against a 179px
+              heading and a row of 288–344px. So a balance in the hundreds — the
+              ordinary one, when a bonus pull costs 150 — reserves exactly right
+              and the row never moves. Four digits or more still flips it once,
+              at 360–390, when the number lands.
+
+              Reserving for those is worse, and this is the arithmetic that says
+              so: 179 + 12 + 144 = 335 against a row that measures 328 at 360 and
+              334 at 390, so a box wide enough for a four-digit chip wraps the
+              row PERMANENTLY on the commonest phone widths. Everybody would pay
+              a second line above the fold — on the screen §17 already faults for
+              its height — to spare a rare balance one reflow. */}
           <div className="mt-1 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="font-display text-3xl font-black uppercase leading-none">The Vault</h1>
             {dustOn && (
