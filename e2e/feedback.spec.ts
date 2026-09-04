@@ -84,6 +84,23 @@ test.describe("waiting", () => {
     await expect(page.getByRole("img", { name: /Alice Ace — not packed yet/ })).toBeVisible();
     await expect(skeletons).toHaveCount(0);
   });
+
+  test("stops waiting out of season rather than holding the placeholders", async ({
+    page,
+    server,
+  }) => {
+    // The failure mode a placeholder invites: something that is never coming.
+    // With no active combine the bundle query never runs and a member's stats
+    // query is gated on an id that will not arrive, so both halves of the wait
+    // stay unfinished for good unless the screen is told an answer HAS been
+    // given — it is just "there is no combine on".
+    await signIn(page);
+    server.set("getActiveEvent", null);
+    await page.goto("/players");
+
+    await expect(page.getByText("No participants yet.")).toBeVisible();
+    await expect(page.getByTestId("card-skeleton")).toHaveCount(0);
+  });
 });
 
 test.describe("toasts", () => {

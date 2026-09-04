@@ -53,11 +53,11 @@ const serverHas = (ids: string[], pullCount = 1) => ({
   })),
 });
 
-async function mount(eventId: string | null = EVENT, eventFailed = false) {
+async function mount(eventId: string | null = EVENT, noEventComing = false) {
   const { useMyCollection } = await import("./use-my-collection");
   const { wrapper, client } = createQueryWrapper();
   return {
-    ...renderHook(() => useMyCollection(eventId, ROSTER, eventFailed), { wrapper }),
+    ...renderHook(() => useMyCollection(eventId, ROSTER, noEventComing), { wrapper }),
     client,
   };
 }
@@ -343,10 +343,12 @@ describe("useMyCollection, holding a pull the server has not been told about", (
   });
 });
 
-describe("useMyCollection, when the league cannot be reached", () => {
-  // With no event id the stats query never runs, so it never succeeds and never
-  // errors — `settled` used to stay false forever and every screen read that as
-  // "still reconciling" and locked the whole vault face-down without a word.
+describe("useMyCollection, when no event id is coming", () => {
+  // Two ways to get here and the hook cannot tell them apart: the active-event
+  // read failed, or it answered and there is no combine on. Either way the stats
+  // query never runs, so it never succeeds and never errors — `settled` used to
+  // stay false forever and every screen read that as "still reconciling" and
+  // locked the whole vault face-down without a word.
   it("settles a member on the local collection, and prunes none of it", async () => {
     const { result } = await mount(null, true);
     await waitFor(() => expect(result.current.ready).toBe(true));

@@ -180,10 +180,14 @@ function PlayersPage() {
   // and cannot also be what the collection is asked about. The hook only ever
   // builds a Set from this, so the order the grid happens to be in is irrelevant.
   const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
-  // The third argument is what stops a failed event read locking the vault: with
-  // no id the stats query never runs, so without it `mine.ready` never turns true
-  // and every slot below renders face-down for good.
-  const mine = useMyCollection(event?.id ?? null, rosterIds, !!error && !event);
+  // The third argument is what stops a missing event locking the vault: with no
+  // id the stats query never runs, so without it `mine.ready` never turns true
+  // and every slot below renders face-down for good. It covers BOTH ways an id
+  // fails to arrive — a read that broke, and a read that answered "no combine on"
+  // — because the difference does not matter to a collection that is never going
+  // to be reconciled against a server. `eventLoading` is the only part that
+  // does: while it is true the answer is still coming.
+  const mine = useMyCollection(event?.id ?? null, rosterIds, !event && !eventLoading);
   const collected = mine.collection;
   // A phone that has just signed in has no member token yet, so the collection
   // settles off the local store alone and the counter would state "0 collected"
