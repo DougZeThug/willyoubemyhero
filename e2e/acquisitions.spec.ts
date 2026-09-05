@@ -105,7 +105,7 @@ test.describe("new since your last visit", () => {
     await expect(arrived(page)).toBeVisible();
     await expect(arrived(page).locator("> li")).toHaveCount(2);
     await expect(page.getByRole("link", { name: "Alice Ace — NEW" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Gary The Grill — NEW" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Gary The Grill — .+ — NEW$/ })).toBeVisible();
   });
 
   test("says nothing at all on a device's first ever visit", async ({ page, server }) => {
@@ -145,7 +145,7 @@ test.describe("new since your last visit", () => {
     await withArrivals(page, server);
     await page.goto("/players");
 
-    await page.getByRole("button", { name: "Gary The Grill — NEW" }).click();
+    await page.getByRole("button", { name: /^Gary The Grill — .+ — NEW$/ }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page).toHaveURL(/\/players\/?$/);
 

@@ -11,44 +11,39 @@
 // celebrate twice: pull an Alice in July, trade for a second one in August, and the
 // second arrival is a real event. A boolean could not tell those apart.
 //
-// Thirteen people on the roster means thirteen entries at most, so there is
-// nothing here to prune. Same storage shape as vault-favourites.ts, with one
-// deliberate difference: there is no hook and no change event.
+// ONE KEY PER CARD, rather than one JSON blob for all of them. A blob has to be
+// read, merged and written back, and two tabs celebrating two different cards in
+// the same instant would have the later write drop the earlier one's entry — which
+// replays exactly the cue this module exists to suppress. Thirteen people means
+// thirteen keys at most, so there is nothing to prune and nothing to serialise.
 //
-// NOTHING RENDERS THIS. It is read once inside the effect that decides whether to
-// play a cue, and a reactive view of it would be actively harmful — writing an
-// entry would re-run that effect, and its cleanup would cancel the confetti import
-// the same pass had just started. A cue is an event, not state.
-const KEY = "wwbh:reveal-seen";
+// NOTHING RENDERS THIS, so there is no hook and no change event. It is read inside
+// the effect that decides whether to play a cue, and a reactive view of it would be
+// actively harmful: writing an entry would re-run that effect, and its cleanup
+// would cancel the confetti import the same pass had just started. A cue is an
+// event, not state.
 
-/** eventParticipantId -> the newest acquisition already celebrated for it. */
-export type RevealSeen = Readonly<Record<string, string>>;
+const PREFIX = "wwbh:reveal-seen:";
 
-let current: RevealSeen = {};
-
-function read(): RevealSeen {
-  if (typeof window === "undefined") return {};
+/** The acquisition already celebrated for this card, or null for none. */
+export function readRevealedAt(eventParticipantId: string): string | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return {};
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const out: Record<string, string> = {};
-    for (const [id, at] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof at === "string") out[id] = at;
-    }
-    return out;
+    return window.localStorage.getItem(PREFIX + eventParticipantId);
   } catch {
-    // Blocked storage, or something else wrote junk under our key. An empty map
-    // means the cue fires once more, which is the harmless direction to fail.
-    return {};
+    // Blocked storage. "Never celebrated" means the cue fires once more, which is
+    // the harmless direction to fail.
+    return null;
   }
 }
 
-/** The stored map. Read at the moment of the cue, never rendered. */
-export function readRevealSeen(): RevealSeen {
-  current = read();
-  return current;
+export function markRevealed(eventParticipantId: string, acquiredAt: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PREFIX + eventParticipantId, acquiredAt);
+  } catch {
+    /* private mode with storage blocked still holds the cue for this page load */
+  }
 }
 
 /**
@@ -65,8 +60,8 @@ export function readRevealSeen(): RevealSeen {
  *   present  older        yes — a newer copy arrived, which is its own event
  *
  * THE THIRD ROW IS THE ONE THAT MATTERS. Tapping the card in the vault's strip
- * bumps wwbh:vault-last-seen, so on the next load the acquisitions window is empty
- * and this card's timestamp is unknown again — but the store is not, and "the
+ * marks the strip seen, so on the next load that card is outside the "new since"
+ * filter and its timestamp is unknown again — but the store is not, and "the
  * timestamp is missing" is not "this device has never seen it". Without that row
  * the chime would come back once per session for exactly the cards somebody has
  * most recently looked at.
@@ -76,25 +71,10 @@ export function readRevealSeen(): RevealSeen {
  * the honest answer is "no opinion" — the caller keeps its per-session guard.
  */
 export function shouldCelebrate(
-  seen: RevealSeen,
-  eventParticipantId: string,
+  storedAt: string | null,
   acquiredAt: string | null,
 ): boolean | null {
-  const stored = seen[eventParticipantId];
-  if (stored === undefined) return acquiredAt ? true : null;
+  if (storedAt === null) return acquiredAt ? true : null;
   if (!acquiredAt) return false;
-  return acquiredAt > stored;
-}
-
-export function markRevealed(eventParticipantId: string, acquiredAt: string) {
-  // Merged onto what is actually on the phone rather than onto the module value:
-  // another tab may have celebrated a different card since this one loaded, and
-  // a blind overwrite would re-arm its cue.
-  current = { ...read(), [eventParticipantId]: acquiredAt };
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(current));
-  } catch {
-    /* private mode with storage blocked still holds the cue for this page load */
-  }
+  return acquiredAt > storedAt;
 }

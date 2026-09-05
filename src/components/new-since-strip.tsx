@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
 import { LevelPips } from "@/components/level-pips";
+import { secretTierLabel } from "@/lib/secret-rarity";
 import type { Edition } from "@/lib/card-edition";
 import type { ImageUrlSet } from "@/lib/media";
 import type { Rarity } from "@/lib/card-rarity";
@@ -104,7 +105,7 @@ export function NewSinceStrip({
                 to="/players/$id"
                 params={{ id: item.id }}
                 onClick={() => onOpen(item)}
-                className="group block focus:outline-none"
+                className={TILE_FOCUS}
                 aria-label={`${item.name} — ${item.label}`}
               >
                 <Tile
@@ -130,8 +131,15 @@ export function NewSinceStrip({
               <button
                 type="button"
                 onClick={() => onOpen(item)}
-                className="group block w-full text-left focus:outline-none"
-                aria-label={`${item.name} — ${item.label}`}
+                className={cn(TILE_FOCUS, "w-full text-left")}
+                // The level is on the card as pips and in their own label, but a
+                // screen reader moving by control hears only the button — and the
+                // level is the whole reason one secret is worth more of a look
+                // than another.
+                // The LABEL, not the caption: the caption appends the base pull
+                // rate, and "8% pull" read aloud is the odds of a thing that
+                // already happened.
+                aria-label={`${item.name} — ${secretTierLabel(item.tier)} — ${item.label}`}
               >
                 <Tile
                   label={item.label}
@@ -156,6 +164,16 @@ export function NewSinceStrip({
     </section>
   );
 }
+
+/**
+ * Focus has to be visible on both tiles.
+ *
+ * `focus:outline-none` on its own is how a keyboard user loses their place: the
+ * browser's ring goes and nothing replaces it. The ring is drawn on the tile
+ * rather than tight to the anchor because the anchor wraps a card and a caption.
+ */
+const TILE_FOCUS =
+  "group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 /** The card with its corner label. `aria-hidden` on the label — it is in the link's name. */
 function Tile({ label, card }: { label: string; card: React.ReactNode }) {

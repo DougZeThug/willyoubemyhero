@@ -294,10 +294,36 @@ describe("what arrived since your last visit", () => {
     expect(streakSlot.compareDocumentPosition(strip)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  const gary = {
+    kind: "secret" as const,
+    id: "secret-gary",
+    name: "Gary The Grill",
+    artUrl: null,
+    rarity: rarityStyle("base"),
+    tier: "epic",
+    label: "×2",
+  };
+
   it("draws what arrived, and passes a tap back up", async () => {
     const onOpenNewCard = vi.fn();
     renderCard({ newCards: [alice], onOpenNewCard });
     await userEvent.click(screen.getByRole("link", { name: "Alice Ace — NEW" }));
     expect(onOpenNewCard).toHaveBeenCalledWith(alice);
+  });
+
+  it("passes a secret up too, which has no URL to navigate to", async () => {
+    const onOpenNewCard = vi.fn();
+    renderCard({ newCards: [gary], onOpenNewCard });
+    await userEvent.click(screen.getByRole("button", { name: /Gary The Grill/ }));
+    expect(onOpenNewCard).toHaveBeenCalledWith(gary);
+  });
+
+  it("forwards a dismiss, which is what makes the row go away", async () => {
+    // The other half of the interaction model: somebody who has read the row and
+    // does not want to open anything must not be stuck with it for a day.
+    const onDismissNew = vi.fn();
+    renderCard({ newCards: [alice, gary], onDismissNew });
+    await userEvent.click(screen.getByRole("button", { name: /dismiss what's new/i }));
+    expect(onDismissNew).toHaveBeenCalledTimes(1);
   });
 });

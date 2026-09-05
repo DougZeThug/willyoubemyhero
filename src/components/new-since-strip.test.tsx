@@ -9,6 +9,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NewSinceStrip, type NewSinceItem } from "./new-since-strip";
 import { rarityStyle } from "@/lib/card-rarity";
+import { secretTierLabel } from "@/lib/secret-rarity";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -68,7 +69,12 @@ describe("NewSinceStrip", () => {
     strip([alice, gary]);
     expect(screen.getByTestId("new-since-strip").children).toHaveLength(2);
     expect(screen.getByRole("link", { name: "Alice Ace — NEW" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Gary The Grill — ×2" })).toBeVisible();
+    // The level rides in the name: a screen reader moving by control hears only
+    // the button, and the level is the whole reason one secret is worth more of a
+    // look than another.
+    expect(
+      screen.getByRole("button", { name: `Gary The Grill — ${secretTierLabel("epic")} — ×2` }),
+    ).toBeVisible();
   });
 
   it("sends a roster card to its own page and a secret to the sheet", () => {
@@ -92,7 +98,7 @@ describe("NewSinceStrip", () => {
     await userEvent.click(screen.getByRole("link", { name: /Alice Ace/ }));
     expect(onOpen).toHaveBeenCalledWith(alice);
 
-    await userEvent.click(screen.getByRole("button", { name: /Gary/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Gary The Grill/ }));
     expect(onOpen).toHaveBeenCalledWith(gary);
   });
 

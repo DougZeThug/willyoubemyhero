@@ -63,6 +63,30 @@ function noStore() {
 /** Newest first, and never more of them than a strip could ever show. */
 const MAX_ROWS = 50;
 
+/** The furthest back this will look, whatever it is asked for. See `windowFrom`. */
+const MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The window actually queried, clamped into the last day.
+ *
+ * The client asks for a day and no more, but the client is not what enforces it:
+ * `since` arrives in a request, and a member who edits one gets their whole
+ * history back instead of a strip. It is their own data either way, so this is a
+ * bound on the work rather than a leak — but an unbounded scan of every copy
+ * somebody has ever held is not a thing a read this small should be able to do.
+ *
+ * Clamped rather than rejected, deliberately. A phone with a skewed clock sends a
+ * window from tomorrow, and refusing it would blank the strip with an error on the
+ * one device that cannot tell why; clamping answers honestly with what is inside
+ * the real day.
+ */
+function windowFrom(since: string, now = Date.now()): string {
+  const asked = Date.parse(since);
+  const floor = now - MAX_WINDOW_MS;
+  if (Number.isNaN(asked)) return new Date(floor).toISOString();
+  return new Date(Math.min(Math.max(asked, floor), now)).toISOString();
+}
+
 export type RosterAcquisition = {
   eventParticipantId: string;
   /** The finish on THIS copy, not the best one held. */
@@ -144,21 +168,23 @@ export const getRecentAcquisitions = createServerFn({ method: "GET" })
     if (epError) throw epError;
     const epIds = (eps ?? []).map((r) => r.id);
 
+    const since = windowFrom(data.since);
     const [roster, secrets] = await Promise.all([
-      recentCopies(sb, participantId, epIds, data.since),
-      recentSecrets(sb, participantId, data.since),
+      recentCopies(sb, participantId, epIds, since),
+      recentSecrets(sb, participantId, since),
     ]);
 
-    // The cap is over the ANSWER, not over either query: fifty of one kind must
-    // not be able to push the other kind off the strip entirely.
-    const kept = new Set(
-      [...roster, ...secrets]
-        .sort((a, b) => b.acquiredAt.localeCompare(a.acquiredAt))
-        .slice(0, MAX_ROWS),
-    );
+    // Merged, sorted and cut once, then split back apart. The cap has to be over
+    // the ANSWER rather than over either query — fifty of one kind must not push
+    // the other kind off the strip entirely — and sorting HERE rather than
+    // leaning on each query's `.order(...)` is what makes newest-first a promise
+    // this function keeps rather than one it inherits.
+    const merged = [...roster, ...secrets]
+      .sort((a, b) => b.acquiredAt.localeCompare(a.acquiredAt))
+      .slice(0, MAX_ROWS);
     return {
-      roster: roster.filter((r) => kept.has(r)),
-      secrets: secrets.filter((s) => kept.has(s)),
+      roster: merged.filter((r): r is RosterAcquisition => "eventParticipantId" in r),
+      secrets: merged.filter((s): s is SecretAcquisition => !("eventParticipantId" in s)),
     };
   });
 

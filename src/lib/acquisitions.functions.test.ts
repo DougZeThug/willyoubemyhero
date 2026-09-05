@@ -112,6 +112,29 @@ describe("getRecentAcquisitions — who may ask", () => {
     await expect(call({ since: "yesterday" })).rejects.toThrow();
   });
 
+  it("will not look further back than a day, whatever it is asked for", async () => {
+    // `since` arrives in a request. It is the caller's own data either way, so
+    // this is a bound on the work rather than a leak — but an unbounded scan of
+    // every copy somebody has ever held is not something a read this small should
+    // be able to do.
+    withDb({ "card_copies.select": { data: [copy()] } });
+    await call({ since: "2020-01-01T00:00:00.000Z" });
+    const gte = mock.callsFor("card_copies", "select")[0]!.filters.find((f) => f.method === "gte");
+    const asked = Date.parse(String(gte?.args[1]));
+    expect(Date.now() - asked).toBeLessThanOrEqual(24 * 60 * 60 * 1000 + 5_000);
+  });
+
+  it("clamps a window from the future rather than refusing it", async () => {
+    // A phone with a skewed clock. Refusing would blank the strip with an error
+    // on the one device that cannot tell why; clamping answers honestly with
+    // what is inside the real day.
+    withDb({ "card_copies.select": { data: [copy()] } });
+    const soon = new Date(Date.now() + 60 * 60_000).toISOString();
+    await call({ since: soon });
+    const gte = mock.callsFor("card_copies", "select")[0]!.filters.find((f) => f.method === "gte");
+    expect(Date.parse(String(gte?.args[1]))).toBeLessThanOrEqual(Date.now());
+  });
+
   it("rejects an event id that is not a uuid", async () => {
     await expect(call({ eventId: "the-combine" })).rejects.toThrow();
   });
@@ -173,7 +196,7 @@ describe("getRecentAcquisitions — the window", () => {
     await call();
     for (const table of ["card_copies", "secret_card_pulls"] as const) {
       const query = mock.callsFor(table, "select")[0]!;
-      expect(query.filters.find((f) => f.method === "gte")?.args).toEqual(["acquired_at", SINCE]);
+      expect(query.filters.find((f) => f.method === "gte")?.args[0]).toBe("acquired_at");
       expect(query.filters.find((f) => f.method === "order")?.args[0]).toBe("acquired_at");
       expect(query.columns).not.toMatch(/created_at/);
     }
@@ -200,12 +223,12 @@ describe("getRecentAcquisitions — the window", () => {
   it("caps the answer at fifty, newest first, across both kinds", async () => {
     // The cap is over the ANSWER and not over either query: forty-five roster
     // copies must not be able to push every secret off the strip.
-    const copies = Array.from({ length: 45 }, (_, i) =>
-      copy({ acquired_at: `2026-09-05T${String(10 + i).padStart(2, "0")}:00:00.000Z` }),
-    );
-    const pulls = Array.from({ length: 15 }, (_, i) =>
-      pull({ acquired_at: `2026-09-05T${String(40 + i).padStart(2, "0")}:00:00.000Z` }),
-    );
+    // Minutes rather than hours: an hour of 54 is not a timestamp Postgres could
+    // ever hand back, and a fixture that could not exist proves nothing about
+    // ordering that only happens to work because the strings sort.
+    const at = (m: number) => `2026-09-05T09:${String(m).padStart(2, "0")}:00.000Z`;
+    const copies = Array.from({ length: 45 }, (_, i) => copy({ acquired_at: at(i) }));
+    const pulls = Array.from({ length: 15 }, (_, i) => pull({ acquired_at: at(45 + i) }));
     withDb({
       "card_copies.select": { data: copies },
       "secret_card_pulls.select": { data: pulls },
@@ -213,12 +236,16 @@ describe("getRecentAcquisitions — the window", () => {
     });
     const res = await call();
     expect(res.roster.length + res.secrets.length).toBe(50);
-    // The fifty newest of the sixty, so the oldest roster copies are what went.
-    const oldest = [...res.roster, ...res.secrets]
-      .map((r) => r.acquiredAt)
-      .sort()
-      .at(0)!;
-    expect(oldest > "2026-09-05T10:00:00.000Z").toBe(true);
+    // The fifty NEWEST of the sixty, so it is the oldest roster copies that went.
+    const kept = [...res.roster, ...res.secrets].map((r) => r.acquiredAt);
+    expect(kept.every((t) => t >= at(10))).toBe(true);
+    // And each list still arrives newest-first. The cap only decides membership;
+    // the order is the database's, and a regression that dropped the `.order(...)`
+    // would leave every assertion above passing.
+    for (const list of [res.roster, res.secrets]) {
+      const times = list.map((r) => r.acquiredAt);
+      expect(times).toEqual([...times].sort().reverse());
+    }
   });
 });
 

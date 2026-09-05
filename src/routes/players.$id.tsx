@@ -70,7 +70,7 @@ import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
 import { acquisitionWindow } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
-import { markRevealed, readRevealSeen, shouldCelebrate } from "@/lib/reveal-seen";
+import { markRevealed, readRevealedAt, shouldCelebrate } from "@/lib/reveal-seen";
 
 /**
  * Cards whose reveal has already played this page load.
@@ -281,7 +281,7 @@ function PlayerCardPage() {
     // Then the device store, which is the half that survives a reload — the whole
     // point of §6. `false` is "already celebrated"; `null` is "no opinion at all",
     // and for that the session guard above was the entire decision.
-    if (shouldCelebrate(readRevealSeen(), ep.id, acquiredAt) === false) return;
+    if (shouldCelebrate(readRevealedAt(ep.id), acquiredAt) === false) return;
     revealed.add(ep.id);
     if (acquiredAt) markRevealed(ep.id, acquiredAt);
     playReveal(rarity.tier);

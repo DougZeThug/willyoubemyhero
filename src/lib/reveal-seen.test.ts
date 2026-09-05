@@ -1,83 +1,92 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { markRevealed, readRevealSeen, shouldCelebrate, type RevealSeen } from "./reveal-seen";
+import { markRevealed, readRevealedAt, shouldCelebrate } from "./reveal-seen";
 
-const KEY = "wwbh:reveal-seen";
+const PREFIX = "wwbh:reveal-seen:";
 const ALICE = "ep-alice";
+const BOB = "ep-bob";
 const JULY = "2026-07-28T10:00:00.000Z";
 const AUGUST = "2026-08-28T10:00:00.000Z";
 
 beforeEach(() => {
-  window.localStorage.clear();
-  // The module cache too: the writes trust their own value over a re-read.
-  markRevealed("__reset__", String(Math.random()));
+  // The whole store. There is no module cache to reset — every read goes to
+  // storage, which is the point of one key per card.
   window.localStorage.clear();
 });
 
 describe("shouldCelebrate", () => {
-  const none: RevealSeen = {};
-
   it("celebrates a card this device has never celebrated and knows the arrival of", () => {
-    expect(shouldCelebrate(none, ALICE, JULY)).toBe(true);
+    expect(shouldCelebrate(null, JULY)).toBe(true);
   });
 
   it("has no opinion when it knows neither the arrival nor the card", () => {
     // A collection built before this shipped, or a card pulled last month. The
     // caller keeps its per-session guard for these — null is not false.
-    expect(shouldCelebrate(none, ALICE, null)).toBeNull();
+    expect(shouldCelebrate(null, null)).toBeNull();
   });
 
   it("stays quiet on a card it has celebrated, even with no timestamp in hand", () => {
-    // THE ROW THAT MATTERS. Tapping the card in the vault's strip bumps
-    // wwbh:vault-last-seen, so on the next load the acquisitions window is empty
-    // and the timestamp is unknown again — but the store is not. Without this the
+    // THE ROW THAT MATTERS. Tapping the card in the vault's strip marks the strip
+    // seen, so on the next load that card is outside the "new since" filter and
+    // its timestamp is unknown again — but the store is not. Without this the
     // chime would come back once per session for exactly the cards somebody has
     // most recently looked at, which is the §6 bug wearing a different hat.
-    expect(shouldCelebrate({ [ALICE]: JULY }, ALICE, null)).toBe(false);
+    expect(shouldCelebrate(JULY, null)).toBe(false);
   });
 
   it("stays quiet on the same arrival seen twice", () => {
-    expect(shouldCelebrate({ [ALICE]: JULY }, ALICE, JULY)).toBe(false);
+    expect(shouldCelebrate(JULY, JULY)).toBe(false);
   });
 
   it("celebrates a newer copy of a card it already holds", () => {
     // Pull an Alice in July, trade for a second in August: the second arrival is
     // its own event, and a boolean store could not have told them apart.
-    expect(shouldCelebrate({ [ALICE]: JULY }, ALICE, AUGUST)).toBe(true);
+    expect(shouldCelebrate(JULY, AUGUST)).toBe(true);
   });
 
   it("does not re-celebrate an older copy arriving late", () => {
-    expect(shouldCelebrate({ [ALICE]: AUGUST }, ALICE, JULY)).toBe(false);
-  });
-
-  it("keeps one card's answer out of another's", () => {
-    expect(shouldCelebrate({ [ALICE]: JULY }, "ep-bob", null)).toBeNull();
+    expect(shouldCelebrate(AUGUST, JULY)).toBe(false);
   });
 });
 
 describe("the store", () => {
-  it("round-trips, and later arrivals overwrite earlier ones", () => {
+  it("round-trips, and a later arrival replaces an earlier one", () => {
     markRevealed(ALICE, JULY);
-    expect(JSON.parse(window.localStorage.getItem(KEY)!)).toMatchObject({ [ALICE]: JULY });
+    expect(readRevealedAt(ALICE)).toBe(JULY);
     markRevealed(ALICE, AUGUST);
-    expect(JSON.parse(window.localStorage.getItem(KEY)!)).toMatchObject({ [ALICE]: AUGUST });
+    expect(readRevealedAt(ALICE)).toBe(AUGUST);
   });
 
-  it("reads junk under its key as an empty map", () => {
-    // The harmless direction to fail: the cue fires once more, rather than never.
-    window.localStorage.setItem(KEY, "[]");
-    expect(readRevealSeen()).toEqual({});
-  });
-
-  it("keeps what another tab wrote while this one was open", () => {
-    // The write merges onto storage rather than onto the module value, so a card
-    // celebrated in a second tab does not get its cue re-armed here.
+  it("keeps one card's answer out of another's", () => {
     markRevealed(ALICE, JULY);
-    window.localStorage.setItem(KEY, JSON.stringify({ [ALICE]: JULY, "ep-bob": AUGUST }));
+    expect(readRevealedAt(BOB)).toBeNull();
+  });
+
+  it("cannot lose one card's entry to another tab writing a different card", () => {
+    // The reason this is a key per card rather than one JSON blob. A blob has to
+    // be read, merged and written back, so two tabs celebrating two different
+    // cards in the same instant would have the later write drop the earlier
+    // entry — replaying exactly the cue this module exists to suppress. Storage
+    // written directly here is what a second tab's write looks like from inside
+    // this one.
+    markRevealed(ALICE, JULY);
+    window.localStorage.setItem(PREFIX + BOB, AUGUST);
     markRevealed("ep-carol", AUGUST);
-    expect(readRevealSeen()).toEqual({
-      [ALICE]: JULY,
-      "ep-bob": AUGUST,
-      "ep-carol": AUGUST,
-    });
+
+    expect(readRevealedAt(ALICE)).toBe(JULY);
+    expect(readRevealedAt(BOB)).toBe(AUGUST);
+    expect(readRevealedAt("ep-carol")).toBe(AUGUST);
+  });
+
+  it("says never-celebrated when storage refuses to answer", () => {
+    // Private mode. The cue fires once more, which is the harmless direction.
+    const getItem = window.localStorage.getItem;
+    window.localStorage.getItem = () => {
+      throw new Error("blocked");
+    };
+    try {
+      expect(readRevealedAt(ALICE)).toBeNull();
+    } finally {
+      window.localStorage.getItem = getItem;
+    }
   });
 });

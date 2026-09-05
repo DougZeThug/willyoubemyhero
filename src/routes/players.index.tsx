@@ -642,10 +642,19 @@ function PlayersPage() {
    */
   const newCards = useMemo<NewSinceItem[]>(() => {
     const data = acquisitions.data;
-    if (!data) return [];
+    // `ready` as well as the data: every roster label is a COPY COUNT off the
+    // reconciled collection, and before that lands `collected` is empty. Drawing
+    // then would label a card you hold three of as NEW, which is worse than
+    // drawing the strip a beat later — and it is the label, not the tile, that
+    // this whole row is for.
+    if (!data || !ready) return [];
+
+    // Both kinds in one list, ordered by when they landed. Concatenating them
+    // instead put every roster tile ahead of every secret however they actually
+    // interleaved, so a secret pulled after a trade still read as older.
+    const entries: { at: string; item: NewSinceItem }[] = [];
 
     const seen = new Set<string>();
-    const roster: NewSinceItem[] = [];
     for (const a of data.roster) {
       // The "since you looked" half, applied here rather than in the query: it is
       // what makes dismissing the strip instant and free, and what stops the open
@@ -656,31 +665,40 @@ function PlayersPage() {
       const p = bundle?.participants.find((x) => x.id === a.eventParticipantId);
       if (!p) continue;
       const copies = collected[a.eventParticipantId]?.count ?? 1;
-      roster.push({
-        kind: "roster",
-        id: a.eventParticipantId,
-        name: p.participant?.name ?? "—",
-        urls: cards.data?.[a.eventParticipantId]?.front ?? null,
-        rarity: rarities.get(a.eventParticipantId) ?? rarityStyle("base"),
-        // The finish of THIS copy, which is the one that just arrived — not the
-        // best one held, which is what the shelf tile wears.
-        edition: toEdition(a.edition),
-        label: copies > 1 ? `×${copies}` : "NEW",
+      entries.push({
+        at: a.acquiredAt,
+        item: {
+          kind: "roster",
+          id: a.eventParticipantId,
+          name: p.participant?.name ?? "—",
+          urls: cards.data?.[a.eventParticipantId]?.front ?? null,
+          rarity: rarities.get(a.eventParticipantId) ?? rarityStyle("base"),
+          // The finish of THIS copy, which is the one that just arrived — not the
+          // best one held, which is what the shelf tile wears.
+          edition: toEdition(a.edition),
+          label: copies > 1 ? `×${copies}` : "NEW",
+        },
       });
     }
 
-    const secretItems: NewSinceItem[] = stripSecrets.map((c) => ({
-      kind: "secret",
-      id: c.id,
-      name: c.name,
-      artUrl: c.artUrl,
-      rarity: secretFoil(c.foil, c.borderFx, c.tier),
-      tier: c.tier,
-      label: c.count > 1 ? `×${c.count}` : "NEW",
-    }));
+    const arrivedAt = new Map((data.secrets ?? []).map((a) => [a.id, a.acquiredAt]));
+    for (const c of stripSecrets) {
+      entries.push({
+        at: arrivedAt.get(c.id) ?? "",
+        item: {
+          kind: "secret",
+          id: c.id,
+          name: c.name,
+          artUrl: c.artUrl,
+          rarity: secretFoil(c.foil, c.borderFx, c.tier),
+          tier: c.tier,
+          label: c.count > 1 ? `×${c.count}` : "NEW",
+        },
+      });
+    }
 
-    return [...roster, ...secretItems];
-  }, [acquisitions.data, bundle, cards.data, collected, lastSeen, rarities, stripSecrets]);
+    return entries.sort((a, b) => b.at.localeCompare(a.at)).map((e) => e.item);
+  }, [acquisitions.data, bundle, cards.data, collected, lastSeen, rarities, ready, stripSecrets]);
 
   /** Acted on, so there is nothing new any more. A look alone never does this. */
   const dismissNew = useCallback(() => markVaultSeen(), []);

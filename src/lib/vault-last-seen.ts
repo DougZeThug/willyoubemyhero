@@ -26,6 +26,9 @@ const CHANGED = "wwbh:vault-last-seen-changed";
  */
 export const ACQUISITION_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/** How coarsely the window is rounded, so two screens agree on one query key. */
+export const WINDOW_BUCKET_MS = 5 * 60 * 1000;
+
 let current: string | null = null;
 
 function read(): string | null {
@@ -79,7 +82,15 @@ export function markVaultSeen(at: string = new Date().toISOString()) {
  * also why the row can vanish under the thumb rather than a moment after it.
  */
 export function acquisitionWindow(now: number, windowMs: number = ACQUISITION_WINDOW_MS): string {
-  return new Date(now - windowMs).toISOString();
+  // QUANTISED, and that is what makes the shared cache real rather than a claim.
+  // `since` is part of the query key, so a raw Date.now() would give the vault and
+  // the card page you tap through to keys that differ by a few milliseconds —
+  // a second identical round trip, and a reveal cue held behind it. Rounding down
+  // to a five-minute bucket makes two mounts moments apart agree, and a window
+  // that trails by up to five minutes inside a day is not a difference anybody
+  // can see.
+  const bucket = Math.floor(now / WINDOW_BUCKET_MS) * WINDOW_BUCKET_MS;
+  return new Date(bucket - windowMs).toISOString();
 }
 
 /**
