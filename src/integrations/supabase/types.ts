@@ -354,6 +354,7 @@ export type Database = {
       }
       card_copies: {
         Row: {
+          acquired_at: string
           acquired_on: string | null
           created_at: string
           edition: string
@@ -364,6 +365,7 @@ export type Database = {
           source: string
         }
         Insert: {
+          acquired_at?: string
           acquired_on?: string | null
           created_at?: string
           edition?: string
@@ -374,6 +376,7 @@ export type Database = {
           source?: string
         }
         Update: {
+          acquired_at?: string
           acquired_on?: string | null
           created_at?: string
           edition?: string
@@ -1436,6 +1439,7 @@ export type Database = {
       }
       secret_card_pulls: {
         Row: {
+          acquired_at: string
           created_at: string
           event_id: string | null
           granted: boolean
@@ -1448,6 +1452,7 @@ export type Database = {
           tier: string
         }
         Insert: {
+          acquired_at?: string
           created_at?: string
           event_id?: string | null
           granted?: boolean
@@ -1460,6 +1465,7 @@ export type Database = {
           tier?: string
         }
         Update: {
+          acquired_at?: string
           created_at?: string
           event_id?: string | null
           granted?: boolean
