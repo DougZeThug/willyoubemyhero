@@ -69,7 +69,14 @@ export type CardCopyRow = {
    * 'grant', and 20260830120000 with 'market' for a copy somebody bought.
    */
   source: "pull" | "trade" | "backfill" | "adopt" | "grant" | "market";
+  /** When this copy was minted. Survives a hand-over — see acquired_at. */
   created_at: string;
+  /**
+   * When this copy entered its CURRENT holder's collection. Restarted on every
+   * change of owner by the trigger in 20260905120000, which is what makes it
+   * different from created_at on a traded or bought copy.
+   */
+  acquired_at: string;
 };
 
 export type TradeRow = {

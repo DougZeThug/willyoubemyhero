@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftRight, PackageOpen } from "lucide-react";
+import { NewSinceStrip, type NewSinceItem } from "@/components/new-since-strip";
 import { StreakFlame } from "@/components/streak-flame";
 import { offlineReason } from "@/hooks/use-online";
 import { nextPackLabel } from "@/lib/pack";
@@ -15,6 +16,9 @@ import { cn } from "@/lib/utils";
  * because each of those needs it as an inline style, not a class.
  */
 const AMBER = "oklch(0.82 0.19 85)";
+
+/** Stable identity, so a defaulted prop cannot re-render the strip every paint. */
+const EMPTY_NEW: readonly NewSinceItem[] = [];
 
 /** Today's pack, as the vault sees it. `left` only means anything while torn. */
 export type TodayCardPack = {
@@ -56,6 +60,9 @@ export function TodayCard({
   offline = false,
   onClaim,
   tradeUnread = 0,
+  newCards = EMPTY_NEW,
+  onOpenNewCard,
+  onDismissNew,
 }: {
   pack: TodayCardPack;
   /** A secret is waiting. Members-only in practice — see `secretWaiting`. */
@@ -98,6 +105,16 @@ export function TodayCard({
   offline?: boolean;
   onClaim?: () => void;
   tradeUnread?: number;
+  /**
+   * What arrived since this device last looked (§12), already shaped for drawing.
+   *
+   * A prop like every other number here, and for the third reason as well as the
+   * usual two: what makes a card "×3" is the collection the vault has already
+   * reconciled, and this card must not be the second place that decides it.
+   */
+  newCards?: readonly NewSinceItem[];
+  onOpenNewCard?: (item: NewSinceItem) => void;
+  onDismissNew?: () => void;
 }) {
   const running = !!streak && streak.current > 0;
   // Alive but not yet extended today. `walkStreak` anchors on today or yesterday
@@ -216,6 +233,23 @@ export function TodayCard({
             />
           )}
         </div>
+      )}
+
+      {/* THE ONE SLOT THIS CARD DOES NOT RESERVE, which is a deliberate exception
+          to everything above rather than an oversight. A strip of cards measures
+          ~180px with its heading and its dismiss control — more than the whole
+          header PR 5 bought back — and it is empty on almost every load. Holding
+          that height open permanently, or even only while the query is in flight,
+          costs it on every visit to save one shift on the minority that have news.
+          So it is rendered only when there is something, and it is LAST, below
+          every control on the card, so the shift it does cause is never under a
+          thumb that is already reaching for one. */}
+      {newCards.length > 0 && (
+        <NewSinceStrip
+          items={newCards}
+          onOpen={(item) => onOpenNewCard?.(item)}
+          onDismiss={() => onDismissNew?.()}
+        />
       )}
     </section>
   );

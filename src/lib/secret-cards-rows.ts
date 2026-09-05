@@ -68,6 +68,8 @@ export type SecretPullRow = {
    */
   tier: string;
   created_at: string;
+  /** When this pull entered its current holder's collection. See CardCopyRow. */
+  acquired_at: string;
 };
 
 /** What public.pull_secret_card returns. Null when nothing is pullable. */
