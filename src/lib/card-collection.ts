@@ -268,16 +268,6 @@ export async function forgetCards(eventParticipantIds: readonly string[]): Promi
   }
 }
 
-export async function clearCollection(): Promise<void> {
-  if (!isBrowser()) return;
-  try {
-    const db = await getDb();
-    await db.clear(COLLECTED);
-  } catch {
-    /* ignore */
-  }
-}
-
 /** A single row, so today's state simply overwrites yesterday's. */
 const PACK_STATE_KEY = "today";
 

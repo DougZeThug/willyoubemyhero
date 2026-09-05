@@ -6,8 +6,8 @@
 // simply walking the vault — which arrow keys and the filmstrip make a few seconds'
 // work — collected the entire roster. That write was removed, but the rows it had
 // already made were not, and nothing has ever cleared them: `card-collection.ts`'s
-// upgrade callback only adds missing stores, and `clearCollection` is called from
-// tests only. A member who had opened one pack was still being told they held all
+// upgrade callback only adds missing stores, and no bulk-clear path ships in
+// production. A member who had opened one pack was still being told they held all
 // eighteen cards.
 //
 // The second is structural. IndexedDB is per-device, so a collection did not follow
