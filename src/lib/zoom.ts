@@ -85,3 +85,26 @@ export function swipeDirection(dx: number, dy: number, ms: number): -1 | 1 | 0 {
   if (Math.abs(dx) < Math.abs(dy) * SWIPE.bias) return 0;
   return dx < 0 ? 1 : -1;
 }
+
+/**
+ * The same throw read on the other axis: -1 for a flick up, 1 for a pull down.
+ *
+ * Its own function rather than an axis flag on `swipeDirection`, because the two
+ * are read one after the other on the same gesture and a shared function taking
+ * an axis would be one wrong argument away from answering plausibly for the
+ * wrong one. Note the sign is the DRAG's own direction, where `swipeDirection`
+ * answers with the card to step to — "pull down" reads as 1 here, which is what
+ * the two callers of it are actually asking about.
+ *
+ * The thresholds are `SWIPE`'s, transposed. A card is taller than it is wide, so
+ * a vertical throw has more room to travel than a horizontal one and could
+ * afford a longer minimum — but the whole point of the bias is that the two axes
+ * decide the same gesture, and two different floors would leave a diagonal
+ * throw counting as neither.
+ */
+export function verticalSwipe(dx: number, dy: number, ms: number): -1 | 1 | 0 {
+  if (ms > SWIPE.ms) return 0;
+  if (Math.abs(dy) < SWIPE.dist) return 0;
+  if (Math.abs(dy) < Math.abs(dx) * SWIPE.bias) return 0;
+  return dy < 0 ? -1 : 1;
+}

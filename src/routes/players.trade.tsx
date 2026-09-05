@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -36,9 +36,12 @@ import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import {
   BLOCKED_LABEL,
   tradeSummaryParts,
+  type RosterSpare,
+  type SecretSpare,
   type TradeItemView,
   type TradeSpares,
 } from "@/lib/trades";
+import { takeTradeIntent, type TradeIntent } from "@/lib/trade-intent";
 import { rarityMap, rarityRank, rarityStyle } from "@/lib/card-rarity";
 import { editionRank } from "@/lib/card-edition";
 import { secretTierRank } from "@/lib/secret-rarity";
@@ -74,6 +77,35 @@ const MAX_PER_SIDE = 4;
 
 /** A staged item, keyed so a tap can toggle it back off. */
 type Staged = { key: string; item: TradeItemView; payload: Record<string, unknown> };
+
+// Both sides of the table are built from these, and so is the pre-stage below.
+// One place, because the payload is what `create_trade_offer` reads and a second
+// copy of it is a second thing to get wrong.
+const stagedSecret = (s: SecretSpare): Staged => ({
+  key: `s:${s.pullId}`,
+  item: {
+    kind: "secret",
+    pullId: s.pullId,
+    name: s.name,
+    artUrl: s.artUrl,
+    tier: s.tier,
+    lastCopy: s.lastCopy,
+    viewerOwns: s.viewerOwns,
+  },
+  payload: { kind: "secret", secretPullId: s.pullId },
+});
+
+const stagedRoster = (r: RosterSpare): Staged => ({
+  key: `c:${r.copyId}`,
+  item: {
+    kind: "roster",
+    copyId: r.copyId,
+    eventParticipantId: r.eventParticipantId,
+    edition: r.edition,
+    viewerOwns: r.viewerOwns,
+  },
+  payload: { kind: "roster", cardCopyId: r.copyId },
+});
 
 function TradePage() {
   const { event, bundle, error, realtimeDegraded } = useEventBundle();
@@ -119,6 +151,20 @@ function TradePage() {
 
   const mySpares = useTradeSpares(myId, myId);
   const theirSpares = useTradeSpares(theirId, myId);
+
+  /**
+   * The card somebody tapped "Offer this card" or "Ask for this card" on (§6).
+   *
+   * Taken in a state initialiser, so it is consumed exactly once per arrival at
+   * this route: a second visit is a blank form, which is what an intent left
+   * lying around would quietly stop being.
+   *
+   * It names a card, not a copy — see the header of trade-intent.ts — so it sits
+   * here until the relevant `getTradeSpares` answers and the effect below can
+   * turn it into a real staged item. Cleared on the first successful stage, so a
+   * card you then remove stays removed.
+   */
+  const [intent, setIntent] = useState<TradeIntent | null>(() => takeTradeIntent());
 
   const acceptFn = useServerFn(acceptTradeOffer);
   const declineFn = useServerFn(declineTradeOffer);
@@ -318,6 +364,71 @@ function TradePage() {
     }
   }
 
+  /**
+   * The spare an intent means, once the spares for that side have landed.
+   *
+   * The MODEST copy on both sides: hand over the plainest spare you hold rather
+   * than your platinum, and ask for their plainest rather than their best. You
+   * asked for the card, not for the metal — and either can be swapped in the
+   * picker, which is two taps away and already open.
+   */
+  const spareForIntent = useCallback((want: TradeIntent, spares: TradeSpares | undefined) => {
+    if (!spares) return null;
+    if (want.kind === "secret") {
+      const hit = spares.secrets.find((s) => s.name === want.name);
+      return hit ? stagedSecret(hit) : null;
+    }
+    const copies = spares.roster
+      .filter((r) => r.eventParticipantId === want.eventParticipantId)
+      .sort((a, b) => editionRank(b.edition) - editionRank(a.edition));
+    return copies[0] ? stagedRoster(copies[0]) : null;
+  }, []);
+
+  /**
+   * Stage the intended card the moment a counterparty is picked.
+   *
+   * After the pill's own handler rather than inside it: picking somebody clears
+   * both trays on purpose, and a stage that rode along on the tap would be wiped
+   * by the very handler that triggered it. This runs on the render after that,
+   * with the trays already empty.
+   *
+   * Deliberately survives a partner switch until it lands: "ask Bob, no, ask
+   * Carol" is the normal way this goes, and only one of them has the card.
+   */
+  useEffect(() => {
+    if (!intent || !theirId) return;
+    const staged = spareForIntent(
+      intent,
+      intent.side === "give" ? mySpares.data : theirSpares.data,
+    );
+    if (!staged) return;
+    const set = intent.side === "give" ? setGive : setWant;
+    setIntent(null);
+    set((list) => (list.some((x) => x.key === staged.key) ? list : [...list, staged]));
+  }, [intent, theirId, mySpares.data, theirSpares.data, spareForIntent]);
+
+  /**
+   * What the Trading Post says back to somebody who arrived from a card.
+   *
+   * Three states, and the third is the one worth having: the intent is still
+   * live, a counterparty is picked, and their spares have landed without it —
+   * which means they simply have not got a spare of it. Saying so beats leaving
+   * a tray mysteriously empty under a banner promising a card.
+   */
+  const intentLine = useMemo(() => {
+    if (!intent) return null;
+    const what = intent.kind === "secret" ? intent.name : lookup(intent.eventParticipantId).name;
+    const side = intent.side === "give" ? mySpares : theirSpares;
+    if (theirId && !side.isPending && !spareForIntent(intent, side.data)) {
+      return intent.side === "give"
+        ? `You have no spare ${what} to offer.`
+        : `${nameOf(theirId)} has no spare ${what}.`;
+    }
+    return intent.side === "give"
+      ? `Offering your spare ${what} — pick who to send it to.`
+      : `Asking for ${what} — pick who to ask.`;
+  }, [intent, lookup, mySpares, theirSpares, theirId, nameOf, spareForIntent]);
+
   function toggle(side: "give" | "want", staged: Staged) {
     const [list, set] = side === "give" ? [give, setGive] : [want, setWant];
     if (list.some((s) => s.key === staged.key)) {
@@ -484,6 +595,14 @@ function TradePage() {
         <section className="mb-6">
           <SectionTitle icon={<ArrowLeftRight className="h-3.5 w-3.5" />} label="Make an offer" />
           <div className="surface-panel rounded-xl border p-3">
+            {intentLine && (
+              // Announced, not just drawn: somebody arrives here mid-thought
+              // from a card they were looking at, and the screen has to pick that
+              // thought back up.
+              <p role="status" className="mb-3 text-sm text-primary">
+                {intentLine}
+              </p>
+            )}
             <div
               role="group"
               aria-label="Who to trade with"
@@ -764,21 +883,7 @@ function SparePicker({
       .sort(
         (a, b) => secretTierRank(a.tier) - secretTierRank(b.tier) || a.name.localeCompare(b.name),
       ) // prettier-ignore
-      .map(
-        (s): Staged => ({
-          key: `s:${s.pullId}`,
-          item: {
-            kind: "secret",
-            pullId: s.pullId,
-            name: s.name,
-            artUrl: s.artUrl,
-            tier: s.tier,
-            lastCopy: s.lastCopy,
-            viewerOwns: s.viewerOwns,
-          },
-          payload: { kind: "secret", secretPullId: s.pullId },
-        }),
-      ),
+      .map(stagedSecret),
     // One tile per COPY, so "my gold Alice" and "my standard Alice" are separately
     // pickable. Earned tier first, then finish, then the card itself — so the
     // champion's card leads and the copies of one card still sit together.
@@ -790,22 +895,10 @@ function SparePicker({
           a.eventParticipantId.localeCompare(b.eventParticipantId) ||
           editionRank(a.edition) - editionRank(b.edition),
       )
-      // Annotated rather than cast. An `as TradeItemView` here silently dropped
-      // `lastCopy` off the secret tiles above and the marker simply never
-      // rendered — the compiler had the answer and the cast threw it away.
-      .map(
-        (r): Staged => ({
-          key: `c:${r.copyId}`,
-          item: {
-            kind: "roster",
-            copyId: r.copyId,
-            eventParticipantId: r.eventParticipantId,
-            edition: r.edition,
-            viewerOwns: r.viewerOwns,
-          },
-          payload: { kind: "roster", cardCopyId: r.copyId },
-        }),
-      ),
+      // Annotated rather than cast — `stagedRoster`'s return type is what keeps
+      // this honest. An `as TradeItemView` here once silently dropped `lastCopy`
+      // off the secret tiles above and the marker simply never rendered.
+      .map(stagedRoster),
   ];
 
   return (

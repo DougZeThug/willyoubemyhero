@@ -728,8 +728,12 @@ test.describe("opening a pack", () => {
       .evaluateAll((els) =>
         els.map((e) => [e.getAttribute("href")!, e.textContent ?? ""] as const),
       );
-    const packed = tiles.find(([, text]) => !text.includes(shutName))![0];
-    const shutHref = tiles.find(([, text]) => text.includes(shutName))![0];
+    // Paths only. Since §7 a vault tile links to `?view=1`, which opens the
+    // full-screen viewer — and this test is about the details page underneath it:
+    // the Compare chip and the filmstrip both live there.
+    const path = (href: string) => new URL(href, "http://x").pathname;
+    const packed = path(tiles.find(([, text]) => !text.includes(shutName))![0]);
+    const shutHref = path(tiles.find(([, text]) => text.includes(shutName))![0]);
 
     await page.goto(packed);
     const compare = page.getByRole("button", { name: /^compare$/i });

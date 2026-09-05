@@ -8,6 +8,7 @@ import {
   normalizeWheelDelta,
   stepIndex,
   swipeDirection,
+  verticalSwipe,
   zoomFromWheel,
 } from "./zoom";
 
@@ -77,6 +78,32 @@ describe("swipeDirection", () => {
     expect(swipeDirection(60, 120, 200)).toBe(0);
     expect(swipeDirection(10, 2, 200)).toBe(0);
     expect(swipeDirection(-90, 4, 2000)).toBe(0);
+  });
+});
+
+describe("verticalSwipe", () => {
+  it("reads a flick up and a pull down", () => {
+    expect(verticalSwipe(4, -90, 200)).toBe(-1);
+    expect(verticalSwipe(4, 90, 200)).toBe(1);
+  });
+
+  it("ignores a nudge and a slow drag", () => {
+    expect(verticalSwipe(2, 10, 200)).toBe(0);
+    expect(verticalSwipe(4, 90, 2000)).toBe(0);
+  });
+
+  it("leaves a horizontal throw to swipeDirection, and vice versa", () => {
+    // The same gesture, put to both. Exactly one of them may claim it, which is
+    // what stops a diagonal flick dismissing the viewer AND stepping the card.
+    expect(verticalSwipe(-90, 4, 200)).toBe(0);
+    expect(swipeDirection(-90, 4, 200)).toBe(1);
+    expect(swipeDirection(4, 90, 200)).toBe(0);
+    expect(verticalSwipe(4, 90, 200)).toBe(1);
+  });
+
+  it("gives a true diagonal to neither", () => {
+    expect(verticalSwipe(70, 70, 200)).toBe(0);
+    expect(swipeDirection(70, 70, 200)).toBe(0);
   });
 });
 

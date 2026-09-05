@@ -128,7 +128,9 @@ test.describe("new since your last visit", () => {
     await expect(arrived(page)).toBeVisible();
 
     await page.getByRole("link", { name: "Alice Ace — NEW" }).click();
-    await expect(page).toHaveURL(/\/players\/ep-alice$/);
+    // `?view=1` since §7: the strip opens the full-screen viewer, the same as a
+    // tap on the shelf below it.
+    await expect(page).toHaveURL(/\/players\/ep-alice(\?|$)/);
 
     // THE LOAD-BEARING PART. The server still answers with the same day's rows —
     // it is asked a stable question — so what makes the strip stay gone is the
