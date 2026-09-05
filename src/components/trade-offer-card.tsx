@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
 import { SealedBack } from "@/components/pack-card-back";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
@@ -202,17 +202,65 @@ function CardStrip({
     return <p className="text-meta text-muted-foreground">Nothing left on this side.</p>;
   }
   return (
-    <div className={cn("flex gap-2 overflow-x-auto pb-1", size === "lg" && "justify-center")}>
+    <div
+      className={cn(
+        "flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-px-1 pb-1",
+        // Centred by margin rather than by `justify-center`, which on an
+        // OVERFLOWING flex row pushes the first item off the left edge and out of
+        // scroll reach entirely — exactly the four-card side this exists for.
+        // And only from `sm` up: stacked, a centred row of cards under a
+        // left-aligned label reads as two unrelated things.
+        size === "lg" && "sm:mx-auto sm:w-fit sm:max-w-full",
+      )}
+    >
       {items.map((item) => (
-        <TradeItemTile
-          key={item.kind === "secret" ? item.pullId : item.copyId}
-          item={item}
-          lookup={lookup}
-          size={size}
-          concealed={conceal && item.viewerOwns === false}
-          backUrl={backUrl}
-        />
+        <div key={item.kind === "secret" ? item.pullId : item.copyId} className="snap-start">
+          <TradeItemTile
+            item={item}
+            lookup={lookup}
+            size={size}
+            concealed={conceal && item.viewerOwns === false}
+            backUrl={backUrl}
+          />
+        </div>
       ))}
+    </div>
+  );
+}
+
+function SideLabel({ pending, children }: { pending: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "mb-1 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground",
+        // Centred over a centred row of cards, left over a left-aligned one.
+        // Stacked, both sides start at the same edge whatever the size.
+        pending ? "text-left sm:text-center" : "text-left",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The direction of travel, as one node restyled by breakpoint rather than two
+ * swapped ones.
+ *
+ * Stacked, a pair of left/right arrows between two full-width rows points at
+ * nothing; a rule across the gap with a down arrow in it is what "and then"
+ * looks like in a column. Still `aria-hidden` — the two labelled sections carry
+ * the meaning now.
+ */
+function Exchange({ pending }: { pending: boolean }) {
+  const size = pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground";
+  return (
+    <div aria-hidden className="flex shrink-0 items-center gap-2 text-primary sm:flex-col sm:gap-0">
+      <span className="h-px flex-1 bg-white/10 sm:hidden" />
+      <ArrowDown className={cn(size, "sm:hidden")} />
+      <ArrowRight className={cn(size, "hidden sm:block")} />
+      <ArrowLeft className={cn(size, "hidden sm:block")} />
+      <span className="h-px flex-1 bg-white/10 sm:hidden" />
     </div>
   );
 }
@@ -227,6 +275,15 @@ export type TradeOfferCardProps = {
   actions?: ReactNode;
   /** The event's universal back, used to conceal art on the "you get" side. */
   backUrl?: ImageUrlSet | string | null;
+  /**
+   * Just sent from the builder, so it can be found in an outbox of four.
+   *
+   * A ring in the success colour rather than a bloom (§15), and deliberately a
+   * different colour from the pending ring below it: "this is the one you just
+   * made" and "this is live" are two different claims about the same card. The
+   * words half is the toast the route raises; this is only the marker.
+   */
+  highlighted?: boolean;
 };
 
 export function TradeOfferCard({
@@ -236,6 +293,7 @@ export function TradeOfferCard({
   lookup,
   actions,
   backUrl = null,
+  highlighted = false,
 }: TradeOfferCardProps) {
   const iAmProposer = offer.proposerId === me;
   const theirId = iAmProposer ? offer.recipientId : offer.proposerId;
@@ -252,6 +310,7 @@ export function TradeOfferCard({
 
   return (
     <article
+      data-highlighted={highlighted ? "true" : undefined}
       className={cn(
         "surface-panel rounded-xl border p-4",
         // A ring, not a bloom (§15). All three states used to glow, and all
@@ -261,6 +320,7 @@ export function TradeOfferCard({
         // the chip below, which is the only thing on this card that is coloured
         // by it.
         pending && "ring-2 ring-primary/50",
+        highlighted && "ring-2 ring-success",
         // The tighter padding a status outside the known five would have got
         // before, kept rather than quietly widened.
         !pending && !accepted && !rejected && "p-3",
@@ -301,49 +361,33 @@ export function TradeOfferCard({
         {tradeItemsLabel(iGive)} for {tradeItemsLabel(iGet)}
       </p>
 
-      {/* Labels sit in their own row so the cards and arrows can be perfectly
-          centered vertically in the row below them. */}
-      <div className={cn("mb-2 flex", pending ? "gap-2" : "gap-3")}>
-        <div
-          className={cn(
-            "min-w-0 flex-1 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground",
-            pending ? "text-center" : "text-left",
-          )}
-        >
-          You give
-        </div>
-        <div className="shrink-0 w-8" aria-hidden />
-        <div
-          className={cn(
-            "min-w-0 flex-1 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground",
-            pending ? "text-center" : "text-left",
-          )}
-        >
-          You get
-        </div>
-      </div>
-
-      <div className={cn("flex items-center", pending ? "gap-2" : "gap-3")}>
-        <div className="min-w-0 flex-1">
+      {/* Stacked on a phone, side by side from `sm` up (§10). Two 139px columns
+          at 390 meant a second card on either side scrolled out of view, and the
+          labels had to live in their own row above so the columns could line up.
+          Each side owns its label now, which is also what gives the two halves an
+          accessible name — the arrows never had one. */}
+      <div className={cn("flex flex-col sm:flex-row sm:items-center", pending ? "gap-2" : "gap-3")}>
+        <section aria-label="You give" className="min-w-0 flex-1">
+          <SideLabel pending={pending}>You give</SideLabel>
           <CardStrip items={iGive} lookup={lookup} size={size} />
-        </div>
-        <div
-          className="shrink-0 flex flex-col items-center justify-center text-primary"
-          aria-hidden
-        >
-          <ArrowRight className={cn(pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground")} />
-          <ArrowLeft className={cn(pending ? "h-6 w-6" : "h-4 w-4 text-muted-foreground")} />
-        </div>
-        <div className="min-w-0 flex-1">
+        </section>
+        <Exchange pending={pending} />
+        <section aria-label="You get" className="min-w-0 flex-1">
+          <SideLabel pending={pending}>You get</SideLabel>
           {/* Their side only: what you are being offered can include art you have
               never pulled, and an offer should not be a way to see it. */}
           <CardStrip items={iGet} lookup={lookup} size={size} conceal backUrl={backUrl} />
-        </div>
+        </section>
       </div>
 
       {actions && (
         <div
-          className={cn("mt-4 flex flex-wrap gap-2", pending ? "justify-center" : "justify-start")}
+          className={cn(
+            // Stacked at 390: a 56px primary and a 44px quiet control side by
+            // side leave neither enough width to read.
+            "mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap",
+            pending ? "sm:justify-center" : "sm:justify-start",
+          )}
         >
           {actions}
         </div>

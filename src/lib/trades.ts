@@ -1,7 +1,7 @@
 // The Trading Post's client-safe half: view types and the labels rendered from
 // them. No imports from anything *.server.ts, so this is safe in the bundle.
-import type { Edition } from "./card-edition";
-import type { SecretTier } from "./secret-rarity";
+import { editionStyle, toEdition, type Edition } from "./card-edition";
+import { secretTierStyle, type SecretTier } from "./secret-rarity";
 
 /**
  * How a completed trade is described in the public feed.
@@ -272,6 +272,58 @@ export function tradeItemsLabel(items: readonly TradeItemView[]): string {
         : ({ kind: "secret", name: i.name } as const),
     ) satisfies TradeSummaryItem[],
   );
+}
+
+/**
+ * One card, named the way somebody says it out loud: "Standard Alice", "Epic Gary".
+ *
+ * `tradeItemsLabel` above COUNTS roster cards, because it cannot resolve an
+ * event_participant_id. This one is handed the resolver, and exists for the one
+ * screen that has to be exact rather than brief: the confirm sheet on Accept.
+ *
+ * The finish is printed for EVERY copy, standard included — deliberately
+ * `editionStyle().label` rather than `editionLabel`, which returns null for
+ * standard because a chip reading "Standard" on seven cards in ten is noise. In
+ * this one sentence it is the opposite of noise: it is what says which of your
+ * two Alices is the one leaving. Do not "fix" this back to editionLabel.
+ */
+export function tradeItemName(
+  item: TradeItemView,
+  rosterName: (eventParticipantId: string) => string,
+): string {
+  if (item.kind === "secret") return `${secretTierStyle(item.tier).label} ${item.name}`;
+  return `${editionStyle(toEdition(item.edition)).label} ${rosterName(item.eventParticipantId)}`;
+}
+
+/**
+ * The one question Accept asks before it moves two people's cards.
+ *
+ * Named cards only where a sentence can carry them — one a side. Past that both
+ * sides fall back to the counted summary, symmetrically, because "Swap your Gold
+ * Bob + Standard Alice + Epic Gary for Bob's ..." is not a question anybody reads
+ * standing in a garden. Symmetrically matters: naming one side and counting the
+ * other reads as though the two were different kinds of thing.
+ *
+ * An empty side is not hypothetical — an item whose card has since been deleted
+ * is dropped on the way out of getMyTradeOffers, so a live offer can arrive with
+ * one side bare. It gets a plain question rather than "Swap your nothing for".
+ *
+ * The possessive is always `'s`, including for a name ending in s. House style
+ * over grammar: "Chris's" is what the rest of the app would say, and a special
+ * case here would be the only place in the codebase that knows about apostrophes.
+ */
+export function tradeSwapPrompt(args: {
+  give: readonly TradeItemView[];
+  get: readonly TradeItemView[];
+  theirName: string;
+  rosterName: (eventParticipantId: string) => string;
+}): string {
+  const { give, get, theirName, rosterName } = args;
+  if (give.length === 0 || get.length === 0) return `Take this offer from ${theirName}?`;
+  const namesFit = give.length === 1 && get.length === 1;
+  const mine = namesFit ? tradeItemName(give[0], rosterName) : tradeItemsLabel(give);
+  const theirs = namesFit ? tradeItemName(get[0], rosterName) : tradeItemsLabel(get);
+  return `Swap your ${mine} for ${theirName}'s ${theirs}?`;
 }
 
 /**

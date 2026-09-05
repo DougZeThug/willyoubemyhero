@@ -181,19 +181,21 @@ test.describe("the full-screen card viewer", () => {
     await viewer(page).getByRole("button", { name: "More actions" }).click();
     await page.getByRole("menuitem", { name: /offer this card/i }).click();
 
-    await expect(page).toHaveURL(/\/players\/trade$/);
+    // An intent opens the builder on arrival — otherwise it lands on an Offers
+    // tab with the card it was carrying nowhere in sight.
+    await expect(page).toHaveURL(/\/players\/trade\?make=1$/);
     // The intent, said out loud — somebody arrives here mid-thought.
     await expect(page.getByText(/Offering your spare Alice Ace/i)).toBeVisible();
 
     // And staged the moment there is somebody to send it to. The PLAINEST spare:
     // you offered the card, not your gold copy of it.
-    await page.getByRole("button", { name: "Bob Blitz" }).click();
-    await expect(page.getByText(/You give \(1\/4\)/)).toBeVisible();
+    await page.getByRole("button", { name: /Bob Blitz/ }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    const giveTray = page.getByRole("region", { name: "You give" });
+    await expect(giveTray).toContainText("1 / 4");
     // A standard copy prints no finish at all (editionLabel is null for 70% of
-    // them), so "no gold tile is the staged one" is what says which copy went in.
-    // By count rather than by attribute: one stub answers both pickers, so the
-    // gold copy is drawn twice — once on each side of the table.
-    await expect(page.getByRole("button", { name: /Gold/, pressed: true })).toHaveCount(0);
+    // them), so "no gold tile is in the tray" is what says which copy went in.
+    await expect(giveTray.getByText("Gold")).toHaveCount(0);
   });
 
   test("a secret opens the same viewer and never touches the URL", async ({ page, server }) => {

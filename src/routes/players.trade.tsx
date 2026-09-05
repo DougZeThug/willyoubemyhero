@@ -1,9 +1,15 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createFileRoute,
+  Link,
+  useCanGoBack,
+  useNavigate,
+  useRouter,
+} from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowLeftRight, Inbox, Send } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { CollectionComplete } from "@/components/collection-complete";
 import { PresentationMode } from "@/components/presentation-mode";
@@ -27,37 +33,41 @@ import {
   tradeSparesKey,
   useTradeFeed,
   useTradeOffers,
-  useTradeSpares,
 } from "@/hooks/use-trades";
 import { markTradeOffersSeen } from "@/hooks/use-trade-badge";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
-import {
-  BLOCKED_LABEL,
-  tradeSummaryParts,
-  type RosterSpare,
-  type SecretSpare,
-  type TradeItemView,
-  type TradeSpares,
-} from "@/lib/trades";
 import { takeTradeIntent, type TradeIntent } from "@/lib/trade-intent";
-import { rarityMap, rarityRank, rarityStyle } from "@/lib/card-rarity";
-import { editionRank } from "@/lib/card-edition";
-import { secretTierRank } from "@/lib/secret-rarity";
+import type { Staged } from "@/lib/trade-staging";
+import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { burst } from "@/lib/card-confetti";
-import {
-  TradeItemTile,
-  TradeOfferCard,
-  type RosterCardLookup,
-} from "@/components/trade-offer-card";
+import type { RosterCardLookup } from "@/components/trade-offer-card";
+import { TradeBuilder } from "@/components/trade-builder";
+import { TradeFeedPanel } from "@/components/trade-feed";
+import { TradeOffersPanel } from "@/components/trade-offers";
 import { CollectorSignup } from "@/components/collector-signup";
-import type { ImageUrlSet } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
-import { isOnlineNow, OFFLINE_MESSAGE, offlineReason, useIsOnline } from "@/hooks/use-online";
+import { isOnlineNow, OFFLINE_MESSAGE, useIsOnline } from "@/hooks/use-online";
 
 export const Route = createFileRoute("/players/trade")({
+  /**
+   * `make=1` is the builder being open, and nothing else.
+   *
+   * A search param rather than component state so the phone's back gesture
+   * closes the builder instead of walking off the Trading Post with a half-built
+   * offer. It names no card — `theirId` and both trays stay in memory — so the
+   * rule that a secret card must never be addressable is untouched.
+   *
+   * The return type is annotated rather than inferred, for the reason
+   * players.$id.tsx records: an inferred `{ make: 1 | undefined }` makes
+   * router-core treat the key as REQUIRED at every call site, and three other
+   * screens link here without it.
+   */
+  validateSearch: (search: Record<string, unknown>): { make?: 1 } => ({
+    make: search.make === 1 || search.make === "1" ? 1 : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Trading Post — Will YOU Be My Hero? Draft Combine" },
@@ -72,45 +82,24 @@ export const Route = createFileRoute("/players/trade")({
   component: TradePage,
 });
 
-/** Matches the RPC and the zod schema. Enforced here so the button can go quiet first. */
-const MAX_PER_SIDE = 4;
+type Tab = "offers" | "feed";
 
-/** A staged item, keyed so a tap can toggle it back off. */
-type Staged = { key: string; item: TradeItemView; payload: Record<string, unknown> };
-
-// Both sides of the table are built from these, and so is the pre-stage below.
-// One place, because the payload is what `create_trade_offer` reads and a second
-// copy of it is a second thing to get wrong.
-const stagedSecret = (s: SecretSpare): Staged => ({
-  key: `s:${s.pullId}`,
-  item: {
-    kind: "secret",
-    pullId: s.pullId,
-    name: s.name,
-    artUrl: s.artUrl,
-    tier: s.tier,
-    lastCopy: s.lastCopy,
-    viewerOwns: s.viewerOwns,
-  },
-  payload: { kind: "secret", secretPullId: s.pullId },
-});
-
-const stagedRoster = (r: RosterSpare): Staged => ({
-  key: `c:${r.copyId}`,
-  item: {
-    kind: "roster",
-    copyId: r.copyId,
-    eventParticipantId: r.eventParticipantId,
-    edition: r.edition,
-    viewerOwns: r.viewerOwns,
-  },
-  payload: { kind: "roster", cardCopyId: r.copyId },
-});
+/**
+ * How long the offer you just sent stays ringed in the outbox.
+ *
+ * Long enough to outlive `refreshMine()`, because the card does not exist yet
+ * when the highlight is set — it arrives with the refetch. Short enough to be
+ * over before anybody acts on it, so it never reads as a state the offer is in.
+ */
+const HIGHLIGHT_MS = 4000;
 
 function TradePage() {
   const { event, bundle, error, realtimeDegraded } = useEventBundle();
   const me = useMemberSession();
   const navigate = useNavigate();
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
+  const { make } = Route.useSearch();
   const { user, loading: authLoading } = useAuthUser();
   const qc = useQueryClient();
   const cards = useEventCardUrls(event?.id ?? null);
@@ -130,16 +119,18 @@ function TradePage() {
 
   // Reading the inbox is what clears the dot, so this fires as soon as the list
   // renders rather than on a tap nobody would think to make. Above the signed-out
-  // gate below, because hooks cannot live behind an early return.
+  // gate below, because hooks cannot live behind an early return — and in the
+  // ROUTE rather than in the Offers panel, or the dot would stop clearing the day
+  // somebody deep-links to the Feed tab.
   useEffect(() => {
     if (!offers.data) return;
     markTradeOffersSeen(offers.data.inbox.map((o) => o.id));
   }, [offers.data]);
 
-  const [theirId, setTheirId] = useState<string | null>(null);
-  const [give, setGive] = useState<Staged[]>([]);
-  const [want, setWant] = useState<Staged[]>([]);
+  const [tab, setTab] = useState<Tab>("offers");
   const [pending, setPending] = useState<string | null>(null);
+  /** The offer just sent, so the outbox can say which one it is. */
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   /**
    * Sets this trade just finished for the person holding the phone.
    *
@@ -149,22 +140,15 @@ function TradePage() {
    */
   const [completions, setCompletions] = useState<CompletedCollection[]>([]);
 
-  const mySpares = useTradeSpares(myId, myId);
-  const theirSpares = useTradeSpares(theirId, myId);
-
   /**
    * The card somebody tapped "Offer this card" or "Ask for this card" on (§6).
    *
    * Taken in a state initialiser, so it is consumed exactly once per arrival at
-   * this route: a second visit is a blank form, which is what an intent left
-   * lying around would quietly stop being.
-   *
-   * It names a card, not a copy — see the header of trade-intent.ts — so it sits
-   * here until the relevant `getTradeSpares` answers and the effect below can
-   * turn it into a real staged item. Cleared on the first successful stage, so a
-   * card you then remove stays removed.
+   * this route: a second visit is a blank builder, which is what an intent left
+   * lying around would quietly stop being. Kept here rather than in the builder
+   * because the builder is not mounted when the route arrives.
    */
-  const [intent, setIntent] = useState<TradeIntent | null>(() => takeTradeIntent());
+  const [intent] = useState<TradeIntent | null>(() => takeTradeIntent());
 
   const acceptFn = useServerFn(acceptTradeOffer);
   const declineFn = useServerFn(declineTradeOffer);
@@ -210,6 +194,38 @@ function TradePage() {
     () => (roster.data ?? []).filter((p) => p.reachable && p.id !== myId),
     [roster.data, myId],
   );
+
+  const builderOpen = make === 1;
+
+  function openBuilder() {
+    void navigate({ to: ".", search: (old) => ({ ...old, make: 1 as const }) });
+  }
+
+  function closeBuilder() {
+    // Back rather than a fresh navigate, so the history entry the open pushed is
+    // spent rather than stacked — otherwise Back reopens what you just cancelled.
+    if (canGoBack) router.history.back();
+    else void navigate({ to: ".", search: {}, replace: true });
+  }
+
+  /**
+   * An intent opens the builder on arrival, REPLACING the entry rather than
+   * pushing one.
+   *
+   * Both places that set an intent push `/players/trade` themselves, so replacing
+   * here means Back from the builder returns to the card somebody was looking at.
+   * Pushing would strand them on an empty Offers tab instead.
+   */
+  useEffect(() => {
+    if (!intent || builderOpen) return;
+    void navigate({ to: ".", search: { make: 1 as const }, replace: true });
+  }, [intent, builderOpen, navigate]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const t = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS);
+    return () => clearTimeout(t);
+  }, [highlightId]);
 
   async function refreshMine() {
     await Promise.all([
@@ -342,118 +358,41 @@ function TradePage() {
     }
   }
 
-  async function propose() {
-    if (!theirId || give.length === 0 || want.length === 0) return;
+  /**
+   * Send what the builder built.
+   *
+   * Answers with the new offer's id so the outbox can ring it, or null so the
+   * builder knows to stay open with every staged card still in place — a failure
+   * that closed the flow would throw away work nobody could get back.
+   */
+  async function propose(offer: {
+    recipientId: string;
+    give: Staged[];
+    want: Staged[];
+  }): Promise<string | null> {
     setPending("compose");
     try {
-      await proposeFn({
+      const res = await proposeFn({
         data: {
-          recipientId: theirId,
-          give: give.map((s) => s.payload),
-          want: want.map((s) => s.payload),
+          recipientId: offer.recipientId,
+          give: offer.give.map((s) => s.payload),
+          want: offer.want.map((s) => s.payload),
         },
       });
-      toast.success(`Offer sent to ${nameOf(theirId)}`);
-      setGive([]);
-      setWant([]);
+      toast.success(`Offer sent to ${nameOf(offer.recipientId)}`);
+      setTab("offers");
+      setHighlightId(res.offerId ?? null);
+      // Replace rather than history.back(): back out of a SENT offer must not be
+      // able to reopen a builder holding cards that have already moved.
+      void navigate({ to: ".", search: {}, replace: true });
       await refreshMine();
+      return res.offerId ?? null;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not send that offer");
+      return null;
     } finally {
       setPending(null);
     }
-  }
-
-  /**
-   * The spare an intent means, once the spares for that side have landed.
-   *
-   * The MODEST copy on both sides: hand over the plainest spare you hold rather
-   * than your platinum, and ask for their plainest rather than their best. You
-   * asked for the card, not for the metal — and either can be swapped in the
-   * picker, which is two taps away and already open.
-   */
-  const spareForIntent = useCallback((want: TradeIntent, spares: TradeSpares | undefined) => {
-    if (!spares) return null;
-    if (want.kind === "secret") {
-      // By id, because two secrets may share a name and staging the wrong card
-      // into a real trade is not a mistake somebody would spot. The name is the
-      // fallback for a spares response older than the id field.
-      const isThisCard = (s: SecretSpare) =>
-        s.cardId ? s.cardId === want.secretCardId : s.name === want.name;
-      // Sorted, not found: `getTradeSpares` answers with one row per PULL and no
-      // promised order, so somebody holding a mythic and a common of the same
-      // card had an arbitrary one of them staged — and half the time it was the
-      // mythic, which is the opposite of what the roster side does two lines
-      // down. secretTierRank counts UP from the rarest, so sorting by it
-      // descending puts the plainest at the front and `copies[0]` is the one to
-      // hand over.
-      const copies = spares.secrets
-        .filter(isThisCard)
-        .sort((a, b) => secretTierRank(b.tier) - secretTierRank(a.tier));
-      return copies[0] ? stagedSecret(copies[0]) : null;
-    }
-    const copies = spares.roster
-      .filter((r) => r.eventParticipantId === want.eventParticipantId)
-      .sort((a, b) => editionRank(b.edition) - editionRank(a.edition));
-    return copies[0] ? stagedRoster(copies[0]) : null;
-  }, []);
-
-  /**
-   * Stage the intended card the moment a counterparty is picked.
-   *
-   * After the pill's own handler rather than inside it: picking somebody clears
-   * both trays on purpose, and a stage that rode along on the tap would be wiped
-   * by the very handler that triggered it. This runs on the render after that,
-   * with the trays already empty.
-   *
-   * Deliberately survives a partner switch until it lands: "ask Bob, no, ask
-   * Carol" is the normal way this goes, and only one of them has the card.
-   */
-  useEffect(() => {
-    if (!intent || !theirId) return;
-    const staged = spareForIntent(
-      intent,
-      intent.side === "give" ? mySpares.data : theirSpares.data,
-    );
-    if (!staged) return;
-    const set = intent.side === "give" ? setGive : setWant;
-    setIntent(null);
-    set((list) => (list.some((x) => x.key === staged.key) ? list : [...list, staged]));
-  }, [intent, theirId, mySpares.data, theirSpares.data, spareForIntent]);
-
-  /**
-   * What the Trading Post says back to somebody who arrived from a card.
-   *
-   * Three states, and the third is the one worth having: the intent is still
-   * live, a counterparty is picked, and their spares have landed without it —
-   * which means they simply have not got a spare of it. Saying so beats leaving
-   * a tray mysteriously empty under a banner promising a card.
-   */
-  const intentLine = useMemo(() => {
-    if (!intent) return null;
-    const what = intent.kind === "secret" ? intent.name : lookup(intent.eventParticipantId).name;
-    const side = intent.side === "give" ? mySpares : theirSpares;
-    if (theirId && !side.isPending && !spareForIntent(intent, side.data)) {
-      return intent.side === "give"
-        ? `You have no spare ${what} to offer.`
-        : `${nameOf(theirId)} has no spare ${what}.`;
-    }
-    return intent.side === "give"
-      ? `Offering your spare ${what} — pick who to send it to.`
-      : `Asking for ${what} — pick who to ask.`;
-  }, [intent, lookup, mySpares, theirSpares, theirId, nameOf, spareForIntent]);
-
-  function toggle(side: "give" | "want", staged: Staged) {
-    const [list, set] = side === "give" ? [give, setGive] : [want, setWant];
-    if (list.some((s) => s.key === staged.key)) {
-      set(list.filter((s) => s.key !== staged.key));
-      return;
-    }
-    if (list.length >= MAX_PER_SIDE) {
-      toast(`${MAX_PER_SIDE} cards a side is the limit`);
-      return;
-    }
-    set([...list, staged]);
   }
 
   // A visitor with neither a player token nor an account has nothing to trade
@@ -509,10 +448,14 @@ function TradePage() {
       {/* Outside the page column and above everything, the same way the pack
           screen mounts it. Shifting the queue on dismiss is what plays the second
           one when a single trade closed two sets. */}
-      {/* PresentationMode is what fades the nav bars out from under a
-          full-screen moment. Without it they stayed live — focusable, and
-          tappable at the edges — under a ceremony every other screen pairs
-          the two for. */}
+      {/* A ceremony only, and deliberately NOT the builder. The flag this writes
+          is read by two things: the nav, which it fades out, and ShellFeedback,
+          which it unmounts — toaster included. That is right for a card arriving
+          and wrong for a working screen: the builder raises the cap refusal and
+          the "offer sent" confirmation, and under this flag neither of them ever
+          reached a phone. The builder claims the screen the other way instead —
+          it paints over the nav at z-50 and traps focus — so nothing is lost by
+          leaving the flag alone. */}
       <PresentationMode active={!!completions[0]} />
       {completions[0] && (
         <CollectionComplete
@@ -522,236 +465,116 @@ function TradePage() {
           onDone={() => setCompletions((q) => q.slice(1))}
         />
       )}
-      <div className="mx-auto max-w-3xl px-4 py-6">
+
+      {builderOpen && (
+        <TradeBuilder
+          me={me.participantId}
+          counterparties={counterparties}
+          nameOf={nameOf}
+          lookup={lookup}
+          backUrl={backUrl}
+          outOfSeason={!event}
+          offline={offline}
+          sending={pending === "compose"}
+          intent={intent}
+          onSend={propose}
+          onClose={closeBuilder}
+        />
+      )}
+
+      <div className="mx-auto max-w-3xl px-4 pb-32 pt-6">
         <Header />
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
           with no signal is the exact failure the health states exist for. */}
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
 
-        <section className="mb-7">
-          <SectionTitle
-            icon={<Inbox className="h-4 w-4" />}
-            label="Waiting on you"
-            count={inbox.length}
+        {/* aria-pressed buttons rather than a tablist, and that is not a
+            shortcut: `role="tab"` makes the controls invisible to
+            getByRole("button"), which is how the e2e suite reaches every
+            selectable thing in this app. */}
+        <div role="group" aria-label="Trading Post sections" className="mb-5 flex gap-1.5">
+          <TabButton on={tab === "offers"} onPress={() => setTab("offers")} count={inbox.length}>
+            Offers
+          </TabButton>
+          <TabButton on={tab === "feed"} onPress={() => setTab("feed")}>
+            Feed
+          </TabButton>
+        </div>
+
+        {tab === "offers" ? (
+          <TradeOffersPanel
+            me={me.participantId}
+            inbox={inbox}
+            outbox={outbox}
+            recent={recent}
+            nameOf={nameOf}
+            lookup={lookup}
+            backUrl={backUrl}
+            pending={pending}
+            offline={offline}
+            onAccept={accept}
+            onDecline={(id) => void resolve(id, "decline")}
+            onCancel={(id) => void resolve(id, "cancel")}
+            highlightId={highlightId}
+            onMakeOffer={openBuilder}
+            reachableCount={counterparties.length}
           />
-          {inbox.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Nobody wants your cards. Yet.</p>
-          ) : (
-            <OfferCarousel>
-              {inbox.map((offer) => (
-                <TradeOfferCard
-                  key={offer.id}
-                  offer={offer}
-                  me={me.participantId}
-                  nameOf={nameOf}
-                  lookup={lookup}
-                  backUrl={backUrl}
-                  actions={
-                    <>
-                      <button
-                        onClick={() => accept(offer.id)}
-                        disabled={pending === offer.id || offline}
-                        {...offlineReason(offline)}
-                        className="neon-btn-lg disabled:opacity-50"
-                      >
-                        Accept
-                      </button>
-                      <button
-                        onClick={() => resolve(offer.id, "decline")}
-                        disabled={pending === offer.id || offline}
-                        {...offlineReason(offline)}
-                        className="inline-flex min-h-11 items-center rounded-full border border-white/10 px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
-                      >
-                        Decline
-                      </button>
-                    </>
-                  }
-                />
-              ))}
-            </OfferCarousel>
-          )}
-        </section>
-
-        {outbox.length > 0 && (
-          <section className="mb-7">
-            <SectionTitle
-              icon={<Send className="h-4 w-4" />}
-              label="Out there"
-              count={outbox.length}
-            />
-            <OfferCarousel>
-              {outbox.map((offer) => (
-                <TradeOfferCard
-                  key={offer.id}
-                  offer={offer}
-                  me={me.participantId}
-                  nameOf={nameOf}
-                  lookup={lookup}
-                  backUrl={backUrl}
-                  actions={
-                    <button
-                      onClick={() => resolve(offer.id, "cancel")}
-                      disabled={pending === offer.id || offline}
-                      {...offlineReason(offline)}
-                      className="inline-flex min-h-11 items-center rounded-full border border-primary/40 px-6 text-label font-bold uppercase tracking-[0.08em] text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
-                    >
-                      Take it back
-                    </button>
-                  }
-                />
-              ))}
-            </OfferCarousel>
-          </section>
-        )}
-
-        {/* ---------- Compose ---------- */}
-        <section className="mb-6">
-          <SectionTitle icon={<ArrowLeftRight className="h-3.5 w-3.5" />} label="Make an offer" />
-          <div className="surface-panel rounded-xl border p-3">
-            {intentLine && (
-              // Announced, not just drawn: somebody arrives here mid-thought
-              // from a card they were looking at, and the screen has to pick that
-              // thought back up.
-              <p role="status" className="mb-3 text-sm text-primary">
-                {intentLine}
-              </p>
-            )}
-            <div
-              role="group"
-              aria-label="Who to trade with"
-              className="mb-3 flex flex-wrap gap-1.5"
-            >
-              {counterparties.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Nobody else has claimed their player or signed in yet.
-                </p>
-              ) : (
-                counterparties.map((p) => (
-                  <button
-                    key={p.id}
-                    // Selected was a border, a ring and a green dot, none of
-                    // which a screen reader reaches.
-                    aria-pressed={p.id === theirId}
-                    onClick={() => {
-                      setTheirId(p.id === theirId ? null : p.id);
-                      // Their spares are half of what is staged, so keeping the
-                      // selection across a switch would send cards the new
-                      // counterparty does not own.
-                      setGive([]);
-                      setWant([]);
-                    }}
-                    className={cn(
-                      "inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] transition-all active:scale-95",
-                      // Selection is a 2px ring, not a bloom (§15). The ring was
-                      // already here at 1px under a glow doing the same job
-                      // twice; it now does it alone and reads harder for it.
-                      p.id === theirId
-                        ? "relative border border-primary/60 bg-primary/10 text-primary ring-2 ring-primary/50"
-                        : "border border-white/10 bg-white/5 shadow-inner text-muted-foreground hover:border-primary/40 hover:text-primary",
-                    )}
-                  >
-                    {p.id === theirId ? (
-                      <span className="flex items-center gap-1.5">
-                        <span className="h-1 w-1 rounded-full bg-success" />
-                        {p.name}
-                      </span>
-                    ) : (
-                      p.name
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-
-            {theirId && (
-              <>
-                <SparePicker
-                  label={`You give (${give.length}/${MAX_PER_SIDE})`}
-                  spares={mySpares.data}
-                  loading={mySpares.isPending}
-                  lookup={lookup}
-                  staged={give}
-                  onToggle={(s) => toggle("give", s)}
-                  backUrl={backUrl}
-                  outOfSeason={!event}
-                />
-                <SparePicker
-                  label={`${nameOf(theirId)} gives (${want.length}/${MAX_PER_SIDE})`}
-                  spares={theirSpares.data}
-                  loading={theirSpares.isPending}
-                  lookup={lookup}
-                  staged={want}
-                  onToggle={(s) => toggle("want", s)}
-                  backUrl={backUrl}
-                  conceal
-                  outOfSeason={!event}
-                />
-                <button
-                  onClick={propose}
-                  disabled={
-                    pending === "compose" || give.length === 0 || want.length === 0 || offline
-                  }
-                  {...offlineReason(offline)}
-                  className="neon-btn-lg mt-3 disabled:opacity-40"
-                >
-                  <ArrowLeftRight className="h-4 w-4" />
-                  Send offer
-                </button>
-              </>
-            )}
-          </div>
-        </section>
-
-        {recent.length > 0 && (
-          <section className="mb-6">
-            <SectionTitle label="Recently settled" />
-            <div className="space-y-2">
-              {recent.map((offer) => (
-                <TradeOfferCard
-                  key={offer.id}
-                  offer={offer}
-                  me={me.participantId}
-                  nameOf={nameOf}
-                  lookup={lookup}
-                  backUrl={backUrl}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* The league-wide record. Names both sides, counts the player cards and
-            names the secrets — the summary carries a secret's name since the
-            trade-feed-secret-names migration, with the old count wording as the
-            fallback for trades settled before it. */}
-
-        {(feed.data ?? []).length > 0 && (
-          <section>
-            <SectionTitle label="Around the league" />
-            <div className="surface-panel max-h-72 overflow-y-auto rounded-xl border">
-              <ul className="divide-y divide-white/10">
-                {(feed.data ?? []).map((t) => (
-                  <li key={t.id} className="px-3 py-2.5 text-meta leading-relaxed text-foreground">
-                    <span className="font-display font-black uppercase tracking-wide">
-                      {nameOf(t.proposerId)}
-                    </span>{" "}
-                    <span className="text-muted-foreground">sent</span>{" "}
-                    <SummaryText items={t.proposerGave} />{" "}
-                    <span className="text-muted-foreground">to</span>{" "}
-                    <span className="font-display font-black uppercase tracking-wide">
-                      {nameOf(t.recipientId)}
-                    </span>{" "}
-                    <span className="text-muted-foreground">for</span>{" "}
-                    <SummaryText items={t.recipientGave} />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
+        ) : (
+          <TradeFeedPanel entries={feed.data ?? []} nameOf={nameOf} loading={feed.isPending} />
         )}
       </div>
+
+      {/* Above the tab bar and always there, so starting a trade never means
+          scrolling past everything you have not answered (§10 problem 1).
+          `z-20` keeps it under the nav's z-30: a CTA that paints over a tab is
+          worse than one that scrolls under it. */}
+      {!builderOpen && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 pb-[calc(env(safe-area-inset-bottom)+4.5rem)] md:pb-4">
+          <div className="pointer-events-auto mx-auto max-w-3xl">
+            <button type="button" onClick={openBuilder} className="neon-btn-lg w-full">
+              <ArrowLeftRight className="h-4 w-4" />
+              Make an offer
+            </button>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function TabButton({
+  on,
+  onPress,
+  count,
+  children,
+}: {
+  on: boolean;
+  onPress: () => void;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onPress}
+      className={cn(
+        "inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg font-display text-badge font-bold uppercase tracking-[0.08em] transition-colors",
+        on
+          ? "bg-primary/15 text-primary ring-2 ring-primary/50"
+          : "border border-white/10 text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+      {/* Only when there is something waiting: a "0" beside Offers reads as a
+          score rather than as a count of things to answer. */}
+      {!!count && (
+        <span className="rounded-full bg-primary px-1.5 font-display text-meta font-black tabular text-background">
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -774,192 +597,6 @@ function Header() {
         Player cards: spares only, you always keep one. Secrets: anything you hold, even your last
         copy. The finish travels with the card.
       </p>
-    </div>
-  );
-}
-
-function SectionTitle({
-  icon,
-  label,
-  count,
-}: {
-  icon?: React.ReactNode;
-  label: string;
-  count?: number;
-}) {
-  return (
-    <div className="mb-2 flex items-center gap-2 text-primary">
-      {icon}
-      <h2 className="font-display text-badge font-bold uppercase tracking-[0.08em]">{label}</h2>
-      {count !== undefined && (
-        <span className="rounded-full bg-primary px-2 py-0.5 font-display text-meta font-black tabular text-background">
-          {count}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/**
- * The feed's summary, with the traded card named in the accent colour.
- *
- * `tradeSummaryParts` already decides the wording, piece by piece, so each
- * one can be lit up rather than reading as one grey run of text. It used to
- * take the joined label and split it back apart on " + ", which cut a secret
- * named "Salt + Pepper" in half.
- */
-function SummaryText({ items }: { items: Parameters<typeof tradeSummaryParts>[0] }) {
-  const parts = tradeSummaryParts(items);
-  return (
-    <>
-      {parts.map((part, i) => (
-        <span key={i}>
-          {i > 0 && <span className="text-muted-foreground"> + </span>}
-          <span className="font-semibold text-primary">{part}</span>
-        </span>
-      ))}
-    </>
-  );
-}
-
-/**
- * One offer at a time, swiped.
- *
- * A vertical stack of full-size offers buries the second one below the fold on a
- * phone, which is where this screen actually gets used. Scroll-snap rather than a
- * carousel library: the browser already does the physics.
- */
-function OfferCarousel({ children }: { children: React.ReactNode[] }) {
-  const [active, setActive] = useState(0);
-  if (children.length === 1) return <>{children[0]}</>;
-  return (
-    <div>
-      <div
-        className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          setActive(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
-        }}
-      >
-        {children.map((child, i) => (
-          <div key={i} className="w-full shrink-0 snap-center">
-            {child}
-          </div>
-        ))}
-      </div>
-      <div className="mt-1 flex justify-center gap-1.5">
-        {children.map((_, i) => (
-          <span
-            key={i}
-            className={cn(
-              "h-1.5 w-1.5 rounded-full transition-colors",
-              i === active ? "bg-primary" : "bg-white/25",
-            )}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SparePicker({
-  label,
-  spares,
-  loading,
-  lookup,
-  staged,
-  onToggle,
-  backUrl = null,
-  conceal = false,
-  outOfSeason = false,
-}: {
-  label: string;
-  spares: TradeSpares | undefined;
-  loading: boolean;
-  lookup: RosterCardLookup;
-  staged: Staged[];
-  onToggle: (staged: Staged) => void;
-  /** The event's universal back, shown instead of art you have not pulled. */
-  backUrl?: ImageUrlSet | null;
-  /** Set on the counterparty's strip only. Your own cards are never concealed. */
-  conceal?: boolean;
-  /** No active event: empty is the season, not a bug. */
-  outOfSeason?: boolean;
-}) {
-  const blocked = spares?.blocked ?? [];
-
-  const items: Staged[] = [
-    // Secrets lead the strip, rarest copy first: they are what anyone opening
-    // this panel is actually scrolling for, and on a phone the base cards used
-    // to bury them. Every secret they hold, single copies included — `lastCopy`
-    // carries through so the tile can say which ones they cannot get back.
-    ...[...(spares?.secrets ?? [])]
-      .sort(
-        (a, b) => secretTierRank(a.tier) - secretTierRank(b.tier) || a.name.localeCompare(b.name),
-      ) // prettier-ignore
-      .map(stagedSecret),
-    // One tile per COPY, so "my gold Alice" and "my standard Alice" are separately
-    // pickable. Earned tier first, then finish, then the card itself — so the
-    // champion's card leads and the copies of one card still sit together.
-    ...[...(spares?.roster ?? [])]
-      .sort(
-        (a, b) =>
-          rarityRank(lookup(a.eventParticipantId).rarity.tier) -
-            rarityRank(lookup(b.eventParticipantId).rarity.tier) ||
-          a.eventParticipantId.localeCompare(b.eventParticipantId) ||
-          editionRank(a.edition) - editionRank(b.edition),
-      )
-      // Annotated rather than cast — `stagedRoster`'s return type is what keeps
-      // this honest. An `as TradeItemView` here once silently dropped `lastCopy`
-      // off the secret tiles above and the marker simply never rendered.
-      .map(stagedRoster),
-  ];
-
-  return (
-    <div className="mt-3">
-      <div className="mb-1.5 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
-        {label}
-      </div>
-      {loading ? (
-        <p className="text-meta text-muted-foreground">Counting spares…</p>
-      ) : items.length === 0 ? (
-        <p className="text-meta text-muted-foreground">
-          {outOfSeason ? "Trading opens with the next combine." : "No spares to trade."}
-        </p>
-      ) : (
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {items.map((s) => (
-            <TradeItemTile
-              key={s.key}
-              item={s.item}
-              lookup={lookup}
-              selected={staged.some((x) => x.key === s.key)}
-              onClick={() => onToggle(s)}
-              concealed={conceal && s.item.viewerOwns === false}
-              backUrl={backUrl}
-            />
-          ))}
-        </div>
-      )}
-      {/* Only ever your own side: the server sends `blocked` empty for anybody
-          else. Shown so "where is my card?" has an answer on the screen. */}
-      {blocked.length > 0 && (
-        <>
-          <div className="mt-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            Can&apos;t be traded
-          </div>
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {blocked.map((b) => (
-              <TradeItemTile
-                key={b.item.kind === "secret" ? `bs:${b.item.pullId}` : `bc:${b.item.copyId}`}
-                item={b.item}
-                lookup={lookup}
-                blockedLabel={BLOCKED_LABEL[b.reason]}
-              />
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 }
