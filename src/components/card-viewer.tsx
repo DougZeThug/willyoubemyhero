@@ -121,6 +121,10 @@ export function CardViewer({
 }) {
   const card = cards[index] ?? null;
   const [flipped, setFlipped] = useState(false);
+  // The surface node, for the menu below. State rather than reading the ref
+  // during render: the ref is null on the first pass, and a portal target that
+  // arrives late leaves the menu portalled to the body for its whole life.
+  const [surface, setSurface] = useState<HTMLDivElement | null>(null);
   // Tracked rather than left to the DOM, because the keyboard below has to defer
   // to it: Escape over an open menu means "shut the menu", and the arrow keys
   // mean "move down it" — neither of them means "leave the card".
@@ -183,7 +187,13 @@ export function CardViewer({
     onStep(stepIndex(index, cards.length, dir));
   };
 
-  const menu: { key: string; label: string; icon: ReactNode; onSelect: () => void }[] = [];
+  const menu: {
+    key: string;
+    label: string;
+    icon: ReactNode;
+    disabled?: boolean;
+    onSelect: () => void;
+  }[] = [];
   // The three that act on the card itself are meaningless while it is face-down:
   // there is no face to export, and nothing to line up against another card.
   if (onShare && !locked) {
@@ -191,6 +201,10 @@ export function CardViewer({
       key: "share",
       label: sharing ? "Rendering…" : "Share",
       icon: <Share2 className="h-4 w-4" />,
+      // The export refetches the signed URLs and then reads the DOM after a
+      // settle delay; a second one started over the top of the first races it
+      // for the same node. The details page's own chip is disabled the same way.
+      disabled: sharing,
       onSelect: onShare,
     });
   }
@@ -233,7 +247,10 @@ export function CardViewer({
 
   return (
     <div
-      ref={surfaceRef}
+      ref={(node) => {
+        surfaceRef.current = node;
+        setSurface(node);
+      }}
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
@@ -367,11 +384,22 @@ export function CardViewer({
                 <MoreHorizontal className="h-5 w-5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="top" className="min-w-[11rem]">
+            {/* Portalled INTO the viewer, not onto the body. useModalSurface
+                cycles Tab within this surface and pulls focus back the moment it
+                lands outside it — which, with the menu on the body, meant Tab
+                over an open menu jumped to the Close button instead of reaching
+                Radix's own handler. */}
+            <DropdownMenuContent
+              container={surface}
+              align="end"
+              side="top"
+              className="min-w-[11rem]"
+            >
               {menu.map((a) => (
                 <DropdownMenuItem
                   key={a.key}
                   onSelect={a.onSelect}
+                  disabled={a.disabled}
                   className="min-h-11 gap-2 text-label font-bold uppercase tracking-[0.08em]"
                 >
                   {a.icon}

@@ -26,6 +26,22 @@ import type { Rarity } from "@/lib/card-rarity";
  */
 const revealed = new Set<string>();
 
+/**
+ * What the session guard remembers, which is a CARD AND ITS ARRIVAL rather than
+ * just a card.
+ *
+ * The two halves of the guard disagreed otherwise. `shouldCelebrate`'s own table
+ * says a newer copy is its own event — pull an Alice in July, trade for a better
+ * one in August, and the second arrival is a real thing that happened — but a
+ * Set keyed on the id alone answered "already done" before the store was ever
+ * asked, so a copy that landed while the tab was open went by in silence.
+ *
+ * Falls back to the bare id when nothing knows when this copy arrived, which is
+ * exactly the case the Set exists for: a collection built before §6 shipped, or
+ * a card pulled outside the acquisitions window.
+ */
+const cueKey = (id: string, acquiredAt: string | null) => (acquiredAt ? `${id}@${acquiredAt}` : id);
+
 /** Test seam. Nothing in the app clears this — a page load is the reset. */
 export function resetRevealedForTests() {
   revealed.clear();
@@ -72,12 +88,12 @@ export function useRevealCue({
     // The session guard still comes first, and unconditionally: arrowing back and
     // forth re-mounts the same card, and this is what stops that being a machine
     // gun whatever the store says.
-    if (revealed.has(id)) return;
+    if (revealed.has(cueKey(id, acquiredAt))) return;
     // Then the device store, which is the half that survives a reload — the whole
     // point of §6. `false` is "already celebrated"; `null` is "no opinion at all",
     // and for that the session guard above was the entire decision.
     if (shouldCelebrate(readRevealedAt(id), acquiredAt) === false) return;
-    revealed.add(id);
+    revealed.add(cueKey(id, acquiredAt));
     if (acquiredAt) markRevealed(id, acquiredAt);
     playReveal(rarity.tier);
     playEditionShine(edition);

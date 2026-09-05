@@ -392,8 +392,17 @@ function PlayerCardPage() {
   const showDetails = () =>
     void navigate({ to: ".", search: (old) => ({ ...old, view: undefined }), replace: true });
 
+  /**
+   * Back up to the card, and PUSHED rather than replaced.
+   *
+   * `showDetails` replaces, because dropping to the stats is staying on the same
+   * card. Coming back up is not the mirror of that: replacing here would spend
+   * the details entry, and then Close — which is `history.back()` — would skip
+   * straight past the page you opened the viewer from and land in the vault.
+   * Pushed, Close returns to exactly what was underneath.
+   */
   const openViewer = () =>
-    void navigate({ to: ".", search: (old) => ({ ...old, view: 1 as const }), replace: true });
+    void navigate({ to: ".", search: (old) => ({ ...old, view: 1 as const }) });
 
   /**
    * A swipe inside the viewer.

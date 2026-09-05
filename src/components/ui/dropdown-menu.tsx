@@ -56,9 +56,20 @@ DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayNam
 
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content> & {
+    /**
+     * Where the menu is portalled to. Undefined is stock shadcn — document.body.
+     *
+     * The one deviation from the primitive as shipped, and the same kind the
+     * 44px close button in dialog.tsx is: a menu inside a hand-rolled modal has
+     * to live inside that modal's own subtree, or its focus trap treats every
+     * menu item as focus that has escaped and yanks it back. Only card-viewer.tsx
+     * passes it.
+     */
+    container?: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>["container"];
+  }
+>(({ className, sideOffset = 4, container, ...props }, ref) => (
+  <DropdownMenuPrimitive.Portal container={container}>
     <DropdownMenuPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}

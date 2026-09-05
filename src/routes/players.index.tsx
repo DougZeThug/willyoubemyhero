@@ -220,6 +220,8 @@ function PlayersPage() {
   const [openSecret, setOpenSecret] = useState<{
     cards: OwnedSecret[] | null;
     index: number;
+    /** The card that index meant when it was set — see `openSecretIndex`. */
+    id: string;
   } | null>(null);
   // Reorder mode. Off by default and never persisted: it is a thing you turn on
   // for a moment, not a preference — and while it is off a shelf header has one
@@ -772,7 +774,7 @@ function PlayersPage() {
       const index = stripSecrets.findIndex((c) => c.id === item.id);
       // Snapshot before the mark, because the mark is what empties `stripSecrets`.
       if (item.kind === "secret" && index >= 0) {
-        setOpenSecret({ cards: stripSecrets, index });
+        setOpenSecret({ cards: stripSecrets, index, id: item.id });
       }
       markVaultSeen();
     },
@@ -859,7 +861,9 @@ function PlayersPage() {
             rarity={rarity}
             intensity="subtle"
             interactive={false}
-            onClick={() => setOpenSecret({ cards: null, index: visibleSecrets.indexOf(s) })}
+            onClick={() =>
+              setOpenSecret({ cards: null, index: visibleSecrets.indexOf(s), id: s.id })
+            }
           />
           <FavouriteButton
             name={s.name}
@@ -1132,7 +1136,13 @@ function PlayersPage() {
           // The list travels with the index, so a swipe out of a card opened from
           // the strip keeps swiping the strip rather than jumping into the shelves
           // halfway through.
-          onStep={(index) => setOpenSecret((prev) => ({ cards: prev?.cards ?? null, index }))}
+          onStep={(index) =>
+            setOpenSecret((prev) => ({
+              cards: prev?.cards ?? null,
+              index,
+              id: openSecretCards[index]?.id ?? prev?.id ?? "",
+            }))
+          }
           onClose={() => setOpenSecret(null)}
           onOffer={() => {
             const card = openSecretCards[openSecretIndex];

@@ -209,12 +209,23 @@ export function useCardZoom({
       const dy = p.y - d.from.y;
       const dt = Date.now() - d.at;
 
+      // A throw ends whatever a tap had started. Without this the *previous*
+      // tap's held-back `onTap` still fires 300ms later — flipping the card
+      // somebody has just swiped away from, or on a surface where the throw
+      // itself does nothing, flipping the card they meant to leave.
+      const claimGesture = () => {
+        if (tapTimer.current) clearTimeout(tapTimer.current);
+        tapTimer.current = null;
+        lastTap.current = null;
+        swallowClick.current = true;
+      };
+
       // A swipe only means "next card" while the card is whole on screen. Zoomed
       // in, the same drag is a pan and must never navigate.
       if (view.current.zoom === MIN_ZOOM && onSwipe) {
         const dir = swipeDirection(dx, dy, dt);
         if (dir) {
-          swallowClick.current = true;
+          claimGesture();
           onSwipe(dir);
           return;
         }
@@ -226,7 +237,7 @@ export function useCardZoom({
       if (view.current.zoom === MIN_ZOOM && onVerticalSwipe) {
         const dir = verticalSwipe(dx, dy, dt);
         if (dir) {
-          swallowClick.current = true;
+          claimGesture();
           onVerticalSwipe(dir);
           return;
         }

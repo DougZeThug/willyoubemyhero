@@ -63,12 +63,19 @@ test.describe("the full-screen card viewer", () => {
     // what makes the phone's back gesture close the viewer.
     await expect(page).toHaveURL(/\/players\/ep-alice\?view=1$/);
 
-    // §6's actual ask, measured: "as big as the phone allows". At 390x844 the
-    // column's own width binds first, so anything under 300 means the svh clamp
-    // in card-viewer.tsx has taken more than its share.
-    const box = await page.getByTestId("card-viewer-card").boundingBox();
-    expect(box, "the viewer rendered no card at all").not.toBeNull();
-    expect(box!.width).toBeGreaterThanOrEqual(300);
+    // §6's actual ask, measured: "as big as the phone allows". Both heights are
+    // worth pinning, because a different constraint binds at each. Playwright's
+    // iPhone 13 preset is 390x664 — the viewport left under the browser's own
+    // chrome, and what `100svh` actually resolves to on the phone — where the
+    // height clamp decides. The audit's "390x844" is the whole device, where the
+    // column's width decides instead.
+    const short = await page.getByTestId("card-viewer-card").boundingBox();
+    expect(short, "the viewer rendered no card at all").not.toBeNull();
+    expect(short!.width, "the svh clamp has taken more than its share").toBeGreaterThanOrEqual(280);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const tall = await page.getByTestId("card-viewer-card").boundingBox();
+    expect(tall!.width, "the audit's floor at its own viewport").toBeGreaterThanOrEqual(300);
 
     await page.goBack();
     await expect(viewer(page)).toBeHidden();
@@ -183,12 +190,10 @@ test.describe("the full-screen card viewer", () => {
     await page.getByRole("button", { name: "Bob Blitz" }).click();
     await expect(page.getByText(/You give \(1\/4\)/)).toBeVisible();
     // A standard copy prints no finish at all (editionLabel is null for 70% of
-    // them), so the gold one NOT being the staged one is what says which copy
-    // went in.
-    await expect(page.getByRole("button", { name: /Gold/ })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    // them), so "no gold tile is the staged one" is what says which copy went in.
+    // By count rather than by attribute: one stub answers both pickers, so the
+    // gold copy is drawn twice — once on each side of the table.
+    await expect(page.getByRole("button", { name: /Gold/, pressed: true })).toHaveCount(0);
   });
 
   test("a secret opens the same viewer and never touches the URL", async ({ page, server }) => {

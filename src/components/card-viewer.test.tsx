@@ -223,6 +223,20 @@ describe("CardViewer, turning the card over", () => {
     expect(screen.getByRole("button", { name: "Flip" })).toBeInTheDocument();
   });
 
+  it("does not flip on the tap a throw interrupted", async () => {
+    const onDetails = vi.fn();
+    const { props } = renderViewer({ onDetails });
+    // A tap holds its flip back for TAP.gap, so a double tap can zoom instead.
+    // A throw landing inside that window has to cancel it, or the card turns
+    // 300ms after somebody has already swiped or dismissed it.
+    throwCard(0, 0);
+    throwCard(0, -90);
+    expect(onDetails).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.getByRole("button", { name: "Flip" })).toBeInTheDocument();
+    expect(props.onStep).not.toHaveBeenCalled();
+  });
+
   it("cannot flip a card nobody has packed", () => {
     renderViewer({ cards: [roster({ locked: true, copies: 0 })], index: 0 });
     expect(screen.getByRole("button", { name: "Flip" })).toBeDisabled();
@@ -311,17 +325,25 @@ describe("CardViewer, the More menu", () => {
     ).toBeInTheDocument();
   });
 
-  it("neither pins nor shares a card nobody has packed", async () => {
+  it("neither pins nor shares a card nobody has packed", () => {
     renderViewer({
       cards: [roster({ locked: true, copies: 0 })],
       index: 0,
       onShare: vi.fn(),
       onCompare: vi.fn(),
     });
+    // Every entry is gated on the card being one you hold, so there is nothing
+    // behind the trigger and the trigger says so rather than opening on nothing.
+    expect(screen.getByRole("button", { name: "More actions" })).toBeDisabled();
+  });
+
+  it("will not start a second export over the first", async () => {
+    renderViewer({ onShare: vi.fn(), sharing: true });
     const menu = await openMenu();
-    expect(menu.queryByRole("menuitem", { name: /^pin/i })).toBe(null);
-    expect(menu.queryByRole("menuitem", { name: /share/i })).toBe(null);
-    expect(menu.queryByRole("menuitem", { name: /compare/i })).toBe(null);
+    expect(menu.getByRole("menuitem", { name: /rendering/i })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("leaves Escape to the menu while the menu is open", async () => {
