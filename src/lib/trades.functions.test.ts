@@ -274,6 +274,7 @@ describe("getTradeSpares", () => {
     expect(res.secrets).toEqual([
       {
         pullId: PULL_ID,
+        cardId: SECRET_ID,
         name: "Gary the Grill",
         artUrl: "https://signed/spare-day",
         tier: "rare",
@@ -713,6 +714,7 @@ describe("getMyTradeOffers", () => {
       {
         kind: "secret",
         pullId: PULL_ID,
+        cardId: SECRET_ID,
         name: "Gary the Grill",
         artUrl: "https://signed/offer-face",
         tier: "mythic",
@@ -844,13 +846,19 @@ describe("getTradeSpares and the catalogue", () => {
     expect(res.secrets).toEqual([
       {
         pullId: PULL_ID,
+        // THE BOUNDARY, and the reason cardId is optional at all: a concealed
+        // card carries no id. A stable handle on a card whose name is being
+        // withheld would let somebody line the same unknown up across two
+        // people's lists and count the unknowns — a route to the set size.
+        cardId: undefined,
         name: "Gary the Grill",
         artUrl: null,
         tier: "mythic",
         lastCopy: true,
         viewerOwns: false,
       }, // prettier-ignore
-      { pullId: "p2", name: "Tucker", artUrl: "https://signed/tucker", tier: "rare", lastCopy: true, viewerOwns: true }, // prettier-ignore
+      // Shown, so it is named — and named, so it may as well be identified.
+      { pullId: "p2", cardId: "s2", name: "Tucker", artUrl: "https://signed/tucker", tier: "rare", lastCopy: true, viewerOwns: true }, // prettier-ignore
     ]);
   });
 
@@ -868,7 +876,7 @@ describe("getTradeSpares and the catalogue", () => {
     });
     const res = await spares(ME, asMe());
     expect(res.secrets).toEqual([
-      { pullId: PULL_ID, name: "Gary the Grill", artUrl: "https://signed/gary", tier: "mythic", lastCopy: true, viewerOwns: true }, // prettier-ignore
+      { pullId: PULL_ID, cardId: SECRET_ID, name: "Gary the Grill", artUrl: "https://signed/gary", tier: "mythic", lastCopy: true, viewerOwns: true }, // prettier-ignore
     ]);
   });
 });

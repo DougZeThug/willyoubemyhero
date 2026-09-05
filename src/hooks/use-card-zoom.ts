@@ -10,6 +10,7 @@ import {
   midpoint,
   normalizeWheelDelta,
   swipeDirection,
+  verticalSwipe,
   zoomFromWheel,
   type Point,
 } from "@/lib/zoom";
@@ -19,6 +20,15 @@ const TAP = { move: 12, ms: 320, gap: 300 } as const;
 
 export type CardZoomOptions = {
   onSwipe?: (dir: -1 | 1) => void;
+  /**
+   * The same throw on the other axis: -1 flicked up, 1 pulled down.
+   *
+   * Read here rather than by a second gesture layer over the card. The frame
+   * already claims `touch-action: none` and captures the pointer above 1x, so an
+   * overlay wanting a pull-down would be asking for events this hook has taken —
+   * which is the fight the header of zoom-pan-frame.tsx exists to avoid.
+   */
+  onVerticalSwipe?: (dir: -1 | 1) => void;
   /** Fired for a single tap that was neither a swipe nor part of a double tap. */
   onTap?: () => void;
   /** Turn the whole thing off, e.g. when there is nothing to look at yet. */
@@ -34,7 +44,12 @@ export type CardZoomOptions = {
  * react to *being* zoomed — suppressing the card's own tilt, showing a reset
  * button — not to drive the transform.
  */
-export function useCardZoom({ onSwipe, onTap, enabled = true }: CardZoomOptions = {}) {
+export function useCardZoom({
+  onSwipe,
+  onVerticalSwipe,
+  onTap,
+  enabled = true,
+}: CardZoomOptions = {}) {
   const frameRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -194,13 +209,36 @@ export function useCardZoom({ onSwipe, onTap, enabled = true }: CardZoomOptions 
       const dy = p.y - d.from.y;
       const dt = Date.now() - d.at;
 
+      // A throw ends whatever a tap had started. Without this the *previous*
+      // tap's held-back `onTap` still fires 300ms later — flipping the card
+      // somebody has just swiped away from, or on a surface where the throw
+      // itself does nothing, flipping the card they meant to leave.
+      const claimGesture = () => {
+        if (tapTimer.current) clearTimeout(tapTimer.current);
+        tapTimer.current = null;
+        lastTap.current = null;
+        swallowClick.current = true;
+      };
+
       // A swipe only means "next card" while the card is whole on screen. Zoomed
       // in, the same drag is a pan and must never navigate.
       if (view.current.zoom === MIN_ZOOM && onSwipe) {
         const dir = swipeDirection(dx, dy, dt);
         if (dir) {
-          swallowClick.current = true;
+          claimGesture();
           onSwipe(dir);
+          return;
+        }
+      }
+      // Same rule on the other axis, and after it rather than before: the two are
+      // mutually exclusive by their bias, so the order cannot change an answer —
+      // but stepping between cards is the gesture people make constantly and
+      // dismissing is the one they make once, so the common case is read first.
+      if (view.current.zoom === MIN_ZOOM && onVerticalSwipe) {
+        const dir = verticalSwipe(dx, dy, dt);
+        if (dir) {
+          claimGesture();
+          onVerticalSwipe(dir);
           return;
         }
       }
@@ -230,7 +268,7 @@ export function useCardZoom({ onSwipe, onTap, enabled = true }: CardZoomOptions 
         onTap?.();
       }, TAP.gap);
     },
-    [local, onSwipe, onTap, reset, zoomTo],
+    [local, onSwipe, onTap, onVerticalSwipe, reset, zoomTo],
   );
 
   const onPointerUp = useCallback((e: React.PointerEvent) => endPointer(e, false), [endPointer]);

@@ -104,6 +104,10 @@ export function NewSinceStrip({
               <Link
                 to="/players/$id"
                 params={{ id: item.id }}
+                // Into the viewer, the same as a tap on the shelf below: this
+                // strip is here to say a card arrived, and the card is what
+                // somebody tapping it came to see (§6).
+                search={{ view: 1 }}
                 onClick={() => onOpen(item)}
                 className={TILE_FOCUS}
                 aria-label={`${item.name} — ${item.label}`}
@@ -127,7 +131,7 @@ export function NewSinceStrip({
             ) : (
               // A button and not a link, deliberately: a secret has no URL, which
               // is the one thing about it that must not change. See the header of
-              // secret-card-sheet.tsx.
+              // card-viewer.tsx.
               <button
                 type="button"
                 onClick={() => onOpen(item)}

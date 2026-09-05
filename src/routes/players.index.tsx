@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -20,7 +20,9 @@ import { useDustBalance } from "@/hooks/use-dust";
 import { dustLive } from "@/lib/dust";
 import { packedByLabel } from "@/lib/card-pulls";
 import { formatDay } from "@/lib/format";
-import { SecretCardSheet } from "@/components/secret-card-sheet";
+import { CardViewer, type ViewerCard } from "@/components/card-viewer";
+import { SecretBackPanel } from "@/components/secret-back-panel";
+import { setTradeIntent } from "@/lib/trade-intent";
 import { VaultSection } from "@/components/vault-section";
 import { VaultHero } from "@/components/vault-hero";
 import { TodayCard } from "@/components/today-card";
@@ -125,6 +127,7 @@ function PlayersPage() {
   // player's — see the note on useEventCardBack. A player's own back on their
   // locked slot would be half the reveal, printed on the thing hiding it.
   const cardBack = useEventCardBack(event?.id ?? null);
+  const navigate = useNavigate();
   /**
    * The SEED is ephemeral on purpose while the sort itself is stored: a frozen
    * shuffle is not a shuffle, so a device that reloads on it gets a fresh deal.
@@ -217,6 +220,8 @@ function PlayersPage() {
   const [openSecret, setOpenSecret] = useState<{
     cards: OwnedSecret[] | null;
     index: number;
+    /** The card that index meant when it was set — see `openSecretIndex`. */
+    id: string;
   } | null>(null);
   // Reorder mode. Off by default and never persisted: it is a thing you turn on
   // for a moment, not a preference — and while it is off a shelf header has one
@@ -603,6 +608,58 @@ function PlayersPage() {
   );
 
   /**
+   * The open shelf, or the strip's snapshot, as the viewer draws it.
+   *
+   * Empty while nothing is open, rather than kept warm: every entry carries a
+   * built SecretBackPanel element, and there is no reason to build thirteen of
+   * them on every render of a page whose viewer is shut.
+   *
+   * Secrets wear the same deck back as every other card — these are universal
+   * backs, so the per-card `back_path` is deliberately not read here.
+   */
+  const openSecretCards: ViewerCard[] = useMemo(() => {
+    if (!openSecret) return [];
+    const list = openSecret.cards ?? visibleSecrets;
+    const back = urlFromSet(cardBack.data?.urls) ? (cardBack.data?.urls ?? null) : null;
+    return list.map((c) => {
+      const rarity = secretFoil(c.foil, c.borderFx, c.tier);
+      return {
+        kind: "secret" as const,
+        id: c.id,
+        name: c.name,
+        rarity,
+        tier: c.tier,
+        flavour: c.flavour,
+        firstPulledOn: c.firstPulledOn,
+        ownerCount: c.ownerCount,
+        frontUrl: c.artUrl,
+        backUrl: back,
+        back: (
+          <SecretBackPanel
+            card={c}
+            rarity={rarity}
+            pulledOn={c.firstPulledOn}
+            completed={!!c.collection && myCompleted.has(c.collection)}
+            size="large"
+          />
+        ),
+        copies: c.count,
+      };
+    });
+  }, [openSecret, visibleSecrets, cardBack.data?.urls, myCompleted]);
+
+  /**
+   * The open secret, once it is known to still be there.
+   *
+   * The shelves' list is live, so a card can leave it — traded away, or its shelf
+   * rolled up — while the viewer is holding an index into it. Null then, and both
+   * the viewer and the chrome below read this rather than `openSecret`: a viewer
+   * that renders nothing while presentation mode still holds the nav inert is a
+   * screen with no way off it.
+   */
+  const openSecretIndex = openSecret && openSecretCards[openSecret.index] ? openSecret.index : null;
+
+  /**
    * The secrets the "new since" strip is showing, in the order it shows them.
    *
    * Its own list because the strip is not a shelf: `visibleSecrets` walks open
@@ -717,7 +774,7 @@ function PlayersPage() {
       const index = stripSecrets.findIndex((c) => c.id === item.id);
       // Snapshot before the mark, because the mark is what empties `stripSecrets`.
       if (item.kind === "secret" && index >= 0) {
-        setOpenSecret({ cards: stripSecrets, index });
+        setOpenSecret({ cards: stripSecrets, index, id: item.id });
       }
       markVaultSeen();
     },
@@ -804,7 +861,9 @@ function PlayersPage() {
             rarity={rarity}
             intensity="subtle"
             interactive={false}
-            onClick={() => setOpenSecret({ cards: null, index: visibleSecrets.indexOf(s) })}
+            onClick={() =>
+              setOpenSecret({ cards: null, index: visibleSecrets.indexOf(s), id: s.id })
+            }
           />
           <FavouriteButton
             name={s.name}
@@ -856,7 +915,16 @@ function PlayersPage() {
     );
     return (
       <div key={p.id} className="relative">
-        <Link to="/players/$id" params={{ id: p.id }} className="group block focus:outline-none">
+        {/* `?view=1` is what makes a tap show the CARD (§6) rather than the
+            stats page it used to land on. Still a real Link: it is a shareable
+            address, it right-clicks, and Back off the viewer returns to this
+            shelf scrolled where it was left. */}
+        <Link
+          to="/players/$id"
+          params={{ id: p.id }}
+          search={{ view: 1 }}
+          className="group block focus:outline-none"
+        >
           {/* Its own positioned box, so the pip below sits on the CARD rather
               than at the bottom of the caption under it. */}
           <div className="relative">
@@ -1045,12 +1113,51 @@ function PlayersPage() {
     : null;
 
   // A claim's reveal takes the whole screen the way the pack's ceremony does, so
-  // it claims the chrome the same way.
+  // it claims the chrome the same way. The card viewer is the same kind of
+  // takeover but is NOT counted here: it mounts its own PresentationMode and its
+  // own stage, and a second stage behind it would dim the room twice.
   const presenting = milestone.milestoneReveal !== null;
 
   return (
     <div className="card-bg min-h-[calc(100dvh-8rem)]">
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      {/* The same viewer a roster card opens into, and deliberately WITHOUT a
+          URL: players.$id.tsx is keyed on an event_participant id and could never
+          address one of these, and an address is shareable — the one thing a
+          secret card must not be. Somebody can still show you their phone; that
+          is the intended and only channel.
+
+          A sibling of the column below rather than a child, because that column
+          goes `inert` while this is up: every shelf behind a full-screen card is
+          still in the tab order and the accessibility tree otherwise. */}
+      {openSecretIndex !== null && (
+        <CardViewer
+          cards={openSecretCards}
+          index={openSecretIndex}
+          // The list travels with the index, so a swipe out of a card opened from
+          // the strip keeps swiping the strip rather than jumping into the shelves
+          // halfway through.
+          onStep={(index) =>
+            setOpenSecret((prev) => ({
+              cards: prev?.cards ?? null,
+              index,
+              id: openSecretCards[index]?.id ?? prev?.id ?? "",
+            }))
+          }
+          onClose={() => setOpenSecret(null)}
+          onOffer={() => {
+            const card = openSecretCards[openSecretIndex];
+            if (!card) return;
+            setTradeIntent({
+              side: "give",
+              kind: "secret",
+              secretCardId: card.id,
+              name: card.name,
+            });
+            void navigate({ to: "/players/trade" });
+          }}
+        />
+      )}
+      <div className="mx-auto max-w-6xl px-4 py-6" inert={openSecretIndex !== null}>
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing at all when it went down — a frozen
           screen with no signal is the exact failure the health states exist
@@ -1109,19 +1216,6 @@ function PlayersPage() {
         {/* Reserved whether or not the collection has reconciled, so the shelves
             below do not step down by a line when it does. */}
         <p className="mb-4 min-h-4 text-xs text-muted-foreground">{summary}</p>
-
-        <SecretCardSheet
-          cards={openSecret?.cards ?? visibleSecrets}
-          index={openSecret?.index ?? null}
-          // The list travels with the index, so a swipe out of a card opened from
-          // the strip keeps swiping the strip rather than jumping into the shelves
-          // halfway through.
-          onIndexChange={(index) =>
-            setOpenSecret((prev) => ({ cards: prev?.cards ?? null, index }))
-          }
-          onOpenChange={(open) => !open && setOpenSecret(null)}
-          completedCollections={myCompleted}
-        />
 
         <VaultSortSheet
           open={sortSheetOpen}

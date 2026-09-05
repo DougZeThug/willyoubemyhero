@@ -20,6 +20,7 @@ import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 export function ZoomPanFrame({
   children,
   onSwipe,
+  onVerticalSwipe,
   onTap,
   canNavigate = false,
   prevLabel,
@@ -31,6 +32,12 @@ export function ZoomPanFrame({
   /** Rendered with the live zoom, so the card can drop its tilt while magnified. */
   children: (state: { zoom: number; zoomed: boolean }) => ReactNode;
   onSwipe?: (dir: -1 | 1) => void;
+  /**
+   * A throw up or down (-1 / 1), for a caller that has somewhere to send one.
+   * There is no button for it: the frame's own row is about zoom, and a chevron
+   * pointing at "dismiss" would be a control, not a gesture.
+   */
+  onVerticalSwipe?: (dir: -1 | 1) => void;
   onTap?: () => void;
   canNavigate?: boolean;
   prevLabel?: string;
@@ -41,7 +48,7 @@ export function ZoomPanFrame({
   className?: string;
 }) {
   const reduced = usePrefersReducedMotion();
-  const zoomer = useCardZoom({ onSwipe, onTap });
+  const zoomer = useCardZoom({ onSwipe, onVerticalSwipe, onTap });
   const { zoom, zoomed } = zoomer;
 
   return (

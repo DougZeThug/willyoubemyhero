@@ -79,7 +79,7 @@ describe("NewSinceStrip", () => {
 
   it("sends a roster card to its own page and a secret to the sheet", () => {
     // A secret is a button and not a link on purpose: it has no URL, which is the
-    // one thing about it that must not change. See secret-card-sheet.tsx.
+    // one thing about it that must not change. See card-viewer.tsx.
     strip([alice, gary]);
     expect(screen.getByRole("link", { name: /Alice Ace/ })).toHaveAttribute(
       "href",

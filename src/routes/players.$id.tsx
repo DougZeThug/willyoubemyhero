@@ -1,4 +1,11 @@
-import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  notFound,
+  useCanGoBack,
+  useNavigate,
+  useRouter,
+} from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,8 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   GitCompareArrows,
-  IdCard,
   Link as LinkIcon,
+  Maximize2,
   Medal,
   MoreHorizontal,
   PackageOpen,
@@ -16,7 +23,6 @@ import {
   RotateCw,
   Share2,
   Smartphone,
-  Sparkles,
   Star,
   Volume2,
   VolumeX,
@@ -25,15 +31,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
-import {
-  cardBadge,
-  editionCelebrates,
-  editionOddsLabel,
-  editionRank,
-  editionStyle,
-  toEdition,
-  type Edition,
-} from "@/lib/card-edition";
+import { cardBadge, editionRank, editionStyle, toEdition, type Edition } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { requestGyroAccess } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
@@ -46,6 +44,8 @@ import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { rosterFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
 import { packedByLabel } from "@/lib/card-pulls";
 import { CardCompare } from "@/components/card-compare";
+import { CardRibbon } from "@/components/card-ribbon";
+import { CardViewer, type ViewerCard } from "@/components/card-viewer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,33 +61,17 @@ import { useCollectionTrophies } from "@/hooks/use-collection-trophies";
 import { trophiesFor, trophySizeLabel, TROPHY_RARITY } from "@/lib/collection-trophies";
 import { useCountUp } from "@/hooks/use-count-up";
 import { awardCategory } from "@/lib/awards";
-import { rarityMap, rarityStyle, TIER_REASON, type Rarity } from "@/lib/card-rarity";
+import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
 import { cardStats } from "@/lib/card-stats";
-import { playEditionShine, playFlip, playReveal, useCardSfx } from "@/lib/card-sfx";
+import { playFlip, useCardSfx } from "@/lib/card-sfx";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
 import { acquisitionWindow } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
-import { markRevealed, readRevealedAt, shouldCelebrate } from "@/lib/reveal-seen";
-
-/**
- * Cards whose reveal has already played this page load.
- *
- * Arrowing back and forth through the roster re-mounts the same card over and
- * over, and a chime on every pass turns a flourish into a machine gun.
- *
- * THE FALLBACK NOW, NOT THE RULE. §6: keying the once-guard on module lifetime
- * meant every fresh session re-fired the chime card by card, and a good card
- * re-fired the confetti, spending a little of the pack reveal's currency each
- * time. wwbh:reveal-seen keys it on ACQUISITION instead — but only for a card
- * whose acquisition this device actually knows about, which is the ones inside
- * the vault's own "new since" window. A collection built before this shipped, or
- * a card pulled last month, has no timestamp to key on, and for those this Set is
- * still the whole guard and still does the job it was written for.
- */
-const revealed = new Set<string>();
+import { useRevealCue } from "@/hooks/use-reveal-cue";
+import { setTradeIntent } from "@/lib/trade-intent";
 
 export const Route = createFileRoute("/players/$id")({
   head: () => ({
@@ -99,11 +83,18 @@ export const Route = createFileRoute("/players/$id")({
     ],
   }),
   // `?vs=` makes a head-to-head a link you can drop in the group chat, rather
-  // than something only reachable by tapping through the drawer.
-  // Annotate `vs` as optional: an inferred `{ vs: string | undefined }` makes
+  // than something only reachable by tapping through the drawer. `?view=1` is
+  // how the vault opens this route straight into the full-screen viewer (§6), so
+  // the phone's back gesture closes it rather than leaving the shelf entirely.
+  //
+  // Annotate both as optional: an inferred `{ vs: string | undefined }` makes
   // router-core treat the key as required at every Link/navigate call site.
-  validateSearch: (search: Record<string, unknown>): { vs?: string } => ({
+  //
+  // `1` rather than a boolean, because a boolean serialises to `?view=true` and
+  // the URL people will see and paste is the one the audit specifies.
+  validateSearch: (search: Record<string, unknown>): { vs?: string; view?: 1 } => ({
     vs: typeof search.vs === "string" && search.vs ? search.vs : undefined,
+    view: search.view === 1 || search.view === "1" ? 1 : undefined,
   }),
   component: PlayerCardPage,
   notFoundComponent: () => (
@@ -118,12 +109,15 @@ export const Route = createFileRoute("/players/$id")({
 
 function PlayerCardPage() {
   const { id } = Route.useParams();
-  const rawVs = Route.useSearch().vs;
+  const { vs: rawVs, view } = Route.useSearch();
   // The picker filters the current player out; a hand-edited URL did not,
   // which gave a comparison of somebody against themselves with every row a
   // tie. validateSearch cannot do this — it never sees the path params.
   const vs = rawVs === id ? undefined : rawVs;
+  const viewing = view === 1;
   const navigate = useNavigate();
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
   const qc = useQueryClient();
   const { event, bundle, loading, error, realtimeDegraded } = useEventBundle();
   const photos = useEventPhotoUrls(event?.id ?? null);
@@ -173,12 +167,16 @@ function PlayerCardPage() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (sharing) return;
+      // The viewer keeps its own keyboard: `go` drops `?view=1`, so an arrow key
+      // pressed over the full-screen card would step to the next player and shut
+      // the viewer on the same keystroke.
+      if (viewing) return;
       if (e.key === "ArrowLeft") go(prev?.id);
       if (e.key === "ArrowRight") go(next?.id);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, prev?.id, next?.id, sharing]);
+  }, [go, prev?.id, next?.id, sharing, viewing]);
 
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
@@ -262,65 +260,16 @@ function PlayerCardPage() {
     );
   }, [acquisitions.data, ep]);
 
-  // Landing on a card is an event: the tier chime, and a burst in the tier's own
-  // colour for the two tiers worth celebrating. A cold page load has no user
-  // gesture behind it, so the AudioContext stays suspended and this is silent —
-  // which is the correct behaviour, not something to work around.
-  useEffect(() => {
-    // Never on a locked card. Landing on a face-down slot is the opposite of a
-    // payoff, and a chime and confetti over it would celebrate nothing.
-    if (!ep || locked) return;
-    // Hold the cue for the one beat it takes to learn whether this card is new.
-    // Firing first and finding out afterwards fires twice, because the answer
-    // landing is itself a re-render.
-    if (acquisitionsPending) return;
-    // The session guard still comes first, and unconditionally: arrowing back and
-    // forth re-mounts the same card, and this is what stops that being a machine
-    // gun whatever the store says.
-    if (revealed.has(ep.id)) return;
-    // Then the device store, which is the half that survives a reload — the whole
-    // point of §6. `false` is "already celebrated"; `null` is "no opinion at all",
-    // and for that the session guard above was the entire decision.
-    if (shouldCelebrate(readRevealedAt(ep.id), acquiredAt) === false) return;
-    revealed.add(ep.id);
-    if (acquiredAt) markRevealed(ep.id, acquiredAt);
-    playReveal(rarity.tier);
-    playEditionShine(edition);
-    // The finish can carry a card the tier never would — same gate as the pack
-    // stand, so landing on a platinum base card is an event on both screens.
-    if (rarity.tier !== "champion" && rarity.tier !== "podium" && !editionCelebrates(edition))
-      return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    let cancelled = false;
-    void import("canvas-confetti").then(({ default: confetti }) => {
-      if (cancelled) return;
-      confetti({
-        particleCount: 90,
-        spread: 75,
-        origin: { y: 0.4 },
-        colors: [
-          rarity.accent,
-          rarity.holoA,
-          rarity.holoB,
-          ...(editionCelebrates(edition) ? [editionStyle(edition).accent] : []),
-          "#ffffff",
-        ],
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    ep,
-    locked,
+  // Landing on a card is an event — and since §7 "landing on a card" means the
+  // viewer, not the stats page underneath it. The gates live in the hook.
+  useRevealCue({
+    active: viewing && !locked && !!ep,
+    id: ep?.id ?? null,
+    rarity,
     edition,
-    rarity.tier,
-    rarity.accent,
-    rarity.holoA,
-    rarity.holoB,
     acquiredAt,
-    acquisitionsPending,
-  ]);
+    pending: acquisitionsPending,
+  });
 
   // Rolled rather than snapped into place. Both return the target verbatim under
   // reduced motion, and null for a player with no official run.
@@ -387,6 +336,99 @@ function PlayerCardPage() {
 
   const urls = cards.data?.[ep.id];
   const name = ep.participant?.name ?? "—";
+
+  /**
+   * The roster as the viewer swipes it: running order, every card, locked ones
+   * included.
+   *
+   * Built here rather than in the viewer because every one of these values is
+   * already resolved on this page — and because a viewer that fetched for itself
+   * would mount a second copy of four queries the moment it opened.
+   *
+   * Built only while the viewer is up. Each entry carries a CardBackPanel
+   * element, and there is no reason to build thirteen of those on every render of
+   * a details page that is not showing any of them.
+   *
+   * Not memoised beyond that: it is thirteen objects, built on a render that only
+   * happens when something it reads has already changed.
+   */
+  const viewerCards: ViewerCard[] = !viewing
+    ? []
+    : roster.map((p) => {
+        const shut = !mine.ready || !collection[p.id];
+        const art = cards.data?.[p.id];
+        const r = rarities.get(p.id) ?? rarityStyle("base");
+        const e = toEdition(collection[p.id]?.edition);
+        return {
+          kind: "roster",
+          id: p.id,
+          name: p.participant?.name ?? "—",
+          rarity: r,
+          edition: shut ? LOCKED_EDITION : e,
+          frontUrl: art?.front ?? null,
+          // A locked slot wears the event's universal back, so the face-down
+          // card gives nothing away about the one underneath it.
+          backUrl: shut ? (cardBack.data?.urls ?? null) : (art?.back ?? null),
+          back: <CardBackPanel ep={p} bundle={bundle} rarity={r} edition={e} />,
+          locked: shut,
+          copies: shut ? 0 : (collection[p.id]?.count ?? 0),
+        };
+      });
+
+  /**
+   * Out of the viewer.
+   *
+   * Back rather than a navigate, because the viewer is almost always reached by
+   * tapping a tile: back returns to the shelf, scrolled where it was left, which
+   * a fresh navigate to /players cannot do. A deep link has nothing behind it in
+   * this tab, and lands in the vault instead.
+   */
+  const closeViewer = () => {
+    if (canGoBack) router.history.back();
+    else void navigate({ to: "/players" });
+  };
+
+  /** Down to the stats, in place — the viewer is the page you came for. */
+  const showDetails = () =>
+    void navigate({ to: ".", search: (old) => ({ ...old, view: undefined }), replace: true });
+
+  /**
+   * Back up to the card, and PUSHED rather than replaced.
+   *
+   * `showDetails` replaces, because dropping to the stats is staying on the same
+   * card. Coming back up is not the mirror of that: replacing here would spend
+   * the details entry, and then Close — which is `history.back()` — would skip
+   * straight past the page you opened the viewer from and land in the vault.
+   * Pushed, Close returns to exactly what was underneath.
+   */
+  const openViewer = () =>
+    void navigate({ to: ".", search: (old) => ({ ...old, view: 1 as const }) });
+
+  /**
+   * A swipe inside the viewer.
+   *
+   * `replace`, because a swipe through a stack of cards is browsing one surface
+   * rather than visiting thirteen pages: pushing an entry each time would make
+   * Back mean "the card before this one" and strand the vault thirteen taps away
+   * from a thumb that has walked the roster.
+   */
+  const stepViewer = (next: number) => {
+    const target = viewerCards[next];
+    if (!target || target.id === id) return;
+    setFlipped(false);
+    void navigate({
+      to: "/players/$id",
+      params: { id: target.id },
+      search: { view: 1 as const },
+      replace: true,
+    });
+  };
+
+  /** Off to the Trading Post with this card already in mind — §6. */
+  const goTrade = (side: "give" | "want") => {
+    setTradeIntent({ side, kind: "roster", eventParticipantId: ep.id });
+    void navigate({ to: "/players/trade" });
+  };
   const photoUrl = photos.data?.[ep.id] ?? ep.participant?.profile_image_url ?? null;
   const { bestRun, rank } = stats;
 
@@ -543,47 +585,55 @@ function PlayerCardPage() {
   ];
 
   return (
-    // Every tier-coloured thing below reads `--tier` off this node rather than
-    // taking a prop, so one variable retints the whole page.
-    <div
-      className="card-bg relative min-h-[calc(100dvh-8rem)]"
-      style={
-        { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
-      }
-    >
-      {/* The same banner five other screens show. This one watches the event
+    <>
+      {/* Every tier-coloured thing below reads `--tier` off this node rather than
+          taking a prop, so one variable retints the whole page. */}
+      <div
+        className="card-bg relative min-h-[calc(100dvh-8rem)]"
+        style={
+          { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
+        }
+        // The details page is covered by the viewer, not gone: without this its
+        // controls stay in the tab order and in the accessibility tree behind it,
+        // which among other things puts a second "More actions" on the screen.
+        // `inert` rather than unmounting — a page that unmounts and remounts on
+        // every Details tap loses its scroll position and refires its queries.
+        // Same tool site-nav.tsx reaches for while a ceremony has the screen.
+        inert={viewing}
+      >
+        {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
           with no signal is the exact failure the health states exist for. */}
-      {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
-      {/* The one coloured light on this page, and it is the player's own tier
+        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+        {/* The one coloured light on this page, and it is the player's own tier
           rather than the house cyan — a champion's page glows gold and a DNF's
           barely glows. It used to sit over circuit-bg, whose own hard-coded
           cyan bloom it had to wash out; card-bg has no bloom of its own, so
           this now lands on a flat ground and only has to be seen. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[70vh]"
-        style={{
-          background:
-            "radial-gradient(ellipse 65% 55% at 50% 20%, color-mix(in oklab, var(--tier) 24%, transparent) 0%, transparent 70%)",
-        }}
-      />
-      <div className="relative mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-2 flex items-center justify-between gap-3 sm:mb-4 sm:items-start">
-          <Link
-            to="/players"
-            className="-ml-2 inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Vault
-          </Link>
-          {/* One pill. A special finish takes the headline in its own metal and
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[70vh]"
+          style={{
+            background:
+              "radial-gradient(ellipse 65% 55% at 50% 20%, color-mix(in oklab, var(--tier) 24%, transparent) 0%, transparent 70%)",
+          }}
+        />
+        <div className="relative mx-auto max-w-3xl px-4 py-6">
+          <div className="mb-2 flex items-center justify-between gap-3 sm:mb-4 sm:items-start">
+            <Link
+              to="/players"
+              className="-ml-2 inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Vault
+            </Link>
+            {/* One pill. A special finish takes the headline in its own metal and
               pushes the tier to the line beneath — see cardBadge. A locked card
               never shows a finish: it is unknown, and would be the biggest
               spoiler on the page. */}
-          <CardRibbon rarity={rarity} edition={locked ? "standard" : edition} />
-        </div>
+            <CardRibbon rarity={rarity} edition={locked ? "standard" : edition} />
+          </div>
 
-        {/*
+          {/*
           The chevrons overlay the card's margins rather than sitting in a flex
           row with it, which squeezed the card. That only works where there are
           margins to overlay: on a phone the slab fills the column and the
@@ -592,164 +642,179 @@ function PlayerCardPage() {
           claims the whole touch gesture and can't also answer to a swipe — is
           the phone's way between cards, along with the arrow keys.
         */}
-        <div className="relative">
-          <div className="mx-auto w-full max-w-sm">
-            <CardSlab
-              eventName={event?.name ?? "Draft Combine"}
-              eventYear={event?.year ?? null}
-              serial={ep.running_order}
-              ofTotal={roster.length}
-              collected={collection[ep.id] ?? null}
-              leagueLine={packedByLabel(pullCounts.data?.[ep.id])}
-            >
-              {/* The slab stays either way — its plate carries the serial and
+          <div className="relative">
+            <div className="mx-auto w-full max-w-sm">
+              <CardSlab
+                eventName={event?.name ?? "Draft Combine"}
+                eventYear={event?.year ?? null}
+                serial={ep.running_order}
+                ofTotal={roster.length}
+                collected={collection[ep.id] ?? null}
+                leagueLine={packedByLabel(pullCounts.data?.[ep.id])}
+              >
+                {/* The slab stays either way — its plate carries the serial and
                   the collection mark, and both are still true of a card you have
                   not pulled. No ZoomPanFrame around a locked one: there is
                   nothing to pinch, and nothing under the swipe worth reaching. */}
-              {locked ? (
-                <div className="flex flex-col items-center gap-3">
-                  <LockedCard back={cardBack.data?.urls ?? null} name={name} />
-                  <Link to="/players/pack" className="neon-btn-sm">
-                    <PackageOpen className="h-4 w-4" />
-                    Rip a pack to see this card
-                  </Link>
-                </div>
-              ) : (
-                <ZoomPanFrame
-                  onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
-                  onTap={() => {
-                    // The zoom frame swallows the click, so HoloCard's own
-                    // toggle — and the sound that rides on it — never fires
-                    // on either full-size surface.
-                    playFlip();
-                    setFlipped((f) => !f);
-                  }}
-                  canNavigate={roster.length > 1}
-                  prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
-                  nextLabel={`Next: ${next?.participant?.name ?? ""}`}
-                  position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
-                  hint="Pinch to zoom · swipe for the next card"
-                >
-                  {({ zoomed }) => (
-                    <HoloCard
-                      frontUrl={urls?.front ?? null}
-                      backUrl={urls?.back ?? null}
-                      name={name}
-                      rarity={rarity}
-                      edition={edition}
-                      flipped={flipped}
-                      onFlippedChange={setFlipped}
-                      gyro={gyro}
-                      tilt="hero"
-                      // While magnified the frame owns the pointer; a card leaning
-                      // under a pan would make the thing you are reading move.
-                      interactive={!zoomed}
-                      flickToFlip={false}
-                      backContent={
-                        <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} edition={edition} />
-                      }
-                    />
-                  )}
-                </ZoomPanFrame>
-              )}
-            </CardSlab>
-          </div>
-          <NavButton
-            onClick={() => go(prev?.id)}
-            label={`Previous: ${prev?.participant?.name ?? ""}`}
-            icon={<ChevronLeft className="h-5 w-5" />}
-            disabled={roster.length < 2 || sharing}
-            className="left-0"
-          />
-          <NavButton
-            onClick={() => go(next?.id)}
-            label={`Next: ${next?.participant?.name ?? ""}`}
-            icon={<ChevronRight className="h-5 w-5" />}
-            disabled={roster.length < 2 || sharing}
-            className="right-0"
-          />
-        </div>
-
-        <div className="mt-4 text-center">
-          <h1 className="font-display text-3xl font-black uppercase leading-none">{name}</h1>
-          {ep.participant?.fantasy_team_name && (
-            <div className="mt-1 text-meta text-muted-foreground">
-              {ep.participant.fantasy_team_name}
-            </div>
-          )}
-          {myTrophies.length > 0 && (
-            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-              {myTrophies.map((t) => (
-                <span
-                  key={t.collection}
-                  className="inline-flex min-h-11 items-center gap-1 rounded-full border px-3 text-label font-bold uppercase tracking-[0.08em]"
-                  style={{
-                    borderColor: TROPHY_RARITY.border,
-                    color: TROPHY_RARITY.accent,
-                    background: "oklch(0.82 0.19 85 / 10%)",
-                  }}
-                  // The pills below link to /awards; these link nowhere, because a
-                  // set's contents are still nobody's business. The trophy says it
-                  // was finished and how big it was, and that is the whole story.
-                  title={`${t.label} — ${trophySizeLabel(t.size)}`}
-                >
-                  <Medal aria-hidden className="h-3 w-3" />
-                  {t.label} · {t.size}
-                </span>
-              ))}
-            </div>
-          )}
-          {myAwards.length > 0 && (
-            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-              {myAwards.map((a) => {
-                const cat = a.award_type ? awardCategory(a.award_type) : undefined;
-                return (
-                  <Link
-                    key={`${a.award_type}-${a.award_name}`}
-                    to="/awards"
-                    className="inline-flex min-h-11 items-center gap-1 rounded-full border border-warn/50 bg-warn/10 px-3 text-label font-bold uppercase tracking-[0.08em] text-warn hover:bg-warn/20"
+                {locked ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <LockedCard back={cardBack.data?.urls ?? null} name={name} />
+                    <Link to="/players/pack" className="neon-btn-sm">
+                      <PackageOpen className="h-4 w-4" />
+                      Rip a pack to see this card
+                    </Link>
+                  </div>
+                ) : (
+                  <ZoomPanFrame
+                    onSwipe={(dir) => go(dir === 1 ? next?.id : prev?.id)}
+                    onTap={() => {
+                      // The zoom frame swallows the click, so HoloCard's own
+                      // toggle — and the sound that rides on it — never fires
+                      // on either full-size surface.
+                      playFlip();
+                      setFlipped((f) => !f);
+                    }}
+                    canNavigate={roster.length > 1}
+                    prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
+                    nextLabel={`Next: ${next?.participant?.name ?? ""}`}
+                    position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
+                    hint="Pinch to zoom · swipe for the next card"
                   >
-                    <span aria-hidden>{cat?.icon ?? "🏅"}</span>
-                    {a.award_name}
-                  </Link>
-                );
-              })}
+                    {({ zoomed }) => (
+                      <HoloCard
+                        frontUrl={urls?.front ?? null}
+                        backUrl={urls?.back ?? null}
+                        name={name}
+                        rarity={rarity}
+                        edition={edition}
+                        flipped={flipped}
+                        onFlippedChange={setFlipped}
+                        gyro={gyro}
+                        tilt="hero"
+                        // While magnified the frame owns the pointer; a card leaning
+                        // under a pan would make the thing you are reading move.
+                        interactive={!zoomed}
+                        flickToFlip={false}
+                        backContent={
+                          <CardBackPanel
+                            ep={ep}
+                            bundle={bundle}
+                            rarity={rarity}
+                            edition={edition}
+                          />
+                        }
+                      />
+                    )}
+                  </ZoomPanFrame>
+                )}
+              </CardSlab>
             </div>
-          )}
-        </div>
+            <NavButton
+              onClick={() => go(prev?.id)}
+              label={`Previous: ${prev?.participant?.name ?? ""}`}
+              icon={<ChevronLeft className="h-5 w-5" />}
+              disabled={roster.length < 2 || sharing}
+              className="left-0"
+            />
+            <NavButton
+              onClick={() => go(next?.id)}
+              label={`Next: ${next?.participant?.name ?? ""}`}
+              icon={<ChevronRight className="h-5 w-5" />}
+              disabled={roster.length < 2 || sharing}
+              className="right-0"
+            />
+          </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          {/* The three that act on the card itself are dead while it is
+          {/* The way back up. §6 makes the viewer the default for a tap, but a
+            /players/$id link dropped in the group chat lands here, and the card
+            is still the thing somebody opened it for. */}
+          <div className="mt-4 flex justify-center">
+            <button type="button" onClick={openViewer} className="neon-btn-sm">
+              <Maximize2 className="h-4 w-4" />
+              View full screen
+            </button>
+          </div>
+
+          <div className="mt-4 text-center">
+            <h1 className="font-display text-3xl font-black uppercase leading-none">{name}</h1>
+            {ep.participant?.fantasy_team_name && (
+              <div className="mt-1 text-meta text-muted-foreground">
+                {ep.participant.fantasy_team_name}
+              </div>
+            )}
+            {myTrophies.length > 0 && (
+              <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                {myTrophies.map((t) => (
+                  <span
+                    key={t.collection}
+                    className="inline-flex min-h-11 items-center gap-1 rounded-full border px-3 text-label font-bold uppercase tracking-[0.08em]"
+                    style={{
+                      borderColor: TROPHY_RARITY.border,
+                      color: TROPHY_RARITY.accent,
+                      background: "oklch(0.82 0.19 85 / 10%)",
+                    }}
+                    // The pills below link to /awards; these link nowhere, because a
+                    // set's contents are still nobody's business. The trophy says it
+                    // was finished and how big it was, and that is the whole story.
+                    title={`${t.label} — ${trophySizeLabel(t.size)}`}
+                  >
+                    <Medal aria-hidden className="h-3 w-3" />
+                    {t.label} · {t.size}
+                  </span>
+                ))}
+              </div>
+            )}
+            {myAwards.length > 0 && (
+              <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                {myAwards.map((a) => {
+                  const cat = a.award_type ? awardCategory(a.award_type) : undefined;
+                  return (
+                    <Link
+                      key={`${a.award_type}-${a.award_name}`}
+                      to="/awards"
+                      className="inline-flex min-h-11 items-center gap-1 rounded-full border border-warn/50 bg-warn/10 px-3 text-label font-bold uppercase tracking-[0.08em] text-warn hover:bg-warn/20"
+                    >
+                      <span aria-hidden>{cat?.icon ?? "🏅"}</span>
+                      {a.award_name}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {/* The three that act on the card itself are dead while it is
               face-down — there is no face to turn, export or line up against
               another. The settings below them still apply to the card you get. */}
-          <ActionButton
-            onClick={() => {
-              playFlip();
-              setFlipped((f) => !f);
-            }}
-            active={flipped}
-            disabled={locked}
-            icon={<RotateCw className="h-3.5 w-3.5" />}
-          >
-            {flipped ? "Front" : urls?.back ? "Flip" : "Stats"}
-          </ActionButton>
-          <ActionButton
-            onClick={onShare}
-            disabled={locked || sharing}
-            icon={<Share2 className="h-3.5 w-3.5" />}
-          >
-            {sharing ? "Rendering…" : "Share"}
-          </ActionButton>
-          <ActionButton
-            onClick={() => setComparing(!comparing)}
-            active={comparing}
-            icon={<GitCompareArrows className="h-3.5 w-3.5" />}
-            disabled={locked || roster.length < 2}
-          >
-            Compare
-          </ActionButton>
+            <ActionButton
+              onClick={() => {
+                playFlip();
+                setFlipped((f) => !f);
+              }}
+              active={flipped}
+              disabled={locked}
+              icon={<RotateCw className="h-3.5 w-3.5" />}
+            >
+              {flipped ? "Front" : urls?.back ? "Flip" : "Stats"}
+            </ActionButton>
+            <ActionButton
+              onClick={onShare}
+              disabled={locked || sharing}
+              icon={<Share2 className="h-3.5 w-3.5" />}
+            >
+              {sharing ? "Rendering…" : "Share"}
+            </ActionButton>
+            <ActionButton
+              onClick={() => setComparing(!comparing)}
+              active={comparing}
+              icon={<GitCompareArrows className="h-3.5 w-3.5" />}
+              disabled={locked || roster.length < 2}
+            >
+              Compare
+            </ActionButton>
 
-          {/*
+            {/*
             Six chips wrapped to three rows on a phone and pushed the stats and
             the filmstrip off the fold. The three that are settings rather than
             actions fold behind the overflow there; a wide screen has the room
@@ -758,150 +823,187 @@ function PlayerCardPage() {
             Breakpoint classes rather than useIsMobile: the hook's first render
             is always `false`, which would flash the full row on a phone.
           */}
-          <div className="hidden items-center gap-2 sm:flex">
-            {secondary.map((a) => (
-              <ActionButton
-                key={a.key}
-                onClick={a.onClick}
-                active={a.active}
-                toggle={a.key !== "copy"}
-                icon={a.icon}
-              >
-                {a.label}
-              </ActionButton>
-            ))}
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                aria-label="More actions"
-                className="tier-chip inline-flex h-11 w-11 items-center justify-center rounded-full border sm:hidden"
-              >
-                <MoreHorizontal className="h-3.5 w-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center" className="min-w-[10rem]">
+            <div className="hidden items-center gap-2 sm:flex">
               {secondary.map((a) => (
-                // On a phone these live inside menu items, which carry no
-                // pressed state at all — so the checkbox role is what makes
-                // "Tilt is on" expressible here.
-                <DropdownMenuItem
+                <ActionButton
                   key={a.key}
-                  onSelect={a.onClick}
-                  role={a.key === "copy" ? undefined : "menuitemcheckbox"}
-                  aria-checked={a.key === "copy" ? undefined : !!a.active}
-                  className="min-h-11 gap-2 text-label font-bold uppercase tracking-[0.08em]"
+                  onClick={a.onClick}
+                  active={a.active}
+                  toggle={a.key !== "copy"}
+                  icon={a.icon}
                 >
-                  {a.icon}
                   {a.label}
-                </DropdownMenuItem>
+                </ActionButton>
               ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {ep.participant?.trash_talk_quote && (
-          <blockquote
-            className="mx-auto mt-6 max-w-md border-l-2 pl-4 text-sm italic text-muted-foreground"
-            style={{ borderColor: "var(--tier)" }}
-          >
-            “{ep.participant.trash_talk_quote}”
-          </blockquote>
-        )}
-
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Order" value={`#${ep.running_order}`} />
-          <StatTile
-            label="Pick"
-            value={ep.selected_draft_position != null ? `#${ep.selected_draft_position}` : "—"}
-          />
-          <StatTile label="Time" value={countedTime != null ? formatTime(countedTime) : "—"} mono />
-          <StatTile
-            label="Rank"
-            value={countedRank != null ? `#${Math.max(1, Math.round(countedRank))}` : "—"}
-          />
-        </div>
-
-        <FieldComparison ladder={stats.ladder} rank={rank} fieldSize={stats.fieldSize} />
-
-        <RosterFilmstrip entries={filmstrip} currentId={ep.id} onSelect={go} />
-
-        {event?.id && (
-          <CardSocial
-            eventId={event.id}
-            eventParticipantId={ep.id}
-            reactions={cardReactions}
-            comments={cardComments}
-            nameOf={nameOf}
-          />
-        )}
-
-        {/* Your own numbers, on your own card only. `ready` keeps the inflated
-            pre-prune count from ever reaching the screen. */}
-        {mine.ready && member?.participantId === ep.participant_id && (
-          <PackStats
-            packsOpened={mine.packsOpened}
-            collectedCount={mine.collectedCount}
-            rosterSize={roster.length}
-            dupes={mine.dupes}
-            firstPackOn={mine.firstPackOn}
-            best={bestPull}
-          />
-        )}
-
-        {qrUrl && (
-          <div className="mt-8 flex flex-col items-center gap-2">
-            <div className="flex items-center gap-1.5 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
-              <QrCode className="h-3.5 w-3.5" /> Scan on the printed card
             </div>
-            <img
-              src={qrUrl}
-              alt={`QR code linking to ${name}'s card`}
-              className="rounded-lg border border-primary/30"
-              width={140}
-              height={140}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  aria-label="More actions"
+                  className="tier-chip inline-flex h-11 w-11 items-center justify-center rounded-full border sm:hidden"
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="min-w-[10rem]">
+                {secondary.map((a) => (
+                  // On a phone these live inside menu items, which carry no
+                  // pressed state at all — so the checkbox role is what makes
+                  // "Tilt is on" expressible here.
+                  <DropdownMenuItem
+                    key={a.key}
+                    onSelect={a.onClick}
+                    role={a.key === "copy" ? undefined : "menuitemcheckbox"}
+                    aria-checked={a.key === "copy" ? undefined : !!a.active}
+                    className="min-h-11 gap-2 text-label font-bold uppercase tracking-[0.08em]"
+                  >
+                    {a.icon}
+                    {a.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {ep.participant?.trash_talk_quote && (
+            <blockquote
+              className="mx-auto mt-6 max-w-md border-l-2 pl-4 text-sm italic text-muted-foreground"
+              style={{ borderColor: "var(--tier)" }}
+            >
+              “{ep.participant.trash_talk_quote}”
+            </blockquote>
+          )}
+
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile label="Order" value={`#${ep.running_order}`} />
+            <StatTile
+              label="Pick"
+              value={ep.selected_draft_position != null ? `#${ep.selected_draft_position}` : "—"}
             />
+            <StatTile
+              label="Time"
+              value={countedTime != null ? formatTime(countedTime) : "—"}
+              mono
+            />
+            <StatTile
+              label="Rank"
+              value={countedRank != null ? `#${Math.max(1, Math.round(countedRank))}` : "—"}
+            />
+          </div>
+
+          <FieldComparison ladder={stats.ladder} rank={rank} fieldSize={stats.fieldSize} />
+
+          <RosterFilmstrip entries={filmstrip} currentId={ep.id} onSelect={go} />
+
+          {event?.id && (
+            <CardSocial
+              eventId={event.id}
+              eventParticipantId={ep.id}
+              reactions={cardReactions}
+              comments={cardComments}
+              nameOf={nameOf}
+            />
+          )}
+
+          {/* Your own numbers, on your own card only. `ready` keeps the inflated
+            pre-prune count from ever reaching the screen. */}
+          {mine.ready && member?.participantId === ep.participant_id && (
+            <PackStats
+              packsOpened={mine.packsOpened}
+              collectedCount={mine.collectedCount}
+              rosterSize={roster.length}
+              dupes={mine.dupes}
+              firstPackOn={mine.firstPackOn}
+              best={bestPull}
+            />
+          )}
+
+          {qrUrl && (
+            <div className="mt-8 flex flex-col items-center gap-2">
+              <div className="flex items-center gap-1.5 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                <QrCode className="h-3.5 w-3.5" /> Scan on the printed card
+              </div>
+              <img
+                src={qrUrl}
+                alt={`QR code linking to ${name}'s card`}
+                className="rounded-lg border border-primary/30"
+                width={140}
+                height={140}
+              />
+            </div>
+          )}
+        </div>
+
+        <CardCompare
+          open={comparing}
+          onOpenChange={setComparing}
+          bundle={bundle}
+          left={{
+            id: ep.id,
+            participantId: ep.participant_id,
+            name,
+            rarity,
+          }}
+          right={comparePool.find((p) => p.id === vs) ?? null}
+          roster={comparePool}
+          onPick={(targetId) =>
+            navigate({
+              to: "/players/$id",
+              params: { id },
+              search: { vs: targetId ?? undefined },
+              replace: true,
+            })
+          }
+        />
+
+        {/* Offscreen 1080x1350 composite that html-to-image rasterises. Never
+          mounted for a locked card: it is an export of the very art being
+          withheld, and Share is disabled anyway. */}
+        {!locked && (
+          // aria-hidden, like the pack summary's equivalent. Mounted for the
+          // whole visit, it put a second copy of every name, time and split on
+          // the page for anybody reading it linearly.
+          <div
+            aria-hidden
+            style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}
+          >
+            <ShareCard ref={shareRef} data={shareData} />
           </div>
         )}
       </div>
 
-      <CardCompare
-        open={comparing}
-        onOpenChange={setComparing}
-        bundle={bundle}
-        left={{
-          id: ep.id,
-          participantId: ep.participant_id,
-          name,
-          rarity,
-        }}
-        right={comparePool.find((p) => p.id === vs) ?? null}
-        roster={comparePool}
-        onPick={(targetId) =>
-          navigate({
-            to: "/players/$id",
-            params: { id },
-            search: { vs: targetId ?? undefined },
-            replace: true,
-          })
-        }
-      />
-
-      {/* Offscreen 1080x1350 composite that html-to-image rasterises. Never
-          mounted for a locked card: it is an export of the very art being
-          withheld, and Share is disabled anyway. */}
-      {!locked && (
-        // aria-hidden, like the pack summary's equivalent. Mounted for the
-        // whole visit, it put a second copy of every name, time and split on
-        // the page for anybody reading it linearly.
-        <div
-          aria-hidden
-          style={{ position: "fixed", top: -10000, left: -10000, pointerEvents: "none" }}
-        >
-          <ShareCard ref={shareRef} data={shareData} />
-        </div>
+      {/* Over everything, and a SIBLING of the page rather than a child of it:
+          the page is `inert` while this is up, and a viewer inside it would be
+          inert too. §6: tapping a card shows the card before anything else, and
+          the page behind is the second step. */}
+      {viewing && (
+        <CardViewer
+          cards={viewerCards}
+          index={index}
+          onStep={stepViewer}
+          onClose={closeViewer}
+          onDetails={showDetails}
+          onShare={onShare}
+          sharing={sharing}
+          // Comparing is a details activity: a vaul drawer over a dialog is two
+          // dismissal gestures deep, and the sheet needs the page's own roster
+          // picker under it either way.
+          onCompare={
+            roster.length < 2
+              ? undefined
+              : () => {
+                  showDetails();
+                  setComparing(true);
+                }
+          }
+          onOffer={() => goTrade("give")}
+          // Only where somebody could actually answer. A card nobody has packed
+          // is not a card with no spares — it is one nobody can hand over, and
+          // "Ask for this card" over it would be a dead end dressed as an offer.
+          onAsk={(pullCounts.data?.[ep.id] ?? 0) > 0 ? () => goTrade("want") : undefined}
+        />
       )}
-    </div>
+    </>
   );
 }
 
@@ -930,60 +1032,6 @@ function NavButton({
     >
       {icon}
     </button>
-  );
-}
-
-/**
- * Tier badge in the page header. The label alone never said what it meant —
- * "Station King" is only a flex if you know it's the fastest split at a station,
- * so the reason rides along underneath — everywhere but a phone, where the pill
- * shrinks to the label and the reason would be a third line of chrome above a
- * card that has none of the screen left.
- */
-/**
- * The one badge in the page header.
- *
- * A standard finish reads exactly as it always did — tier word, reason under it,
- * in the tier colour. A special finish takes the headline in its own metal and
- * demotes the tier to the line beneath, and swaps the card glyph for sparkles,
- * because the finish is luck rather than something somebody did on the course.
- */
-function CardRibbon({ rarity, edition }: { rarity: Rarity; edition: Edition }) {
-  const badge = cardBadge(
-    { label: rarity.label, reason: TIER_REASON[rarity.tier] ?? "", accent: rarity.accent },
-    edition,
-  );
-  // The tier and the finish keep separate custom properties on purpose — two
-  // axes, never merged — so the ribbon picks whichever one it is wearing.
-  const c = badge.isEdition ? "var(--edn)" : "var(--tier)";
-  return (
-    <div
-      className="flex min-w-0 items-center gap-2 rounded-full border py-1 pl-2.5 pr-3 sm:py-1.5 sm:pl-3 sm:pr-3.5"
-      style={{
-        borderColor: `color-mix(in oklab, ${c} 45%, transparent)`,
-        background: `color-mix(in oklab, ${c} 10%, transparent)`,
-        boxShadow: `0 0 24px -8px ${c}`,
-      }}
-    >
-      {badge.isEdition ? (
-        <Sparkles className="h-4 w-4 shrink-0" style={{ color: c }} />
-      ) : (
-        <IdCard className="h-4 w-4 shrink-0" style={{ color: c }} />
-      )}
-      <div className="min-w-0 leading-tight">
-        <div
-          className="font-display truncate text-badge font-black uppercase tracking-[0.08em]"
-          style={{ color: c }}
-        >
-          {badge.headline}
-        </div>
-        {/* On a finish this is the pull rate and nothing else — the tier is not
-            repeated under its own metal. */}
-        <div className="hidden truncate text-meta font-semibold text-muted-foreground sm:block">
-          {badge.isEdition ? (editionOddsLabel(edition) ?? "") : badge.sub}
-        </div>
-      </div>
-    </div>
   );
 }
 
