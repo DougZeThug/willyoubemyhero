@@ -43,6 +43,37 @@ async function oldCopy(participantId: string, ep: string): Promise<string> {
   return row.id;
 }
 
+/** A member who has actually claimed their player, which trading requires. */
+async function claimed(participantId: string) {
+  await sql(
+    `INSERT INTO public.member_codes (participant_id, code_salt, code_hash, claimed_at)
+     VALUES ($1, 'salt', 'hash', now())
+     ON CONFLICT (participant_id) DO UPDATE SET claimed_at = now()`,
+    [participantId],
+  );
+}
+
+/**
+ * N copies of one card, then the derived card_pulls row.
+ *
+ * `source = 'backfill'` so `acquired_on` stays null and these never meet
+ * card_copies_one_pull_per_day — seeding several copies of one card for one person
+ * is the normal case here and would otherwise collide.
+ */
+async function giveCopies(participantId: string, ep: string, count: number): Promise<string[]> {
+  const ids: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const [row] = await sql<{ id: string }>(
+      `INSERT INTO public.card_copies (participant_id, event_participant_id, source)
+       VALUES ($1, $2, 'backfill') RETURNING id`,
+      [participantId, ep],
+    );
+    ids.push(row.id);
+  }
+  await sql("SELECT public.resync_card_pull($1, $2)", [participantId, ep]);
+  return ids;
+}
+
 async function copyRow(id: string) {
   const [row] = await sql<{ created_at: string; acquired_at: string; participant_id: string }>(
     "SELECT created_at, acquired_at, participant_id FROM public.card_copies WHERE id = $1",
@@ -89,6 +120,53 @@ describe("card_copies.acquired_at", () => {
     // The mint is history and stays history: the finish travelled with the copy,
     // and so does the date it was rolled.
     expect(await agoSeconds(after.created_at)).toBeGreaterThan(60);
+  });
+
+  it("is stamped by a REAL accept, not only by a hand-written UPDATE", async () => {
+    // The end-to-end case, and the one that actually justifies the trigger. Every
+    // test above drives the owner column directly, so they would all keep passing
+    // if accept_trade_offer stopped re-parenting the row — recreated it, say, or
+    // moved ownership some other way — while the strip silently went blank for the
+    // one arrival it exists for. This drives the real RPC.
+    const [ep, other] = await sql<{ id: string }>(
+      "SELECT id FROM public.event_participants ORDER BY running_order LIMIT 2",
+    ).then((rows) => rows.map((r) => r.id));
+
+    await claimed(IDS.alice);
+    await claimed(IDS.bob);
+    // Two copies a side, because only a spare can be offered.
+    const [aliceSpare] = await giveCopies(IDS.alice, ep!, 2);
+    const [bobSpare] = await giveCopies(IDS.bob, other!, 2);
+    // Aged, so a stamp is unmistakable against the mint.
+    await sql(
+      "UPDATE public.card_copies SET created_at = now() - interval '30 days', acquired_at = now() - interval '30 days' WHERE id = ANY($1)",
+      [[aliceSpare, bobSpare]],
+    );
+
+    const [offer] = await sql<{ create_trade_offer: { ok: boolean; offerId: string } }>(
+      "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [
+        IDS.alice,
+        IDS.bob,
+        IDS.event,
+        JSON.stringify([{ kind: "roster", cardCopyId: aliceSpare }]),
+        JSON.stringify([{ kind: "roster", cardCopyId: bobSpare }]),
+      ],
+    );
+    const [accepted] = await sql<{ accept_trade_offer: { ok: boolean; reason?: string } }>(
+      "SELECT public.accept_trade_offer($1, $2)",
+      [offer.create_trade_offer.offerId, IDS.bob],
+    );
+    expect(accepted.accept_trade_offer.ok).toBe(true);
+
+    // Both copies changed hands, so both clocks restarted — and neither mint did.
+    for (const id of [aliceSpare!, bobSpare!]) {
+      const row = await copyRow(id);
+      expect(await agoSeconds(row.acquired_at)).toBeLessThan(5);
+      expect(await agoSeconds(row.created_at)).toBeGreaterThan(60);
+    }
+    expect((await copyRow(aliceSpare!)).participant_id).toBe(IDS.bob);
+    expect((await copyRow(bobSpare!)).participant_id).toBe(IDS.alice);
   });
 
   it("leaves the clock alone when something else about the copy changes", async () => {
