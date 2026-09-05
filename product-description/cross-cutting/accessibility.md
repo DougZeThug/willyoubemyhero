@@ -209,10 +209,6 @@ The edge cases of this document are its gaps, so they are the whole of it.
 
 ## Open questions and verification
 
-- **The claim in [the sealed pack](../cards/the-sealed-pack.md) that the tear has
-  no keyboard path is wrong at this commit.** The sealed wrapper handles Enter and
-  Space and commits the tear directly. That document should be corrected rather
-  than this one softened.
 - None of this has been run with a real screen reader. Everything here was read
   from markup, labels and comments, and the whole document is a list of
   hypotheses until somebody drives the app with VoiceOver on a phone.
