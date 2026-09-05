@@ -78,7 +78,13 @@ export type RosterAcquisition = {
    * print for a pulled card; never used to order or filter — see below.
    */
   acquiredOn: string | null;
-  /** When the copy landed in this collection. The one instant every source has. */
+  /**
+   * When this copy entered THIS member's collection.
+   *
+   * Restarted on every hand-over by the trigger 20260905120000 installs, so a card
+   * pulled in July and traded over this morning reads this morning — which
+   * `created_at`, the mint, does not.
+   */
   acquiredAt: string;
 };
 
@@ -106,13 +112,14 @@ export type RecentAcquisitions = {
  * them, and a strip that could only ever show the other half is worse than no
  * strip. requireMember() first, before anything reads or writes a header.
  *
- * THE WINDOW IS created_at, NOT acquired_on, and that is not a slip. acquired_on is
- * a date, and 20260817120000, 20260824235152 and 20260830120000 all NULL it when a
- * copy changes hands; adopted copies never had one. Filtering on it would silently
- * drop every traded, bought and granted card — which is precisely the population
- * §12 says the strip exists for, since those are the arrivals no aggregate can
- * place in time. created_at is NOT NULL and is the only column that orders an
- * acquisition.
+ * THE WINDOW IS acquired_at, and neither of the two columns that look like it
+ * would have done. `acquired_on` is a date that every hand-over path NULLs, so a
+ * traded, bought or granted copy has none — precisely the population §12 says the
+ * strip exists for. `created_at` is the MINT time and survives a hand-over
+ * untouched, because accept_trade_offer and buy_market_listing RE-PARENT the
+ * existing row rather than writing a new one, so a card pulled in July and traded
+ * to you this morning still reads July. 20260905120000 adds the column that means
+ * what this needs, and a trigger restarts it on every change of owner.
  */
 export const getRecentAcquisitions = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) =>
@@ -165,16 +172,16 @@ async function recentCopies(
   if (epIds.length === 0) return [];
   const { data, error } = await sb
     .from("card_copies")
-    .select("event_participant_id, edition, source, acquired_on, created_at")
+    .select("event_participant_id, edition, source, acquired_on, acquired_at")
     .eq("participant_id", participantId)
     .in("event_participant_id", epIds)
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
+    .gte("acquired_at", since)
+    .order("acquired_at", { ascending: false })
     .limit(MAX_ROWS)
     .returns<
       Pick<
         CardCopyRow,
-        "event_participant_id" | "edition" | "source" | "acquired_on" | "created_at"
+        "event_participant_id" | "edition" | "source" | "acquired_on" | "acquired_at"
       >[]
     >();
   if (error) throw error;
@@ -183,7 +190,7 @@ async function recentCopies(
     edition: r.edition,
     source: r.source,
     acquiredOn: r.acquired_on,
-    acquiredAt: r.created_at,
+    acquiredAt: r.acquired_at,
   }));
 }
 
@@ -195,12 +202,12 @@ async function recentSecrets(
 ): Promise<SecretAcquisition[]> {
   const { data: pulls, error } = await sb
     .from("secret_card_pulls")
-    .select("secret_card_id, is_duplicate, tier, created_at")
+    .select("secret_card_id, is_duplicate, tier, acquired_at")
     .eq("participant_id", participantId)
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
+    .gte("acquired_at", since)
+    .order("acquired_at", { ascending: false })
     .limit(MAX_ROWS)
-    .returns<Pick<SecretPullRow, "secret_card_id" | "is_duplicate" | "tier" | "created_at">[]>();
+    .returns<Pick<SecretPullRow, "secret_card_id" | "is_duplicate" | "tier" | "acquired_at">[]>();
   if (error) throw error;
   if (!pulls?.length) return [];
 
@@ -232,7 +239,7 @@ async function recentSecrets(
         // secret-cards.functions.ts states and the reason `tier` is on the pull.
         tier: toSecretTier(p.tier),
         duplicate: p.is_duplicate,
-        acquiredAt: p.created_at,
+        acquiredAt: p.acquired_at,
       };
     }),
   );

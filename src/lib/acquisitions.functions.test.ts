@@ -45,7 +45,7 @@ const copy = (over: Record<string, unknown> = {}) => ({
   edition: "gold",
   source: "pull",
   acquired_on: "2026-09-05",
-  created_at: "2026-09-05T09:00:00.000Z",
+  acquired_at: "2026-09-05T09:00:00.000Z",
   ...over,
 });
 
@@ -53,7 +53,7 @@ const pull = (over: Record<string, unknown> = {}) => ({
   secret_card_id: CARD_ID,
   is_duplicate: false,
   tier: "epic",
-  created_at: "2026-09-05T08:00:00.000Z",
+  acquired_at: "2026-09-05T08:00:00.000Z",
   ...over,
 });
 
@@ -160,16 +160,22 @@ describe("getRecentAcquisitions — whose rows", () => {
 });
 
 describe("getRecentAcquisitions — the window", () => {
-  it("windows on created_at, not on acquired_on", async () => {
-    // acquired_on is a date, and every hand-over path NULLs it. Filtering on it
-    // would drop exactly the traded, bought and granted cards this feature exists
-    // to surface.
+  it("windows on acquired_at, not on acquired_on or created_at", async () => {
+    // Neither of the other two would do. acquired_on is a date that every
+    // hand-over path NULLs, so it drops exactly the traded and bought cards this
+    // feature exists to surface; created_at is the MINT time and survives a
+    // hand-over, because a trade re-parents the row rather than writing a new one
+    // — so a card pulled in July and traded over this morning would still read
+    // July and never appear. 20260905120000 is the column that means what this
+    // needs, and asserting the column name here is what stops a future edit
+    // quietly reaching for one of its neighbours.
     withDb({ "card_copies.select": { data: [copy()] } });
     await call();
     for (const table of ["card_copies", "secret_card_pulls"] as const) {
       const query = mock.callsFor(table, "select")[0]!;
-      const gte = query.filters.find((f) => f.method === "gte");
-      expect(gte?.args).toEqual(["created_at", SINCE]);
+      expect(query.filters.find((f) => f.method === "gte")?.args).toEqual(["acquired_at", SINCE]);
+      expect(query.filters.find((f) => f.method === "order")?.args[0]).toBe("acquired_at");
+      expect(query.columns).not.toMatch(/created_at/);
     }
   });
 
@@ -195,10 +201,10 @@ describe("getRecentAcquisitions — the window", () => {
     // The cap is over the ANSWER and not over either query: forty-five roster
     // copies must not be able to push every secret off the strip.
     const copies = Array.from({ length: 45 }, (_, i) =>
-      copy({ created_at: `2026-09-05T${String(10 + i).padStart(2, "0")}:00:00.000Z` }),
+      copy({ acquired_at: `2026-09-05T${String(10 + i).padStart(2, "0")}:00:00.000Z` }),
     );
     const pulls = Array.from({ length: 15 }, (_, i) =>
-      pull({ created_at: `2026-09-05T${String(40 + i).padStart(2, "0")}:00:00.000Z` }),
+      pull({ acquired_at: `2026-09-05T${String(40 + i).padStart(2, "0")}:00:00.000Z` }),
     );
     withDb({
       "card_copies.select": { data: copies },
