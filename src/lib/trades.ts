@@ -134,6 +134,18 @@ export type RosterSpare = {
  */
 export type SecretSpare = {
   pullId: string;
+  /**
+   * `secret_cards.id`, and ONLY where this row's card is one the viewer can
+   * already see — their own spares, or a counterparty's copy of a card they hold
+   * too. Undefined on a concealed row, deliberately: a stable id on an anonymous
+   * card would let somebody correlate the same unknown card across two people's
+   * lists and count how many distinct unknowns are out there, which is a route to
+   * the set size that nothing in this app may give.
+   *
+   * Here so a card can be named by identity rather than by `name`, which is not
+   * unique: two secrets called the same thing would otherwise stage each other.
+   */
+  cardId?: string;
   name: string;
   artUrl: string | null;
   tier: SecretTier;

@@ -28,18 +28,22 @@ export type TradeIntent = {
 } & (
   | { kind: "roster"; eventParticipantId: string }
   /**
-   * A secret travels by NAME, and that is not a shortcut.
+   * A secret travels by ID, with its name behind it.
    *
-   * `getTradeSpares` answers with `{ pullId, name, artUrl, tier, … }` and no card
-   * id at all, so the name is the only handle the viewer and the Trading Post
-   * actually share — and it is the handle a person uses too. A card id would need
-   * widening that response, which is a change to make when something needs it
-   * rather than in passing here.
+   * The name alone is not an identity: `secret_cards.name` has no uniqueness
+   * constraint, and two cards called the same thing would stage each other. So
+   * `getTradeSpares` carries `cardId` on every row whose card the viewer can
+   * already see — which is all of their own, and their own is the only side a
+   * secret intent ever resolves against.
+   *
+   * The name stays as the fallback, for the one case the id cannot cover: a phone
+   * left open across the deploy that added the field, holding a spares response
+   * that has no `cardId` on it at all.
    *
    * `want` is roster-only. A secret you have not pulled does not exist to you, so
    * there is nothing to ask for and no screen that could offer it.
    */
-  | { kind: "secret"; name: string }
+  | { kind: "secret"; secretCardId: string; name: string }
 );
 
 let pending: TradeIntent | null = null;

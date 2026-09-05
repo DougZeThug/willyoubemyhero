@@ -185,6 +185,9 @@ async function hydrateSecrets(
       const card = byId.get(row.secret_card_id);
       out.set(row.id, {
         pullId: row.id,
+        // Gated on `shown` for the reason on the field: an id attached to a card
+        // whose name is being withheld is a handle for counting the catalogue.
+        cardId: shown ? row.secret_card_id : undefined,
         // A retired card still trades; it just has no row left to name it.
         name: card?.name ?? "Secret card",
         // thumb rather than large: these are tiles in a picker, not the reveal.

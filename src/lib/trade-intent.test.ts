@@ -30,10 +30,20 @@ describe("the trade intent", () => {
     });
   });
 
-  it("carries a secret by name, because that is the only handle both ends share", () => {
-    // getTradeSpares answers with { pullId, name, artUrl, tier } and no card id,
-    // so a secret card id here would be a key nothing on the other side can turn.
-    setTradeIntent({ side: "give", kind: "secret", name: "Gary The Grill" });
-    expect(takeTradeIntent()).toEqual({ side: "give", kind: "secret", name: "Gary The Grill" });
+  it("carries a secret by id, with the name behind it", () => {
+    // The name is not an identity — two secrets may share one — so the id leads
+    // and the name is only the fallback for a spares response older than it.
+    setTradeIntent({
+      side: "give",
+      kind: "secret",
+      secretCardId: "secret-gary",
+      name: "Gary The Grill",
+    });
+    expect(takeTradeIntent()).toEqual({
+      side: "give",
+      kind: "secret",
+      secretCardId: "secret-gary",
+      name: "Gary The Grill",
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ChevronUp,
@@ -134,6 +134,24 @@ export function CardViewer({
   // The shared hook takes focus, cycles Tab inside and hands it back on close.
   const surfaceRef = useModalSurface<HTMLDivElement>(!!card);
 
+  /**
+   * One node, wanted two ways: as a ref by the focus trap, and as a value by the
+   * menu below, which needs somewhere to portal to while it renders.
+   *
+   * Memoised, and that is the whole point of it being here rather than inline. A
+   * fresh callback identity every render makes React detach and reattach the ref
+   * on every one of them — so an inline version runs `setSurface(null)` and then
+   * `setSurface(node)` per render, and leans on batching collapsing the pair back
+   * to a no-op to avoid a loop. Stable, it attaches once and detaches on unmount.
+   */
+  const holdSurface = useCallback(
+    (node: HTMLDivElement | null) => {
+      surfaceRef.current = node;
+      setSurface(node);
+    },
+    [surfaceRef],
+  );
+
   // A new card always lands face up, however the last one was left.
   useEffect(() => setFlipped(false), [card?.id]);
 
@@ -247,10 +265,7 @@ export function CardViewer({
 
   return (
     <div
-      ref={(node) => {
-        surfaceRef.current = node;
-        setSurface(node);
-      }}
+      ref={holdSurface}
       tabIndex={-1}
       role="dialog"
       aria-modal="true"

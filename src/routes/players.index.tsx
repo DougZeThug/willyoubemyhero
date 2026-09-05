@@ -1147,7 +1147,12 @@ function PlayersPage() {
           onOffer={() => {
             const card = openSecretCards[openSecretIndex];
             if (!card) return;
-            setTradeIntent({ side: "give", kind: "secret", name: card.name });
+            setTradeIntent({
+              side: "give",
+              kind: "secret",
+              secretCardId: card.id,
+              name: card.name,
+            });
             void navigate({ to: "/players/trade" });
           }}
         />

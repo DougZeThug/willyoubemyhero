@@ -375,13 +375,20 @@ function TradePage() {
   const spareForIntent = useCallback((want: TradeIntent, spares: TradeSpares | undefined) => {
     if (!spares) return null;
     if (want.kind === "secret") {
+      // By id, because two secrets may share a name and staging the wrong card
+      // into a real trade is not a mistake somebody would spot. The name is the
+      // fallback for a spares response older than the id field.
+      const isThisCard = (s: SecretSpare) =>
+        s.cardId ? s.cardId === want.secretCardId : s.name === want.name;
       // Sorted, not found: `getTradeSpares` answers with one row per PULL and no
       // promised order, so somebody holding a mythic and a common of the same
       // card had an arbitrary one of them staged — and half the time it was the
       // mythic, which is the opposite of what the roster side does two lines
-      // down. secretTierRank runs rarest-first, so the last one is the plainest.
+      // down. secretTierRank counts UP from the rarest, so sorting by it
+      // descending puts the plainest at the front and `copies[0]` is the one to
+      // hand over.
       const copies = spares.secrets
-        .filter((s) => s.name === want.name)
+        .filter(isThisCard)
         .sort((a, b) => secretTierRank(b.tier) - secretTierRank(a.tier));
       return copies[0] ? stagedSecret(copies[0]) : null;
     }
