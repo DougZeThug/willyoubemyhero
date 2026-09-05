@@ -15,11 +15,12 @@ face-down slot and a button to go and rip a pack.
 
 ## The simple case
 
-You tap a card in [the vault](the-vault.md). The page arrives tinted in that
-player's tier colour, a chime plays, and if the tier or the finish is worth it,
-confetti goes off. The badge in the top right says "1 of 1 · Fastest official
-time". The slab's plate reads "Collected · Gold" on the left, the event and year
-in the middle, and "3/18" on the right.
+You tap a card in [the vault](the-vault.md) and it opens full-screen, tinted in
+that player's tier colour with a chime and — if the tier or the finish is worth
+it — confetti. A swipe up, or the Details button, drops down to this page: the
+badge in the top right says "1 of 1 · Fastest official time". The slab's plate
+reads "Collected · Gold" on the left, the event and year in the middle, and
+"3/18" on the right.
 
 You tap the card and it turns over: a stat panel with their bib, their order,
 their pick, their official time and every station split as a bar with the gap to
@@ -103,11 +104,13 @@ pack to see this card".
 
 Landing on a card you hold is treated as an event: the tier's chime plays, and
 for a champion, a podium card or any finish of gold or better, confetti in that
-card's own colours. It fires once per card per page load, because arrowing back
-and forth through the roster would otherwise turn a flourish into a machine gun.
-It never fires on a locked card, and never under reduced motion. A cold page load
-has no tap behind it, so the browser keeps the audio suspended and it is silent —
-which is correct rather than something worked around.
+card's own colours. The cue fires in the full-screen viewer the tap opens, not
+on this page, and is keyed on the copy's arrival rather than the page load, so
+it survives a reload; a per-session guard still stops arrowing back and forth
+through the roster from turning a flourish into a machine gun. It never fires
+on a locked card, and never under reduced motion. A cold page load has no tap
+behind it, so the browser keeps the audio suspended and it is silent — which is
+correct rather than something worked around.
 
 ### Leave without acting
 
