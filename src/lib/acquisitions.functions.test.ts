@@ -124,15 +124,18 @@ describe("getRecentAcquisitions — who may ask", () => {
     expect(Date.now() - asked).toBeLessThanOrEqual(24 * 60 * 60 * 1000 + 5_000);
   });
 
-  it("clamps a window from the future rather than refusing it", async () => {
-    // A phone with a skewed clock. Refusing would blank the strip with an error
-    // on the one device that cannot tell why; clamping answers honestly with
-    // what is inside the real day.
+  it("answers a window from the future with the whole day, not with nothing", async () => {
+    // A phone with a skewed clock. Refusing would blank the strip with an error on
+    // the one device that cannot tell why — and clamping FORWARD to now would
+    // blank it just as thoroughly, only quietly. A window this server has not
+    // reached yet is a wrong clock, not a request for nothing.
     withDb({ "card_copies.select": { data: [copy()] } });
-    const soon = new Date(Date.now() + 60 * 60_000).toISOString();
+    const soon = new Date(Date.now() + 26 * 60 * 60_000).toISOString();
     await call({ since: soon });
     const gte = mock.callsFor("card_copies", "select")[0]!.filters.find((f) => f.method === "gte");
-    expect(Date.parse(String(gte?.args[1]))).toBeLessThanOrEqual(Date.now());
+    const asked = Date.parse(String(gte?.args[1]));
+    expect(Date.now() - asked).toBeGreaterThan(23 * 60 * 60_000);
+    expect(Date.now() - asked).toBeLessThanOrEqual(24 * 60 * 60_000 + 5_000);
   });
 
   it("rejects an event id that is not a uuid", async () => {

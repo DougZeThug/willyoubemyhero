@@ -77,14 +77,19 @@ const MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
  *
  * Clamped rather than rejected, deliberately. A phone with a skewed clock sends a
  * window from tomorrow, and refusing it would blank the strip with an error on the
- * one device that cannot tell why; clamping answers honestly with what is inside
- * the real day.
+ * one device that cannot tell why.
+ *
+ * AND CLAMPED TO THE FLOOR, NOT TO NOW, which is the half that matters. A window
+ * this server has not reached yet is a wrong clock, not a request for nothing —
+ * clamping it forward to `now` answers with an empty day, which is the same blank
+ * strip arrived at more quietly. The whole day is the honest answer to a question
+ * that cannot be taken at its word.
  */
 function windowFrom(since: string, now = Date.now()): string {
   const asked = Date.parse(since);
   const floor = now - MAX_WINDOW_MS;
-  if (Number.isNaN(asked)) return new Date(floor).toISOString();
-  return new Date(Math.min(Math.max(asked, floor), now)).toISOString();
+  if (Number.isNaN(asked) || asked > now) return new Date(floor).toISOString();
+  return new Date(Math.max(asked, floor)).toISOString();
 }
 
 export type RosterAcquisition = {

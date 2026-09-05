@@ -681,7 +681,14 @@ function PlayersPage() {
       });
     }
 
-    const arrivedAt = new Map((data.secrets ?? []).map((a) => [a.id, a.acquiredAt]));
+    // FIRST match wins, not last. The rows arrive newest-first and a Map built
+    // from entries keeps the LAST value for a repeated key — so a secret pulled
+    // twice inside the window would be sorted by its older arrival while
+    // `stripSecrets`, which dedupes by keeping the first, drew the newer one.
+    const arrivedAt = new Map<string, string>();
+    for (const a of data.secrets ?? []) {
+      if (!arrivedAt.has(a.id)) arrivedAt.set(a.id, a.acquiredAt);
+    }
     for (const c of stripSecrets) {
       entries.push({
         at: arrivedAt.get(c.id) ?? "",
