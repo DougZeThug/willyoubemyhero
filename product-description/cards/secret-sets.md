@@ -94,9 +94,13 @@ name.
 
 ### Leave without acting
 
-Nothing is recorded. Scrolling the vault, opening a card, swiping through every
-secret you own and leaving writes nothing anywhere: no view count, no last-seen,
-no server call. Looking at your own cards is free.
+Nothing is written to the server while you only look at it. Recent acquisitions
+are read once on arrival so the "new since your last visit" strip has something
+to show, and the strip's baseline timestamp in this browser's storage is seeded
+silently on the first visit and moved only by acting on the strip; apart from
+that seed, scrolling the vault, opening a card, swiping through every secret
+you own and leaving writes nothing else anywhere — no view count, no further
+last-visit bump, no server write. Looking at your own cards is free.
 
 ### The tap that starts something
 
