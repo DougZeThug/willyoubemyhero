@@ -97,17 +97,6 @@ export type SecretDayStatus = {
   resetsAt: string | null;
 };
 
-export type SecretPullResult =
-  | {
-      ok: true;
-      day: string;
-      duplicate: boolean;
-      /** False when this call resumed a pull already spent today. */
-      fresh: boolean;
-      card: SecretCardView;
-    }
-  | { ok: false; reason: "unavailable" };
-
 /**
  * Foil treatments a secret card may wear.
  *
