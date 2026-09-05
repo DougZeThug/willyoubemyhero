@@ -259,6 +259,12 @@ export const DEFAULT_RESPONSES: Responses = {
   // them back. A test that wants the server to have an opinion sets one, the way
   // favourites.spec.ts does.
   getMyCardStats: null,
+  // What arrived since this device last looked (§12). Empty by default, so the
+  // "new since" strip inside the Today card is hidden and no existing spec has to
+  // know the feature exists. `getRecentAcquisitions` is neither a substring of any
+  // key above nor a superset of one — assertDistinctKeys checks, and the rule now
+  // has to hold across every key in this object.
+  getRecentAcquisitions: { roster: [], secrets: [] },
 };
 
 assertDistinctKeys(DEFAULT_RESPONSES);

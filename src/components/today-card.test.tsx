@@ -8,12 +8,25 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TodayCard } from "./today-card";
+import { rarityStyle } from "@/lib/card-rarity";
 import { STREAK_MILESTONES } from "@/lib/streaks";
 import type { StreakStatus } from "@/lib/streaks.functions";
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children, to, ...rest }: { children: React.ReactNode; to: string }) => (
-    <a href={to} {...rest}>
+  // `params` is destructured out rather than spread: the strip's roster links are
+  // `to="/players/$id" params={{ id }}`, and React would otherwise warn about an
+  // unknown attribute on the anchor.
+  Link: ({
+    children,
+    to,
+    params,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    to: string;
+    params?: { id: string };
+  }) => (
+    <a href={params ? to.replace("$id", params.id) : to} {...rest}>
       {children}
     </a>
   ),
@@ -249,5 +262,42 @@ describe("the offer pill", () => {
       "href",
       "/players/trade",
     );
+  });
+});
+
+describe("what arrived since your last visit", () => {
+  const alice = {
+    kind: "roster" as const,
+    id: "ep-alice",
+    name: "Alice Ace",
+    urls: null,
+    rarity: rarityStyle("champion"),
+    edition: "gold" as const,
+    label: "NEW",
+  };
+
+  it("costs no height on the loads it has nothing to say on", () => {
+    // Which is almost all of them, and is why this is the one slot the card does
+    // not reserve: a strip measures ~180px, more than the whole header PR 5
+    // bought back.
+    renderCard({ newCards: [] });
+    expect(screen.queryByTestId("new-since-strip")).not.toBeInTheDocument();
+    expect(screen.queryByText(/new since your last visit/i)).not.toBeInTheDocument();
+  });
+
+  it("sits below every control on the card, so its arrival is never under a thumb", () => {
+    renderCard({ newCards: [alice], streak: streak({ current: 4 }) });
+    const card = screen.getByTestId("today-card");
+    const strip = screen.getByTestId("new-since-strip");
+    const streakSlot = screen.getByTestId("streak-slot");
+    expect(card.lastElementChild!.contains(strip)).toBe(true);
+    expect(streakSlot.compareDocumentPosition(strip)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("draws what arrived, and passes a tap back up", async () => {
+    const onOpenNewCard = vi.fn();
+    renderCard({ newCards: [alice], onOpenNewCard });
+    await userEvent.click(screen.getByRole("link", { name: "Alice Ace — NEW" }));
+    expect(onOpenNewCard).toHaveBeenCalledWith(alice);
   });
 });

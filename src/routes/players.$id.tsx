@@ -68,12 +68,24 @@ import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner } from "@/components/feed-state";
+import { acquisitionWindow } from "@/lib/vault-last-seen";
+import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
+import { markRevealed, readRevealSeen, shouldCelebrate } from "@/lib/reveal-seen";
 
 /**
  * Cards whose reveal has already played this page load.
  *
  * Arrowing back and forth through the roster re-mounts the same card over and
  * over, and a chime on every pass turns a flourish into a machine gun.
+ *
+ * THE FALLBACK NOW, NOT THE RULE. §6: keying the once-guard on module lifetime
+ * meant every fresh session re-fired the chime card by card, and a good card
+ * re-fired the confetti, spending a little of the pack reveal's currency each
+ * time. wwbh:reveal-seen keys it on ACQUISITION instead — but only for a card
+ * whose acquisition this device actually knows about, which is the ones inside
+ * the vault's own "new since" window. A collection built before this shipped, or
+ * a card pulled last month, has no timestamp to key on, and for those this Set is
+ * still the whole guard and still does the job it was written for.
  */
 const revealed = new Set<string>();
 
@@ -223,6 +235,33 @@ function PlayerCardPage() {
     if (locked) setComparing(false);
   }, [locked]);
 
+  /**
+   * When this copy arrived, if anybody knows.
+   *
+   * The plain day rather than "since your last visit", and that is the whole
+   * reason `acquisitionWindow` exists: this page is reached BY TAPPING THE STRIP,
+   * which marks the strip seen — so a window anchored on that instant would
+   * already be empty by the time this read it, and the cue §6 asks for would be
+   * back to firing off the per-session guard on every reload.
+   *
+   * Pinned at mount, so it is the same key the vault mounts and this is served out
+   * of that query's cache rather than costing a second round trip. Null for a card
+   * acquired outside the day — which is most of them, most of the time.
+   */
+  const [since] = useState(() => acquisitionWindow(Date.now()));
+  const acquisitions = useRecentAcquisitions(event?.id ?? null, since);
+  // Genuinely waiting for an answer, rather than holding a query that is disabled
+  // and will never have one — `isPending` alone is true forever for the second.
+  const acquisitionsPending = acquisitions.isPending && acquisitions.fetchStatus === "fetching";
+  const acquiredAt = useMemo(() => {
+    if (!ep) return null;
+    // Newest first off the server, so the first match is the latest copy — which
+    // is the one that makes this an event.
+    return (
+      acquisitions.data?.roster.find((a) => a.eventParticipantId === ep.id)?.acquiredAt ?? null
+    );
+  }, [acquisitions.data, ep]);
+
   // Landing on a card is an event: the tier chime, and a burst in the tier's own
   // colour for the two tiers worth celebrating. A cold page load has no user
   // gesture behind it, so the AudioContext stays suspended and this is silent —
@@ -230,8 +269,21 @@ function PlayerCardPage() {
   useEffect(() => {
     // Never on a locked card. Landing on a face-down slot is the opposite of a
     // payoff, and a chime and confetti over it would celebrate nothing.
-    if (!ep || locked || revealed.has(ep.id)) return;
+    if (!ep || locked) return;
+    // Hold the cue for the one beat it takes to learn whether this card is new.
+    // Firing first and finding out afterwards fires twice, because the answer
+    // landing is itself a re-render.
+    if (acquisitionsPending) return;
+    // The session guard still comes first, and unconditionally: arrowing back and
+    // forth re-mounts the same card, and this is what stops that being a machine
+    // gun whatever the store says.
+    if (revealed.has(ep.id)) return;
+    // Then the device store, which is the half that survives a reload — the whole
+    // point of §6. `false` is "already celebrated"; `null` is "no opinion at all",
+    // and for that the session guard above was the entire decision.
+    if (shouldCelebrate(readRevealSeen(), ep.id, acquiredAt) === false) return;
     revealed.add(ep.id);
+    if (acquiredAt) markRevealed(ep.id, acquiredAt);
     playReveal(rarity.tier);
     playEditionShine(edition);
     // The finish can carry a card the tier never would — same gate as the pack
@@ -258,7 +310,17 @@ function PlayerCardPage() {
     return () => {
       cancelled = true;
     };
-  }, [ep, locked, edition, rarity.tier, rarity.accent, rarity.holoA, rarity.holoB]);
+  }, [
+    ep,
+    locked,
+    edition,
+    rarity.tier,
+    rarity.accent,
+    rarity.holoA,
+    rarity.holoB,
+    acquiredAt,
+    acquisitionsPending,
+  ]);
 
   // Rolled rather than snapped into place. Both return the target verbatim under
   // reduced motion, and null for a player with no official run.

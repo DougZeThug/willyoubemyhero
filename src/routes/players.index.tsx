@@ -24,6 +24,7 @@ import { SecretCardSheet } from "@/components/secret-card-sheet";
 import { VaultSection } from "@/components/vault-section";
 import { VaultHero } from "@/components/vault-hero";
 import { TodayCard } from "@/components/today-card";
+import type { NewSinceItem } from "@/components/new-since-strip";
 import { VaultSortChip, VaultSortSheet } from "@/components/vault-sort-sheet";
 import { MilestoneReveal } from "@/components/milestone-reveal";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
@@ -69,6 +70,13 @@ import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { useIsOnline } from "@/hooks/use-online";
 import { nextLocalMidnight } from "@/lib/pack";
 import { vaultSummaryLine } from "@/lib/vault-summary";
+import {
+  acquisitionWindow,
+  isNewSince,
+  markVaultSeen,
+  useVaultLastSeen,
+} from "@/lib/vault-last-seen";
+import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
 import { urlFromSet } from "@/lib/media";
 
 export const Route = createFileRoute("/players/")({
@@ -194,7 +202,22 @@ function PlayersPage() {
   const pullCounts = useCardPullCounts(event?.id ?? null);
   // An index rather than the card itself: the sheet swipes between secrets, so it
   // needs to know where in the shelf the open one sits.
-  const [openSecret, setOpenSecret] = useState<number | null>(null);
+  //
+  // And WHICH list that index is into, because there are now two. The shelves
+  // swipe `visibleSecrets`, which is built from open shelves only — a secret
+  // opened from the "new since" strip can easily be sitting in a rolled-up one,
+  // and `indexOf` would answer -1 for it. One sheet with two sources rather than
+  // two sheets: two dialogs could both believe they were open.
+  //
+  // The strip's list is SNAPSHOT rather than followed. Opening a card from the
+  // strip also marks the strip seen, which empties it — and a sheet reading a live
+  // list would lose the card out from under the person who just tapped it. The
+  // shelves stay live (`cards: null`), because nothing about opening a shelf card
+  // changes what is on that shelf.
+  const [openSecret, setOpenSecret] = useState<{
+    cards: OwnedSecret[] | null;
+    index: number;
+  } | null>(null);
   // Reorder mode. Off by default and never persisted: it is a thing you turn on
   // for a moment, not a preference — and while it is off a shelf header has one
   // job, which is what stops the arrows being mistapped for the chevron.
@@ -362,6 +385,26 @@ function PlayersPage() {
   // midnight is the one the pack actually re-seals on. See TodayCard's prop doc —
   // these are two clocks and the fallback is the more accurate of the two.
   const nextPackAt = secretStatus.data?.resetsAt ?? nextLocalMidnight(packProgress.now);
+
+  /**
+   * What arrived since this device last looked (§12).
+   *
+   * ONE STABLE QUESTION TO THE SERVER — the last day — and the "since you looked"
+   * part is a filter over the answer. See `acquisitionWindow` for why the narrower
+   * question was the wrong one to ask; the short version is that tapping the strip
+   * is what moves the last-visit instant, and the card page you land on needs the
+   * same rows a moment later.
+   *
+   * The window is PINNED for the visit rather than recomputed off
+   * `packProgress.now`: that clock ticks every second, and a window that moved with
+   * it would mint a new query key every minute for an answer that cannot have
+   * changed. `lastSeen` is null until the store has been read, and null again on a
+   * device that has never stored one — which is the silent first visit, because
+   * `isNewSince` answers false for everything against a null.
+   */
+  const lastSeen = useVaultLastSeen();
+  const [since] = useState(() => acquisitionWindow(Date.now()));
+  const acquisitions = useRecentAcquisitions(event?.id ?? null, since);
 
   const ownedSecrets = useMemo(() => secrets.data?.cards ?? [], [secrets.data]);
   const { ids: favouriteIds, isFavourite, toggle: toggleFavourite } = useVaultFavourites();
@@ -560,6 +603,103 @@ function PlayersPage() {
   );
 
   /**
+   * The secrets the "new since" strip is showing, in the order it shows them.
+   *
+   * Its own list because the strip is not a shelf: `visibleSecrets` walks open
+   * shelves, and a secret that arrived this morning is very often filed in one
+   * that is rolled up. Resolved against `ownedSecrets` rather than built from the
+   * acquisitions response, because the sheet wants a full OwnedSecret — the level,
+   * the count, the people count — and every one of those numbers is already in
+   * hand here. None of them comes from the new server function, which is what
+   * keeps a counting number off that wire entirely.
+   */
+  const stripSecrets = useMemo(() => {
+    const byId = new Map(ownedSecrets.map((c) => [c.id, c]));
+    const seen = new Set<string>();
+    const out: OwnedSecret[] = [];
+    for (const a of acquisitions.data?.secrets ?? []) {
+      if (!isNewSince(a.acquiredAt, lastSeen)) continue;
+      // One tile per CARD. Two pulls of the same secret inside the window are one
+      // arrival wearing a ×2, not two tiles of the same picture.
+      if (seen.has(a.id)) continue;
+      seen.add(a.id);
+      const owned = byId.get(a.id);
+      // A pull whose card has not landed in getMySecrets yet — the two queries
+      // settle independently — is skipped rather than half-drawn.
+      if (owned) out.push(owned);
+    }
+    return out;
+  }, [acquisitions.data, lastSeen, ownedSecrets]);
+
+  /**
+   * The strip itself, shaped for drawing.
+   *
+   * EVERY LABEL IS COMPUTED HERE, from the collection this page has already
+   * reconciled: "×3" is `collected[id].count` for a roster card and
+   * `OwnedSecret.count` for a secret. The server sends neither, and it must not —
+   * a count on that response is one careless addition away from being a count of
+   * the set. §12 asks for exactly these two predicates.
+   */
+  const newCards = useMemo<NewSinceItem[]>(() => {
+    const data = acquisitions.data;
+    if (!data) return [];
+
+    const seen = new Set<string>();
+    const roster: NewSinceItem[] = [];
+    for (const a of data.roster) {
+      // The "since you looked" half, applied here rather than in the query: it is
+      // what makes dismissing the strip instant and free, and what stops the open
+      // secret sheet losing the card underneath it when somebody does.
+      if (!isNewSince(a.acquiredAt, lastSeen)) continue;
+      if (seen.has(a.eventParticipantId)) continue;
+      seen.add(a.eventParticipantId);
+      const p = bundle?.participants.find((x) => x.id === a.eventParticipantId);
+      if (!p) continue;
+      const copies = collected[a.eventParticipantId]?.count ?? 1;
+      roster.push({
+        kind: "roster",
+        id: a.eventParticipantId,
+        name: p.participant?.name ?? "—",
+        urls: cards.data?.[a.eventParticipantId]?.front ?? null,
+        rarity: rarities.get(a.eventParticipantId) ?? rarityStyle("base"),
+        // The finish of THIS copy, which is the one that just arrived — not the
+        // best one held, which is what the shelf tile wears.
+        edition: toEdition(a.edition),
+        label: copies > 1 ? `×${copies}` : "NEW",
+      });
+    }
+
+    const secretItems: NewSinceItem[] = stripSecrets.map((c) => ({
+      kind: "secret",
+      id: c.id,
+      name: c.name,
+      artUrl: c.artUrl,
+      rarity: secretFoil(c.foil, c.borderFx, c.tier),
+      tier: c.tier,
+      label: c.count > 1 ? `×${c.count}` : "NEW",
+    }));
+
+    return [...roster, ...secretItems];
+  }, [acquisitions.data, bundle, cards.data, collected, lastSeen, rarities, stripSecrets]);
+
+  /** Acted on, so there is nothing new any more. A look alone never does this. */
+  const dismissNew = useCallback(() => markVaultSeen(), []);
+
+  const openNewCard = useCallback(
+    (item: NewSinceItem) => {
+      // Before opening, not after: a roster tap navigates away, and a write that
+      // waited for the next render would never happen.
+      const index = stripSecrets.findIndex((c) => c.id === item.id);
+      // Snapshot before the mark, because the mark is what empties `stripSecrets`.
+      if (item.kind === "secret" && index >= 0) {
+        setOpenSecret({ cards: stripSecrets, index });
+      }
+      markVaultSeen();
+    },
+    [stripSecrets],
+  );
+
+  /**
    * A finished set, as a plaque rather than a card.
    *
    * Deliberately not a HoloCard: a set is not a card, and drawing it as one puts
@@ -639,7 +779,7 @@ function PlayersPage() {
             rarity={rarity}
             intensity="subtle"
             interactive={false}
-            onClick={() => setOpenSecret(visibleSecrets.indexOf(s))}
+            onClick={() => setOpenSecret({ cards: null, index: visibleSecrets.indexOf(s) })}
           />
           <FavouriteButton
             name={s.name}
@@ -936,6 +1076,9 @@ function PlayersPage() {
             if (milestone.claimable) void milestone.claim(milestone.claimable.days);
           }}
           tradeUnread={tradeUnread}
+          newCards={newCards}
+          onOpenNewCard={openNewCard}
+          onDismissNew={dismissNew}
         />
 
         {/* Reserved whether or not the collection has reconciled, so the shelves
@@ -943,9 +1086,14 @@ function PlayersPage() {
         <p className="mb-4 min-h-4 text-xs text-muted-foreground">{summary}</p>
 
         <SecretCardSheet
-          cards={visibleSecrets}
-          index={openSecret}
-          onIndexChange={setOpenSecret}
+          cards={openSecret?.cards ?? visibleSecrets}
+          index={openSecret?.index ?? null}
+          // The list travels with the index, so a swipe out of a card opened from
+          // the strip keeps swiping the strip rather than jumping into the shelves
+          // halfway through.
+          onIndexChange={(index) =>
+            setOpenSecret((prev) => ({ cards: prev?.cards ?? null, index }))
+          }
           onOpenChange={(open) => !open && setOpenSecret(null)}
           completedCollections={myCompleted}
         />
