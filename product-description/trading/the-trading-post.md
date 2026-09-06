@@ -238,14 +238,17 @@ whether the cards are open or shut.
   you what you got is not a record of anything. A Declined, Pulled or Expired
   receipt is not an exception: nothing moved, so the other side's cards stay
   face-down, named and levelled but not shown.
-- **A card you have since milled or sold.** Different, and worse: milling or
-  selling deletes the copy outright, and a settled offer's items are wired to
-  the copy rather than to a snapshot of it, so that half of the receipt empties
-  to "Nothing left on this side." permanently. This is the same deletion the
-  edge case above it describes for a live offer, reaching a piece of history
-  that ought to be immutable. Flagged as a defect rather than described as a
-  feature; fixing it needs the item to record what the card WAS, which it does
-  not today.
+- **A card you have since milled or sold.** Different, and worse: that half of
+  the receipt empties to "Nothing left on this side." and never comes back. The
+  same sentence the edge case above shows on a live offer, on a piece of
+  history that ought to be settled. Flagged as a defect rather than described
+  as a feature.
+
+  > Technical note: milling and selling delete the copy, and a settled offer's
+  > items point at the copy rather than at a record of what it was, so the item
+  > goes with it. Trading the card on instead only changes who holds it, which
+  > is why that case keeps its picture and this one does not.
+
 - **A phone handed around.** The screen is whoever the browser says it is. Two
   people sharing one handset share one inbox and one dot.
 
