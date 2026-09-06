@@ -190,6 +190,18 @@ describe("the mystery slot on a set shelf", () => {
     expect(within(petsShelf()).queryByText("3")).toBeNull();
   });
 
+  it("prints the set on the card as well as over the shelf", () => {
+    // A favourite leaves its set's panel for the pinned shelf, and the viewer and
+    // the trade screen have no panels at all — so the card has to carry it.
+    render(<PlayersPage />);
+    // Excluding the shelf's own heading, which says the same word for a different
+    // reason: that one names the panel, these name the cards.
+    const chips = within(petsShelf())
+      .getAllByText("Pets")
+      .filter((el) => el.tagName !== "H2");
+    expect(chips).toHaveLength(PETS.length);
+  });
+
   it("leaves the unsorted pile alone", () => {
     // "Secrets" is a pile, not a set: there is no set behind it that could have
     // more in it, so pointing at a horizon there would be inventing one.

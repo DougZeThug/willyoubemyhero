@@ -19,6 +19,8 @@ import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { getMySecrets } from "@/lib/secret-cards.functions";
 import { BoughtPullReveal } from "@/components/bought-pull-reveal";
 import { LevelPips } from "@/components/level-pips";
+import { SetChip } from "@/components/set-chip";
+import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { PresentationMode } from "@/components/presentation-mode";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import type { OwnedSecret } from "@/lib/secret-cards";
@@ -156,6 +158,7 @@ export function DustShopPanel({
     onError: () => toast("Could not buy that just now"),
   });
 
+  const sets = useSecretCollections();
   const sparesFn = useServerFn(getTradeSpares);
   const spares = useQuery({
     queryKey: ["dust-spares", participantId],
@@ -414,6 +417,10 @@ export function DustShopPanel({
                     <span className="ml-1.5" style={{ color: style.accent }}>
                       {style.label}
                     </span>
+                    {/* Which set you would be selling it out of. Two secrets of
+                        the same level are worth the same dust, so the set is the
+                        only thing on this row that makes them different cards. */}
+                    <SetChip collection={s.collection} sets={sets} className="ml-1.5" />
                     {s.lastCopy && <span className="ml-1.5 text-muted-foreground">last copy</span>}
                   </span>
                   <Button

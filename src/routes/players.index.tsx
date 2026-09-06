@@ -8,6 +8,7 @@ import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { LOCKED_EDITION, LockedCard } from "@/components/locked-card";
 import { MysterySlot } from "@/components/mystery-slot";
+import { SetChip } from "@/components/set-chip";
 import { CardSkeleton } from "@/components/card-skeleton";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
@@ -80,6 +81,7 @@ import {
   useVaultLastSeen,
 } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
+import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { urlFromSet } from "@/lib/media";
 
 export const Route = createFileRoute("/players/")({
@@ -163,14 +165,11 @@ function PlayersPage() {
   // where a card is actually at stake; the vault only ever reads.
   const actor = useSecretActor();
   const secrets = useMySecrets(actor);
-  // The sets, purely for their names and their order — this says nothing about
-  // what is inside one, so the vault's silence about unpulled cards holds.
-  const collectionsFn = useServerFn(getSecretCollections);
-  const collections = useQuery({
-    queryKey: ["secret-collections"],
-    queryFn: () => collectionsFn(),
-    staleTime: 30 * 60_000,
-  });
+  // The sets, purely for their names, their colours and their order — this says
+  // nothing about what is inside one, so the vault's silence about unpulled cards
+  // holds. Shared now with the viewer, the trade screen and the shop, which print
+  // the same names on the same cards.
+  const collections = useSecretCollections();
   // The whole league's trophies, because the same rows badge your card backs and
   // fill your shelf. Public data, so this is the one collection query on this
   // page that is not scoped to whoever is holding the phone.
@@ -471,17 +470,17 @@ function PlayersPage() {
    * the set it came from. Never how many sets exist.
    */
   const secretSetCount = useMemo(
-    () => groupBySecretCollection(ownedSecrets, collections.data?.collections).length,
-    [ownedSecrets, collections.data],
+    () => groupBySecretCollection(ownedSecrets, collections).length,
+    [ownedSecrets, collections],
   );
 
   const secretGroups = useMemo(
     () =>
       groupBySecretCollection(
         ownedSecrets.filter((s) => !pinnedIds.has(secretFavouriteId(s.id))),
-        collections.data?.collections,
+        collections,
       ),
-    [ownedSecrets, pinnedIds, collections.data],
+    [ownedSecrets, pinnedIds, collections],
   );
 
   const sections = useMemo(
@@ -634,6 +633,7 @@ function PlayersPage() {
         name: c.name,
         rarity,
         tier: c.tier,
+        collection: c.collection,
         flavour: c.flavour,
         firstPulledOn: c.firstPulledOn,
         ownerCount: c.ownerCount,
@@ -897,6 +897,10 @@ function PlayersPage() {
                 collection speak the same language. */}
             {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
           </div>
+          {/* On the tile as well as on the shelf above it, because a favourite
+              leaves its set's panel for the pinned shelf and would otherwise
+              arrive there with nothing left saying where it came from. */}
+          <SetChip collection={s.collection} sets={collections} className="mt-1" />
           {packedByLabel(s.ownerCount) && (
             <div className="text-meta font-semibold text-muted-foreground">
               {packedByLabel(s.ownerCount)}

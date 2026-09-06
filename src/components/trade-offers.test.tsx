@@ -10,6 +10,13 @@ import userEvent from "@testing-library/user-event";
 import { TradeOffersPanel } from "./trade-offers";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { TradeOfferView } from "@/lib/trades";
+import { createQueryWrapper } from "@/test/query";
+
+// A provider, because the tiles below now ask for the set list to print the set
+// chip. Nothing in this file asserts on that query — it is the same shared key
+// the vault already holds — but a component that reads TanStack Query cannot be
+// rendered bare, and in the app these never are.
+const { wrapper } = createQueryWrapper();
 
 vi.mock("./holo-card", () => ({
   HoloCard: ({ name }: { name: string }) => <div>{name}</div>,
@@ -62,7 +69,7 @@ function renderPanel(over: Partial<React.ComponentProps<typeof TradeOffersPanel>
     reachableCount: 3,
     ...over,
   };
-  return { props, ...render(<TradeOffersPanel {...props} />) };
+  return { props, ...render(<TradeOffersPanel {...props} />, { wrapper }) };
 }
 
 beforeEach(() => {

@@ -26,6 +26,13 @@ vi.mock("@tanstack/react-router", () => ({
 // jsdom has no Web Audio, and the flip sound rides on every tap.
 vi.mock("@/lib/card-sfx", () => ({ playFlip: vi.fn() }));
 import { playFlip } from "@/lib/card-sfx";
+import { createQueryWrapper } from "@/test/query";
+
+// A provider, because the tiles below now ask for the set list to print the set
+// chip. Nothing in this file asserts on that query — it is the same shared key
+// the vault already holds — but a component that reads TanStack Query cannot be
+// rendered bare, and in the app these never are.
+const { wrapper } = createQueryWrapper();
 
 function roster(over: Partial<Extract<ViewerCard, { kind: "roster" }>> = {}) {
   return {
@@ -50,6 +57,7 @@ function secret(over: Partial<Extract<ViewerCard, { kind: "secret" }>> = {}) {
     name: "Gary The Grill",
     rarity: secretFoil("rosette", "none", "mythic"),
     tier: "mythic",
+    collection: "pets",
     flavour: "Lit at 11am. Still going at 11pm.",
     firstPulledOn: "2026-07-28",
     ownerCount: 3,
@@ -75,7 +83,7 @@ function renderViewer(over: Partial<React.ComponentProps<typeof CardViewer>> = {
     onClose: vi.fn(),
     ...over,
   } satisfies React.ComponentProps<typeof CardViewer>;
-  return { props, ...render(<CardViewer {...props} />) };
+  return { props, ...render(<CardViewer {...props} />, { wrapper }) };
 }
 
 /**

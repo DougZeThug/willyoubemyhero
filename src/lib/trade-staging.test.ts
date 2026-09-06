@@ -33,6 +33,7 @@ const secret = (over: Partial<SecretSpare> = {}): SecretSpare => ({
   name: "Gary The Grill",
   artUrl: null,
   tier: "common",
+  collection: "pets",
   lastCopy: false,
   viewerOwns: true,
   ...over,

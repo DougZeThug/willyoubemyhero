@@ -35,6 +35,7 @@ export const stagedSecret = (s: SecretSpare): Staged => ({
     name: s.name,
     artUrl: s.artUrl,
     tier: s.tier,
+    collection: s.collection,
     lastCopy: s.lastCopy,
     viewerOwns: s.viewerOwns,
   },

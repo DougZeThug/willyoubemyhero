@@ -8,6 +8,8 @@ import type { ImageUrlSet } from "@/lib/media";
 import { secretFoil } from "@/lib/secret-cards";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import { LevelPips } from "@/components/level-pips";
+import { SetChip } from "@/components/set-chip";
+import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { offerStatusLabel, tradeItemsLabel, type TradeItemView, type TradeOfferView } from "@/lib/trades"; // prettier-ignore
 import { cn } from "@/lib/utils";
 
@@ -68,6 +70,7 @@ export function TradeItemTile({
   concealed = false,
   backUrl = null,
 }: TradeItemTileProps) {
+  const sets = useSecretCollections();
   const width = TILE_WIDTH[size];
   const big = size === "lg";
   const roster = item.kind === "roster" ? lookup(item.eventParticipantId) : null;
@@ -132,6 +135,10 @@ export function TradeItemTile({
         {concealed && (
           <div className="text-meta font-semibold text-muted-foreground">Not yours yet</div>
         )}
+        {/* Which shelf it came off, on a screen that has no shelves. Null on a
+            concealed tile because the server withheld it there — a set on a card
+            whose name is being kept back would sort the unknowns into piles. */}
+        {item.kind === "secret" && <SetChip collection={item.collection} sets={sets} />}
         {/* Any secret copy is tradeable now, single or not, so this is the only
             thing standing between somebody and giving away their only mythic.
             A marker rather than a dialog: visible, not in the way. */}

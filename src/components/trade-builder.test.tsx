@@ -11,6 +11,13 @@ import userEvent from "@testing-library/user-event";
 import { TradeBuilder } from "./trade-builder";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { RosterSpare, SecretSpare, TradeSpares } from "@/lib/trades";
+import { createQueryWrapper } from "@/test/query";
+
+// A provider, because the tiles below now ask for the set list to print the set
+// chip. Nothing in this file asserts on that query — it is the same shared key
+// the vault already holds — but a component that reads TanStack Query cannot be
+// rendered bare, and in the app these never are.
+const { wrapper } = createQueryWrapper();
 
 const toast = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
@@ -56,6 +63,7 @@ const secret = (over: Partial<SecretSpare> = {}): SecretSpare => ({
   name: "Gary The Grill",
   artUrl: null,
   tier: "epic",
+  collection: "pets",
   lastCopy: false,
   viewerOwns: true,
   ...over,
@@ -89,7 +97,7 @@ function renderBuilder(over: Partial<React.ComponentProps<typeof TradeBuilder>> 
     onClose: vi.fn(),
     ...over,
   };
-  return { props, ...render(<TradeBuilder {...props} />) };
+  return { props, ...render(<TradeBuilder {...props} />, { wrapper }) };
 }
 
 /** Who → trays, which every test past the first step has to walk. */
