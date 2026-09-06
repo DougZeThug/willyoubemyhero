@@ -319,6 +319,20 @@ export function editionCelebrates(edition: string | null | undefined): boolean {
   return editionRank(edition) <= editionRank("gold");
 }
 
+/**
+ * Whether the finish alone earns the reveal's second beat.
+ *
+ * One rung below `editionCelebrates`, deliberately. Confetti is a party and one
+ * pack in ten is right for it; a quarter-second of held light costs nothing and
+ * is worth spending on a finish that would otherwise only ever be a word in a
+ * caption. Named beside its neighbour rather than written out at the stand for
+ * the same reason that one is: two copies of "which finishes are a big deal"
+ * drift, and the one that drifts is always the quieter one.
+ */
+export function editionEarnsTheBeat(edition: string | null | undefined): boolean {
+  return editionRank(edition) <= editionRank("silver");
+}
+
 /** Exported for the test that pins the table against the advertised rates. */
 export const EDITION_WEIGHTS_BP: Readonly<Record<Edition, number>> = WEIGHT_BP;
 export const EDITION_BP_TOTAL = BP_TOTAL;

@@ -5,11 +5,13 @@
 // behaviour. What is worth pinning is what the flight must never do: put a card
 // on screen that answers a tap before the stand actually owns it, and strand the
 // route waiting for a landing that can never come.
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PackStand } from "./pack-stand";
 import { rarityStyle } from "@/lib/card-rarity";
 import type { PackHandoff } from "@/lib/pack-handoff";
+import { playEditionShine } from "@/lib/card-sfx";
+import { setMatchMedia } from "@/test/setup";
 
 // jsdom has no canvas, and canvas-confetti walks straight into a null 2d
 // context and throws. It is lazily imported, so it only actually runs once a
@@ -19,6 +21,16 @@ vi.mock("@/lib/card-confetti", () => ({
   burst: vi.fn(async () => {}),
   celebrate: vi.fn(async () => {}),
   celebrateSecret: vi.fn(async () => {}),
+}));
+
+// The stand owns the finish's second cue now, so what it plays and *when* is part
+// of this file's contract rather than an implementation detail of the route.
+// `playFlip` is in here because HoloCard reaches for it on every turn; a partial
+// mock would hand it undefined the first time a card moved.
+vi.mock("@/lib/card-sfx", () => ({
+  cue: vi.fn(),
+  playEditionShine: vi.fn(),
+  playFlip: vi.fn(),
 }));
 
 const PACK = [
@@ -34,6 +46,10 @@ const SECRET = {
   artUrl: null,
   foil: null,
   borderFx: null,
+  // Spelled out rather than left to `toSecretTier`'s fallback. It was always
+  // reading as common; now that the level decides whether the card gets a second
+  // beat, the fixture has to say which level it is testing.
+  tier: "common",
 } as unknown as React.ComponentProps<typeof PackStand>["secret"];
 
 /** A deck that was genuinely measured — what a real browser would hand over. */
@@ -481,6 +497,106 @@ describe("the finish on the stand", () => {
     });
     expect(chips(/^(Platinum|Gold|Silver|Bronze)$/i)).toHaveLength(0);
     expect(container.querySelector(".card-edition")).toBeNull();
+  });
+});
+
+/**
+ * The beat between "it's Bob" and "…in Gold".
+ *
+ * A special pull lands on a face held at 60% for a quarter of a second before its
+ * metal comes up, and a common one keeps the single beat it always had. What is
+ * pinned here is which pulls earn the hold and when the finish's cue lands —
+ * never the tuning, which belongs to the tokens and not to a test.
+ *
+ * Real timers, like everything else in this file: the hold is released by a
+ * timeout and let go by a motion exit, and neither ticks under a fake clock.
+ */
+describe("the second beat", () => {
+  const tick = (ms: number) =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+
+  /** The held light. aria-hidden, so a test id is the only honest handle on it. */
+  const held = () => screen.queryByTestId("reveal-beat");
+
+  /** Long enough for the hold, the release and the fade that follows it. */
+  const gone = () => waitFor(() => expect(held()).toBeNull(), { timeout: 4000 });
+
+  it("holds a gold pull dim, then blooms it with its own cue", async () => {
+    renderStand({ revealed: [0], editions: { "ep-1": "gold" } });
+
+    // The card is on screen and the finish is not yet: that gap is the point.
+    expect(held()).not.toBeNull();
+    expect(playEditionShine).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(playEditionShine).toHaveBeenCalledWith("gold"), { timeout: 4000 });
+    await gone();
+  });
+
+  it("gives a standard pull the single beat it always had", async () => {
+    renderStand({ revealed: [0], editions: { "ep-1": "standard" } });
+    expect(held()).toBeNull();
+    await tick(900);
+    expect(held()).toBeNull();
+    expect(playEditionShine).not.toHaveBeenCalled();
+  });
+
+  it("holds nothing for a finish the server has not answered with", async () => {
+    // The `known` guard. An unanswered finish reads as standard, and a beat spent
+    // on the fallback is a promise about a card nobody has decided yet.
+    renderStand({ revealed: [0], editions: {} });
+    await tick(900);
+    expect(held()).toBeNull();
+    expect(playEditionShine).not.toHaveBeenCalled();
+  });
+
+  it("still holds a champion the recording has not reached", () => {
+    // The other half of that guard, and deliberately asymmetric: a champion is a
+    // champion the moment the pack was dealt, so its ceremony must not depend on
+    // how fast the network was.
+    renderStand({
+      revealed: [0],
+      editions: {},
+      rarities: new Map([["ep-1", rarityStyle("champion")]]),
+    });
+    expect(held()).not.toBeNull();
+  });
+
+  it("has no dim and one beat when the device asks for less motion", async () => {
+    setMatchMedia((q) => q.includes("prefers-reduced-motion"));
+    renderStand({ revealed: [0], editions: { "ep-1": "gold" } });
+
+    // The cue is not a motion setting — see the note at the top of card-sfx.ts —
+    // so it lands on the beat the card was turned rather than being dropped.
+    expect(playEditionShine).toHaveBeenCalledWith("gold");
+    await gone();
+  });
+
+  it("holds a Rare secret and leaves its bell where it was", async () => {
+    // The secret's second beat is the ring blooming out of the flash, and nothing
+    // else: its own chime rang at the top of the turn and its impact landed a beat
+    // ago, so a fifth sound here would be noise rather than a second beat.
+    renderStand({
+      cursor: PACK.length,
+      secretSlot: "open",
+      secret: { ...SECRET, tier: "rare" } as typeof SECRET,
+      secretRevealed: true,
+    });
+    expect(held()).not.toBeNull();
+    await gone();
+    expect(playEditionShine).not.toHaveBeenCalled();
+  });
+
+  it("gives a Common secret the single beat", async () => {
+    renderStand({
+      cursor: PACK.length,
+      secretSlot: "open",
+      secret: SECRET,
+      secretRevealed: true,
+    });
+    await tick(900);
+    expect(held()).toBeNull();
   });
 });
 

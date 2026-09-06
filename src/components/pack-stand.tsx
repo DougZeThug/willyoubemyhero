@@ -5,7 +5,7 @@ import { SealedBack } from "@/components/pack-card-back";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { SecretBackPanel } from "@/components/secret-back-panel";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { cardBadge, type Edition } from "@/lib/card-edition";
+import { cardBadge, editionEarnsTheBeat, type Edition } from "@/lib/card-edition";
 import { swipeDirection } from "@/lib/zoom";
 import { StandDeck, StandEntrance } from "@/components/stand-entrance";
 import { RevealAmbience } from "@/components/reveal-ambience";
@@ -13,10 +13,10 @@ import { LevelPips } from "@/components/level-pips";
 import { PullRibbon } from "@/components/pull-ribbon";
 import { ambienceStrength } from "@/lib/reveal-ambience";
 import { burst } from "@/lib/card-confetti";
-import { cue } from "@/lib/card-sfx";
+import { cue, playEditionShine } from "@/lib/card-sfx";
 import { canFly, type PackHandoff, type SlotRect } from "@/lib/pack-handoff";
 import type { SecretCardView } from "@/lib/secret-cards";
-import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
+import { secretTierCaption, secretTierEarnsTheBeat, secretTierStyle } from "@/lib/secret-rarity";
 import { secretTakesTheStand, type SecretSlot } from "@/lib/pack";
 import {
   secretOwnsStage,
@@ -63,6 +63,27 @@ const SLAM_MS = 460;
  */
 const HANDOVER_EXIT_MS = 260;
 
+/**
+ * How far into the turn the face has actually arrived.
+ *
+ * Not a new number: it is the fraction the landing burst has always used, named
+ * here because the second beat has to be measured from the same instant. A card
+ * is front-on well before the rotation stops, and a beat measured from the flip's
+ * full length would begin a quarter-second after the moment it is punctuating.
+ */
+const FACE_LANDS_AT = 0.86;
+
+/**
+ * The beat a special pull is held on before its metal comes up.
+ *
+ * Long enough to read as two events — the card, and then what it turned out to
+ * be — and short enough that nobody standing in a garden thinks it has stalled.
+ */
+const BEAT_MS = 250;
+
+/** How long the held light takes to let go. */
+const BLOOM_MS = 280;
+
 type StandParticipant = {
   id: string;
   participant_id: string;
@@ -94,6 +115,31 @@ function standStyle(args: {
     style.boxShadow = `0 0 60px -10px ${secretRarity.border}`;
   }
   return style as React.CSSProperties;
+}
+
+/**
+ * Whether what is on the stand has earned a second beat.
+ *
+ * The tier half and the finish half take the `known` guard differently, and the
+ * asymmetry is the one the confetti gate in players.pack.tsx already makes: a
+ * champion is a champion the moment the pack was dealt, where a finish is only a
+ * fact once the recording has answered. Gating the whole predicate on `known`
+ * would make a champion's ceremony depend on how fast the network was, and the
+ * one thing worse than no beat is a beat that comes and goes.
+ */
+function earnsTheBeat(args: {
+  onSecret: boolean;
+  tier: Rarity["tier"];
+  edition: Edition;
+  knownFinish: boolean;
+  secretTier: string | undefined;
+}): boolean {
+  if (args.onSecret) return secretTierEarnsTheBeat(args.secretTier);
+  return (
+    args.tier === "champion" ||
+    args.tier === "podium" ||
+    (args.knownFinish && editionEarnsTheBeat(args.edition))
+  );
 }
 
 /**
@@ -396,6 +442,8 @@ export function PackStand({
   // until the card is front-on, so the swap happens somewhere nobody is looking.
   const [settled, setSettled] = useState(false);
   const [flipped, setFlipped] = useState(false);
+  /** Beat one holds the face at 60%; beat two lets it go. See the effect below. */
+  const [beat, setBeat] = useState<"none" | "held" | "bloomed">("none");
   // Latched on the first render, so only the card the ceremony handed over gets
   // the gather entrance. Every card after it is a step, and a step slides.
   const firstMountRef = useRef(true);
@@ -463,6 +511,7 @@ export function PackStand({
   useEffect(() => {
     setSettled(false);
     setFlipped(false);
+    setBeat("none");
   }, [shownKey]);
 
   useEffect(() => {
@@ -493,6 +542,10 @@ export function PackStand({
   // Alongside rarityRef and for the same reason: the burst fires from a timeout
   // that outlives the render it was scheduled in.
   const editionRef = useRef<Edition>("standard");
+  // And beside those two for the same reason: the second beat is scheduled from a
+  // timeout that outlives the render it was armed in, so a finish landing mid-flip
+  // must not be able to re-decide it.
+  const twoBeatRef = useRef(false);
   /**
    * The secret's landing, which has to be the loudest thing in the app.
    *
@@ -524,10 +577,58 @@ export function PackStand({
       } else {
         cue("cardFace");
       }
-    }, ms * 0.86);
+    }, ms * FACE_LANDS_AT);
     return () => clearTimeout(t);
     // `rarity` is read through a ref so a bundle arriving mid-flip cannot
     // re-schedule the burst and fire it twice.
+  }, [isRevealed, onSecret, reduced, shownKey]);
+
+  /**
+   * The second beat.
+   *
+   * A good pull lands on a face held at 60% for a quarter of a second, and only
+   * then does its metal come up. Beat one is the card — the burst above, and the
+   * tier's own chime from the route — and beat two is what it turned out to be.
+   * A common pull has nothing to say twice and keeps the single beat it had.
+   *
+   * Scheduled off the same instant the burst is, because that is when the face is
+   * actually front-on: the flip's full length is when the rotation stops, a
+   * quarter-second after there is anything to look at.
+   *
+   * The finish's cue fires from here rather than from `revealAt`, where it used to
+   * live. That runs at the tap, before the hold and before the turn — the same
+   * mistake the landing burst above was moved off the tap to fix.
+   */
+  const beatFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isRevealed) return;
+    // Once per card, like the burst: `settled` flips back and forth across a step,
+    // and the secret's own step re-runs this on a cursor that has not moved.
+    if (beatFiredRef.current === shownKey) return;
+    if (!twoBeatRef.current) return;
+    const fire = () => {
+      beatFiredRef.current = shownKey;
+      setBeat("bloomed");
+      // The secret's own bell rang at the top of its turn and its impact landed a
+      // beat ago; a fifth sound on the same card is noise rather than a second
+      // beat. Its second beat is the ring blooming out of the flash.
+      if (!onSecret) playEditionShine(editionRef.current);
+    };
+    // Nothing is held back, so there is nothing to release — but a cue is not a
+    // motion setting (see the note at the top of card-sfx.ts) and it still belongs
+    // to this card, so it lands on the beat the card was turned.
+    if (reduced) {
+      fire();
+      return;
+    }
+    setBeat("held");
+    const ms = onSecret ? SECRET_FLIP_MS : FLIP_MS;
+    const t = setTimeout(fire, ms * FACE_LANDS_AT + BEAT_MS);
+    return () => clearTimeout(t);
+    // Deliberately the same deps as the burst above, and `beat` is not among them:
+    // this effect only writes that value, and listing it would re-run the effect on
+    // its own write — clearing the timeout it had just armed. `beatFiredRef` is
+    // what keeps the beat to one per card without needing it in the list.
   }, [isRevealed, onSecret, reduced, shownKey]);
 
   // The card is mid-ceremony: turned over already in everything but appearance.
@@ -582,6 +683,23 @@ export function PackStand({
   const edition = onSecret ? "standard" : (editions[ep?.id ?? ""] ?? "standard");
   editionRef.current = edition;
   rarityRef.current = rarity;
+  /**
+   * Whether the finish on the stand is one the server has actually answered with.
+   *
+   * `Object.hasOwn`, not the `?? "standard"` above: until the recording lands a
+   * card has no finish at all, and that fallback collapses "standard" and "not
+   * asked yet" into one value. Same guard and same reason as `revealAt`'s over in
+   * players.pack.tsx — a beat spent on the fallback is a promise about a finish
+   * nobody has decided yet.
+   */
+  const knownFinish = !onSecret && Object.hasOwn(editions, ep?.id ?? "");
+  twoBeatRef.current = earnsTheBeat({
+    onSecret,
+    tier: rarity.tier,
+    edition,
+    knownFinish,
+    secretTier: secret?.tier,
+  });
   const name = onSecret ? (secret?.name ?? "Secret") : (ep?.participant?.name ?? "—");
   const showStats = isRevealed && settled;
 
@@ -959,6 +1077,15 @@ export function PackStand({
                       rarity={rarity}
                       tilt="hero"
                       flipMs={onSecret ? SECRET_FLIP_MS : FLIP_MS}
+                      // A held pull sweeps when it blooms rather than when it
+                      // lands: fired under the scrim, the sweep would be spent on
+                      // a card nobody can see.
+                      shineDelayMs={
+                        beat === "none"
+                          ? undefined
+                          : Math.round((onSecret ? SECRET_FLIP_MS : FLIP_MS) * FACE_LANDS_AT) +
+                            BEAT_MS
+                      }
                       faceDown={!isRevealed}
                       flipped={isRevealed ? flipped : false}
                       onFlippedChange={isRevealed ? setFlipped : undefined}
@@ -1002,6 +1129,43 @@ export function PackStand({
                   </motion.div>
                 )}
               </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* The beat between "it's Bob" and "…in Gold".
+
+              A sibling of the card and never a child, for the reason the ribbon
+              below is one: the card carries a layoutId and a projected subtree
+              drags its children through the same distortion.
+
+              A black scrim rather than a brightness filter, and not an opacity on
+              anything above the card either. `filter` is a grouping property — an
+              element carrying one is flattened out of its 3D context and the flip
+              stops being a rotation and becomes a squash (see .holo-turning in
+              styles.css) — and `opacity` groups the same way on the very element
+              motion is projecting. This composites the face at 60% and touches
+              nothing the card is made of.
+
+              `initial` at zero is load-bearing rather than taste:
+              usePrefersReducedMotion answers false on the first client commit by
+              design, so a stand mounting on an already-revealed card holds for one
+              frame before the reduced pass cancels it. Ramping from nothing means
+              that frame is invisible.
+
+              pointer-events-none because the card underneath is tappable the
+              instant it lands — its back is one tap away — and a hit test would
+              otherwise find this instead. */}
+          <AnimatePresence>
+            {beat === "held" && (
+              <motion.div
+                aria-hidden
+                data-testid="reveal-beat"
+                className="pointer-events-none absolute inset-0 rounded-xl bg-black"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.4 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: BLOOM_MS / 1000, ease: "easeOut" }}
+              />
             )}
           </AnimatePresence>
 

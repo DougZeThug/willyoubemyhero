@@ -12,6 +12,7 @@ import {
   EDITION_ORDER,
   EDITION_WEIGHTS_BP,
   editionCelebrates,
+  editionEarnsTheBeat,
   editionLabel,
   editionOddsLabel,
   editionRank,
@@ -176,6 +177,25 @@ describe("labels", () => {
     expect(editionLabel("legendary")).toBeNull();
     expect(editionLabel(undefined)).toBeNull();
     expect(editionOddsLabel("__proto__")).toBeNull();
+  });
+});
+
+describe("editionEarnsTheBeat", () => {
+  it("holds the reveal one rung lower than the confetti does", () => {
+    // The cheap half of the ladder's payoff: a silver would otherwise only ever
+    // be a word in a caption, and a quarter-second of held light costs nothing.
+    expect(editionEarnsTheBeat("platinum")).toBe(true);
+    expect(editionEarnsTheBeat("gold")).toBe(true);
+    expect(editionEarnsTheBeat("silver")).toBe(true);
+  });
+
+  it("lets the common rungs land in one beat", () => {
+    expect(editionEarnsTheBeat("bronze")).toBe(false);
+    expect(editionEarnsTheBeat("standard")).toBe(false);
+    expect(editionEarnsTheBeat(undefined)).toBe(false);
+    // A stored string nobody has taught this about sorts last, so it lands quietly
+    // rather than claiming a beat it did not earn.
+    expect(editionEarnsTheBeat("chartreuse")).toBe(false);
   });
 });
 
