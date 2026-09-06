@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { editionStyle, toEdition } from "@/lib/card-edition";
@@ -19,11 +18,14 @@ import { buyBonusSecretPull } from "@/lib/dust.functions";
 import { getMySecrets } from "@/lib/secret-cards.functions";
 import { BoughtPullReveal } from "@/components/bought-pull-reveal";
 import { LevelPips } from "@/components/level-pips";
+import { SectionTitle } from "@/components/section-title";
+import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { SetChip } from "@/components/set-chip";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { PresentationMode } from "@/components/presentation-mode";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import type { OwnedSecret } from "@/lib/secret-cards";
+import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media";
 import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
 import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
@@ -325,57 +327,58 @@ export function DustShopPanel({
   const offline = !useIsOnline();
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg border border-border p-4">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide">
-          Bonus secret pull
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+    <div className="space-y-section-gap">
+      <section>
+        <SectionTitle label="Bonus secret pull" />
+        <p className="text-meta text-muted-foreground">
           One extra pull, right now. It does not touch tomorrow&apos;s free one.
         </p>
-        <Button
-          className="mt-3 w-full"
+        <button
+          type="button"
+          className="neon-btn mt-3 w-full"
           disabled={!canAfford || buy.isPending || offline}
           {...offlineReason(offline)}
           onClick={() => buy.mutate()}
         >
           {buy.isPending ? "Pulling…" : `Buy for ${DUST_PRICES.bonusPull}`}
-        </Button>
+        </button>
         {!canAfford && balance != null && (
-          <p className="mt-2 text-center text-xs text-muted-foreground">
+          <p className="mt-2 text-center text-meta text-muted-foreground">
             {DUST_PRICES.bonusPull - balance} more to go
           </p>
         )}
       </section>
 
-      <section className="rounded-lg border border-border p-4">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide">Burn a spare</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+      <section>
+        <SectionTitle label="Burn a spare" count={burnable.length || undefined} />
+        <p className="text-meta text-muted-foreground">
           Only cards you hold two or more of, and never the one you pulled today. You always keep
           one.
         </p>
         {spares.isLoading ? (
-          <p className="mt-3 text-xs text-muted-foreground">Counting spares…</p>
+          <p className="mt-3 text-meta text-muted-foreground">Counting spares…</p>
         ) : burnable.length === 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground">No spares yet.</p>
+          <p className="mt-3 text-meta text-muted-foreground">No spares yet.</p>
         ) : (
-          <ul className="mt-3 space-y-1.5">
+          <ul className={cn(ROW_LIST, "mt-3")}>
             {burnable.map((r) => {
               const style = editionStyle(r.edition);
               const worth = millValue(r.edition, r.assertedBy);
               return (
-                <li key={r.copyId} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate text-xs">
-                    <span className="font-bold">{nameFor(r.eventParticipantId)}</span>
+                <li key={r.copyId} className={ROW}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-badge font-bold">
+                      {nameFor(r.eventParticipantId)}
+                    </span>
                     {style.label && (
-                      <span className="ml-1.5" style={{ color: style.accent }}>
+                      <span className="mt-0.5 block text-meta" style={{ color: style.accent }}>
                         {style.label}
                       </span>
                     )}
                   </span>
-                  <Button
-                    variant="outline"
-                    className="min-h-11 shrink-0"
+                  <button
+                    type="button"
+                    className="neon-btn-quiet shrink-0"
                     disabled={mill.isPending || offline}
                     {...offlineReason(offline)}
                     onClick={() => {
@@ -384,7 +387,7 @@ export function DustShopPanel({
                     }}
                   >
                     {burning === r.copyId && mill.isPending ? "…" : `Burn +${worth}`}
-                  </Button>
+                  </button>
                 </li>
               );
             })}
@@ -392,40 +395,40 @@ export function DustShopPanel({
         )}
       </section>
 
-      <section className="rounded-lg border border-border p-4">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide">Sell a secret</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+      <section>
+        <SectionTitle label="Sell a secret" count={sellable.length || undefined} />
+        <p className="text-meta text-muted-foreground">
           Any secret you hold, priced by the level on your copy — including your only one. Never the
           one you pulled today.
         </p>
         {spares.isLoading ? (
-          <p className="mt-3 text-xs text-muted-foreground">Counting secrets…</p>
+          <p className="mt-3 text-meta text-muted-foreground">Counting secrets…</p>
         ) : sellable.length === 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground">No secrets yet.</p>
+          <p className="mt-3 text-meta text-muted-foreground">No secrets yet.</p>
         ) : (
-          <ul className="mt-3 space-y-1.5">
+          <ul className={cn(ROW_LIST, "mt-3")}>
             {sellable.map((s) => {
               const style = secretTierStyle(s.tier);
               const worth = secretSellValue(s.tier);
               return (
-                <li key={s.pullId} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate text-xs">
-                    <span className="font-bold">{s.name}</span>
-                    {/* The level decides what this is worth — the row's whole
-                        point — so it gets the shape as well as the word. */}
-                    <LevelPips tier={s.tier} className="ml-1.5" />
-                    <span className="ml-1.5" style={{ color: style.accent }}>
-                      {style.label}
+                <li key={s.pullId} className={ROW}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-badge font-bold">{s.name}</span>
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
+                      {/* The level decides what this is worth — the row's whole
+                          point — so it gets the shape as well as the word. */}
+                      <LevelPips tier={s.tier} />
+                      <span style={{ color: style.accent }}>{style.label}</span>
+                      {/* Which set you would be selling it out of. Two secrets of
+                          the same level are worth the same dust, so the set is the
+                          only thing on this row that makes them different cards. */}
+                      <SetChip collection={s.collection} sets={sets} />
+                      {s.lastCopy && <span className="shrink-0">last copy</span>}
                     </span>
-                    {/* Which set you would be selling it out of. Two secrets of
-                        the same level are worth the same dust, so the set is the
-                        only thing on this row that makes them different cards. */}
-                    <SetChip collection={s.collection} sets={sets} className="ml-1.5" />
-                    {s.lastCopy && <span className="ml-1.5 text-muted-foreground">last copy</span>}
                   </span>
-                  <Button
-                    variant="outline"
-                    className="min-h-11 shrink-0"
+                  <button
+                    type="button"
+                    className="neon-btn-quiet shrink-0"
                     disabled={sell.isPending || offline}
                     {...offlineReason(offline)}
                     onClick={() => {
@@ -443,7 +446,7 @@ export function DustShopPanel({
                     }}
                   >
                     {selling === s.pullId && sell.isPending ? "…" : `Sell +${worth}`}
-                  </Button>
+                  </button>
                 </li>
               );
             })}
@@ -451,36 +454,36 @@ export function DustShopPanel({
         )}
       </section>
 
-      <section className="rounded-lg border border-border p-4">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide">Settle a finish</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+      <section>
+        <SectionTitle label="Settle a finish" count={rerollable.length || undefined} />
+        <p className="text-meta text-muted-foreground">
           Roll a card&apos;s finish again for {DUST_PRICES.reroll}. Any card you hold, including
           your only one — and it can go down.
         </p>
         {spares.isLoading ? (
-          <p className="mt-3 text-xs text-muted-foreground">Counting cards…</p>
+          <p className="mt-3 text-meta text-muted-foreground">Counting cards…</p>
         ) : rerollable.length === 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground">No cards yet.</p>
+          <p className="mt-3 text-meta text-muted-foreground">No cards yet.</p>
         ) : (
-          <ul className="mt-3 space-y-1.5">
+          <ul className={cn(ROW_LIST, "mt-3")}>
             {rerollable.map((r) => {
               const style = editionStyle(r.edition);
               return (
-                <li key={r.copyId} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate text-xs">
-                    <span className="font-bold">{nameFor(r.eventParticipantId)}</span>
-                    {style.label && (
-                      <span className="ml-1.5" style={{ color: style.accent }}>
-                        {style.label}
+                <li key={r.copyId} className={ROW}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-badge font-bold">
+                      {nameFor(r.eventParticipantId)}
+                    </span>
+                    {(style.label || r.assertedBy !== "server") && (
+                      <span className="mt-0.5 flex items-center gap-1.5 text-meta text-muted-foreground">
+                        {style.label && <span style={{ color: style.accent }}>{style.label}</span>}
+                        {r.assertedBy !== "server" && <span>unsettled</span>}
                       </span>
                     )}
-                    {r.assertedBy !== "server" && (
-                      <span className="ml-1.5 text-muted-foreground">unsettled</span>
-                    )}
                   </span>
-                  <Button
-                    variant="outline"
-                    className="min-h-11 shrink-0"
+                  <button
+                    type="button"
+                    className="neon-btn-quiet shrink-0"
                     disabled={!canReroll || reroll.isPending || offline}
                     {...offlineReason(offline)}
                     onClick={() => {
@@ -491,7 +494,7 @@ export function DustShopPanel({
                     {rolling === r.copyId && reroll.isPending
                       ? "…"
                       : `Re-roll ${DUST_PRICES.reroll}`}
-                  </Button>
+                  </button>
                 </li>
               );
             })}
@@ -499,17 +502,18 @@ export function DustShopPanel({
         )}
       </section>
 
-      <section className="rounded-lg border border-border p-4">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide">
-          Where dust comes from
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+      <section>
+        <SectionTitle label="Where dust comes from" />
+        <p className="text-meta text-muted-foreground">
           Burning a spare pays by its finish, and selling a secret pays by its level:
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1">
+        {/* The one panel on this screen that is a table rather than a list of
+            actions, and the only place the rarity ladder is written down
+            anywhere in the app. */}
+        <div className="surface-panel mt-3 grid grid-cols-2 gap-x-6 rounded-xl border p-3">
           <ul className="space-y-1">
             {MILL_LADDER.map(({ edition, value }) => (
-              <li key={edition} className="flex items-center justify-between text-xs">
+              <li key={edition} className="flex items-center justify-between text-meta">
                 <span style={{ color: editionStyle(edition).accent }}>
                   {editionStyle(edition).label}
                 </span>
@@ -519,7 +523,7 @@ export function DustShopPanel({
           </ul>
           <ul className="space-y-1">
             {SECRET_SELL_LADDER.map(({ tier, value }) => (
-              <li key={tier} className="flex items-center justify-between text-xs">
+              <li key={tier} className="flex items-center justify-between text-meta">
                 <span className="inline-flex items-center gap-1.5">
                   <LevelPips tier={tier} />
                   <span style={{ color: secretTierStyle(tier).accent }}>
@@ -531,7 +535,7 @@ export function DustShopPanel({
             ))}
           </ul>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-3 text-meta text-muted-foreground">
           Cards from before finishes were settled server-side pay a flat {MILL_CLIENT_FLAT},
           whatever they say on them. Settling one above fixes that.
         </p>

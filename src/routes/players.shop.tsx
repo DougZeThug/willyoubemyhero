@@ -14,6 +14,7 @@ import { getClaimRoster } from "@/lib/member.functions";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import type { RosterCardLookup } from "@/components/trade-offer-card";
 import { DustShopPanel } from "@/components/dust-shop";
+import { DustChip } from "@/components/dust-chip";
 import { MarketPanel } from "@/components/market-panel";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { dustLive } from "@/lib/dust";
@@ -117,7 +118,7 @@ function ShopPage() {
   if (loading && !bundle) {
     return (
       <div className="card-bg min-h-[calc(100dvh-8rem)]">
-        <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="mx-auto max-w-3xl px-4 py-6">
           <FeedLoading label="Reading the combine…" />
         </div>
       </div>
@@ -127,7 +128,7 @@ function ShopPage() {
   if (error && !bundle) {
     return (
       <div className="card-bg min-h-[calc(100dvh-8rem)]">
-        <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="mx-auto max-w-3xl px-4 py-6">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
       </div>
@@ -136,7 +137,7 @@ function ShopPage() {
 
   return (
     <div className="card-bg min-h-[calc(100dvh-8rem)]">
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-3xl px-4 py-6">
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
           with no signal is the exact failure the health states exist for. */}
@@ -149,7 +150,7 @@ function ShopPage() {
             </span>
           </div>
           <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">Dust</h1>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-meta text-muted-foreground">
             {!dustOn
               ? "The commissioner has not switched dust on yet."
               : dust.data?.balance == null
@@ -201,7 +202,7 @@ function ShopPage() {
             </Link>
           </p>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-section-gap">
             <MarketPanel
               balance={dust.data?.balance}
               participantId={participantId}
@@ -213,6 +214,25 @@ function ShopPage() {
               backUrl={cardBack.data?.urls ?? null}
               dustOn
             />
+
+            {/* The seam between the two halves — what other members will sell you
+                above, what the house pays below. A div rather than a section on
+                purpose: the e2e suite scopes assertions with
+                `locator("section", { hasText })`, and an extra section wrapping
+                either half re-resolves its .first()/.last() onto the wrong one.
+
+                The chip repeats the balance rather than the header's sentence.
+                Four sections spend against that number and it was off screen by
+                the time you reached any of them; saying "You have N." twice would
+                resolve the suite's /you have 120/i to two nodes. */}
+            <div className="flex items-center gap-3">
+              <span className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                Spend &amp; earn
+              </span>
+              <span aria-hidden className="h-px flex-1 bg-border" />
+              <DustChip balance={dust.data?.balance} />
+            </div>
+
             <DustShopPanel
               balance={dust.data?.balance}
               participantId={participantId}

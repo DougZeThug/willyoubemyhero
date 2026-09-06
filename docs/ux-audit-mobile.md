@@ -498,8 +498,8 @@ Measured on real renders at 390 px (CSS px, height × width where relevant). Tar
 | Send offer                                      | trade builder                         | 34 tall                     | High     |
 | Claim Three Days / View collection / Share pack | pack summary                          | 34 tall                     | High     |
 | Rip a pack to see this card                     | locked card                           | 34 tall                     | Medium   |
-| Burn / Sell / Re-roll                           | shop                                  | 32 tall                     | Medium   |
-| List a card / Buy for 150                       | shop                                  | 36 tall                     | Low      |
+| Burn / Sell / Re-roll                           | shop                                  | 44 tall — fixed             | Done     |
+| List a card / Buy for 150                       | shop                                  | 48 tall — fixed             | Done     |
 | Favourite star                                  | tiles                                 | 36 × 36, overlapping a link | Medium   |
 | Rearrange                                       | vault                                 | 36 tall                     | Low      |
 | Next                                            | stand                                 | 36 tall                     | Medium   |
@@ -636,10 +636,10 @@ Passing: bottom tabs, Open Pack (46 px), shelf headers (`min-h-11`), dust chip (
 
 - **Works**: the most readable screen (12 px body throughout); prices on buttons; refusals as sentences; market-first order is argued and reasonable; "Nothing for sale right now".
 - **UX**: "Settle a finish" rows read "— unsettled" with no card name (stub artefact of missing names, but the row design relies on a name that may be absent); the ladder table is the only place the rarity ladder is visible in the whole app; `window.confirm` on last copy.
-- **Mobile**: 32 px Burn/Sell/Re-roll buttons; five stacked panels of prose before the first action.
-- **Visual**: stock shadcn buttons in a neon app — inconsistent but readable.
-- **Changes**: 44 px row buttons; collapse the explanatory prose to one line each with "?"; lift the ladder into the profile/rarity guide; app dialog instead of `window.confirm`; show a card thumbnail on each row.
-- **Priority: Medium.**
+- **Mobile**: fixed — every control now clears 44 px (`neon-btn-sm` on the shelf, `neon-btn-quiet` on rows, `neon-btn` on the two CTAs), and a row is a 44 px target in its own right rather than a 32 px button inside a 36 px line. Seven panels of prose remain, one per section.
+- **Visual**: fixed — the seven identical `border-border` boxes were the app's only non-conforming panel style. Headings and prose now sit on the page ground and only the row lists get a `surface-panel`, so a surface means "a list of things you can act on". Buttons are the `neon-btn` family throughout.
+- **Changes**: remaining — collapse the explanatory prose to one line each with "?"; lift the ladder into the profile/rarity guide; app dialog instead of `window.confirm`; show a card thumbnail on each row.
+- **Priority: Low** (was Medium; the touch targets and the panel chrome are done).
 
 ### League hub — `/league`
 
