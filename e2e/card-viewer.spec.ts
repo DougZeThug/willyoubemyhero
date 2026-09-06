@@ -173,6 +173,7 @@ test.describe("the full-screen card viewer", () => {
         { copyId: COPY_B, eventParticipantId: "ep-alice", edition: "standard", viewerOwns: true },
       ],
     });
+    server.set("createTradeOffer", { ok: true, offerId: "00000000-0000-4000-8000-000000000021" });
 
     await page.goto("/players/ep-alice?view=1");
     // Scoped to the viewer: the details page behind it carries its own overflow
@@ -196,6 +197,29 @@ test.describe("the full-screen card viewer", () => {
     // A standard copy prints no finish at all (editionLabel is null for 70% of
     // them), so "no gold tile is in the tray" is what says which copy went in.
     await expect(giveTray.getByText("Gold")).toHaveCount(0);
+
+    // And the intent is SPENT once the builder has it. It used to be held for
+    // the life of the route, which re-fired the effect that opens the builder
+    // every time the builder closed: sending the offer below navigated the
+    // `make` param away and the flow reopened on the spot with the same card
+    // staged, and Cancel could not close it either.
+    const getTray = page.getByRole("region", { name: "You get" });
+    await getTray.getByRole("button", { name: /ask for/i }).click();
+    // By its title, not `.last()`: the builder is itself a dialog, and it holds
+    // buttons named after the same cards the picker does.
+    const picker = page.getByRole("dialog", { name: /Bob Blitz's cards/i });
+    await picker
+      .getByRole("button", { name: /alice ace/i })
+      .first()
+      .click();
+    await picker.getByRole("button", { name: /^done$/i }).click();
+
+    await page.getByRole("button", { name: "Review" }).click();
+    await page.getByRole("button", { name: /send offer/i }).click();
+
+    await expect(page.getByText(/offer sent to Bob Blitz/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/players\/trade$/);
+    await expect(page.getByRole("dialog", { name: /make an offer/i })).toBeHidden();
   });
 
   test("a secret opens the same viewer and never touches the URL", async ({ page, server }) => {

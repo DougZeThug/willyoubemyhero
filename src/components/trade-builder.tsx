@@ -295,6 +295,7 @@ export function TradeBuilder({
                 staged={give}
                 spares={mySpares.data}
                 loading={mySpares.isPending}
+                failed={mySpares.isError}
                 lookup={lookup}
                 backUrl={backUrl}
                 outOfSeason={outOfSeason}
@@ -307,6 +308,7 @@ export function TradeBuilder({
                 staged={want}
                 spares={theirSpares.data}
                 loading={theirSpares.isPending}
+                failed={theirSpares.isError}
                 lookup={lookup}
                 backUrl={backUrl}
                 outOfSeason={outOfSeason}
@@ -377,6 +379,7 @@ export function TradeBuilder({
           title={sheetFor === "want" ? `${theirName}'s cards` : "Your cards"}
           spares={sheetFor === "want" ? theirSpares.data : mySpares.data}
           loading={sheetFor === "want" ? theirSpares.isPending : mySpares.isPending}
+          failed={sheetFor === "want" ? theirSpares.isError : mySpares.isError}
           staged={sheetFor === "want" ? want : give}
           lookup={lookup}
           rosterRank={rosterRank}
@@ -450,7 +453,13 @@ function WhoRow({
   const count = spares.data
     ? (spares.data.roster?.length ?? 0) + (spares.data.secrets?.length ?? 0)
     : null;
-  const spareLine = count === null ? null : `${count} ${count === 1 ? "spare" : "spares"}`;
+  // Three states, not two: an unanswered read and a failed one both have no
+  // count, and an ellipsis that never resolves is the worse of the two to show.
+  const spareLine = spares.isError
+    ? "spares unknown"
+    : count === null
+      ? null
+      : `${count} ${count === 1 ? "spare" : "spares"}`;
 
   return (
     <button
@@ -500,6 +509,7 @@ function Tray({
   lookup,
   backUrl,
   outOfSeason,
+  failed,
   conceal = false,
   addLabel,
   onAdd,
@@ -512,6 +522,8 @@ function Tray({
   lookup: RosterCardLookup;
   backUrl: ImageUrlSet | null;
   outOfSeason: boolean;
+  /** The spares read failed. Distinct from having none, which is a fact. */
+  failed: boolean;
   conceal?: boolean;
   addLabel: string;
   onAdd: () => void;
@@ -523,6 +535,7 @@ function Tray({
   // exists. Hiding the button behind a spares count would bury it.
   const nothingToOffer =
     !loading &&
+    !failed &&
     (spares?.roster?.length ?? 0) +
       (spares?.secrets?.length ?? 0) +
       (spares?.blocked?.length ?? 0) ===
@@ -568,6 +581,14 @@ function Tray({
           screen — which is what B-33 is about. */}
       {loading ? (
         <p className="text-meta text-muted-foreground">Counting spares…</p>
+      ) : failed ? (
+        // `getTradeSpares` is a member-guarded read that deliberately does not
+        // retry, so a token that expired mid-party lands here. Saying "no spares
+        // to trade" instead would be a claim about somebody's collection that
+        // the app has no basis for, and it takes the add button away with it.
+        <p role="status" className="text-meta text-warn">
+          Couldn&apos;t count the spares. Try again in a moment.
+        </p>
       ) : nothingToOffer ? (
         <p className="text-meta text-muted-foreground">
           {outOfSeason ? "Trading opens with the next combine." : "No spares to trade."}
@@ -593,6 +614,7 @@ function SparePickerDrawer({
   title,
   spares,
   loading,
+  failed,
   staged,
   lookup,
   rosterRank,
@@ -606,6 +628,7 @@ function SparePickerDrawer({
   title: string;
   spares: TradeSpares | undefined;
   loading: boolean;
+  failed: boolean;
   staged: Staged[];
   lookup: RosterCardLookup;
   rosterRank: (eventParticipantId: string) => number;
@@ -633,6 +656,10 @@ function SparePickerDrawer({
         <div className="overflow-y-auto px-4 pb-8">
           {loading ? (
             <p className="text-meta text-muted-foreground">Counting spares…</p>
+          ) : failed ? (
+            <p role="status" className="text-meta text-warn">
+              Couldn&apos;t count the spares. Try again in a moment.
+            </p>
           ) : items.length === 0 ? (
             <p className="text-meta text-muted-foreground">
               {outOfSeason ? "Trading opens with the next combine." : "No spares to trade."}

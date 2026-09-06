@@ -147,8 +147,11 @@ function TradePage() {
    * this route: a second visit is a blank builder, which is what an intent left
    * lying around would quietly stop being. Kept here rather than in the builder
    * because the builder is not mounted when the route arrives.
+   *
+   * CLEARED the moment the builder has it, and that is load-bearing rather than
+   * tidiness — see the effect below.
    */
-  const [intent] = useState<TradeIntent | null>(() => takeTradeIntent());
+  const [intent, setIntent] = useState<TradeIntent | null>(() => takeTradeIntent());
 
   const acceptFn = useServerFn(acceptTradeOffer);
   const declineFn = useServerFn(declineTradeOffer);
@@ -215,9 +218,20 @@ function TradePage() {
    * Both places that set an intent push `/players/trade` themselves, so replacing
    * here means Back from the builder returns to the card somebody was looking at.
    * Pushing would strand them on an empty Offers tab instead.
+   *
+   * The clear is the important half. An intent that stays non-null re-fires this
+   * every time the builder closes — so sending the offer, which navigates the
+   * `make` param away, reopened the flow on the spot with the same card staged,
+   * and Cancel could not close it either. Safe to clear the instant the builder
+   * is up: TradeBuilder seeds its own copy from this prop at mount and never
+   * reads it again.
    */
   useEffect(() => {
-    if (!intent || builderOpen) return;
+    if (!intent) return;
+    if (builderOpen) {
+      setIntent(null);
+      return;
+    }
     void navigate({ to: ".", search: { make: 1 as const }, replace: true });
   }, [intent, builderOpen, navigate]);
 
@@ -521,7 +535,12 @@ function TradePage() {
             reachableCount={counterparties.length}
           />
         ) : (
-          <TradeFeedPanel entries={feed.data ?? []} nameOf={nameOf} loading={feed.isPending} />
+          <TradeFeedPanel
+            entries={feed.data ?? []}
+            nameOf={nameOf}
+            loading={feed.isPending}
+            failed={feed.isError}
+          />
         )}
       </div>
 

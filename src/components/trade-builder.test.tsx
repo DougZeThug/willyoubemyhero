@@ -23,12 +23,16 @@ vi.mock("./holo-card", () => ({
   FLIP_EDGE_AT: 0.384,
 }));
 
-const SPARES = vi.hoisted(() => ({ current: {} as Record<string, TradeSpares | undefined> }));
+const SPARES = vi.hoisted(() => ({
+  current: {} as Record<string, TradeSpares | undefined>,
+  failed: false,
+}));
 vi.mock("@/hooks/use-trades", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/use-trades")>()),
   useTradeSpares: (participantId: string | null) => ({
-    data: participantId ? SPARES.current[participantId] : undefined,
+    data: SPARES.failed || !participantId ? undefined : SPARES.current[participantId],
     isPending: false,
+    isError: SPARES.failed,
   }),
 }));
 
@@ -100,6 +104,7 @@ beforeEach(() => {
   HTMLElement.prototype.releasePointerCapture = vi.fn();
   HTMLElement.prototype.scrollIntoView = vi.fn();
 
+  SPARES.failed = false;
   SPARES.current = {
     [ME]: {
       participantId: ME,
@@ -280,6 +285,26 @@ describe("give and get", () => {
     await pickPartner("Carol Crush");
     expect(screen.getAllByText("Trading opens with the next combine.")).toHaveLength(2);
     expect(screen.queryByText("No spares to trade.")).not.toBeInTheDocument();
+  });
+});
+
+describe("when the spares cannot be read", () => {
+  it("says the count is unknown rather than showing an ellipsis for ever", () => {
+    // getTradeSpares is a member-guarded read with retry off, so an expired
+    // token lands here rather than resolving a moment later.
+    SPARES.failed = true;
+    renderBuilder();
+    expect(screen.getByRole("button", { name: "Bob Blitz, spares unknown" })).toBeInTheDocument();
+  });
+
+  it("does not report a failed read as an empty collection", async () => {
+    // "No spares to trade." would be a claim about somebody's cards that the
+    // app has no basis for — and it takes the add button away with it.
+    SPARES.failed = true;
+    renderBuilder();
+    await pickPartner();
+    expect(screen.queryByText("No spares to trade.")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/couldn't count the spares/i).length).toBeGreaterThan(0);
   });
 });
 

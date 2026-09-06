@@ -193,6 +193,7 @@ export function TradeOffersPanel({
         nameOf={nameOf}
         lookup={lookup}
         busy={!!confirming && pending === confirming.id}
+        offline={offline}
         onConfirm={(offerId) => {
           setConfirming(null);
           onAccept(offerId);
@@ -217,6 +218,7 @@ function ConfirmAcceptSheet({
   nameOf,
   lookup,
   busy,
+  offline,
   onConfirm,
   onCancel,
 }: {
@@ -225,6 +227,13 @@ function ConfirmAcceptSheet({
   nameOf: (participantId: string) => string;
   lookup: RosterCardLookup;
   busy: boolean;
+  /**
+   * Asked again here rather than trusted from the Accept behind this sheet: the
+   * signal can drop in the seconds between opening the question and answering
+   * it, and a Confirm that stays lit through that is the one control on the
+   * screen that would throw a toast instead of going quiet.
+   */
+  offline: boolean;
   onConfirm: (offerId: string) => void;
   onCancel: () => void;
 }) {
@@ -251,7 +260,8 @@ function ConfirmAcceptSheet({
         <div className="flex flex-col gap-2 px-4 pb-8">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || offline}
+            {...offlineReason(offline)}
             onClick={() => offer && onConfirm(offer.id)}
             className="neon-btn-lg w-full disabled:opacity-50"
           >

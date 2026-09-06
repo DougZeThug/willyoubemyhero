@@ -17,13 +17,30 @@ export function TradeFeedPanel({
   entries,
   nameOf,
   loading = false,
+  failed = false,
 }: {
   entries: TradeFeedEntry[];
   nameOf: (participantId: string) => string;
   loading?: boolean;
+  /** The read failed. Distinct from empty, which is a fact about the league. */
+  failed?: boolean;
 }) {
   if (loading && entries.length === 0) {
     return <p className="text-sm text-muted-foreground">Reading the ledger…</p>;
+  }
+  if (failed && entries.length === 0) {
+    // A failed read is not an empty ledger, and saying "nothing has changed
+    // hands yet" when the request fell over is a claim about the league that
+    // happens to be untrue. The old screen hid the section entirely on an
+    // error, which was quieter but not more honest.
+    //
+    // No retry button: the query already refetches on window focus, and party
+    // phones lock and unlock constantly.
+    return (
+      <p role="status" className="text-sm text-warn">
+        Couldn&apos;t read the ledger. It will fill in when the connection does.
+      </p>
+    );
   }
   if (entries.length === 0) {
     // An empty section used to vanish entirely (§10 problem 7). A tab cannot
