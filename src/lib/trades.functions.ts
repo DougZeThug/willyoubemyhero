@@ -490,7 +490,28 @@ async function toOfferViews(
     byCopy = new Map((rows ?? []).map((r) => [r.id, r]));
   }
 
-  function view(item: TradeOfferItemRow): TradeItemView | null {
+  /**
+   * One item, plus whether this reader is the one it went TO.
+   *
+   * `received` is the trades half of `withListedSecrets` in market.functions.ts,
+   * and it exists for the same reason that one does: `viewerOwns` asks what you
+   * hold NOW, so a card you have since milled, sold or traded on went face-down
+   * on the one screen whose whole job is to tell you what arrived. Worse, it did
+   * so beside the card that LEFT, which the give side draws in full colour — a
+   * receipt where your own half is lit and the other half is a deck back.
+   *
+   * A widening, stated rather than smuggled: a roster card is a face-down slot
+   * in the vault and on its player page until you hold a copy, so a receipt for
+   * a card you have let go since shows art the rest of the app has gone back to
+   * hiding from you. That is the intent — the swap happened and the card was
+   * yours — and it takes the set chip with it, which the tile suppresses on a
+   * concealed card for the same reason it suppresses the art.
+   *
+   * Scoped to the RECEIVING side of an ACCEPTED offer, which is what keeps it
+   * from becoming an art reveal: declined, cancelled and voided moved nothing,
+   * so propose-then-take-it-back is not two taps to see somebody's card.
+   */
+  function view(item: TradeOfferItemRow, received: boolean): TradeItemView | null {
     if (item.kind === "roster") {
       const copy = item.card_copy_id ? byCopy.get(item.card_copy_id) : undefined;
       return copy
@@ -499,18 +520,22 @@ async function toOfferViews(
             copyId: copy.id,
             eventParticipantId: copy.event_participant_id,
             edition: toEdition(copy.edition),
-            viewerOwns: viewer.roster.has(copy.event_participant_id),
+            viewerOwns: received || viewer.roster.has(copy.event_participant_id),
           }
         : null;
     }
     const secret = item.secret_pull_id ? hydrated.get(item.secret_pull_id) : undefined;
     // A card whose ledger row has since gone is dropped rather than rendered as a
     // blank: the offer is still readable, it just has one fewer thing on it.
-    return secret ? { kind: "secret", ...secret } : null;
+    return secret ? { kind: "secret", ...secret, viewerOwns: received || secret.viewerOwns } : null;
   }
 
   return offers.map((offer) => {
     const mine = items.filter((i) => i.offer_id === offer.id);
+    // Which side, if either, landed in the reader's collection when this settled.
+    // Only `accepted` moved anything at all.
+    const tookFrom: TradeOfferItemRow["giver_side"] | null =
+      offer.status !== "accepted" ? null : offer.proposer_id === me ? "recipient" : "proposer";
     return {
       id: offer.id,
       status: offer.status,
@@ -520,11 +545,11 @@ async function toOfferViews(
       resolvedAt: offer.resolved_at,
       proposerGives: mine
         .filter((i) => i.giver_side === "proposer")
-        .map(view)
+        .map((i) => view(i, tookFrom === "proposer"))
         .filter((v): v is TradeItemView => v !== null),
       recipientGives: mine
         .filter((i) => i.giver_side === "recipient")
-        .map(view)
+        .map((i) => view(i, tookFrom === "recipient"))
         .filter((v): v is TradeItemView => v !== null),
     };
   });
@@ -543,6 +568,12 @@ const RECENT_LIMIT = 10;
  * the whole league. What there is now is a broadcast topic, which is not a table and
  * publishes nothing: see nudge.server.ts, and `nudgeTopic` below. Window focus
  * refetching stays the backstop, and party phones lock and unlock constantly.
+ *
+ * That shelf is ordered by WHEN AN OFFER SETTLED. It used to be ordered by when the
+ * offer was made, which answers a different question: an offer proposed on Monday
+ * and declined on Friday filed itself under Monday, behind everything made since,
+ * and could be pushed off the end of a ten-row list by offers that settled before
+ * it did. A decline nobody sees is a decline that never happened.
  */
 export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
   async (): Promise<{
@@ -562,26 +593,71 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
     const { tradeNudgeTopic } = await import("./nudge.server");
     const nudgeTopic = tradeNudgeTopic(me);
 
-    // Two equality queries rather than one `.or(...)`: that filter is built by
-    // interpolating a value into PostgREST's expression DSL, which nothing else
+    // Two equality queries a side rather than one `.or(...)`: that filter is built
+    // by interpolating a value into PostgREST's expression DSL, which nothing else
     // in this app does, and trade_offers_not_self_ck guarantees no row can come
-    // back from both. Thirteen people; the second round trip costs nothing.
+    // back from both sides. Thirteen people; the round trips cost nothing.
+    //
+    // Live is unbounded because reality bounds it — an offer is pending only until
+    // somebody answers it. Settled is not: a resolved offer is never deleted and
+    // composing one is two taps, so one member's history grows for the life of the
+    // league. Reading the lot and slicing to ten afterwards was fine for Postgres
+    // and is the same shape getMyStall had to be talked out of; the cap belongs in
+    // the query. What it protects is the `.in(...)` below, which would otherwise
+    // expand every offer anybody had ever made into a PostgREST URL that gets
+    // longer every week.
     const cols = "id, event_id, proposer_id, recipient_id, status, created_at, resolved_at";
-    const [{ data: sent, error }, { data: received, error: receivedError }] = await Promise.all([
-      sb.from("trade_offers").select(cols).eq("proposer_id", me).returns<TradeOfferRow[]>(),
-      sb.from("trade_offers").select(cols).eq("recipient_id", me).returns<TradeOfferRow[]>(),
-    ]);
-    if (error) throw error;
-    if (receivedError) throw receivedError;
+    const live = (col: "proposer_id" | "recipient_id") =>
+      sb
+        .from("trade_offers")
+        .select(cols)
+        .eq(col, me)
+        .eq("status", "pending")
+        // Newest first. This used to fall out of one JS sort across both sides;
+        // split per side, each query has to ask, or the carousel opens on
+        // whichever row the heap handed back and announces "1 of 3" about it.
+        .order("created_at", { ascending: false })
+        .returns<TradeOfferRow[]>();
+    const settled = (col: "proposer_id" | "recipient_id") =>
+      sb
+        .from("trade_offers")
+        .select(cols)
+        .eq(col, me)
+        .neq("status", "pending")
+        // `nullsFirst` because DESC puts nulls at the TOP in Postgres. Every
+        // resolution path sets resolved_at, so this is unreachable — but the
+        // column is nullable, and the failure it would buy is a dateless row
+        // taking the head of the shelf and pushing a real receipt off the end.
+        .order("resolved_at", { ascending: false, nullsFirst: false })
+        .limit(RECENT_LIMIT)
+        .returns<TradeOfferRow[]>();
 
-    const rows = [...(sent ?? []), ...(received ?? [])].sort((a, b) =>
-      b.created_at.localeCompare(a.created_at),
-    );
-    const pending = rows.filter((o) => o.status === "pending");
-    // Capped rather than paged: this is a strip under two live lists, and the
-    // whole league is thirteen people.
-    const resolved = rows.filter((o) => o.status !== "pending").slice(0, RECENT_LIMIT);
-    const wanted = [...pending, ...resolved];
+    const [sent, received, sentDone, receivedDone] = await Promise.all([
+      live("proposer_id"),
+      live("recipient_id"),
+      settled("proposer_id"),
+      settled("recipient_id"),
+    ]);
+    for (const r of [sent, received, sentDone, receivedDone]) if (r.error) throw r.error;
+
+    /** Newest resolution first; a row carrying none falls back to when it was made. */
+    const settledAt = (o: TradeOfferRow) => o.resolved_at ?? o.created_at;
+    // Ten a side, each already sorted, so the top ten of the merge is the true top
+    // ten however lopsided the two histories are.
+    const resolved = [...(sentDone.data ?? []), ...(receivedDone.data ?? [])]
+      .sort((a, b) => settledAt(b).localeCompare(settledAt(a)))
+      .slice(0, RECENT_LIMIT);
+
+    // An offer answered BETWEEN the live read and the settled one comes back from
+    // both, and would draw as a live offer with Accept on it and as a receipt at
+    // the same time. The settled read is the later fact, so it wins — the same
+    // call getMyStall makes, for the same reason: a dead Accept is worse than a
+    // receipt that turns up one refetch early.
+    const done = new Set(resolved.map((o) => o.id));
+    const outboxRows = (sent.data ?? []).filter((o) => !done.has(o.id));
+    const inboxRows = (received.data ?? []).filter((o) => !done.has(o.id));
+
+    const wanted = [...outboxRows, ...inboxRows, ...resolved];
     if (wanted.length === 0) return { inbox: [], outbox: [], recent: [], nudgeTopic };
 
     const { data: items, error: itemError } = await sb
@@ -597,8 +673,8 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
     const views = await toOfferViews(wanted, items ?? [], me);
     const byId = new Map(views.map((v) => [v.id, v]));
     return {
-      inbox: pending.filter((o) => o.recipient_id === me).map((o) => byId.get(o.id)!),
-      outbox: pending.filter((o) => o.proposer_id === me).map((o) => byId.get(o.id)!),
+      inbox: inboxRows.map((o) => byId.get(o.id)!),
+      outbox: outboxRows.map((o) => byId.get(o.id)!),
       recent: resolved.map((o) => byId.get(o.id)!),
       nudgeTopic,
     };

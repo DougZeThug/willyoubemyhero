@@ -26,10 +26,12 @@ Under it, "Make an offer": a row of names, one per person you could trade with.
 Tap a name and two strips of cards open — yours and theirs — and a Send button
 that stays dead until you have put at least one card on each side.
 
-Below that, every offer you were part of that has settled lately reads as a small
-receipt marked Done, Declined, Pulled or Expired. At the very bottom, "Around
-the league": a scrolling panel of one-line sentences about every trade that has
-completed this combine.
+Below that, every offer you were part of that has settled lately reads as one
+folded line: who it was with, a chip saying Done, Declined, Pulled or Expired,
+and a summary naming what each side gave. Tap the line and the cards open under
+it; tap again and they fold away. They run newest-settled first. At the very
+bottom, "Around the league": a scrolling panel of one-line sentences about every
+trade that has completed this combine.
 
 Offers you have sent appear in their own band, "Out there", between the inbox
 and the compose panel — but only while you have one. An empty outbox is absent
@@ -202,7 +204,9 @@ its state, so a screen reader announces staging on the control that was operated
 A blocked card is not a control at all — it is marked disabled with its reason
 read out beside it. The arrows between the two sides of an offer are decorative
 and hidden. The tab's dot is hidden too; the wording on the tab carries the whole
-message.
+message. A settled receipt is a heading you can press — the heading stays a
+heading, so the strip can still be walked by them, and the control inside it says
+whether the cards are open or shut.
 
 ## Edge cases
 
@@ -222,13 +226,26 @@ message.
 - **Your own name.** Never appears in the counterparty row. The database refuses
   a trade with yourself as well, so both ends agree.
 - **The receipts strip.** Holds the ten most recently settled offers in either
-  direction, and is the only way a decline is ever seen — there is no message and
-  no notification for one.
+  direction, ordered by when they settled rather than when they were made: an
+  offer proposed on Monday and declined on Friday reads as Friday's. It is the
+  only way a decline is ever seen — there is no message and no notification for
+  one. Every receipt arrives folded, because ten of them open at once is five
+  phone screens of history sitting under the two lists that need answering.
+- **A card you have since let go.** A Done receipt shows the art of what arrived
+  even if you have milled, sold or traded it on. Everywhere else a card you do
+  not hold goes back to being a face-down slot; the receipt is the exception,
+  because a record of a swap that will not show you what you got is not a record
+  of anything. A Declined, Pulled or Expired receipt is not an exception: nothing
+  moved, so the other side's cards stay face-down, named and levelled but not
+  shown.
 - **A phone handed around.** The screen is whoever the browser says it is. Two
   people sharing one handset share one inbox and one dot.
 
 ## Open questions and verification
 
+- That a folded receipt still reaches a screen reader as a heading, and that its
+  chip is readable without opening it, was read from the markup rather than heard
+  on a phone.
 - The "Claim your player" panel that appears while the account lookup is still
   answering is, on a device with neither identity, replaced by a redirect to the
   account screen a moment later. Which of the two a real visitor actually reads

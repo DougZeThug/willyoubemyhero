@@ -172,6 +172,11 @@ export function TradeOffersPanel({
       {recent.length > 0 && (
         <section className="mb-6">
           <SectionTitle label="Recently settled" />
+          {/* Folded, newest settlement first. Ten open receipts is five screens of
+              history under the two lists that need answering, and the plan this
+              screen was built from asked for this strip to stay text-first. The
+              summary line on each one names both sides, so a folded receipt is
+              still the whole story — which is what a strip of receipts is for. */}
           <div className="space-y-2">
             {recent.map((offer) => (
               <TradeOfferCard
@@ -181,6 +186,7 @@ export function TradeOffersPanel({
                 nameOf={nameOf}
                 lookup={lookup}
                 backUrl={backUrl}
+                collapsible
               />
             ))}
           </div>
