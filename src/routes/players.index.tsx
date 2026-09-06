@@ -1,7 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { Layers, Check, Medal } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
@@ -61,7 +59,6 @@ import {
   type CollectionTrophy,
 } from "@/lib/collection-trophies";
 import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
-import { getSecretCollections } from "@/lib/secret-cards.functions";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { CollectorSignupGate } from "@/components/collector-signup";

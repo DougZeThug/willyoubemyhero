@@ -847,8 +847,8 @@ function PackPage() {
       // beat *after* the card lands — the tier and the finish are separate facts
       // and the ear should hear them one after the other — and this line runs at
       // the tap, a 900ms hold and half a second of turn before there is a face to
-      // shine on. PackStand fires it, on the frame it blooms the frame, and it
-      // carries the `known` guard below with it.
+      // shine on. PackStand fires it, on the frame the metal comes up, and makes
+      // the same `known` check for itself off the editions map it is handed.
       // A migrated pack turns cards that were already pulled. Writing here would
       // charge somebody a second pull for a ceremony they were given, not asked
       // for. See replayedRef.
