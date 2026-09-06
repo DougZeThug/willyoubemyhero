@@ -30,6 +30,27 @@ async function signIn(page: Page, pid = ME.pid, name = ME.name) {
   );
 }
 
+/** Open the full-screen builder, and wait for it to actually be up. */
+async function openBuilder(page: Page) {
+  await page.getByRole("button", { name: /make an offer/i }).click();
+  await expect(page.getByRole("dialog", { name: /make an offer/i })).toBeVisible();
+}
+
+/** Who → give/get, which everything past the first step has to walk. */
+async function pickPartner(page: Page, name = THEM.name) {
+  await page.getByRole("button", { name: new RegExp(name) }).click();
+  await page.getByRole("button", { name: "Next" }).click();
+}
+
+/** The picker behind a tray's add button. */
+async function openPicker(page: Page, side: "give" | "want") {
+  const tray = page.getByRole("region", { name: side === "give" ? "You give" : "You get" });
+  await tray
+    .getByRole("button", { name: side === "give" ? /add your cards/i : /ask for/i })
+    .click();
+  return page.getByRole("dialog").last();
+}
+
 /** Bob offering his card for Alice's. */
 const INBOX_OFFER = {
   id: OFFER_ID,
@@ -61,6 +82,9 @@ test.describe("trading post", () => {
     // member session, so an unclaimed visitor cannot start composing and then
     // discover they cannot send it.
     await expect(page.getByRole("button", { name: /send offer/i })).toHaveCount(0);
+    // And nothing to open the builder with either: the sticky CTA belongs to the
+    // signed-in screen, and the gate stays exactly what it was.
+    await expect(page.getByRole("button", { name: /make an offer/i })).toHaveCount(0);
   });
 
   test("shows an offer waiting on you, naming both sides", async ({ page, server }) => {
@@ -94,6 +118,12 @@ test.describe("trading post", () => {
 
     await page.goto("/players/trade");
     await page.getByRole("button", { name: "Accept" }).click();
+    // Accept asks first now: it moves two people's cards, and it used to do that
+    // on one tap. The button in the sheet is "Confirm" rather than a second
+    // "Accept", so the locator above stays unambiguous.
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.getByText(/^Swap your /)).toBeVisible();
+    await sheet.getByRole("button", { name: /^confirm$/i }).click();
 
     await expect(page.getByText(/trade done/i)).toBeVisible();
     expect(posted).toHaveLength(1);
@@ -111,6 +141,10 @@ test.describe("trading post", () => {
 
     await page.goto("/players/trade");
     await page.getByRole("button", { name: "Accept" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^confirm$/i })
+      .click();
     await expect(page.getByText(/already moved on/i)).toBeVisible();
   });
 
@@ -175,29 +209,41 @@ test.describe("trading post", () => {
     });
 
     await page.goto("/players/trade");
+    await openBuilder(page);
 
-    await expect(page.getByRole("button", { name: PLAYERS[2].name })).toHaveCount(0);
-    await page.getByRole("button", { name: THEM.name }).click();
+    // Unclaimed people are not rows either — the Who list is the picker now.
+    await expect(page.getByRole("button", { name: new RegExp(PLAYERS[2].name) })).toHaveCount(0);
+    await page.getByRole("button", { name: new RegExp(THEM.name) }).click();
+    await page.getByRole("button", { name: "Next" }).click();
 
-    // Nothing staged yet, so there is nothing to send.
-    await expect(page.getByRole("button", { name: /send offer/i })).toBeDisabled();
+    // Nothing staged yet, so there is nothing to review — which is where Send
+    // lives now. The old "Send is disabled" beat, at the gate that replaced it.
+    await expect(page.getByRole("button", { name: "Review" })).toBeDisabled();
 
-    // One tile from each panel. Both panels render the same stub, so picking the
-    // first of each is picking one card from each side.
-    await page
+    // One tile from each picker. Both pickers render the same stub, so picking
+    // the first of each is picking one card from each side.
+    const mine = await openPicker(page, "give");
+    await mine
       .getByRole("button", { name: new RegExp(ME.name, "i") })
       .first()
       .click();
-    await page
-      .getByRole("button", { name: /gary the grill/i })
-      .last()
-      .click();
+    await mine.getByRole("button", { name: /^done$/i }).click();
 
+    const theirs = await openPicker(page, "want");
+    await theirs
+      .getByRole("button", { name: /gary the grill/i })
+      .first()
+      .click();
+    await theirs.getByRole("button", { name: /^done$/i }).click();
+
+    await page.getByRole("button", { name: "Review" }).click();
     const send = page.getByRole("button", { name: /send offer/i });
     await expect(send).toBeEnabled();
     await send.click();
 
     await expect(page.getByText(new RegExp(`offer sent to ${THEM.name}`, "i"))).toBeVisible();
+    // Sending puts the builder away and rings the offer it just made.
+    await expect(page).toHaveURL(/\/players\/trade$/);
     expect(posted).toHaveLength(1);
     // The counterparty is the one id a payload legitimately carries; both sides
     // go over as the discriminated shape the RPC validates. A roster item names a
@@ -229,8 +275,11 @@ test.describe("trading post", () => {
     server.set("getTradeSpares", { participantId: ME.pid, roster: [], secrets: [] });
 
     await page.goto("/players/trade");
-    await page.getByRole("button", { name: THEM.name }).click();
+    await openBuilder(page);
+    await pickPartner(page);
 
+    // On both trays, where somebody actually looks — not hidden behind a picker
+    // nobody has opened.
     await expect(page.getByText(/trading opens with the next combine/i)).toHaveCount(2);
     await expect(page.getByText("No spares to trade.")).toHaveCount(0);
   });
@@ -261,12 +310,14 @@ test.describe("trading post", () => {
     });
 
     await page.goto("/players/trade");
-    await page.getByRole("button", { name: THEM.name }).click();
+    await openBuilder(page);
+    await pickPartner(page);
+    const picker = await openPicker(page, "give");
 
     // The rarest finish leads, and only the special one is labelled — a chip
     // reading "Standard" on 70% of copies is noise.
-    await expect(page.getByText("Platinum").first()).toBeVisible();
-    await expect(page.getByText("Standard")).toHaveCount(0);
+    await expect(picker.getByText("Platinum").first()).toBeVisible();
+    await expect(picker.getByText("Standard")).toHaveCount(0);
   });
 
   test("marks a secret you only own one of", async ({ page, server }) => {
@@ -294,18 +345,20 @@ test.describe("trading post", () => {
     });
 
     await page.goto("/players/trade");
-    await page.getByRole("button", { name: THEM.name }).click();
+    await openBuilder(page);
+    await pickPartner(page);
+    const picker = await openPicker(page, "give");
 
     // Asserted by containment rather than accessible name: the tile is a button
     // wrapping a card image and three lines of caption, and how those concatenate
     // into one name is not something worth pinning a test to.
-    const gary = page
+    const gary = picker
       .getByRole("button")
       .filter({ hasText: /gary the grill/i })
       .first();
     await expect(gary).toContainText(/last copy/i);
 
-    const dog = page
+    const dog = picker
       .getByRole("button")
       .filter({ hasText: /the dog/i })
       .first();
@@ -333,6 +386,7 @@ test.describe("trading post", () => {
     ]);
 
     await page.goto("/players/trade");
+    await page.getByRole("button", { name: /^feed$/i }).click();
     await expect(page.getByText(/sent a secret to/i)).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/gary/i);
   });
@@ -354,9 +408,81 @@ test.describe("trading post", () => {
     ]);
 
     await page.goto("/players/trade");
+    // The tab first: `toBeHidden` below would otherwise pass on a feed nobody
+    // had opened, and go on passing if the naming ever broke.
+    await page.getByRole("button", { name: /^feed$/i }).click();
     await expect(page.getByText(/gary the grill/i).first()).toBeVisible();
     // And the nameless wording stays out of the way when there is a name.
     await expect(page.getByText(/sent a secret to/i)).toBeHidden();
+  });
+
+  test("will not move a card until the accept is confirmed", async ({ page, server }) => {
+    // The negative half, and the one that actually proves the sheet: the test
+    // above would pass just as well with no confirmation at all.
+    await signIn(page);
+    server.set("getMyTradeOffers", { inbox: [INBOX_OFFER], outbox: [], recent: [] });
+
+    await page.goto("/players/trade");
+    await page.getByRole("button", { name: "Accept" }).click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet).toBeVisible();
+    await sheet.getByRole("button", { name: /^cancel$/i }).click();
+
+    await expect(sheet).toBeHidden();
+    // acceptTradeOffer is deliberately not in DEFAULT_RESPONSES, so calling it
+    // would 500 and fail the test on its own — but say it out loud anyway.
+    expect(server.calls.filter((c) => /acceptTradeOffer/.test(c))).toHaveLength(0);
+  });
+
+  test("an empty inbox says so and offers a way out of it", async ({ page, server }) => {
+    // One 12px sentence and no way forward was §10's problem 7.
+    await signIn(page);
+    await page.goto("/players/trade");
+
+    await expect(page.getByText("Nobody wants your cards. Yet.")).toBeVisible();
+    await page.getByRole("button", { name: /start the first offer/i }).click();
+    await expect(page.getByRole("dialog", { name: /make an offer/i })).toBeVisible();
+  });
+
+  test("stacks the two trays at a phone width", async ({ page, server }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "the stack is the phone layout");
+    await signIn(page);
+    server.set("getClaimRoster", [
+      { id: ME.pid, name: ME.name, nickname: null, hasCode: true, claimed: true, reachable: true },
+      {
+        id: THEM.pid,
+        name: THEM.name,
+        nickname: null,
+        hasCode: true,
+        claimed: true,
+        reachable: true,
+      },
+    ]);
+    server.set("getTradeSpares", {
+      participantId: ME.pid,
+      roster: [{ copyId: MY_COPY, eventParticipantId: ME.ep, edition: "standard" }],
+      secrets: [],
+    });
+
+    // Stated rather than inherited: the iPhone 13 preset is 390x664 in-page,
+    // which is the viewport left under the browser's own chrome. The audit's
+    // number is the whole device, and that is what this assertion is about.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/players/trade");
+    await openBuilder(page);
+    await pickPartner(page);
+
+    // Scoped to the builder: an offer card carries sections with these same
+    // names, and at 390 it is doing the same thing for the same reason.
+    const builder = page.getByRole("dialog", { name: /make an offer/i });
+    const give = await builder.getByRole("region", { name: "You give" }).boundingBox();
+    const get = await builder.getByRole("region", { name: "You get" }).boundingBox();
+
+    expect(give!.height, "the give tray measured as nothing").toBeGreaterThan(0);
+    expect(
+      get!.y,
+      "the get tray sits beside the give tray rather than under it",
+    ).toBeGreaterThanOrEqual(give!.y + give!.height);
   });
 
   test("the nav links here", async ({ page, server }) => {
