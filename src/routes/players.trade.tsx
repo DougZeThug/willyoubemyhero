@@ -225,15 +225,25 @@ function TradePage() {
    * and Cancel could not close it either. Safe to clear the instant the builder
    * is up: TradeBuilder seeds its own copy from this prop at mount and never
    * reads it again.
+   *
+   * `me` is in that condition because the builder RENDERS behind the signed-out
+   * gate below, and this effect does not — hooks run whichever branch returns.
+   * The two conditions have to be the same one, or a render with the param set
+   * and no session yet would spend the intent on a builder that never mounted.
+   * `useMemberSession` answers null on the hydration render by design, so that
+   * window is real even though the flow that carries an intent does not open on
+   * it.
    */
+  const myIdForIntent = me?.participantId ?? null;
   useEffect(() => {
     if (!intent) return;
-    if (builderOpen) {
+    if (builderOpen && myIdForIntent) {
       setIntent(null);
       return;
     }
+    if (builderOpen) return;
     void navigate({ to: ".", search: { make: 1 as const }, replace: true });
-  }, [intent, builderOpen, navigate]);
+  }, [intent, builderOpen, myIdForIntent, navigate]);
 
   useEffect(() => {
     if (!highlightId) return;

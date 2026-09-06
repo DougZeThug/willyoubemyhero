@@ -26,6 +26,7 @@ vi.mock("./holo-card", () => ({
 const SPARES = vi.hoisted(() => ({
   current: {} as Record<string, TradeSpares | undefined>,
   failed: false,
+  refetch: vi.fn(),
 }));
 vi.mock("@/hooks/use-trades", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/use-trades")>()),
@@ -33,6 +34,7 @@ vi.mock("@/hooks/use-trades", async (importOriginal) => ({
     data: SPARES.failed || !participantId ? undefined : SPARES.current[participantId],
     isPending: false,
     isError: SPARES.failed,
+    refetch: SPARES.refetch,
   }),
 }));
 
@@ -305,6 +307,17 @@ describe("when the spares cannot be read", () => {
     await pickPartner();
     expect(screen.queryByText("No spares to trade.")).not.toBeInTheDocument();
     expect(screen.getAllByText(/couldn't count the spares/i).length).toBeGreaterThan(0);
+  });
+
+  it("offers a way back out of it without leaving the flow", async () => {
+    // Automatic retries are off on purpose and focus refetching only helps
+    // somebody who leaves the app and comes back, which is not a thing to ask
+    // of a person mid-offer.
+    SPARES.failed = true;
+    renderBuilder();
+    await pickPartner();
+    await userEvent.click(within(tray("You give")).getByRole("button", { name: /try again/i }));
+    expect(SPARES.refetch).toHaveBeenCalled();
   });
 });
 

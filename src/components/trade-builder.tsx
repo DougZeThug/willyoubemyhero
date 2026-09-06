@@ -296,6 +296,7 @@ export function TradeBuilder({
                 spares={mySpares.data}
                 loading={mySpares.isPending}
                 failed={mySpares.isError}
+                onRetry={() => void mySpares.refetch()}
                 lookup={lookup}
                 backUrl={backUrl}
                 outOfSeason={outOfSeason}
@@ -309,6 +310,7 @@ export function TradeBuilder({
                 spares={theirSpares.data}
                 loading={theirSpares.isPending}
                 failed={theirSpares.isError}
+                onRetry={() => void theirSpares.refetch()}
                 lookup={lookup}
                 backUrl={backUrl}
                 outOfSeason={outOfSeason}
@@ -380,6 +382,7 @@ export function TradeBuilder({
           spares={sheetFor === "want" ? theirSpares.data : mySpares.data}
           loading={sheetFor === "want" ? theirSpares.isPending : mySpares.isPending}
           failed={sheetFor === "want" ? theirSpares.isError : mySpares.isError}
+          onRetry={() => void (sheetFor === "want" ? theirSpares : mySpares).refetch()}
           staged={sheetFor === "want" ? want : give}
           lookup={lookup}
           rosterRank={rosterRank}
@@ -510,6 +513,7 @@ function Tray({
   backUrl,
   outOfSeason,
   failed,
+  onRetry,
   conceal = false,
   addLabel,
   onAdd,
@@ -524,6 +528,8 @@ function Tray({
   outOfSeason: boolean;
   /** The spares read failed. Distinct from having none, which is a fact. */
   failed: boolean;
+  /** Ask for the spares again — the only way out of `failed` without leaving. */
+  onRetry: () => void;
   conceal?: boolean;
   addLabel: string;
   onAdd: () => void;
@@ -586,9 +592,21 @@ function Tray({
         // retry, so a token that expired mid-party lands here. Saying "no spares
         // to trade" instead would be a claim about somebody's collection that
         // the app has no basis for, and it takes the add button away with it.
-        <p role="status" className="text-meta text-warn">
-          Couldn&apos;t count the spares. Try again in a moment.
-        </p>
+        //
+        // The button matters as much as the wording. Automatic retries are off
+        // on purpose, and focus refetching only helps somebody who leaves the
+        // app and comes back — which is not a thing to ask of a person standing
+        // in a garden mid-offer. A tap is what gets them out of here.
+        <div role="status">
+          <p className="text-meta text-warn">Couldn&apos;t count the spares.</p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-white/10 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Try again
+          </button>
+        </div>
       ) : nothingToOffer ? (
         <p className="text-meta text-muted-foreground">
           {outOfSeason ? "Trading opens with the next combine." : "No spares to trade."}
@@ -615,6 +633,7 @@ function SparePickerDrawer({
   spares,
   loading,
   failed,
+  onRetry,
   staged,
   lookup,
   rosterRank,
@@ -629,6 +648,7 @@ function SparePickerDrawer({
   spares: TradeSpares | undefined;
   loading: boolean;
   failed: boolean;
+  onRetry: () => void;
   staged: Staged[];
   lookup: RosterCardLookup;
   rosterRank: (eventParticipantId: string) => number;
@@ -657,9 +677,12 @@ function SparePickerDrawer({
           {loading ? (
             <p className="text-meta text-muted-foreground">Counting spares…</p>
           ) : failed ? (
-            <p role="status" className="text-meta text-warn">
-              Couldn&apos;t count the spares. Try again in a moment.
-            </p>
+            <div role="status">
+              <p className="text-meta text-warn">Couldn&apos;t count the spares.</p>
+              <button type="button" onClick={onRetry} className="neon-btn-sm mt-2 w-full">
+                Try again
+              </button>
+            </div>
           ) : items.length === 0 ? (
             <p className="text-meta text-muted-foreground">
               {outOfSeason ? "Trading opens with the next combine." : "No spares to trade."}
