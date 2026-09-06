@@ -1,6 +1,5 @@
-import { PackCardBack } from "@/components/pack-card-back";
 import { LOCKED_RARITY } from "@/components/locked-card";
-import type { ImageUrlSet } from "@/lib/media";
+import { urlFromSet, type ImageUrlSet } from "@/lib/media";
 
 /**
  * The horizon at the end of an open set shelf.
@@ -23,6 +22,7 @@ import type { ImageUrlSet } from "@/lib/media";
  * is the difference between "shut" and "unwritten".
  */
 export function MysterySlot({ back }: { back: ImageUrlSet | null }) {
+  const url = urlFromSet(back, "thumb");
   return (
     <div className="flex flex-col gap-2">
       <div
@@ -34,9 +34,31 @@ export function MysterySlot({ back }: { back: ImageUrlSet | null }) {
         className="relative aspect-[5/7] w-full overflow-hidden rounded-xl border border-dashed"
         style={{ borderColor: `color-mix(in oklab, ${LOCKED_RARITY.border} 45%, transparent)` }}
       >
-        <PackCardBack art={back} inGrid className="opacity-40" />
-        <div aria-hidden className="absolute inset-0 flex items-center justify-center bg-black/45">
-          <span className="font-display text-4xl font-black leading-none text-foreground/45">
+        {/* The event's back where there is one, and bare foil where there is
+            not — deliberately NOT PackCardBack's SealedBack, which is the branded
+            fallback and has "Will YOU Be My Hero? / Draft Combine" written across
+            the middle of it. Under the "?" those words fight for the same space
+            and neither wins. A slot has nothing to announce; it only has to read
+            as a card, face down.
+
+            The thumb rendition, like every other face-down slot in this grid: a
+            picture the eye reads as "shut" does not need 1200px. */}
+        {url ? (
+          <img
+            src={url}
+            alt=""
+            aria-hidden
+            draggable={false}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="wax-foil h-full w-full" aria-hidden />
+        )}
+        {/* Heavy enough that whatever is under it reads as texture rather than as
+            a picture: this slot is a space, not a card somebody is hiding. */}
+        <div aria-hidden className="absolute inset-0 flex items-center justify-center bg-black/60">
+          <span className="font-display text-5xl font-black leading-none text-foreground/70">
             ?
           </span>
         </div>
