@@ -135,10 +135,17 @@ export function TradeItemTile({
         {concealed && (
           <div className="text-meta font-semibold text-muted-foreground">Not yours yet</div>
         )}
-        {/* Which shelf it came off, on a screen that has no shelves. Null on a
-            concealed tile because the server withheld it there — a set on a card
-            whose name is being kept back would sort the unknowns into piles. */}
-        {item.kind === "secret" && <SetChip collection={item.collection} sets={sets} />}
+        {/* Which shelf it came off, on a screen that has no shelves.
+            Never on a concealed tile, and NOT because the server withheld it —
+            inside an offer it did not. `getTradeSpares` conceals a counterparty's
+            unowned card, but `getMyTradeOffers` hydrates with concealment off,
+            because you cannot judge an offer sight unseen. That exception is
+            scoped to the card's NAME. A set is a different fact: it says which
+            shelf of yours has something missing from it, which is the one thing
+            the whole feature withholds. So the tile gates it here as well. */}
+        {!concealed && item.kind === "secret" && (
+          <SetChip collection={item.collection} sets={sets} />
+        )}
         {/* Any secret copy is tradeable now, single or not, so this is the only
             thing standing between somebody and giving away their only mythic.
             A marker rather than a dialog: visible, not in the way. */}

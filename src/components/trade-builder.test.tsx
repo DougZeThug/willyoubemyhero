@@ -1,10 +1,14 @@
 // Building an offer, as three screens.
 //
-// Rendered with NO PROVIDERS AT ALL — no router, no QueryClient, no server
-// function — and that is the assertion rather than a shortcut. The builder holds
-// the offer and nothing else: `onSend` and `onClose` are props, and the only data
-// it reaches for is the two spares lists it draws. Anything that made this file
-// need a wrapper would mean the flow had grown a dependency it should not have.
+// No router and no server function, and that is the assertion rather than a
+// shortcut. The builder holds the offer and nothing else: `onSend` and `onClose`
+// are props, and the only data it reaches for is the two spares lists it draws.
+//
+// It does now need a QueryClient. The tiles print a set chip, and the set list is
+// a query — one shared key, cached across the four screens that print the name.
+// That is the one dependency this flow has grown, and it is a label rather than
+// anything the builder decides with; anything BEYOND it that made this file need
+// a wrapper would mean the flow had grown a dependency it should not have.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

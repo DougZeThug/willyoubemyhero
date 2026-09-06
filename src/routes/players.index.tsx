@@ -1315,10 +1315,23 @@ function PlayersPage() {
                                 Not the unsorted pile, which is not a set and has
                                 nothing more to come — and not a set you have
                                 finished, where the trophy has already given you the
-                                size and there is no horizon left to point at. */}
-                            {section.setId !== null && !myCompleted.has(section.setId) && (
-                              <MysterySlot back={cardBack.data?.urls ?? null} />
-                            )}
+                                size and there is no horizon left to point at.
+
+                                And not for a guest at all, which is the awkward
+                                one. A completion trophy is the ONLY thing that can
+                                tell a client a set is finished — the size is never
+                                sent, deliberately — and a guest has no trophies by
+                                design; claim_guest_secrets banks them the moment
+                                they put a name to the phone. So a guest who really
+                                had finished a set would be promised another card
+                                that does not exist. There is no client-side way to
+                                know, and a horizon that might be a lie is worse
+                                than no horizon. */}
+                            {section.setId !== null &&
+                              !!member?.participantId &&
+                              !myCompleted.has(section.setId) && (
+                                <MysterySlot back={cardBack.data?.urls ?? null} />
+                              )}
                           </>,
                         )}
               </VaultSection>

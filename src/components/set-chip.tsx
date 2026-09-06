@@ -32,9 +32,18 @@ export function SetChip({
   className?: string;
 }) {
   if (!collection) return null;
+  // The live list first, then the sets that shipped, then the id itself.
+  //
+  // An admin can HIDE a set, which takes it out of getSecretCollections' answer
+  // — it only returns active ones — while the cards filed into it are still in
+  // somebody's vault. Handing the helpers a list that does not contain this id
+  // would print `legacyPets` on the card, which reads as a bug rather than as a
+  // label. Passing undefined instead drops them onto SECRET_COLLECTIONS, which
+  // is exactly the fallback they were written with.
+  const list = sets?.some((c) => c.id === collection) ? sets : undefined;
   // The shelf's own fallback, so a card from an untinted set wears the shared
   // secret green rather than going colourless on its own.
-  const accent = setAccent(collection, sets) ?? SECRET_RARITY.accent;
+  const accent = setAccent(collection, list) ?? SECRET_RARITY.accent;
   return (
     <span
       className={cn(
@@ -48,7 +57,7 @@ export function SetChip({
         background: `color-mix(in oklab, ${accent} 18%, transparent)`,
       }}
     >
-      {secretCollectionLabel(collection, sets)}
+      {secretCollectionLabel(collection, list)}
     </span>
   );
 }

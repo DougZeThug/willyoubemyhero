@@ -14,6 +14,7 @@ import { EVENT_ID, makeBundle } from "@/test/fixtures";
 
 const useCollectionTrophies = vi.fn();
 const useMySecrets = vi.fn();
+const useMemberSession = vi.fn();
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -86,7 +87,7 @@ vi.mock("@/hooks/use-my-collection", () => ({
 // the hook it reads.
 vi.mock("@/lib/member-token", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
-  return { ...actual, useMemberSession: () => ({ participantId: ME }) };
+  return { ...actual, useMemberSession: () => useMemberSession() };
 });
 
 vi.mock("lucide-react", async (importOriginal) => {
@@ -146,6 +147,7 @@ function petsShelf() {
 beforeEach(() => {
   useMySecrets.mockReturnValue({ data: { cards: PETS, pulled: PETS.length } });
   useCollectionTrophies.mockReturnValue({ data: { trophies: [] } });
+  useMemberSession.mockReturnValue({ participantId: ME });
 });
 
 describe("the mystery slot on a set shelf", () => {
@@ -200,6 +202,20 @@ describe("the mystery slot on a set shelf", () => {
       .getAllByText("Pets")
       .filter((el) => el.tagName !== "H2");
     expect(chips).toHaveLength(PETS.length);
+  });
+
+  it("says nothing to a guest, who has no way of knowing a set is done", () => {
+    // A completion trophy is the only thing that can tell a client a set is
+    // finished — the size is never sent — and a guest has no trophies by design.
+    // So a guest who HAD finished a set would be promised a card that does not
+    // exist, and there is no client-side way to tell the two apart.
+    useMemberSession.mockReturnValue(null);
+    render(<PlayersPage />);
+
+    // The shelf and its cards are still theirs; only the horizon is withheld.
+    expect(within(petsShelf()).getAllByText("Pets").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("img", { name: "Unknown cards remain" })).toBeNull();
+    expect(screen.queryByText("More in this set")).toBeNull();
   });
 
   it("leaves the unsorted pile alone", () => {

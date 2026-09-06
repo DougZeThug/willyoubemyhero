@@ -29,6 +29,14 @@ describe("the set chip", () => {
     expect(screen.getByText("Pets")).toBeInTheDocument();
   });
 
+  it("falls back to the shipped label for a set an admin has hidden", () => {
+    // getSecretCollections only returns ACTIVE sets, so hiding one takes it out of
+    // the live list while the cards filed into it stay in people's vaults. Reading
+    // the raw id off the card would look like a bug rather than a label.
+    render(<SetChip collection="pets" sets={[{ id: "wags", label: "WAGs", accent: null }]} />);
+    expect(screen.getByText("Pets")).toBeInTheDocument();
+  });
+
   it("keeps a retired set legible rather than dropping it", () => {
     // An id nobody has a label for still has rows pointing at it, and a card that
     // silently loses its set reads as a bug.
