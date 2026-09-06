@@ -231,13 +231,21 @@ whether the cards are open or shut.
   only way a decline is ever seen — there is no message and no notification for
   one. Every receipt arrives folded, because ten of them open at once is five
   phone screens of history sitting under the two lists that need answering.
-- **A card you have since let go.** A Done receipt shows the art of what arrived
-  even if you have milled, sold or traded it on. Everywhere else a card you do
-  not hold goes back to being a face-down slot; the receipt is the exception,
-  because a record of a swap that will not show you what you got is not a record
-  of anything. A Declined, Pulled or Expired receipt is not an exception: nothing
-  moved, so the other side's cards stay face-down, named and levelled but not
-  shown.
+- **A card you have since traded on.** A Done receipt shows the art of what
+  arrived even after you have passed that card along to somebody else.
+  Everywhere else a card you do not hold goes back to being a face-down slot;
+  the receipt is the exception, because a record of a swap that will not show
+  you what you got is not a record of anything. A Declined, Pulled or Expired
+  receipt is not an exception: nothing moved, so the other side's cards stay
+  face-down, named and levelled but not shown.
+- **A card you have since milled or sold.** Different, and worse: milling or
+  selling deletes the copy outright, and a settled offer's items are wired to
+  the copy rather than to a snapshot of it, so that half of the receipt empties
+  to "Nothing left on this side." permanently. This is the same deletion the
+  edge case above it describes for a live offer, reaching a piece of history
+  that ought to be immutable. Flagged as a defect rather than described as a
+  feature; fixing it needs the item to record what the card WAS, which it does
+  not today.
 - **A phone handed around.** The screen is whoever the browser says it is. Two
   people sharing one handset share one inbox and one dot.
 

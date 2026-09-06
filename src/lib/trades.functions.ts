@@ -495,14 +495,25 @@ async function toOfferViews(
    *
    * `received` is the trades half of `withListedSecrets` in market.functions.ts,
    * and it exists for the same reason that one does: `viewerOwns` asks what you
-   * hold NOW, so a card you have since milled, sold or traded on went face-down
-   * on the one screen whose whole job is to tell you what arrived. Worse, it did
-   * so beside the card that LEFT, which the give side draws in full colour — a
-   * receipt where your own half is lit and the other half is a deck back.
+   * hold NOW, so a card you have since TRADED ON went face-down on the one
+   * screen whose whole job is to tell you what arrived. Worse, it did so beside
+   * the card that LEFT, which the give side draws in full colour — a receipt
+   * where your own half is lit and the other half is a deck back.
+   *
+   * TRADED ON, and not milled or sold, which this flag cannot reach and must not
+   * be described as reaching. accept_trade_offer re-parents (UPDATE card_copies
+   * SET participant_id), so a card passed along again leaves its
+   * trade_offer_items row standing for `view` to find. mill_card_copy and
+   * sell_secret_card DELETE the row, and trade_offer_items.card_copy_id /
+   * .secret_pull_id are ON DELETE CASCADE, so the item goes with it: `view` is
+   * never called, the side arrives empty, and CardStrip prints "Nothing left on
+   * this side." That is a separate, older defect — a settled receipt has no
+   * immutable snapshot of what was on it — and no flag here can fix it. Both
+   * halves are pinned in tests/db/trades.test.ts.
    *
    * A widening, stated rather than smuggled: a roster card is a face-down slot
    * in the vault and on its player page until you hold a copy, so a receipt for
-   * a card you have let go since shows art the rest of the app has gone back to
+   * a card you have passed along shows art the rest of the app has gone back to
    * hiding from you. That is the intent — the swap happened and the card was
    * yours — and it takes the set chip with it, which the tile suppresses on a
    * concealed card for the same reason it suppresses the art.

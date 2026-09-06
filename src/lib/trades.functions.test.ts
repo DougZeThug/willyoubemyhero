@@ -860,13 +860,19 @@ describe("getMyTradeOffers", () => {
     expect(res.inbox[0].proposerGives).toEqual([]);
   });
 
-  it("keeps the face of a card an accepted swap put in your hands, once it has gone again", async () => {
+  it("keeps the face of a card an accepted swap put in your hands, once it has moved on", async () => {
     // The reported bug. `viewerOwns` asks what you hold NOW, so a card you have
-    // since milled, sold or traded on went face-down on the one screen whose
-    // whole job is to say what arrived — and it did so BESIDE the card that left,
-    // which the give side draws in full colour. Your own half lit, their half a
-    // deck back. Scoped exactly like withListedSecrets in market.functions.ts:
-    // the receiving side of an offer that was actually accepted, and nothing else.
+    // since traded on went face-down on the one screen whose whole job is to say
+    // what arrived — and it did so BESIDE the card that left, which the give side
+    // draws in full colour. Your own half lit, their half a deck back. Scoped
+    // exactly like withListedSecrets in market.functions.ts: the receiving side
+    // of an offer that was actually accepted, and nothing else.
+    //
+    // Traded on, NOT milled or sold: those DELETE the copy and the item row
+    // cascades away, so there is nothing left for this to un-conceal. The state
+    // below — the copy row alive, owned by somebody else — is the one accepting
+    // a second trade produces, because accept re-parents rather than deletes.
+    // tests/db/trades.test.ts pins both halves against the real schema.
     const accepted = { ...settled, status: "accepted" };
     withDb({
       "trade_offers.select": offerReads([], [], [], [accepted]),
@@ -876,8 +882,8 @@ describe("getMyTradeOffers", () => {
           { id: "i2", offer_id: "o3", giver_side: "recipient", kind: "roster", card_copy_id: COPY_2, secret_pull_id: null }, // prettier-ignore
         ],
       },
-      // The reader holds neither card any more: they gave one away and have let
-      // the other go since.
+      // The reader holds neither card any more: they gave one away in this trade
+      // and have since traded the other on to somebody else.
       "card_copies.select": [
         { data: [] },
         {

@@ -491,7 +491,7 @@ export function TradeOfferCard({
                 have never pulled, and an offer should not be a way to see it.
                 What DID reach you is not concealed — toOfferViews marks the
                 receiving side of an accepted offer as owned, so a receipt draws
-                the card that arrived even after you have let it go again. */}
+                the card that arrived even after you have traded it on. */}
             <CardStrip items={iGet} lookup={lookup} size={size} conceal backUrl={backUrl} />
           </section>
         </div>
