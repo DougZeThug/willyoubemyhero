@@ -7,6 +7,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { LOCKED_EDITION, LockedCard } from "@/components/locked-card";
+import { MysterySlot } from "@/components/mystery-slot";
 import { CardSkeleton } from "@/components/card-skeleton";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
@@ -514,6 +515,10 @@ function PlayersPage() {
       ...secretGroups.map((g) => ({
         kind: "secrets" as const,
         id: secretSectionId(g.id),
+        // The SET, where `id` above is the section derived from it. Two different
+        // things, and the mystery slot below needs this one: `secret:` is also a
+        // valid section id — the unsorted pile's — and that pile is not a set.
+        setId: g.id,
         title: g.id === null ? VAULT_UNSORTED_LABEL : g.label,
         // How many of this set you hold. Never a denominator — see the shelf below.
         meta: g.items.length,
@@ -1292,7 +1297,29 @@ function PlayersPage() {
                             f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
                           ),
                         )
-                      : cardGrid(section.items.map(secretTile))}
+                      : cardGrid(
+                          <>
+                            {section.items.map(secretTile)}
+                            {/* The one exception to this feature's silence, and only
+                                in this exact shape: ONE tile at the end of an open
+                                set, whether one card is left in it or twenty.
+
+                                That is what keeps it from leaking. A slot per
+                                missing card would be the set size written out in
+                                silhouettes; a number on this tile would be the set
+                                size written out in digits. One tile says only "this
+                                set is not finished", which the shelf's own absence
+                                from the Complete shelf already says out loud.
+
+                                Not the unsorted pile, which is not a set and has
+                                nothing more to come — and not a set you have
+                                finished, where the trophy has already given you the
+                                size and there is no horizon left to point at. */}
+                            {section.setId !== null && !myCompleted.has(section.setId) && (
+                              <MysterySlot back={cardBack.data?.urls ?? null} />
+                            )}
+                          </>,
+                        )}
               </VaultSection>
             </div>
           );
@@ -1301,3 +1328,5 @@ function PlayersPage() {
     </div>
   );
 }
+
+export default PlayersPage;
