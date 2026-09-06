@@ -643,9 +643,22 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
         .limit(RECENT_LIMIT)
         .returns<TradeOfferRow[]>();
 
-    const [sent, received, sentDone, receivedDone] = await Promise.all([
-      live("proposer_id"),
-      live("recipient_id"),
+    // TWO BATCHES, LIVE FIRST, and the order is load-bearing rather than tidy.
+    //
+    // Run all four at once and an offer answered mid-request can land in NEITHER
+    // list: the settled read reaches Postgres while it is still pending and skips
+    // it, the live read arrives after the answer and skips it too, and the offer
+    // simply vanishes off the screen until something refetches. Reading live
+    // first closes that — whatever settles after the live snapshot is caught by
+    // the settled one, and anything caught by both is deduped below.
+    //
+    // It leaves the mirror case, which is much narrower: an offer put back with
+    // Undo inside its sixty seconds, between the two batches, is missed by both
+    // for one fetch. That is a tap the person is watching, `undoResolve` calls
+    // refreshMine() straight after it, and the next focus refetch closes it
+    // regardless — where a decline nobody is watching would sit vanished.
+    const [sent, received] = await Promise.all([live("proposer_id"), live("recipient_id")]);
+    const [sentDone, receivedDone] = await Promise.all([
       settled("proposer_id"),
       settled("recipient_id"),
     ]);
@@ -659,11 +672,11 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
       .sort((a, b) => settledAt(b).localeCompare(settledAt(a)))
       .slice(0, RECENT_LIMIT);
 
-    // An offer answered BETWEEN the live read and the settled one comes back from
-    // both, and would draw as a live offer with Accept on it and as a receipt at
-    // the same time. The settled read is the later fact, so it wins — the same
-    // call getMyStall makes, for the same reason: a dead Accept is worse than a
-    // receipt that turns up one refetch early.
+    // An offer answered between the two batches comes back from both — pending in
+    // the earlier read, resolved in the later one — and would draw as a live
+    // offer with Accept on it AND as a receipt. The settled read is the later
+    // fact, so it wins: the same call getMyStall makes, for the same reason. A
+    // receipt one refetch early beats a live offer with a dead Accept on it.
     const done = new Set(resolved.map((o) => o.id));
     const outboxRows = (sent.data ?? []).filter((o) => !done.has(o.id));
     const inboxRows = (received.data ?? []).filter((o) => !done.has(o.id));
