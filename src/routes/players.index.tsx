@@ -1,12 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { Layers, Check, Medal } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { HoloCard } from "@/components/holo-card";
 import { LOCKED_EDITION, LockedCard } from "@/components/locked-card";
+import { MysterySlot } from "@/components/mystery-slot";
+import { SetChip } from "@/components/set-chip";
 import { CardSkeleton } from "@/components/card-skeleton";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
@@ -59,7 +59,6 @@ import {
   type CollectionTrophy,
 } from "@/lib/collection-trophies";
 import { rosterFavouriteId, secretFavouriteId, useVaultFavourites } from "@/lib/vault-favourites";
-import { getSecretCollections } from "@/lib/secret-cards.functions";
 import { secretTierCaption, secretTierStyle } from "@/lib/secret-rarity";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { CollectorSignupGate } from "@/components/collector-signup";
@@ -79,6 +78,7 @@ import {
   useVaultLastSeen,
 } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
+import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { urlFromSet } from "@/lib/media";
 
 export const Route = createFileRoute("/players/")({
@@ -162,14 +162,11 @@ function PlayersPage() {
   // where a card is actually at stake; the vault only ever reads.
   const actor = useSecretActor();
   const secrets = useMySecrets(actor);
-  // The sets, purely for their names and their order — this says nothing about
-  // what is inside one, so the vault's silence about unpulled cards holds.
-  const collectionsFn = useServerFn(getSecretCollections);
-  const collections = useQuery({
-    queryKey: ["secret-collections"],
-    queryFn: () => collectionsFn(),
-    staleTime: 30 * 60_000,
-  });
+  // The sets, purely for their names, their colours and their order — this says
+  // nothing about what is inside one, so the vault's silence about unpulled cards
+  // holds. Shared now with the viewer, the trade screen and the shop, which print
+  // the same names on the same cards.
+  const collections = useSecretCollections();
   // The whole league's trophies, because the same rows badge your card backs and
   // fill your shelf. Public data, so this is the one collection query on this
   // page that is not scoped to whoever is holding the phone.
@@ -470,17 +467,17 @@ function PlayersPage() {
    * the set it came from. Never how many sets exist.
    */
   const secretSetCount = useMemo(
-    () => groupBySecretCollection(ownedSecrets, collections.data?.collections).length,
-    [ownedSecrets, collections.data],
+    () => groupBySecretCollection(ownedSecrets, collections).length,
+    [ownedSecrets, collections],
   );
 
   const secretGroups = useMemo(
     () =>
       groupBySecretCollection(
         ownedSecrets.filter((s) => !pinnedIds.has(secretFavouriteId(s.id))),
-        collections.data?.collections,
+        collections,
       ),
-    [ownedSecrets, pinnedIds, collections.data],
+    [ownedSecrets, pinnedIds, collections],
   );
 
   const sections = useMemo(
@@ -514,6 +511,10 @@ function PlayersPage() {
       ...secretGroups.map((g) => ({
         kind: "secrets" as const,
         id: secretSectionId(g.id),
+        // The SET, where `id` above is the section derived from it. Two different
+        // things, and the mystery slot below needs this one: `secret:` is also a
+        // valid section id — the unsorted pile's — and that pile is not a set.
+        setId: g.id,
         title: g.id === null ? VAULT_UNSORTED_LABEL : g.label,
         // How many of this set you hold. Never a denominator — see the shelf below.
         meta: g.items.length,
@@ -629,6 +630,7 @@ function PlayersPage() {
         name: c.name,
         rarity,
         tier: c.tier,
+        collection: c.collection,
         flavour: c.flavour,
         firstPulledOn: c.firstPulledOn,
         ownerCount: c.ownerCount,
@@ -892,6 +894,10 @@ function PlayersPage() {
                 collection speak the same language. */}
             {s.count > 1 ? `Pulled ×${s.count}` : "Secret"}
           </div>
+          {/* On the tile as well as on the shelf above it, because a favourite
+              leaves its set's panel for the pinned shelf and would otherwise
+              arrive there with nothing left saying where it came from. */}
+          <SetChip collection={s.collection} sets={collections} className="mt-1" />
           {packedByLabel(s.ownerCount) && (
             <div className="text-meta font-semibold text-muted-foreground">
               {packedByLabel(s.ownerCount)}
@@ -1292,7 +1298,42 @@ function PlayersPage() {
                             f.kind === "roster" ? rosterTile(f.row) : secretTile(f.card),
                           ),
                         )
-                      : cardGrid(section.items.map(secretTile))}
+                      : cardGrid(
+                          <>
+                            {section.items.map(secretTile)}
+                            {/* The one exception to this feature's silence, and only
+                                in this exact shape: ONE tile at the end of an open
+                                set, whether one card is left in it or twenty.
+
+                                That is what keeps it from leaking. A slot per
+                                missing card would be the set size written out in
+                                silhouettes; a number on this tile would be the set
+                                size written out in digits. One tile says only "this
+                                set is not finished", which the shelf's own absence
+                                from the Complete shelf already says out loud.
+
+                                Not the unsorted pile, which is not a set and has
+                                nothing more to come — and not a set you have
+                                finished, where the trophy has already given you the
+                                size and there is no horizon left to point at.
+
+                                And not for a guest at all, which is the awkward
+                                one. A completion trophy is the ONLY thing that can
+                                tell a client a set is finished — the size is never
+                                sent, deliberately — and a guest has no trophies by
+                                design; claim_guest_secrets banks them the moment
+                                they put a name to the phone. So a guest who really
+                                had finished a set would be promised another card
+                                that does not exist. There is no client-side way to
+                                know, and a horizon that might be a lie is worse
+                                than no horizon. */}
+                            {section.setId !== null &&
+                              !!member?.participantId &&
+                              !myCompleted.has(section.setId) && (
+                                <MysterySlot back={cardBack.data?.urls ?? null} />
+                              )}
+                          </>,
+                        )}
               </VaultSection>
             </div>
           );
@@ -1301,3 +1342,5 @@ function PlayersPage() {
     </div>
   );
 }
+
+export default PlayersPage;

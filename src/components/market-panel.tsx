@@ -97,6 +97,13 @@ function asTileItem(listing: MarketListing): TradeItemView {
         name: listing.item.name,
         artUrl: listing.item.artUrl,
         tier: listing.item.tier,
+        // Null, always, and not a field this listing is missing. A shelf browse
+        // can hold every unowned secret in the league at once — which is why the
+        // name itself is withheld on a card you do not hold — and a set on those
+        // rows would sort the catalogue into piles for the price of scrolling.
+        // The trade screen can afford the chip because you are already inside a
+        // two-party offer; a stall cannot.
+        collection: null,
         // A shelf says nothing about how many of a card its seller has left. That
         // is their collection, not part of the price.
         lastCopy: false,
@@ -298,6 +305,10 @@ export function MarketPanel({
           name: s.name,
           artUrl: s.artUrl,
           tier: s.tier,
+          // Your own spares, on their way to the picker. The set is safe here for
+          // the reason it is not safe on a stall row above: these are cards you
+          // already hold, so naming their shelf tells you nothing new.
+          collection: s.collection,
           lastCopy: s.lastCopy,
         },
         floor: houseFloor({ kind: "secret", name: s.name, artUrl: s.artUrl, tier: s.tier, concealed: false }), // prettier-ignore

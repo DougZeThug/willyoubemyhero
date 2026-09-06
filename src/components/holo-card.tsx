@@ -224,6 +224,16 @@ export type HoloCardProps = {
    * rather than a way of getting at the stats.
    */
   flipMs?: number;
+  /**
+   * When the landing shine sweeps, measured from the start of the turn.
+   *
+   * Defaults to 82% of the flip, which is the frame the face is front-on and a
+   * specular pass is a pass across a card you can actually see. The pack's stand
+   * holds a special pull dim for a beat after it lands and moves the sweep to the
+   * moment it blooms, so the light arrives *with* the metal rather than a
+   * quarter-second before it — there, the sweep is the light coming back up.
+   */
+  shineDelayMs?: number;
   /** Rendered on the back face when there is no uploaded back artwork. */
   backContent?: React.ReactNode;
   className?: string;
@@ -246,6 +256,7 @@ function HoloCardImpl({
   gyro = false,
   faceDown = false,
   flipMs = DEFAULT_FLIP_MS,
+  shineDelayMs,
   backContent,
   className,
   onClick,
@@ -631,7 +642,7 @@ function HoloCardImpl({
     "--edn-b": edn.metalB,
     "--edn-spec": edn.specular,
     // Late enough that the card has landed and you are looking at its face.
-    "--holo-shine-delay": `${Math.round(flipMs * 0.82)}ms`,
+    "--holo-shine-delay": `${shineDelayMs ?? Math.round(flipMs * 0.82)}ms`,
     aspectRatio: CARD_ASPECT,
     // "pan-y" for a card in a scrolling grid; "none" for a hero card, which owns
     // the whole gesture on both axes.

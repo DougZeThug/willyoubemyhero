@@ -16,6 +16,8 @@ import { LockedCard, LOCKED_RARITY } from "@/components/locked-card";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
 import { CardRibbon } from "@/components/card-ribbon";
 import { LevelPips } from "@/components/level-pips";
+import { SetChip } from "@/components/set-chip";
+import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
 import {
   DropdownMenu,
@@ -66,6 +68,8 @@ export type ViewerCard =
       name: string;
       rarity: Rarity;
       tier: string;
+      /** The set it is filed into, so the card carries its shelf in here with it. */
+      collection: string | null;
       flavour: string | null;
       firstPulledOn: string;
       /** How many PEOPLE have found this. Never how many cards exist. */
@@ -448,6 +452,7 @@ export function CardViewer({
  * how many PEOPLE have found it. Never a denominator, never a set size.
  */
 function SecretLine({ card }: { card: Extract<ViewerCard, { kind: "secret" }> }) {
+  const sets = useSecretCollections();
   return (
     <>
       {card.flavour && (
@@ -463,6 +468,11 @@ function SecretLine({ card }: { card: Extract<ViewerCard, { kind: "secret" }> })
       >
         {secretTierCaption(card.tier)}
       </span>
+      {/* The set name, which the shelf used to be the only place to read. In here
+          the card is on its own, and "which page of the binder is this" was the
+          one thing it stopped being able to answer. Still no size — a name is not
+          a count. */}
+      <SetChip collection={card.collection} sets={sets} />
       <span className="text-meta font-semibold text-muted-foreground">
         Pulled {formatDay(card.firstPulledOn)}
         {card.copies > 1 && (

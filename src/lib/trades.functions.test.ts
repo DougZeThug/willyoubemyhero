@@ -266,7 +266,14 @@ describe("getTradeSpares", () => {
         ],
       },
       "secret_cards.select": {
-        data: [{ id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/spare-day/art.webp" }],
+        data: [
+          {
+            id: SECRET_ID,
+            name: "Gary the Grill",
+            art_path: "secrets/spare-day/art.webp",
+            collection: "pets",
+          },
+        ],
       },
       "storage.createSignedUrl": { data: { signedUrl: "https://signed/spare-day" } },
     });
@@ -278,6 +285,7 @@ describe("getTradeSpares", () => {
         name: "Gary the Grill",
         artUrl: "https://signed/spare-day",
         tier: "rare",
+        collection: "pets",
         lastCopy: true,
         // Your own list, so nothing on it is ever concealed.
         viewerOwns: true,
@@ -296,7 +304,14 @@ describe("getTradeSpares", () => {
         ],
       },
       "secret_cards.select": {
-        data: [{ id: SECRET_ID, name: "The Dog", art_path: "secrets/granted-today/art.webp" }],
+        data: [
+          {
+            id: SECRET_ID,
+            name: "The Dog",
+            art_path: "secrets/granted-today/art.webp",
+            collection: "pets",
+          },
+        ],
       },
       "storage.createSignedUrl": { data: { signedUrl: "https://signed/granted-today" } },
     });
@@ -705,7 +720,14 @@ describe("getMyTradeOffers", () => {
         { data: [{ participant_id: THEM, secret_card_id: SECRET_ID }] },
       ],
       "secret_cards.select": {
-        data: [{ id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/offer-face/art.webp" }],
+        data: [
+          {
+            id: SECRET_ID,
+            name: "Gary the Grill",
+            art_path: "secrets/offer-face/art.webp",
+            collection: "pets",
+          },
+        ],
       },
       "storage.createSignedUrl": { data: { signedUrl: "https://signed/offer-face" } },
     });
@@ -718,6 +740,8 @@ describe("getMyTradeOffers", () => {
         name: "Gary the Grill",
         artUrl: "https://signed/offer-face",
         tier: "mythic",
+        // Inside an offer nothing is concealed, so the set travels with the card.
+        collection: "pets",
         // The proposer holds exactly one — they are offering their only Gary.
         lastCopy: true,
         // The reader has never pulled it, so the tile renders face-down.
@@ -836,8 +860,8 @@ describe("getTradeSpares and the catalogue", () => {
       ],
       "secret_cards.select": {
         data: [
-          { id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/gary-unowned.webp" }, // prettier-ignore
-          { id: "s2", name: "Tucker", art_path: "secrets/tucker.webp" }, // prettier-ignore
+          { id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/gary-unowned.webp", collection: "pets" }, // prettier-ignore
+          { id: "s2", name: "Tucker", art_path: "secrets/tucker.webp", collection: "wags" }, // prettier-ignore
         ],
       },
       "storage.createSignedUrl": { data: { signedUrl: "https://signed/tucker" } },
@@ -854,11 +878,17 @@ describe("getTradeSpares and the catalogue", () => {
         name: "Gary the Grill",
         artUrl: null,
         tier: "mythic",
+        // Withheld on the same side of that boundary, and for a weaker version of
+        // the same reason: a set on an unnamed card sorts the unknowns into piles,
+        // and a pile of unknowns is a step towards counting them. The row IS filed
+        // into "pets" — see the fixture above — and says so to nobody here.
+        collection: null,
         lastCopy: true,
         viewerOwns: false,
       }, // prettier-ignore
-      // Shown, so it is named — and named, so it may as well be identified.
-      { pullId: "p2", cardId: "s2", name: "Tucker", artUrl: "https://signed/tucker", tier: "rare", lastCopy: true, viewerOwns: true }, // prettier-ignore
+      // Shown, so it is named, identified — and filed. A card you already hold
+      // tells you nothing new by naming the shelf you took it off.
+      { pullId: "p2", cardId: "s2", name: "Tucker", artUrl: "https://signed/tucker", tier: "rare", collection: "wags", lastCopy: true, viewerOwns: true }, // prettier-ignore
     ]);
   });
 
@@ -871,12 +901,12 @@ describe("getTradeSpares and the catalogue", () => {
           { id: PULL_ID, secret_card_id: SECRET_ID, tier: "mythic", granted: true, pulled_on: "2026-01-02" }, // prettier-ignore
         ],
       },
-      "secret_cards.select": { data: [{ id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/gary.webp" }] }, // prettier-ignore
+      "secret_cards.select": { data: [{ id: SECRET_ID, name: "Gary the Grill", art_path: "secrets/gary.webp", collection: "pets" }] }, // prettier-ignore
       "storage.createSignedUrl": { data: { signedUrl: "https://signed/gary" } },
     });
     const res = await spares(ME, asMe());
     expect(res.secrets).toEqual([
-      { pullId: PULL_ID, cardId: SECRET_ID, name: "Gary the Grill", artUrl: "https://signed/gary", tier: "mythic", lastCopy: true, viewerOwns: true }, // prettier-ignore
+      { pullId: PULL_ID, cardId: SECRET_ID, name: "Gary the Grill", artUrl: "https://signed/gary", tier: "mythic", collection: "pets", lastCopy: true, viewerOwns: true }, // prettier-ignore
     ]);
   });
 });

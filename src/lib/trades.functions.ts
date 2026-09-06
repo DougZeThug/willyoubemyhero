@@ -172,10 +172,10 @@ async function hydrateSecrets(
   const { data: cards } = cardIds.length
     ? await sb
         .from("secret_cards")
-        .select("id, name, art_path")
+        .select("id, name, art_path, collection")
         .in("id", cardIds)
-        .returns<Pick<SecretCardRow, "id" | "name" | "art_path">[]>()
-    : { data: [] as Pick<SecretCardRow, "id" | "name" | "art_path">[] };
+        .returns<Pick<SecretCardRow, "id" | "name" | "art_path" | "collection">[]>()
+    : { data: [] as Pick<SecretCardRow, "id" | "name" | "art_path" | "collection">[] };
   const byId = new Map((cards ?? []).map((c) => [c.id, c]));
 
   await Promise.all(
@@ -192,6 +192,11 @@ async function hydrateSecrets(
         name: card?.name ?? "Secret card",
         // thumb rather than large: these are tiles in a picker, not the reveal.
         artUrl: shown ? await signPath(card?.art_path ?? null, VARIANT_WIDTHS.thumb) : null,
+        // Gated on `shown` for a weaker version of the reason `cardId` is: a set
+        // on a card whose name is being withheld sorts the unknowns into piles,
+        // and a pile of unknowns is a step towards counting them. The name is
+        // public enough to judge an offer by; which shelf it came off is not.
+        collection: shown ? (card?.collection ?? null) : null,
         tier: toSecretTier(row.tier),
         lastCopy: lastCopyIds.has(row.id),
         viewerOwns: owns,

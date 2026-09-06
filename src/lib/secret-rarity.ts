@@ -149,3 +149,12 @@ export function secretTierFloorLabel(tier: SecretTier): string {
 export function secretTierCelebrates(tier: string | null | undefined): boolean {
   return secretTierRank(tier) <= secretTierRank("legendary");
 }
+
+/**
+ * Whether the level alone earns the reveal's second beat. Two rungs below the
+ * burst — the same trade `editionEarnsTheBeat` makes on the other ladder, and
+ * for the same reason: the held beat is cheap and the confetti is not.
+ */
+export function secretTierEarnsTheBeat(tier: string | null | undefined): boolean {
+  return secretTierRank(tier) <= secretTierRank("rare");
+}

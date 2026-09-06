@@ -605,14 +605,26 @@ test.describe("the daily secret", () => {
 test.describe("the vault's secret shelf", () => {
   test("shows what you pulled, with no total and no empty slots", async ({ page, server }) => {
     await asMember(page);
+    // Filed into a real set rather than left on the unsorted pile, because the one
+    // marker this page is allowed — see below — only ever appears on a set.
+    server.set("getSecretCollections", {
+      collections: [{ id: "pets", label: "Pets", accent: "mint" }],
+    });
     server.set("getMySecrets", {
       pulled: 3,
       cards: [
-        { ...SECRET_CARD, firstPulledOn: "2026-07-28", count: 1, ownerCount: 3 },
+        {
+          ...SECRET_CARD,
+          collection: "pets",
+          firstPulledOn: "2026-07-28",
+          count: 1,
+          ownerCount: 3,
+        },
         {
           ...SECRET_CARD,
           id: "secret-gazebo",
           name: "The Gazebo",
+          collection: "pets",
           firstPulledOn: "2026-07-27",
           count: 2,
           ownerCount: 1,
@@ -631,13 +643,58 @@ test.describe("the vault's secret shelf", () => {
     // distinction below is a rule rather than an accident.
     await expect(page.getByText(/packed by 3/i)).toBeVisible();
 
+    // The one marker the page is allowed, and only in this exact shape: ONE tile
+    // at the end of an open set, whatever is left in it. Two of them would be a
+    // count of what is missing; a number on it would be the set size outright.
+    await expect(page.getByText("More in this set")).toHaveCount(1);
+    await expect(page.getByRole("img", { name: "Unknown cards remain" })).toHaveCount(1);
+
     // The load-bearing assertion: nowhere on this page is there a denominator, a
     // silhouette, or a "???" slot. An unpulled secret is not missing — it is
-    // unknown, and the page must not admit it exists.
+    // unknown, and the page must not admit it exists. The marker above says a set
+    // is unfinished and nothing whatsoever about by how much, which is why it can
+    // sit inside these three.
     const body = page.locator("body");
     await expect(body).not.toContainText(/of \d+ secrets/i);
     await expect(body).not.toContainText(/\?\?\?/);
     await expect(body).not.toContainText(/\d+ \/ \d+ secrets/i);
+  });
+
+  test("drops the marker once the set is finished", async ({ page, server }) => {
+    // Completion is the one moment the size is known, and the plaque already says
+    // it. A horizon after that would be pointing past the end of the shelf.
+    await asMember(page);
+    server.set("getSecretCollections", {
+      collections: [{ id: "pets", label: "Pets", accent: "mint" }],
+    });
+    server.set("getMySecrets", {
+      pulled: 1,
+      cards: [
+        {
+          ...SECRET_CARD,
+          collection: "pets",
+          firstPulledOn: "2026-07-28",
+          count: 1,
+          ownerCount: 3,
+        },
+      ],
+    });
+    server.set("getCollectionTrophies", {
+      trophies: [
+        {
+          participantId: "p-alice",
+          collection: "pets",
+          label: "Pets",
+          size: 1,
+          completedOn: "2026-07-28",
+          via: "pull",
+        },
+      ],
+    });
+    await page.goto("/players");
+
+    await expect(page.getByRole("heading", { level: 2, name: "Complete" })).toBeVisible();
+    await expect(page.getByText("More in this set")).toHaveCount(0);
   });
 
   test("keeps the trophy case above the sets it is the answer to", async ({ page, server }) => {

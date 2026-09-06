@@ -73,6 +73,8 @@ export type TradeItemView =
       name: string;
       artUrl: string | null;
       tier: SecretTier;
+      /** The set it belongs to, so a card carries its shelf into the offer. */
+      collection: string | null;
       /** True when its owner holds no other copy of that card. */
       lastCopy: boolean;
       /** Whether the person reading this already holds a copy of the card. */
@@ -150,6 +152,14 @@ export type SecretSpare = {
   artUrl: string | null;
   tier: SecretTier;
   lastCopy: boolean;
+  /**
+   * The set this card is filed into, and only where the viewer can already see
+   * the card — the same gate `cardId` above is behind, for a weaker version of
+   * the same reason. A set on an anonymous card would sort the unknowns into
+   * piles, and a pile of unknowns is a step towards counting them. Null when the
+   * card is unfiled, or withheld.
+   */
+  collection: string | null;
   /** See RosterSpare.viewerOwns. */
   viewerOwns: boolean;
 };

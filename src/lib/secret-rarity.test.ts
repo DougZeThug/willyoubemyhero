@@ -9,6 +9,7 @@ import {
   secretTierLevel,
   secretTierRank,
   toSecretTier,
+  secretTierEarnsTheBeat,
 } from "./secret-rarity";
 
 describe("secret rarity ladder", () => {
@@ -73,5 +74,23 @@ describe("secret rarity ladder", () => {
     // Read off the ladder rather than hardcoded, so a rung added above mythic
     // moves the word with it.
     expect(secretTierFloorLabel(SECRET_TIER_ORDER[0])).toContain("guaranteed");
+  });
+});
+
+describe("secretTierEarnsTheBeat", () => {
+  it("holds the reveal two rungs below the burst", () => {
+    // Same trade editionEarnsTheBeat makes on the other ladder: the held beat is
+    // cheap where the confetti is not, so it reaches further down.
+    expect(secretTierEarnsTheBeat("mythic")).toBe(true);
+    expect(secretTierEarnsTheBeat("legendary")).toBe(true);
+    expect(secretTierEarnsTheBeat("epic")).toBe(true);
+    expect(secretTierEarnsTheBeat("rare")).toBe(true);
+  });
+
+  it("lets a common land in one beat", () => {
+    // 70% of copies. A hold on seven pulls in ten is not a hold, it is the pace.
+    expect(secretTierEarnsTheBeat("common")).toBe(false);
+    expect(secretTierEarnsTheBeat(undefined)).toBe(false);
+    expect(secretTierEarnsTheBeat("ultra")).toBe(false);
   });
 });

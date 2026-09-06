@@ -56,6 +56,7 @@ describe("tradeItemsLabel", () => {
         pullId: "p1",
         name: "Gary the Grill",
         artUrl: null,
+        collection: "pets",
         tier: "epic",
         lastCopy: true,
       },
@@ -137,6 +138,7 @@ const secretView = (over: Partial<SecretView> = {}): SecretView => ({
   name: "Gary The Grill",
   artUrl: null,
   tier: "epic",
+  collection: "pets",
   lastCopy: false,
   ...over,
 });

@@ -8,6 +8,8 @@ import type { ImageUrlSet } from "@/lib/media";
 import { secretFoil } from "@/lib/secret-cards";
 import { secretTierStyle } from "@/lib/secret-rarity";
 import { LevelPips } from "@/components/level-pips";
+import { SetChip } from "@/components/set-chip";
+import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { offerStatusLabel, tradeItemsLabel, type TradeItemView, type TradeOfferView } from "@/lib/trades"; // prettier-ignore
 import { cn } from "@/lib/utils";
 
@@ -68,6 +70,7 @@ export function TradeItemTile({
   concealed = false,
   backUrl = null,
 }: TradeItemTileProps) {
+  const sets = useSecretCollections();
   const width = TILE_WIDTH[size];
   const big = size === "lg";
   const roster = item.kind === "roster" ? lookup(item.eventParticipantId) : null;
@@ -131,6 +134,17 @@ export function TradeItemTile({
             than as missing artwork. */}
         {concealed && (
           <div className="text-meta font-semibold text-muted-foreground">Not yours yet</div>
+        )}
+        {/* Which shelf it came off, on a screen that has no shelves.
+            Never on a concealed tile, and NOT because the server withheld it —
+            inside an offer it did not. `getTradeSpares` conceals a counterparty's
+            unowned card, but `getMyTradeOffers` hydrates with concealment off,
+            because you cannot judge an offer sight unseen. That exception is
+            scoped to the card's NAME. A set is a different fact: it says which
+            shelf of yours has something missing from it, which is the one thing
+            the whole feature withholds. So the tile gates it here as well. */}
+        {!concealed && item.kind === "secret" && (
+          <SetChip collection={item.collection} sets={sets} />
         )}
         {/* Any secret copy is tradeable now, single or not, so this is the only
             thing standing between somebody and giving away their only mythic.

@@ -44,7 +44,7 @@ import {
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import { playEditionShine, playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
+import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret } from "@/lib/card-confetti";
 import { pullSecretCard } from "@/lib/secret-cards.functions";
 import {
@@ -822,10 +822,11 @@ function PackPage() {
     if (!ep) return;
     const rarity = rarities.get(ep.id) ?? rarityStyle("base");
     // KNOWN, not just non-null. A card turned before the record response lands
-    // reads as standard, and the cues below have to stay silent for it: a shine
-    // or a burst fired off the fallback is a promise about a finish nobody has
-    // decided yet. The card itself still updates when the answer arrives — the
-    // map is state — and the summary shows it with the shine it earned.
+    // reads as standard, and the celebration below — and the second beat the
+    // stand holds — have to stay silent for it: a burst or a shine fired off the
+    // fallback is a promise about a finish nobody has decided yet. The card itself
+    // still updates when the answer arrives — the map is state — and the summary
+    // shows it with the shine it earned.
     const known = Object.hasOwn(editions, ep.id);
     const edition = editions[ep.id] ?? "standard";
     const isHit = i === pack.length - 1;
@@ -842,10 +843,12 @@ function PackPage() {
       revealedRef.current = [...revealedRef.current, i];
       setRevealed(revealedRef.current);
       playReveal(rarity.tier);
-      // A second cue over the chime, not a chime of its own — the tier and the
-      // finish are separate facts and the ear should hear them that way. Silent
-      // below gold, and silent for a finish the server has not answered with yet.
-      if (known) playEditionShine(edition);
+      // The finish's own cue is deliberately not fired here. It belongs to the
+      // beat *after* the card lands — the tier and the finish are separate facts
+      // and the ear should hear them one after the other — and this line runs at
+      // the tap, a 900ms hold and half a second of turn before there is a face to
+      // shine on. PackStand fires it, on the frame the metal comes up, and makes
+      // the same `known` check for itself off the editions map it is handed.
       // A migrated pack turns cards that were already pulled. Writing here would
       // charge somebody a second pull for a ceremony they were given, not asked
       // for. See replayedRef.
