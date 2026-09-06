@@ -633,12 +633,38 @@ describe("getMyTradeOffers", () => {
     resolved_at: null,
   };
   const pendingOut = { ...pendingIn, id: "o2", proposer_id: ME, recipient_id: THEM };
+  // Made FIRST and settled LAST, which is the pair the old created_at sort got
+  // backwards. Both carry a real resolved_at: a settled offer always has one, and
+  // inheriting pendingIn's null made the ordering here accidentally right.
   const settled = {
     ...pendingIn,
     id: "o3",
     status: "declined",
     created_at: "2026-08-16T10:00:00Z",
+    resolved_at: "2026-08-18T12:00:00Z",
   };
+  const settledOut = {
+    ...pendingOut,
+    id: "o4",
+    status: "accepted",
+    created_at: "2026-08-17T10:00:00Z",
+    resolved_at: "2026-08-17T12:00:00Z",
+  };
+
+  /**
+   * The four reads, in Promise.all order: live out, live in, settled out,
+   * settled in.
+   *
+   * Spelled out because the mock repeats a queue's LAST entry once it drains — a
+   * two-entry queue under four calls does not fail, it quietly serves the same
+   * rows three times and lands one offer in two lists at once.
+   */
+  const offerReads = (
+    liveOut: object[],
+    liveIn: object[],
+    doneOut: object[] = [],
+    doneIn: object[] = [],
+  ) => [{ data: liveOut }, { data: liveIn }, { data: doneOut }, { data: doneIn }];
 
   it("refuses a caller with no member token", async () => {
     await expect(offers()).rejects.toThrow("Claim your player first");
@@ -655,8 +681,7 @@ describe("getMyTradeOffers", () => {
 
   it("splits pending offers by which way they point", async () => {
     withDb({
-      // First call is the outbox query, second the inbox query.
-      "trade_offers.select": [{ data: [pendingOut] }, { data: [pendingIn, settled] }],
+      "trade_offers.select": offerReads([pendingOut], [pendingIn], [], [settled]),
       "trade_offer_items.select": {
         data: [
           { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "roster", card_copy_id: COPY_1, secret_pull_id: null }, // prettier-ignore
@@ -689,19 +714,90 @@ describe("getMyTradeOffers", () => {
     ]);
   });
 
-  it("scopes both queries to the token holder", async () => {
+  it("scopes all four queries to the token holder", async () => {
     withDb({ "trade_offers.select": { data: [] } });
     await offers(asMe());
     const calls = mock.callsFor("trade_offers", "select");
-    expect(calls).toHaveLength(2);
-    expect(calls.map((c) => mock.eqValue(c, "proposer_id") ?? mock.eqValue(c, "recipient_id"))).toEqual([ME, ME]); // prettier-ignore
+    expect(calls).toHaveLength(4);
+    expect(calls.map((c) => mock.eqValue(c, "proposer_id") ?? mock.eqValue(c, "recipient_id"))).toEqual([ME, ME, ME, ME]); // prettier-ignore
+  });
+
+  it("asks for what settled by when it settled, capped in the query", async () => {
+    // "Recently settled" is a question about resolution and was answered with
+    // creation. The cap moved into SQL for the reason getMyStall's did: a
+    // resolved offer is never deleted, so reading the lot and slicing to ten
+    // afterwards expands every offer anybody ever made into the items `.in(...)`.
+    withDb({ "trade_offers.select": { data: [] } });
+    await offers(asMe());
+    const settledReads = mock
+      .callsFor("trade_offers", "select")
+      .filter((c) => c.filters.some((f) => f.method === "neq" && f.args[0] === "status"));
+    expect(settledReads).toHaveLength(2);
+    for (const call of settledReads) {
+      expect(call.filters).toContainEqual({ method: "limit", args: [10] });
+      // nullsFirst, because DESC puts nulls at the TOP in Postgres: one dateless
+      // row would take the head of the shelf and push a real receipt off the end.
+      expect(call.filters).toContainEqual({
+        method: "order",
+        args: ["resolved_at", { ascending: false, nullsFirst: false }],
+      });
+    }
+  });
+
+  it("asks for the live lists newest first, which no longer falls out of one sort", async () => {
+    // Split per side, nothing re-sorts these afterwards — and the carousel opens
+    // on index 0 and announces "1 of 3" about whatever it finds there.
+    withDb({ "trade_offers.select": { data: [] } });
+    await offers(asMe());
+    const liveReads = mock
+      .callsFor("trade_offers", "select")
+      .filter((c) => mock.eqValue(c, "status") === "pending");
+    expect(liveReads).toHaveLength(2);
+    for (const call of liveReads) {
+      expect(call.filters).toContainEqual({
+        method: "order",
+        args: ["created_at", { ascending: false }],
+      });
+    }
+  });
+
+  it("orders the shelf by resolution rather than by creation", async () => {
+    // o3 was proposed first and settled last. Sorted by created_at it filed
+    // itself under the older date, behind an offer that settled before it — and
+    // on a ten-row shelf that is how a decline goes unseen.
+    withDb({ "trade_offers.select": offerReads([], [], [settledOut], [settled]) });
+    const res = await offers(asMe());
+    expect(res.recent.map((o) => o.id)).toEqual(["o3", "o4"]);
+  });
+
+  it("files a row that settled between the two reads as a receipt, not a live offer", async () => {
+    // Four reads rather than two, so an offer answered mid-request comes back
+    // from both. The settled read is the later fact and wins: a live offer with a
+    // dead Accept on it is worse than a receipt one refetch early.
+    const answered = { ...pendingIn, status: "declined", resolved_at: "2026-08-18T13:00:00Z" };
+    withDb({
+      "trade_offers.select": offerReads([], [pendingIn], [], [answered]),
+      "trade_offer_items.select": { data: [] },
+    });
+    const res = await offers(asMe());
+    expect(res.inbox).toEqual([]);
+    expect(res.recent.map((o) => o.id)).toEqual([OFFER_ID]);
+  });
+
+  it("puts a settled row carrying no resolution date last rather than first", async () => {
+    // Unreachable today — every path sets it. The column is nullable and the
+    // fallback is one `??`, which is cheaper than finding out the hard way.
+    const dateless = { ...settledOut, id: "o5", resolved_at: null };
+    withDb({ "trade_offers.select": offerReads([], [], [dateless], [settled]) });
+    const res = await offers(asMe());
+    expect(res.recent.map((o) => o.id)).toEqual(["o3", "o5"]);
   });
 
   it("shows a staked secret's face to the two people in the offer", async () => {
     // The scoped exception, and its scope: reachable only through an offer you
     // are party to. You cannot judge "a secret card" sight unseen.
     withDb({
-      "trade_offers.select": [{ data: [] }, { data: [pendingIn] }],
+      "trade_offers.select": offerReads([], [pendingIn]),
       "trade_offer_items.select": {
         data: [
           { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "secret", card_copy_id: null, secret_pull_id: PULL_ID }, // prettier-ignore
@@ -752,7 +848,7 @@ describe("getMyTradeOffers", () => {
 
   it("drops an item whose card has since gone rather than rendering a blank", async () => {
     withDb({
-      "trade_offers.select": [{ data: [] }, { data: [pendingIn] }],
+      "trade_offers.select": offerReads([], [pendingIn]),
       "trade_offer_items.select": {
         data: [
           { id: "i1", offer_id: OFFER_ID, giver_side: "proposer", kind: "secret", card_copy_id: null, secret_pull_id: PULL_ID }, // prettier-ignore
@@ -762,6 +858,67 @@ describe("getMyTradeOffers", () => {
     });
     const res = await offers(asMe());
     expect(res.inbox[0].proposerGives).toEqual([]);
+  });
+
+  it("keeps the face of a card an accepted swap put in your hands, once it has moved on", async () => {
+    // The reported bug. `viewerOwns` asks what you hold NOW, so a card you have
+    // since traded on went face-down on the one screen whose whole job is to say
+    // what arrived — and it did so BESIDE the card that left, which the give side
+    // draws in full colour. Your own half lit, their half a deck back. Scoped
+    // exactly like withListedSecrets in market.functions.ts: the receiving side
+    // of an offer that was actually accepted, and nothing else.
+    //
+    // Traded on, NOT milled or sold: those DELETE the copy and the item row
+    // cascades away, so there is nothing left for this to un-conceal. The state
+    // below — the copy row alive, owned by somebody else — is the one accepting
+    // a second trade produces, because accept re-parents rather than deletes.
+    // tests/db/trades.test.ts pins both halves against the real schema.
+    const accepted = { ...settled, status: "accepted" };
+    withDb({
+      "trade_offers.select": offerReads([], [], [], [accepted]),
+      "trade_offer_items.select": {
+        data: [
+          { id: "i1", offer_id: "o3", giver_side: "proposer", kind: "roster", card_copy_id: COPY_1, secret_pull_id: null }, // prettier-ignore
+          { id: "i2", offer_id: "o3", giver_side: "recipient", kind: "roster", card_copy_id: COPY_2, secret_pull_id: null }, // prettier-ignore
+        ],
+      },
+      // The reader holds neither card any more: they gave one away in this trade
+      // and have since traded the other on to somebody else.
+      "card_copies.select": [
+        { data: [] },
+        {
+          data: [
+            { id: COPY_1, event_participant_id: CARD_A, edition: "gold" },
+            { id: COPY_2, event_participant_id: CARD_B, edition: "standard" },
+          ],
+        },
+      ],
+    });
+    const res = await offers(asMe());
+    // What came to them draws its face…
+    expect(res.recent[0].proposerGives[0].viewerOwns).toBe(true);
+    // …and what they handed over does not pretend they still have it.
+    expect(res.recent[0].recipientGives[0].viewerOwns).toBe(false);
+  });
+
+  it("keeps a declined offer's cards face-down, because nothing moved", async () => {
+    // The half that proves the scope. Without it, composing an offer for a card
+    // you have never pulled and taking it straight back would be two taps to see
+    // anybody's art — offers hydrate with concealment off.
+    withDb({
+      "trade_offers.select": offerReads([], [], [], [settled]),
+      "trade_offer_items.select": {
+        data: [
+          { id: "i1", offer_id: "o3", giver_side: "proposer", kind: "roster", card_copy_id: COPY_1, secret_pull_id: null }, // prettier-ignore
+        ],
+      },
+      "card_copies.select": [
+        { data: [] },
+        { data: [{ id: COPY_1, event_participant_id: CARD_A, edition: "gold" }] },
+      ],
+    });
+    const res = await offers(asMe());
+    expect(res.recent[0].proposerGives[0].viewerOwns).toBe(false);
   });
 
   it("does not go looking for items when there are no offers", async () => {

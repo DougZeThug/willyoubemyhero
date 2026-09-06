@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ArrowDown, ArrowLeft, ArrowRight, ChevronDown } from "lucide-react";
 import { HoloCard } from "@/components/holo-card";
 import { SealedBack } from "@/components/pack-card-back";
 import { rarityStyle, type Rarity } from "@/lib/card-rarity";
@@ -10,7 +10,7 @@ import { secretTierStyle } from "@/lib/secret-rarity";
 import { LevelPips } from "@/components/level-pips";
 import { SetChip } from "@/components/set-chip";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { offerStatusLabel, tradeItemsLabel, type TradeItemView, type TradeOfferView } from "@/lib/trades"; // prettier-ignore
+import { offerStatusLabel, tradeItemName, tradeItemsLabel, type TradeItemView, type TradeOfferView } from "@/lib/trades"; // prettier-ignore
 import { cn } from "@/lib/utils";
 
 /** Everything the card needs to turn an event_participant_id into a face. */
@@ -242,6 +242,38 @@ function CardStrip({
   );
 }
 
+/**
+ * The status, and the only thing on an offer wearing its colour (§15).
+ *
+ * Lifted out of the header because a folded receipt needs it on the control that
+ * opens it — a chip you have to expand a receipt to read is not a status.
+ * Deliberately not exported: the shop has its own vocabulary and its own chip
+ * (see marketStatusLabel), and one shared component would drag trade words into
+ * it the first time either side gained a state.
+ */
+function StatusChip({ offer }: { offer: TradeOfferView }) {
+  const pending = offer.status === "pending";
+  const accepted = offer.status === "accepted";
+  const rejected =
+    offer.status === "declined" || offer.status === "cancelled" || offer.status === "voided";
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full border px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em]",
+        pending
+          ? "border-primary/50 bg-primary/10 text-primary"
+          : accepted
+            ? "border-success/50 bg-success/10 text-success"
+            : rejected
+              ? "border-destructive/50 bg-destructive/10 text-destructive"
+              : "border-white/15 text-muted-foreground",
+      )}
+    >
+      {offerStatusLabel(offer.status)}
+    </span>
+  );
+}
+
 function SideLabel({ pending, children }: { pending: boolean; children: ReactNode }) {
   return (
     <div
@@ -298,6 +330,17 @@ export type TradeOfferCardProps = {
    * words half is the toast the route raises; this is only the marker.
    */
   highlighted?: boolean;
+  /**
+   * Folded to its heading and its one-line summary until somebody opens it.
+   *
+   * Only the receipts strip passes this. Ten settled offers, each a header, a
+   * summary and two labelled rows of tiles stacked at 390, is five screens of
+   * history sitting underneath the two lists that actually need answering — and
+   * the plan this screen was built from asked for "Recently settled" to stay a
+   * compact text-first section. A live offer is never foldable: the cards ARE
+   * the offer, and folding one would hide the thing being asked about.
+   */
+  collapsible?: boolean;
 };
 
 export function TradeOfferCard({
@@ -308,6 +351,7 @@ export function TradeOfferCard({
   actions,
   backUrl = null,
   highlighted = false,
+  collapsible = false,
 }: TradeOfferCardProps) {
   const iAmProposer = offer.proposerId === me;
   const theirId = iAmProposer ? offer.recipientId : offer.proposerId;
@@ -321,6 +365,25 @@ export function TradeOfferCard({
   // A live offer is the loudest thing on the screen: ringed, big cards. A
   // settled one is a receipt.
   const size = pending ? "lg" : "sm";
+
+  const [open, setOpen] = useState(false);
+  const folded = collapsible && !open;
+
+  const heading = iAmProposer ? `You → ${nameOf(theirId)}` : `${nameOf(theirId)} → You`;
+
+  // `tradeItemsLabel` COUNTS roster cards — it cannot resolve an
+  // event_participant_id, and does not have the resolver. Under a row of tiles
+  // that is fine. On a folded receipt it is the only line there is, and a
+  // card-for-card swap would read "1 card for 1 card", which is nothing. So a
+  // foldable one names them, through the same `tradeItemName` and the same
+  // one-a-side symmetry rule the confirm sheet uses: past one a side no sentence
+  // carries the names anyway, and naming one side while counting the other reads
+  // as though the two were different kinds of thing.
+  const namesFit = collapsible && iGive.length === 1 && iGet.length === 1;
+  const rosterName = (id: string) => lookup(id).name;
+  const summary = namesFit
+    ? `${tradeItemName(iGive[0], rosterName)} for ${tradeItemName(iGet[0], rosterName)}`
+    : `${tradeItemsLabel(iGive)} for ${tradeItemsLabel(iGet)}`;
 
   return (
     <article
@@ -341,38 +404,71 @@ export function TradeOfferCard({
       )}
     >
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <h3
-          className={cn(
-            "min-w-0 truncate font-display font-black uppercase tracking-wide",
-            pending ? "text-xl" : "text-sm",
-          )}
-        >
-          {iAmProposer ? `You → ${nameOf(theirId)}` : `${nameOf(theirId)} → You`}
-        </h3>
-        {/* The status, and now the only thing wearing its colour. A settled
-            offer is still legible in one glance, without a bloom the size of
-            the card behind it. */}
-        <span
-          className={cn(
-            "shrink-0 rounded-full border px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em]",
-            pending
-              ? "border-primary/50 bg-primary/10 text-primary"
-              : accepted
-                ? "border-success/50 bg-success/10 text-success"
-                : rejected
-                  ? "border-destructive/50 bg-destructive/10 text-destructive"
-                  : "border-white/15 text-muted-foreground",
-          )}
-        >
-          {offerStatusLabel(offer.status)}
-        </span>
+        {collapsible ? (
+          // THE HEADING WRAPS THE BUTTON, never the other way round. A button's
+          // children are presentational in ARIA, so an <h3> placed INSIDE one is
+          // struck out of the accessibility tree entirely — a strip of ten
+          // receipts would vanish from the heading rotor, which is the one way
+          // anybody navigates a strip of ten of anything. (It is also invalid
+          // HTML: <button> takes phrasing content and a heading is not.)
+          <h3 className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              // No `aria-controls`: the block below is not in the document while
+              // this is shut, and that is the whole point — ten receipts must not
+              // mount twenty HoloCards and fetch their art to be scrolled past.
+              // An aria-controls naming an id that is not there is an invalid
+              // value rather than a weaker hint, so aria-expanded carries it
+              // alone, which is what it is for.
+              className="flex min-h-11 w-full items-center gap-2 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <span className="min-w-0 flex-1 truncate font-display text-sm font-black uppercase tracking-wide">
+                {heading}
+              </span>
+              <StatusChip offer={offer} />
+              <ChevronDown
+                aria-hidden
+                className={cn(
+                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                  open && "rotate-180",
+                )}
+              />
+            </button>
+          </h3>
+        ) : (
+          <>
+            <h3
+              className={cn(
+                "min-w-0 truncate font-display font-black uppercase tracking-wide",
+                pending ? "text-xl" : "text-sm",
+              )}
+            >
+              {heading}
+            </h3>
+            {/* The status, and now the only thing wearing its colour. A settled
+                offer is still legible in one glance, without a bloom the size of
+                the card behind it. */}
+            <StatusChip offer={offer} />
+          </>
+        )}
       </div>
 
       {/* The one-line version, which is also what the public feed shows. It is
           above the tiles rather than below because on a phone, in a garden, it is
-          usually the only part anyone reads. */}
-      <p className={cn("mb-3 text-muted-foreground", pending ? "text-sm" : "text-meta")}>
-        {tradeItemsLabel(iGive)} for {tradeItemsLabel(iGet)}
+          usually the only part anyone reads — and on a folded receipt it is the
+          only part there IS, which is what makes the fold safe. Outside the
+          button on purpose: inside, it would swallow text selection and stretch
+          the control's accessible name past the two facts it needs to carry. */}
+      <p
+        className={cn(
+          "text-muted-foreground",
+          pending ? "text-sm" : "text-meta",
+          !folded && "mb-3",
+        )}
+      >
+        {summary}
       </p>
 
       {/* Stacked on a phone, side by side from `sm` up (§10). Two 139px columns
@@ -380,19 +476,26 @@ export function TradeOfferCard({
           labels had to live in their own row above so the columns could line up.
           Each side owns its label now, which is also what gives the two halves an
           accessible name — the arrows never had one. */}
-      <div className={cn("flex flex-col sm:flex-row sm:items-center", pending ? "gap-2" : "gap-3")}>
-        <section aria-label="You give" className="min-w-0 flex-1">
-          <SideLabel pending={pending}>You give</SideLabel>
-          <CardStrip items={iGive} lookup={lookup} size={size} />
-        </section>
-        <Exchange pending={pending} />
-        <section aria-label="You get" className="min-w-0 flex-1">
-          <SideLabel pending={pending}>You get</SideLabel>
-          {/* Their side only: what you are being offered can include art you have
-              never pulled, and an offer should not be a way to see it. */}
-          <CardStrip items={iGet} lookup={lookup} size={size} conceal backUrl={backUrl} />
-        </section>
-      </div>
+      {!folded && (
+        <div
+          className={cn("flex flex-col sm:flex-row sm:items-center", pending ? "gap-2" : "gap-3")}
+        >
+          <section aria-label="You give" className="min-w-0 flex-1">
+            <SideLabel pending={pending}>You give</SideLabel>
+            <CardStrip items={iGive} lookup={lookup} size={size} />
+          </section>
+          <Exchange pending={pending} />
+          <section aria-label="You get" className="min-w-0 flex-1">
+            <SideLabel pending={pending}>You get</SideLabel>
+            {/* Their side only: what you are being offered can include art you
+                have never pulled, and an offer should not be a way to see it.
+                What DID reach you is not concealed — toOfferViews marks the
+                receiving side of an accepted offer as owned, so a receipt draws
+                the card that arrived even after you have traded it on. */}
+            <CardStrip items={iGet} lookup={lookup} size={size} conceal backUrl={backUrl} />
+          </section>
+        </div>
+      )}
 
       {actions && (
         <div

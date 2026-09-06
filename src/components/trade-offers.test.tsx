@@ -188,11 +188,60 @@ describe("more than one offer", () => {
 });
 
 describe("a settled offer", () => {
-  it("is a receipt, with its status in words and nothing to press", () => {
+  it("is a receipt: its status in words, folded to a line until you open it", () => {
     renderPanel({ inbox: [], recent: [offer({ status: "accepted", resolvedAt: "2026-08-17T11:00:00Z" })] }); // prettier-ignore
     const receipt = screen.getByRole("article");
     expect(within(receipt).getByText("Done")).toBeInTheDocument();
-    expect(within(receipt).queryByRole("button")).not.toBeInTheDocument();
+    // The chip is readable folded. A status you have to open a receipt to read
+    // is not a status.
+    expect(within(receipt).queryByLabelText("You get")).not.toBeInTheDocument();
+  });
+
+  it("names both sides on the one line it is folded to", () => {
+    // tradeItemsLabel COUNTS roster cards, so the strip used to fold down to
+    // "1 card for 1 card" — which is the whole story, minus the story. Folded,
+    // that line is all there is, so it names them through tradeItemName.
+    renderPanel({ inbox: [], recent: [offer({ status: "accepted", resolvedAt: "2026-08-17T11:00:00Z" })] }); // prettier-ignore
+    const receipt = screen.getByRole("article");
+    expect(within(receipt).getByText("Standard Alice Ace for Gold Bob Blitz")).toBeInTheDocument();
+    expect(within(receipt).queryByText("1 card for 1 card")).not.toBeInTheDocument();
+  });
+
+  it("still has nothing on it that answers an offer", () => {
+    // What the old assertion was really claiming. A receipt is not a control
+    // panel: it has exactly one button now, and that button only opens it.
+    renderPanel({ inbox: [], recent: [offer({ status: "declined", resolvedAt: "2026-08-17T11:00:00Z" })] }); // prettier-ignore
+    const receipt = screen.getByRole("article");
+    const [only, ...rest] = within(receipt).getAllByRole("button");
+    expect(rest).toHaveLength(0);
+    // Anchored, because the one button there IS wears the status chip in its
+    // accessible name — "Bob Blitz → You Declined" contains the word decline.
+    expect(only).toHaveAttribute("aria-expanded");
+    expect(within(receipt).queryByRole("button", { name: /^(accept|decline|take it back)$/i })).not.toBeInTheDocument(); // prettier-ignore
+  });
+
+  it("opens onto the cards, and says so on the control that opened it", async () => {
+    renderPanel({ inbox: [], recent: [offer({ status: "accepted", resolvedAt: "2026-08-17T11:00:00Z" })] }); // prettier-ignore
+    await userEvent.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+    expect(screen.getByLabelText("You get")).toBeInTheDocument();
+  });
+
+  it("stays reachable as a heading, which a button's contents are not", () => {
+    // The fold is a heading wrapping a control, not a control wrapping a
+    // heading. A button's children are presentational in ARIA, so the other
+    // shape would strike every receipt out of the heading rotor — the one way
+    // anybody walks a strip of ten of these.
+    renderPanel({ inbox: [], recent: [offer({ status: "accepted", resolvedAt: "2026-08-17T11:00:00Z" })] }); // prettier-ignore
+    expect(screen.getByRole("heading", { name: /Bob Blitz → You/ })).toBeInTheDocument();
+  });
+
+  it("does not fold an offer that is still waiting on somebody", () => {
+    // The cards ARE the live offer. Folding one would hide the thing the person
+    // is being asked about.
+    renderPanel();
+    expect(screen.queryByRole("button", { expanded: false })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("You get")).toBeInTheDocument();
   });
 });
 

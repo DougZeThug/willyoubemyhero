@@ -970,6 +970,67 @@ describe("accept_trade_offer — lifecycle", () => {
     expect(await sql("SELECT count(*)::int AS n FROM public.trades")).toEqual([{ n: 0 }]);
   });
 
+  it("keeps a settled receipt's item when the card is traded on, and loses it when it is milled", async () => {
+    // Which half of "you no longer hold it" a settled receipt can still draw.
+    //
+    // accept_trade_offer RE-PARENTS (UPDATE card_copies SET participant_id), so a
+    // card traded on again leaves its trade_offer_items row standing and the
+    // receipt can still name and draw it — which is what the `received` flag in
+    // toOfferViews exists to un-conceal.
+    //
+    // mill_card_copy DELETES the copy, and trade_offer_items.card_copy_id is
+    // ON DELETE CASCADE, so the item goes with it and the receipt has nothing
+    // left to render on that side at all. No flag can reach a row that is gone.
+    // Pinned here because the difference is invisible from the TS side and easy
+    // to describe wrongly.
+    const { aliceCard, bobCard, aliceCopies, bobCopies } = await twoSpares();
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [copy(aliceCopies[0])],
+      [copy(bobCopies[0])],
+    );
+    expect(await accept(offerId, IDS.bob)).toMatchObject({ ok: true });
+
+    const itemsLeft = async () => {
+      const [{ n }] = await sql<{ n: number }>(
+        "SELECT count(*)::int AS n FROM public.trade_offer_items WHERE offer_id = $1",
+        [offerId],
+      );
+      return n;
+    };
+    expect(await itemsLeft()).toBe(2);
+
+    // Bob hands Alice's card straight on to a third party. The row moves; the
+    // receipt keeps both its items.
+    await claim(IDS.carol);
+    await sql("UPDATE public.card_copies SET participant_id = $1 WHERE id = $2", [
+      IDS.carol,
+      aliceCopies[0],
+    ]);
+    await sql("SELECT public.resync_card_pull($1, $2)", [IDS.bob, aliceCard]);
+    expect(await itemsLeft()).toBe(2);
+
+    // Alice mills what she got instead, and that item is gone from the receipt
+    // for good — the strip renders "Nothing left on this side." for that half.
+    //
+    // Two things the mill needs first, both of which say something: dust ships
+    // switched OFF and the RPC answers `disabled` rather than deleting anything,
+    // and it refuses `last_copy`, so Alice has to hold a spare of Bob's card
+    // before she can destroy the one that arrived. Which sharpens the point —
+    // she still holds a copy of that card, `viewerOwns` is still true, and the
+    // receipt has lost the item anyway. No flag reaches a row that is gone.
+    await sql("UPDATE public.events SET dust_enabled = true");
+    await giveRoster(IDS.alice, bobCard, 1);
+    await sql("SELECT public.resync_card_pull($1, $2)", [IDS.alice, bobCard]);
+    const [milled] = await sql<{ r: { ok: boolean } }>(
+      "SELECT public.mill_card_copy($1, $2) AS r",
+      [IDS.alice, bobCopies[0]],
+    );
+    expect(milled.r.ok).toBe(true);
+    expect(await itemsLeft()).toBe(1);
+  });
+
   it("refuses somebody accepting an offer that is not theirs", async () => {
     const { aliceCopies, bobCopies } = await twoSpares();
     const { offerId } = await createOffer(

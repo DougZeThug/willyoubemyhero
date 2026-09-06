@@ -60,8 +60,10 @@ Above the tiles is the same one-line summary the public record uses. It is above
 rather than below because on a phone, in a garden, it is usually the only part
 anybody reads.
 
-A settled offer keeps the same shape at a smaller size, with a status chip
-instead of buttons: **Done**, **Declined**, **Pulled** or **Expired**.
+A settled offer folds down to its heading, a status chip — **Done**,
+**Declined**, **Pulled** or **Expired** — and one line naming what each side
+gave. Pressing it opens the same two sides at a smaller size. There are no answer
+buttons on it; the only control is the one that opens it.
 
 ### Leave without acting
 
