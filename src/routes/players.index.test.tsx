@@ -144,6 +144,19 @@ function petsShelf() {
   return shelf;
 }
 
+/**
+ * The set chips on the shelf's CARDS, excluding the shelf's own heading.
+ *
+ * The heading says the same word for a different reason — it names the panel,
+ * where these name the cards — and counting it too would let an assertion about
+ * the cards pass on a shelf that had lost every one of them.
+ */
+function setChips() {
+  return within(petsShelf())
+    .getAllByText("Pets")
+    .filter((el) => el.tagName !== "H2");
+}
+
 beforeEach(() => {
   useMySecrets.mockReturnValue({ data: { cards: PETS, pulled: PETS.length } });
   useCollectionTrophies.mockReturnValue({ data: { trophies: [] } });
@@ -196,12 +209,7 @@ describe("the mystery slot on a set shelf", () => {
     // A favourite leaves its set's panel for the pinned shelf, and the viewer and
     // the trade screen have no panels at all — so the card has to carry it.
     render(<PlayersPage />);
-    // Excluding the shelf's own heading, which says the same word for a different
-    // reason: that one names the panel, these name the cards.
-    const chips = within(petsShelf())
-      .getAllByText("Pets")
-      .filter((el) => el.tagName !== "H2");
-    expect(chips).toHaveLength(PETS.length);
+    expect(setChips()).toHaveLength(PETS.length);
   });
 
   it("says nothing to a guest, who has no way of knowing a set is done", () => {
@@ -212,8 +220,9 @@ describe("the mystery slot on a set shelf", () => {
     useMemberSession.mockReturnValue(null);
     render(<PlayersPage />);
 
-    // The shelf and its cards are still theirs; only the horizon is withheld.
-    expect(within(petsShelf()).getAllByText("Pets").length).toBeGreaterThan(0);
+    // The shelf and its cards are still theirs; only the horizon is withheld. A
+    // chip per card, so this cannot pass on a shelf that rendered no cards at all.
+    expect(setChips()).toHaveLength(PETS.length);
     expect(screen.queryByRole("img", { name: "Unknown cards remain" })).toBeNull();
     expect(screen.queryByText("More in this set")).toBeNull();
   });
