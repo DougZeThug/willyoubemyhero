@@ -498,8 +498,8 @@ Measured on real renders at 390 px (CSS px, height × width where relevant). Tar
 | Send offer                                      | trade builder                         | 34 tall                     | High     |
 | Claim Three Days / View collection / Share pack | pack summary                          | 34 tall                     | High     |
 | Rip a pack to see this card                     | locked card                           | 34 tall                     | Medium   |
-| Burn / Sell / Re-roll                           | shop                                  | 44 tall — fixed             | Done     |
-| List a card / Buy for 150                       | shop                                  | 48 tall — fixed             | Done     |
+| Burn / Sell / Re-roll                           | shop                                  | 44 tall — fixed             | Medium   |
+| List a card / Buy for 150                       | shop                                  | 48 tall — fixed             | Low      |
 | Favourite star                                  | tiles                                 | 36 × 36, overlapping a link | Medium   |
 | Rearrange                                       | vault                                 | 36 tall                     | Low      |
 | Next                                            | stand                                 | 36 tall                     | Medium   |
