@@ -130,11 +130,24 @@ test.describe("one scale of button glow", () => {
     const waiting = /^open today's pack — a secret is waiting$/i;
     await expect(page.getByRole("link", { name: waiting })).toBeVisible();
 
-    const shadow = await shadowOf(page, waiting);
-    // Still two blurred layers — the ring is a fourth, blur-0 entry beside them.
+    const { shadow, dot } = await page.getByRole("link", { name: waiting }).evaluate((el) => ({
+      shadow: getComputedStyle(el).boxShadow,
+      // The waiting dot pinned to this button's corner, which is driven by the
+      // same SECRET_RARITY.border the ring is. Reading it here rather than
+      // hard-coding an oklch literal keeps the assertion true when the token
+      // moves — the claim is that the two agree, not what they equal.
+      dot: getComputedStyle(el.querySelector("span[aria-hidden]")!).backgroundColor,
+    }));
+
+    // Still two blurred layers — the ring is a third, blur-0 entry beside them.
     expect(glowLayers(shadow)).toBe(2);
-    // And the ring is genuinely there: a 2px spread in the secret's own colour.
-    expect(shadow).toMatch(/0px 0px 0px 2px/);
+
+    // And the ring is genuinely there, in the secret's own colour. Matching the
+    // 2px spread alone would pass on a ring painted the wrong colour, which is
+    // most of what this test is for.
+    const ring = shadow.split(/,(?![^(]*\))/).find((l) => /0px 0px 0px 2px/.test(l));
+    expect(ring, "no 2px ring layer in the shadow").toBeDefined();
+    expect(ring!.trim().startsWith(dot), `ring "${ring}" is not the dot's ${dot}`).toBe(true);
   });
 
   test("gives a refused control no glow at all", async ({ page, server }) => {
