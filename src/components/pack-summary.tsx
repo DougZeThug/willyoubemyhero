@@ -609,7 +609,7 @@ function SecretSlotView({
               </>
             ) : (
               <div
-                className="text-badge font-bold uppercase tracking-[0.08em]"
+                className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
                 style={{ color: rarity.border }}
               >
                 {/* Taught once, on the first secret anyone ever pulls. Without it

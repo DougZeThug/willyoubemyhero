@@ -884,7 +884,7 @@ function PlayersPage() {
               the thing that is actually read. */}
           <LevelPips tier={s.tier} className="mt-0.5" />
           <div
-            className="text-badge font-bold uppercase tracking-[0.08em]"
+            className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
             style={{ color: secretTierStyle(s.tier).accent }}
           >
             {secretTierCaption(s.tier)}
@@ -986,7 +986,7 @@ function PlayersPage() {
                 <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
               )}
               <span
-                className="text-badge font-bold uppercase tracking-[0.08em]"
+                className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
                 style={{
                   color: locked
                     ? undefined

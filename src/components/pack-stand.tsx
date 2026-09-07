@@ -1254,7 +1254,7 @@ export function PackStand({
                       return (
                         <>
                           <div
-                            className="text-badge font-bold uppercase tracking-[0.08em]"
+                            className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
                             style={{ color: badge.color }}
                           >
                             {badge.headline}
