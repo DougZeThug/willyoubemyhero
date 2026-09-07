@@ -13,7 +13,7 @@
 // And a buy mints one request id per tap and rotates it, because a lost response
 // on a purchase is the worst bug this feature could ship.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
 import { dustBalanceKey } from "@/hooks/use-dust";
@@ -402,6 +402,33 @@ describe("while the commissioner has dust switched off", () => {
     renderPanel(500, false);
     expect(await screen.findByText(/counting your stall/i)).toBeInTheDocument();
     settle({ active: [], recent: [] });
+  });
+});
+
+describe("the finish, wherever it has to be read", () => {
+  // The regression this pins: suppressing the shelf's duplicate finish inside
+  // itemMeta took it off the stall too, and StallLine draws no tile, so a
+  // seller's own row went down to a name and a price.
+  it("keeps a settled finish on a stall row, which has no tile to carry it", async () => {
+    stallFn.mockResolvedValue({
+      active: [{ ...rosterListing, sellerId: ME, status: "active", buyerId: null, resolvedAt: null }], // prettier-ignore
+      recent: [],
+    });
+    renderPanel();
+    // Wait for the row itself — the heading is painted before the query lands,
+    // so scoping to it any earlier reads "Counting your stall…".
+    const takeDown = await screen.findByRole("button", { name: /take down/i });
+    const stall = takeDown.closest("li");
+    expect(within(stall!).getByText("Gold")).toBeInTheDocument();
+  });
+
+  it("does not repeat a settled finish on the shelf, where the tile prints it", async () => {
+    // One "Gold" in the cell, from TradeItemTile — not the two it used to draw.
+    browseFn.mockResolvedValue({ listings: [rosterListing], nudgeTopic: null });
+    renderPanel();
+    const buy = await screen.findByRole("button", { name: /buy/i });
+    const cell = buy.closest("li");
+    expect(within(cell!).getAllByText("Gold")).toHaveLength(1);
   });
 });
 
