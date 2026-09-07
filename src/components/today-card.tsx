@@ -158,14 +158,16 @@ export function TodayCard({
           // second route to the same screen here would be the nav drawn twice —
           // the argument that took the Awards and Trade pills off this header in
           // the first place.
-          <p className="inline-flex min-h-14 items-center gap-2 rounded-full border border-primary/25 px-5 font-display text-button font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+          // Filled, not outlined: a cyan pill outline in the primary slot drew a
+          // button around a readout nobody can press, one row above the shelves.
+          <p className="inline-flex min-h-14 items-center gap-2 rounded-full bg-white/[0.04] px-5 font-display text-button font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
             <PackageOpen aria-hidden className="h-4 w-4" />
             {nextPackLabel(nextPackAt, now)}
           </p>
         ) : (
           <Link
             to="/players/pack"
-            className={cn("neon-btn-lg relative", packWaiting && "ring-2")}
+            className={cn("neon-btn-lg neon-btn-hero relative", packWaiting && "ring-2")}
             style={packWaiting ? { ["--tw-ring-color" as string]: SECRET_RARITY.border } : undefined} // prettier-ignore
             // Byte-identical to what this control has always said when sealed:
             // the e2e suite matches these exactly, and so does anyone who has

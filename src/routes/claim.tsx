@@ -154,7 +154,12 @@ function ClaimPage() {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto grid max-w-md place-items-center px-4 py-12">
-          <Card className="hud-bezel w-full border-primary/30">
+          {/* No hud-bezel. §15 keeps that treatment for the three objects meant
+              to feel physical — the slab, the pack wrapper, the trophy plaque —
+              and a radial gradient plus a three-layer shadow around an identity
+              panel was a third edge on something that already has the Card's
+              border and a cyan one over it. */}
+          <Card className="w-full border-primary/30">
             <CardContent className="space-y-4 p-6 text-center">
               <BadgeCheck className="mx-auto h-10 w-10 text-primary" />
               <div>
@@ -292,9 +297,16 @@ function ClaimPage() {
             />
           </div>
 
-          <Button type="submit" disabled={busy || !selected || !code.trim()} className="w-full">
+          {/* The screen's whole purpose, and until now the quietest thing on it —
+              a stock Button under a glowing back link. The hero glow belongs
+              here (§15: the strongest cyan goes to the one action that matters). */}
+          <button
+            type="submit"
+            disabled={busy || !selected || !code.trim()}
+            className="neon-btn-lg neon-btn-hero w-full"
+          >
             {busy ? "Checking…" : "Claim"}
-          </Button>
+          </button>
         </form>
 
         <p className="mt-6 flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">

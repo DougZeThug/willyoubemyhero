@@ -112,7 +112,7 @@ export function TradeOffersPanel({
                       onClick={() => setConfirming(offer)}
                       disabled={pending === offer.id || offline}
                       {...offlineReason(offline)}
-                      className="neon-btn-lg w-full disabled:opacity-50 sm:w-auto"
+                      className="neon-btn-lg neon-btn-hero w-full disabled:opacity-50 sm:w-auto"
                     >
                       Accept
                     </button>
@@ -270,7 +270,7 @@ function ConfirmAcceptSheet({
             disabled={busy || offline}
             {...offlineReason(offline)}
             onClick={() => offer && onConfirm(offer.id)}
-            className="neon-btn-lg w-full disabled:opacity-50"
+            className="neon-btn-lg neon-btn-hero w-full disabled:opacity-50"
           >
             Confirm
           </button>

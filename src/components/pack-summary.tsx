@@ -462,7 +462,7 @@ export function PackSummary({
           than a taste one: two 56px pills with 1.75rem of padding each do not
           fit across 320px without one of them truncating its own label. */}
       <div className="mx-auto flex max-w-xs flex-col gap-2 pt-1">
-        <Link to="/players" className="neon-btn-lg w-full">
+        <Link to="/players" className="neon-btn-lg neon-btn-hero w-full">
           <PackageOpen className="h-4 w-4" />
           View collection
         </Link>

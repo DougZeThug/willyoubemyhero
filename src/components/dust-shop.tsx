@@ -335,7 +335,7 @@ export function DustShopPanel({
         </p>
         <button
           type="button"
-          className="neon-btn mt-3 w-full"
+          className="neon-btn neon-btn-hero mt-3 w-full"
           disabled={!canAfford || buy.isPending || offline}
           {...offlineReason(offline)}
           onClick={() => buy.mutate()}

@@ -121,14 +121,20 @@ function itemMeta(item: MarketListingItem): { label: string | null; accent: stri
     // floor, so a buyer reading "Platinum" alone was paying for the word.
     // editionLabel is null for standard, which every adopted copy now is, so
     // the two halves are joined rather than templated.
+    //
+    // A SETTLED finish says nothing here, because the tile above already printed
+    // it: every cell used to read "Alice Ace / Gold / Bob Blitz / Buy · 120 /
+    // Gold", the same word twice within 40px in the same amber. The caveat is
+    // the only part of this line the tile cannot say.
     const label =
       item.assertedBy === "client"
         ? [editionLabel(item.edition), "unsettled"].filter(Boolean).join(" · ")
-        : editionLabel(item.edition);
+        : null;
     return { label, accent: style.accent };
   }
-  const style = secretTierStyle(item.tier);
-  return { label: style.label, accent: style.accent };
+  // Same argument for a secret: TradeItemTile draws the level word under the
+  // name, and nothing about a stall listing qualifies it.
+  return { label: null, accent: secretTierStyle(item.tier).accent };
 }
 
 export function MarketPanel({
@@ -566,7 +572,7 @@ export function MarketPanel({
                   </p>
                   <button
                     type="button"
-                    className="neon-btn w-full"
+                    className="neon-btn neon-btn-hero w-full"
                     disabled={!priceOk || putUp.isPending || offline}
                     {...offlineReason(offline)}
                     onClick={confirmList}

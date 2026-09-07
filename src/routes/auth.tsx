@@ -270,7 +270,9 @@ function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={busy}>
+            {/* Same call as /claim: the form's one action carries the hero glow
+                rather than sitting flat under neon chrome. */}
+            <button type="submit" className="neon-btn-lg neon-btn-hero w-full" disabled={busy}>
               {mode === "signup" ? (
                 <>
                   <UserRoundPlus className="mr-2 h-4 w-4" /> Create account
@@ -280,7 +282,7 @@ function AuthPage() {
                   <LogIn className="mr-2 h-4 w-4" /> Sign in
                 </>
               )}
-            </Button>
+            </button>
           </form>
 
           <button
