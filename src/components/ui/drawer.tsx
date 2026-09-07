@@ -42,8 +42,14 @@ const DrawerContent = React.forwardRef<
         // viewport-fit=cover its last control lands under the home indicator and,
         // in landscape, its content runs under the notch. Here rather than at the
         // five call sites, because a sheet that forgets it is a button nobody can
-        // press. Bare insets compose: this element has no padding of its own, its
-        // children carry theirs, and on a phone with no notch all three are 0.
+        // press.
+        //
+        // Bare insets rather than the max() sheet.tsx needs: this element had no
+        // padding of its own to clobber, so the inset lands OUTSIDE the p-4 its
+        // header and content already carry — 47px to clear a notch and then the
+        // usual 16px gutter inside it, which is the composition you want and not
+        // a doubled one. On a phone with no notch every inset is 0 and nothing
+        // here changes.
         "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background pb-safe px-safe",
         className,
       )}
