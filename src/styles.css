@@ -144,7 +144,20 @@
   --sidebar-accent-foreground: oklch(0.98 0.005 240);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.82 0.14 210);
+  /* Three levels of cyan, and which one an element wears is the whole hierarchy
+     (§15, §26). Ceremonial for the one action that matters and for the pack;
+     interactive for the moment a thumb is on something; ember for the resting
+     hint that keeps an ordinary button recognisably neon without lighting the
+     room. The rim is not a glow at all — it is the 1px hairline that survives on
+     every level, so a button still has an edge when the light goes out. */
   --glow-primary: 0 0 24px oklch(0.82 0.14 210 / 45%), 0 0 60px oklch(0.82 0.14 210 / 25%);
+  --glow-interactive: 0 0 14px oklch(0.82 0.14 210 / 45%);
+  --glow-ember: 0 0 10px oklch(0.82 0.14 210 / 20%);
+  /* The ceremonial glow with a thumb on it. Its own token because two rules
+     need the identical value — hover and press — and a pair of hand-copied
+     four-layer shadows is exactly how a system drifts. */
+  --glow-primary-lit: 0 0 30px oklch(0.82 0.14 210 / 55%), 0 0 70px oklch(0.82 0.14 210 / 30%);
+  --glow-rim: 0 0 0 1px oklch(0.82 0.14 210 / 15%);
   --gradient-bezel: radial-gradient(
     circle at 30% 20%,
     oklch(0.32 0.02 235) 0%,
@@ -299,16 +312,30 @@
 }
 
 /*
- * Buttons come in three heights — 44 / 48 / 56 (§18). Written as component-layer
- * rules rather than @utility on purpose: the shared look lives in one selector
- * list, and a caller's own utilities (w-full, mt-3, disabled:opacity-*) still win
- * because the utilities layer sorts after components.
+ * Buttons come in three heights — 44 / 48 / 56 (§18) — and, separately, three
+ * levels of emphasis. Written as component-layer rules rather than @utility on
+ * purpose: the shared look lives in one selector list, and a caller's own
+ * utilities (w-full, mt-3, disabled:opacity-*) still win because the utilities
+ * layer sorts after components.
+ *
+ * SIZE AND EMPHASIS ARE SEPARATE, and that separation is the point. Every size
+ * used to carry the full two-layer --glow-primary at rest, so a screen with four
+ * of them — the pack summary, the trade builder — lit four things equally and
+ * said none of them was the one to press. Now:
+ *
+ *   .neon-btn-hero   ceremonial. The full bloom, on ONE action per screen.
+ *   .neon-btn / -lg  a resting ember, and a tighter glow while you touch it.
+ *   .neon-btn-sm     secondary. No resting glow at all; the same touch glow.
+ *   .neon-btn-quiet  utility. Contrast and a border, nothing else.
+ *
+ * The order below is load-bearing: these are all single-class selectors, so ties
+ * break on source order. Sizes, then quiet, then hero, then the interactive
+ * states, then :disabled last so a refused button never lights up.
  */
 @layer components {
   .neon-btn,
   .neon-btn-sm,
-  .neon-btn-lg,
-  .neon-btn-quiet {
+  .neon-btn-lg {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -330,42 +357,24 @@
     cursor: pointer;
     box-shadow:
       inset 0 0 0 1px oklch(1 0 0 / 4%),
-      0 0 0 1px oklch(0.82 0.14 210 / 15%),
-      var(--glow-primary);
+      var(--glow-rim),
+      var(--glow-ember);
     transition:
       transform 120ms ease,
       box-shadow 120ms ease,
       background 120ms ease;
   }
 
-  .neon-btn:hover,
-  .neon-btn-sm:hover,
-  .neon-btn-lg:hover {
-    background: linear-gradient(180deg, oklch(0.26 0.04 235) 0%, oklch(0.18 0.03 240) 100%);
-    box-shadow:
-      inset 0 0 0 1px oklch(1 0 0 / 8%),
-      0 0 0 1px oklch(0.82 0.14 210 / 30%),
-      0 0 30px oklch(0.82 0.14 210 / 55%);
-  }
-
-  .neon-btn:active,
-  .neon-btn-sm:active,
-  .neon-btn-lg:active,
-  .neon-btn-quiet:active {
-    transform: translateY(1px);
-  }
-
-  .neon-btn:focus-visible,
-  .neon-btn-sm:focus-visible,
-  .neon-btn-lg:focus-visible,
-  .neon-btn-quiet:focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-  }
-
   .neon-btn-sm {
     min-height: 44px;
     padding: 0 1.125rem;
+    /* The secondary size, and the most-used one: 18 call sites, mostly row
+       actions and second exits. Ember and all, a shelf of these was the cyan
+       haze §15 describes. The border and the cyan word still say "neon"; the
+       light arrives when a thumb does. */
+    box-shadow:
+      inset 0 0 0 1px oklch(1 0 0 / 4%),
+      var(--glow-rim);
   }
 
   .neon-btn {
@@ -384,21 +393,121 @@
    * §26 keeps the glow for primary CTAs and rare tiers, and a shelf of eight
    * glowing rows would say every one of them is the point. It reads as the
    * quiet member of one family rather than as stock shadcn in a neon app.
+   *
+   * Its own rule rather than a member of the list above, which is where it used
+   * to sit — it then had to spend four declarations undoing what it had just
+   * been given.
    */
   .neon-btn-quiet {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
     min-height: 44px;
     padding: 0 1rem;
-    border-color: oklch(1 0 0 / 15%);
+    border-radius: 9999px;
+    border: 1px solid oklch(1 0 0 / 15%);
     background: oklch(1 0 0 / 4%);
     color: var(--color-muted-foreground);
-    box-shadow: none;
+    font-family: var(--font-display);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: var(--text-button);
+    line-height: var(--text-button--line-height);
+    cursor: pointer;
+    transition:
+      transform 120ms ease,
+      border-color 120ms ease,
+      background 120ms ease;
   }
 
-  .neon-btn-quiet:hover {
-    background: oklch(1 0 0 / 8%);
-    border-color: oklch(1 0 0 / 25%);
-    color: var(--color-foreground);
-    box-shadow: none;
+  /*
+   * Ceremonial. A modifier, not a size, so the one action that matters can be any
+   * height and two neighbours can share a size without sharing the bloom — which
+   * is exactly the pack summary, where View collection and Share pack are both
+   * neon-btn-lg and only the first is the way out.
+   */
+  .neon-btn-hero {
+    box-shadow:
+      inset 0 0 0 1px oklch(1 0 0 / 6%),
+      var(--glow-rim),
+      var(--glow-primary);
+  }
+
+  /*
+   * Level 2, and it is a STATE: pressed, focused, or hovered by something that
+   * can actually hover. Selection is deliberately NOT in this list — a chosen
+   * sort chip, partner or trade slot wears a ring or a fill and never a bloom
+   * (§15), and every one of them already does.
+   */
+  .neon-btn:active,
+  .neon-btn-sm:active,
+  .neon-btn-lg:active,
+  .neon-btn-quiet:active {
+    transform: translateY(1px);
+  }
+
+  .neon-btn:focus-visible,
+  .neon-btn-sm:focus-visible,
+  .neon-btn-lg:focus-visible,
+  .neon-btn-quiet:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .neon-btn:active,
+  .neon-btn-sm:active,
+  .neon-btn-lg:active,
+  .neon-btn:focus-visible,
+  .neon-btn-sm:focus-visible,
+  .neon-btn-lg:focus-visible {
+    background: linear-gradient(180deg, oklch(0.26 0.04 235) 0%, oklch(0.18 0.03 240) 100%);
+    box-shadow:
+      inset 0 0 0 1px oklch(1 0 0 / 8%),
+      0 0 0 1px oklch(0.82 0.14 210 / 30%),
+      var(--glow-interactive);
+  }
+
+  /*
+   * Hover is gated on a pointer that can leave again. On a phone :hover latches
+   * after a tap, which turns the one glow that is supposed to be temporary into
+   * a permanent one on whatever was pressed last.
+   */
+  @media (hover: hover) and (pointer: fine) {
+    .neon-btn:hover,
+    .neon-btn-sm:hover,
+    .neon-btn-lg:hover {
+      background: linear-gradient(180deg, oklch(0.26 0.04 235) 0%, oklch(0.18 0.03 240) 100%);
+      box-shadow:
+        inset 0 0 0 1px oklch(1 0 0 / 8%),
+        0 0 0 1px oklch(0.82 0.14 210 / 30%),
+        var(--glow-interactive);
+    }
+
+    .neon-btn-quiet:hover {
+      background: oklch(1 0 0 / 8%);
+      border-color: oklch(1 0 0 / 25%);
+      color: var(--color-foreground);
+    }
+
+    .neon-btn-hero:hover {
+      box-shadow:
+        inset 0 0 0 1px oklch(1 0 0 / 10%),
+        0 0 0 1px oklch(0.82 0.14 210 / 40%),
+        var(--glow-primary-lit);
+    }
+  }
+
+  /* Last, so the hero's own bloom outranks the Level 2 state it would otherwise
+     inherit from the selector list above — a pressed hero brightens rather than
+     dimming to the interactive glow. */
+  .neon-btn-hero:active,
+  .neon-btn-hero:focus-visible {
+    box-shadow:
+      inset 0 0 0 1px oklch(1 0 0 / 10%),
+      0 0 0 1px oklch(0.82 0.14 210 / 40%),
+      var(--glow-primary-lit);
   }
 
   /* Every spend button in this app can be refused — offline, or short of dust —
@@ -406,10 +515,23 @@
   .neon-btn:disabled,
   .neon-btn-sm:disabled,
   .neon-btn-lg:disabled,
-  .neon-btn-quiet:disabled {
+  .neon-btn-quiet:disabled,
+  .neon-btn-hero:disabled {
     opacity: 0.45;
     box-shadow: none;
     cursor: not-allowed;
+  }
+}
+
+/* The one animated thing in the family, and the only transition in the file that
+   no reduced-motion block had reached. The states still change; they just arrive
+   rather than travel. */
+@media (prefers-reduced-motion: reduce) {
+  .neon-btn,
+  .neon-btn-sm,
+  .neon-btn-lg,
+  .neon-btn-quiet {
+    transition: none;
   }
 }
 
