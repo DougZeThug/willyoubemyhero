@@ -167,8 +167,14 @@ export function TodayCard({
         ) : (
           <Link
             to="/players/pack"
-            className={cn("neon-btn-lg neon-btn-hero relative", packWaiting && "ring-2")}
-            style={packWaiting ? { ["--tw-ring-color" as string]: SECRET_RARITY.border } : undefined} // prettier-ignore
+            className="neon-btn-lg neon-btn-hero relative"
+            // --btn-ring, not Tailwind's `ring-2`. A ring utility writes the whole
+            // box-shadow property from the utilities layer, which sorts after the
+            // @layer components rule holding the hero bloom — so it replaced the
+            // glow rather than sitting outside it, and the one day this button had
+            // a secret to announce was the one day it stopped shouting. The custom
+            // property is a slot inside the family's own stack instead.
+            style={packWaiting ? { ["--btn-ring" as string]: `0 0 0 2px ${SECRET_RARITY.border}` } : undefined} // prettier-ignore
             // Byte-identical to what this control has always said when sealed:
             // the e2e suite matches these exactly, and so does anyone who has
             // learned the screen by its shape.

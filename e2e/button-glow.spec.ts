@@ -25,6 +25,33 @@ async function asMember(page: Page) {
   );
 }
 
+/**
+ * No secret waiting, stated rather than inherited.
+ *
+ * The pack button wears a state ring when one is, and a ring that replaced the
+ * bloom instead of composing with it is exactly the bug this file now guards —
+ * so "two layers" has to be a fact about a named state, not about whichever
+ * default the shared fixture happens to carry.
+ */
+const NOTHING_WAITING = {
+  claimed: true,
+  day: null,
+  pulledToday: true,
+  pulled: 1,
+  available: false,
+  resetsAt: "2026-07-29T04:00:00Z",
+};
+
+/** A secret on the other side of the wrapper, which is what puts a ring on the button. */
+const SECRET_WAITING = {
+  claimed: true,
+  day: "2026-07-28",
+  pulledToday: false,
+  pulled: 1,
+  available: true,
+  resetsAt: "2026-07-29T04:00:00Z",
+};
+
 /** A rung standing unclaimed, which is what puts a secondary button beside Open Pack. */
 const CLAIMABLE = {
   kind: "member",
@@ -71,6 +98,7 @@ test.describe("one scale of button glow", () => {
   }) => {
     await asMember(page);
     server.set("getStreakStatus", CLAIMABLE);
+    server.set("getSecretStatus", NOTHING_WAITING);
     await page.goto("/players");
 
     const hero = page.getByRole("link", { name: /^open today's pack/i });
@@ -86,6 +114,27 @@ test.describe("one scale of button glow", () => {
     // blur. A 44px pill next to the day's action is not a second answer to the
     // same question.
     expect(glowLayers(await shadowOf(page, /claim three days/i))).toBe(0);
+  });
+
+  test("keeps the bloom under the secret-waiting ring", async ({ page, server }) => {
+    // The ring arrives as --btn-ring inside the family's own box-shadow stack.
+    // As Tailwind's `ring-2` it wrote the whole property from the utilities
+    // layer, which sorts after @layer components: the ring did not sit outside
+    // the ceremonial glow, it replaced it, and the button went dark on the one
+    // day it had something to announce.
+    await asMember(page);
+    server.set("getSecretStatus", SECRET_WAITING);
+    await page.goto("/players");
+    // Anchored on the pack button's own label: the nav's Pack tab wears the same
+    // cue and the same words, which is two links for a bare /a secret is waiting/.
+    const waiting = /^open today's pack — a secret is waiting$/i;
+    await expect(page.getByRole("link", { name: waiting })).toBeVisible();
+
+    const shadow = await shadowOf(page, waiting);
+    // Still two blurred layers — the ring is a fourth, blur-0 entry beside them.
+    expect(glowLayers(shadow)).toBe(2);
+    // And the ring is genuinely there: a 2px spread in the secret's own colour.
+    expect(shadow).toMatch(/0px 0px 0px 2px/);
   });
 
   test("gives a refused control no glow at all", async ({ page, server }) => {
