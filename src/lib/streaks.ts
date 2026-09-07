@@ -83,13 +83,25 @@ export const STREAK_MILESTONES: readonly StreakMilestone[] = [
     blurb: "A month of showing up. Legendary or better.",
   },
   {
-    days: 100,
+    days: 60,
     reward: "secret",
     tierFloor: "mythic",
-    label: "One Hundred Days",
-    blurb: "A hundred days without a gap. The mythic one.",
+    label: "Sixty Days",
+    blurb: "Sixty days without a gap. The mythic one — and the run starts over.",
   },
 ] as const;
+
+/**
+ * The rung that wipes the slate.
+ *
+ * Cashing the capstone restarts the run, so the ladder is something to climb
+ * again rather than a number that only goes up. The reset lives in the walk
+ * below and in `streak_runs`, which cuts on the same claim day — the client and
+ * the payout have to agree about where a run begins or the button and the reward
+ * disagree.
+ */
+export const STREAK_RESET_MILESTONE = 60;
+
 
 const DAYS = new Set(STREAK_MILESTONES.map((m) => m.days));
 
