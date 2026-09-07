@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Drawer,
@@ -12,6 +11,8 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { TradeItemTile, type RosterCardLookup } from "@/components/trade-offer-card";
+import { SectionTitle } from "@/components/section-title";
+import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { LevelPips } from "@/components/level-pips";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { marketListingsKey, myStallKey, useMarketListings, useMyStall } from "@/hooks/use-market";
@@ -28,6 +29,7 @@ import type { MarketListing, MarketListingItem, MyMarketListing } from "@/lib/ma
 import { buyMarketListing, cancelMarketListing, listCardForDust } from "@/lib/market.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
 import type { ImageUrlSet } from "@/lib/media";
+import { cn } from "@/lib/utils";
 import type { TradeItemView, TradeSpares } from "@/lib/trades";
 
 /**
@@ -349,21 +351,21 @@ export function MarketPanel({
   if (!dustOn && active.length === 0 && !stall.isLoading) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-section-gap">
       {dustOn && (
-        <section className="rounded-lg border border-border p-4">
-          <h2 className="font-display text-sm font-bold uppercase tracking-wide">The market</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+        <section>
+          <SectionTitle label="The market" count={listings.length || undefined} />
+          <p className="text-meta text-muted-foreground">
             Cards other people have put up. The price is theirs to set, and the dust goes straight
             to them.
           </p>
 
           {market.isLoading ? (
-            <p className="mt-3 text-xs text-muted-foreground">Reading the shelf…</p>
+            <p className="mt-3 text-meta text-muted-foreground">Reading the shelf…</p>
           ) : listings.length === 0 ? (
-            <p className="mt-3 text-xs text-muted-foreground">Nothing for sale right now.</p>
+            <p className="mt-3 text-meta text-muted-foreground">Nothing for sale right now.</p>
           ) : (
-            <ul className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <ul className="mt-3 grid grid-cols-3 gap-grid-gap sm:grid-cols-4 lg:grid-cols-6">
               {listings.map((listing) => {
                 const meta = itemMeta(listing.item);
                 const broke = balance != null && balance < listing.price;
@@ -377,13 +379,19 @@ export function MarketPanel({
                       concealed={listing.item.kind === "secret" && listing.item.concealed}
                       backUrl={backUrl}
                     />
-                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    {/* w-full, or the truncate never engages: the column centres
+                        its children, so without a width this sizes to the name
+                        and overflows the cell rather than clipping. */}
+                    <span className="w-full truncate text-center text-meta font-bold uppercase tracking-[0.08em] text-muted-foreground">
                       {nameOf(listing.sellerId)}
                     </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
+                    <button
+                      type="button"
+                      // Trimmed from the pill's own 1.125rem/15px: three columns
+                      // at 320px leaves an 88px cell, and the refused label
+                      // ("120 dust") is longer than the live one. Both have to
+                      // stay on one line under a card the same width.
+                      className="neon-btn-sm w-full px-2 text-badge"
                       // Said on the button rather than discovered on tap: the RPC
                       // would refuse this anyway, and being told the price you
                       // cannot meet is more use than a toast that says no.
@@ -395,14 +403,14 @@ export function MarketPanel({
                       }}
                     >
                       {busy ? "…" : broke ? `${listing.price} dust` : `Buy · ${listing.price}`}
-                    </Button>
+                    </button>
                     {/* No pips here: the tile above is a TradeItemTile and draws
                         them under the name already. This line is the seller-side
                         meta, and a second row of the same diamonds would read as
                         two different facts. */}
                     {meta.label && (
                       <span
-                        className="text-[9px] font-bold uppercase tracking-[0.2em]"
+                        className="text-meta font-bold uppercase tracking-[0.08em]"
                         style={{ color: meta.accent }}
                       >
                         {meta.label}
@@ -416,27 +424,26 @@ export function MarketPanel({
         </section>
       )}
 
-      <section className="rounded-lg border border-border p-4">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide">Your stall</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+      <section>
+        <SectionTitle label="Your stall" count={active.length || undefined} />
+        <p className="text-meta text-muted-foreground">
           {dustOn
             ? "Spares only, and a roster card always leaves you one. A sale is between you and the buyer — nobody else is told."
             : "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."}
         </p>
 
         {stall.isLoading ? (
-          <p className="mt-3 text-xs text-muted-foreground">Counting your stall…</p>
+          <p className="mt-3 text-meta text-muted-foreground">Counting your stall…</p>
         ) : active.length === 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground">Nothing up at the moment.</p>
+          <p className="mt-3 text-meta text-muted-foreground">Nothing up at the moment.</p>
         ) : (
-          <ul className="mt-3 space-y-1.5">
+          <ul className={cn(ROW_LIST, "mt-3")}>
             {active.map((listing) => (
-              <li key={listing.id} className="flex items-center justify-between gap-3">
+              <li key={listing.id} className={ROW}>
                 <StallLine listing={listing} nameFor={nameFor} nameOf={nameOf} />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0"
+                <button
+                  type="button"
+                  className="neon-btn-quiet shrink-0"
                   disabled={(pulling === listing.id && pull.isPending) || offline}
                   {...offlineReason(offline)}
                   onClick={() => {
@@ -445,15 +452,16 @@ export function MarketPanel({
                   }}
                 >
                   {pulling === listing.id && pull.isPending ? "…" : "Take down"}
-                </Button>
+                </button>
               </li>
             ))}
           </ul>
         )}
 
         {dustOn && (
-          <Button
-            className="mt-3 w-full"
+          <button
+            type="button"
+            className="neon-btn mt-3 w-full"
             disabled={spares.isLoading}
             onClick={() => {
               setStaged(null);
@@ -462,7 +470,7 @@ export function MarketPanel({
             }}
           >
             List a card
-          </Button>
+          </button>
         )}
 
         {recent.length > 0 && (
@@ -470,14 +478,14 @@ export function MarketPanel({
             {/* The ONLY place a sale is ever visible. A completed sale writes no
                 row into the trade feed, so without this list somebody learns
                 about it as "huh, I have more dust". */}
-            <h3 className="mt-4 font-display text-[11px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+            <h3 className="mt-4 font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
               Lately
             </h3>
-            <ul className="mt-2 space-y-1.5">
+            <ul className={cn(ROW_LIST, "mt-2")}>
               {recent.map((listing) => (
-                <li key={listing.id} className="flex items-center justify-between gap-3">
+                <li key={listing.id} className={ROW}>
                   <StallLine listing={listing} nameFor={nameFor} nameOf={nameOf} />
-                  <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                  <span className="shrink-0 text-meta font-bold uppercase tracking-[0.08em] text-muted-foreground">
                     {marketStatusLabel(listing.status)}
                   </span>
                 </li>
@@ -491,21 +499,21 @@ export function MarketPanel({
         <Drawer open={picking} onOpenChange={setPicking}>
           <DrawerContent className="max-h-[85dvh]">
             <DrawerHeader>
-              <DrawerTitle className="font-display text-sm font-bold uppercase tracking-wide">
+              <DrawerTitle className="font-display text-badge font-bold uppercase tracking-[0.08em]">
                 List a card
               </DrawerTitle>
-              <DrawerDescription className="text-xs">
+              <DrawerDescription className="text-meta">
                 Pick a spare, then name your price.
               </DrawerDescription>
             </DrawerHeader>
 
             <div className="overflow-y-auto px-4 pb-6">
               {sellable.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-meta text-muted-foreground">
                   Nothing spare to sell yet. Roster cards need a second copy; any secret will do.
                 </p>
               ) : (
-                <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                <ul className="grid grid-cols-3 gap-grid-gap sm:grid-cols-4">
                   {sellable.map((entry) => {
                     const key =
                       entry.item.kind === "roster" ? entry.item.copyId : entry.item.pullId;
@@ -532,7 +540,7 @@ export function MarketPanel({
                 <div className="mt-4 space-y-2 border-t border-border pt-4">
                   <label
                     htmlFor="market-price"
-                    className="block font-display text-[11px] font-bold uppercase tracking-[0.3em] text-muted-foreground"
+                    className="block font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground"
                   >
                     Your price
                   </label>
@@ -549,17 +557,18 @@ export function MarketPanel({
                   {/* A hint, never a rule. Undercutting the mill is a legitimate
                     thing to do for a card you would rather see in somebody's
                     collection than burn. */}
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-meta text-muted-foreground">
                     The house would pay <span className="font-mono">{staged.floor}</span>.
                   </p>
-                  <Button
-                    className="w-full"
+                  <button
+                    type="button"
+                    className="neon-btn w-full"
                     disabled={!priceOk || putUp.isPending || offline}
                     {...offlineReason(offline)}
                     onClick={confirmList}
                   >
                     {putUp.isPending ? "…" : priceOk ? `List for ${asking}` : "Name a price"}
-                  </Button>
+                  </button>
                 </div>
               )}
             </div>
@@ -584,20 +593,21 @@ function StallLine({
   const title =
     listing.item.kind === "roster" ? nameFor(listing.item.eventParticipantId) : listing.item.name;
   return (
-    <span className="min-w-0 truncate text-xs">
-      <span className="font-bold">{title}</span>
-      {/* Only a secret has a level; itemMeta collapses a finish and a level into
-          the same {label, accent} shape, so the discriminator has to be here. */}
-      {listing.item.kind === "secret" && <LevelPips tier={listing.item.tier} className="ml-1.5" />}
-      {meta.label && (
-        <span className="ml-1.5" style={{ color: meta.accent }}>
-          {meta.label}
-        </span>
-      )}
-      <span className="ml-1.5 font-mono text-muted-foreground">{listing.price}</span>
-      {listing.status === "sold" && listing.buyerId && (
-        <span className="ml-1.5 text-muted-foreground">{`to ${nameOf(listing.buyerId)}`}</span>
-      )}
+    /* Two lines rather than one. Five facts strung along a single truncating row
+       lost the price and the buyer first — the two you actually came to read —
+       because the name is the longest of them and sits at the front. */
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-badge font-bold">{title}</span>
+      <span className="mt-0.5 flex items-center gap-1.5 text-meta text-muted-foreground">
+        {/* Only a secret has a level; itemMeta collapses a finish and a level into
+            the same {label, accent} shape, so the discriminator has to be here. */}
+        {listing.item.kind === "secret" && <LevelPips tier={listing.item.tier} />}
+        {meta.label && <span style={{ color: meta.accent }}>{meta.label}</span>}
+        <span className="font-mono">{listing.price}</span>
+        {listing.status === "sold" && listing.buyerId && (
+          <span className="truncate">{`to ${nameOf(listing.buyerId)}`}</span>
+        )}
+      </span>
     </span>
   );
 }

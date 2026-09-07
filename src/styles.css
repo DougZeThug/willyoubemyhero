@@ -271,7 +271,8 @@
 @layer components {
   .neon-btn,
   .neon-btn-sm,
-  .neon-btn-lg {
+  .neon-btn-lg,
+  .neon-btn-quiet {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -286,6 +287,11 @@
     letter-spacing: 0.08em;
     font-size: var(--text-button);
     line-height: var(--text-button--line-height);
+    /* Tailwind v4's preflight gives every button `cursor: default`, and these are
+       plain <button>/<a> rather than the shadcn Button that carried its own
+       cursor-pointer. Without this the whole family loses the affordance on a
+       pointer device. */
+    cursor: pointer;
     box-shadow:
       inset 0 0 0 1px oklch(1 0 0 / 4%),
       0 0 0 1px oklch(0.82 0.14 210 / 15%),
@@ -308,13 +314,15 @@
 
   .neon-btn:active,
   .neon-btn-sm:active,
-  .neon-btn-lg:active {
+  .neon-btn-lg:active,
+  .neon-btn-quiet:active {
     transform: translateY(1px);
   }
 
   .neon-btn:focus-visible,
   .neon-btn-sm:focus-visible,
-  .neon-btn-lg:focus-visible {
+  .neon-btn-lg:focus-visible,
+  .neon-btn-quiet:focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
   }
@@ -332,6 +340,40 @@
   .neon-btn-lg {
     min-height: 56px;
     padding: 0 1.75rem;
+  }
+
+  /*
+   * Row actions — burn, sell, settle, take down, re-roll. The same 44px pill and
+   * the same condensed caps as the rest of the family, but no cyan and no glow:
+   * §26 keeps the glow for primary CTAs and rare tiers, and a shelf of eight
+   * glowing rows would say every one of them is the point. It reads as the
+   * quiet member of one family rather than as stock shadcn in a neon app.
+   */
+  .neon-btn-quiet {
+    min-height: 44px;
+    padding: 0 1rem;
+    border-color: oklch(1 0 0 / 15%);
+    background: oklch(1 0 0 / 4%);
+    color: var(--color-muted-foreground);
+    box-shadow: none;
+  }
+
+  .neon-btn-quiet:hover {
+    background: oklch(1 0 0 / 8%);
+    border-color: oklch(1 0 0 / 25%);
+    color: var(--color-foreground);
+    box-shadow: none;
+  }
+
+  /* Every spend button in this app can be refused — offline, or short of dust —
+     and the shape has to survive that without the glow insisting otherwise. */
+  .neon-btn:disabled,
+  .neon-btn-sm:disabled,
+  .neon-btn-lg:disabled,
+  .neon-btn-quiet:disabled {
+    opacity: 0.45;
+    box-shadow: none;
+    cursor: not-allowed;
   }
 }
 
