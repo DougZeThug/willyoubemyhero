@@ -152,13 +152,13 @@ function ClaimPage() {
 
   if (session) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto grid max-w-md place-items-center px-4 py-12">
           <Card className="hud-bezel w-full border-primary/30">
             <CardContent className="space-y-4 p-6 text-center">
               <BadgeCheck className="mx-auto h-10 w-10 text-primary" />
               <div>
-                <div className="font-display text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+                <div className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   Signed in as
                 </div>
                 <div className="font-display text-2xl font-black uppercase leading-none">
@@ -208,12 +208,12 @@ function ClaimPage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-lg px-4 py-8">
         <div className="mb-5 border-b border-primary/20 pb-4 text-center">
           <div className="flex items-center justify-center gap-2 text-primary">
             <UserRoundCheck className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
               League Members
             </span>
           </div>
@@ -231,7 +231,7 @@ function ClaimPage() {
 
         <form onSubmit={submit} className="space-y-5">
           <div>
-            <Label className="mb-2 block text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            <Label className="mb-2 block text-label uppercase tracking-[0.08em] text-muted-foreground">
               Who are you?
             </Label>
             {roster.isLoading ? (
@@ -248,7 +248,7 @@ function ClaimPage() {
                       type="button"
                       onClick={() => setSelected(p.id)}
                       className={cn(
-                        "truncate rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
+                        "flex min-h-11 items-center truncate rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
                         selected === p.id
                           ? "border-primary bg-primary/15 text-primary"
                           : "border-white/10 bg-white/[0.02] text-foreground hover:border-primary/40",
@@ -256,7 +256,7 @@ function ClaimPage() {
                     >
                       {p.name}
                       {p.claimed && (
-                        <span className="ml-1 text-[9px] font-bold tracking-widest text-muted-foreground">
+                        <span className="ml-1 text-label font-bold tracking-widest text-muted-foreground">
                           ✓
                         </span>
                       )}
@@ -269,7 +269,7 @@ function ClaimPage() {
           <div>
             <Label
               htmlFor="member-code"
-              className="mb-2 block text-[10px] uppercase tracking-[0.3em] text-muted-foreground"
+              className="mb-2 block text-label uppercase tracking-[0.08em] text-muted-foreground"
             >
               Your code
             </Label>
@@ -281,6 +281,9 @@ function ClaimPage() {
               autoCapitalize="characters"
               spellCheck={false}
               placeholder="XXXXXX"
+              // The one place wide tracking survives the §16 cap: a code is read
+              // and typed character by character, and the gaps are what let a
+              // thumb find its place in it.
               className="text-center font-display text-2xl tracking-[0.4em]"
             />
           </div>
@@ -303,7 +306,7 @@ function ClaimPage() {
           <Link
             to="/auth"
             search={{ mode: "signup" as const, next: undefined }}
-            className="font-bold text-primary underline"
+            className="inline-flex min-h-11 items-center font-bold text-primary underline"
           >
             Create an account
           </Link>{" "}

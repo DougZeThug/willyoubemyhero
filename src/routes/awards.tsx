@@ -93,7 +93,7 @@ function AwardsPage() {
 
   if (loading && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-3xl px-4 py-10">
           <FeedLoading label="Reading the awards…" />
         </div>
@@ -103,7 +103,7 @@ function AwardsPage() {
 
   if (error && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-3xl px-4 py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
@@ -112,13 +112,13 @@ function AwardsPage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-3xl px-4 py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Award className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
               Superlatives
             </span>
           </div>
@@ -134,7 +134,10 @@ function AwardsPage() {
 
         {!me && !locked && (
           <div className="mb-5 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-            <Link to="/claim" className="font-bold text-primary underline">
+            <Link
+              to="/claim"
+              className="inline-flex min-h-11 items-center font-bold text-primary underline"
+            >
               Claim your player
             </Link>{" "}
             <span className="text-muted-foreground">to vote.</span>
@@ -175,7 +178,7 @@ function AwardsPage() {
                         </Link>
                       ))}
                       {winners.length > 1 && (
-                        <span className="self-center text-[10px] uppercase tracking-widest text-muted-foreground">
+                        <span className="self-center text-label uppercase tracking-widest text-muted-foreground">
                           tied
                         </span>
                       )}
@@ -202,7 +205,7 @@ function AwardsPage() {
                           onClick={() => vote(cat.id, pid)}
                           disabled={!me || pending === key}
                           className={cn(
-                            "flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:opacity-50",
+                            "flex min-h-11 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:opacity-50",
                             chosen
                               ? "border-primary bg-primary/15"
                               : "border-white/10 bg-white/[0.02] hover:border-primary/40",

@@ -236,7 +236,7 @@ export function TradeBuilder({
       // gets. A card being revealed wants the room behind it; a form does not —
       // 80% over a busy Trading Post left the heading and an offer card legible
       // straight through the flow.
-      className="card-bg fixed inset-0 z-50 flex flex-col outline-none"
+      className="card-bg fixed inset-0 z-50 flex flex-col pt-safe px-safe outline-none"
     >
       <header className="flex items-center justify-between gap-2 border-b border-primary/20 px-2 py-2">
         <button
@@ -688,7 +688,13 @@ function SparePickerDrawer({
               {outOfSeason ? "Trading opens with the next combine." : "No spares to trade."}
             </p>
           ) : (
-            <ul className="grid grid-cols-3 justify-items-center gap-3">
+            // Tracks sized off the tile rather than a column count: a `lg` tile
+            // is a fixed 110px, and three of them plus the drawer's padding need
+            // 386px — so at 320 and 375 the old grid-cols-3 overflowed its cells
+            // and the tiles sat on each other, which `overflow-x: hidden` hid.
+            // auto-fill drops to two across on a narrow phone and back to three
+            // as soon as there is room.
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] justify-items-center gap-3">
               {items.map((s) => (
                 <li key={s.key}>
                   <TradeItemTile
@@ -713,7 +719,7 @@ function SparePickerDrawer({
               <h4 className="mt-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 Can&apos;t be traded
               </h4>
-              <ul className="mt-2 grid grid-cols-3 justify-items-center gap-3">
+              <ul className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] justify-items-center gap-3">
                 {blocked.map((b) => (
                   <li key={blockedKey(b)}>
                     <TradeItemTile

@@ -1600,7 +1600,7 @@ function PackPage() {
   // The same shape /leaderboard and /analytics use for a read they cannot make.
   if (eventFailed) {
     return (
-      <div className="card-bg min-h-[calc(100dvh-8rem)]">
+      <div className="card-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-4xl px-4 py-10">
           <FeedError
             message="Your cards are safe on this phone — today's pack needs the roster before it can be dealt."
@@ -1632,7 +1632,7 @@ function PackPage() {
   const presentingAny = presenting || milestoneReveal !== null;
 
   return (
-    <div className="card-bg min-h-[calc(100dvh-8rem)]">
+    <div className="card-bg min-h-[var(--page-min-h)]">
       {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
           with no signal is the exact failure the health states exist for.
@@ -1673,7 +1673,7 @@ function PackPage() {
           screen, mid-reveal and on the summary alike — the same corner every
           time. Lifted to clear the mobile tab bar, which is fixed at the bottom
           and only exists below md. */}
-      <SoundToggle className="fixed bottom-[calc(env(safe-area-inset-bottom)+3.75rem)] left-1 z-40 rounded-full border border-white/10 bg-background/70 backdrop-blur-sm md:bottom-4" />
+      <SoundToggle className="fixed bottom-[calc(var(--tab-bar-h)+0.25rem)] left-1 z-40 rounded-full border border-white/10 bg-background/70 backdrop-blur-sm md:bottom-4" />
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-3 sm:py-6">
         {/* Same gate as the vault, and here for the same reason: a pack opened
             before they pick a name lands on the device, not on them. Kept out of

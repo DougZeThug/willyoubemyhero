@@ -1,6 +1,6 @@
 // Every public route renders, hydrates, and survives having no data.
 import type { Page } from "@playwright/test";
-import { test, expect, PLAYERS, sealedPack } from "./fixtures";
+import { test, expect, BUNDLE, PLAYERS, sealedPack, type ServerFnMock } from "./fixtures";
 
 const ROUTES = [
   { path: "/", title: /Draft Combine|Hero/i },
@@ -202,10 +202,17 @@ async function signInAsMember(page: Page) {
  * `settle` is the wait AND the route's own sanity check: measuring a screen that
  * has not filled in yet passes for the wrong reason, because half the controls
  * are not mounted yet.
+ *
+ * Every phone-facing route is here, and that breadth is the point: the floor was
+ * guarded on three screens while the rest drifted, and a rule enforced in three
+ * places is a rule the fourth screen does not have. /tv is the only deliberate
+ * omission — it is a board read from across a garden and nothing on it is
+ * tapped — and /admin is unreachable behind its PIN.
  */
 const TAP_TARGET_ROUTES: {
   path: string;
   member?: true;
+  arrange?: (server: ServerFnMock) => void;
   settle: (page: Page) => Promise<void>;
 }[] = [
   {
@@ -238,6 +245,85 @@ const TAP_TARGET_ROUTES: {
       await expect(page.getByRole("heading", { name: "Trading Post" })).toBeVisible();
     },
   },
+  {
+    // A card page, where the chips under the card are the densest row of
+    // controls in the app.
+    path: `/players/${PLAYERS[0].ep}`,
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: PLAYERS[0].name })).toBeVisible();
+    },
+  },
+  {
+    // With dust ON, or the whole screen is the switched-off notice and none of
+    // the controls this is here to measure exist.
+    path: "/players/shop",
+    member: true,
+    arrange: (server) => {
+      server.set("getActiveEvent", { ...BUNDLE.event, dust_enabled: true });
+      // A claimed member with dust to spend, so the shelf renders Buy buttons
+      // rather than the "nothing you can afford" branch.
+      server.set("getDustBalance", { balance: 500 });
+    },
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: /^dust$/i })).toBeVisible();
+    },
+  },
+  {
+    path: "/leaderboard",
+    settle: async (page) => {
+      await expect(page.getByRole("main")).toContainText(PLAYERS[0].name);
+    },
+  },
+  {
+    path: "/league",
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: "The League" })).toBeVisible();
+    },
+  },
+  {
+    path: "/awards",
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: "League Awards" })).toBeVisible();
+    },
+  },
+  {
+    // A marshal's screen, held in one hand at a start line — the place a 32px
+    // button costs a run rather than a tap.
+    path: "/live",
+    settle: async (page) => {
+      await expect(page.getByRole("main")).toContainText(/spectator/i);
+    },
+  },
+  {
+    path: "/analytics",
+    // With an archive in it: the rows are links, and a list nobody stubs renders
+    // as "no archived events yet" with nothing to measure.
+    arrange: (server) =>
+      server.set("listArchives", [
+        {
+          id: "arch-1",
+          slug: "combine-2025",
+          event_name: "Draft Combine",
+          event_year: 2025,
+          created_at: "2025-08-24T12:00:00.000Z",
+        },
+      ]),
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: /splits & records/i })).toBeVisible();
+    },
+  },
+  {
+    path: "/claim",
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: /claim your player/i })).toBeVisible();
+    },
+  },
+  {
+    path: "/auth",
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: /^sign in$/i })).toBeVisible();
+    },
+  },
 ];
 
 test.describe("tap targets", () => {
@@ -247,7 +333,7 @@ test.describe("tap targets", () => {
         testInfo.project.name !== "mobile",
         "44px is a touch rule; the desktop chrome is mouse-driven and 24px is its bar.",
       );
-      void server;
+      route.arrange?.(server);
       if (route.member) await signInAsMember(page);
 
       await page.goto(route.path);

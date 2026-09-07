@@ -233,7 +233,7 @@ export function EditResultSheet({
           <div>
             <label
               htmlFor="raw-time"
-              className="mb-1 block font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground"
+              className="mb-1 block font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground"
             >
               Course time (before penalties)
             </label>
@@ -249,7 +249,7 @@ export function EditResultSheet({
               placeholder="1:23.45"
             />
             {splitDerivedMs != null && rawMs != null && rawMs !== splitDerivedMs && (
-              <p className="mt-1 text-[10px] text-warn">
+              <p className="mt-1 text-label text-warn">
                 From splits: <span className="tabular">{formatTime(splitDerivedMs)}</span> — your
                 typed time is being used instead.
               </p>
@@ -257,7 +257,7 @@ export function EditResultSheet({
           </div>
 
           <div>
-            <div className="mb-1 font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
+            <div className="mb-1 font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
               Station times
             </div>
             <div className="space-y-2">
@@ -272,7 +272,7 @@ export function EditResultSheet({
                       {st.short_name ?? st.name}
                     </span>
                     {at != null && (
-                      <span className="shrink-0 text-[10px] tabular text-muted-foreground">
+                      <span className="shrink-0 text-label tabular text-muted-foreground">
                         at {formatTime(at)}
                       </span>
                     )}
@@ -294,7 +294,7 @@ export function EditResultSheet({
                 <p className="text-xs text-muted-foreground">No stations set up.</p>
               )}
             </div>
-            <p className="mt-1 text-[10px] text-muted-foreground">
+            <p className="mt-1 text-label text-muted-foreground">
               Type how long each station took — the running clock beside it updates as you go. Leave
               a station blank to remove its split.
             </p>
@@ -302,7 +302,7 @@ export function EditResultSheet({
 
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
+              <span className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 Penalties
               </span>
               <Button
@@ -368,7 +368,7 @@ export function EditResultSheet({
           </div>
 
           <div className="flex items-center justify-between rounded-md border border-primary/30 bg-primary/[0.06] px-3 py-2">
-            <span className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+            <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
               Official time
             </span>
             <span className="timer-digits tabular text-lg text-primary">

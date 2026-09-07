@@ -365,7 +365,11 @@ export function MarketPanel({
           ) : listings.length === 0 ? (
             <p className="mt-3 text-meta text-muted-foreground">Nothing for sale right now.</p>
           ) : (
-            <ul className="mt-3 grid grid-cols-3 gap-grid-gap sm:grid-cols-4 lg:grid-cols-6">
+            // Two across until 380px. Three columns inside a 288px shelf left an
+            // 88px cell — a 5:7 card 62px wide, under a seller name and a price,
+            // which is the vault's own argument for 2-up made on a smaller card.
+            // The 380px step is the same one field-comparison.tsx uses.
+            <ul className="mt-3 grid grid-cols-2 gap-grid-gap min-[380px]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6">
               {listings.map((listing) => {
                 const meta = itemMeta(listing.item);
                 const broke = balance != null && balance < listing.price;
@@ -387,11 +391,11 @@ export function MarketPanel({
                     </span>
                     <button
                       type="button"
-                      // Trimmed from the pill's own 1.125rem/15px: three columns
-                      // at 320px leaves an 88px cell, and the refused label
-                      // ("120 dust") is longer than the live one. Both have to
-                      // stay on one line under a card the same width.
-                      className="neon-btn-sm w-full px-2 text-badge"
+                      // Back on the pill's own size now the cell is 128px rather
+                      // than 88: the label this has to hold on one line is the
+                      // refused one ("120 dust"), which is longer than the live
+                      // one, and it fits.
+                      className="neon-btn-sm w-full px-2"
                       // Said on the button rather than discovered on tap: the RPC
                       // would refuse this anyway, and being told the price you
                       // cannot meet is more use than a toast that says no.
@@ -513,7 +517,7 @@ export function MarketPanel({
                   Nothing spare to sell yet. Roster cards need a second copy; any secret will do.
                 </p>
               ) : (
-                <ul className="grid grid-cols-3 gap-grid-gap sm:grid-cols-4">
+                <ul className="grid grid-cols-2 gap-grid-gap min-[380px]:grid-cols-3 sm:grid-cols-4">
                   {sellable.map((entry) => {
                     const key =
                       entry.item.kind === "roster" ? entry.item.copyId : entry.item.pullId;

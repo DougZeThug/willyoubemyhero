@@ -17,9 +17,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { secretWaiting, SECRET_RARITY } from "@/lib/secret-cards";
-import { activeTab, navHidden, navTabs, type NavRowId } from "@/lib/nav";
+import { activeTab, navTabs, type NavRowId } from "@/lib/nav";
 import { useActiveEvent } from "@/hooks/use-active-event";
-import { dustLive } from "@/lib/dust";
+import { useNavShape } from "@/lib/nav-shape";
 import { cn } from "@/lib/utils";
 
 export function SiteNav() {
@@ -41,7 +41,11 @@ export function SiteNav() {
   // any page that already has the event this is a cache read rather than a
   // request.
   const event = useActiveEvent().data;
-  const links = navTabs({ dustOn: dustLive(event), hidden: navHidden(event) });
+  // Through the device store rather than straight off the event: until the query
+  // answers, the bar draws the shape this device last saw instead of the
+  // five-row default, so a league with dust on stops gaining a sixth tab — and
+  // narrowing every other one — a beat after the page arrives.
+  const links = navTabs(useNavShape(event));
   // A screen playing something cinematic gets the whole device. Faded and inert
   // rather than unmounted: unmounting the header reflows every page under it, and
   // the flag flips mid-ceremony. `inert` is the load-bearing half — chrome dimmed
@@ -80,10 +84,11 @@ export function SiteNav() {
         inert={presenting}
         animate={{ opacity: presenting ? 0 : 1 }}
         transition={step}
-        className="sticky top-0 z-30 border-b border-primary/10 bg-background/85 backdrop-blur"
-        // The notch sits over a sticky header, so the bar owes it the same room
-        // the bottom nav already gives the home indicator.
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
+        // pt-safe: the notch sits over a sticky header, so the bar owes it the
+        // same room the bottom nav already gives the home indicator. px-safe is
+        // for landscape, where the notch is beside the content rather than above
+        // it — zero in portrait, so it costs nothing on the common case.
+        className="sticky top-0 z-30 border-b border-primary/10 bg-background/85 pt-safe px-safe backdrop-blur"
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-2.5 sm:gap-4">
           <div className="w-11 md:w-16" aria-hidden />
@@ -137,7 +142,7 @@ export function SiteNav() {
         animate={{ opacity: presenting ? 0 : 1 }}
         transition={step}
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/15 bg-background/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-primary/15 bg-background/95 pb-safe px-safe backdrop-blur md:hidden"
       >
         {/* flex rather than grid: the row count is whatever the commissioner has
             left switched on, and Tailwind scans source for literals — a computed
@@ -156,7 +161,11 @@ export function SiteNav() {
                   aria-current={active === l.to ? "page" : undefined}
                   aria-label={waiting ? `${l.label} — ${waiting.suffix}` : undefined}
                   className={cn(
-                    "relative flex flex-col items-center gap-1 py-2.5 text-nav font-bold uppercase tracking-[0.08em] transition-colors",
+                    // whitespace-nowrap is the bar's height contract: six rows
+                    // at 320px leave each tile ~53px, and a label that wrapped
+                    // to a second line grew the bar past the room `main`
+                    // reserves for it and pushed every page under it.
+                    "relative flex flex-col items-center gap-1 whitespace-nowrap py-2.5 text-nav font-bold uppercase tracking-[0.08em] transition-colors",
                     active === l.to ? "text-primary" : "text-muted-foreground",
                   )}
                 >
@@ -187,7 +196,6 @@ export function SiteNav() {
             );
           })}
         </ul>
-        <div className="h-[env(safe-area-inset-bottom)]" />
       </motion.nav>
     </>
   );

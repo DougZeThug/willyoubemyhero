@@ -86,21 +86,21 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
               type="button"
               onClick={() => setTab(t.id)}
               className={cn(
-                "min-h-9 truncate rounded-md px-1.5 text-xs font-bold uppercase tracking-wider transition-colors",
+                "flex min-h-11 flex-col items-center justify-center rounded-md px-1.5 text-xs font-bold uppercase leading-tight tracking-wider transition-colors sm:min-h-9 sm:flex-row sm:gap-1",
                 tab === t.id
                   ? "bg-primary/20 text-primary shadow-inner"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               {t.label}
-              <span className="ml-1 tabular-nums opacity-70">{t.count}</span>
+              <span className="tabular-nums opacity-70">{t.count}</span>
             </button>
           ))}
         </div>
         <Button
           size="sm"
           variant="ghost"
-          className="h-9 shrink-0 px-2"
+          className="shrink-0 px-2"
           aria-label="Refresh audit"
           onClick={() => audit.refetch()}
           disabled={audit.isFetching}

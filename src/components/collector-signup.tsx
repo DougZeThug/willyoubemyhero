@@ -58,7 +58,7 @@ export function CollectorSignup({ className }: { className?: string }) {
       onSubmit={submit}
       className={cn("surface-panel rounded-xl border border-primary/30 p-4", className)}
     >
-      <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-primary">
+      <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-primary">
         Pick a trading name
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">

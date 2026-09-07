@@ -26,12 +26,12 @@ export const Route = createFileRoute("/league")({
  */
 function LeaguePage() {
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-6xl px-4 py-6">
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Trophy className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
               Combine
             </span>
           </div>
@@ -53,7 +53,7 @@ function LeaguePage() {
                 className="hud-bezel rounded-xl border border-primary/20 p-4 transition-colors hover:border-primary/50"
               >
                 <Icon className="h-5 w-5 text-primary" strokeWidth={1.75} />
-                <div className="mt-2 font-display text-sm font-black uppercase tracking-[0.15em]">
+                <div className="mt-2 font-display text-sm font-black uppercase tracking-[0.08em]">
                   {l.label}
                 </div>
                 <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
@@ -68,7 +68,7 @@ function LeaguePage() {
             knows where this is, and everybody else tapping it hits the PIN. */}
         <Link
           to="/admin"
-          className="mt-4 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground transition-colors hover:text-primary"
+          className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-primary"
         >
           <Settings className="h-3.5 w-3.5" />
           Admin

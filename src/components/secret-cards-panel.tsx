@@ -777,7 +777,7 @@ export function SecretCardsPanel() {
           aria-expanded={manageSets}
           className="flex min-h-11 w-full items-center justify-between gap-2 px-3 text-left"
         >
-          <span className="font-display text-xs font-black uppercase tracking-[0.25em] text-primary">
+          <span className="font-display text-xs font-black uppercase tracking-[0.08em] text-primary">
             Sets
           </span>
           <span className="flex shrink-0 items-center gap-2">
@@ -982,7 +982,7 @@ export function SecretCardsPanel() {
                 className="flex min-h-11 w-full items-center justify-between gap-2 px-3 text-left"
               >
                 <span
-                  className="truncate font-display text-xs font-black uppercase tracking-[0.25em] text-primary"
+                  className="truncate font-display text-xs font-black uppercase tracking-[0.08em] text-primary"
                   style={group.accent ? { color: group.accent } : undefined}
                 >
                   {group.label}

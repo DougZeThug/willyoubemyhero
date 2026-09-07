@@ -126,7 +126,7 @@ function LivePage() {
 
   if (loading && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-6xl px-4 pb-6 pt-10">
           <FeedLoading />
         </div>
@@ -136,7 +136,7 @@ function LivePage() {
 
   if (error && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-6xl px-4 pb-6 pt-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
@@ -145,11 +145,11 @@ function LivePage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100vh-4.5rem)]">
+    <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-6xl space-y-6 px-4 pb-6 pt-4 sm:pt-6">
         <div className="flex items-center justify-center gap-2 text-primary">
           <Radio className="h-4 w-4 animate-pulse" />
-          <span className="font-display text-[10px] font-black uppercase tracking-[0.4em]">
+          <span className="font-display text-label font-black uppercase tracking-[0.08em]">
             Live · Spectator
           </span>
         </div>
@@ -188,7 +188,7 @@ function LivePage() {
             )}
           </HudTimer>
           {!adminRun && onClock && onClockSince && (
-            <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+            <div className="mt-1 text-label uppercase tracking-[0.08em] text-muted-foreground">
               Unofficial
             </div>
           )}
@@ -217,10 +217,10 @@ function LivePage() {
         <Card className="hud-bezel border-primary/20">
           <CardContent className="p-4">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="font-display text-xs font-black uppercase tracking-[0.32em] text-primary/80">
+              <h2 className="font-display text-xs font-black uppercase tracking-[0.08em] text-primary/80">
                 Top 5
               </h2>
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              <span className="text-label uppercase tracking-widest text-muted-foreground">
                 {done}/{total} done
               </span>
               <Trophy className="h-3.5 w-3.5 text-primary/60" />
@@ -258,9 +258,11 @@ function LivePage() {
                       <Link
                         to="/players/$id"
                         params={{ id: row.ep.id }}
-                        className="flex-1 truncate text-sm font-semibold uppercase tracking-wide hover:text-primary"
+                        className="flex min-h-11 flex-1 items-center hover:text-primary"
                       >
-                        {row.ep.participant?.name ?? "—"}
+                        <span className="truncate text-sm font-semibold uppercase tracking-wide">
+                          {row.ep.participant?.name ?? "—"}
+                        </span>
                       </Link>
                     ) : (
                       <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">

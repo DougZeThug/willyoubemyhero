@@ -152,7 +152,7 @@ function AuthPage() {
               <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-primary" />
             )}
             <div>
-              <h1 className="font-display text-xl font-black uppercase tracking-[0.18em]">
+              <h1 className="font-display text-xl font-black uppercase tracking-[0.08em]">
                 {sync.status === "error" ? "Link needs another try" : "Securing your cards"}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
@@ -198,7 +198,7 @@ function AuthPage() {
   return (
     <div className="mx-auto max-w-md px-4 py-10">
       <header className="mb-6 text-center">
-        <h1 className="font-display text-2xl font-black uppercase tracking-[0.18em] text-foreground">
+        <h1 className="font-display text-2xl font-black uppercase tracking-[0.08em] text-foreground">
           {mode === "signup" ? "Create an account" : "Sign in"}
         </h1>
         {next === "/players/trade" && (
@@ -233,7 +233,7 @@ function AuthPage() {
             Continue with Google
           </Button>
 
-          <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+          <div className="flex items-center gap-3 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
             or
             <span className="h-px flex-1 bg-border" />
@@ -286,7 +286,8 @@ function AuthPage() {
           <button
             type="button"
             className={cn(
-              "w-full text-center text-xs font-semibold uppercase tracking-[0.2em]",
+              "flex min-h-11 w-full items-center justify-center text-center",
+              "text-xs font-semibold uppercase tracking-[0.08em]",
               "text-muted-foreground transition-colors hover:text-primary",
             )}
             onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
@@ -300,7 +301,10 @@ function AuthPage() {
           holding a paper code — who needs no account — was left creating one. */}
       <p className="mt-4 text-center text-xs text-muted-foreground">
         Got a player code from the commissioner?{" "}
-        <Link to="/claim" className="font-bold text-primary underline">
+        <Link
+          to="/claim"
+          className="inline-flex min-h-11 items-center font-bold text-primary underline"
+        >
           Claim your player
         </Link>{" "}
         instead — no account needed.

@@ -65,14 +65,14 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
     >
       <div className="mb-2 flex items-center gap-2">
         <Radio className="h-3.5 w-3.5 text-primary" />
-        <span className="font-display text-[10px] font-black uppercase tracking-[0.3em] text-primary/80">
+        <span className="font-display text-label font-black uppercase tracking-[0.08em] text-primary/80">
           Commissioner
         </span>
-        <Badge variant="secondary" className="h-4 px-1.5 text-[9px] uppercase">
+        <Badge variant="secondary" className="h-5 px-1.5 text-label uppercase">
           Admin
         </Badge>
         {run && (
-          <span className="ml-auto text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+          <span className="ml-auto text-label uppercase tracking-[0.08em] text-muted-foreground">
             {statusLabel}
           </span>
         )}
@@ -97,7 +97,6 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
             <Button
               size="sm"
               variant="secondary"
-              className="h-auto"
               onClick={() => setOnClock(slot.onClock ? null : pick)}
               disabled={!pick && !slot.onClock}
             >
@@ -162,7 +161,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
 
               <div>
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
+                  <span className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                     Splits
                   </span>
                   <Button
@@ -231,7 +230,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
 
       {done.length > 0 && (
         <div className="mt-3 border-t border-white/10 pt-2">
-          <div className="mb-1 font-display text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">
+          <div className="mb-1 font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
             Fix a result
           </div>
           <ul className="max-h-52 space-y-0.5 overflow-auto pr-1">
@@ -244,7 +243,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-8 shrink-0 px-2 text-[10px] uppercase tracking-widest"
+                      className="shrink-0 px-2 text-label uppercase tracking-widest"
                       onClick={() => setEditing(p.participant_id)}
                     >
                       <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
@@ -253,7 +252,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 shrink-0 px-2 text-[10px] uppercase tracking-widest text-destructive hover:bg-destructive/10"
+                    className="shrink-0 px-2 text-label uppercase tracking-widest text-destructive hover:bg-destructive/10"
                     onClick={() => {
                       if (confirm(`Clear ${playerName}'s run and put them back in the queue?`)) {
                         resetAthlete(p.participant_id);

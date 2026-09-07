@@ -81,7 +81,7 @@ export function FinishCelebration({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 grid place-items-center bg-background/85 backdrop-blur"
+          className="fixed inset-0 z-50 grid place-items-center bg-background/85 pt-safe pb-safe backdrop-blur"
         >
           <motion.div
             initial={{ scale: 0.85, y: 20 }}
@@ -90,7 +90,7 @@ export function FinishCelebration({
             transition={{ type: "spring", stiffness: 220, damping: 18 }}
             className="hud-bezel hud-glow mx-4 max-w-lg rounded-3xl border border-primary/40 p-8 text-center"
           >
-            <div className="font-display text-xs font-black uppercase tracking-[0.4em] text-primary">
+            <div className="font-display text-xs font-black uppercase tracking-[0.08em] text-primary">
               Finish
             </div>
             <div className="mt-2 font-display text-4xl font-black uppercase leading-none">
@@ -111,7 +111,7 @@ export function FinishCelebration({
                 )}
               </div>
             )}
-            <div className="mt-6 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+            <div className="mt-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
               Tap to dismiss
             </div>
           </motion.div>

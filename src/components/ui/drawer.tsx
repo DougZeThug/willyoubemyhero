@@ -38,7 +38,11 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+        // pb-safe: every bottom sheet in the app is anchored to the bottom edge,
+        // so with viewport-fit=cover its last control lands under the home
+        // indicator. Here rather than at the five call sites, because a sheet
+        // that forgets it is a button nobody can press.
+        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background pb-safe",
         className,
       )}
       {...props}

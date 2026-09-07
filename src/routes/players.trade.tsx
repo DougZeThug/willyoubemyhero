@@ -439,7 +439,7 @@ function TradePage() {
   // as "signed out" until the query below has something to say.
   if (!me) {
     return (
-      <div className="card-bg min-h-[calc(100dvh-8rem)]">
+      <div className="card-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-3xl px-4 py-6">
           <Header />
           {/* Signed in but nobody yet: they are not on the roster, so a paper
@@ -468,7 +468,7 @@ function TradePage() {
   const recent = offers.data?.recent ?? [];
 
   return (
-    <div className="card-bg min-h-[calc(100dvh-8rem)]">
+    <div className="card-bg min-h-[var(--page-min-h)]">
       {/* Outside the page column and above everything, the same way the pack
           screen mounts it. Shifting the queue on dismiss is what plays the second
           one when a single trade closed two sets. */}
@@ -559,7 +559,7 @@ function TradePage() {
           `z-20` keeps it under the nav's z-30: a CTA that paints over a tab is
           worse than one that scrolls under it. */}
       {!builderOpen && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 pb-[calc(env(safe-area-inset-bottom)+4.5rem)] md:pb-4">
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 pb-[calc(var(--tab-bar-h)+0.5rem)] md:pb-4">
           <div className="pointer-events-auto mx-auto max-w-3xl">
             <button type="button" onClick={openBuilder} className="neon-btn-lg w-full">
               <ArrowLeftRight className="h-4 w-4" />

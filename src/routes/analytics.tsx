@@ -78,7 +78,7 @@ function AnalyticsPage() {
   // was given feed-state.tsx for.
   if (loading && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100vh-4.5rem)] px-4 py-6">
+      <div className="circuit-bg min-h-[var(--page-min-h)] px-4 py-6">
         <div className="mx-auto max-w-3xl">
           <FeedLoading label="Reading the splits…" />
         </div>
@@ -88,7 +88,7 @@ function AnalyticsPage() {
 
   if (error && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100vh-4.5rem)] px-4 py-6">
+      <div className="circuit-bg min-h-[var(--page-min-h)] px-4 py-6">
         <div className="mx-auto max-w-3xl">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
@@ -97,11 +97,11 @@ function AnalyticsPage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100vh-4.5rem)] px-4 py-6">
+    <div className="circuit-bg min-h-[var(--page-min-h)] px-4 py-6">
       <div className="mx-auto max-w-3xl space-y-4">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner />}
         <header>
-          <div className="font-display text-[10px] font-black uppercase tracking-[0.4em] text-primary">
+          <div className="font-display text-label font-black uppercase tracking-[0.08em] text-primary">
             Analytics
           </div>
           <h1 className="font-display text-3xl font-black uppercase leading-none">
@@ -170,7 +170,7 @@ function AnalyticsPage() {
                     key={b.name}
                     className="flex items-center gap-3 rounded-md bg-[oklch(0.16_0.02_240)] px-3 py-2"
                   >
-                    <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 text-[10px] font-black text-primary">
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 text-label font-black text-primary">
                       {i + 1}
                     </span>
                     <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
@@ -200,12 +200,12 @@ function AnalyticsPage() {
                     <Link
                       to="/recap/$slug"
                       params={{ slug: a.slug }}
-                      className="flex items-center justify-between rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2 text-sm hover:border-primary/40"
+                      className="flex min-h-11 items-center justify-between rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2 text-sm hover:border-primary/40"
                     >
                       <span className="font-semibold uppercase tracking-wide">
                         {a.event_name} {a.event_year ?? ""}
                       </span>
-                      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      <span className="text-label uppercase tracking-widest text-muted-foreground">
                         {new Date(a.created_at).toLocaleDateString()}
                       </span>
                     </Link>

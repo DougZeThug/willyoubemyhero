@@ -463,7 +463,7 @@ function SecretLine({ card }: { card: Extract<ViewerCard, { kind: "secret" }> })
           look and says nothing about how lucky the pull was. */}
       <LevelPips tier={card.tier} />
       <span
-        className="font-display text-sm font-black uppercase tracking-[0.3em]"
+        className="font-display text-sm font-black uppercase tracking-[0.08em]"
         style={{ color: secretTierStyle(card.tier).accent }}
       >
         {secretTierCaption(card.tier)}

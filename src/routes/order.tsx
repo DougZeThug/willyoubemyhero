@@ -84,7 +84,7 @@ function OrderPage() {
 
   if (loading && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-3xl px-4 py-10">
           <FeedLoading label="Reading the running order…" />
         </div>
@@ -94,7 +94,7 @@ function OrderPage() {
 
   if (error && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-3xl px-4 py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
@@ -103,14 +103,14 @@ function OrderPage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-3xl px-4 py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 flex items-end justify-between gap-2 border-b border-primary/20 pb-4">
           <div>
             <div className="flex items-center gap-2 text-primary">
               <ListOrdered className="h-5 w-5" />
-              <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+              <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
                 Order
               </span>
             </div>
@@ -164,9 +164,11 @@ function OrderPage() {
                       <Link
                         to="/players/$id"
                         params={{ id: r.id }}
-                        className="block truncate font-display text-lg font-bold uppercase leading-tight hover:text-primary"
+                        className="flex min-h-11 items-center hover:text-primary"
                       >
-                        {r.participant?.name ?? "—"}
+                        <span className="truncate font-display text-lg font-bold uppercase leading-tight">
+                          {r.participant?.name ?? "—"}
+                        </span>
                       </Link>
                       {r.participant?.fantasy_team_name && (
                         <div className="truncate text-xs text-muted-foreground">
@@ -196,7 +198,7 @@ function StatusBadge({ status }: { status: string }) {
           ? "bg-destructive/20 text-destructive"
           : "bg-white/10 text-muted-foreground";
   return (
-    <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${cls}`}>
+    <span className={`rounded px-2 py-0.5 text-label font-bold uppercase tracking-widest ${cls}`}>
       {status.replace(/_/g, " ")}
     </span>
   );

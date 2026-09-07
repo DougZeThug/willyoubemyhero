@@ -17,11 +17,25 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      // Touch-first, with a step back to the stock shadcn heights above `sm`.
+      //
+      // An edit to src/components/ui, which CLAUDE.md says to make rarely — and
+      // this is the reason it exists: every stock size (h-8/h-9/h-10) is under
+      // the 44px floor of §18, so roughly thirty call sites were each patching
+      // around it with their own min-h-11 and about as many were not. The floor
+      // belongs to the primitive.
+      //
+      // The `sm:` step is not a shortcut: 44px is a TOUCH guideline, the pointer
+      // equivalent is 24px, and this repo already writes that distinction down —
+      // vault-section.tsx's move arrows are `h-11 w-11 sm:h-8 sm:w-8`, and
+      // e2e/smoke.spec.ts only measures the mobile project for the same reason.
+      // So a phone gets a thumb-sized control and a desktop keeps the density it
+      // has today.
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        default: "h-11 px-4 py-2 sm:h-9",
+        sm: "h-11 rounded-md px-3 text-xs sm:h-8",
+        lg: "h-12 rounded-md px-8 sm:h-10",
+        icon: "h-11 w-11 sm:h-9 sm:w-9",
       },
     },
     defaultVariants: {
