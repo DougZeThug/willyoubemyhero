@@ -1757,7 +1757,12 @@ function PackPage() {
                 Today&apos;s Pack
               </h1>
               <p className="mt-1 max-w-xs px-2 text-meta leading-snug text-muted-foreground sm:mt-2 sm:max-w-sm">
-                One pack a day, dealt to you and nobody else. Rip the top off to open it.
+                {/* The rule, and only the rule. "Rip the top off to open it" used
+                    to follow it, which is the third time this screen explains one
+                    gesture — the perforation is tagged RIP and the line under the
+                    pack says "drag across the tear · or press Enter", and that one
+                    is the accurate one. */}
+                One pack a day, dealt to you and nobody else.
               </p>
               {/* No test id: the flame above already carries one, and a second
                   node saying the same number is how the e2e suite ends up
