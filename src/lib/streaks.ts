@@ -163,8 +163,14 @@ const DEAD: Streak = { current: 0, startedOn: null, lastOpenedOn: null, openedTo
  * reading rows, and a query whose ORDER BY is load-bearing is one refactor away
  * from being wrong.
  */
-export function walkStreak(days: readonly string[], today: string): Streak {
-  const seen = new Set(days);
+export function walkStreak(days: readonly string[], today: string, since?: string | null): Streak {
+  // `since` is the day the capstone was cashed. Days before it belong to the run
+  // that bought it and are not part of anything live — the claim day itself still
+  // counts, so somebody who claims and keeps opening is on day 2 tomorrow rather
+  // than being told their best streak died overnight. Mirrors the `cut` CTE in
+  // streak_runs; a db test pins the two together.
+  const seen = new Set(since ? days.filter((d) => d >= since) : days);
+
   if (seen.size === 0) return DEAD;
 
   const yesterday = previousDay(today);
