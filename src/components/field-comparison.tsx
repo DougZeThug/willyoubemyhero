@@ -32,10 +32,10 @@ export function FieldComparison({
   return (
     <section className="mt-8">
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+        <h2 className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Vs. the field
         </h2>
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+        <div className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           {rank != null && fieldSize > 0 && (
             <span style={{ color: "var(--tier)" }}>
               #{rank} of {fieldSize}
@@ -56,14 +56,14 @@ export function FieldComparison({
 
       {/* Said once here rather than on every row: the gap column was the part
           people could not read, and repeating the caption seven times is worse. */}
-      <p className="mb-3 text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+      <p className="mb-3 text-label uppercase tracking-[0.08em] text-muted-foreground/70">
         Place at each station · gap vs. field median
       </p>
 
       <ul className="space-y-2.5">
         {ladder.map((row) => (
           <li key={row.id} className="flex items-center gap-2.5">
-            <span className="w-16 shrink-0 truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <span className="w-16 shrink-0 truncate text-label font-bold uppercase tracking-wider text-muted-foreground">
               {row.label}
             </span>
             <span className="hidden h-2 flex-1 overflow-hidden rounded-full bg-white/5 min-[380px]:block">
@@ -85,13 +85,16 @@ export function FieldComparison({
             {/* On a narrow phone the place tucks under the time instead of
                 becoming a fourth column nobody can read. */}
             <span className="ml-auto flex shrink-0 flex-col items-end leading-tight min-[380px]:ml-0">
-              <span className="text-[11px] tabular text-foreground/90">
+              {/* The split is the number this row is about, so it stays a step
+                  above the place under it — which the §16 floor had just made
+                  the larger of the two. */}
+              <span className="text-sm tabular text-foreground/90">
                 {row.ms != null ? formatTime(row.ms) : "—"}
               </span>
               {row.place != null && row.fieldCount > 0 && (
                 <span
                   className={
-                    "text-[9px] font-bold uppercase tracking-wider tabular " +
+                    "text-label font-bold uppercase tracking-wider tabular " +
                     (row.place === 1 ? "" : "text-muted-foreground")
                   }
                   style={row.place === 1 ? { color: "var(--tier)" } : undefined}
@@ -102,7 +105,7 @@ export function FieldComparison({
             </span>
             <span
               className={
-                "w-[4.75rem] shrink-0 text-right text-[10px] font-bold tabular leading-tight " +
+                "w-[4.75rem] shrink-0 text-right text-label font-bold tabular leading-tight " +
                 (row.deltaMs == null
                   ? "text-muted-foreground"
                   : row.deltaMs <= 0

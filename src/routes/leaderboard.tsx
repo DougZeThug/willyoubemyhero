@@ -96,7 +96,7 @@ function LeaderboardPage() {
 
   if (loading && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-4xl px-4 py-10">
           <FeedLoading label="Reading the standings…" />
         </div>
@@ -106,7 +106,7 @@ function LeaderboardPage() {
 
   if (error && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-4xl px-4 py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
@@ -115,7 +115,7 @@ function LeaderboardPage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-4xl px-4 py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <PageHeader
@@ -176,44 +176,54 @@ function LeaderboardPage() {
                       }
                       size={40}
                     />
-                    <div className="min-w-0 flex-1">
-                      {row.ep ? (
-                        <Link
-                          to="/players/$id"
-                          params={{ id: row.ep.id }}
-                          className="block truncate font-display text-lg font-bold uppercase leading-tight hover:text-primary"
-                        >
-                          {row.ep.participant?.name ?? "—"}
-                        </Link>
-                      ) : (
-                        <div className="truncate font-display text-lg font-bold uppercase leading-tight">
-                          —
-                        </div>
-                      )}
-                      <div className="truncate text-xs text-muted-foreground">
-                        {row.ep?.participant?.fantasy_team_name ??
-                          row.ep?.participant?.nickname ??
-                          "—"}
-                        {row.run.penalty_ms > 0 && (
-                          <>
-                            {" · "}
-                            <span className="text-warn">
-                              +{formatTime(row.run.penalty_ms)} pen.
+                    {/* Name, pick and time as one wrapping group: at 320px the
+                        row was a 36px rank, a 40px avatar, a 44px share button
+                        and a 100px time in 288px, which left the name nothing
+                        and truncated it to an initial. `basis-24` is the floor
+                        that makes the time drop to a second line instead —
+                        wrapping below ~375px and staying on one line above it. */}
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5">
+                      <div className="min-w-0 flex-1 basis-24">
+                        {row.ep ? (
+                          <Link
+                            to="/players/$id"
+                            params={{ id: row.ep.id }}
+                            className="flex min-h-11 items-center hover:text-primary"
+                          >
+                            <span className="truncate font-display text-lg font-bold uppercase leading-tight">
+                              {row.ep.participant?.name ?? "—"}
                             </span>
-                          </>
+                          </Link>
+                        ) : (
+                          <div className="truncate font-display text-lg font-bold uppercase leading-tight">
+                            —
+                          </div>
                         )}
+                        <div className="truncate text-xs text-muted-foreground">
+                          {row.ep?.participant?.fantasy_team_name ??
+                            row.ep?.participant?.nickname ??
+                            "—"}
+                          {row.run.penalty_ms > 0 && (
+                            <>
+                              {" · "}
+                              <span className="text-warn">
+                                +{formatTime(row.run.penalty_ms)} pen.
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    {row.ep?.selected_draft_position != null && (
-                      <Badge
-                        variant="outline"
-                        className="hidden border-primary/40 text-primary sm:inline-flex"
-                      >
-                        Pick #{row.ep.selected_draft_position}
-                      </Badge>
-                    )}
-                    <div className="timer-digits tabular text-2xl text-primary">
-                      {formatTime(row.run.official_time_ms)}
+                      {row.ep?.selected_draft_position != null && (
+                        <Badge
+                          variant="outline"
+                          className="hidden border-primary/40 text-primary sm:inline-flex"
+                        >
+                          Pick #{row.ep.selected_draft_position}
+                        </Badge>
+                      )}
+                      <div className="timer-digits tabular text-xl text-primary sm:text-2xl">
+                        {formatTime(row.run.official_time_ms)}
+                      </div>
                     </div>
                     <Button
                       variant="ghost"
@@ -265,7 +275,7 @@ function PageHeader({
         <div>
           <div className="flex items-center gap-2 text-primary">
             {icon}
-            <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
               {eyebrow}
             </span>
           </div>

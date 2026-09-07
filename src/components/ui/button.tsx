@@ -17,11 +17,30 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      // A FLOOR on a coarse pointer, not a second height.
+      //
+      // An edit to src/components/ui, which CLAUDE.md says to make rarely — and
+      // this is the reason it exists: every stock size (h-8/h-9/h-10) is under
+      // the 44px floor of §18, so roughly thirty call sites were each patching
+      // around it with their own min-h-11 and about as many were not. The floor
+      // belongs to the primitive.
+      //
+      // `pointer-fine:` and NOT a width breakpoint: 44px is a TOUCH guideline
+      // and 24px is the pointer one, and a width does not tell the two apart. A
+      // landscape phone and most touch tablets are past 640px with the thumb
+      // still the input, and a `sm:` step would have handed the floor back
+      // exactly there.
+      //
+      // `min-h-*` and not `h-*` so a caller's own height still wins: the
+      // marshal's start/finish buttons ask for `h-12`, and a responsive `h-*`
+      // here would outrank that and shrink them to 36px on the laptop the
+      // console is actually run from. A min-height a taller caller clears
+      // changes nothing; one a shorter caller does not clear is the whole point.
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        default: "h-9 min-h-11 px-4 py-2 pointer-fine:min-h-0",
+        sm: "h-8 min-h-11 rounded-md px-3 text-xs pointer-fine:min-h-0",
+        lg: "h-10 min-h-12 rounded-md px-8 pointer-fine:min-h-0",
+        icon: "h-9 w-9 min-h-11 min-w-11 pointer-fine:min-h-0 pointer-fine:min-w-0",
       },
     },
     defaultVariants: {

@@ -12,7 +12,7 @@ export function StatTile({ label, value, mono }: { label: string; value: string;
       className="surface-panel rounded-xl border px-4 py-2 text-center"
       style={{ borderColor: "color-mix(in oklab, var(--tier) 30%, oklch(1 0 0 / 10%))" }}
     >
-      <div className="text-[9px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+      <div className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
       <div

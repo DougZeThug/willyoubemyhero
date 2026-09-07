@@ -40,7 +40,7 @@ export function SetAccentPicker({
           disabled={disabled}
           aria-label={`Colour for ${setLabel}`}
           className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 disabled:opacity-30",
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/15 disabled:opacity-30 pointer-fine:h-9 pointer-fine:w-9",
           )}
         >
           <span
@@ -53,18 +53,26 @@ export function SetAccentPicker({
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-auto max-w-[min(18rem,90vw)] p-2">
-        <div className="grid grid-cols-6 gap-1.5">
+        {/* Five across and not six: the popover is 288px at its widest, so six
+            columns left each swatch a 40px cell and a 28px target — the smallest
+            thing to tap in the app. The circles are the size they always were;
+            the button around them grew. */}
+        <div className="grid grid-cols-5 gap-1">
           <button
             type="button"
             onClick={() => choose(null, "untinted")}
             aria-label={`No colour for ${setLabel}`}
             aria-pressed={!accent}
-            className={cn(
-              "flex h-7 w-7 items-center justify-center rounded-full border text-[10px] text-muted-foreground",
-              !accent ? "border-primary ring-2 ring-primary/50" : "border-white/20",
-            )}
+            className="flex h-11 w-11 items-center justify-center rounded-full"
           >
-            ✕
+            <span
+              className={cn(
+                "flex h-7 w-7 items-center justify-center rounded-full border text-[10px] text-muted-foreground",
+                !accent ? "border-primary ring-2 ring-primary/50" : "border-white/20",
+              )}
+            >
+              ✕
+            </span>
           </button>
           {SET_ACCENTS.map((a) => (
             <button
@@ -73,14 +81,18 @@ export function SetAccentPicker({
               onClick={() => choose(a.id, a.label)}
               aria-label={`${a.label} for ${setLabel}`}
               aria-pressed={accent === a.id}
-              className={cn(
-                "h-7 w-7 rounded-full border transition-transform",
-                accent === a.id
-                  ? "scale-110 border-white/60 ring-2 ring-white/40"
-                  : "border-white/15",
-              )}
-              style={{ background: a.oklch }}
-            />
+              className="flex h-11 w-11 items-center justify-center rounded-full"
+            >
+              <span
+                className={cn(
+                  "h-7 w-7 rounded-full border transition-transform",
+                  accent === a.id
+                    ? "scale-110 border-white/60 ring-2 ring-white/40"
+                    : "border-white/15",
+                )}
+                style={{ background: a.oklch }}
+              />
+            </button>
           ))}
         </div>
       </PopoverContent>

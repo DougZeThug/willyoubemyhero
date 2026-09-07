@@ -161,7 +161,7 @@ export function HudTimer({
           {digits}
           {underAMinute && <span className="ml-1 align-top text-2xl opacity-75">s</span>}
         </div>
-        <div className="mt-2 text-xs font-black uppercase tracking-[0.4em] text-primary/90">
+        <div className="mt-2 text-xs font-black uppercase tracking-[0.08em] text-primary/90">
           {status}
         </div>
       </div>

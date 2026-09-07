@@ -589,7 +589,7 @@ function PlayerCardPage() {
       {/* Every tier-coloured thing below reads `--tier` off this node rather than
           taking a prop, so one variable retints the whole page. */}
       <div
-        className="card-bg relative min-h-[calc(100dvh-8rem)]"
+        className="card-bg relative min-h-[var(--page-min-h)]"
         style={
           { "--tier": rarity.accent, "--edn": editionStyle(edition).accent } as React.CSSProperties
         }

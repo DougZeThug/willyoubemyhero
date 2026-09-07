@@ -235,7 +235,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <span
               className={
-                "text-[10px] font-bold uppercase tracking-[0.3em] " +
+                "text-[10px] font-bold uppercase tracking-[0.08em] " +
                 (saved ? "text-primary" : "text-warn")
               }
             >
@@ -251,13 +251,13 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
             <span className="flex items-center gap-3">
               <button
                 onClick={copyAll}
-                className="inline-flex min-h-9 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline sm:min-h-0 sm:px-0"
+                className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
               >
                 <Copy className="h-3 w-3" /> Copy all
               </button>
               <button
                 onClick={printAll}
-                className="inline-flex min-h-9 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline sm:min-h-0 sm:px-0"
+                className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
               >
                 <Printer className="h-3 w-3" /> Print
               </button>
@@ -266,7 +266,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
               {!saved && (
                 <button
                   onClick={() => setSaved(true)}
-                  className="inline-flex min-h-9 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:underline sm:min-h-0 sm:px-0"
+                  className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
                 >
                   <Check className="h-3 w-3" /> Got them
                 </button>

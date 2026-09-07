@@ -1125,7 +1125,7 @@ function PlayersPage() {
   const presenting = milestone.milestoneReveal !== null;
 
   return (
-    <div className="card-bg min-h-[calc(100dvh-8rem)]">
+    <div className="card-bg min-h-[var(--page-min-h)]">
       {/* The same viewer a roster card opens into, and deliberately WITHOUT a
           URL: players.$id.tsx is keyed on an event_participant id and could never
           address one of these, and an address is shareable — the one thing a

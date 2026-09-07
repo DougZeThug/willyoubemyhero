@@ -110,7 +110,7 @@ function DraftPage() {
 
   if (loading && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-5xl px-4 py-10">
           <FeedLoading label="Reading the draft board…" />
         </div>
@@ -120,7 +120,7 @@ function DraftPage() {
 
   if (error && !bundle) {
     return (
-      <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+      <div className="circuit-bg min-h-[var(--page-min-h)]">
         <div className="mx-auto max-w-5xl px-4 py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
@@ -129,14 +129,14 @@ function DraftPage() {
   }
 
   return (
-    <div className="circuit-bg min-h-[calc(100dvh-8rem)]">
+    <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner />}
         <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-4">
           <div>
             <div className="flex items-center gap-2 text-primary">
               <ClipboardList className="h-5 w-5" />
-              <span className="font-display text-xs font-bold uppercase tracking-[0.3em]">
+              <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
                 Draft
               </span>
             </div>
@@ -166,7 +166,7 @@ function DraftPage() {
                 size={72}
               />
               <div className="flex-1">
-                <div className="text-xs font-bold uppercase tracking-[0.3em] text-primary">
+                <div className="text-xs font-bold uppercase tracking-[0.08em] text-primary">
                   On the clock
                 </div>
                 <Link
@@ -225,7 +225,7 @@ function DraftPage() {
                   >
                     {pos}
                   </div>
-                  <div className="mt-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  <div className="mt-2 text-label font-bold uppercase tracking-widest text-muted-foreground">
                     {holder?.participant?.name ?? (isTaken ? "" : "Open")}
                   </div>
                 </button>

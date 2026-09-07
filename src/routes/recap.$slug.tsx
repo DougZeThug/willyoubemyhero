@@ -65,10 +65,10 @@ function RecapPage() {
   const drafts = [...snap.drafts].sort((a, b) => a.draft_position - b.draft_position);
 
   return (
-    <div className="circuit-bg min-h-[calc(100vh-4.5rem)] px-4 py-6">
+    <div className="circuit-bg min-h-[var(--page-min-h)] px-4 py-6">
       <div className="mx-auto max-w-3xl space-y-6">
         <header>
-          <div className="font-display text-[10px] font-black uppercase tracking-[0.4em] text-primary">
+          <div className="font-display text-label font-black uppercase tracking-[0.08em] text-primary">
             Recap · Archived {new Date(recap.created_at).toLocaleDateString()}
           </div>
           <h1 className="font-display text-3xl font-black uppercase leading-none">
@@ -77,7 +77,7 @@ function RecapPage() {
         </header>
 
         <section>
-          <h2 className="mb-2 font-display text-xs font-black uppercase tracking-[0.32em] text-primary/80">
+          <h2 className="mb-2 font-display text-xs font-black uppercase tracking-[0.08em] text-primary/80">
             Final Leaderboard
           </h2>
           <ol className="space-y-1.5">
@@ -102,7 +102,7 @@ function RecapPage() {
 
         {drafts.length > 0 && (
           <section>
-            <h2 className="mb-2 font-display text-xs font-black uppercase tracking-[0.32em] text-primary/80">
+            <h2 className="mb-2 font-display text-xs font-black uppercase tracking-[0.08em] text-primary/80">
               Final Draft Order
             </h2>
             <ol className="space-y-1.5">

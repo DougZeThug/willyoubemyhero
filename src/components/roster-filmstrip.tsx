@@ -63,7 +63,7 @@ export function RosterFilmstrip({
 
   return (
     <div className="mt-6">
-      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground">
+      <div className="mb-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
         The Set
       </div>
       <div
@@ -113,7 +113,7 @@ export function RosterFilmstrip({
                   <span className="font-display text-base font-black uppercase leading-none text-primary/70">
                     {initialsOf(entry.name) || "?"}
                   </span>
-                  <span className="w-full truncate text-[7px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <span className="w-full truncate text-nav font-bold uppercase tracking-wider text-muted-foreground">
                     {entry.name}
                   </span>
                 </div>

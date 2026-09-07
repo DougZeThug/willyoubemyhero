@@ -195,7 +195,7 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
           <div className="mb-4">
             <div className="flex items-center gap-2 text-primary">
               <LockKeyhole className="h-4 w-4" />
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">
+              <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
                 Console
               </span>
             </div>
@@ -222,6 +222,9 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
                 setPin(next);
                 if (next.length === 4 && !busy) void attempt(next);
               }}
+              // The one place wide tracking survives the §16 cap: a code is read
+              // and typed character by character, and the gaps are what let a
+              // thumb find its place in it.
               className="text-center font-display text-2xl tracking-[0.4em]"
             />
             <Button type="submit" disabled={busy || !pin} className="w-full">
@@ -280,7 +283,7 @@ function TimingConsole() {
         <div>
           <div className="flex items-center gap-2 text-primary">
             <TimerIcon className="h-4 w-4" />
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
               Console
             </span>
             <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[9px] uppercase">
@@ -302,7 +305,7 @@ function TimingConsole() {
           <div className="mb-2">
             <div className="flex items-center gap-2 text-primary">
               <Camera className="h-4 w-4" />
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.3em]">
+              <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
                 Event Setup
               </span>
             </div>
@@ -336,7 +339,7 @@ function TimingConsole() {
                 <div>
                   <div
                     className={
-                      "text-xs font-bold uppercase tracking-[0.28em] " +
+                      "text-xs font-bold uppercase tracking-[0.08em] " +
                       (finished ? "text-warn" : "text-muted-foreground")
                     }
                   >
@@ -554,7 +557,7 @@ function StartCard({
             }
           />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
               {slot.onClock ? "On the clock" : "Up next on the crowd screens"}
             </div>
             <div className="truncate text-sm font-semibold uppercase">

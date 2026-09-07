@@ -169,6 +169,17 @@
   --above-tab-bar: calc(5rem + env(safe-area-inset-bottom));
   /* The same slot with the offline banner already standing in it. */
   --above-offline-banner: calc(7.75rem + env(safe-area-inset-bottom));
+  /* The bar itself, as opposed to the room reserved under it. Two screens park
+     a control just above the bar and used to each guess at this — 4.5rem on the
+     Trading Post, 3.75rem on the pack — so a bar that ever changes height took
+     one of them with it and left the other behind. */
+  --tab-bar-h: calc(3.625rem + env(safe-area-inset-bottom));
+  /* What a route may fill without pushing the page past one screen: the viewport
+     less the sticky header, less the notch above it, less the bar's clearance
+     below. dvh and not vh — vh is the LARGE viewport on mobile Safari, so a page
+     sized off it grows by the height of the toolbar the moment the toolbar
+     collapses, which is a jump under the thumb on every scroll. */
+  --page-min-h: calc(100dvh - 3rem - env(safe-area-inset-top) - var(--above-tab-bar));
 }
 
 /* md, where the bottom bar is `md:hidden` and the clearance goes with it. */
@@ -176,6 +187,9 @@
   :root {
     --above-tab-bar: 1rem;
     --above-offline-banner: 3.75rem;
+    /* Stated rather than derived: the desktop shell has no bottom bar and no
+       notch, and the number it has always used is 8rem. */
+    --page-min-h: calc(100dvh - 8rem);
   }
 }
 
@@ -214,6 +228,28 @@
       repeating-linear-gradient(90deg, transparent 0 79px, var(--color-field-line) 79px 80px);
     background-blend-mode: normal, screen;
   }
+}
+
+/* The notch, the home indicator and the rounded corners, as three utilities
+   rather than an `env()` buried in an arbitrary value at every call site.
+
+   These only mean anything because the viewport meta in src/routes/__root.tsx
+   carries `viewport-fit=cover`: without it iOS reports every inset as 0 and
+   every one of these is a no-op. On a phone with no notch they still are, which
+   is the point — a page that pads for the bezel is correct everywhere. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Landscape only, in practice: portrait insets are 0 either way, and the bars
+   are `inset-x-0` so the room has to come from their own padding. */
+@utility px-safe {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 @utility timer-digits {

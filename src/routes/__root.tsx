@@ -24,7 +24,7 @@ import { hydrateCardSfxMuted } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
   return (
-    <div className="card-bg flex min-h-screen items-center justify-center px-4">
+    <div className="card-bg flex min-h-dvh items-center justify-center px-4">
       <div className="surface-panel w-full max-w-md rounded-xl border p-6 text-center">
         <h1 className="font-display text-7xl font-black leading-none text-primary/70">404</h1>
         <h2 className="mt-4 font-display text-section font-black uppercase tracking-wide">
@@ -51,7 +51,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="card-bg flex min-h-screen items-center justify-center px-4">
+    <div className="card-bg flex min-h-dvh items-center justify-center px-4">
       <div className="surface-panel w-full max-w-md rounded-xl border p-6 text-center">
         <h1 className="font-display text-section font-black uppercase tracking-wide">
           This page didn&apos;t load
@@ -87,7 +87,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      // viewport-fit=cover is what makes env(safe-area-inset-*) report anything
+      // at all on iOS. Without it every inset is 0, and the header's top padding,
+      // the tab bar's bottom spacer and --above-tab-bar are all writing zero into
+      // a calc. The page now runs edge to edge and each bar pays for its own
+      // bezel.
+      {
+        name: "viewport",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover",
+      },
       // "Hero" stays in the title wherever it appears: it is what the app is
       // called, and the smoke suite pins it on the root.
       { title: "Will YOU Be My Hero? — The Vault" },
@@ -190,7 +198,7 @@ function RootComponent() {
             response — so the ceremony for those has to live above the routes
             rather than in one of them. */}
         <TrophyCeremonyHost />
-        <div className="flex min-h-screen flex-col">
+        <div className="flex min-h-dvh flex-col">
           {/* The first thing in the tab order, and invisible until it has
               focus. Without it every screen began with the whole nav. */}
           <a
@@ -213,7 +221,11 @@ function RootComponent() {
             id="main"
             ref={mainRef}
             tabIndex={-1}
-            className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] focus:outline-none md:pb-0"
+            // The one number for "how much room the bottom bar wants", shared
+            // with the toaster and the offline banner so a change to the bar
+            // cannot move one of them and forget the others. md:pb-0 stays:
+            // above 768px the bar is gone and the clearance goes with it.
+            className="flex-1 pb-[var(--above-tab-bar)] focus:outline-none md:pb-0"
           >
             <Outlet />
           </main>

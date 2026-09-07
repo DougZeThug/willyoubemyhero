@@ -42,7 +42,7 @@ export function AdminSection({
           <CollapsibleTrigger className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:pointer-events-none md:min-h-0">
             <span className="flex min-w-0 items-center gap-2 text-primary">
               {icon}
-              <h2 className="truncate font-display text-sm font-black uppercase tracking-[0.3em]">
+              <h2 className="truncate font-display text-sm font-black uppercase tracking-[0.08em]">
                 {title}
               </h2>
             </span>

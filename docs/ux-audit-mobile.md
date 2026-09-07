@@ -28,8 +28,8 @@ Priority scale: **Critical** (blocks the emotional loop or usability on a phone)
 
 - **The home screen (the Vault) does not answer "what should I do right now".** It answers "what do I own". There is no countdown to the next pack, no claimable-reward cue on home, no "new since yesterday", and a guest never sees the "secret waiting" ring at all (`secretWaiting` requires `claimed`, `src/lib/secret-cards.ts:580-582`).
 - **The chrome competes with the cards.** Every page sits on `circuit-bg` (cyan bloom + circuit-trace SVG, `src/styles.css:156-167`), the base-tier card foil is the same electric cyan as the primary button, the nav underline, the badges and the wordmark. A base card and the UI are the same colour.
-- **The label layer is tiny.** 210 uses of `text-[8px]`…`text-[11px]` across player-facing files, almost all uppercase with 0.2–0.35 em tracking. Tier names, finish names, "You give", set counts, trade captions and the "Reveal all" control are all 9–10 px. Outdoors, at arm's length, this is the single biggest readability problem.
-- **Touch targets.** Roughly 40 distinct controls are under 44 px (section 18). The nav tabs and the Open Pack button are the notable exceptions.
+- **The label layer** was the single biggest readability problem — 210 uses of `text-[8px]`…`text-[11px]`, almost all uppercase at 0.2–0.35 em tracking. Fixed: an 11 px floor everywhere but the admin console, the TV board and the share renderers, and a 0.08 em cap everywhere but a typed code, a poster and the wordmark's desktop step.
+- **Touch targets.** Fixed: nothing a thumb can land on is under 44 px on any of the twelve phone-facing routes, and `e2e/smoke.spec.ts` measures every one of them on every run.
 - **Rarity is legible on the card, not on the shelf.** A Mythic and a Common secret tile differ by the colour of a 9 px caption. Roster tiles do not show how many copies you hold.
 - **Trading** is functional but reads like a form: a wrapping row of 30 px name pills, two 84 px-tile strips, and a Send button with no summary and no confirmation.
 
@@ -67,8 +67,8 @@ No screen scrolls sideways; `html, body { overflow-x: hidden }` (`src/styles.css
 - **Desktop layout compressed onto mobile** in two places: the trade offer card's side-by-side "You give | ⇄ | You get" (`src/components/trade-offer-card.tsx:281-327`) gives each side ≈ 139 px at 390 and scrolls a second card sideways; the shop's two-column ladder table (`src/components/dust-shop.tsx:492`) is fine at 390 but tight at 320.
 - **Sort chips wrap to two rows at 320** ("Name Order Pick / Rarity … Shuffle"), pushing the grid down further.
 - **Important actions placed high**: Open Pack, Rearrange, sort chips, the player page's Flip/Share/Compare row and the trade counterparty picker all sit in the top third. The thumb zone (bottom third) holds only the nav.
-- **No `safe-area-inset-top`** on the sticky header; on a notched phone in standalone/PWA mode the wordmark sits under the status bar.
-- **Three different viewport formulas** (`calc(100dvh-8rem)` on 11 routes, `calc(100vh-4.5rem)` on live/analytics/recap, `100vh` on tv). The `vh` ones mis-size when Safari's toolbar collapses.
+- **Safe area**: fixed — the viewport meta carries `viewport-fit=cover`, which is what makes `env(safe-area-inset-*)` report anything at all on iOS; every inset in the codebase was a no-op without it. The header pays for the notch, the tab bar and every bottom sheet pay for the home indicator, and the five full-screen ceremonies pay for both.
+- **Viewport formulas**: fixed — one `--page-min-h` token on all seventeen route shells, in `dvh` and net of both insets. The three that used `vh` mis-sized when Safari's toolbar collapsed.
 - **Modals**: the secret sheet is a centred `Dialog` at `w-[92vw]` with a 16 px close icon (`src/components/ui/dialog.tsx:47-50`); the compare and market-listing drawers are proper bottom sheets. Two modal idioms for the same kind of task.
 
 **Mobile-native alternatives to adopt**
@@ -114,10 +114,10 @@ Current bar: **Vault · Pack · Trade · (Shop) · Board · League** (`src/lib/n
 **Problems**
 
 - **Two products share five slots.** Board and League are the combine; they take 40% of the bar all year for a week of use. The brief's expected shape (Home · Collection · Packs · Trading · Profile) is closer to how the app is actually used the other 51 weeks.
-- **The bar changes shape** (`grid-cols-5` ↔ `grid-cols-6`) when the commissioner flips dust (`src/components/site-nav.tsx:130`), acknowledged as a deliberate cost in `nav.ts:38-45`. On a phone the tabs move under the thumb and the label size drops.
+- **The bar changes shape** (five rows ↔ six) when the commissioner flips dust, acknowledged as a deliberate cost in `nav.ts:38-45`. The half of it that was not deliberate is fixed: the shape is remembered per device (`src/lib/nav-shape.ts`), so a cold load no longer draws five rows and then re-shapes to six a round trip later. What remains is the switch actually being flipped, which is once a season.
 - **Profile has no home.** Account, claim code, sound, tilt, sign out are spread across the header icon menu, the pack screen (sound), the player page overflow (tilt/pin/sound) and `/claim`.
-- **Labels are `text-[10px]` uppercase with 0.15 em tracking**; "LEAGUE" and "BOARD" touch at 320 px with six columns.
-- Neither `<nav>` carries an `aria-label`; the badge dots are aria-hidden with the text on the link (good).
+- Labels are 11 px uppercase at 0.08 em and `whitespace-nowrap`, which is the bar's height contract — a label that wrapped grew the bar past the room `main` reserves for it.
+- Both `<nav>`s carry an `aria-label`; the badge dots are aria-hidden with the text on the link (good).
 
 **Recommendation** (Priority: High, Moderate effort)
 
@@ -423,7 +423,7 @@ Measured on real renders at 390 px (share of visible text nodes under 11 px):
 | Trade builder  | 43 / 117 | 9 px ×37, 11 px ×16           |
 | Shop           | 1 / 74   | 12 px ×61                     |
 
-The Shop, built from stock shadcn components, is the most readable screen in the app. The card screens, built by hand, run their labels at 8–10 px uppercase with 0.2–0.35 em tracking on a dark ground. On a phone outdoors this is the first thing to fix.
+The Shop, built from stock shadcn components, was the most readable screen in the app, and the card screens, built by hand, ran their labels at 8–10 px uppercase with 0.2–0.35 em tracking on a dark ground. Both halves are now closed: nothing outside the admin console, the TV board and the share renderers reads below 11 px, and letter-spacing is capped at 0.08 em everywhere but a typed code, a poster and the wordmark's desktop step.
 
 **Recommended scale** (rem, phone; two display sizes, one body family, one utility)
 
@@ -476,6 +476,19 @@ Collapse the hero to one row on scroll; move sort/rearrange into a sheet; put th
 ---
 
 ## 18. Buttons and touch targets
+
+**Fixed.** The floor is 44 px on a phone and 48 px for a primary action, and it
+now lives in the primitive rather than at the call sites: `src/components/ui/button.tsx`
+is touch-first with a `sm:` step back to the stock shadcn heights, which is the
+same distinction `vault-section.tsx`'s move arrows and `e2e/smoke.spec.ts`'s
+mobile-only run already drew — 44 px is a touch guideline and the pointer
+equivalent is 24.
+
+The table below was the survey that started it and is kept for the record. Every
+row in it is closed, and the gate that keeps them closed is the tap-target sweep
+in `e2e/smoke.spec.ts`, which measures every visible `button`, `a[href]` and
+`[role=button]` on the twelve phone-facing routes. `/tv` is the one deliberate
+omission — a board read from across a garden, where nothing is tapped.
 
 Measured on real renders at 390 px (CSS px, height × width where relevant). Target: 44 px minimum, 48 px for primary actions.
 
@@ -664,9 +677,10 @@ Passing: bottom tabs, Open Pack (46 px), shelf headers (`min-h-11`), dust chip (
 
 ### Global shell (header, tabs, toasts, errors)
 
-- **Problems**: wordmark wraps at 320; no safe-area top; 32 px account icon; tab bar reflows 5↔6; `text-[10px]` tab labels; toasts top-centre; unthemed 404/error; white SSR error page.
-- **Changes**: single-line wordmark; safe-area top; 44 px account target; fixed five tabs (Vault · Pack · Trade · League · You); 11 px labels; toasts bottom-centre above the bar; themed error pages.
-- **Priority: High.**
+- **Problems**: remaining — two products share five slots, and the bar still re-shapes the once when the dust switch is actually flipped (§4).
+- **Fixed**: single-line wordmark; safe-area top and bottom, live now that the viewport carries `viewport-fit=cover`; 44 px account target; 11 px nav labels that cannot wrap; toasts bottom-centre above the bar; themed 404, error boundary and SSR error page.
+- **Changes**: remaining — fixed five tabs (Vault · Pack · Trade · League · You), which is PR 9.
+- **Priority: Low** (was High).
 
 ---
 

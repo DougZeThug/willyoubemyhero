@@ -363,7 +363,7 @@ export function PackSummary({
               }
             />
             <span
-              className="font-display text-sm font-black uppercase tracking-[0.2em]"
+              className="font-display text-sm font-black uppercase tracking-[0.08em]"
               style={{ color: "oklch(0.82 0.19 85)" }}
             >
               Day {streak.current}
@@ -534,7 +534,7 @@ function SecretSlotView({
     <div className="mx-auto flex w-full max-w-[320px] flex-col items-center gap-2 pt-2">
       <div className="text-center">
         <h2
-          className="font-display text-sm font-black uppercase tracking-[0.2em]"
+          className="font-display text-sm font-black uppercase tracking-[0.08em]"
           style={{ color: rarity.accent }}
         >
           One More Card

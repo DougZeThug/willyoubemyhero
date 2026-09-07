@@ -86,7 +86,7 @@ export function BoughtPullReveal({
     <div
       ref={surfaceRef}
       tabIndex={-1}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6 outline-none"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6 pt-safe pb-safe outline-none"
       data-testid="bought-pull-reveal"
       role="dialog"
       aria-modal="true"

@@ -87,7 +87,7 @@ export function CollectionComplete({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 px-6"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 px-6 pt-safe pb-safe"
       data-testid="collection-complete"
       role="dialog"
       aria-label={`${label} complete`}
@@ -107,7 +107,7 @@ export function CollectionComplete({
           />
         </motion.div>
 
-        <div className="mt-4 font-display text-[10px] font-bold uppercase tracking-[0.35em] text-muted-foreground">
+        <div className="mt-4 font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           Set complete
         </div>
         <div
@@ -134,7 +134,7 @@ export function CollectionComplete({
                 {/* The hook eases through floats; only whole cards mean anything. */}
                 {Math.round(cards ?? 0)}
               </div>
-              <div className="mt-2 font-display text-xs font-bold uppercase tracking-[0.25em] text-muted-foreground">
+              <div className="mt-2 font-display text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 {trophySizeLabel(size)}, all of them
               </div>
             </motion.div>
