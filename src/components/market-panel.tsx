@@ -112,23 +112,39 @@ function asTileItem(listing: MarketListing): TradeItemView {
       };
 }
 
-/** "Gold" / "Mythic" — the one word under a tile that is not the name. */
-function itemMeta(item: MarketListingItem): { label: string | null; accent: string } {
+/**
+ * "Gold" / "Mythic" — the one word beside a listing that is not the name.
+ *
+ * `underATile` is the market shelf, where TradeItemTile has already printed this
+ * word under the card: every cell there used to read "Alice Ace / Gold / Bob
+ * Blitz / Buy · 120 / Gold", the same word twice within 40px in the same amber.
+ * StallLine draws NO tile — a seller's own row is a name, this word and a price
+ * — so it passes nothing and keeps the word. Without that split, suppressing the
+ * repeat on the shelf silently took the finish off the stall as well, and a
+ * seller lost the one thing telling their Gold copy from their Standard one.
+ *
+ * The caveat survives on both. "unsettled" is the shop's word for a finish
+ * Postgres did not decide: a client-asserted platinum mills for the flat floor,
+ * so a buyer reading "Platinum" alone was paying for the word. editionLabel is
+ * null for standard, which every adopted copy now is, so the two halves are
+ * joined rather than templated.
+ */
+function itemMeta(
+  item: MarketListingItem,
+  { underATile = false }: { underATile?: boolean } = {},
+): { label: string | null; accent: string } {
   if (item.kind === "roster") {
     const style = editionStyle(item.edition);
-    // "unsettled" is the shop's word for a finish Postgres did not decide, and
-    // it belongs beside the price: a client-asserted platinum mills for the flat
-    // floor, so a buyer reading "Platinum" alone was paying for the word.
-    // editionLabel is null for standard, which every adopted copy now is, so
-    // the two halves are joined rather than templated.
     const label =
       item.assertedBy === "client"
         ? [editionLabel(item.edition), "unsettled"].filter(Boolean).join(" · ")
-        : editionLabel(item.edition);
+        : underATile
+          ? null
+          : editionLabel(item.edition);
     return { label, accent: style.accent };
   }
   const style = secretTierStyle(item.tier);
-  return { label: style.label, accent: style.accent };
+  return { label: underATile ? null : style.label, accent: style.accent };
 }
 
 export function MarketPanel({
@@ -371,7 +387,7 @@ export function MarketPanel({
             // The 380px step is the same one field-comparison.tsx uses.
             <ul className="mt-3 grid grid-cols-2 gap-grid-gap min-[380px]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6">
               {listings.map((listing) => {
-                const meta = itemMeta(listing.item);
+                const meta = itemMeta(listing.item, { underATile: true });
                 const broke = balance != null && balance < listing.price;
                 const busy = buying === listing.id && buy.isPending;
                 return (
@@ -566,7 +582,7 @@ export function MarketPanel({
                   </p>
                   <button
                     type="button"
-                    className="neon-btn w-full"
+                    className="neon-btn neon-btn-hero w-full"
                     disabled={!priceOk || putUp.isPending || offline}
                     {...offlineReason(offline)}
                     onClick={confirmList}

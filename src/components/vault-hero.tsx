@@ -43,12 +43,6 @@ export function VaultHero({
 }) {
   return (
     <div className="mb-3">
-      <div className="flex items-center gap-2 text-primary">
-        <Layers aria-hidden className="h-5 w-5" />
-        <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
-          Collection
-        </span>
-      </div>
       {/* The chip needs its own BOX and not just a taller row, which is the one
           slot here where a min-height is not enough. DustChip renders nothing
           until the balance is known — a "0" that becomes "140" reads as having
@@ -65,6 +59,10 @@ export function VaultHero({
           Four digits or more still flips it once, at 360–390, when the number
           lands. */}
       <div className="mt-1 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2">
+        {/* The eyebrow that used to sit above this said "Collection", which is
+            what "The Vault" already says. The icon carried the screen's mark
+            and it keeps doing that from here. */}
+        <Layers aria-hidden className="h-6 w-6 shrink-0 text-primary" />
         <h1 className="font-display text-3xl font-black uppercase leading-none">The Vault</h1>
         {dustOn && (
           <div className="flex min-h-11 min-w-32 items-center">

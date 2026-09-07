@@ -389,7 +389,12 @@ export function TradeOfferCard({
     <article
       data-highlighted={highlighted ? "true" : undefined}
       className={cn(
-        "surface-panel rounded-xl border p-4",
+        "surface-panel rounded-xl p-4",
+        // The ring REPLACES the border rather than sitting outside it. A state
+        // ring drawn around a bordered panel that already contains a bordered
+        // status chip is three concentric edges within 12px, and the outer two
+        // say the same thing.
+        !pending && !highlighted && "border",
         // A ring, not a bloom (§15). All three states used to glow, and all
         // three used hud-glow — which is the cyan --glow-primary — so an
         // accepted offer and a declined one bloomed the same colour as each

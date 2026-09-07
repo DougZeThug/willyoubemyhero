@@ -341,7 +341,7 @@ export function TradeBuilder({
               type="button"
               onClick={send}
               disabled={sending || offline || !!stepBlocker("trays", { theirId, give, want })}
-              className="neon-btn-lg w-full disabled:opacity-40"
+              className="neon-btn-lg neon-btn-hero w-full disabled:opacity-40"
             >
               <ArrowLeftRight className="h-4 w-4" />
               Send offer
