@@ -120,7 +120,12 @@ export function SiteNav() {
                   aria-current={active === l.to ? "page" : undefined}
                   aria-label={waiting ? `${l.label} — ${waiting.suffix}` : undefined}
                   className={cn(
-                    "relative rounded-md px-3 py-1.5 text-sm font-semibold uppercase tracking-wide transition-colors",
+                    // Above md the bottom bar is gone and this row IS the
+                    // navigation — including on a phone turned sideways, which
+                    // is 844px wide and still a thumb. 32px was fine while this
+                    // was only ever a mouse's row; the pointer rule is what
+                    // makes that true.
+                    "relative inline-flex min-h-11 items-center rounded-md px-3 py-1.5 text-sm font-semibold uppercase tracking-wide transition-colors pointer-fine:min-h-0",
                     active === l.to
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-white/5 hover:text-foreground",

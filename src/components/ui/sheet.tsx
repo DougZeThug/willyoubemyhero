@@ -37,9 +37,14 @@ const sheetVariants = cva(
       side: {
         top: "inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
         bottom:
-          // pb-safe for the same reason DrawerContent carries it: a bottom sheet
-          // ends at the bottom edge, and the home indicator sits on top of it.
-          "inset-x-0 bottom-0 border-t pb-safe data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+          // A bottom sheet ends at the screen's edges, which is where the home
+          // indicator and — in landscape — the notch and the rounded corners
+          // are. max() against the base `p-6` rather than the bare inset,
+          // because these are the same three properties the shorthand sets and
+          // Tailwind emits the longhands after it: a plain `pb-safe` here does
+          // not add to the sheet's padding, it replaces it, and a phone with no
+          // notch reports 0.
+          "inset-x-0 bottom-0 border-t pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
         left: "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
         right:
           "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",

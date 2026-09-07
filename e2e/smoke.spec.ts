@@ -349,4 +349,26 @@ test.describe("tap targets", () => {
       ).toEqual([]);
     });
   }
+
+  test("holds the floor on a phone turned sideways", async ({ page, server }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "a coarse pointer is the whole point of this");
+    void server;
+
+    // The case a width-based rule gets wrong, and the reason the floor is keyed
+    // on `pointer: coarse` rather than on `sm:`. A landscape phone is past the
+    // 640px breakpoint while the thumb is still the input, so a `sm:` step down
+    // would hand back every control this suite measures — and the portrait run
+    // above would not see it go.
+    await page.setViewportSize({ width: 844, height: 390 });
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+
+    await page.goto("/players");
+    await expect(page.getByRole("button", { name: /sort and filter/i })).toBeVisible();
+
+    expect(
+      await shortTargets(page),
+      `Controls under ${MIN_TARGET}px on /players in landscape. The floor is a ` +
+        `pointer rule, not a width one — check for a stray sm: step.`,
+    ).toEqual([]);
+  });
 });

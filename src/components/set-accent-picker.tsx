@@ -40,7 +40,7 @@ export function SetAccentPicker({
           disabled={disabled}
           aria-label={`Colour for ${setLabel}`}
           className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 disabled:opacity-30",
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/15 disabled:opacity-30 pointer-fine:h-9 pointer-fine:w-9",
           )}
         >
           <span

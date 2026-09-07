@@ -86,7 +86,7 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
               type="button"
               onClick={() => setTab(t.id)}
               className={cn(
-                "flex min-h-11 flex-col items-center justify-center rounded-md px-1.5 text-xs font-bold uppercase leading-tight tracking-wider transition-colors sm:min-h-9 sm:flex-row sm:gap-1",
+                "flex min-h-11 flex-col items-center justify-center rounded-md px-1.5 text-xs font-bold uppercase leading-tight tracking-wider transition-colors sm:flex-row sm:gap-1 pointer-fine:min-h-9",
                 tab === t.id
                   ? "bg-primary/20 text-primary shadow-inner"
                   : "text-muted-foreground hover:text-foreground",

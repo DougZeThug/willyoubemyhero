@@ -38,11 +38,13 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        // pb-safe: every bottom sheet in the app is anchored to the bottom edge,
-        // so with viewport-fit=cover its last control lands under the home
-        // indicator. Here rather than at the five call sites, because a sheet
-        // that forgets it is a button nobody can press.
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background pb-safe",
+        // Every drawer in the app is anchored to the screen's edges, so with
+        // viewport-fit=cover its last control lands under the home indicator and,
+        // in landscape, its content runs under the notch. Here rather than at the
+        // five call sites, because a sheet that forgets it is a button nobody can
+        // press. Bare insets compose: this element has no padding of its own, its
+        // children carry theirs, and on a phone with no notch all three are 0.
+        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background pb-safe px-safe",
         className,
       )}
       {...props}

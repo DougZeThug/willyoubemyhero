@@ -17,7 +17,8 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
-      // Touch-first, with a step back to the stock shadcn heights above `sm`.
+      // Touch-first, stepping back to the stock shadcn heights only where there
+      // is a precise pointer to aim with.
       //
       // An edit to src/components/ui, which CLAUDE.md says to make rarely — and
       // this is the reason it exists: every stock size (h-8/h-9/h-10) is under
@@ -25,17 +26,19 @@ const buttonVariants = cva(
       // around it with their own min-h-11 and about as many were not. The floor
       // belongs to the primitive.
       //
-      // The `sm:` step is not a shortcut: 44px is a TOUCH guideline, the pointer
-      // equivalent is 24px, and this repo already writes that distinction down —
-      // vault-section.tsx's move arrows are `h-11 w-11 sm:h-8 sm:w-8`, and
-      // e2e/smoke.spec.ts only measures the mobile project for the same reason.
-      // So a phone gets a thumb-sized control and a desktop keeps the density it
-      // has today.
+      // `pointer-fine:` and NOT a width breakpoint, which is what this started
+      // as: 44px is a TOUCH guideline and 24px is the pointer one, and a width
+      // does not tell the two apart. A landscape phone and most touch tablets
+      // are past 640px and would have lost the floor exactly where the thumb is
+      // still the input — and the tap-target sweep, which only runs at 390px,
+      // would not have seen it go. The media query asks the question the rule is
+      // actually about. 44px is the default because a device that reports no
+      // pointer at all should get the safe answer.
       size: {
-        default: "h-11 px-4 py-2 sm:h-9",
-        sm: "h-11 rounded-md px-3 text-xs sm:h-8",
-        lg: "h-12 rounded-md px-8 sm:h-10",
-        icon: "h-11 w-11 sm:h-9 sm:w-9",
+        default: "h-11 px-4 py-2 pointer-fine:h-9",
+        sm: "h-11 rounded-md px-3 text-xs pointer-fine:h-8",
+        lg: "h-12 rounded-md px-8 pointer-fine:h-10",
+        icon: "h-11 w-11 pointer-fine:h-9 pointer-fine:w-9",
       },
     },
     defaultVariants: {
