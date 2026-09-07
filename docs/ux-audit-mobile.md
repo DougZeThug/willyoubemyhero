@@ -479,7 +479,7 @@ Collapse the hero to one row on scroll; move sort/rearrange into a sheet; put th
 
 **Fixed.** The floor is 44 px on a phone and 48 px for a primary action, and it
 now lives in the primitive rather than at the call sites: `src/components/ui/button.tsx`
-is touch-first with a `sm:` step back to the stock shadcn heights, which is the
+is touch-first with a `pointer-fine:` step back to the stock shadcn heights, which is the
 same distinction `vault-section.tsx`'s move arrows and `e2e/smoke.spec.ts`'s
 mobile-only run already drew — 44 px is a touch guideline and the pointer
 equivalent is 24.
