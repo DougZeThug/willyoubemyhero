@@ -19,7 +19,7 @@
 // the real bar — is not available here: the e2e suite stubs server functions in
 // the BROWSER, and a root loader would run in-process on the server, sail past
 // the stubs and render every spec against a dead Supabase.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { dustLive } from "@/lib/dust";
 import { navHidden } from "@/lib/nav";
 
@@ -101,19 +101,30 @@ export function shapeOfEvent(event: unknown): NavShape | null {
 }
 
 /**
+ * A layout effect on the client and a plain one on the server, which React would
+ * otherwise warn about during SSR.
+ *
+ * Load-bearing here rather than a preference: a passive effect runs AFTER the
+ * browser has painted, so the bar would still show one frame of the five-row
+ * default before correcting. A layout effect runs after the commit and before
+ * the paint, so the remembered shape is the first thing drawn.
+ */
+const useNavShapeEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/**
  * The shape to build the bar from: the event's once it has answered, the
  * remembered one until then, and the five-row default on a device that has never
  * stored one.
  *
- * The remembered shape is picked up in a mount effect rather than during render,
- * for the reason use-photo-urls.ts is written around: SSR has no localStorage,
- * and a first paint that disagrees with the second is the bug this is trying to
- * fix rather than a second copy of it.
+ * Storage is read in an effect and never during render, for the reason
+ * use-photo-urls.ts is written around: SSR has no localStorage, so a render that
+ * read it would hand the server one bar and the client another and hydrate into
+ * a mismatch — which is a louder version of the bug this exists to fix.
  */
 export function useNavShape(event: unknown): NavShape {
   const [remembered, setRemembered] = useState<NavShape | null>(null);
 
-  useEffect(() => {
+  useNavShapeEffect(() => {
     // Our own writes trust the module value; re-reading storage would hand a
     // private-mode browser back the value it just refused to save.
     const mine = () => setRemembered(current);

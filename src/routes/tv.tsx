@@ -3,8 +3,9 @@
 // That cap exists for labels held at arm's length on a phone, where 0.3em on 9px
 // text is what makes a tier name unreadable. This board is read from across a
 // garden at 4xl and up, where the wide tracking is doing the opposite job — it
-// is what keeps a word legible at distance. Nothing here is tapped either, so
-// the touch floor is not its rule.
+// is what keeps a word legible at distance. Its rows do link to card pages, but
+// this is a screen watched from a sofa rather than held, so the touch floor is
+// not its rule either.
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useEventBundle } from "@/hooks/use-event-bundle";

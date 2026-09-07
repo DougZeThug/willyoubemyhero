@@ -258,7 +258,7 @@ function LivePage() {
                       <Link
                         to="/players/$id"
                         params={{ id: row.ep.id }}
-                        className="flex min-h-11 flex-1 items-center hover:text-primary"
+                        className="flex min-h-11 min-w-0 flex-1 items-center hover:text-primary"
                       >
                         <span className="truncate text-sm font-semibold uppercase tracking-wide">
                           {row.ep.participant?.name ?? "—"}

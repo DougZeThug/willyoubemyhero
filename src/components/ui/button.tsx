@@ -17,8 +17,7 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
-      // Touch-first, stepping back to the stock shadcn heights only where there
-      // is a precise pointer to aim with.
+      // A FLOOR on a coarse pointer, not a second height.
       //
       // An edit to src/components/ui, which CLAUDE.md says to make rarely — and
       // this is the reason it exists: every stock size (h-8/h-9/h-10) is under
@@ -26,19 +25,22 @@ const buttonVariants = cva(
       // around it with their own min-h-11 and about as many were not. The floor
       // belongs to the primitive.
       //
-      // `pointer-fine:` and NOT a width breakpoint, which is what this started
-      // as: 44px is a TOUCH guideline and 24px is the pointer one, and a width
-      // does not tell the two apart. A landscape phone and most touch tablets
-      // are past 640px and would have lost the floor exactly where the thumb is
-      // still the input — and the tap-target sweep, which only runs at 390px,
-      // would not have seen it go. The media query asks the question the rule is
-      // actually about. 44px is the default because a device that reports no
-      // pointer at all should get the safe answer.
+      // `pointer-fine:` and NOT a width breakpoint: 44px is a TOUCH guideline
+      // and 24px is the pointer one, and a width does not tell the two apart. A
+      // landscape phone and most touch tablets are past 640px with the thumb
+      // still the input, and a `sm:` step would have handed the floor back
+      // exactly there.
+      //
+      // `min-h-*` and not `h-*` so a caller's own height still wins: the
+      // marshal's start/finish buttons ask for `h-12`, and a responsive `h-*`
+      // here would outrank that and shrink them to 36px on the laptop the
+      // console is actually run from. A min-height a taller caller clears
+      // changes nothing; one a shorter caller does not clear is the whole point.
       size: {
-        default: "h-11 px-4 py-2 pointer-fine:h-9",
-        sm: "h-11 rounded-md px-3 text-xs pointer-fine:h-8",
-        lg: "h-12 rounded-md px-8 pointer-fine:h-10",
-        icon: "h-11 w-11 pointer-fine:h-9 pointer-fine:w-9",
+        default: "h-9 min-h-11 px-4 py-2 pointer-fine:min-h-0",
+        sm: "h-8 min-h-11 rounded-md px-3 text-xs pointer-fine:min-h-0",
+        lg: "h-10 min-h-12 rounded-md px-8 pointer-fine:min-h-0",
+        icon: "h-9 w-9 min-h-11 min-w-11 pointer-fine:min-h-0 pointer-fine:min-w-0",
       },
     },
     defaultVariants: {

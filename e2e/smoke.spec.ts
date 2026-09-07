@@ -266,6 +266,12 @@ const TAP_TARGET_ROUTES: {
     },
     settle: async (page) => {
       await expect(page.getByRole("heading", { name: /^dust$/i })).toBeVisible();
+      // The heading is in both branches, so on its own it would have let this
+      // measure the switched-off notice and pass for the wrong reason. The
+      // sentence below only exists while dust is off. (The switch is read off
+      // getActiveEvent — useEventBundle takes its event from there, see
+      // use-event-bundle.ts:15 — which is why the arrange sets that one.)
+      await expect(page.getByText(/has not switched dust on/i)).toHaveCount(0);
     },
   },
   {
