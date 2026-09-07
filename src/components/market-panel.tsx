@@ -379,15 +379,19 @@ export function MarketPanel({
                       concealed={listing.item.kind === "secret" && listing.item.concealed}
                       backUrl={backUrl}
                     />
-                    <span className="truncate text-meta font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                    {/* w-full, or the truncate never engages: the column centres
+                        its children, so without a width this sizes to the name
+                        and overflows the cell rather than clipping. */}
+                    <span className="w-full truncate text-center text-meta font-bold uppercase tracking-[0.08em] text-muted-foreground">
                       {nameOf(listing.sellerId)}
                     </span>
                     <button
                       type="button"
-                      // px-2 rather than the pill's own 1.125rem: the refused
-                      // label ("120 dust") is longer than the live one and has to
-                      // stay on one line in a cell the width of the card above it.
-                      className="neon-btn-sm w-full px-2"
+                      // Trimmed from the pill's own 1.125rem/15px: three columns
+                      // at 320px leaves an 88px cell, and the refused label
+                      // ("120 dust") is longer than the live one. Both have to
+                      // stay on one line under a card the same width.
+                      className="neon-btn-sm w-full px-2 text-badge"
                       // Said on the button rather than discovered on tap: the RPC
                       // would refuse this anyway, and being told the price you
                       // cannot meet is more use than a toast that says no.
