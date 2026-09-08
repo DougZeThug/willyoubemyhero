@@ -172,4 +172,3 @@ async function mergeGuests(participantId: string, guestIds: string[]) {
     if (error) throw error;
   }
 }
-
