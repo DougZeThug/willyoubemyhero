@@ -61,8 +61,8 @@ describe("STREAK_MILESTONES", () => {
     expect(nextMilestone(0)?.days).toBe(3);
     expect(nextMilestone(3)?.days).toBe(7);
     expect(nextMilestone(29)?.days).toBe(30);
-    expect(nextMilestone(30)?.days).toBe(100);
-    expect(nextMilestone(100)).toBeNull();
+    expect(nextMilestone(30)?.days).toBe(60);
+    expect(nextMilestone(60)).toBeNull();
     expect(nextMilestone(400)).toBeNull();
   });
 });
@@ -78,14 +78,36 @@ describe("nextMilestoneLine", () => {
   });
 
   it("says guaranteed at the top, where there is no better", () => {
-    expect(nextMilestoneLine(at(30))).toBe("Day 100 pays Mythic, guaranteed.");
+    expect(nextMilestoneLine(at(30))).toBe("Day 60 pays Mythic, guaranteed.");
   });
 
   it("says nothing once every rung is behind you", () => {
     // Same rule as streakLine: a promise that does not exist is not worth a line
     // of a phone screen.
-    expect(nextMilestoneLine(at(100))).toBeNull();
+    expect(nextMilestoneLine(at(60))).toBeNull();
     expect(nextMilestoneLine(at(365))).toBeNull();
+  });
+});
+
+describe("walkStreak after the capstone", () => {
+  const TODAY = "2026-08-24";
+
+  it("ignores days before the reset and counts the claim day as day one", () => {
+    // The cut-off streak_runs applies in SQL. Without it the run the capstone was
+    // bought with keeps counting and the ladder has nothing left on it.
+    const s = walkStreak(
+      ["2026-08-20", "2026-08-21", "2026-08-22", "2026-08-23", "2026-08-24"],
+      TODAY,
+      "2026-08-24",
+    );
+    expect(s.current).toBe(1);
+    expect(s.startedOn).toBe("2026-08-24");
+    expect(s.openedToday).toBe(true);
+  });
+
+  it("is the plain walk when nothing has been cashed", () => {
+    const days = ["2026-08-22", "2026-08-23", "2026-08-24"];
+    expect(walkStreak(days, TODAY, null)).toEqual(walkStreak(days, TODAY));
   });
 });
 

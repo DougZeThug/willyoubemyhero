@@ -7,7 +7,14 @@ import type { SecretCardRow, PackOpenRow } from "./secret-cards-rows";
 import type { ClaimStreakMilestoneResult } from "./streaks-rows";
 import type { SecretCardView } from "./secret-cards";
 import type { SecretTier } from "./secret-rarity";
-import { STREAK_MILESTONES, isStreakMilestone, walkStreak, type Streak } from "./streaks";
+import {
+  STREAK_MILESTONES,
+  STREAK_RESET_MILESTONE,
+  isStreakMilestone,
+  walkStreak,
+  type Streak,
+} from "./streaks";
+
 import { leagueDay } from "./trades";
 import { sqlNull } from "./rpc-null";
 
@@ -100,18 +107,30 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
       .returns<Pick<PackOpenRow, "opened_on">[]>();
     if (error) throw error;
 
-    const streak = walkStreak(
-      (opens ?? []).map((r) => r.opened_on),
-      today,
-    );
-
     const streaks = await admin();
     const { data: claims, error: claimError } = await streaks
       .from("streak_milestone_claims")
-      .select("milestone, streak_started_on")
+      .select("milestone, streak_started_on, claimed_on")
       .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
-      .returns<{ milestone: number; streak_started_on: string }[]>();
+      .returns<{ milestone: number; streak_started_on: string; claimed_on: string }[]>();
     if (claimError) throw claimError;
+
+    // The day the capstone was last cashed, which is where the walk restarts.
+    // Read before the walk rather than after it, because the walk depends on it:
+    // streak_runs does the same cut in SQL, and a screen that disagreed with the
+    // payout would offer a rung the server then refuses.
+    const resetOn =
+      (claims ?? [])
+        .filter((c) => c.milestone === STREAK_RESET_MILESTONE)
+        .map((c) => c.claimed_on)
+        .sort()
+        .at(-1) ?? null;
+
+    const streak = walkStreak(
+      (opens ?? []).map((r) => r.opened_on),
+      today,
+      resetOn,
+    );
 
     const sbAdmin = await admin();
     // An existence check, deliberately not maybeSingle(): account_identities
