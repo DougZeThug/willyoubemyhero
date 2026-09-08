@@ -29,13 +29,29 @@ export async function adoptLocalCollection(
   snapshot: Awaited<ReturnType<typeof loadCollection>>,
 ): Promise<number> {
   const ids = adoptableIds(snapshot);
-  if (ids.length === 0) return 0;
-  const res = await adoptCollection({ data: { eventParticipantIds: ids } });
-  return res.adopted;
+  let adopted = 0;
+  // Sent in batches, sequentially. The handler takes a roster's worth at a
+  // time, and one call used to be the whole of it — but this store spans every
+  // event the handset has ever played and is never emptied, so a long-tenured
+  // guest's active-roster cards could sit past the cut, go unfiled, and be
+  // deleted by the reconcile that follows the very sign-in meant to save them.
+  // Sequential because a burst of service-role writes from one phone at the
+  // identity transition buys nothing; a chunk that throws leaves the earlier
+  // ones filed, and filing is idempotent, so the retry simply re-sends all.
+  for (let i = 0; i < ids.length; i += ADOPT_CHUNK) {
+    const res = await adoptCollection({
+      data: { eventParticipantIds: ids.slice(i, i + ADOPT_CHUNK) },
+    });
+    adopted += res.adopted;
+  }
+  return adopted;
 }
 
+/** What the handler accepts in one call; the batch size, not the total. */
+const ADOPT_CHUNK = 64;
+
 /**
- * Exactly the ids the call above sends, ceiling and all.
+ * Exactly the ids the call above sends — all of them.
  *
  * Split out because the claim has to know afterwards WHICH cards adoption
  * accounted for. A pack torn but only half turned is the case: `collectCard`
@@ -45,9 +61,7 @@ export async function adoptLocalCollection(
  * these.
  */
 export function adoptableIds(snapshot: Awaited<ReturnType<typeof loadCollection>>): string[] {
-  return Object.values(snapshot)
-    .slice(0, 64)
-    .map((c) => c.eventParticipantId);
+  return Object.values(snapshot).map((c) => c.eventParticipantId);
 }
 
 /** Read this device's collection before anything can prune it. */
