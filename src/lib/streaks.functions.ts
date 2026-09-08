@@ -7,7 +7,14 @@ import type { SecretCardRow, PackOpenRow } from "./secret-cards-rows";
 import type { ClaimStreakMilestoneResult } from "./streaks-rows";
 import type { SecretCardView } from "./secret-cards";
 import type { SecretTier } from "./secret-rarity";
-import { STREAK_MILESTONES, isStreakMilestone, walkStreak, type Streak } from "./streaks";
+import {
+  STREAK_MILESTONES,
+  STREAK_RESET_MILESTONE,
+  isStreakMilestone,
+  walkStreak,
+  type Streak,
+} from "./streaks";
+
 import { leagueDay } from "./trades";
 import { sqlNull } from "./rpc-null";
 
