@@ -66,7 +66,7 @@ export type SecretCardView = {
   backUrl: string | null;
   /**
    * How good THIS copy is — see secret-rarity.ts. On SecretCardView rather than
-   * OwnedSecret because the fourth slot renders the level the moment the card
+   * OwnedSecret because a secret slot renders the level the moment the card
    * turns, before it is anything you own.
    */
   tier: string;
@@ -80,33 +80,10 @@ export type OwnedSecret = SecretCardView & {
   /**
    * How many people have found this card. Deliberately on OwnedSecret and not on
    * SecretCardView: a count only ever appears on a card you already own, and
-   * SecretCardView is what the fourth slot renders mid-reveal.
+   * SecretCardView is what a secret slot renders mid-reveal.
    */
   ownerCount: number;
 };
-
-export type SecretDayStatus = {
-  claimed: boolean;
-  /** Null when nobody is claimed — the server tells a stranger nothing. */
-  day: string | null;
-  pulledToday: boolean;
-  /** How many this member owns. Never how many exist. */
-  pulled: number;
-  /** Only ever "there is something to pull", never how much. */
-  available: boolean;
-  resetsAt: string | null;
-};
-
-export type SecretPullResult =
-  | {
-      ok: true;
-      day: string;
-      duplicate: boolean;
-      /** False when this call resumed a pull already spent today. */
-      fresh: boolean;
-      card: SecretCardView;
-    }
-  | { ok: false; reason: "unavailable" };
 
 /**
  * Foil treatments a secret card may wear.
@@ -603,41 +580,4 @@ export function secretFoil(
  */
 export function secretsPulledLabel(n: number): string {
   return `${n} secret${n === 1 ? "" : "s"} pulled`;
-}
-
-/**
- * Is there a card waiting today?
- *
- * Extracted from the vault's pack button so the nav's Pack tab and that button
- * cannot drift: two places drawing the same cue off two copies of the same
- * expression is how one of them quietly starts glowing on a spent day.
- *
- * Leaks nothing. Every field it reads is already scoped to whoever is asking —
- * `available` is only ever "there is something", never how much — and a stranger
- * with no status at all is simply false.
- */
-export function secretWaiting(status: SecretDayStatus | null | undefined): boolean {
-  return !!status?.claimed && !status.pulledToday && status.available;
-}
-
-/**
- * Does today's pack still owe a fourth card — pulled or not?
- *
- * A DIFFERENT QUESTION from `secretWaiting`, and the difference is the whole
- * reason this exists. That one asks "is there something to come and get", so it
- * goes false the instant the pull lands — which is right for the ring on the
- * button and wrong for anything counting what is left to TURN OVER, because the
- * pack pulls the secret the moment it is torn and the card then sits face-down
- * on the stand for as long as the user takes.
- *
- * A vault reading `secretWaiting` therefore counted a spent-but-unrevealed
- * secret as nothing and called a half-finished pack done. `pulledToday` is what
- * closes that: it means the card exists and is theirs, whether or not they have
- * looked at it. Whether it has been LOOKED at is on the pack row, not here.
- *
- * Leaks nothing more than its sibling: every field is already scoped to whoever
- * is asking, and a stranger with no status is false.
- */
-export function secretOwed(status: SecretDayStatus | null | undefined): boolean {
-  return !!status?.claimed && (status.available || status.pulledToday);
 }

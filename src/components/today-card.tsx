@@ -4,7 +4,6 @@ import { NewSinceStrip, type NewSinceItem } from "@/components/new-since-strip";
 import { StreakFlame } from "@/components/streak-flame";
 import { offlineReason } from "@/hooks/use-online";
 import { nextPackLabel } from "@/lib/pack";
-import { SECRET_RARITY } from "@/lib/secret-cards";
 import { nextMilestoneLine, streakLine, STREAK_MILESTONES } from "@/lib/streaks";
 import type { StreakStatus, StreakMilestoneStatus } from "@/lib/streaks.functions";
 import { cn } from "@/lib/utils";
@@ -65,18 +64,14 @@ export function TodayCard({
   onDismissNew,
 }: {
   pack: TodayCardPack;
-  /** A secret is waiting. Members-only in practice — see `secretWaiting`. */
+  /** Today's pack is still sealed, and this device has an identity to open it. See `packWaiting`. */
   packWaiting: boolean;
   /**
    * When the next pack lands, as an ISO instant, or null when nobody knows.
    *
-   * TWO CLOCKS, and this is the seam between them. `SecretDayStatus.resetsAt` is
-   * the league's midnight in America/New_York, because that is what the secret
-   * drop rolls over on; the pack itself re-seals on the DEVICE's local midnight
-   * (`todayKey`). For anybody outside that zone the two differ, so this
-   * countdown is an approximation of the pack by way of the secret — which is
-   * the trade the audit asked for, since `resetsAt` is the only one of the two
-   * the server actually vouches for.
+   * `PackStatus.resetsAt` is the league's midnight in America/New_York, which is
+   * the clock the pack now rolls over on everywhere — the device's own midnight
+   * is only the fallback for a phone the server has not answered yet.
    */
   nextPackAt: string | null;
   /** The pack poll's clock, so the countdown re-renders with the day tick. */
@@ -172,27 +167,26 @@ export function TodayCard({
             // box-shadow property from the utilities layer, which sorts after the
             // @layer components rule holding the hero bloom — so it replaced the
             // glow rather than sitting outside it, and the one day this button had
-            // a secret to announce was the one day it stopped shouting. The custom
-            // property is a slot inside the family's own stack instead.
-            style={packWaiting ? { ["--btn-ring" as string]: `0 0 0 2px ${SECRET_RARITY.border}` } : undefined} // prettier-ignore
+            // something to announce was the one day it stopped shouting. The
+            // custom property is a slot inside the family's own stack instead.
+            //
+            // The ring is the app's own cyan now, not the secret's green: it says
+            // "unopened", and a secret is the pack's news to break, not this
+            // button's.
+            style={packWaiting ? { ["--btn-ring" as string]: "0 0 0 2px oklch(0.85 0.14 205)" } : undefined} // prettier-ignore
             // Byte-identical to what this control has always said when sealed:
             // the e2e suite matches these exactly, and so does anyone who has
             // learned the screen by its shape.
-            aria-label={
-              pack.state === "torn"
-                ? finishLabel(pack.left)
-                : packWaiting
-                  ? "Open today's pack — a secret is waiting"
-                  : "Open today's pack"
-            }
+            aria-label={pack.state === "torn" ? finishLabel(pack.left) : "Open today's pack"}
           >
             <PackageOpen aria-hidden className="h-4 w-4" />
             {pack.state === "torn" ? finishLabel(pack.left) : "Open Pack"}
             {packWaiting && (
               <span
                 aria-hidden
+                data-testid="pack-waiting-dot"
                 className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full"
-                style={{ background: SECRET_RARITY.border }}
+                style={{ background: "oklch(0.85 0.14 205)" }}
               />
             )}
           </Link>

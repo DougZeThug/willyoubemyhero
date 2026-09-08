@@ -18,7 +18,8 @@ import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { marketListingsKey, myStallKey } from "@/hooks/use-market";
-import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { packStatusKey } from "@/hooks/use-pack-status";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
@@ -182,7 +183,7 @@ describe("buying", () => {
       // "Packed by N" has genuinely risen.
       cardPullCountsKey(EVENT),
       mySecretsKey(ACTOR),
-      secretStatusKey(ACTOR),
+      packStatusKey(ACTOR),
     ]) {
       expect(refreshed).toContain(JSON.stringify(key));
     }

@@ -13,7 +13,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
-import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { packStatusKey } from "@/hooks/use-pack-status";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { DUST_PRICES, SELL_BY_SECRET_TIER } from "@/lib/dust";
@@ -107,10 +108,10 @@ describe("buying a pull", () => {
 
     await waitFor(() => expect(buyFn).toHaveBeenCalled());
     const seen = keys(invalidate);
-    expect(seen).toContain(JSON.stringify(secretStatusKey(ACTOR)));
+    expect(seen).toContain(JSON.stringify(packStatusKey(ACTOR)));
     expect(seen).toContain(JSON.stringify(mySecretsKey(ACTOR)));
     // And never the bare id, which is the shape that silently matched nothing.
-    expect(seen).not.toContain(JSON.stringify(secretStatusKey(ME)));
+    expect(seen).not.toContain(JSON.stringify(packStatusKey(ME)));
   });
 
   it("writes the new balance straight in rather than refetching it", async () => {
@@ -166,7 +167,7 @@ describe("buying a pull", () => {
     await userEvent.click(screen.getByRole("button", { name: /buy for/i }));
 
     await waitFor(() => expect(buyFn).toHaveBeenCalled());
-    expect(keys(invalidate)).not.toContain(JSON.stringify(secretStatusKey(ACTOR)));
+    expect(keys(invalidate)).not.toContain(JSON.stringify(packStatusKey(ACTOR)));
     expect(client.getQueryData(dustBalanceKey(ME))).toBeUndefined();
   });
 });
@@ -307,7 +308,7 @@ describe("selling a secret", () => {
     const seen = keys(invalidate);
     expect(seen).toContain(JSON.stringify(["dust-spares", ME]));
     expect(seen).toContain(JSON.stringify(mySecretsKey(ACTOR)));
-    expect(seen).toContain(JSON.stringify(secretStatusKey(ACTOR)));
+    expect(seen).toContain(JSON.stringify(packStatusKey(ACTOR)));
     expect(seen).not.toContain(JSON.stringify(mySecretsKey(ME)));
     // Written straight in, never refetched — same rule as every other mutation.
     expect(client.getQueryData(dustBalanceKey(ME))).toEqual({ balance: 320 });

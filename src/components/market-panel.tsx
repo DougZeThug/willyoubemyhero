@@ -16,7 +16,8 @@ import { ROW, ROW_LIST } from "@/components/shop-rows";
 import { LevelPips } from "@/components/level-pips";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { marketListingsKey, myStallKey, useMarketListings, useMyStall } from "@/hooks/use-market";
-import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { packStatusKey } from "@/hooks/use-pack-status";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
@@ -222,7 +223,7 @@ export function MarketPanel({
     // N" has genuinely risen — the same reason a completed trade invalidates it.
     void qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId) });
     void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
-    void qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+    void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
     if (completedCollection) void qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
   }
 

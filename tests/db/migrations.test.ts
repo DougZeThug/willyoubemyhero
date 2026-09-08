@@ -452,11 +452,7 @@ describe("migrations", () => {
       "SELECT indexdef FROM pg_indexes WHERE tablename = 'secret_card_pulls'",
     );
     expect(
-      rows.some(
-        (r) =>
-          r.indexdef.includes("UNIQUE") &&
-          r.indexdef.includes("pulled_on"),
-      ),
+      rows.some((r) => r.indexdef.includes("UNIQUE") && r.indexdef.includes("pulled_on")),
     ).toBe(false);
     expect(
       rows.some(

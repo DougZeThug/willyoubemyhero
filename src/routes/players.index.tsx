@@ -11,7 +11,8 @@ import { CardSkeleton } from "@/components/card-skeleton";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
-import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
+import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
+import { usePackStatus } from "@/hooks/use-pack-status";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useTradeBadge } from "@/hooks/use-trade-badge";
 import { useStreakStatus } from "@/hooks/use-streak";
@@ -35,8 +36,6 @@ import { LevelPips } from "@/components/level-pips";
 import {
   groupBySecretCollection,
   secretFoil,
-  secretOwed,
-  secretWaiting,
   SECRET_RARITY,
   VAULT_UNSORTED_LABEL,
   type OwnedSecret,
@@ -69,7 +68,7 @@ import { useAccountSyncState } from "@/lib/account-sync-state";
 import { usePackProgress } from "@/hooks/use-pack-progress";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { useIsOnline } from "@/hooks/use-online";
-import { nextLocalMidnight } from "@/lib/pack";
+import { nextLocalMidnight, packWaiting as packStillSealed } from "@/lib/pack";
 import { vaultSummaryLine } from "@/lib/vault-summary";
 import {
   acquisitionWindow,
@@ -182,7 +181,7 @@ function PlayersPage() {
     () => completedIds(allTrophies.data?.trophies ?? [], member?.participantId ?? null),
     [allTrophies.data, member?.participantId],
   );
-  const secretStatus = useSecretStatus(actor);
+  const packStatus = usePackStatus(actor);
   // Off the actor rather than the member, same as the secrets above: a guest
   // builds a real streak too, and claim_guest_packs carries it over when they
   // finally put a name to the phone. StreakStatus is a Streak with the milestone
@@ -373,20 +372,15 @@ function PlayersPage() {
   // Trade tab carries the same news permanently, but its dot is easy to miss
   // under a thumb on the screen you are already looking at.
   const tradeUnread = useTradeBadge();
-  const packWaiting = secretWaiting(secretStatus.data);
+  const packWaiting = packStillSealed(packStatus.data);
   // Read, never written: dealing still belongs to the pack screen, which is what
-  // keeps one pack a day one pack a day.
-  //
-  // `secretOwed`, NOT `packWaiting`, and the two are deliberately different
-  // questions. The pack pulls its secret the moment it is torn, so `packWaiting`
-  // — the ring on the button — goes false while the card is still sitting
-  // face-down on the stand. Counting with it called a pack with an unturned
-  // secret finished and took away the link back to it.
-  const packProgress = usePackProgress(secretOwed(secretStatus.data));
-  // The secret's reset is the only one the server vouches for; the device's own
-  // midnight is the one the pack actually re-seals on. See TodayCard's prop doc —
-  // these are two clocks and the fallback is the more accurate of the two.
-  const nextPackAt = secretStatus.data?.resetsAt ?? nextLocalMidnight(packProgress.now);
+  // keeps one pack a day one pack a day. The count of cards left comes off the
+  // stored row alone — a secret is a slot in it like any other now.
+  const packProgress = usePackProgress();
+  // The server's reset is the league's midnight, which is the clock the pack
+  // rolls over on; the device's own midnight is only the fallback for a phone
+  // the server has not answered yet.
+  const nextPackAt = packStatus.data?.resetsAt ?? nextLocalMidnight(packProgress.now);
 
   /**
    * What arrived since this device last looked (§12).

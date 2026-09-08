@@ -183,78 +183,58 @@ describe("pack state", () => {
     });
   });
 
-  it("round-trips whether today's secret has been turned over", async () => {
+  it("round-trips every slot, secret or roster, in dealt order", async () => {
     const mod = await freshModule();
     const state = {
       dayKey: "2026-07-28",
-      ids: [CARD_A, CARD_B, "card-c"],
-      revealed: [0, 1, 2],
-      secretRevealed: true,
+      ids: [CARD_A, CARD_B],
+      cards: [
+        { kind: "roster" as const, id: CARD_A, heldBefore: 0 },
+        { kind: "secret" as const, id: "secret-1" },
+        { kind: "roster" as const, id: CARD_B, heldBefore: 2, editionBefore: "gold" },
+      ],
+      revealed: [0, 1],
     };
     await mod.savePackState(state);
     expect(await mod.loadPackState()).toEqual(state);
   });
 
-  it("loads a row written before secret cards existed", async () => {
-    // savePackState is a pure passthrough, so an old row simply has no
-    // secretRevealed key — it must not come back defaulted to anything.
+  it("loads a row written before the server dealt packs", async () => {
+    // savePackState is a pure passthrough, so an old row simply has no `cards`
+    // key — it must not come back defaulted to anything, and the pack screen
+    // reads its absence as "not today's pack".
     const mod = await freshModule();
     const legacy = { dayKey: "2026-07-28", ids: [CARD_A], revealed: [0] };
     await mod.savePackState(legacy);
     const loaded = await mod.loadPackState();
     expect(loaded).toEqual(legacy);
-    expect(loaded).not.toHaveProperty("secretRevealed");
+    expect(loaded).not.toHaveProperty("cards");
   });
 
-  it("only stores the flag, never which secret it was", async () => {
-    // The card itself is a Postgres row keyed on the claimed member, so it
-    // follows you to a new phone. An id here would be a second source of truth.
-    const mod = await freshModule();
-    await mod.savePackState({
-      dayKey: "2026-07-28",
-      ids: [CARD_A],
-      revealed: [0],
-      secretRevealed: true,
-    });
-    expect(Object.keys((await mod.loadPackState())!).sort()).toEqual([
-      "dayKey",
-      "ids",
-      "revealed",
-      "secretRevealed",
-    ]);
-  });
-
-  it("round-trips a set the pull finished but the secret has not revealed yet", async () => {
+  it("stores which slots still owe a set-complete ceremony, never the set itself", async () => {
     // The ceremony fires late, after the card has been turned over, so there is a
-    // gap — and a reload in it used to swallow the most earned moment in the game:
-    // the in-memory ref went with the page and the re-pull answers null because
-    // the row already exists.
+    // gap — and a reload in it used to swallow the most earned moment in the game.
+    // Which set it was comes back with the pack from the server; only the debt
+    // lives here.
     const mod = await freshModule();
-    const pendingCompletion = {
-      collection: "pets",
-      label: "Pets",
-      size: 9,
-      completedOn: "2026-07-28",
-    };
     await mod.savePackState({
       dayKey: "2026-07-28",
       ids: [CARD_A],
+      cards: [{ kind: "secret", id: "secret-1" }],
       revealed: [],
-      pendingCompletion,
+      pendingCompletions: [0],
     });
-    expect((await mod.loadPackState())?.pendingCompletion).toEqual(pendingCompletion);
+    expect((await mod.loadPackState())?.pendingCompletions).toEqual([0]);
   });
 
   it("loads a row that has no ceremony owing", async () => {
     const mod = await freshModule();
     await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A], revealed: [] });
-    expect((await mod.loadPackState())?.pendingCompletion).toBeUndefined();
+    expect((await mod.loadPackState())?.pendingCompletions).toBeUndefined();
   });
 
-  it("stores the dealt ids rather than a seed", async () => {
-    // The last slot is swapped for a card the user had not collected at the
-    // moment the pack was dealt, so re-deriving from the seed after revealing
-    // would pick a different card than the one actually pulled.
+  it("stores the dealt ids, which the server chose", async () => {
+    // Nothing on the phone can re-derive them: the deal is Postgres's.
     const mod = await freshModule();
     await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A, CARD_B], revealed: [] });
     expect((await mod.loadPackState())?.ids).toEqual([CARD_A, CARD_B]);

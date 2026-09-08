@@ -10,12 +10,11 @@ import { LevelPips } from "@/components/level-pips";
 import { PullRibbon } from "@/components/pull-ribbon";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { packedByLabel } from "@/lib/card-pulls";
-import { rarityStyle, type Rarity } from "@/lib/card-rarity";
-import { cardBadge, type Edition } from "@/lib/card-edition";
-import type { SecretCardView } from "@/lib/secret-cards";
-import type { SecretSlot } from "@/lib/pack";
+import { cardBadge } from "@/lib/card-edition";
+import { upgradeLabel } from "@/lib/pack-outcome";
 import { nextMilestoneLine, type Streak } from "@/lib/streaks";
-import { secretTierFloorLabel, secretTierStyle } from "@/lib/secret-rarity";
+import { secretTierCaption, secretTierFloorLabel, secretTierStyle } from "@/lib/secret-rarity";
+import type { StandSlot } from "@/components/pack-stand";
 import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
@@ -23,46 +22,27 @@ import { urlFromSet } from "@/lib/media";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { cn } from "@/lib/utils";
 
-type SummaryParticipant = {
-  id: string;
-  participant_id: string;
-  running_order: number;
-  bib_number: number | null;
-  selected_draft_position: number | null;
-  participant?: { name?: string | null; trash_talk_quote?: string | null } | null;
-};
-
 /**
  * Where the pack ends up.
  *
  * The sequence used to stop rather than finish: the last card was turned and the
- * screen simply became a grid, with the fourth slot below it and a link back to
- * the vault. Everything that had been built up over the previous thirty seconds
- * was spent, and nothing collected it.
+ * screen simply became a grid with a link back to the vault. Everything that had
+ * been built up over the previous thirty seconds was spent, and nothing
+ * collected it.
  *
  * So this is the curtain call. Every pull laid out at once — which is only
- * allowed *here*, after they have each been earned one at a time — the secret
- * larger because it is the one nobody else has, the collection counter that was
- * hidden for the whole reveal, and somewhere to go next.
+ * allowed *here*, after they have each been earned one at a time — in the order
+ * they were dealt, a secret sitting in its slot among the roster with the prism
+ * ring that marks it out, the collection counter that was hidden for the whole
+ * reveal, and somewhere to go next.
  */
 export function PackSummary({
-  pack,
+  slots,
   bundle,
   cards,
-  rarities,
-  editions = {},
   revealed,
   pullCounts,
   universalBack,
-  secretSlot,
-  secret,
-  secretRarity,
-  secretDuplicate,
-  secretSellValue,
-  secretPulled,
-  copies,
-  secretCopies,
-  sellValues,
   collected,
   total,
   eventYear,
@@ -72,43 +52,18 @@ export function PackSummary({
   claiming,
   claimError,
   onClaim,
-  onRetrySecret,
 }: {
-  pack: SummaryParticipant[];
+  /**
+   * The pack as the stand showed it, slot by slot. Every number on a slot —
+   * the count, the price, the outcome — was the route's decision before the
+   * first card turned, so the summary prints exactly what the stand printed.
+   */
+  slots: StandSlot[];
   bundle: StatsBundle | null | undefined;
   cards: Record<string, CardUrls> | undefined;
-  rarities: Map<string, Rarity>;
-  /** Finishes by card id. Empty by default, so every card reads as standard. */
-  editions?: Record<string, Edition>;
   revealed: number[];
   pullCounts: Record<string, number> | undefined;
   universalBack: ImageUrlSet | null;
-  secretSlot: SecretSlot;
-  secret: SecretCardView | null;
-  secretRarity: Rarity;
-  secretDuplicate: boolean;
-  /**
-   * What the secret's spare copy would fetch, or null for nothing to say.
-   *
-   * The stand has carried this line since the dupe economy landed; the summary
-   * never did, so the offer vanished the moment the sequence ended. Same value,
-   * same gating — the route decides, this only prints.
-   */
-  secretSellValue?: number | null;
-  /** How many secrets this person has ever pulled, for the first-timer line. */
-  secretPulled: number;
-  /**
-   * Copies held of each roster card, by event_participant id, this pull counted.
-   *
-   * From the route's pre-pack snapshot, not the live collection — see the note on
-   * `rosterCopies` there. Optional, and a card missing from it gets no ribbon
-   * rather than a guessed one.
-   */
-  copies?: Record<string, number>;
-  /** The same number for the secret, whose count lives on the server. */
-  secretCopies?: number;
-  /** What each spare roster copy is worth. Duplicates only, and only while dust is on. */
-  sellValues?: Record<string, number>;
   collected: number;
   total: number;
   eventYear: number | null;
@@ -122,7 +77,6 @@ export function PackSummary({
   /** Inline, never a toast — see the note on the failed secret slot below. */
   claimError: string | null;
   onClaim: () => void;
-  onRetrySecret: () => void;
 }) {
   // The claim mints a card on the server, so it cannot be taken in a dead spot.
   // Read here rather than passed in: the button is the only thing on this screen
@@ -144,28 +98,27 @@ export function PackSummary({
   // rendering a component that takes twenty-five props.
   const nextRung = streak ? nextMilestoneLine(streak) : null;
 
-  const shareCards: SharePackCard[] = [
-    ...pack.map((ep) => {
-      const rarity = rarities.get(ep.id) ?? rarityStyle("base");
-      return {
-        name: ep.participant?.name ?? "—",
-        rarityLabel: rarity.label,
-        rarityColor: rarity.accent,
-        artUrl: cards?.[ep.id]?.front ?? null,
-      };
-    }),
-    ...(secretSlot === "open" && secret
-      ? [
-          {
-            name: secret.name,
-            rarityLabel: "Secret",
-            rarityColor: secretRarity.accent,
-            artUrl: secret.artUrl,
-            secret: true,
-          },
-        ]
-      : []),
-  ];
+  // In dealt order, exactly as the row below. A secret is marked so the graphic
+  // can frame it, and names nothing about which secret it is beyond the name
+  // the person has already seen.
+  const shareCards: SharePackCard[] = slots.map(({ slot, rarity, ep }) =>
+    slot.kind === "secret"
+      ? {
+          name: slot.card.name,
+          rarityLabel: "Secret",
+          rarityColor: rarity.accent,
+          artUrl: slot.card.artUrl,
+          secret: true,
+        }
+      : {
+          name: ep?.participant?.name ?? "—",
+          rarityLabel: rarity.label,
+          rarityColor: rarity.accent,
+          artUrl: cards?.[slot.id]?.front ?? null,
+        },
+  );
+
+  const secretRevealed = slots.some((s, i) => s.slot.kind === "secret" && revealed.includes(i));
 
   async function share() {
     const node = shareRef.current;
@@ -198,28 +151,11 @@ export function PackSummary({
       >
         <h1 className="font-display text-2xl font-black uppercase leading-none">Pack Complete</h1>
         <p className="mt-1 text-meta font-semibold text-muted-foreground">
-          {secretSlot === "open"
+          {secretRevealed
             ? "That's today's pack, secret and all"
             : "That's today's pack — come back tomorrow"}
         </p>
       </motion.div>
-
-      {/* The fourth card first, and full width.
-
-          It was under the roster trio, which put the one card nobody else has
-          below three cards several people do. Order is the loudest thing a
-          summary says. */}
-      <SecretSlotView
-        slot={secretSlot}
-        card={secret}
-        rarity={secretRarity}
-        duplicate={secretDuplicate}
-        sellValue={secretSellValue ?? null}
-        copies={secretCopies}
-        pulledCount={secretPulled}
-        universalBack={universalBack}
-        onRetry={onRetrySecret}
-      />
 
       {/* The three, in a row you scroll rather than a grid you squint at.
 
@@ -237,14 +173,14 @@ export function PackSummary({
         // The row is the scroller, so it owns the scrollbar rather than the page.
         style={{ scrollbarWidth: "none" }}
       >
-        {pack.map((ep, i) => {
-          const rarity: Rarity = rarities.get(ep.id) ?? rarityStyle("base");
-          const edition = editions[ep.id] ?? "standard";
-          const name = ep.participant?.name ?? "—";
-          const held = copies?.[ep.id];
+        {slots.map(({ slot, rarity, edition, outcome, copies, sellValue, ep }, i) => {
+          const isSecret = slot.kind === "secret";
+          const name = isSecret ? slot.card.name : (ep?.participant?.name ?? "—");
+          const turned = revealed.includes(i);
+          const climbed = outcome === "upgrade" ? upgradeLabel(slot) : null;
           return (
             <div
-              key={ep.id}
+              key={slot.id}
               // The floor the audit asked for, and the one the e2e suite
               // measures. `min-width` rather than `shrink-0` carries it, and the
               // difference matters: min-width beats flex-shrink outright, so the
@@ -260,34 +196,55 @@ export function PackSummary({
                   with the stand, so the card flies from where it was examined
                   into its column rather than appearing there. */}
               <motion.div
-                layoutId={`pack-card-${ep.id}`}
+                layoutId={`pack-card-${slot.id}`}
                 transition={{ type: "spring", stiffness: 260, damping: 28, delay: i * 0.06 }}
-                className="relative rounded-xl"
+                className={cn(
+                  "relative rounded-xl",
+                  isSecret && turned && outcome === "duplicate" && "secret-dupe-shimmer",
+                )}
               >
-                <HoloCard
-                  frontUrl={cards?.[ep.id]?.front ?? null}
-                  backUrl={cards?.[ep.id]?.back ?? null}
-                  name={name}
-                  rarity={rarity}
-                  edition={edition}
-                  // The row scrolls sideways now, and drag-tilt cannot share that
-                  // axis with it. A tilting card sets `touch-action: pan-y`, which
-                  // hands the browser the vertical pan and keeps the horizontal
-                  // one for itself — so a thumb dragging across a card tilted it
-                  // and the row underneath never moved. touch-action is read once
-                  // at gesture start and is final, so there is no arrangement
-                  // where both work. Scrolling wins: these are thumbnails in a
-                  // scrolling row, which is the case this prop exists for.
-                  touchTilt={false}
-                  backContent={
-                    <CardBackPanel ep={ep} bundle={bundle} rarity={rarity} edition={edition} />
-                  }
-                />
+                {isSecret ? (
+                  <HoloCard
+                    frontUrl={slot.card.artUrl}
+                    backUrl={universalBack}
+                    name={name}
+                    rarity={rarity}
+                    touchTilt={false}
+                    backContent={<SecretBackPanel card={slot.card} rarity={rarity} />}
+                  />
+                ) : (
+                  <HoloCard
+                    frontUrl={cards?.[slot.id]?.front ?? null}
+                    backUrl={cards?.[slot.id]?.back ?? null}
+                    name={name}
+                    rarity={rarity}
+                    edition={edition ?? "standard"}
+                    // The row scrolls sideways now, and drag-tilt cannot share that
+                    // axis with it. A tilting card sets `touch-action: pan-y`, which
+                    // hands the browser the vertical pan and keeps the horizontal
+                    // one for itself — so a thumb dragging across a card tilted it
+                    // and the row underneath never moved. touch-action is read once
+                    // at gesture start and is final, so there is no arrangement
+                    // where both work. Scrolling wins: these are thumbnails in a
+                    // scrolling row, which is the case this prop exists for.
+                    touchTilt={false}
+                    backContent={
+                      ep ? (
+                        <CardBackPanel
+                          ep={ep}
+                          bundle={bundle}
+                          rarity={rarity}
+                          edition={edition ?? "standard"}
+                        />
+                      ) : null
+                    }
+                  />
+                )}
                 {/* Only once it has been turned. An unturned column is a card
                     still in the sequence, and its ribbon would answer early. */}
-                {revealed.includes(i) && held != null && <PullRibbon copies={held} />}
+                {turned && copies != null && <PullRibbon copies={copies} upgrade={climbed} />}
               </motion.div>
-              {revealed.includes(i) && (
+              {turned && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -295,45 +252,75 @@ export function PackSummary({
                 >
                   {/* Two lines at most. The column is 140px now rather than 80,
                       which is what lets these read at 12px instead of 8. */}
-                  <Link
-                    to="/players/$id"
-                    params={{ id: ep.id }}
-                    className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary"
-                  >
-                    {name}
-                  </Link>
-                  {/* A special finish leads in its own metal and pushes the tier
-                      to the muted line under it — see cardBadge. accent, not
-                      border: base and dnf set border to a near-transparent white
-                      so their bezel vanishes, which left this unreadable. */}
-                  {(() => {
-                    const badge = cardBadge(
-                      {
-                        label: rarity.label,
-                        reason: "",
-                        accent: rarity.accent,
-                      },
-                      edition,
-                    );
-                    return (
-                      <div
-                        className="text-label font-bold uppercase tracking-[0.08em]"
-                        style={{ color: badge.color }}
-                      >
-                        {badge.headline}
-                      </div>
-                    );
-                  })()}
-                  {packedByLabel(pullCounts?.[ep.id]) && (
-                    <div className="text-meta font-semibold leading-tight text-muted-foreground">
-                      {packedByLabel(pullCounts?.[ep.id])}
+                  {isSecret ? (
+                    <div className="line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide">
+                      {name}
                     </div>
+                  ) : (
+                    <Link
+                      to="/players/$id"
+                      params={{ id: slot.id }}
+                      className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary"
+                    >
+                      {name}
+                    </Link>
+                  )}
+                  {isSecret ? (
+                    <>
+                      {/* The pips name the level only when the caption does not —
+                          the same rule the stand follows. */}
+                      <LevelPips
+                        tier={slot.card.tier}
+                        namesLevel={outcome === "duplicate"}
+                        className="mt-0.5"
+                      />
+                      {outcome === "duplicate" ? (
+                        <div className="text-meta font-semibold leading-tight text-muted-foreground">
+                          Already yours — this one&apos;s just showing off
+                        </div>
+                      ) : (
+                        <div
+                          className="text-label font-bold uppercase tracking-[0.08em]"
+                          style={{ color: secretTierStyle(slot.card.tier).accent }}
+                        >
+                          {secretTierCaption(slot.card.tier)}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* A special finish leads in its own metal and pushes the
+                          tier to the muted line under it — see cardBadge. accent,
+                          not border: base and dnf set border to a near-transparent
+                          white so their bezel vanishes, which left this
+                          unreadable. */}
+                      {(() => {
+                        const badge = cardBadge(
+                          { label: rarity.label, reason: "", accent: rarity.accent },
+                          edition,
+                        );
+                        return (
+                          <div
+                            className="text-label font-bold uppercase tracking-[0.08em]"
+                            style={{ color: badge.color }}
+                          >
+                            {badge.headline}
+                          </div>
+                        );
+                      })()}
+                      {packedByLabel(pullCounts?.[slot.id]) && (
+                        <div className="text-meta font-semibold leading-tight text-muted-foreground">
+                          {packedByLabel(pullCounts?.[slot.id])}
+                        </div>
+                      )}
+                    </>
                   )}
                   {/* The same offer the stand makes on a spare, in the same
-                      words. It used to end with the sequence. */}
-                  {sellValues?.[ep.id] ? (
+                      words, for either kind of card. It used to end with the
+                      sequence. */}
+                  {sellValue ? (
                     <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
-                      Sell for {sellValues[ep.id]}
+                      Sell for {sellValue}
                     </div>
                   ) : null}
                 </motion.div>
@@ -487,141 +474,6 @@ export function PackSummary({
       <div aria-hidden className="pointer-events-none fixed -left-[9999px] top-0">
         <SharePack ref={shareRef} data={{ eventYear, cards: shareCards, collected, total }} />
       </div>
-    </div>
-  );
-}
-
-/**
- * The fourth slot, as it appears in the finished pack.
- *
- * The ceremony itself belongs to PackStand — by the time this renders, the card
- * has already been turned over. What is left here is the card at rest, plus the
- * two states that never reach the stand at all: a guest who has not claimed, and
- * a pull that could not complete.
- */
-function SecretSlotView({
-  slot,
-  card,
-  rarity,
-  duplicate,
-  sellValue,
-  copies,
-  pulledCount,
-  universalBack,
-  onRetry,
-}: {
-  slot: SecretSlot;
-  card: SecretCardView | null;
-  rarity: Rarity;
-  duplicate: boolean;
-  sellValue: number | null;
-  copies: number | undefined;
-  pulledCount: number;
-  universalBack: ImageUrlSet | null;
-  onRetry: () => void;
-}) {
-  if (slot === "hidden") return null;
-
-  return (
-    // The stand's cap, 320px, so the card is the same size at rest as it was at
-    // the moment it turned rather than shrinking by a third on the handover.
-    //
-    // What is deliberately NOT carried over is the stand's viewport-height clamp
-    // (`min(320px, calc((100svh-19rem)*5/7))`). That exists because the stand has
-    // to fit the card, its name and the step dots on one screen with nothing
-    // scrolling. This page scrolls, so the clamp would only ever make the card
-    // smaller for no reason on a short phone.
-    <div className="mx-auto flex w-full max-w-[320px] flex-col items-center gap-2 pt-2">
-      <div className="text-center">
-        <h2
-          className="font-display text-sm font-black uppercase tracking-[0.08em]"
-          style={{ color: rarity.accent }}
-        >
-          One More Card
-        </h2>
-      </div>
-
-      {slot === "failed" ? (
-        <button
-          onClick={onRetry}
-          className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
-        >
-          <span className="font-display text-badge font-black uppercase tracking-[0.08em]">
-            No signal
-          </span>
-          {/* Never a toast: a toast announces a fourth card to whoever is
-              glancing at the phone over your shoulder. */}
-          <span className="text-meta leading-snug text-muted-foreground">
-            Tap to try again — you haven&apos;t used today&apos;s.
-          </span>
-        </button>
-      ) : slot === "pending" ? (
-        // The same sealed-back sweep the stand shows, for the window where the
-        // sequence has ended and the pull is still in the air.
-        <div className="wax-foil pack-seal-wait relative flex aspect-[5/7] w-full items-center justify-center overflow-hidden rounded-xl border border-white/15" />
-      ) : card ? (
-        <>
-          {/* w-full is load-bearing: the column above centres its items, which
-              makes a flex child shrink to its content, and HoloCard sizes itself
-              from its width via aspect-ratio — so without this the card collapses
-              to nothing and the slot renders as a sliver. */}
-          <motion.div
-            layoutId="pack-card-secret"
-            transition={{ type: "spring", stiffness: 260, damping: 28 }}
-            className={cn("relative w-full rounded-xl", duplicate && "secret-dupe-shimmer")}
-          >
-            <HoloCard
-              frontUrl={card.artUrl}
-              backUrl={universalBack}
-              name={card.name}
-              rarity={rarity}
-              tilt="hero"
-              backContent={<SecretBackPanel card={card} rarity={rarity} />}
-            />
-            {/* The secret's count is the only one on this screen the baseline
-                cannot answer — it comes from the pull's own duplicate flag. */}
-            {copies != null && <PullRibbon copies={copies} />}
-          </motion.div>
-          <div className="text-center">
-            <div className="truncate font-display text-xs font-black uppercase tracking-wide">
-              {card.name}
-            </div>
-            {/* The only level cue this slot has ever carried, which is also why
-                it is the one place the pips name the level as well as count it:
-                the line below is the teaching copy about what a secret *is* and
-                never says "Mythic". Everywhere else a level word sits beside
-                them and naming it here too would say it twice. */}
-            <LevelPips tier={card.tier} namesLevel className="mt-0.5" />
-            {duplicate ? (
-              <>
-                <div className="text-meta font-semibold text-muted-foreground">
-                  Already yours — you&apos;ve pulled the whole set. This one&apos;s just showing
-                  off.
-                </div>
-                {/* Carried over from the stand, which was the only place it ever
-                    appeared — so the answer to "what do I do with a spare"
-                    disappeared at exactly the screen that has the shop link. */}
-                {sellValue ? (
-                  <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
-                    Sell for {sellValue}
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <div
-                className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
-                style={{ color: rarity.border }}
-              >
-                {/* Taught once, on the first secret anyone ever pulls. Without it
-                    the empty vault shelf afterwards reads as a bug. */}
-                {pulledCount <= 1
-                  ? "Secret · Not on the roster. Nobody knows how many there are."
-                  : "Secret · Yours for good, even on a new phone."}
-              </div>
-            )}
-          </div>
-        </>
-      ) : null}
     </div>
   );
 }

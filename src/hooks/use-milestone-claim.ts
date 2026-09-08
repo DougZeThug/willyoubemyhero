@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { packStatusKey } from "@/hooks/use-pack-status";
 import { streakStatusKey } from "@/hooks/use-streak";
 import { claimStreakMilestone, type StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { StreakStatus } from "@/lib/streaks.functions";
@@ -67,7 +68,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
         qc.invalidateQueries({ queryKey: mySecretsKey(who) }),
         // A bonus pull is a non-duplicate row like any other, so the "pulled"
         // count behind the secret slot moves with it.
-        qc.invalidateQueries({ queryKey: secretStatusKey(who) }),
+        qc.invalidateQueries({ queryKey: packStatusKey(who) }),
       ]);
     },
     [qc],

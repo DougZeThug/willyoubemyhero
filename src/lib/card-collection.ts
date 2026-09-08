@@ -6,7 +6,7 @@
 
 import { openDB, type IDBPDatabase } from "idb";
 import { bestEdition, type Edition } from "./card-edition";
-import type { CompletedCollection } from "./collection-trophies";
+import { leagueDay } from "./trades";
 
 // The name, the version and the store names below are read directly by
 // e2e/journeys.spec.ts, which opens this database itself to assert what a pack
@@ -19,49 +19,71 @@ const CARD_META = "card-meta";
 const PACK_STATE = "pack-state";
 
 /**
- * Local date key, so the pack rolls over at midnight in the user's own timezone.
+ * The day a pack belongs to: the LEAGUE's, in New York, exactly as `open_pack`
+ * stamps it.
+ *
+ * This used to be the device's local date, and the app ran on two clocks — the
+ * roster re-sealed on the phone's midnight while the secret rolled over on the
+ * league's, and anyone up between the two saw the fourth slot re-arm while the
+ * three cards did not. The server deals the whole pack now, keyed on its own
+ * day, so the row here follows that day too; when the server's answer arrives
+ * it overrides this, and the two only ever disagree on a phone whose clock is
+ * wrong.
  *
  * Lives beside the row that carries it rather than in the pack route, because
- * two things now have to agree on what "today" means: the screen deciding
- * whether to re-seal, and `carryPackToIdentity` below deciding whether a stored
- * pack is still today's. Two copies of this would disagree at exactly the moment
- * it matters.
+ * the screen deciding whether to re-seal and `carryPackToIdentity` below
+ * deciding whether a stored pack is still today's have to agree.
  */
 export function todayKey(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return leagueDay();
 }
 
 /** Aspect ratio of a player's card art, cached so revisits never re-measure or jump. */
 export type CardMeta = { aspect: number };
 
 /**
+ * One slot of today's pack, as this device remembers it.
+ *
+ * Only what is needed to recognise the pack and to read the ribbon on a
+ * reload. The art, the finish and the level are NOT here: a secret's URLs are
+ * signed and expire, and every load re-asks `openPack`, which answers the same
+ * pack back with fresh ones. `heldBefore` and `editionBefore` are a guest's —
+ * the server knows nothing of their collection, so the route snapshots it at
+ * the tear and this is where the snapshot survives a reload.
+ */
+export type PackSlotRef = {
+  kind: "roster" | "secret";
+  id: string;
+  heldBefore?: number;
+  editionBefore?: string;
+};
+
+/**
  * Today's pack, and how far through it this device got.
  *
- * The dealt cards are stored rather than re-derived. The seed alone is not
- * enough: the last slot is swapped for a card the user had not collected *at
- * the moment the pack was dealt*, so re-deriving after the pack is revealed —
- * when those cards are in the collection — picks a different final card than
- * the one actually pulled.
+ * The dealt slots are stored rather than re-asked for on every render, and the
+ * reveal progress is stored because it lives nowhere else: the server knows
+ * what it dealt, never what you have looked at.
  */
 export type PackState = {
-  /** Local date key the pack was dealt for. A different key means a new pack. */
+  /** The league day the pack was dealt for. A different key means a new pack. */
   dayKey: string;
-  /** `event_participants.id` for each card in the pack, in dealt order. */
-  ids: string[];
-  /** Indices already flipped face-up. */
-  revealed: number[];
   /**
-   * Whether today's secret card has been turned over *on this device*.
+   * `event_participants.id` for each ROSTER card in the pack, in dealt order.
    *
-   * Only a flag. Which secret it is lives in a Postgres row keyed on the claimed
-   * member, so it follows you to a new phone — an id here would be a second
-   * source of truth that could disagree with the first. Optional so a row written
-   * before secret cards existed still loads, and so `savePackState` can stay a
-   * pure passthrough of whatever the caller handed it.
+   * Kept beside `cards` rather than replaced by it: `carriedAdopted` and the
+   * unrecorded row name roster ids, and the e2e suite reads this field to say
+   * what a pack left behind. Written in lockstep with `cards` by the route.
    */
-  secretRevealed?: boolean;
+  ids: string[];
+  /**
+   * Every slot, roster and secret, in dealt order. Optional only so a row
+   * written before the server dealt packs still loads — such a row is not
+   * today's pack, and the resume path treats it as sealed.
+   */
+  cards?: PackSlotRef[];
+  /** Indices into `cards` already flipped face-up. */
+  revealed: number[];
   /**
    * Who this pack was dealt to, as `usePackIdentity` returns it.
    *
@@ -116,18 +138,17 @@ export type PackState = {
    */
   carriedAdopted?: string[];
   /**
-   * A set this pull finished, waiting for the secret to be turned over.
+   * Slots whose set-complete ceremony has not fired yet.
    *
    * The ceremony deliberately fires late — you see WHICH card it was and only
-   * then that it was the last one — so between the pull landing and the card
+   * then that it was the last one — so between the deal landing and the card
    * being turned there is a gap, and a reload in that gap used to swallow the
-   * most earned moment in the game outright: the in-memory ref went with the
-   * page, the re-pull answers `completedCollection: null` because the row already
-   * exists, and the global host stays quiet because the trophy was marked
-   * celebrated at pull time. Parked here so it survives the reload, and dropped
-   * the moment the ceremony actually runs.
+   * most earned moment in the game outright. Which sets they are comes back
+   * with the pack on every load (the slot remembers, server-side); what has to
+   * survive here is only that the ceremony is still owed. Dropped the moment it
+   * actually runs.
    */
-  pendingCompletion?: CompletedCollection;
+  pendingCompletions?: number[];
 };
 
 /**

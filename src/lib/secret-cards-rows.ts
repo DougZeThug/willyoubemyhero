@@ -2,7 +2,7 @@
 //
 // src/integrations/supabase/types.ts is `supabase gen types` output, must not be
 // hand-edited, and is .prettierignore'd — so `secret_cards`, `secret_card_pulls`,
-// `card_pulls` and `pack_opens`, along with `pull_secret_card`, `secret_pull_status`,
+// `card_pulls` and `pack_opens`, along with `open_pack`, `pack_status`,
 // `record_card_pulls` and `record_pack_open`, are invisible to the typed client
 // until somebody regenerates it,
 // long after this lands. `.from("secret_cards")` and `.rpc("pull_secret_card")`
@@ -72,31 +72,48 @@ export type SecretPullRow = {
   acquired_at: string;
 };
 
-/** What public.pull_secret_card returns. Null when nothing is pullable. */
-export type PullSecretCardResult = {
+/** A roster slot as public.open_pack stores it. The finish fields are a member's only. */
+export type OpenPackRosterSlot = {
+  kind: "roster";
+  id: string;
+  /** Null when the mint was rationed or the id unknown, and always for a guest. */
+  edition?: string | null;
+  heldBefore?: number;
+  editionBefore?: string | null;
+};
+
+/** A secret slot as public.open_pack stores it. */
+export type OpenPackSecretSlot = {
+  kind: "secret";
+  id: string;
   pullId: string;
-  cardId: string;
-  day: string;
-  duplicate: boolean;
   tier: string;
-  fresh: boolean;
+  duplicate: boolean;
+  /** The level of the copy already owned, when `duplicate`. */
+  tierBefore: string | null;
   /**
-   * The set this pull just finished, or null — which is every pull but one.
+   * The set this slot just finished, or null — which is every slot but one.
    *
    * The single place in this feature a set SIZE crosses the wire, and it only
-   * ever describes a set that is already complete. Present on the `fresh: false`
-   * returns too, always null: they acquired nothing, and one shape is easier to
-   * reason about than an optional key.
+   * ever describes a set that is already complete. Stored on the slot so the
+   * replay of an already-opened pack answers it again.
    */
   completedCollection: CompletedCollection | null;
+};
+
+/** What public.open_pack returns. Null when nothing at all is dealable. */
+export type OpenPackResult = {
+  day: string;
+  fresh: boolean;
+  packsOpened: number;
+  cards: (OpenPackRosterSlot | OpenPackSecretSlot)[];
 } | null;
 
-/** What public.secret_pull_status returns. Note the absence of a set size. */
-export type SecretPullStatusResult = {
+/** What public.pack_status returns. Note the absence of a set size. */
+export type PackStatusResult = {
   day: string;
-  pulledToday: boolean;
-  pulled: number;
-  available: boolean;
+  openedToday: boolean;
+  secretsOwned: number;
   resetsAt: string;
 };
 
@@ -119,6 +136,8 @@ export type PackOpenRow = {
   opened_on: string;
   event_id: string | null;
   card_count: number;
+  /** The dealt slots, written once by open_pack. Null on rows from before it. */
+  cards: unknown | null;
   created_at: string;
 };
 

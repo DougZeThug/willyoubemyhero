@@ -73,9 +73,9 @@ const secrets = (p: Pack) => (p?.cards ?? []).filter((c): c is SecretSlot => c.k
 const roster = (p: Pack) => (p?.cards ?? []).filter((c): c is RosterSlot => c.kind === "roster");
 
 const rosterIds = async () =>
-  (await sql<{ id: string }>("SELECT id FROM public.event_participants ORDER BY running_order")).map(
-    (r) => r.id,
-  );
+  (
+    await sql<{ id: string }>("SELECT id FROM public.event_participants ORDER BY running_order")
+  ).map((r) => r.id);
 
 const packRows = async () =>
   sql<{ participant_id: string | null; guest_id: string | null; opened_on: string; cards: Slot[] | null }>( // prettier-ignore
@@ -126,7 +126,11 @@ describe("open_pack deals from one pool", () => {
     // The roster alone fills a pack: three players, three slots.
     const rosterOnly = await open();
     expect(roster(rosterOnly)).toHaveLength(3);
-    expect((await rosterIds()).sort()).toEqual(roster(rosterOnly).map((c) => c.id).sort());
+    expect((await rosterIds()).sort()).toEqual(
+      roster(rosterOnly)
+        .map((c) => c.id)
+        .sort(),
+    );
 
     // And with no event at all the pool is the secrets, so every slot is one.
     await rewindDay();
@@ -265,7 +269,8 @@ describe("roster slots", () => {
     const ids = roster(pack).map((c) => c.id);
     const copies = await copyRows();
     expect(copies.map((c) => c.event_participant_id).sort()).toEqual([...ids].sort());
-    for (const c of copies) expect(c).toMatchObject({ source: "pull", edition_asserted_by: "server" });
+    for (const c of copies)
+      expect(c).toMatchObject({ source: "pull", edition_asserted_by: "server" });
     const mints = await sql<{ n: number }>("SELECT count(*)::int AS n FROM public.card_mints");
     expect(mints[0].n).toBe(3);
     const pulls = await sql<{ pull_count: number }>("SELECT pull_count FROM public.card_pulls");
@@ -278,18 +283,18 @@ describe("roster slots", () => {
       "SELECT (now() AT TIME ZONE 'America/New_York')::date::text AS day",
     );
     for (const slot of roster(pack)) {
-      const [row] = await sql<{ e: string }>("SELECT public.roll_card_edition($1, $2, $3::date) AS e", [
-        IDS.alice,
-        slot.id,
-        day,
-      ]);
+      const [row] = await sql<{ e: string }>(
+        "SELECT public.roll_card_edition($1, $2, $3::date) AS e",
+        [IDS.alice, slot.id, day],
+      );
       expect(slot.edition).toBe(row.e);
     }
   });
 
   it("says a first copy was held zero times before, and a second once", async () => {
     const first = await open();
-    for (const slot of roster(first)) expect(slot).toMatchObject({ heldBefore: 0, editionBefore: null });
+    for (const slot of roster(first))
+      expect(slot).toMatchObject({ heldBefore: 0, editionBefore: null });
     await rewindDay();
     const second = await open();
     for (const slot of roster(second)) {
@@ -301,7 +306,12 @@ describe("roster slots", () => {
   it("reports the best copy held before, not the copy just minted", async () => {
     // A platinum handed over earlier is what today's standard has to beat.
     const [ep] = await rosterIds();
-    await sql("SELECT public.grant_card_copy_once($1, $2, $3, $4)", ["k-1", IDS.alice, ep, "platinum"]);
+    await sql("SELECT public.grant_card_copy_once($1, $2, $3, $4)", [
+      "k-1",
+      IDS.alice,
+      ep,
+      "platinum",
+    ]);
     const pack = await open();
     const slot = roster(pack).find((c) => c.id === ep)!;
     expect(slot).toMatchObject({ heldBefore: 1, editionBefore: "platinum" });
@@ -397,7 +407,11 @@ describe("secret slots", () => {
     );
     const pack = await open(IDS.alice, null);
     const closer = secrets(pack).find((c) => c.id === b)!;
-    expect(closer.completedCollection).toMatchObject({ collection: "pets", label: "Pets", size: 2 });
+    expect(closer.completedCollection).toMatchObject({
+      collection: "pets",
+      label: "Pets",
+      size: 2,
+    });
     expect(secrets(pack).find((c) => c.id === a)!.completedCollection).toBeNull();
     expect(await sql("SELECT 1 FROM public.collection_trophies")).toHaveLength(1);
 
