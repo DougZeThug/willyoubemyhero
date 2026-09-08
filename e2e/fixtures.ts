@@ -138,6 +138,74 @@ function assertDistinctKeys(responses: Responses, added?: string) {
 const GUEST_ID = "00000000-0000-4000-8000-0000000000e1";
 const GUEST_EXPIRES = Date.now() + 90 * 24 * 60 * 60 * 1000;
 
+/**
+ * Today in the league's zone, exactly as `leagueDay()` in src/lib/trades.ts
+ * computes it — the same Intl formula, because the pack row is keyed on this
+ * and a stub that answered a different day would leave every resume test
+ * looking at a row the route calls yesterday's.
+ */
+export function leagueDayAt(at: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(at);
+}
+export const LEAGUE_DAY = leagueDayAt(new Date());
+
+/** A secret card as `openPack` hands one over, for tests that want one in the pack. */
+export const SECRET_CARD = {
+  id: "secret-gary",
+  name: "Gary The Grill",
+  flavour: "Lit at 11am. Still going at 11pm.",
+  foil: "rosette",
+  borderFx: "spin",
+  collection: null,
+  artUrl: null,
+  backUrl: null,
+  tier: "common",
+};
+
+/** A roster slot as the server deals one to a member: held zero times, standard. */
+export const rosterSlot = (ep: string, over: Record<string, unknown> = {}) => ({
+  kind: "roster",
+  id: ep,
+  edition: "standard",
+  heldBefore: 0,
+  editionBefore: null,
+  ...over,
+});
+
+/** A secret slot: a first pull, at the card's own level, finishing nothing. */
+export const secretSlot = (over: Record<string, unknown> = {}) => ({
+  kind: "secret",
+  id: SECRET_CARD.id,
+  card: SECRET_CARD,
+  duplicate: false,
+  tierBefore: null,
+  completedCollection: null,
+  ...over,
+});
+
+/** The pack every spec opens unless it says otherwise: three roster cards, no secret. */
+export const DEFAULT_PACK = [rosterSlot("ep-alice"), rosterSlot("ep-bob"), rosterSlot("ep-carol")];
+/** Roster ids in dealt order, for the specs that read the pack row back. */
+export const DEFAULT_PACK_IDS = DEFAULT_PACK.map((s) => s.id);
+
+/** What `openPack` answers: a fresh deal of `cards` on today's league day. */
+export const packResponse = (
+  cards: unknown[] = DEFAULT_PACK,
+  over: Record<string, unknown> = {},
+) => ({
+  ok: true,
+  day: LEAGUE_DAY,
+  fresh: true,
+  packsOpened: 1,
+  cards,
+  ...over,
+});
+
 export const DEFAULT_RESPONSES: Responses = {
   getActiveEvent: BUNDLE.event,
   getEventBundle: BUNDLE,
@@ -160,28 +228,31 @@ export const DEFAULT_RESPONSES: Responses = {
     reachable: false,
   })),
   getMyAwardVotes: [],
-  // A guest identity is minted on the pack screen so an unclaimed visitor can own
-  // a secret card. The token only has to satisfy the client's parse — four parts,
+  // A guest identity is minted on the pack screen so an unclaimed visitor can be
+  // dealt a pack. The token only has to satisfy the client's parse — four parts,
   // a "g" prefix and a future expiry — because the signature is checked on the
   // server, which is stubbed out here anyway. Without a storable token the client
-  // never resolves an actor and the fourth slot stays pending forever.
+  // never resolves an actor and the wrapper is never tearable.
   startGuestSession: {
     ok: true,
     guestId: GUEST_ID,
     token: `g.${GUEST_ID}.${GUEST_EXPIRES}.e2e-signature`,
     expiresAt: GUEST_EXPIRES,
   },
-  // Secret cards. Off by default: `available: false` means there is nothing to
-  // pull, which is what every existing pack test runs as — for a guest and a
-  // member alike, now that both can pull.
-  getSecretStatus: {
-    claimed: false,
-    day: null,
-    pulledToday: false,
-    pulled: 0,
-    available: false,
-    resetsAt: null,
+  // The pack. Sealed by default, and dealt as three roster cards with nothing
+  // special about them, so no existing spec has to know a secret can be in it.
+  // Static, so every call answers `fresh: true` — the route recognises a resume
+  // by the row it holds, not by this flag. `getPackStatus` and `openPack` are
+  // neither substrings of each other nor of any key here; assertDistinctKeys
+  // checks.
+  getPackStatus: {
+    claimed: true,
+    day: LEAGUE_DAY,
+    openedToday: false,
+    secretsOwned: 0,
+    resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
   },
+  openPack: packResponse(),
   getMySecrets: { cards: [], pulled: 0 },
   // Streaks. Zero by default, so the flame and the summary's claim block render
   // nothing and no existing pack spec has to know this feature exists. Neither
@@ -200,15 +271,10 @@ export const DEFAULT_RESPONSES: Responses = {
     canClaim: false,
     milestones: [],
   },
-  pullSecretCard: { ok: false, reason: "unavailable" },
   listSecretCards: { cards: [], claimedMembers: 0, exhausted: false },
   // Empty by default, so packedByLabel renders nothing and no existing spec
   // has to know this feature exists.
   getCardPullCounts: {},
-  // `editions` is the map the pack reveal reads — keyed by event_participant_id,
-  // filled in by the server. Empty by default so every existing spec reveals
-  // standards and none of them has to know a finish can arrive late.
-  recordCardPulls: { ok: true, recorded: 0, packsOpened: 0, editions: {} },
   // Trading. Empty by default for the same reason: /players/trade renders its
   // "nobody wants your cards yet" state and the vault's Trade pill leads
   // somewhere harmless. None of these three keys is a substring of another or of
@@ -255,9 +321,8 @@ export const DEFAULT_RESPONSES: Responses = {
   // this device's local rows back untouched, which is the state every spec that
   // deals a pack was written against. The shaped empty answer — `{ cards: [] }` —
   // is the server saying "you own nothing", and that PRUNES the cards the pack
-  // just dealt: recordCardPulls answers ok by default, so nothing is holding
-  // them back. A test that wants the server to have an opinion sets one, the way
-  // favourites.spec.ts does.
+  // just dealt. A test that wants the server to have an opinion sets one, the
+  // way favourites.spec.ts does.
   getMyCardStats: null,
   // What arrived since this device last looked (§12). Empty by default, so the
   // "new since" strip inside the Today card is hidden and no existing spec has to
@@ -269,16 +334,6 @@ export const DEFAULT_RESPONSES: Responses = {
 
 assertDistinctKeys(DEFAULT_RESPONSES);
 
-/** A secret card as pullSecretCard returns it, for tests that want the fourth slot. */
-export const SECRET_CARD = {
-  id: "secret-gary",
-  name: "Gary The Grill",
-  flavour: "Lit at 11am. Still going at 11pm.",
-  foil: "rosette",
-  artUrl: null,
-  backUrl: null,
-};
-
 /** The sealed pack control on /players/pack. */
 export const sealedPack = (page: Page) => page.getByRole("button", { name: /tear the pack open/i });
 
@@ -286,8 +341,8 @@ export const sealedPack = (page: Page) => page.getByRole("button", { name: /tear
  * The one way any spec opens the pack.
  *
  * The app's tear handler — `tearOpen` in src/routes/players.pack.tsx — refuses
- * while the collection is still being reconciled, because without a baseline
- * there is nothing to deal a pack from. And it refuses *silently*, so
+ * while the collection is still being reconciled, because a guest's "held
+ * before" is read off it at the deal. And it refuses *silently*, so
  * a test that presses Enter too early gets a pack that stays sealed and an
  * assertion that times out somewhere unrelated. The Collected counter is the
  * one thing on the screen that says so out loud: it reads a dash until the

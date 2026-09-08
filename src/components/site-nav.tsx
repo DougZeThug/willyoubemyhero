@@ -17,7 +17,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SECRET_RARITY } from "@/lib/secret-cards";
 import { packWaiting as packStillSealed } from "@/lib/pack";
 import { activeTab, navTabs, type NavRowId } from "@/lib/nav";
 import { useActiveEvent } from "@/hooks/use-active-event";
@@ -74,8 +73,10 @@ export function SiteNav() {
    */
   const badge = (id: NavRowId): { suffix: string; color?: string } | null => {
     if (id === "trade" && tradeUnread > 0) return { suffix: "a trade offer is waiting" };
-    if (id === "pack" && packWaiting)
-      return { suffix: "a secret is waiting", color: SECRET_RARITY.border };
+    // "Unopened", not "a secret is waiting": whether a secret is in the pack is
+    // the pack's news to break, and the cue is the app's own cyan for the same
+    // reason.
+    if (id === "pack" && packWaiting) return { suffix: "today's pack is unopened" };
     return null;
   };
 

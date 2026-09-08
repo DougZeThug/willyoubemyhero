@@ -3,9 +3,9 @@
 ## Summary
 
 When you step off the end of the reveal stand, the pack does not simply stop
-being a pack — it takes a curtain call. Every pull is laid out at once, the
-secret larger than the rest, with the collection counter that was hidden for the
-whole reveal, a way to share it, and somewhere to go next.
+being a pack — it takes a curtain call. Every pull is laid out at once, in the
+order it was dealt, with the collection counter that was hidden for the whole
+reveal, a way to share it, and somewhere to go next.
 
 This document owns the final stage of a pack. Getting there is
 [opening a pack](opening-a-pack.md).
@@ -13,9 +13,9 @@ This document owns the final stage of a pack. Getting there is
 ## The simple case
 
 You press Next on the last card. The stand gives way to a layout holding
-everything you just pulled: the three roster cards, each with its tier and its
-finish, and the fourth slot below or beside them, bigger, because it is the one
-nobody else has.
+everything you just pulled: three cards in a row, each with its tier and its
+finish — or, for a secret, its prism edge and its level — and the stamp the stand
+gave it: NEW, ↑ GOLD, ×3.
 
 Under them: how many cards you now hold, where your streak stands, a milestone to
 claim if you have earned one, a button to share the pack as an image, and a link
@@ -27,9 +27,8 @@ is finished; there is nothing left to turn.
 ## Why it exists
 
 The sequence used to _stop_ rather than finish. The last card was turned and the
-screen simply became a grid, with the fourth slot underneath and a link back to
-the vault. Everything built up over the previous thirty seconds was spent, and
-nothing collected it.
+screen simply became a grid with a link back to the vault. Everything built up
+over the previous thirty seconds was spent, and nothing collected it.
 
 Laying every pull out at once is only allowed _here_, after each has been earned
 one at a time. The same layout shown earlier would spend the payoff before it was
@@ -37,16 +36,11 @@ earned — which is the same reason the grid is a destination and never a stage.
 
 ## What is on it
 
-**The cards.** Each with the tier it wears and the finish on your copy. A card
-turned before the server answered about its finish showed Standard on the stand;
-here it shows what it actually is, with the shine it earned.
-
-**The fourth slot.** Deliberately wider than the others. If it stops being
-visibly the biggest thing on the screen it stops reading as the thing nobody else
-on the roster has. This is also where the two states that never reach the stand
-appear: a device with no identity, which sees a claim invitation, and a pull that
-could not complete, which sees a retry — inline, never a toast, because this is a
-screen somebody is enjoying.
+**The cards.** In dealt order, each with the tier it wears and the finish on
+your copy, and each with the stamp it earned on the stand. A secret sits in the
+slot it was dealt in, wearing its prism edge, with its level pips and either its
+level line or — on a plain duplicate — the wink and what it would sell for. The
+subtitle admits a secret was in the pack only once it has been turned.
 
 **The collection counter.** Hidden for the whole reveal and shown here. A running
 total during the reveal would turn each card into an increment.
@@ -112,12 +106,12 @@ an error somebody has to dismiss on a screen they are enjoying.
 
 ## Modifiers
 
-| Modifier                                                          | At arrival                                                                                                                                                                            | Changed during                                                                   |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Who you are (guest · member · account · commissioner)             | A guest sees the same three cards and either a secret or the claim invitation in the fourth slot. Cashing a milestone requires an account, so the button says so rather than failing. | Claiming a player mid-screen replaces the invitation with the slot's real state. |
-| The event's state                                                 | The tiers shown are live and can change while the screen is open.                                                                                                                     | A result landing re-draws a card's tier here as anywhere else.                   |
-| Dust switched on or off                                           | No effect on this screen. A duplicate credits nothing at pull time either way.                                                                                                        | No effect.                                                                       |
-| The device (phone · desktop · reduced motion · presentation mode) | The layout is built for a phone. Reduced motion removes the entrance animation, not the layout.                                                                                       | No effect.                                                                       |
+| Modifier                                                          | At arrival                                                                                                             | Changed during                                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Who you are (guest · member · account · commissioner)             | A guest sees the same three cards. Cashing a milestone requires an account, so the button says so rather than failing. | Claiming a player mid-screen changes nothing on the cards.     |
+| The event's state                                                 | The tiers shown are live and can change while the screen is open.                                                      | A result landing re-draws a card's tier here as anywhere else. |
+| Dust switched on or off                                           | No effect on this screen. A duplicate credits nothing at pull time either way.                                         | No effect.                                                     |
+| The device (phone · desktop · reduced motion · presentation mode) | The layout is built for a phone. Reduced motion removes the entrance animation, not the layout.                        | No effect.                                                     |
 
 ## Cancel and interrupt
 
@@ -170,13 +164,10 @@ is noted below as something a screen reader user would not learn about.
 
 ## Edge cases
 
-- **A pack with no secret** — an empty set, or a guest with no identity — still
-  reaches this screen. The fourth slot shows its gate or its "nothing today"
-  rather than being absent, so the layout does not change shape.
-- **A failed secret pull** shows its retry here as well as on the stand. This is
-  one of the two states that never reaches the stand at all.
-- **A finish that arrived late** is shown correctly here even though the stand
-  showed Standard.
+- **A pack with no secret** is three roster cards and a subtitle that says come
+  back tomorrow. Nothing on the screen admits a secret could have been here.
+- **A pack with three secrets** is three secrets in a row. The layout does not
+  change shape for any mix.
 - **Every rung already claimed.** No next milestone is promised, because there is
   nothing left to promise.
 - **The streak query still in flight** leaves a gap rather than a zero.
@@ -198,4 +189,4 @@ is noted below as something a screen reader user would not learn about.
   streak and milestone blocks fill in late by design, and nothing else was found
   that could leave the screen empty.
 
-Verified against willyoubemyhero commit `b46f330`.
+Verified against willyoubemyhero commit `752d4fb`.

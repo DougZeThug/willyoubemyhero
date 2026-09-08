@@ -222,7 +222,7 @@ cards/
   the-sealed-pack.md             arriving at the pack, the wrapper, and the tear
   opening-a-pack.md              the ceremony and the reveal stand, one card at a time
   what-you-pulled.md             the summary columns and what they offer
-  the-daily-secret.md            the fourth slot and the once-a-day rule
+  the-daily-secret.md            secrets as slots in the pack, and what is withheld
   secret-sets.md                 collections, unsorted secrets, and how a set reads
   looking-closer.md              zoom, tilt, gyroscope, and turning a card over
   comparing-cards.md             two cards side by side

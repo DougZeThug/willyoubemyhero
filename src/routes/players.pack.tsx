@@ -241,6 +241,8 @@ function PackPage() {
   const [openState, setOpenState] = useState<"idle" | "pending" | "failed" | "unavailable">("idle");
   /** Which request has been sent, so a re-render cannot send it twice. */
   const openFiredRef = useRef<string | null>(null);
+  /** The slot ids the stored row named, for a resume to check the answer against. */
+  const storedIdsRef = useRef<string[]>([]);
   /**
    * A guest's collection as it stood when the pack was dealt, by card id.
    *
@@ -460,6 +462,7 @@ function PackPage() {
           }
         }
         setLocalBefore(before);
+        storedIdsRef.current = s.cards.map((c) => c.id);
         pendingCompletionsRef.current = s.pendingCompletions ?? [];
         setPendingCompletions(s.pendingCompletions ?? []);
         // The cards themselves come from the server: a secret's art is signed
@@ -650,6 +653,15 @@ function PackPage() {
   useEffect(() => {
     revealedForRef.current = revealed;
   }, [revealed]);
+  // The two query keys the answer refreshes, read through refs so that neither
+  // arriving mid-request re-runs the effect below — its cleanup cancels the
+  // request in flight, and the latch would then refuse to send it again.
+  const eventIdRef = useRef(event?.id);
+  const participantIdRef = useRef(me?.participantId);
+  useEffect(() => {
+    eventIdRef.current = event?.id;
+    participantIdRef.current = me?.participantId;
+  });
 
   /**
    * Ask the server for today's pack.
@@ -665,7 +677,14 @@ function PackPage() {
     openFiredRef.current = key;
     setOpenState("pending");
     const sentAs = actor;
+    const sentOn = dayKey;
     const kind = openRequest.kind;
+    // The pack this answer is for can be re-sealed before it lands: the day
+    // tick and a deferred resume both reset everything, and a stale answer
+    // applied on top put yesterday's cards back on a stand that had moved on.
+    // Both halves are needed — the cleanup catches the request being replaced,
+    // the day catches a reset that left the request alone.
+    let cancelled = false;
 
     let settled = false;
     const timer = setTimeout(() => {
@@ -680,12 +699,26 @@ function PackPage() {
         const res = await open();
         settled = true;
         // The phone can have changed hands during the request, and this pack
-        // belongs to the actor that asked for it.
-        if (actorRef.current !== sentAs) return;
+        // belongs to the actor that asked for it — and to the day it was asked on.
+        if (cancelled || actorRef.current !== sentAs || dealtOnRef.current !== sentOn) return;
         if (!res.ok) {
           setSlots([]);
           setOpenState("unavailable");
           return;
+        }
+        // A resumed row that does not describe this pack — a deal the phone
+        // recorded that the server never kept, which should be impossible — is
+        // progress over cards that are not on screen. Started over rather than
+        // trusted.
+        if (kind === "resume") {
+          const stored = storedIdsRef.current;
+          const answered = res.cards.map((c) => c.id);
+          if (stored.length !== answered.length || stored.some((id, i) => id !== answered[i])) {
+            revealedRef.current = [];
+            setRevealed([]);
+            setCursor(0);
+            pendingCompletionsRef.current = [];
+          }
         }
         // A guest's collection is the phone's. Snapshotted now, on the fresh
         // deal, and never from the live collection afterwards — the reveal
@@ -723,7 +756,7 @@ function PackPage() {
           // the key at claim time.
           const keys = res.cards.flatMap((c) =>
             c.kind === "secret" && c.completedCollection
-              ? [trophyKey(me?.participantId ?? identity, c.completedCollection.collection)]
+              ? [trophyKey(participantIdRef.current ?? identity, c.completedCollection.collection)]
               : [],
           );
           if (keys.length > 0) markTrophiesCelebrated(keys);
@@ -736,16 +769,20 @@ function PackPage() {
           // The pack open is what advances the streak, for a guest as much as
           // for a member.
           qc.invalidateQueries({ queryKey: streakStatusKey(sentAs) }),
-          qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
+          qc.invalidateQueries({ queryKey: cardPullCountsKey(eventIdRef.current) }),
           qc.invalidateQueries({ queryKey: collectionTrophiesKey() }),
           // Only a member has card rows to recount; a guest's slots went nowhere.
-          ...(me?.participantId
-            ? [qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, me.participantId) })]
+          ...(participantIdRef.current
+            ? [
+                qc.invalidateQueries({
+                  queryKey: myCardStatsKey(eventIdRef.current, participantIdRef.current),
+                }),
+              ]
             : []),
         ]);
       } catch (e) {
         settled = true;
-        if (actorRef.current !== sentAs) return;
+        if (cancelled || actorRef.current !== sentAs) return;
         // The only place this app matches on an error string, justified because
         // the messages in require-auth.server.ts are explicitly contractual. A
         // token the server rejects is a token worth dropping, so the gate shows
@@ -759,11 +796,11 @@ function PackPage() {
       }
     })();
 
-    return () => clearTimeout(timer);
-    // `event?.id` and `me?.participantId` only name the queries to refresh.
-    // Re-running on either is free: the latch above returns before it can
-    // spend anything.
-  }, [openRequest, actor, identity, dayKey, open, qc, event?.id, me?.participantId]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [openRequest, actor, identity, dayKey, open, qc]);
 
   // A phone changing hands mid-party is a real thing in this league. The resume
   // effect re-seals for the new person; this drops the request that was theirs.
