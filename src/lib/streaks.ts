@@ -102,7 +102,6 @@ export const STREAK_MILESTONES: readonly StreakMilestone[] = [
  */
 export const STREAK_RESET_MILESTONE = 60;
 
-
 const DAYS = new Set(STREAK_MILESTONES.map((m) => m.days));
 
 export function isStreakMilestone(days: number): boolean {

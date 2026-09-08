@@ -132,7 +132,6 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
       resetOn,
     );
 
-
     const sbAdmin = await admin();
     // An existence check, deliberately not maybeSingle(): account_identities
     // indexes participant_id and guest_id NON-uniquely, so two accounts adopting
