@@ -221,6 +221,52 @@ describe("streak_runs", () => {
     expect(runs[0]?.len).toBe(walked.current);
     expect(walked.current).toBe(4);
   });
+
+  it("restarts the run at the day the capstone was cashed", async () => {
+    // The reset is a cut-off, not a wipe: the pack days are all still there, and
+    // the claim day itself is day 1 of the new run rather than a dead streak the
+    // morning after somebody's best one.
+    await seedSecrets();
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(60);
+    expect((await claim(60)).ok).toBe(true);
+
+    const runs = await sql<{ len: number }>(
+      "SELECT len FROM public.streak_runs($1, NULL) ORDER BY started_on DESC",
+      [IDS.alice],
+    );
+    expect(runs[0]?.len).toBe(1);
+    // And the TypeScript walk cuts on the same day, so the pill and the payout
+    // agree about where the new run begins.
+    const { walkStreak } = await import("../../src/lib/streaks");
+    const days = await sql<{ opened_on: string }>(
+      "SELECT opened_on::text FROM public.pack_opens WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    const [row] = await sql<{ today: string; cut: string }>(
+      `SELECT (now() AT TIME ZONE 'America/New_York')::date::text AS today,
+              (SELECT max(claimed_on)::text FROM public.streak_milestone_claims
+                WHERE participant_id = $1 AND milestone = 60) AS cut`,
+      [IDS.alice],
+    );
+    expect(
+      walkStreak(
+        days.map((d) => d.opened_on),
+        row.today,
+        row.cut,
+      ).current,
+    ).toBe(1);
+  });
+
+  it("lets the whole ladder be climbed again after a reset", async () => {
+    await seedSecrets();
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(60);
+    expect((await claim(60)).ok).toBe(true);
+    // One day of the new run is not three, so the bottom rung is out of reach
+    // again rather than instantly re-payable.
+    expect((await claim(3)).reason).toBe("not_earned");
+  });
 });
 
 describe("claim_streak_milestone", () => {

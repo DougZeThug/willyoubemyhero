@@ -89,6 +89,26 @@ describe("nextMilestoneLine", () => {
   });
 });
 
+describe("walkStreak after the capstone", () => {
+  it("ignores days before the reset and counts the claim day as day one", () => {
+    // The cut-off streak_runs applies in SQL. Without it the run the capstone was
+    // bought with keeps counting and the ladder has nothing left on it.
+    const s = walkStreak(
+      ["2026-08-20", "2026-08-21", "2026-08-22", "2026-08-23", "2026-08-24"],
+      TODAY,
+      "2026-08-24",
+    );
+    expect(s.current).toBe(1);
+    expect(s.startedOn).toBe("2026-08-24");
+    expect(s.openedToday).toBe(true);
+  });
+
+  it("is the plain walk when nothing has been cashed", () => {
+    const days = ["2026-08-22", "2026-08-23", "2026-08-24"];
+    expect(walkStreak(days, TODAY, null)).toEqual(walkStreak(days, TODAY));
+  });
+});
+
 describe("previousDay", () => {
   it("steps back one calendar day", () => {
     expect(previousDay("2026-08-24")).toBe("2026-08-23");
