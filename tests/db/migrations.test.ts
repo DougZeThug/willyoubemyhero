@@ -88,15 +88,28 @@ describe("migrations", () => {
     ]);
   });
 
-  it("creates the secret-card RPCs the app calls", async () => {
+  it("creates the pack RPCs the app calls", async () => {
+    const rows = await sql<{ proname: string }>(`
+      SELECT proname FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND proname IN ('open_pack', 'pack_status')
+      ORDER BY proname
+    `);
+    expect(rows.map((r) => r.proname)).toEqual(["open_pack", "pack_status"]);
+  });
+
+  it("drops the fourth-card RPCs the pack replaced", async () => {
+    // pull_secret_card's ON CONFLICT targeted the one-secret-a-day index, which
+    // 20260908120000 removes. Left standing it would fail at call time, with its
+    // grants intact; an overload nobody calls is a resolution hazard either way.
     const rows = await sql<{ proname: string }>(`
       SELECT proname FROM pg_proc p
       JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public'
         AND proname IN ('pull_secret_card', 'secret_pull_status')
-      ORDER BY proname
     `);
-    expect(rows.map((r) => r.proname)).toEqual(["pull_secret_card", "secret_pull_status"]);
+    expect(rows).toEqual([]);
   });
 
   it("creates the trading RPCs the app calls", async () => {
@@ -170,7 +183,7 @@ describe("migrations", () => {
     ).toBe(true);
   });
 
-  it("creates the two RPCs the pack calls when it is torn", async () => {
+  it("keeps the two RPCs open_pack mints and counts through", async () => {
     const rows = await sql<{ proname: string }>(`
       SELECT proname FROM pg_proc p
       JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -431,7 +444,10 @@ describe("migrations", () => {
     ).toBe(true);
   });
 
-  it("enforces one secret pull per member per league day in the schema", async () => {
+  it("no longer limits secrets to one a day, but still to one ownership row", async () => {
+    // A pack can hold three secrets now. The one-a-day unique index is gone in
+    // both its member and guest forms; the owned-once rule is what still makes a
+    // row count a people count.
     const rows = await sql<{ indexdef: string }>(
       "SELECT indexdef FROM pg_indexes WHERE tablename = 'secret_card_pulls'",
     );
@@ -439,10 +455,27 @@ describe("migrations", () => {
       rows.some(
         (r) =>
           r.indexdef.includes("UNIQUE") &&
-          r.indexdef.includes("participant_id") &&
           r.indexdef.includes("pulled_on"),
       ),
+    ).toBe(false);
+    expect(
+      rows.some(
+        (r) =>
+          r.indexdef.includes("UNIQUE") &&
+          r.indexdef.includes("participant_id") &&
+          r.indexdef.includes("secret_card_id") &&
+          r.indexdef.includes("NOT is_duplicate"),
+      ),
     ).toBe(true);
+  });
+
+  it("gives the pack row a place for its cards", async () => {
+    const [row] = await sql<{ data_type: string; is_nullable: string }>(`
+      SELECT data_type, is_nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'pack_opens' AND column_name = 'cards'
+    `);
+    // Nullable: every row from before the server dealt packs has none.
+    expect(row).toEqual({ data_type: "jsonb", is_nullable: "YES" });
   });
 
   it("ships the bottom bar whole, which is what makes deploying it a no-op", async () => {

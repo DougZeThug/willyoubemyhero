@@ -6,7 +6,7 @@
 // mocked test because all three are facts about Postgres:
 //
 //  1. Detection is ATOMIC with the acquisition. The trophy is minted under the
-//     participant row lock that pull_secret_card and accept_trade_offer already
+//     participant row lock that open_pack and accept_trade_offer already
 //     take, so two cards of one set arriving at once cannot both read
 //     "not complete" and leave nobody told.
 //  2. It is IDEMPOTENT by primary key, not by a check. Every acquiring path calls
@@ -64,9 +64,8 @@ async function addCard(
 /**
  * One secret ledger row.
  *
- * `granted` defaults to true so seeding several cards for one person does not
- * collide on secret_card_pulls_one_per_day — the same reason giveSecret in
- * trades.test.ts does it, and the same reason the real grant path sets it.
+ * `granted` defaults to true, the way the real grant path sets it: a seeded
+ * card is not the day's pull.
  */
 async function own(
   participantId: string,
@@ -107,12 +106,22 @@ async function trophies() {
   );
 }
 
+/**
+ * Open a pack from the secrets alone (no event, so no roster in the pool) and
+ * hand back one slot: the one that closed a set if any did, else the first.
+ */
 async function pull(participantId: string | null, guestId: string | null = null): Promise<Pull> {
-  const [row] = await sql<{ pull_secret_card: Pull }>(
-    "SELECT public.pull_secret_card($1, $2, $3)",
-    [participantId, guestId, IDS.event],
-  );
-  return row.pull_secret_card;
+  const [row] = await sql<{
+    open_pack: {
+      fresh: boolean;
+      cards: { kind: string; completedCollection: Pull["completedCollection"] }[];
+    } | null;
+  }>("SELECT public.open_pack($1, $2, null)", [participantId, guestId]);
+  const pack = row.open_pack;
+  if (!pack) return { fresh: false, completedCollection: null } as unknown as Pull;
+  const slots = pack.cards.filter((c) => c.kind === "secret");
+  const closer = slots.find((c) => c.completedCollection) ?? slots[0];
+  return { ...closer, fresh: pack.fresh } as unknown as Pull;
 }
 
 async function grant(participantId: string, cardId: string): Promise<Grant> {
@@ -180,7 +189,7 @@ describe("award_collection_trophy", () => {
   });
 
   it("ignores inactive and artless cards when sizing the set", async () => {
-    // Both are cards pull_secret_card would never hand out, so counting them
+    // Both are cards open_pack would never hand out, so counting them
     // makes a set nobody can finish through the front door.
     const a = await addCard("Gary the Grill");
     await addCard("Retired", { active: false });
@@ -255,7 +264,7 @@ describe("award_collection_trophy", () => {
   });
 });
 
-describe("pull_secret_card", () => {
+describe("open_pack", () => {
   it("hands the size back on the pull that finishes the set", async () => {
     // The designed exception to the silence rule, and the only place in the app
     // a total is allowed out. It rides the pull response so the ceremony has it
@@ -272,14 +281,16 @@ describe("pull_secret_card", () => {
   it("says nothing on a pull that leaves cards outstanding", async () => {
     await addCard("Gary the Grill");
     await addCard("The Gazebo");
+    // Still in the set, never in the draw — so the pack cannot close it.
+    await addCard("Benched", { weight: 0 });
     expect((await pull(IDS.alice)).completedCollection).toBeNull();
     expect(await trophies()).toEqual([]);
   });
 
-  it("says nothing on the second pull of the day", async () => {
-    // The already-pulled short circuit re-reads today's row and returns early.
-    // It carries the key so the client type is one shape, but it cannot have
-    // completed anything — it acquired nothing.
+  it("says it again on the second open of the day, off the stored slot", async () => {
+    // The already-opened short circuit reads today's row back. The trophy was
+    // minted once; the slot remembers that it was, so a reload mid-ceremony
+    // still hears about the set it just finished.
     const a = await addCard("Gary the Grill");
     await addCard("The Gazebo");
     await own(IDS.alice, a);
@@ -288,7 +299,7 @@ describe("pull_secret_card", () => {
     expect(first.completedCollection).not.toBeNull();
     const second = await pull(IDS.alice);
     expect(second.fresh).toBe(false);
-    expect(second.completedCollection).toBeNull();
+    expect(second.completedCollection).toEqual(first.completedCollection);
     expect(await trophies()).toHaveLength(1);
   });
 

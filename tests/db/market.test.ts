@@ -437,7 +437,7 @@ describe("list_card_for_dust", () => {
 
   it("refuses today's un-granted pull, which is the seller's spent daily slot", async () => {
     // THE ONE SEQUENCE THAT WOULD PRINT. buy_market_listing sets granted = true on
-    // the row it moves — it has to, or secret_card_pulls_one_per_day aborts the
+    // the row it moves — a bought card is not the buyer's own pull, and the
     // sale — so listing today's un-granted pull would hand the SELLER a second
     // daily slot the moment somebody bought it.
     const cardId = await seedSecret("fresh");
@@ -667,10 +667,9 @@ describe("buy_market_listing", () => {
 
 describe("buying a secret", () => {
   it("arrives granted, so it cannot pass for the buyer's own daily pull", async () => {
-    // secret_card_pulls_one_per_day is UNIQUE (participant_id, pulled_on) WHERE
-    // NOT granted. Leave granted false and re-parenting aborts the sale whenever
-    // the buyer already pulled that day — and a bought card would masquerade as
-    // their unspent slot.
+    // A row the pack dealt today is `pulled_on = today AND NOT granted`, and
+    // that is what sell_secret_card and the shop refuse to move. A bought card
+    // left un-granted would masquerade as one of the buyer's own pulls.
     const { pullId } = await heldSecret(IDS.alice, "mythic-thing", "mythic");
     await credit(500, IDS.bob);
     const res = await list(IDS.alice, { pullId, price: 300 });
@@ -723,19 +722,18 @@ describe("buying a secret", () => {
     // "have I pulled today" search would find nothing afterwards.
     await seedSecret("a");
     await seedSecret("b");
-    const first = await sql<{ pull_secret_card: { pullId: string } }>(
-      "SELECT public.pull_secret_card($1, NULL, $2)",
-      [IDS.alice, IDS.event],
-    );
-    const pullId = first[0].pull_secret_card.pullId;
+    type Pack = { cards: { kind: string; pullId?: string }[] };
+    const first = await sql<{ open_pack: Pack }>("SELECT public.open_pack($1, NULL, NULL)", [
+      IDS.alice,
+    ]);
+    const pullId = first[0].open_pack.cards.find((c) => c.kind === "secret")!.pullId!;
     expect(await list(IDS.alice, { pullId })).toMatchObject({ ok: false, reason: "too_fresh" });
 
-    // And the slot is still spent: a second pull today grants nothing new.
-    const second = await sql<{ pull_secret_card: { ok?: boolean; pullId?: string } }>(
-      "SELECT public.pull_secret_card($1, NULL, $2)",
-      [IDS.alice, IDS.event],
-    );
-    expect(second[0].pull_secret_card.pullId).toBe(pullId);
+    // And the pack is still spent: a second open today deals nothing new.
+    const second = await sql<{ open_pack: Pack }>("SELECT public.open_pack($1, NULL, NULL)", [
+      IDS.alice,
+    ]);
+    expect(second[0].open_pack.cards.map((c) => c.pullId)).toContain(pullId);
   });
 
   it("mints a trophy for a set the buyer just completed", async () => {

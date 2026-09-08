@@ -469,19 +469,19 @@ describe("claim_streak_milestone", () => {
 });
 
 describe("pull_bonus_secret_card", () => {
-  it("leaves the free daily pull untouched", async () => {
-    // The whole reason the bonus inserts granted = true: the daily unique index
-    // is WHERE NOT granted, so a milestone must not cost somebody their pull.
+  it("leaves the day's pack untouched", async () => {
+    // The whole reason the bonus inserts granted = true: a milestone is not the
+    // pack, and must not cost somebody the one they have not opened yet.
     await seedSecrets();
     await seedAccount({ participantId: IDS.alice });
     await openDays(3);
     expect((await claim(3)).ok).toBe(true);
 
-    const [daily] = await sql<{ pull_secret_card: { fresh: boolean } | null }>(
-      "SELECT public.pull_secret_card($1, NULL, $2)",
+    const [pack] = await sql<{ open_pack: { fresh: boolean } | null }>(
+      "SELECT public.open_pack($1, NULL, $2)",
       [IDS.alice, IDS.event],
     );
-    expect(daily.pull_secret_card?.fresh).toBe(true);
+    expect(pack.open_pack?.fresh).toBe(true);
   });
 
   it("marks a card they already own as a duplicate rather than failing", async () => {

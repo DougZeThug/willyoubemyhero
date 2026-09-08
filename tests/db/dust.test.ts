@@ -61,12 +61,13 @@ async function balance(participantId = IDS.alice): Promise<number> {
 }
 
 type Pull = { duplicate: boolean; pullId: string; tier: string };
+/** Today's pack from the secrets alone, reduced to its first secret slot. */
 async function pullSecret(participantId: string | null, guestId: string | null = null) {
-  const [row] = await sql<{ pull_secret_card: Pull }>(
-    "SELECT public.pull_secret_card($1, $2, $3)",
-    [participantId, guestId, IDS.event],
+  const [row] = await sql<{ open_pack: { cards: ({ kind: string } & Pull)[] } | null }>(
+    "SELECT public.open_pack($1, $2, null)",
+    [participantId, guestId],
   );
-  return row.pull_secret_card;
+  return row.open_pack!.cards.find((c) => c.kind === "secret")!;
 }
 
 /** Pretend every pull and copy on file happened `days` ago. */
@@ -79,6 +80,9 @@ async function rewindDay(days = 1) {
   // that table whether this card was already minted today, so a rewind that left
   // it alone would report every seeded copy as still being today's.
   await sql("UPDATE public.card_mints SET minted_on = minted_on - $1::int", [days]);
+  // And the pack itself: open_pack answers today's row back rather than dealing
+  // again, so a rewind that left it in place would never reach a second pull.
+  await sql("UPDATE public.pack_opens SET opened_on = opened_on - $1::int", [days]);
 }
 
 /** Two copies of one card, the older one millable. Returns the spare's id. */
@@ -121,8 +125,8 @@ async function sell(pullId: string, participantId = IDS.alice): Promise<SellResu
  *
  * Written directly rather than pulled and rewound, because the tier is what every
  * assertion here is about and `roll_secret_tier()` will not be told what to roll.
- * `granted` is what keeps it out of the daily-slot rule — it is not the row
- * `pull_secret_card` looks for — which is also true of a real bonus pull.
+ * `granted` is what keeps it out of the daily-slot rule — it is not a row the
+ * pack dealt today — which is also true of a real bonus pull.
  */
 async function heldSecret(tier = "common", participantId = IDS.alice, name = "gary") {
   const cardId = await seedSecret(name);
@@ -290,10 +294,10 @@ describe("sell_secret_card", () => {
   });
 
   it("cannot buy back the day's pull — the sequence this guard exists for", async () => {
-    // THE EXPLOIT, as a test. pull_secret_card decides whether you have pulled by
-    // looking for exactly `pulled_on = today AND NOT granted`, so deleting that
-    // row would hand the slot straight back and pull -> sell -> pull would print
-    // dust for as long as somebody kept tapping.
+    // THE EXPLOIT, as a test. sell_secret_card refuses exactly
+    // `pulled_on = today AND NOT granted`, the rows the pack dealt today, so
+    // deleting one would hand the card straight back and open -> sell -> open
+    // would print dust for as long as somebody kept tapping.
     await seedSecret("only-card");
     const first = await pullSecret(IDS.alice);
     expect(await sell(first.pullId)).toMatchObject({ ok: false, reason: "too_fresh" });

@@ -7,7 +7,7 @@
 //  1. A traded roster copy carries its FINISH. That is the whole reason
 //     card_copies exists — before it there was only a person-level "best finish
 //     ever pulled", so every traded card arrived standard.
-//  2. Re-parenting a secret pull does not trip `secret_card_pulls_one_per_day`,
+//  2. Re-parenting a secret pull marks it granted, so it never reads as the receiver's own pull,
 //     and re-parenting a card copy does not trip `card_copies_one_pull_per_day`.
 //     Both indexes are partial on a "did this come from a pack" flag, and the
 //     accept only survives because it clears that flag on the row it moves.
@@ -366,10 +366,10 @@ describe("create_trade_offer", () => {
   });
 
   it("refuses today's own pull, which is the giver's spent daily slot", async () => {
-    // Not tidiness — a daily-limit bypass. pull_secret_card decides whether you
-    // have pulled today by looking for `pulled_on = today AND NOT granted`, and
-    // the accept sets granted = true on the row it moves. Trading today's
-    // duplicate away would delete the evidence and hand the giver a second pull.
+    // Not tidiness — a daily-limit bypass. A row the pack dealt today is
+    // `pulled_on = today AND NOT granted`, and the accept sets granted = true on
+    // the row it moves. Trading today's duplicate away would erase the evidence
+    // that the pack was opened at all.
     const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
@@ -750,11 +750,12 @@ describe("accept_trade_offer — secret cards", () => {
   });
 
   it("still works when both people already pulled on the day the copy was pulled", async () => {
-    // THE REGRESSION. secret_card_pulls_one_per_day is
-    // UNIQUE (participant_id, pulled_on) WHERE NOT granted. Alice's spare and
-    // Bob's own pull share a day, so re-parenting without setting granted = true
-    // violates it and the whole accept aborts — on every day both of them pulled,
-    // which in a league where everyone pulls daily is nearly every day.
+    // THE REGRESSION. secret_card_pulls used to be UNIQUE (participant_id,
+    // pulled_on) WHERE NOT granted. Alice's spare and Bob's own pull share a day,
+    // so re-parenting without setting granted = true violated it and the whole
+    // accept aborted — on every day both of them pulled. The index is gone now
+    // that a pack can hold several secrets, but a traded card is still not the
+    // receiver's own pull and the accept still says so.
     const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     const other = await addCard("The Dog");
