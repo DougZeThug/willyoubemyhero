@@ -64,6 +64,5 @@ export function adoptableIds(snapshot: Awaited<ReturnType<typeof loadCollection>
   return Object.values(snapshot).map((c) => c.eventParticipantId);
 }
 
-
 /** Read this device's collection before anything can prune it. */
 export const snapshotLocalCollection = loadCollection;

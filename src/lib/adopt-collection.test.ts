@@ -40,8 +40,8 @@ describe("adoptLocalCollection", () => {
     await adoptLocalCollection(snapshot);
 
     const batches = adoptCollection.mock.calls.map(
-      ([arg]) => (arg as { data: { eventParticipantIds: string[] } }).data.eventParticipantIds
-        .length,
+      ([arg]) =>
+        (arg as { data: { eventParticipantIds: string[] } }).data.eventParticipantIds.length,
     );
     expect(batches).toEqual([64, 64, 22]);
     expect(sentIds()).toEqual(Object.keys(snapshot));
