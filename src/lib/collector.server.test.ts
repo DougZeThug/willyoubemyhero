@@ -61,7 +61,7 @@ describe("createCollector", () => {
     await create("Jane Doe", GUEST);
     const rpc = mock.client.rpc as unknown as { mock: { calls: [string, unknown][] } };
     expect(rpc.mock.calls.map(([name]) => name)).toEqual(
-      expect.arrayContaining(["claim_guest_secrets", "claim_guest_packs"]),
+      expect.arrayContaining(["merge_guest_into_collector"]),
     );
     expect(rpc.mock.calls[0]?.[1]).toMatchObject({
       _participant_id: NEW_ID,
@@ -75,7 +75,10 @@ describe("createCollector", () => {
         data: { user_id: USER, participant_id: null, guest_id: GUEST },
       },
       "account_identities.update": { data: [{ user_id: USER }], error: null },
-      "rpc.claim_guest_secrets": { data: null, error: { message: "db down", code: "XX000" } },
+      "rpc.merge_guest_into_collector": {
+        data: null,
+        error: { message: "db down", code: "XX000" },
+      },
     });
     await expect(create("Jane Doe")).rejects.toThrow();
 
@@ -95,7 +98,10 @@ describe("createCollector", () => {
   it("deletes the fresh identity row when the merge fails with no guest to restore", async () => {
     withDb({
       "account_identities.insert": { data: null, error: null },
-      "rpc.claim_guest_secrets": { data: null, error: { message: "db down", code: "XX000" } },
+      "rpc.merge_guest_into_collector": {
+        data: null,
+        error: { message: "db down", code: "XX000" },
+      },
     });
     await expect(create("Jane Doe", GUEST)).rejects.toThrow();
 

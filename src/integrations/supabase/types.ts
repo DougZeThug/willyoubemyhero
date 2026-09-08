@@ -2166,6 +2166,10 @@ export type Database = {
         }
         Returns: Json
       }
+      merge_guest_into_collector: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: undefined
+      }
       merge_guest_packs: {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number
