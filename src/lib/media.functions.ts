@@ -511,18 +511,25 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const side: CardSide = data.side;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row } = await supabaseAdmin
+    const { data: row, error: lookupError } = await supabaseAdmin
       .from("event_participants")
       .select(
         "card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium",
       )
       .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
       .maybeSingle();
+    if (lookupError) throw lookupError;
+    // requireAdmin only proves the caller holds a session for data.eventId, not
+    // that data.eventParticipantId belongs to it — event_participants ids are
+    // publicly enumerable, so an unscoped delete would destroy another event's
+    // artwork. The storage remove below is permanent, so refuse here.
+    if (!row) throw new Error("That athlete is not part of this event.");
 
     const existing = {
-      large: side === "front" ? row?.card_path : row?.card_back_path,
-      thumb: side === "front" ? row?.card_path_thumb : row?.card_back_path_thumb,
-      medium: side === "front" ? row?.card_path_medium : row?.card_back_path_medium,
+      large: side === "front" ? row.card_path : row.card_back_path,
+      thumb: side === "front" ? row.card_path_thumb : row.card_back_path_thumb,
+      medium: side === "front" ? row.card_path_medium : row.card_back_path_medium,
     };
 
     // Update the database first and confirm it succeeded before removing storage.
@@ -530,7 +537,8 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
     const { error: dbErr } = await supabaseAdmin
       .from("event_participants")
       .update(cardPatch(side, null))
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
     if (dbErr) throw dbErr;
 
     await removePaths(supabaseAdmin, [existing.large, existing.thumb, existing.medium]);
