@@ -576,7 +576,7 @@ describe("the TypeScript ladder and the SQL one", () => {
     await openDays(100);
     // Rejected even on a run long enough to have earned them, because the ladder
     // gate is the first check after the identity guard.
-    for (const notARung of [1, 2, 4, 6, 8, 15, 29, 31, 99, 101]) {
+    for (const notARung of [1, 2, 4, 6, 8, 15, 29, 31, 59, 61, 100]) {
       expect((await claim(notARung)).reason).toBe("unknown_milestone");
     }
   });
@@ -591,7 +591,7 @@ describe("the TypeScript ladder and the SQL one", () => {
 
     const first = await claim(3);
     expect(first.ok).toBe(true);
-    const capstone = await claim(100);
+    const capstone = await claim(60);
     expect(capstone.reward!.tier).toBe("mythic");
     expect(capstone.reward!.duplicate).toBe(true);
 
