@@ -160,22 +160,16 @@ export async function createCollector(
 
 async function mergeGuests(participantId: string, guestIds: string[]) {
   for (const guestId of new Set(guestIds.filter(Boolean))) {
-    const { error: secretsError } = await supabaseAdmin.rpc("claim_guest_secrets", {
+    // One RPC, one transaction. Done as three separate claim_guest_* calls, a
+    // failure between two of them committed part of the device onto a
+    // participant the catch block above then retires — and since those
+    // functions null guest_id as they move rows, the retry's
+    // WHERE guest_id = _guest_id could never find them again.
+    const { error } = await supabaseAdmin.rpc("merge_guest_into_collector", {
       _participant_id: participantId,
       _guest_id: guestId,
     });
-    if (secretsError) throw secretsError;
-    const { error: packsError } = await supabaseAdmin.rpc("claim_guest_packs", {
-      _participant_id: participantId,
-      _guest_id: guestId,
-    });
-    if (packsError) throw packsError;
-    // After the packs, always: a claim stranded on the dead guest id would let the
-    // same milestone pay twice once the streak recomputes against the moved rows.
-    const { error: streakError } = await supabaseAdmin.rpc("claim_guest_streak_milestones", {
-      _participant_id: participantId,
-      _guest_id: guestId,
-    });
-    if (streakError) throw streakError;
+    if (error) throw error;
   }
 }
+
