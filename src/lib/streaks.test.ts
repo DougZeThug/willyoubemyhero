@@ -90,6 +90,8 @@ describe("nextMilestoneLine", () => {
 });
 
 describe("walkStreak after the capstone", () => {
+  const TODAY = "2026-08-24";
+
   it("ignores days before the reset and counts the claim day as day one", () => {
     // The cut-off streak_runs applies in SQL. Without it the run the capstone was
     // bought with keeps counting and the ladder has nothing left on it.
