@@ -1,183 +1,98 @@
-// Pack composition. The property that matters is that two people opening on the
-// same day get different cards — which is the whole point of the change, and was
-// not true before: the seed carried no identity at all.
+// The pack's client-side rules. Composition is Postgres's now (open_pack), so
+// what is tested here is the reading of it: where the ceremony is, which card
+// to come back to, what the vault says about a stored row, and the one cue the
+// nav and the vault share.
 import { describe, expect, it } from "vitest";
 import {
   cardsLeft,
-  dealPack,
   nextLocalMidnight,
   nextPackLabel,
-  packSeed,
   packStage,
+  packWaiting,
   resumeCursor,
   TEAR,
   tearProgress,
   todayPackState,
-  type SecretSlot,
+  type PackStatus,
 } from "./pack";
-import { secretOwed, secretWaiting } from "./secret-cards";
 
-const EVENT = "00000000-0000-4000-8000-0000000000ff";
-const DAY = "2026-07-28";
-const roster = Array.from({ length: 13 }, (_, i) => ({ id: `ep-${i}` }));
-
-const ids = (cards: { id: string }[]) => cards.map((c) => c.id);
-
-describe("packSeed", () => {
-  it("carries the identity, which is what makes a pack yours", () => {
-    expect(packSeed(EVENT, DAY, "m:alice")).toBe(`${EVENT}:${DAY}:m:alice`);
+describe("packWaiting", () => {
+  const status = (over: Partial<PackStatus> = {}): PackStatus => ({
+    claimed: true,
+    day: "2026-09-08",
+    openedToday: false,
+    secretsOwned: 0,
+    resetsAt: "2026-09-09T04:00:00Z",
+    ...over,
   });
 
-  it("survives having no event, so the screen still works before one is active", () => {
-    expect(packSeed(null, DAY, "d:abc")).toBe(`no-event:${DAY}:d:abc`);
-  });
-});
-
-describe("dealPack", () => {
-  it("deals the same cards to the same person all day", () => {
-    const seed = packSeed(EVENT, DAY, "m:alice");
-    expect(ids(dealPack(roster, seed, {}, 3))).toEqual(ids(dealPack(roster, seed, {}, 3)));
+  it("says yes while today's pack is sealed", () => {
+    expect(packWaiting(status())).toBe(true);
   });
 
-  it("deals different cards to two different people", () => {
-    const alice = dealPack(roster, packSeed(EVENT, DAY, "m:alice"), {}, 3);
-    const bob = dealPack(roster, packSeed(EVENT, DAY, "m:bob"), {}, 3);
-    expect(ids(alice)).not.toEqual(ids(bob));
+  it("says no once it has been opened", () => {
+    expect(packWaiting(status({ openedToday: true }))).toBe(false);
   });
 
-  it("deals different cards to one person on two days", () => {
-    const today = dealPack(roster, packSeed(EVENT, DAY, "m:alice"), {}, 3);
-    const tomorrow = dealPack(roster, packSeed(EVENT, "2026-07-29", "m:alice"), {}, 3);
-    expect(ids(today)).not.toEqual(ids(tomorrow));
-  });
-
-  it("deals a full pack with no duplicates in it", () => {
-    const pack = dealPack(roster, packSeed(EVENT, DAY, "m:alice"), {}, 3);
-    expect(pack).toHaveLength(3);
-    expect(new Set(ids(pack)).size).toBe(3);
-  });
-
-  it("prefers an uncollected card in the last slot, so the set completes", () => {
-    // Everything collected except one card: that card has to be the hit.
-    const baseline = Object.fromEntries(roster.map((p) => [p.id, true]));
-    delete baseline["ep-9"];
-    const pack = dealPack(roster, packSeed(EVENT, DAY, "m:alice"), baseline, 3);
-    expect(pack[2].id).toBe("ep-9");
-  });
-
-  it("leaves the earlier slots alone when it swaps the last one", () => {
-    const seed = packSeed(EVENT, DAY, "m:alice");
-    const fresh = dealPack(roster, seed, {}, 3);
-    const baseline = Object.fromEntries(roster.map((p) => [p.id, true]));
-    delete baseline["ep-9"];
-    const swapped = dealPack(roster, seed, baseline, 3);
-    expect(ids(swapped).slice(0, 2)).toEqual(ids(fresh).slice(0, 2));
-  });
-
-  it("does not put the same card in twice when the hit is already in the pack", () => {
-    const seed = packSeed(EVENT, DAY, "m:alice");
-    const fresh = dealPack(roster, seed, {}, 3);
-    // Collect everything except the card already sitting in slot 0.
-    const baseline = Object.fromEntries(roster.map((p) => [p.id, true]));
-    delete baseline[fresh[0].id];
-    const pack = dealPack(roster, seed, baseline, 3);
-    expect(new Set(ids(pack)).size).toBe(3);
-  });
-
-  it("returns nothing for an empty roster rather than throwing", () => {
-    expect(dealPack([], packSeed(EVENT, DAY, "m:alice"), {}, 3)).toEqual([]);
-  });
-
-  it("deals what it can when the roster is smaller than the pack", () => {
-    expect(dealPack(roster.slice(0, 2), packSeed(EVENT, DAY, "m:alice"), {}, 3)).toHaveLength(2);
+  it("says no to a device the server does not know", () => {
+    expect(packWaiting(status({ claimed: false }))).toBe(false);
+    expect(packWaiting(undefined)).toBe(false);
+    expect(packWaiting(null)).toBe(false);
   });
 });
 
 describe("packStage", () => {
-  const at = (cursor: number, secretSlot: SecretSlot = "sealed") =>
-    packStage({ torn: true, opening: false, packSize: 3, cursor, secretSlot });
+  const at = (cursor: number) => packStage({ torn: true, opening: false, packSize: 3, cursor });
 
   it("is sealed until the wrapper comes off", () => {
-    expect(
-      packStage({ torn: false, opening: false, packSize: 3, cursor: 0, secretSlot: "hidden" }),
-    ).toBe("sealed");
+    expect(packStage({ torn: false, opening: false, packSize: 3, cursor: 0 })).toBe("sealed");
   });
 
   it("plays the opening ceremony before handing over to the stand", () => {
-    expect(
-      packStage({ torn: true, opening: true, packSize: 3, cursor: 0, secretSlot: "pending" }),
-    ).toBe("opening");
-  });
-
-  // The secret is pulled the moment the pack is dealt, so the slot moves under
-  // the ceremony while it plays. None of those moves may change the stage.
-  it("holds the ceremony however the secret slot moves under it", () => {
-    for (const slot of ["hidden", "pending", "sealed", "failed"] as const) {
-      expect(
-        packStage({ torn: true, opening: true, packSize: 3, cursor: 3, secretSlot: slot }),
-      ).toBe("opening");
-    }
+    expect(packStage({ torn: true, opening: true, packSize: 3, cursor: 0 })).toBe("opening");
   });
 
   // A tab left open across midnight has its pack re-sealed under it by the day
   // tick. A ceremony that outlived the pack it was opening must not hold the
   // screen against a pack that no longer exists.
   it("never opens a pack that is no longer torn", () => {
-    expect(
-      packStage({ torn: false, opening: true, packSize: 3, cursor: 0, secretSlot: "hidden" }),
-    ).toBe("sealed");
+    expect(packStage({ torn: false, opening: true, packSize: 3, cursor: 0 })).toBe("sealed");
   });
 
   it("hands to the stand the moment the ceremony ends", () => {
-    expect(
-      packStage({ torn: true, opening: false, packSize: 3, cursor: 0, secretSlot: "pending" }),
-    ).toBe("revealing");
+    expect(at(0)).toBe("revealing");
   });
 
   it("keeps the stand while there are cards left to turn", () => {
-    expect(at(0)).toBe("revealing");
+    expect(at(1)).toBe("revealing");
     expect(at(2)).toBe("revealing");
   });
 
-  it("gives the secret its own step past the last roster card", () => {
-    expect(at(3, "sealed")).toBe("revealing");
-    expect(at(3, "pending")).toBe("revealing");
-    expect(at(3, "open")).toBe("revealing");
-  });
-
   it("hands over to the columns once the user walks off the end", () => {
-    expect(at(4, "open")).toBe("complete");
+    expect(at(3)).toBe("complete");
   });
 
-  // The claim gate and the retry button live in the finished pack, not on the
-  // stand — a card that is never coming must not be able to hold the sequence.
-  it("does not let a secret nobody is getting stall the sequence", () => {
-    for (const slot of ["gated", "failed", "hidden"] as const) {
-      expect(at(3, slot)).toBe("complete");
-    }
+  it("gives a secret no step of its own — it is a slot like any other", () => {
+    // Three slots, whatever kind they are. There is no fourth step to park on.
+    expect(packStage({ torn: true, opening: false, packSize: 3, cursor: 3 })).toBe("complete");
   });
 });
 
 describe("resumeCursor", () => {
   it("comes back to the first card still face-down", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [0], secretRevealed: false })).toBe(1);
+    expect(resumeCursor({ packSize: 3, revealed: [0] })).toBe(1);
   });
 
   it("starts at the beginning on a pack nobody has touched", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [], secretRevealed: false })).toBe(0);
+    expect(resumeCursor({ packSize: 3, revealed: [] })).toBe(0);
   });
 
-  it("parks on the secret's slot when the roster is done but it is not", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [0, 1, 2], secretRevealed: false })).toBe(3);
-  });
-
-  // Re-running the ceremony on every reload turns the payoff into a toll.
-  it("goes past the end once the secret has already been seen", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [0, 1, 2], secretRevealed: true })).toBe(4);
+  it("goes past the end once every card has been seen", () => {
+    expect(resumeCursor({ packSize: 3, revealed: [0, 1, 2] })).toBe(3);
   });
 
   it("ignores the order cards were turned in", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [2, 0], secretRevealed: false })).toBe(1);
+    expect(resumeCursor({ packSize: 3, revealed: [2, 0] })).toBe(1);
   });
 });
 
@@ -210,31 +125,24 @@ describe("tearProgress", () => {
 });
 
 describe("cardsLeft", () => {
-  const args = { ids: 3, revealed: 0, secretRevealed: false, secretOwed: false };
-
-  it("counts the roster cards still face-down", () => {
-    expect(cardsLeft({ ...args, revealed: 1 })).toBe(2);
-  });
-
-  it("counts the secret's slot only when one is actually owed", () => {
-    // A guest with no actor, a spent day and an empty set all land here, and none
-    // of them should be promised a fourth card.
-    expect(cardsLeft({ ...args, revealed: 3, secretOwed: false })).toBe(0);
-    expect(cardsLeft({ ...args, revealed: 3, secretOwed: true })).toBe(1);
-  });
-
-  it("stops counting a secret once it has been turned", () => {
-    expect(cardsLeft({ ...args, revealed: 3, secretOwed: true, secretRevealed: true })).toBe(0);
+  it("counts the slots still face-down, whatever kind they are", () => {
+    expect(cardsLeft({ slots: 3, revealed: 1 })).toBe(2);
+    expect(cardsLeft({ slots: 3, revealed: 3 })).toBe(0);
   });
 
   it("never goes negative on a row that revealed more than it dealt", () => {
-    expect(cardsLeft({ ...args, ids: 2, revealed: 5 })).toBe(0);
+    expect(cardsLeft({ slots: 2, revealed: 5 })).toBe(0);
   });
 });
 
 describe("todayPackState", () => {
-  const row = { dayKey: "2026-09-04", ids: ["a", "b", "c"], revealed: [], cursor: 0, identity: "d:1" }; // prettier-ignore
-  const args = { row, dayKey: "2026-09-04", identity: "d:1", secretOwed: false };
+  const cards = [
+    { kind: "roster", id: "a" },
+    { kind: "secret", id: "s" },
+    { kind: "roster", id: "c" },
+  ];
+  const row = { dayKey: "2026-09-04", cards, revealed: [], cursor: 0, identity: "d:1" };
+  const args = { row, dayKey: "2026-09-04", identity: "d:1" };
 
   it("is sealed with no row at all", () => {
     expect(todayPackState({ ...args, row: null })).toEqual({ state: "sealed" });
@@ -252,11 +160,18 @@ describe("todayPackState", () => {
   it("treats a row with no identity as this device's", () => {
     // Written before per-person packs. Calling it somebody else's would take the
     // cards off the screen of anybody mid-reveal on the day this ships.
-    const legacy = { dayKey: "2026-09-04", ids: ["a", "b"], revealed: [0], cursor: 1 };
+    const legacy = { dayKey: "2026-09-04", cards: cards.slice(0, 2), revealed: [0], cursor: 1 };
     expect(todayPackState({ ...args, row: legacy })).toEqual({ state: "torn", left: 1 });
   });
 
-  it("is torn while cards are still face-down", () => {
+  it("is sealed for a row written before the server dealt packs", () => {
+    // Such a row has ids and no `cards`. It is not today's pack: the pack screen
+    // asks the server, which either resumes or deals over it.
+    const old = { dayKey: "2026-09-04", revealed: [0, 1, 2], cursor: 3, identity: "d:1" };
+    expect(todayPackState({ ...args, row: old })).toEqual({ state: "sealed" });
+  });
+
+  it("is torn while cards are still face-down, secret or not", () => {
     expect(todayPackState({ ...args, row: { ...row, revealed: [0] } })).toEqual({
       state: "torn",
       left: 2,
@@ -269,27 +184,9 @@ describe("todayPackState", () => {
     });
   });
 
-  it("still owes the secret when one is waiting", () => {
-    expect(
-      todayPackState({
-        ...args,
-        secretOwed: true,
-        row: { ...row, revealed: [0, 1, 2], cursor: 3 },
-      }),
-    ).toEqual({ state: "torn", left: 1 });
-  });
-
-  it("calls a pre-stand row torn, because that is what the pack screen does with it", () => {
-    // No cursor and everything revealed is the shape the old ceremony wrote, and
-    // the pack replays it through the stand — turning every card face-down again.
-    // "Done" here would have the two screens disagree about whether there is
-    // anything left to open.
-    const preStand = { dayKey: "2026-09-04", ids: ["a", "b", "c"], revealed: [0, 1, 2] };
-    expect(todayPackState({ ...args, row: preStand })).toEqual({ state: "torn", left: 3 });
-  });
-
-  it("is sealed for a row that dealt nothing", () => {
-    expect(todayPackState({ ...args, row: { ...row, ids: [] } })).toEqual({ state: "sealed" });
+  it("is done for a row that dealt nothing", () => {
+    // The server had nothing to deal and said so; there is nothing to open.
+    expect(todayPackState({ ...args, row: { ...row, cards: [] } })).toEqual({ state: "done" });
   });
 });
 
@@ -334,48 +231,5 @@ describe("nextLocalMidnight", () => {
     const at = new Date(nextLocalMidnight(new Date(2026, 8, 30, 23, 59).getTime()));
     expect(at.getMonth()).toBe(9);
     expect(at.getDate()).toBe(1);
-  });
-});
-
-describe("secretOwed against secretWaiting", () => {
-  // The distinction the vault got wrong: the pack pulls its secret the moment it
-  // is torn, so `secretWaiting` — which is right for the ring on the button —
-  // goes false while the card is still face-down on the stand.
-  const base = { claimed: true, day: "2026-09-04", pulled: 1, resetsAt: null };
-
-  it("both say yes before the pack is torn", () => {
-    const status = { ...base, pulledToday: false, available: true };
-    expect(secretWaiting(status)).toBe(true);
-    expect(secretOwed(status)).toBe(true);
-  });
-
-  it("they part the moment the pull lands", () => {
-    // THE BUG. Counting with secretWaiting here called a pack with an unturned
-    // secret finished and took away the link back to it.
-    const status = { ...base, pulledToday: true, available: false };
-    expect(secretWaiting(status)).toBe(false);
-    expect(secretOwed(status)).toBe(true);
-  });
-
-  it("both say no on a day with nothing left to find", () => {
-    const status = { ...base, pulledToday: false, available: false, pulled: 0 };
-    expect(secretWaiting(status)).toBe(false);
-    expect(secretOwed(status)).toBe(false);
-  });
-
-  it("both say no to a device the server does not know", () => {
-    expect(secretOwed(null)).toBe(false);
-    expect(secretOwed(undefined)).toBe(false);
-    expect(secretOwed({ ...base, claimed: false, pulledToday: true, available: true })).toBe(false);
-  });
-
-  it("counts a pulled-but-unturned secret as a card still to see", () => {
-    const row = { dayKey: "d", ids: ["a", "b", "c"], revealed: [0, 1, 2], cursor: 3 };
-    const args = { row, dayKey: "d", identity: "d:1" };
-    expect(todayPackState({ ...args, secretOwed: true })).toEqual({ state: "torn", left: 1 });
-    // And done once it has been turned.
-    expect(
-      todayPackState({ ...args, row: { ...row, secretRevealed: true }, secretOwed: true }),
-    ).toEqual({ state: "done" });
   });
 });

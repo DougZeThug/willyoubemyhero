@@ -13,7 +13,7 @@ import { streakStatusKey, useStreakStatus } from "./use-streak";
 describe("streakStatusKey", () => {
   it("is keyed on the actor, never on the event", () => {
     // A streak is a permanent record of showing up. An event id in the key would
-    // throw it away every year — the same reason secretStatusKey omits one.
+    // throw it away every year — the same reason packStatusKey omits one.
     expect(streakStatusKey("m:abc")).toEqual(["pack-streak", "m:abc"]);
     expect(streakStatusKey("g:abc")).not.toEqual(streakStatusKey("m:abc"));
   });

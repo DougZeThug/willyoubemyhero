@@ -27,7 +27,8 @@ import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import type { OwnedSecret } from "@/lib/secret-cards";
 import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media";
-import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { packStatusKey } from "@/hooks/use-pack-status";
 import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
 import { tradeSparesKey } from "@/hooks/use-trades";
@@ -121,7 +122,7 @@ export function DustShopPanel({
       // participant id matches nothing at all and the purchase closed on "check
       // your secrets" with the card still missing. useMySecrets holds a
       // five-minute staleTime, so it was the one that stayed wrong longest.
-      void qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+      void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
       void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
       // A bought pull is a real pull: buy_bonus_secret_pull delegates to
       // pull_bonus_secret_card, which mints the row and awards the trophy. Buying
@@ -254,7 +255,7 @@ export function DustShopPanel({
       // beside it have both moved, and a bare participant id matches neither. See
       // the comment on the prop.
       void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
-      void qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+      void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
       toast(`+${res.awarded} dust`);
     },
     onError: () => toast("Could not sell that one"),

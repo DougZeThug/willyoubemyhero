@@ -15,7 +15,6 @@ import {
   riseTransform,
   type CeremonyPhase,
 } from "@/lib/pack-ceremony";
-import { SECRET_RARITY } from "@/lib/secret-cards";
 import { seededRng } from "@/lib/format";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
@@ -34,18 +33,6 @@ const SKIP_DEAD_MS = 90;
 
 /** How wide a flying card is, against the pack. Roughly the printed proportion. */
 const CARD_W = 0.62;
-
-/**
- * The pause the secret takes before following the roster out, in seconds.
- *
- * Long enough to read as a separate arrival and short enough that the fan still
- * lands inside the phase it has. Sized against `launch`, so it moved with the
- * timeline: at 0.35s it was over half of the phase it has to fit inside. The
- * stand is where the secret's real ceremony happens — a 1600ms hold, a riser and
- * a flip twice the house length — so this is only the hint that there is a fourth
- * card, not the payoff.
- */
-const SECRET_BEAT = 0.22;
 
 /**
  * How far apart the cards leave, in seconds per card.
@@ -82,7 +69,6 @@ export function PackOpening({
   packSize,
   year,
   slots,
-  secret = false,
   onTear,
   onDone,
 }: {
@@ -91,20 +77,13 @@ export function PackOpening({
   packSize: number;
   year: string;
   /**
-   * How many cards fly out. The roster cards dealt, plus the secret when one is
-   * coming — see `secret`.
+   * How many cards fly out.
+   *
+   * Every one of them shows the same universal back. A secret used to come
+   * forward wearing the rainbow bezel; now the fan gives nothing away, and the
+   * first the person hears of a secret is the stand going dark around it.
    */
   slots: number;
-  /**
-   * The last slot is the daily secret rather than a roster card.
-   *
-   * It comes forward in the fan wearing the rainbow bezel, and that is the *only*
-   * thing the ceremony gives away about it: the face is the same universal back
-   * every other card in the fan is showing, so which secret it is stays for the
-   * stand. The pack is genuinely four cards on a day with a drop in it, and a fan
-   * of three was quietly under-counting it.
-   */
-  secret?: boolean;
   /**
    * The ceremony has begun. Deal the pack now, so the network gets a head start.
    *
@@ -320,9 +299,6 @@ export function PackOpening({
   // rather than as a pause, so it breathes while it is being looked at.
   const hovering = target === "fan";
 
-  /** Whether slot `i` is the daily secret. Always the last one, as on the stand. */
-  const isSecret = (i: number) => secret && i === slots - 1;
-
   const jitter = useMemo(() => packJitter(seed, slots), [seed, slots]);
 
   /**
@@ -345,14 +321,12 @@ export function PackOpening({
   }, [seed]);
 
   /**
-   * The colour the payoff is lit in.
+   * The colour the payoff is lit in: the app's cyan, every day.
    *
-   * The secret's green when there is one in the pack, the app's cyan otherwise —
-   * the same tell the bezel gives, so a big day is brighter as well as greener.
-   * It is a wash of light rather than a card face, so it gives away that there is
-   * a secret, which the fan already does, and nothing about which one.
+   * It used to go green when a secret was in the pack. That was a tell, and the
+   * fan is not allowed one any more.
    */
-  const bloomHue = secret ? SECRET_RARITY.border : "oklch(0.85 0.14 205)";
+  const bloomHue = "oklch(0.85 0.14 205)";
   // The payoff, from the cards clearing the mouth to the fan being looked at.
   const celebrating = target === "fan";
   const lifting = target === "rise" || target === "fan";
@@ -369,7 +343,6 @@ export function PackOpening({
   function cardShadow(i: number): string {
     const back = Math.min(i, 3);
     const drop = `0 ${22 + back * 4}px ${36 + back * 10}px -14px oklch(0 0 0 / ${72 - back * 12}%)`;
-    if (isSecret(i)) return `${drop}, 0 0 34px -6px ${SECRET_RARITY.border}`;
     return `${drop}, 0 0 ${22 - back * 4}px -8px oklch(0.82 0.14 210 / ${45 - back * 9}%)`;
   }
 
@@ -383,14 +356,10 @@ export function PackOpening({
    * the arc read as a cascade leaning one way. This settles those ties the same way
    * the depths do, so the two never disagree.
    *
-   * In the fan that means the middle card, or the secret when there is one, because
-   * being held out in front of the others is most of what marks it as different.
-   * Everywhere else it is a stack, and the top of a stack is the card the stand is
-   * about to show — which leaves the secret at the *back* of the deck, exactly
-   * where it belongs, since the stand turns it last.
+   * In the fan that means the middle card. Everywhere else it is a stack, and
+   * the top of a stack is the card the stand is about to show.
    */
   function layer(i: number): number {
-    if (target === "fan" && isSecret(i)) return (slots + 1) * 10;
     const from = target === "fan" ? Math.abs(i - (slots - 1) / 2) : i;
     return Math.round((slots - from) * 10);
   }
@@ -419,9 +388,6 @@ export function PackOpening({
         rotateZ: t.rotate + j.rotate,
         scale: 0.78 * t.scale,
         opacity: 1,
-        // The secret waits a beat behind the roster, so it leaves the pack on its
-        // own rather than in the crowd. It is already last in the order; this is
-        // the gap that makes that legible at speed.
         transition: {
           type: "spring",
           // Softer than a snap. A spring that arrives in 200ms and then waits out
@@ -429,7 +395,7 @@ export function PackOpening({
           // is still travelling when the eye gets to it.
           stiffness: 128 * j.stiffness,
           damping: 20 * j.damping,
-          delay: i * RISE_STEP + (isSecret(i) ? SECRET_BEAT : 0),
+          delay: i * RISE_STEP,
         },
       };
     },
@@ -439,29 +405,20 @@ export function PackOpening({
       return {
         x: t.x * scale,
         y: t.y * scale,
-        // Brought properly forward, in depth rather than in paint order. The
-        // perspective on the container makes this a 3D rendering context, and in
-        // one of those the browser sorts by computed depth and ignores z-index
-        // outright — so `layer()` alone left the secret sharing the *back* of the
-        // fan with the far roster card, which is the opposite of the point.
-        z: isSecret(i) ? t.z + 60 : t.z,
+        z: t.z,
         // Each card leans its own way out of the plane, not just around it. A fan
         // where every card shares one rotateX is four cutouts on one sheet of
         // glass; a couple of degrees of disagreement is what makes them separate
         // objects.
         rotateX: -10 + j.rotate * 0.9,
         rotateZ: t.rotate + j.rotate,
-        // Same nominal size as the rest. Being 60 closer to the camera already
-        // renders it about 6% bigger, and stacking an explicit scale on top of
-        // that took it to 14% — large enough to read as a different card rather
-        // than a nearer one, and wide enough to crowd the edge of a phone.
         scale: 0.8 * t.scale,
         opacity: 1,
         transition: {
           type: "spring",
           stiffness: 118 * j.stiffness,
           damping: 19 * j.damping,
-          delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
+          delay: i * FAN_STEP,
         },
       };
     },
@@ -600,15 +557,9 @@ export function PackOpening({
                   aspectRatio: "5 / 7",
                   zIndex: layer(i),
                   transformStyle: "preserve-3d",
-                  // The secret's own green rather than the app's cyan, and a
-                  // deeper one — the same colour it wears on the stand and in the
-                  // vault, so it is recognisable before it is readable. Always
-                  // the default green, never the card's own foil: the sealed
-                  // slot must not leak which look is inside before the reveal.
                   boxShadow: cardShadow(i),
-                  borderColor: isSecret(i) ? SECRET_RARITY.border : undefined,
                 }}
-                className={cn("rounded-xl border", !isSecret(i) && "border-primary/30")}
+                className="rounded-xl border border-primary/30"
               >
                 {/* Nested, so the breath composes with the fan transform rather
                     than overwriting it.
@@ -641,13 +592,6 @@ export function PackOpening({
                   <PackCardBack art={artUrl} />
                 </motion.div>
 
-                {/* The rainbow bezel, the one thing that says "secret" across this
-                    whole app. Outside the breathing layer so it stays welded to the
-                    card's edge, and the same `.holo-prism-edge` HoloCard mounts —
-                    opaque chrome rather than a blend mode, which is the reason it
-                    survives being looked at in a garden. */}
-                {isSecret(i) && <div className="holo-prism-edge is-spinning" aria-hidden />}
-
                 {/* The light catching the face as the card reaches its fan pose.
 
                     A card that arrives and then simply sits there is a rectangle;
@@ -672,7 +616,7 @@ export function PackOpening({
                     animate={hovering ? { x: ["-160%", "260%"] } : { x: "-160%" }}
                     transition={{
                       duration: 0.85,
-                      delay: i * FAN_STEP + (isSecret(i) ? SECRET_BEAT : 0),
+                      delay: i * FAN_STEP,
                       ease: "easeInOut",
                     }}
                   />

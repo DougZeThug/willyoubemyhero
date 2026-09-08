@@ -5,7 +5,7 @@ import { getStreakStatus, type StreakStatus } from "@/lib/streaks.functions";
 /**
  * Keyed on whoever is asking, never on the event.
  *
- * Same reasoning as secretStatusKey next door: a streak is a permanent record of
+ * Same reasoning as packStatusKey next door: a streak is a permanent record of
  * showing up, so an event id in the key would throw it away every year. It is
  * only a cache key — the server takes the identity from the verified token on the
  * request and never from anything the client passes.

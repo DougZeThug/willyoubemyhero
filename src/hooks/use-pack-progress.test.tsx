@@ -11,9 +11,24 @@ import { PACK_DEALT_KEY, PACK_STATE_CHANGED, todayKey } from "@/lib/card-collect
 
 const DEVICE = "test-device";
 
+/**
+ * Every fixture names its roster ids; the slots the server dealt are derived
+ * from them here so the rows read the way they always did. A row without
+ * `cards` is what the OLD client wrote, and the one test about that builds it
+ * by hand.
+ */
+function withCards(row: Record<string, unknown>) {
+  if ("cards" in row) {
+    const { cards, ...rest } = row;
+    return cards === undefined ? rest : row;
+  }
+  const ids = (row.ids as string[] | undefined) ?? [];
+  return { cards: ids.map((id) => ({ kind: "roster", id })), ...row };
+}
+
 async function seed(row: Record<string, unknown>) {
   const { savePackState } = await import("@/lib/card-collection");
-  await savePackState(row as never);
+  await savePackState(withCards(row) as never);
 }
 
 /**
@@ -37,16 +52,16 @@ function seedSilently(row: Record<string, unknown>) {
     open.onerror = () => reject(open.error);
     open.onsuccess = () => {
       const tx = open.result.transaction("pack-state", "readwrite");
-      tx.objectStore("pack-state").put(row, "today");
+      tx.objectStore("pack-state").put(withCards(row), "today");
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     };
   });
 }
 
-async function mountHook(secretOwed = false) {
+async function mountHook() {
   const { usePackProgress } = await import("./use-pack-progress");
-  return renderHook(() => usePackProgress(secretOwed));
+  return renderHook(() => usePackProgress());
 }
 
 beforeEach(() => {
@@ -98,17 +113,37 @@ describe("usePackProgress", () => {
     expect(result.current.left).toBe(2);
   });
 
-  it("counts the secret's slot when one is waiting", async () => {
+  it("counts a secret slot like any other card still face-down", async () => {
     await seed({
       dayKey: todayKey(),
+      ids: ["a", "b"],
+      cards: [
+        { kind: "roster", id: "a" },
+        { kind: "secret", id: "s" },
+        { kind: "roster", id: "b" },
+      ],
+      revealed: [0, 2],
+      cursor: 1,
+      identity: `d:${DEVICE}`,
+    });
+    const { result } = await mountHook();
+    await waitFor(() => expect(result.current.state).toBe("torn"));
+    expect(result.current.left).toBe(1);
+  });
+
+  it("calls a row from before the server dealt packs sealed", async () => {
+    // No `cards`: the old client wrote it, and it is not today's pack. The pack
+    // screen asks the server, which resumes or deals over it.
+    await seedSilently({
+      dayKey: todayKey(),
       ids: ["a", "b", "c"],
+      cards: undefined,
       revealed: [0, 1, 2],
       cursor: 3,
       identity: `d:${DEVICE}`,
     });
-    const { result } = await mountHook(true);
-    await waitFor(() => expect(result.current.state).toBe("torn"));
-    expect(result.current.left).toBe(1);
+    const { result } = await mountHook();
+    await waitFor(() => expect(result.current.state).toBe("sealed"));
   });
 
   it("is done once the whole pack is turned", async () => {
@@ -117,7 +152,6 @@ describe("usePackProgress", () => {
       ids: ["a", "b", "c"],
       revealed: [0, 1, 2],
       cursor: 3,
-      secretRevealed: true,
       identity: `d:${DEVICE}`,
     });
     const { result } = await mountHook();

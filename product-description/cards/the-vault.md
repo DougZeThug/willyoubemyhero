@@ -190,7 +190,7 @@ deliberately reduced foil. The one exception is a trophy ceremony arriving from
 somewhere else, which takes the whole screen.
 
 **Notifications and badges.** Two, both in the header: a coloured ring and dot on
-the Open Pack button while a secret is waiting, and an "Offer waiting" pill while
+the Open Pack button while today's pack is unopened, and an "Offer waiting" pill while
 an unread trade offer is in. The Trade tab carries the same news permanently; the
 pill exists because a tab's dot is easy to miss under a thumb on the screen you
 are already looking at.

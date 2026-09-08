@@ -156,10 +156,9 @@ nothing and tells nobody.
 
 ## The pack
 
-**Pack.** Three roster cards dealt once per _league day_, plus a fourth slot for
-the _daily secret_. The three come from a seeded shuffle keyed to the event, the
-day and your identity, so refreshing cannot reroll them and two people get
-different packs.
+**Pack.** Three cards dealt by the server once per _league day_, from one pool of
+roster cards and secrets, owned or not. A pack can hold none, one, or three
+secrets. See [the sealed pack](cards/the-sealed-pack.md).
 
 **League day.** The day boundary a pack and a streak are counted against. A
 pack's day is the device's local date, because nothing is at stake in it; the
@@ -181,9 +180,10 @@ committed tear to the final columns,
 grid is the destination, never a stage — showing the final layout while cards are
 still face-down spends the payoff before it is earned.
 
-**Daily secret.** The fourth slot: one secret card a day, per actor, decided and
-recorded by the server. It never stalls the ceremony — only a secret that is
-actually coming holds the stand.
+**Secret slot.** A secret card dealt as one of the pack's three slots, decided
+and recorded by the server. Formerly "the daily secret", a fourth slot that was
+always last and never a card you already owned while one was left to find. See
+[secrets in the pack](cards/the-daily-secret.md).
 
 **Milestone.** A rung on the streak ladder that pays a reward. Every milestone
 pays a bonus secret, some with a level floor. The rungs are stored, so one may be

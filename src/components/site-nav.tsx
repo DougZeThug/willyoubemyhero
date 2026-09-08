@@ -5,7 +5,8 @@ import { UserRound, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { useIsPresenting } from "@/hooks/use-presentation";
 import { useTradeBadge } from "@/hooks/use-trade-badge";
-import { useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
+import { useSecretActor } from "@/hooks/use-daily-secret";
+import { usePackStatus } from "@/hooks/use-pack-status";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { signOutAccount, useAuthUser } from "@/hooks/use-account";
 import {
@@ -16,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { secretWaiting, SECRET_RARITY } from "@/lib/secret-cards";
+import { packWaiting as packStillSealed } from "@/lib/pack";
 import { activeTab, navTabs, type NavRowId } from "@/lib/nav";
 import { useActiveEvent } from "@/hooks/use-active-event";
 import { useNavShape } from "@/lib/nav-shape";
@@ -31,8 +32,8 @@ export function SiteNav() {
   // to ask from up here: the query is disabled until a token resolves, it opens
   // no realtime channel, and /players holds the same key — so the vault and the
   // nav share one round trip rather than making two.
-  const secretStatus = useSecretStatus(useSecretActor());
-  const packWaiting = secretWaiting(secretStatus.data);
+  const packStatus = usePackStatus(useSecretActor());
+  const packWaiting = packStillSealed(packStatus.data);
   // Which rows the bar holds: the shop answers to the dust switch, the rest to
   // the commissioner's hidden set. Both ride the same event, so this is one read
   // and not two. useActiveEvent rather than useEventBundle on purpose — see the
@@ -72,8 +73,10 @@ export function SiteNav() {
    */
   const badge = (id: NavRowId): { suffix: string; color?: string } | null => {
     if (id === "trade" && tradeUnread > 0) return { suffix: "a trade offer is waiting" };
-    if (id === "pack" && packWaiting)
-      return { suffix: "a secret is waiting", color: SECRET_RARITY.border };
+    // "Unopened", not "a secret is waiting": whether a secret is in the pack is
+    // the pack's news to break, and the cue is the app's own cyan for the same
+    // reason.
+    if (id === "pack" && packWaiting) return { suffix: "today's pack is unopened" };
     return null;
   };
 

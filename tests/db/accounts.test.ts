@@ -99,9 +99,9 @@ describe("merge_guest_pulls", () => {
   });
 
   it("drops an incoming pull that would collide with today's unspent one", async () => {
-    // secret_card_pulls_one_per_day is UNIQUE (guest_id, pulled_on) WHERE NOT
-    // granted: two unspent rows on the same day cannot coexist, and the merge has
-    // to lose one rather than abort the whole sign-in.
+    // Two identities each dealt a pack on the same day would leave the merged
+    // guest with two days' worth of pulls on one day, so the merge keeps the
+    // destination's and drops the source's rather than double-counting the day.
     const a = await addCard("merge-today-a");
     const b = await addCard("merge-today-b");
     await givePull(GUEST_A, a, { day: "2026-02-01", granted: false });

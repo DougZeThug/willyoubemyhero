@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getMySecrets, getSecretStatus } from "@/lib/secret-cards.functions";
-import type { OwnedSecret, SecretDayStatus } from "@/lib/secret-cards";
+import { getMySecrets } from "@/lib/secret-cards.functions";
+import type { OwnedSecret } from "@/lib/secret-cards";
 import { useMemberSession } from "@/lib/member-token";
 import { useGuestSession } from "@/lib/guest-token";
 
@@ -16,8 +16,6 @@ import { useGuestSession } from "@/lib/guest-token";
  * too. It is only a cache key: the server takes the identity from the verified
  * token on the request and never from anything the client passes.
  */
-export const secretStatusKey = (actorId: string | null | undefined) =>
-  ["daily-secret", actorId] as const;
 export const mySecretsKey = (actorId: string | null | undefined) =>
   ["my-secrets", actorId] as const;
 
@@ -38,27 +36,6 @@ export function useSecretActor(): string | null {
   const guest = useGuestSession();
   if (member) return `m:${member.participantId}`;
   return guest ? `g:${guest.guestId}` : null;
-}
-
-/**
- * Is there a card waiting today?
- *
- * No realtime subscription: the tables behind this are deliberately absent from
- * the realtime publication, because a broadcast would tell every connected phone
- * that somebody just pulled something. Window focus is refresh enough for a
- * once-a-day drop.
- */
-export function useSecretStatus(actorId: string | null | undefined) {
-  const fn = useServerFn(getSecretStatus);
-  return useQuery({
-    queryKey: secretStatusKey(actorId),
-    queryFn: () => fn() as Promise<SecretDayStatus>,
-    // Gated on the actor, so signing in as somebody else in a garden never
-    // paints the previous person's state out of the cache.
-    enabled: !!actorId,
-    staleTime: 60_000,
-    refetchOnWindowFocus: true,
-  });
 }
 
 /** Everything this person has pulled. Never anything they haven't. */

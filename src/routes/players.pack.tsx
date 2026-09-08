@@ -2,23 +2,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { ArrowLeft, PackageOpen } from "lucide-react";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
-import {
-  mySecretsKey,
-  secretStatusKey,
-  useMySecrets,
-  useSecretActor,
-  useSecretStatus,
-} from "@/hooks/use-daily-secret";
-import { HoloCard } from "@/components/holo-card";
-import { CardBackPanel } from "@/components/card-back-panel";
-import { SecretBackPanel } from "@/components/secret-back-panel";
+import { mySecretsKey, useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
+import { packStatusKey, usePackStatus } from "@/hooks/use-pack-status";
 import { PackOpening } from "@/components/pack-opening";
-import { PackStand } from "@/components/pack-stand";
+import { PackStand, type StandSlot } from "@/components/pack-stand";
 import { PresentationMode, PresentationStage } from "@/components/presentation-mode";
 import { PackSummary } from "@/components/pack-summary";
 import { SoundToggle } from "@/components/sound-toggle";
@@ -28,7 +20,7 @@ import { CollectionComplete } from "@/components/collection-complete";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
-import { rarityMap, rarityStyle, type Rarity } from "@/lib/card-rarity";
+import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import {
   addUnrecorded,
   clearPackDealt,
@@ -40,36 +32,38 @@ import {
   savePackState,
   todayKey,
   PACK_DEALT_KEY,
-  type CollectedCard,
+  type PackSlotRef,
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
-import { celebrate, celebrateSecret } from "@/lib/card-confetti";
-import { pullSecretCard } from "@/lib/secret-cards.functions";
-import {
-  secretFoil,
-  SECRET_CHIME,
-  SECRET_DUPE_CHIME,
-  type SecretCardView,
-} from "@/lib/secret-cards";
+import { celebrate, celebrateSecret, celebrateUpgrade } from "@/lib/card-confetti";
+import { openPack } from "@/lib/pack.functions";
+import { adoptCollection } from "@/lib/card-pulls.functions";
+import { secretFoil, SECRET_CHIME, SECRET_DUPE_CHIME } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { deviceId, usePackIdentity } from "@/lib/device-id";
-import { dealPack, packSeed, packStage, resumeCursor, type SecretSlot } from "@/lib/pack";
-import { editionCelebrates, type Edition } from "@/lib/card-edition";
+import { packStage, type PackSlot } from "@/lib/pack";
+import {
+  celebrationFor,
+  copiesAfter,
+  peekMs,
+  SECRET_RISER_AT_MS,
+  slotOutcome,
+  upgradeLabel,
+  type LocalBefore,
+} from "@/lib/pack-outcome";
+import { editionStyle, toEdition } from "@/lib/card-edition";
 import { dustLive, MILL_BY_EDITION, secretSellValue } from "@/lib/dust";
+import { secretTierStyle } from "@/lib/secret-rarity";
 import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
-import { recordCardPulls } from "@/lib/card-pulls.functions";
 import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { streakLine } from "@/lib/streaks";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
-import { packedByLabel, type MyCardStats } from "@/lib/card-pulls";
 import { urlFromSet } from "@/lib/media";
-import type { ImageUrlSet } from "@/lib/media";
 import { CollectorSignupGate } from "@/components/collector-signup";
-import { cn } from "@/lib/utils";
 import { FeedDegradedBanner, FeedError } from "@/components/feed-state";
 
 export const Route = createFileRoute("/players/pack")({
@@ -82,18 +76,14 @@ export const Route = createFileRoute("/players/pack")({
           "Rip today's pack of combine trading cards. Three cards, dealt to you and nobody else.",
       },
       { property: "og:title", content: "Draft Combine — Open a Pack" },
-      { property: "og:description", content: "Three cards. One hit. Nobody else gets this pack." },
+      { property: "og:description", content: "Three cards. Any of them could be a secret." },
     ],
   }),
   component: PackPage,
 });
 
+/** How many cards the wrapper shows flying out. The server deals exactly this many. */
 const PACK_SIZE = 3;
-
-/** Hold on the glowing edge before the hit lands. */
-const PEEK_MS = 900;
-/** The once-a-day card holds longer. It is the only card here nobody has seen. */
-const SECRET_PEEK_MS = 1600;
 
 /**
  * The gap between a secret's own burst and the set closing behind it.
@@ -103,15 +93,16 @@ const SECRET_PEEK_MS = 1600;
  * finished the secret chime before the resolving one lands on top of it.
  */
 const COMPLETION_BEAT_MS = 900;
-/** Where in that hold the riser starts, so it lands on the chime's bottom note. */
-const SECRET_RISER_AT_MS = 700;
 /**
- * Short on purpose: staring at a pulsing card while your friends look at theirs
- * is worse than a retry tap. Giving up does not cancel the request — a row may
- * still land — which is exactly why the server re-reads rather than re-rolls.
+ * How long the deal is allowed to take before the screen admits it has stalled.
+ *
+ * Short on purpose: staring at a sealed wrapper while your friends look at their
+ * cards is worse than a retry tap. Giving up does not cancel the request — the
+ * row may still land — which is exactly why the server answers the same pack
+ * back on the retry rather than dealing a second one.
  */
-const SECRET_PULL_TIMEOUT_MS = 6_000;
-/** Full ceremony for the first few duplicates; after that it is a tax. */
+const OPEN_TIMEOUT_MS = 8_000;
+/** Full ceremony for the first few duplicate secrets; after that it is a tax. */
 const DUPE_CEREMONY_LIMIT = 3;
 /** How often to notice the date changed under a tab nobody closed. */
 const DAY_TICK_MS = 60_000;
@@ -126,21 +117,6 @@ const AUTO_STEP_MS = 420;
  */
 const AUTO_MOUNT_MS = 300;
 /**
- * How long the automatic run will wait for the stand to produce the secret.
- *
- * Stepping onto the secret's slot is not a swap: the stand clears the last
- * roster card off the stage and holds a bare beat before the secret arrives.
- * That handover ends on an animation callback, not on a clock — see
- * `STAND_BEAT` in src/lib/stand-phase.ts — so the run waits for the stand to
- * say it has happened rather than guessing a delay against it.
- *
- * This is only the ceiling on that wait, and it is sized past the stand's own
- * deadlock breaker so the two cannot disagree: if the stand ever needs its full
- * fallback, the run is still here when the card lands. A run that gave up first
- * would finish having never shown the card the whole sequence is built around.
- */
-const SECRET_STAGE_TIMEOUT_MS = 4_000;
-/**
  * How long to hold a guest's pack while a claim in another tab carries it.
  *
  * The token lands a whole network round trip before `carryPackToIdentity` does,
@@ -152,15 +128,33 @@ const SECRET_STAGE_TIMEOUT_MS = 4_000;
  */
 const CARRY_GRACE_MS = 20_000;
 
+/** Why the screen is asking the server for a pack. */
+type OpenRequest = {
+  /** A tear deals; a resume re-reads today's pack for its fresh signed art. */
+  kind: "tear" | "resume";
+  /** Bumped by the retry button, so an identical request still re-runs the effect. */
+  nonce: number;
+};
+
+/** The one slot ref the row stores per card, from a dealt slot. */
+function slotRef(slot: PackSlot, local: LocalBefore | undefined): PackSlotRef {
+  const ref: PackSlotRef = { kind: slot.kind, id: slot.id };
+  if (local) {
+    ref.heldBefore = local.heldBefore;
+    if (local.editionBefore) ref.editionBefore = local.editionBefore;
+  }
+  return ref;
+}
+
 function PackPage() {
   const { event, bundle, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
   // A read that failed, as opposed to one still on its way — and all three ways
-  // it can fail, because every one of them ends with `dealPack` holding an empty
-  // roster and `tearOpen` refusing without a word. The event can be missing, the
-  // bundle query can reject, or the bundle can come back fine with the roster
-  // table coalesced to `[]` — which is the case `failed` exists to name, and the
-  // one an error check alone cannot see. This is both what unblocks
-  // `useMyCollection` below and what the render bails out on.
+  // it can fail, because every one of them ends with no roster to draw the cards
+  // on screen from. The event can be missing, the bundle query can reject, or
+  // the bundle can come back fine with the roster table coalesced to `[]` —
+  // which is the case `failed` exists to name, and the one an error check alone
+  // cannot see. This is both what unblocks `useMyCollection` below and what the
+  // render bails out on.
   const eventFailed =
     (!!error && (!event || !bundle)) || failedTables.includes("event_participants");
   const cards = useEventCardUrls(event?.id ?? null);
@@ -170,45 +164,35 @@ function PackPage() {
   const packBack = useEventCardBack(event?.id ?? null);
   const rarities = useMemo(() => rarityMap(bundle), [bundle]);
 
-  // Reconciled against the server rather than read straight off this device — the
-  // local store had been inflated to the whole roster by the old collect-on-sight
-  // behaviour, which also meant `dealPack` believed there was nothing left to
-  // pick as the guaranteed-new last card.
+  // Reconciled against the server rather than read straight off this device.
+  // For a member the server is the collection; for a guest the local store is,
+  // and it is what the ribbon counts a guest's pulls against.
   const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
   const mine = useMyCollection(event?.id ?? null, rosterIds, eventFailed);
   const collected = mine.collection;
   const collectionLoaded = mine.ready;
-  // Snapshot of the collection taken when a pack is dealt. The pack composition
-  // must not shift while the user is revealing it, and revealing a card writes
-  // straight back into `collected`.
-  const [packBaseline, setPackBaseline] = useState<Record<string, CollectedCard> | null>(null);
-  // Today's dealt cards, once the wrapper is off. Null means the pack is still
-  // sealed; undefined-until-loaded is tracked by `stateLoaded` instead, so the
-  // sealed pack never flashes on a day that has already been opened.
-  const [dealtIds, setDealtIds] = useState<string[] | null>(null);
+
+  /**
+   * Today's pack, as the server dealt it. Null means nothing is on screen yet:
+   * the wrapper is still sealed, or a request is in the air. `stateLoaded`
+   * tracks undefined-until-loaded separately, so the sealed pack never flashes
+   * on a day that has already been opened.
+   */
+  const [slots, setSlots] = useState<PackSlot[] | null>(null);
   const [stateLoaded, setStateLoaded] = useState(false);
   const [revealed, setRevealed] = useState<number[]>([]);
-  const [peeking, setPeeking] = useState(false);
+  /** Which slot is holding on its glowing edge, or null for none. */
+  const [peeking, setPeeking] = useState<number | null>(null);
   /**
    * The opening ceremony is playing.
    *
    * Set only by `tearOpen`, never by the resume path: coming back to a pack you
    * already tore should land you on the card you were looking at, not replay the
-   * production. Same argument `resumeCursor` makes about the secret — a payoff,
-   * not a toll.
+   * production. A payoff, not a toll.
    */
   const [opening, setOpening] = useState(false);
   // Readable from the day-tick interval, whose closure cannot see the state.
   const openingRef = useRef(false);
-  /**
-   * The fan gets a fourth card, because a secret is on its way.
-   *
-   * Latched at the tear rather than read live. The pull is fired *by* the tear, so
-   * `secretSlot` moves from hidden to pending to sealed while the ceremony is
-   * playing, and a card count that changed mid-flight would remount the cards
-   * halfway through their arc.
-   */
-  const [secretComing, setSecretComing] = useState(false);
   /**
    * A ceremony ran on this screen, so the stand is mounting out of a deck rather
    * than out of nothing. Survives `opening` going false, which is the whole point
@@ -222,10 +206,6 @@ function PackPage() {
    * by the time this is set the stand genuinely owns the screen and is simply
    * still arriving. Null for all but a few hundred milliseconds a day, and null
    * outright for a skip or under reduced motion.
-   *
-   * Held apart from `ceremonyRanRef` on purpose: this is *geometry*, that is
-   * "a ceremony ran, so do not slide in from the right". A skip has the second
-   * without the first.
    */
   const [entering, setEntering] = useState<PackHandoff | null>(null);
   // Which card is on the stand. Advanced only by the user: revealing a card does
@@ -233,62 +213,62 @@ function PackPage() {
   // are finished with.
   const [cursor, setCursor] = useState(0);
 
-  // ---- the fourth slot ----
   const me = useMemberSession();
   const qc = useQueryClient();
-  const pull = useServerFn(pullSecretCard);
-  const record = useServerFn(recordCardPulls);
+  const open = useServerFn(openPack);
+  const adopt = useServerFn(adoptCollection);
   const pullCounts = useCardPullCounts(event?.id ?? null);
   // A guest gets an identity minted for them the moment they land here, so the
-  // fourth card is theirs rather than a locked slot. Only for the unclaimed —
-  // a member already has one.
+  // pack is theirs rather than a locked wrapper. Only for the unclaimed — a
+  // member already has one.
   useEnsureGuestSession(true);
   const actor = useSecretActor();
   const streakQuery = useStreakStatus(actor);
-  const status = useSecretStatus(actor);
-  const [secret, setSecret] = useState<SecretCardView | null>(null);
-  const [secretDuplicate, setSecretDuplicate] = useState(false);
-  const [secretRevealed, setSecretRevealed] = useState(false);
+  const status = usePackStatus(actor);
+  const mySecrets = useMySecrets(actor);
+
   /**
-   * The set this pull just finished, held until the card has been turned over.
+   * The request in flight, or the one that failed and is waiting on a retry.
    *
-   * Parked rather than shown on arrival because the order is the whole point:
+   * State rather than a call from `tearOpen`, and for the same reason the old
+   * secret pull was an effect: the commonest first-timer path is a guest who
+   * tears the pack, hits the claim gate, goes to /claim and comes back to the
+   * same already-torn pack, where `tearOpen` will never run again. A resume
+   * asks too — a secret's art is signed and expires, and only the server has
+   * fresh URLs for it.
+   */
+  const [openRequest, setOpenRequest] = useState<OpenRequest | null>(null);
+  const [openState, setOpenState] = useState<"idle" | "pending" | "failed" | "unavailable">("idle");
+  /** Which request has been sent, so a re-render cannot send it twice. */
+  const openFiredRef = useRef<string | null>(null);
+  /** The slot ids the stored row named, for a resume to check the answer against. */
+  const storedIdsRef = useRef<string[]>([]);
+  /**
+   * A guest's collection as it stood when the pack was dealt, by card id.
+   *
+   * The server answers "held before" for a member off its own ledger and says
+   * nothing for a guest, whose collection lives on this phone. Snapshotted at
+   * the deal and persisted on the row's slots, so the ribbon reads the same on
+   * every load rather than counting a card the reveal has just written.
+   */
+  const [localBefore, setLocalBefore] = useState<Record<string, LocalBefore>>({});
+  /**
+   * Slots whose set-complete ceremony is still owed.
+   *
+   * Parked rather than fired on arrival because the order is the whole point:
    * you see WHICH card it was, and only then find out it was the last one. Fired
-   * at the end of revealSecret below.
-   *
-   * A ref rather than state because nothing renders it and revealSecret is a
+   * at the end of `revealAt`. A ref beside the state because `revealAt` is a
    * plain function re-made every render — reached through a stale closure it
-   * would swallow the one ceremony this feature exists for, and a ref cannot go
-   * stale. Same reason the reveal latch beside it is one.
+   * would swallow the one ceremony this feature exists for — and state because
+   * the save effect has to persist it across the reload that used to lose it.
    */
-  const pendingCompletionRef = useRef<CompletedCollection | null>(null);
-  /**
-   * The same value, mirrored into state so the save effect can persist it.
-   *
-   * The ref is what revealSecret reads — see above, a stale closure would swallow
-   * the one ceremony this feature exists for. But nothing else in the pack row
-   * changes when a completion arrives, so a ref alone would never wake the save
-   * effect, and the reload the parked ceremony has to survive is exactly the one
-   * that loses it. Two homes for one value, each doing a job the other cannot.
-   */
-  const [pendingCompletion, setPendingCompletion] = useState<CompletedCollection | null>(null);
+  const pendingCompletionsRef = useRef<number[]>([]);
+  const [pendingCompletions, setPendingCompletions] = useState<number[]>([]);
   const [completion, setCompletion] = useState<CompletedCollection | null>(null);
-  const [secretPeeking, setSecretPeeking] = useState(false);
-  const [secretPulling, setSecretPulling] = useState(false);
-  const [secretFailed, setSecretFailed] = useState(false);
-  const [secretUnavailable, setSecretUnavailable] = useState(false);
-  // Bumped by the retry button. Clearing the latch alone leaves every value the
-  // pull effect depends on unchanged, so the effect never re-runs and the retry
-  // does nothing at all.
-  const [retryNonce, setRetryNonce] = useState(0);
-  // Set synchronously before the request goes out. setDealtIds is async, so two
-  // Enter presses in one tick both see the old state; this also survives
-  // StrictMode mounting every effect twice in development.
-  const pullFiredRef = useRef(false);
   /**
    * A ceremony is running.
    *
-   * Also the re-entrancy latch. A card holds for 900ms (1600ms for the secret)
+   * Also the re-entrancy latch. A card holds for 900ms (1600ms for a secret)
    * before it turns, and for all of that time it is still face-down and still
    * answering taps — so a second tap used to start a whole second ceremony on
    * the same card: two holds, two chimes, two confetti bursts, two writes into
@@ -302,65 +282,23 @@ function PackPage() {
    * same tick — or during a hold — cannot see yet.
    */
   const revealedRef = useRef<number[]>([]);
-  /**
-   * Indices being turned over for a second time, on a pack migrated off the
-   * pre-stand ceremony. They get the flip and the chime and nothing that writes:
-   * the pull they represent was recorded the first time round.
-   */
-  const replayedRef = useRef<Set<number>>(new Set());
-  /**
-   * Indices this pack had already turned when the screen loaded.
-   *
-   * A narrower fact than `resumedRef`, and the ribbon is the only thing that
-   * needs it. `revealAt` never counts these cards — they are either already
-   * turned, or replayed and skipped — but `rosterCopies` counts every card in
-   * the pack, so it is the one place that has to know a pull the previous
-   * session already banked. Without it a guest who reloads mid-pack reads ×2 on
-   * a card they own exactly one of.
-   *
-   * Banked, not face-up. A replayed pack turns its cards down again for the
-   * theatre without giving back the pulls behind them, so this follows the
-   * stored row rather than what is on screen.
-   */
-  const resumedRevealedRef = useRef<Set<number>>(new Set());
-  /**
-   * This pack was already open when the screen loaded.
-   *
-   * Which means `recordCardPulls` ran in whatever session tore it, so for a
-   * claimed member the reconciled collection already counts every card in it —
-   * including the ones still face-down. See the floor in `revealAt`.
-   */
-  const resumedRef = useRef(false);
   /** Set while "Reveal all" owns the sequence, so nothing else can drive it. */
   const autoRef = useRef(false);
   const [autoRunning, setAutoRunning] = useState(false);
-  // Mirrors of state the auto sequence has to read *after* awaiting, where its
-  // own closure is already stale.
-  const secretRef = useRef<SecretCardView | null>(null);
-  const pullingRef = useRef(false);
-  useEffect(() => {
-    secretRef.current = secret;
-  }, [secret]);
-  useEffect(() => {
-    pullingRef.current = secretPulling;
-  }, [secretPulling]);
 
-  // The *pack* day is device-local: a pack has no identity and no constraint
-  // behind it. The *drop* day is league-owned, decided in Postgres. Two clocks,
-  // deliberately — see the server-day effect below.
+  // The pack's day is the league's — see `todayKey`. The server's answer, when
+  // it has one, wins over this phone's idea of it.
   const [dayKey, setDayKey] = useState(todayKey);
   // Null until the browser has answered. Nothing is dealt against a half-known
   // identity, or a claimed member would flash a device-seeded pack first.
   const identity = usePackIdentity();
-  const seed = identity ? packSeed(event?.id ?? null, dayKey, identity) : null;
 
   /**
    * The pack on screen was dealt to a guest and carried across by a claim.
    *
-   * Read by the record loop, which must not file these cards again, and by the
-   * baseline latch, which must not treat the upgrade as a new person. A ref
-   * rather than state: both of those read it from inside effects that are keyed
-   * on other things, and nothing renders it.
+   * Read by the reveal, which files the cards the claim's adoption never saw,
+   * and by nothing else. A ref rather than state: it is read from inside a
+   * function keyed on other things, and nothing renders it.
    */
   const carriedFromRef = useRef<string | null>(null);
   /**
@@ -368,30 +306,27 @@ function PackPage() {
    *
    * Never assume the whole pack: `collectCard` runs inside the reveal, so a guest
    * who claims with cards still face-down has those in no snapshot and adoption
-   * never heard about them. The record loop skips these and sends the rest.
+   * never heard about them. The reveal files exactly the rest, one by one.
    */
-  const carriedAdoptedRef = useRef<readonly string[] | undefined>(undefined);
+  const carriedAdoptedRef = useRef<string[]>([]);
   /**
-   * The identity `dealtIds` were actually dealt to.
+   * The identity `slots` were actually dealt to.
    *
    * `identity` moves under a pack that is already on screen — a claim in another
    * tab, the 90-day token expiring on the hourly tick — and the resume load that
    * re-seals is always a beat behind it, because it is asynchronous and the
-   * effects keyed on the new identity are not. For that beat the ids in hand
-   * belong to somebody else, and the record loop below would file them under
-   * whoever the phone is now. That is how a guest's pack was minted a second
-   * time against the member who claimed it, in the tab they were not looking at.
+   * effects keyed on the new identity are not. For that beat the cards in hand
+   * belong to somebody else, and the save effect below would file them under
+   * whoever the phone is now.
    */
   const dealtForRef = useRef<string | null>(null);
   /**
-   * The league day `dealtIds` were dealt on.
+   * The league day `slots` were dealt on.
    *
    * `dayKey` moves on the day tick, a render before the resume load can answer
-   * with the new day's row — so for that render the ids in hand are yesterday's
-   * while everything keyed on the day says today. Recording them then files a
-   * fresh mint against a day nobody opened a pack on, and saving them then
-   * rewrites the row to claim yesterday's cards are today's pack, which the next
-   * resume accepts and nobody gets today's.
+   * with the new day's row — so for that render the cards in hand are
+   * yesterday's while everything keyed on the day says today, and saving them
+   * then would rewrite the row to claim yesterday's cards are today's pack.
    */
   const dealtOnRef = useRef<string | null>(null);
   /**
@@ -415,14 +350,10 @@ function PackPage() {
    * A resume the guard below has held back, waiting for the screen to be still.
    *
    * The day tick refuses to re-seal a pack under somebody's thumb; this effect
-   * had no such guard, so any identity flip mid-reveal nulled `dealtIds` and the
-   * cards vanished under their finger. Reachable from a claim in another tab, the
-   * 90-day token expiring on the hourly tick, and this screen's own
-   * `clearMemberToken()` when the secret pull answers "Claim your player first".
-   *
-   * A flag rather than the identity that was deferred: the load re-reads
-   * everything from the row when it runs, so all that has to survive is THAT one
-   * was owed — which stays true however many times the identity moves in between.
+   * had no such guard, so any identity flip mid-reveal nulled the pack and the
+   * cards vanished under their finger. Reachable from a claim in another tab,
+   * the 90-day token expiring on the hourly tick, and this screen's own
+   * `clearMemberToken()` when the deal answers "Claim your player first".
    */
   const resumeDeferredRef = useRef(false);
 
@@ -430,8 +361,8 @@ function PackPage() {
    * Act on a deferred identity change, now that nothing is in the air.
    *
    * Called from every `finally` that hands `revealingRef` back and from the
-   * ceremony's own close — those are the three places the guard above can stop
-   * being true, and a deferral that outlives all of them is a pack that never
+   * ceremony's own close — those are the places the guard above can stop being
+   * true, and a deferral that outlives all of them is a pack that never
    * re-seals.
    */
   const releaseDeferredResume = useCallback(() => {
@@ -440,15 +371,33 @@ function PackPage() {
     setResumeNonce((n) => n + 1);
   }, []);
 
+  /** Everything a fresh wrapper starts from, and everything a re-seal clears. */
+  const resetPack = useCallback(() => {
+    setSlots(null);
+    setOpenRequest(null);
+    setOpenState("idle");
+    openFiredRef.current = null;
+    revealedRef.current = [];
+    setRevealed([]);
+    setCursor(0);
+    setPeeking(null);
+    setLocalBefore({});
+    pendingCompletionsRef.current = [];
+    setPendingCompletions([]);
+    carriedFromRef.current = null;
+    carriedAdoptedRef.current = [];
+    dealtForRef.current = null;
+    dealtOnRef.current = null;
+  }, []);
+
   // One pack a day, so a return visit resumes rather than deals. Yesterday's row
   // is simply ignored — the next tear overwrites it.
   useEffect(() => {
     // Wait for the browser to answer who this pack is for. usePackIdentity
     // returns null for one render on every mount while it reads localStorage,
     // and running the load then would compare a stored `d:xxx` against `null`,
-    // decide the pack isn't mine, and clear dealtIds — briefly rendering a
-    // tearable sealed pack that a fast tap can deal straight over the saved
-    // one. Skipping this pass keeps `stateLoaded` false until we know.
+    // decide the pack isn't mine, and clear it — briefly rendering a tearable
+    // sealed pack that a fast tap can deal straight over the saved one.
     if (identity == null) return;
     // The day tick's guard, which this effect went without. Deferred rather than
     // dropped: whoever the pack now belongs to, the cards already on the stand
@@ -460,7 +409,7 @@ function PackPage() {
     let cancelled = false;
     let graceTimer: number | undefined;
     // Cleared first so the rollover below cannot write today's key over
-    // yesterday's ids in the window before this resolves.
+    // yesterday's cards in the window before this resolves.
     setStateLoaded(false);
     loadPackState().then((s) => {
       if (cancelled) return;
@@ -469,13 +418,11 @@ function PackPage() {
       // `setMemberToken` flips this tab's identity the instant the token is
       // written, which is a whole network round trip before the carry rewrites
       // the row. Re-sealing in that window takes the cards off the screen and
-      // lets a fast tap deal a second pack over the one being carried — B-07
-      // again, through the back door. So an upgrade from THIS DEVICE's own guest
-      // identity waits: the pack stays exactly where it is, nothing is saved or
-      // recorded under the new name (both effects check `dealtForRef`), and the
-      // carry's own write to the mirror brings us back here with the row it
-      // expects. A phone that genuinely changed hands is the same shape and gets
-      // the same answer, which is the product decision B-07 records.
+      // lets a fast tap deal a second pack over the one being carried. So an
+      // upgrade from THIS DEVICE's own guest identity waits: the pack stays
+      // exactly where it is, nothing is saved under the new name (the save
+      // effect checks `dealtForRef`), and the carry's own write to the mirror
+      // brings us back here with the row it expects.
       const device = deviceId();
       const carrying =
         !!s &&
@@ -495,104 +442,38 @@ function PackPage() {
       }
       awaitingCarryRef.current = false;
       // A stored row without an identity predates per-person packs; treat it
-      // as a match so nobody mid-reveal on the day this ships loses their
-      // cards. Now that we always wait for `identity` above, a mismatch here
-      // means the phone genuinely changed hands.
+      // as a match. A row without `cards` was written before the server dealt
+      // packs, and is not today's pack: the server either resumes today's or
+      // deals it, and either way the row is rewritten.
       const mine = s?.identity == null || s.identity === identity;
-      if (s && s.dayKey === dayKey && mine && s.ids.length > 0) {
-        // A row the pre-stand ceremony left finished.
-        //
-        // That screen put every card into `revealed` as the wrapper came off, so
-        // resuming one faithfully lands past the end of the stand and renders the
-        // finished grid — no wrapper to rip and no cards to step through for the
-        // rest of that day, which is indistinguishable from the stand not having
-        // shipped. Only those are replayed. A pre-stand row that stopped partway
-        // still has cards to turn and is resumed exactly as it stands.
-        //
-        // Recognised by the missing cursor, because every row the stand has ever
-        // written carries one. A version field would have caught the stand's own
-        // early rows too and marched somebody back to the first card.
-        const replay = s.cursor === undefined && s.revealed.length >= s.ids.length;
-        setDealtIds(s.ids);
-        const revealedNow = replay ? [] : s.revealed;
-        // These cards were pulled once already, under the old ceremony. Turning
-        // them over again is theatre; counting them again is not — `collectCard`
-        // increments rather than being idempotent, and for a guest the local store
-        // *is* the collection, so a replayed pull would inflate "Pulled ×N" for
-        // good.
-        replayedRef.current = new Set(replay ? s.revealed : []);
-        // `s.revealed` and not `revealedNow`, which are different questions: that
-        // one is what shows face-up, this one is whose pull the collection has
-        // already banked. They agree everywhere except a replay, where the cards
-        // are turned face-down again for the theatre and their pulls are very much
-        // still counted — which is what `replayedRef` above exists to say. Reading
-        // the visual set here handed a replaying guest a floor of zero on every
-        // card and stamped the whole pack one copy too high.
-        resumedRevealedRef.current = new Set(s.revealed);
-        resumedRef.current = true;
+      if (s && s.dayKey === dayKey && mine && s.cards && s.cards.length > 0) {
+        revealedRef.current = s.revealed;
+        setRevealed(s.revealed);
+        // Come back to the card you were on, not to the start.
+        setCursor(s.cursor ?? s.revealed.length);
         carriedFromRef.current = s.carriedFrom ?? null;
-        // Left UNDEFINED when the row does not carry the field, which is not the
-        // same fact as an empty list. Empty means adoption looked and took
-        // nothing — a guest who claimed before turning a card — and those ids are
-        // this loop's to file. Absent means a row written before the field
-        // existed, where what adoption took is unknowable.
-        carriedAdoptedRef.current = s.carriedAdopted;
-        // A row with no identity predates per-person packs and counted as a match
-        // above, so it counts as one here too.
+        carriedAdoptedRef.current = s.carriedAdopted ?? [];
         dealtForRef.current = s.identity ?? identity;
         dealtOnRef.current = s.dayKey;
-        // The parked ceremony, back from the row. Both homes, because the reveal
-        // reads the ref and the save effect reads the state.
-        //
-        // One owed on a secret that has ALREADY been turned fires here and now
-        // instead of being parked. `secretRevealed` goes true a beat before the
-        // ceremony does — the card's own burst has to finish first, and the set
-        // resolves behind it — so a reload inside that beat leaves exactly this
-        // shape on the row. Parking it there would strand it forever, because
-        // `revealSecret` is the only thing that fires it and it returns at the
-        // door on an already-revealed card. Firing it now costs nothing the
-        // ordering was protecting: the card has been seen.
-        const owed = s.pendingCompletion ?? null;
-        if (owed && s.secretRevealed) {
-          pendingCompletionRef.current = null;
-          setPendingCompletion(null);
-          setCompletion(owed);
-        } else {
-          pendingCompletionRef.current = owed;
-          setPendingCompletion(owed);
+        const before: Record<string, LocalBefore> = {};
+        for (const c of s.cards) {
+          if (c.heldBefore != null) {
+            before[c.id] = { heldBefore: c.heldBefore, editionBefore: c.editionBefore ?? null };
+          }
         }
-        revealedRef.current = revealedNow;
-        setRevealed(revealedNow);
-        setSecretRevealed(!!s.secretRevealed);
-        // Come back to the card you were on, not to the start. The stored cursor
-        // is the answer when there is one; `resumeCursor` is the fallback for a
-        // row written before the stand existed, and can only ever land on the
-        // next unturned card.
-        setCursor(
-          replay
-            ? 0
-            : (s.cursor ??
-                resumeCursor({
-                  packSize: s.ids.length,
-                  revealed: s.revealed,
-                  secretRevealed: !!s.secretRevealed,
-                })),
-        );
+        setLocalBefore(before);
+        storedIdsRef.current = s.cards.map((c) => c.id);
+        pendingCompletionsRef.current = s.pendingCompletions ?? [];
+        setPendingCompletions(s.pendingCompletions ?? []);
+        // The cards themselves come from the server: a secret's art is signed
+        // and expires, and only the server has fresh URLs. The row's slots are
+        // what the answer is checked against.
+        setSlots(null);
+        setOpenState("pending");
+        openFiredRef.current = null;
+        setOpenRequest({ kind: "resume", nonce: 0 });
       } else {
-        setDealtIds(null);
-        revealedRef.current = [];
-        replayedRef.current = new Set();
-        resumedRevealedRef.current = new Set();
-        resumedRef.current = false;
-        carriedFromRef.current = null;
-        carriedAdoptedRef.current = undefined;
-        dealtForRef.current = null;
-        dealtOnRef.current = null;
-        pendingCompletionRef.current = null;
-        setPendingCompletion(null);
-        setRevealed([]);
-        setSecretRevealed(false);
-        setCursor(0);
+        resetPack();
         // The stored row is not this person's pack for today, so neither is the
         // mirror. This is the only place a mirror that outlived its row is ever
         // cleaned up — which is why one that somehow survives can cost at most a
@@ -605,7 +486,7 @@ function PackPage() {
       cancelled = true;
       if (graceTimer) window.clearTimeout(graceTimer);
     };
-  }, [dayKey, identity, resumeNonce]);
+  }, [dayKey, identity, resumeNonce, resetPack]);
 
   // A different identity waits its own grace, not the leftovers of the last one's.
   useEffect(() => {
@@ -615,8 +496,8 @@ function PackPage() {
 
   // Another tab tore the pack. IndexedDB says nothing across tabs, so the mirror
   // beside it is the only signal this one gets — and without it a tab left on a
-  // sealed wrapper stayed sealed, then dealt the same ids over the other tab's
-  // reveal progress when somebody eventually tapped it.
+  // sealed wrapper stayed sealed, then asked for the same pack over the other
+  // tab's reveal progress when somebody eventually tapped it.
   useEffect(() => {
     const theirs = (e: StorageEvent) => {
       if (e.key !== null && e.key !== PACK_DEALT_KEY) return;
@@ -626,8 +507,7 @@ function PackPage() {
     // `useAccountSync` right here, so the pack the hold below is waiting for can
     // arrive without a single cross-tab event. Gated on the hold rather than
     // listened to always: this fires on every write to the pack row, and outside
-    // the hold that is our own save on every card turned. Inside it there are no
-    // saves of ours to hear, because they are suppressed for the whole of it.
+    // the hold that is our own save on every card turned.
     const ours = () => {
       if (awaitingCarryRef.current) setResumeNonce((n) => n + 1);
     };
@@ -639,10 +519,9 @@ function PackPage() {
     };
   }, []);
 
-  // A tab left open past midnight used to sit on yesterday's pack forever, which
-  // with a server-side drop becomes actively confusing: the fourth slot re-arms
-  // while the three cards do not. Polled rather than scheduled, because a phone
-  // suspends timers the moment the screen goes dark.
+  // A tab left open past midnight used to sit on yesterday's pack forever.
+  // Polled rather than scheduled, because a phone suspends timers the moment the
+  // screen goes dark.
   useEffect(() => {
     function check() {
       // Never re-seal a pack under somebody's thumb. Eating a card mid-reveal is
@@ -653,10 +532,8 @@ function PackPage() {
       const next = todayKey();
       setDayKey((prev) => {
         if (prev === next) return prev;
-        // The baseline effect keys on [collectionLoaded, collected], neither of
-        // which changes at midnight — so nulling the baseline here would leave it
-        // null forever, nextPack empty and the pack permanently un-openable.
-        setPackBaseline(collected);
+        // The server's own view of the day, refreshed with it.
+        void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
         return next;
       });
     }
@@ -666,594 +543,269 @@ function PackPage() {
       clearInterval(id);
       document.removeEventListener("visibilitychange", check);
     };
-  }, [collected]);
+  }, [qc, actor]);
 
   /**
-   * Snapshot the collection the pack is dealt against, once per person.
+   * The server's day beats this phone's, while nothing is on the stand.
    *
-   * Two things have to be true at the same time. It must not move while somebody
-   * is revealing — `dealPack` swaps the last slot for a card they do not own, and
-   * a baseline that shifted mid-reveal would re-deal it underneath them. And it
-   * must not be somebody *else's*: a phone changes hands in this league, and a
-   * write-once baseline meant the next person's guaranteed-new card was chosen
-   * from the previous person's collection.
-   *
-   * So it is latched per identity rather than once, and `collectionLoaded` is
-   * `mine.ready` — which is false until the server has reconciled, so the snapshot
-   * is never taken from the unreconciled local store.
+   * They agree everywhere except on a phone whose clock is wrong, and there the
+   * server's answer is the one the pack will actually be keyed on. Only while
+   * sealed: moving the day under a dealt pack would re-seal it.
    */
-  const baselineForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!identity) return;
-    // A claim is not somebody new. `carriedFrom` names the identity this pack was
-    // dealt to, and the snapshot the reveal counts its floor from is *that*
-    // person's — see `revealAt`, which reads the baseline as "what the collection
-    // held when the pack was dealt". Dropping it on the upgrade would hand every
-    // remaining card a floor of zero on the way past.
-    const carried = carriedFromRef.current;
-    const somebodyNew = baselineForRef.current !== identity && carried !== baselineForRef.current;
-    if (!collectionLoaded) {
-      // Their reconciliation is still out. Drop the previous person's snapshot
-      // rather than deal against it: `nextPack` is empty without a baseline and
-      // `tearOpen` refuses on an empty pack, so the wrapper simply is not
-      // tearable for the beat it takes the server to answer. Holding the old one
-      // would have dealt this person the guaranteed-new card that was new to
-      // somebody else.
-      if (somebodyNew) setPackBaseline(null);
-      return;
-    }
-    setPackBaseline((prev) => (prev !== null && !somebodyNew ? prev : collected));
-    baselineForRef.current = identity;
-  }, [collectionLoaded, collected, identity]);
+    const day = status.data?.day;
+    if (!day || slots != null || openRequest != null) return;
+    setDayKey((prev) => (prev === day ? prev : day));
+  }, [status.data?.day, slots, openRequest]);
 
-  // What today's pack *would* be if torn open right now — yours, and nobody
-  // else's, because the seed carries who you are. See src/lib/pack.ts.
-  const nextPack = useMemo(() => {
-    const all = bundle?.participants ?? [];
-    if (all.length === 0 || !packBaseline || !seed) return [];
-    return dealPack(all, seed, packBaseline, PACK_SIZE);
-  }, [bundle, seed, packBaseline]);
-
-  // Once dealt, the stored ids are the pack. Re-deriving would drift: the last
-  // slot depends on what was uncollected when the pack was opened.
-  const pack = useMemo(() => {
-    const all = bundle?.participants ?? [];
-    if (!dealtIds) return nextPack;
-    return dealtIds.map((id) => all.find((p) => p.id === id)).filter((p) => p != null);
-  }, [bundle, dealtIds, nextPack]);
-
-  // The finish on each card in the pack, by card id — as decided by Postgres.
-  //
-  // This used to be a pure function of the pack seed: the device rolled every
-  // finish from rollEdition(editionSeed(...)) and a resumed pack re-derived the
-  // identical set. It is a server answer now, because a finish stopped being a
-  // private stat the moment dust started paying out by edition
-  // (20260826120000_server_rolled_editions.sql). `record_card_pulls` derives it
-  // from (participant, card, league day) and hands back a map, which is what the
-  // recording effect below fills this in from.
-  //
-  // Empty until that response lands, and `revealAt` falls back to standard for
-  // anything missing. That is the deliberate trade: reveal the plainest thing and
-  // correct it, never a locally-rolled rare the server will not honour. The RPC
-  // derives rather than rolls, so the same pack answers the same way on every
-  // retry — which is what the seed's determinism used to buy.
-  const [editions, setEditions] = useState<Record<string, Edition>>({});
-
-  const torn = dealtIds != null;
+  const torn = slots != null || openRequest != null;
   const reduced = usePrefersReducedMotion();
 
   /**
-   * Deal today's pack. Answers whether it did.
+   * Whether the wrapper can be torn right now.
    *
-   * The false case is the beat on arrival where the server has not reconciled the
-   * collection yet: `nextPack` is empty without a baseline, so the wrapper is
-   * simply not tearable for that beat. The ceremony has to hear about it, or it
-   * plays a full production over a pack that was never dealt.
+   * The server has to know the day (so the row is keyed right), the guest
+   * session has to exist (so there is somebody to deal to), the bundle has to
+   * have answered (so the cards dealt can be drawn), and the collection has to
+   * be reconciled (so a guest's "held before" snapshot is honest). The
+   * Collected counter's dash is what says the last of those out loud.
+   *
+   * NOT the roster having anybody on it. The server deals from the secrets
+   * alone when the event has no roster yet, and a gate here would keep a pack
+   * the server is willing to deal from ever being asked for.
+   */
+  const canTear = !torn && !!identity && !!actor && !!status.data && !!bundle && collectionLoaded;
+
+  /**
+   * Tear today's pack. Answers whether it did.
+   *
+   * The false case is the beat on arrival where the server has not answered the
+   * status or the collection is not reconciled yet: the wrapper is simply not
+   * tearable for that beat. The ceremony has to hear about it, or it plays a
+   * full production over a pack that was never dealt.
    */
   const tearOpen = useCallback((): boolean => {
-    if (dealtIds || nextPack.length === 0) return false;
+    if (!canTear || !identity) return false;
     // A pack of this device's is on its way over from a claim in another tab.
     // Dealing now would put a second one on top of it. The resume load comes back
     // on its own when the carry lands, or when it gives up waiting.
     if (awaitingCarryRef.current) return false;
-    // Another tab already tore this pack. `dealtIds` above only knows about this
+    // Another tab already tore this pack. `slots` above only knows about this
     // one, and IndexedDB fires no cross-tab event — so without the mirror a
-    // second tab dealt the same ids and wrote `revealed: []` and `cursor: 0` over
-    // the first tab's progress. Refused rather than merged, and the resume load
-    // is nudged so this tab picks the other's row up instead of sitting sealed.
-    if (identity && packDealtElsewhere(dayKey, identity)) {
+    // second tab asked for the same pack and wrote `revealed: []` and `cursor: 0`
+    // over the first tab's progress. Refused rather than merged, and the resume
+    // load is nudged so this tab picks the other's row up instead of sitting sealed.
+    if (packDealtElsewhere(dayKey, identity)) {
       setResumeNonce((n) => n + 1);
       return false;
     }
-    const ids = nextPack.map((p) => p.id);
-    // Dealt at the moment the rip commits rather than when the ceremony ends, so
-    // the two round trips this unblocks — the daily secret's pull and the pack
-    // recording, both keyed on `torn` below — get the ceremony's whole run as a
-    // head start. The secret's own six-second timeout is the thing most likely to
-    // make somebody wait, and this is two free seconds off it.
-    setDealtIds(ids);
+    // Asked for at the moment the rip commits rather than when the ceremony
+    // ends, so the round trip gets the ceremony's whole run as a head start.
     revealedRef.current = [];
-    replayedRef.current = new Set();
-    resumedRevealedRef.current = new Set();
-    resumedRef.current = false;
-    // A pack dealt here is nobody's carried pack, whatever the last one was, and
-    // it belongs to whoever is holding the phone right now.
+    setRevealed([]);
+    setCursor(0);
     carriedFromRef.current = null;
-    carriedAdoptedRef.current = undefined;
+    carriedAdoptedRef.current = [];
     dealtForRef.current = identity;
     dealtOnRef.current = dayKey;
-    setCursor(0);
+    pendingCompletionsRef.current = [];
+    setPendingCompletions([]);
+    setOpenState("pending");
+    openFiredRef.current = null;
+    setOpenRequest({ kind: "tear", nonce: 0 });
     // The ceremony is the only thing the preference silences. Everything above is
     // the pack actually opening and happens either way.
     openingRef.current = !reduced;
     ceremonyRanRef.current = !reduced;
     setOpening(!reduced);
-    // Whether the fan is holding three cards or four, decided once, here.
-    //
-    // `available` is the server's own "there is something to pull", and it has to
-    // be a positive answer: a status query still in flight counts as no. Flying a
-    // fourth card that then never lands on the stand is a worse lie than a fan
-    // that simply did not preview one — and the secret keeps its whole production
-    // on the stand either way.
-    setSecretComing(!!actor && status.data?.available === true);
     playTear();
     return true;
-  }, [dealtIds, nextPack, reduced, actor, status.data?.available, dayKey, identity]);
+  }, [canTear, identity, dayKey, reduced]);
 
   const closeCeremony = useCallback(
     (from: PackHandoff | null) => {
       openingRef.current = false;
       setEntering(from);
       setOpening(false);
-      // One of the three moments the resume guard stops holding. Three cards in
-      // the air is the worst thing to re-seal under, so an identity that changed
+      // One of the moments the resume guard stops holding. Three cards in the
+      // air is the worst thing to re-seal under, so an identity that changed
       // during the ceremony has been waiting for exactly this.
       releaseDeferredResume();
     },
     [releaseDeferredResume],
   );
 
-  async function revealAt(i: number) {
-    // Both guards read refs, not state. A tap during the hit's hold, and a second
-    // tap in the same tick as the first, are the two ways this used to run twice
-    // over one card — and neither is visible in `revealed` yet.
-    if (revealingRef.current || revealedRef.current.includes(i)) return;
-    const ep = pack[i];
-    if (!ep) return;
-    const rarity = rarities.get(ep.id) ?? rarityStyle("base");
-    // KNOWN, not just non-null. A card turned before the record response lands
-    // reads as standard, and the celebration below — and the second beat the
-    // stand holds — have to stay silent for it: a burst or a shine fired off the
-    // fallback is a promise about a finish nobody has decided yet. The card itself
-    // still updates when the answer arrives — the map is state — and the summary
-    // shows it with the shine it earned.
-    const known = Object.hasOwn(editions, ep.id);
-    const edition = editions[ep.id] ?? "standard";
-    const isHit = i === pack.length - 1;
-
-    revealingRef.current = true;
-    try {
-      // Hold on the glowing edge before the hit lands. The pause is the whole trick.
-      if (isHit) {
-        setPeeking(true);
-        await new Promise((r) => setTimeout(r, PEEK_MS));
-        setPeeking(false);
-      }
-
-      revealedRef.current = [...revealedRef.current, i];
-      setRevealed(revealedRef.current);
-      playReveal(rarity.tier);
-      // The finish's own cue is deliberately not fired here. It belongs to the
-      // beat *after* the card lands — the tier and the finish are separate facts
-      // and the ear should hear them one after the other — and this line runs at
-      // the tap, a 900ms hold and half a second of turn before there is a face to
-      // shine on. PackStand fires it, on the frame the metal comes up, and makes
-      // the same `known` check for itself off the editions map it is handed.
-      // A migrated pack turns cards that were already pulled. Writing here would
-      // charge somebody a second pull for a ceremony they were given, not asked
-      // for. See replayedRef.
-      if (!replayedRef.current.has(i)) {
-        void collectCard(ep.id, rarity.tier, edition);
-        // Optimistic, and held apart from the reconciled collection: a card the
-        // server has not vouched for is exactly what the merge would prune, so
-        // without this it would light up as you flipped it and then vanish.
-        //
-        // The floor is counted from the snapshot the pack was dealt against, not
-        // from whatever the collection holds now. `recordCardPulls` fires at tear
-        // time and can answer before a card is turned over, and a floor derived
-        // from the reconciled number then stacked this pull on top of the server's
-        // own row for the rest of the session.
-        //
-        // On a resumed pack that recording already happened, in the session that
-        // tore it — so for a member the snapshot itself contains this pull and
-        // there is nothing to add. A guest has no server row either way, and their
-        // local store only reaches this hook on mount, so they are still owed it.
-        const held = packBaseline?.[ep.id]?.count ?? 0;
-        const counted = resumedRef.current && !!me?.participantId;
-        mine.markCollected(ep.id, rarity.tier, edition, counted ? Math.max(held, 1) : held + 1);
-      }
-
-      // The finish can carry a card the tier never would: a 0.5% platinum on a
-      // base card is the whole point of the ladder, and it stops the garden the
-      // same way a podium does.
-      if (
-        rarity.tier === "champion" ||
-        rarity.tier === "podium" ||
-        (known && editionCelebrates(edition))
-      ) {
-        await celebrate(rarity, edition);
-      }
-    } finally {
-      revealingRef.current = false;
-      releaseDeferredResume();
-    }
-  }
+  // The actor behind a request is live — a phone can change hands while one is
+  // in the air. The middleware reads whatever token localStorage holds at send
+  // time, so a late answer is checked against who the phone is now before it is
+  // shown.
+  const actorRef = useRef(actor);
+  useEffect(() => {
+    actorRef.current = actor;
+  });
+  // Read by the open effect after its await, where its own closure is stale.
+  const collectedRef = useRef(collected);
+  useEffect(() => {
+    collectedRef.current = collected;
+  }, [collected]);
+  const revealedForRef = useRef(revealed);
+  useEffect(() => {
+    revealedForRef.current = revealed;
+  }, [revealed]);
+  // The two query keys the answer refreshes, read through refs so that neither
+  // arriving mid-request re-runs the effect below — its cleanup cancels the
+  // request in flight, and the latch would then refuse to send it again.
+  const eventIdRef = useRef(event?.id);
+  const participantIdRef = useRef(me?.participantId);
+  useEffect(() => {
+    eventIdRef.current = event?.id;
+    participantIdRef.current = me?.participantId;
+  });
 
   /**
-   * The one-a-day card.
+   * Ask the server for today's pack.
    *
-   * Fired from an effect keyed on the torn pack and the member, rather than from
-   * `tearOpen`. Not on mount, because reaching this route is one mis-tap from the
-   * vault and must not spend the drop; not on tapping the card, because an
-   * unbounded round trip racing the hold either stalls or lies; and not inside
-   * `tearOpen`, because that misses the commonest first-timer path — a guest
-   * tears the pack, hits the gate, goes to /claim, and comes back to the same
-   * already-torn pack, where `tearOpen` will never run again.
+   * Fired on a tear and on a resume, once per request. Idempotent server-side:
+   * the same league day answers the same three cards, so a retry after a lost
+   * response, a second phone and a reload all land on one pack.
    */
   useEffect(() => {
-    if (!torn || !actor || pullFiredRef.current) return;
-    pullFiredRef.current = true;
-    setSecretPulling(true);
-    setSecretFailed(false);
+    if (!openRequest || !actor || !identity) return;
+    const key = `${actor}:${dayKey}:${openRequest.kind}:${openRequest.nonce}`;
+    if (openFiredRef.current === key) return;
+    openFiredRef.current = key;
+    setOpenState("pending");
+    const sentAs = actor;
+    const sentOn = dayKey;
+    const kind = openRequest.kind;
+    // The pack this answer is for can be re-sealed before it lands: the day
+    // tick and a deferred resume both reset everything, and a stale answer
+    // applied on top put yesterday's cards back on a stand that had moved on.
+    // Both halves are needed — the cleanup catches the request being replaced,
+    // the day catches a reset that left the request alone.
+    let cancelled = false;
 
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
-      // A row may still land server-side. That is fine: the retry re-reads the
-      // day's pull rather than rolling a new one, so nothing is lost either way.
-      setSecretPulling(false);
-      setSecretFailed(true);
-    }, SECRET_PULL_TIMEOUT_MS);
+      // The row may still land server-side. That is fine: the retry re-reads
+      // the day's pack rather than dealing a new one, so nothing is lost.
+      setOpenState("failed");
+    }, OPEN_TIMEOUT_MS);
 
     void (async () => {
       try {
-        const res = await pull();
+        const res = await open();
         settled = true;
-        if (res.ok) {
-          setSecret(res.card);
-          setSecretDuplicate(res.duplicate);
-          // No balance to refresh: a pull credits nothing now. The dupe's worth
-          // is worked out from the tier on the card below, and it only moves when
-          // somebody actually sells it in the shop.
-          setSecretUnavailable(false);
-          // A card minted just now has never been seen, whatever the device's
-          // stored reveal state says — local midnight and league midnight can
-          // be hours apart, so the resumed pack can carry a stale "revealed".
-          if (res.fresh) setSecretRevealed(false);
-          // Null on all but one pull in a season. Held for revealSecret rather
-          // than shown here — the card comes first. Parked on the pack row as
-          // well as in the ref, because the gap between this and the card being
-          // turned is a gap a reload used to swallow the ceremony in: the ref
-          // goes with the page, the re-pull answers null because the row already
-          // exists, and the mark below keeps the global host quiet.
-          //
-          // ONLY WHEN THERE IS ONE, never a null over the top. This same pull
-          // runs again on every load of an already-torn pack, and the server
-          // answers the second one with no completion at all because the row
-          // already exists — so assigning unconditionally would wipe the very
-          // ceremony the row was persisted to save, a beat after restoring it.
-          if (res.completedCollection) {
-            pendingCompletionRef.current = res.completedCollection;
-            setPendingCompletion(res.completedCollection);
-          }
-          qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
-          qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
-          if (res.completedCollection) {
-            // Claimed HERE rather than when the ceremony fires, because the fire
-            // is a beat behind the card and the refetch below is not. Left until
-            // then, the global host would see an uncelebrated trophy first and
-            // play a second ceremony over the top of this one.
-            //
-            // A GUEST IS MARKED TOO, under the identity they actually have. They
-            // used to be marked under nothing at all, so the claim banked the
-            // trophy under their new participant id, the host found it
-            // uncelebrated, and they got the same ceremony twice.
-            // `carryTrophySeen` translates the key at claim time.
-            const key = me?.participantId
-              ? trophyKey(me.participantId, res.completedCollection.collection)
-              : identity
-                ? trophyKey(identity, res.completedCollection.collection)
-                : null;
-            if (key) markTrophiesCelebrated([key]);
-            qc.invalidateQueries({ queryKey: collectionTrophiesKey() });
-          }
-        } else {
-          // Nothing in the set yet, or every card still missing its art. Not a
-          // failure to retry — there is genuinely nothing to hand over.
-          setSecretUnavailable(true);
+        // The phone can have changed hands during the request, and this pack
+        // belongs to the actor that asked for it — and to the day it was asked on.
+        if (cancelled || actorRef.current !== sentAs || dealtOnRef.current !== sentOn) return;
+        if (!res.ok) {
+          setSlots([]);
+          setOpenState("unavailable");
+          return;
         }
-        setSecretFailed(false);
+        // A resumed row that does not describe this pack — a deal the phone
+        // recorded that the server never kept, which should be impossible — is
+        // progress over cards that are not on screen. Started over rather than
+        // trusted.
+        if (kind === "resume") {
+          const stored = storedIdsRef.current;
+          const answered = res.cards.map((c) => c.id);
+          if (stored.length !== answered.length || stored.some((id, i) => id !== answered[i])) {
+            revealedRef.current = [];
+            setRevealed([]);
+            setCursor(0);
+            pendingCompletionsRef.current = [];
+          }
+        }
+        // A guest's collection is the phone's. Snapshotted now, on the fresh
+        // deal, and never from the live collection afterwards — the reveal
+        // writes into it, and a snapshot taken then would count this pull.
+        if (kind === "tear") {
+          const before: Record<string, LocalBefore> = {};
+          for (const slot of res.cards) {
+            if (slot.kind === "roster" && slot.heldBefore == null) {
+              const held = collectedRef.current[slot.id];
+              before[slot.id] = { heldBefore: held?.count ?? 0, editionBefore: held?.edition ?? null }; // prettier-ignore
+            }
+          }
+          setLocalBefore(before);
+        }
+        // The set(s) this pack finished, owed to the reveal of the card that
+        // did it. On a resume the row says which are still owed; a row from
+        // before the field existed owes every one not yet turned.
+        const owed =
+          kind === "tear"
+            ? res.cards.flatMap((c, i) => (c.kind === "secret" && c.completedCollection ? [i] : []))
+            : pendingCompletionsRef.current.length > 0
+              ? pendingCompletionsRef.current
+              : res.cards.flatMap(
+                  (c, i) =>
+                  c.kind === "secret" && c.completedCollection && !revealedForRef.current.includes(i) ? [i] : [], // prettier-ignore
+                );
+        pendingCompletionsRef.current = owed;
+        setPendingCompletions(owed);
+        if (kind === "tear") {
+          // Claimed HERE rather than when the ceremony fires, because the fire
+          // is a beat behind the card and the refetch below is not. Left until
+          // then, the global host would see an uncelebrated trophy first and
+          // play a second ceremony over the top of this one. A guest is marked
+          // under the identity they actually have; `carryTrophySeen` translates
+          // the key at claim time.
+          const keys = res.cards.flatMap((c) =>
+            c.kind === "secret" && c.completedCollection
+              ? [trophyKey(participantIdRef.current ?? identity, c.completedCollection.collection)]
+              : [],
+          );
+          if (keys.length > 0) markTrophiesCelebrated(keys);
+        }
+        setSlots(res.cards);
+        setOpenState("idle");
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: packStatusKey(sentAs) }),
+          qc.invalidateQueries({ queryKey: mySecretsKey(sentAs) }),
+          // The pack open is what advances the streak, for a guest as much as
+          // for a member.
+          qc.invalidateQueries({ queryKey: streakStatusKey(sentAs) }),
+          qc.invalidateQueries({ queryKey: cardPullCountsKey(eventIdRef.current) }),
+          qc.invalidateQueries({ queryKey: collectionTrophiesKey() }),
+          // Only a member has card rows to recount; a guest's slots went nowhere.
+          ...(participantIdRef.current
+            ? [
+                qc.invalidateQueries({
+                  queryKey: myCardStatsKey(eventIdRef.current, participantIdRef.current),
+                }),
+              ]
+            : []),
+        ]);
       } catch (e) {
         settled = true;
+        if (cancelled || actorRef.current !== sentAs) return;
         // The only place this app matches on an error string, justified because
         // the messages in require-auth.server.ts are explicitly contractual. A
         // token the server rejects is a token worth dropping, so the gate shows
         // instead of a retry that can never work.
         if (e instanceof Error && e.message.includes("Claim your player first")) {
           clearMemberToken();
-        } else {
-          setSecretFailed(true);
         }
+        setOpenState("failed");
       } finally {
         clearTimeout(timer);
-        setSecretPulling(false);
       }
     })();
 
-    return () => clearTimeout(timer);
-    // `me?.participantId` and `identity` only to stamp a completed set as already
-    // celebrated. Re-running on either is free: pullFiredRef latches on the first
-    // pass, so a second entry returns before it can spend anything.
-  }, [torn, actor, me?.participantId, identity, pull, qc, retryNonce]);
-
-  /**
-   * Tell the server which cards were in this pack, so the vault can say how many
-   * people have each one.
-   *
-   * Fired from an effect for the same reason the secret pull is: `tearOpen` misses
-   * the commonest first-timer path, where a guest tears the pack, hits the claim
-   * gate, goes to /claim and comes back to the same already-torn pack. Recorded on
-   * tear rather than on reveal, because "packed by" means the card was in your
-   * pack, not that you got round to tapping it.
-   *
-   * Keyed on the ACTOR, not on the member: a guest's pack open is recorded too,
-   * against their `g.` token, which is what gives them a streak before they have
-   * signed in — and `claim_guest_packs` carries it across when they do. Their
-   * roster cards still go nowhere server-side (card_copies is keyed on a
-   * participant), so the handler files the pack and ignores the ids.
-   *
-   * Fire-and-forget either way: a failure is swallowed, because a decorative
-   * count must never surface as an error on a screen somebody is enjoying.
-   */
-  const recordedForRef = useRef<string | null>(null);
-  // The retry loop below sleeps between attempts, and the actor behind it is live
-  // — a phone can change hands while it waits. The request middleware reads
-  // whatever token localStorage holds at send time, so a stale loop would post
-  // the first person's ids under the second person's account. Each attempt
-  // re-checks the current identity through this ref and abandons on a change.
-  // Tracking the actor rather than the participant is strictly stronger: `m:` and
-  // `g:` are both stable identities, and a guest claiming a player changes it.
-  const recordActorRef = useRef(actor);
-  useEffect(() => {
-    recordActorRef.current = actor;
-  });
-  // Re-arm signal for a record that exhausted its retries: the latch is a ref,
-  // so handing it back re-runs nothing, and once a pack is torn the effect's
-  // deps sit still. These are the two moments connectivity plausibly returned.
-  const [recordWake, setRecordWake] = useState(0);
-  useEffect(() => {
-    const wake = () => {
-      if (document.visibilityState === "visible") setRecordWake((n) => n + 1);
-    };
-    window.addEventListener("online", wake);
-    document.addEventListener("visibilitychange", wake);
     return () => {
-      window.removeEventListener("online", wake);
-      document.removeEventListener("visibilitychange", wake);
+      cancelled = true;
+      clearTimeout(timer);
     };
-  }, []);
-  useEffect(() => {
-    const pid = me?.participantId;
-    // The event gates this alongside the rest, not just the seed. A seed built
-    // before the bundle answers carries "no-event", so the ids in hand are a pack
-    // dealt against nothing — and the latch below would make that pack permanent
-    // for the day. Waiting costs nothing: the effect re-runs when the event lands.
-    if (!torn || !dealtIds?.length || !actor || !seed || !event?.id) return;
-    // `stateLoaded` is the second half of the midnight guard below. When the day
-    // turns under an open tab, `dayKey` moves a beat before the resume load has
-    // answered with the new day's row — so for that beat `dealtIds` is still
-    // yesterday's while `dayKey` is today, and a wake landing in it would file
-    // yesterday's ids against today. The resume effect clears this flag for the
-    // whole of that window.
-    if (!stateLoaded) return;
-    // And the ids in hand have to be this identity's. Nothing is latched on the
-    // way out: the resume load is already on its way to deciding whether this
-    // pack is carried or re-sealed, and it owns the answer.
-    if (dealtForRef.current !== identity || dealtOnRef.current !== dayKey) return;
-    if (recordedForRef.current === actor) return;
-    // On a carried pack, the cards the claim's adoption already filed are dropped
-    // from the payload. `record_card_pulls` rations on `card_mints` rather than
-    // on copies, and an adopt copy writes no mint row — so re-sending an adopted
-    // id mints a SECOND copy of that card and re-rolls its finish.
-    //
-    // DROPPED, NOT THE WHOLE PACK. `collectCard` runs inside the reveal, so a
-    // guest who claimed with cards still face-down had those in no snapshot;
-    // adoption never heard about them and this is the only thing that will ever
-    // file them. Skipping wholesale left them owned by nobody and the next
-    // reconcile deleted them off the phone the moment they were turned over.
-    const alreadyFiled = carriedAdoptedRef.current;
-    // A carried row that does not say what adoption took predates the field, and
-    // there is no way to tell "took nothing" from "took the turned cards" after
-    // the fact. Skip the whole pack, which is what the build that wrote such a
-    // row did: a missing pack_open is cheaper than minting every card twice.
-    if (carriedFromRef.current && alreadyFiled === undefined && pid) {
-      recordedForRef.current = actor;
-      return;
-    }
-    const owed = alreadyFiled?.length
-      ? dealtIds.filter((id) => !alreadyFiled.includes(id))
-      : dealtIds;
-    if (owed.length === 0) {
-      // Nothing left to tell the league. The pack open is not lost either: it was
-      // recorded against the guest id and `claim_guest_packs` carries it across.
-      recordedForRef.current = actor;
-      return;
-    }
-    recordedForRef.current = actor;
-    // The league day these ids were dealt on, taken from the row rather than from
-    // the screen's clock, and captured before the first attempt rather than read
-    // live: the loop below sleeps up to twelve seconds and re-arms on `online`
-    // and `visibilitychange`, so a phone that woke up at 00:01 could otherwise
-    // file yesterday's pack against the new day — minting it afresh and writing a
-    // pack_open for a day nobody opened a pack on.
-    const dealtOn = dealtOnRef.current;
+  }, [openRequest, actor, identity, dayKey, open, qc]);
 
-    void (async () => {
-      // Record only today's dealt cards. An earlier version also backfilled the
-      // device's whole collection here so counts weren't zero on day one — but
-      // in practice the first person to claim painted every card they'd ever
-      // revealed with "Packed by 1", making the counter meaningless. Better an
-      // honest ramp than a uniform stripe.
-      const ids = owed.slice(0, 16);
-      // Filed before the first attempt, because the cards are in IndexedDB the
-      // moment they are turned over and `mergeCollection` deletes anything the
-      // server does not vouch for. Until one of the attempts below lands, the
-      // server cannot vouch for these — so a pack torn in a dead spot was
-      // collected, shown, and then deleted on the next load. This row is what
-      // `useMyCollection` reads to hold them back, and it outlives the page.
-      await addUnrecorded({ dayKey, identity: identity ?? undefined, ids });
-      // Three tries with a pause between them, then hand the latch back and
-      // wait for a wake (recordWake above) to start a fresh cycle. One garden
-      // dead spot used to cost the whole day's count: the latch was taken
-      // before the await and a swallowed failure never returned it. A retry
-      // after a lost response is safe to send: record_card_pulls files a copy
-      // ON CONFLICT (participant, card, acquired_on) and resync_card_pull
-      // derives pull_count from the copies, so the same pack posted twice on one
-      // league day lands on the same numbers. Twice across the server's midnight
-      // does not — that is the day-boundary problem, and it is not this loop's.
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 4_000));
-        // Midnight, checked before every attempt and therefore after every wake.
-        // The latch is deliberately left alone: these ids belong to a day that is
-        // over, and nothing should re-send them. They stay protected by the
-        // `unrecorded` row, which is not scoped to today for exactly this reason.
-        if (todayKey() !== dealtOn) return;
-        // Abandon without touching the latch if the phone changed hands while
-        // this loop slept — the new member's own effect run owns it now, and a
-        // request sent here would carry their token with this pack's ids.
-        if (recordActorRef.current !== actor) return;
-        try {
-          // The same call records the pack itself. A pack of three cards you already
-          // own writes no new card_pulls row, so counting packs from that table
-          // would stop counting the moment somebody's collection filled up.
-          //
-          // No event is sent: the handler resolves the active one itself. A resumed
-          // pack reaches here before the event query has answered, so passing it
-          // from the client stamped a null and the latch above stopped it ever
-          // being retried.
-          // No finishes are sent. The RPC derives its own and ignores the
-          // parameter; the map it answers with is the only edition this screen
-          // shows. Applied before the invalidations so the reveal has it as
-          // early as possible — the cards are usually still face down here.
-          const res = await record({ data: { eventParticipantIds: ids } });
-          // The phone can have changed hands during the request, and these
-          // finishes belong to the actor that asked for them.
-          if (recordActorRef.current === actor && res?.editions) {
-            setEditions((prev) => ({ ...prev, ...res.editions }));
-          }
-          await Promise.all([
-            qc.invalidateQueries({ queryKey: cardPullCountsKey(event?.id) }),
-            // The pack open is what advances the streak, for a guest as much as
-            // for a member.
-            qc.invalidateQueries({ queryKey: streakStatusKey(actor) }),
-            // Only a member has card rows to recount; a guest's ids went nowhere.
-            ...(pid ? [qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, pid) })] : []),
-          ]);
-          // Retired only once something else vouches for these cards, because
-          // the moment the row lets go of them the merge may delete them.
-          //
-          // `invalidateQueries` resolves whether or not the refetch it fired
-          // succeeded, and a failed one leaves the answer from *before* the tear
-          // sitting in the cache — retiring against that is the exact prune this
-          // row exists to prevent. So the answer has to be here and has to name
-          // the cards. A guest has no stats query and is never pruned, so there
-          // is nothing for one to wait for.
-          //
-          // The actor guard is the same one each attempt makes above: a phone
-          // that changed hands mid-request has a new member's own run filing
-          // their row by now, and this one must not retire it for them.
-          const answered = pid
-            ? (qc.getQueryData(myCardStatsKey(event?.id, pid)) as MyCardStats | undefined)
-            : undefined;
-          const vouchedFor = new Set(answered?.cards.map((c) => c.eventParticipantId));
-          const vouched = !pid || (!!answered && ids.every((id) => vouchedFor.has(id)));
-          if (recordActorRef.current === actor && vouched) await retireUnrecorded(ids);
-          return;
-        } catch {
-          /* a count nobody asked for is not worth an error nobody can act on */
-        }
-      }
-      // Only if it is still ours: an exhausted loop from before a handoff must
-      // not clear the latch the next member's run has taken.
-      if (recordedForRef.current === actor) recordedForRef.current = null;
-    })();
-    // `editions` is deliberately absent: this effect WRITES it, and depending on
-    // what it sets would re-run it against its own result.
-  }, [
-    torn,
-    dealtIds,
-    stateLoaded,
-    actor,
-    me?.participantId,
-    record,
-    qc,
-    event?.id,
-    seed,
-    recordWake,
-    dayKey,
-    identity,
-  ]);
-
-  // A phone changing hands mid-party is a real thing in this league. Re-arm the
-  // latch when the member changes so the next person gets their own card.
+  // A phone changing hands mid-party is a real thing in this league. The resume
+  // effect re-seals for the new person; this drops the request that was theirs.
   useEffect(() => {
-    pullFiredRef.current = false;
-    recordedForRef.current = null;
-    // Finishes belong to the member they were derived for.
-    setEditions({});
-    setSecret(null);
-    setSecretRevealed(false);
-    setSecretFailed(false);
-    setSecretUnavailable(false);
-    // The milestone half of this reset moved with the claim itself, into
-    // useMilestoneClaim — it re-arms on the same `actor` and for the same reason.
+    openFiredRef.current = null;
   }, [actor]);
-
-  // And re-arm the pack half when the DAY turns, which the effect above cannot
-  // see: a tab left open overnight keeps the same actor, so nothing here used to
-  // run at all.
-  //
-  // Two things were wrong with that. The latch stayed set to `actor`, so the
-  // record effect returned at its guard for the rest of the new day — the pack
-  // was never filed, the streak never advanced for it, and none of the counts
-  // were invalidated. And `editions` still held yesterday's map, so a card in
-  // both packs rendered with yesterday's finish AND passed the `known` check,
-  // firing the shine and the burst for a finish the server had not granted. That
-  // is exactly what `known` exists to prevent.
-  //
-  // Its own effect rather than more deps on the one above, because this app runs
-  // on two clocks on purpose: the pack rolls over on the device's local day and
-  // the secret drop on the server's league day (see serverDayRef below). Folding
-  // them together would re-arm the secret on the wrong signal.
-  useEffect(() => {
-    recordedForRef.current = null;
-    setEditions({});
-  }, [dayKey]);
-
-  // The drop rolls over on the *server's* day, not this device's. Guarded on the
-  // first observed value, or this would clobber the secretRevealed that the
-  // resume effect has just restored from IndexedDB.
-  const serverDayRef = useRef<string | null>(null);
-  useEffect(() => {
-    const day = status.data?.day ?? null;
-    if (!day) return;
-    if (serverDayRef.current && serverDayRef.current !== day) {
-      pullFiredRef.current = false;
-      setSecret(null);
-      setSecretRevealed(false);
-    }
-    serverDayRef.current = day;
-  }, [status.data?.day]);
 
   const streak = streakQuery.data ?? null;
   // Shared with the vault, which can now cash a rung from home — see
@@ -1269,148 +821,163 @@ function PackPage() {
     dismiss: dismissMilestone,
   } = useMilestoneClaim(actor, streak);
 
-  const secretRarity = secretFoil(secret?.foil, secret?.borderFx, secret?.tier);
-
   /**
-   * What this copy would fetch in the shop, for the line under a duplicate.
+   * Every slot, resolved for the stand and the summary.
    *
-   * Worked out here from the tier on the card — no server field carries it, and
-   * none needs to: the ladder is a constant this bundle already holds. Only on a
-   * DUPLICATE, which is the moment the economy is answering; under a card you
-   * have just found for the first time it would be an invitation to sell the only
-   * copy you own. Members only, because a guest has no ledger to sell into, and
-   * silent while the commissioner has dust switched off.
+   * This is the one place the pack's numbers are decided: the tier from the
+   * bundle, the finish from the deal, the outcome from what was held before,
+   * the count for the ribbon, and what a spare is worth — the last two gated
+   * exactly as they always were: duplicates only, members only, silent while
+   * the commissioner has dust switched off.
    */
-  const sellValue =
-    secretDuplicate && secret && me?.participantId && dustLive(event)
-      ? secretSellValue(secret.tier)
-      : null;
-
-  /**
-   * How many of each card in this pack you hold once it is turned, for the ribbon.
-   *
-   * Counted from `packBaseline` and never from `collected`. The live collection
-   * already carries this pull the moment `markCollected` fires — which is before
-   * the ribbon paints — so reading it here would stamp ×2 on a card nobody owned
-   * a second ago, and on every card in the pack.
-   *
-   * Nothing at all until the snapshot exists. With no baseline every card
-   * computes to a floor of zero and the whole pack reads NEW — a confident wrong
-   * answer, where an absent ribbon is merely quiet. The consumers already treat a
-   * missing entry as "say nothing".
-   *
-   * Whether the pull is ALREADY in that snapshot is the whole question, and it
-   * has two answers rather than one:
-   *
-   *   - A member's `recordCardPulls` fired in the session that tore this pack, so
-   *     the server has all three and their reconciled snapshot carries every one
-   *     of them, turned or not.
-   *   - A guest has no server row. Their local store is the collection, and it
-   *     only holds the cards they actually turned before the reload.
-   *
-   * So a resumed guest is counted per card, not wholesale. Reading this the way
-   * `revealAt` does — member-only — inflated every card a guest had already
-   * turned, and a first pull came back from a reload wearing ×2.
-   *
-   * `revealAt` needs no such term and is right as it stands: it only ever runs on
-   * a card being turned now, which is by definition one the previous session did
-   * not bank. This counts every card in the pack, which is why it is the only
-   * place that has to know.
-   */
-  const rosterCopies = useMemo(() => {
-    if (!packBaseline) return {};
-    const out: Record<string, number> = {};
-    pack.forEach((ep, i) => {
-      const banked =
-        resumedRef.current && (!!me?.participantId || resumedRevealedRef.current.has(i));
-      const held = packBaseline[ep.id]?.count ?? 0;
-      out[ep.id] = banked ? Math.max(held, 1) : held + 1;
+  const standSlots = useMemo<StandSlot[]>(() => {
+    const all = bundle?.participants ?? [];
+    const pricing = !!me?.participantId && dustLive(event);
+    return (slots ?? []).map((slot) => {
+      if (slot.kind === "secret") {
+        const outcome = slotOutcome(slot);
+        // The secret's count lives on the server. `getMySecrets` is invalidated
+        // by the deal itself, so it answers with this copy already counted —
+        // and two is the floor while that refetch is still in the air, because
+        // a duplicate is by definition never your first.
+        const copies = !slot.duplicate
+          ? 1
+          : Math.max(2, mySecrets.data?.cards.find((c) => c.id === slot.id)?.count ?? 0);
+        return {
+          slot,
+          rarity: secretFoil(slot.card.foil, slot.card.borderFx, slot.card.tier),
+          edition: null,
+          outcome,
+          copies,
+          sellValue: pricing && slot.duplicate ? secretSellValue(slot.card.tier) : null,
+          ep: null,
+        };
+      }
+      const local = localBefore[slot.id];
+      const outcome = slotOutcome(slot, local);
+      const copies = copiesAfter(slot, local);
+      // `MILL_BY_EDITION` rather than `millValue`, and that is safe rather than
+      // optimistic: the finish is the one Postgres minted. A finish it did not
+      // decide is null, and null prices nothing — no number is better than a
+      // number that moves.
+      const sellValue =
+        pricing && (copies ?? 1) > 1 && slot.edition != null
+          ? MILL_BY_EDITION[toEdition(slot.edition)]
+          : null;
+      return {
+        slot,
+        rarity: rarities.get(slot.id) ?? rarityStyle("base"),
+        edition: slot.edition,
+        outcome,
+        copies,
+        sellValue,
+        ep: all.find((p) => p.id === slot.id) ?? null,
+      };
     });
-    return out;
-    // Both refs are settled by the time a card can be turned — they are written at
-    // deal and at resume, both of which are behind the tear — so they are read
-    // here rather than tracked, which is also how `revealAt` reads `resumedRef`.
-  }, [pack, packBaseline, me?.participantId]);
+  }, [slots, bundle, rarities, localBefore, mySecrets.data, me?.participantId, event]);
 
-  /**
-   * The secret's own copy count. `packBaseline` holds no secrets.
-   *
-   * The predicate is the pull's `duplicate` flag, which is the only thing that
-   * knows; this is just the number printed beside it. `getMySecrets` is
-   * invalidated by the pull itself, so it answers with this copy already counted
-   * — and two is the floor while that refetch is still in the air, because a
-   * duplicate is by definition never your first.
-   */
-  const mySecrets = useMySecrets(actor);
-  const secretCopies = !secretDuplicate
-    ? 1
-    : Math.max(2, mySecrets.data?.cards.find((c) => c.id === secret?.id)?.count ?? 0);
+  async function revealAt(i: number) {
+    // Both guards read refs, not state. A tap during a hold, and a second tap in
+    // the same tick as the first, are the two ways this used to run twice over
+    // one card — and neither is visible in `revealed` yet.
+    if (revealingRef.current || revealedRef.current.includes(i)) return;
+    const stand = standSlots[i];
+    if (!stand) return;
+    const { slot, rarity, outcome } = stand;
+    const isSecret = slot.kind === "secret";
 
-  /**
-   * What a spare roster card is worth, by card id. The same line the secret gets.
-   *
-   * Gated exactly as `sellValue` is — duplicates only, members only, silent while
-   * dust is off — because it is the same promise about the same ledger.
-   *
-   * `MILL_BY_EDITION` rather than `millValue`, and that is safe here rather than
-   * optimistic: `editions` on this route is the map `record_card_pulls` handed
-   * back, so every finish in it is one Postgres decided. A finish this map does
-   * not carry falls back to standard, whose rung is the untrusted floor anyway.
-   */
-  const rosterSellValues = useMemo(() => {
-    if (!me?.participantId || !dustLive(event)) return {};
-    const out: Record<string, number> = {};
-    for (const ep of pack) {
-      // `Object.hasOwn`, not `?? "standard"`, and for the same reason `revealAt`
-      // checks `known`: until the recording answers, a card has no finish, and
-      // defaulting one here would price a platinum duplicate at the standard
-      // rung and then quietly quadruple the offer a moment later. No number is
-      // better than a number that moves.
-      if ((rosterCopies[ep.id] ?? 1) > 1 && Object.hasOwn(editions, ep.id))
-        out[ep.id] = MILL_BY_EDITION[editions[ep.id]];
-    }
-    return out;
-  }, [pack, rosterCopies, editions, me?.participantId, event]);
-
-  async function revealSecret() {
-    // revealingRef first: the secret holds for 1600ms before it turns, and
-    // `secretRevealed` is still false for every one of them.
-    if (revealingRef.current || !secret || secretRevealed) return;
     revealingRef.current = true;
     try {
-      // A duplicate you have seen three times does not need the full production.
-      const ceremony = !secretDuplicate || (status.data?.pulled ?? 0) <= DUPE_CEREMONY_LIMIT;
-      if (ceremony) {
-        setSecretPeeking(true);
-        await new Promise((r) => setTimeout(r, SECRET_RISER_AT_MS));
-        playSecretRiser(0.9);
-        await new Promise((r) => setTimeout(r, SECRET_PEEK_MS - SECRET_RISER_AT_MS));
-        setSecretPeeking(false);
+      // Hold on the glowing edge before a card worth waiting for lands. The
+      // pause is the whole trick — and a duplicate secret you have seen three
+      // times does not need the full production.
+      const skipHold =
+        isSecret &&
+        outcome === "duplicate" &&
+        (status.data?.secretsOwned ?? 0) > DUPE_CEREMONY_LIMIT;
+      const hold = skipHold ? null : peekMs(slot, outcome);
+      if (hold) {
+        setPeeking(i);
+        if (isSecret) {
+          await new Promise((r) => setTimeout(r, SECRET_RISER_AT_MS));
+          playSecretRiser(0.9);
+          await new Promise((r) => setTimeout(r, hold - SECRET_RISER_AT_MS));
+        } else {
+          await new Promise((r) => setTimeout(r, hold));
+        }
+        setPeeking(null);
       }
 
-      setSecretRevealed(true);
-      // Not a tier: SECRET_RARITY carries tier "base" so it satisfies the type,
-      // and nothing may branch on that. The chime is named explicitly.
-      playReveal(secretDuplicate ? SECRET_DUPE_CHIME : SECRET_CHIME);
-      // The secret's haptic belongs to the *landing*, not to the request, so the
-      // stand fires it — see the `secretImpact` cue. A long pattern started here
-      // would still be buzzing a second later when the card actually arrives,
-      // which is the one frame it is supposed to be marking.
-      // A duplicate gets the shimmer, never a second burst — a wink, not a parade.
-      if (!secretDuplicate) await celebrateSecret(secretRarity);
+      revealedRef.current = [...revealedRef.current, i];
+      setRevealed(revealedRef.current);
+      if (isSecret) {
+        // Not a tier: a secret's rarity carries tier "base" so it satisfies the
+        // type, and nothing may branch on that. The chime is named explicitly.
+        // An upgrade gets the fresh chime: the level is the news.
+        playReveal(outcome === "duplicate" ? SECRET_DUPE_CHIME : SECRET_CHIME);
+      } else {
+        playReveal(rarity.tier);
+        // The finish's own cue is deliberately not fired here. It belongs to the
+        // beat *after* the card lands, and PackStand fires it on the frame the
+        // metal comes up.
+        const edition = slot.edition ?? "standard";
+        void collectCard(slot.id, rarity.tier, edition);
+        // Optimistic, and held apart from the reconciled collection: a card the
+        // server has not vouched for is exactly what the merge would prune, so
+        // without this a guest's card would light up as they flipped it and then
+        // vanish. Counted from the snapshot the pack was dealt against.
+        const before = slot.heldBefore ?? localBefore[slot.id]?.heldBefore ?? 0;
+        mine.markCollected(slot.id, rarity.tier, edition, before + 1);
+        // A carried pack's card the claim's adoption never saw. The server
+        // minted nothing for a guest, and this is the only thing that will ever
+        // file it — protected by the unrecorded row until it lands, because the
+        // merge deletes anything the server cannot vouch for.
+        if (
+          carriedFromRef.current &&
+          me?.participantId &&
+          !carriedAdoptedRef.current.includes(slot.id)
+        ) {
+          carriedAdoptedRef.current = [...carriedAdoptedRef.current, slot.id];
+          void (async () => {
+            await addUnrecorded({ dayKey, identity: identity ?? undefined, ids: [slot.id] });
+            try {
+              await adopt({ data: { eventParticipantIds: [slot.id] } });
+              await qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, me.participantId) }); // prettier-ignore
+              await retireUnrecorded([slot.id]);
+            } catch {
+              /* the row keeps protecting it; the next claim adopts it */
+            }
+          })();
+        }
+      }
+
+      // Which burst, if any: the tier's own for a champion or a good finish, the
+      // framed shot for a new secret, the lift for a rung climbed.
+      const burst = celebrationFor({ slot, outcome, tier: rarity.tier });
+      if (burst === "tier") {
+        await celebrate(rarity, slot.kind === "roster" ? (slot.edition ?? "standard") : "standard");
+      } else if (burst === "secret") {
+        await celebrateSecret(rarity);
+      } else if (burst === "upgrade") {
+        const rung = upgradeLabel(slot);
+        const accent =
+          rung?.accent ??
+          (isSecret ? secretTierStyle(slot.card.tier).accent : editionStyle("standard").accent);
+        await celebrateUpgrade(accent);
+      }
 
       // And only now, once the card has been seen and its own burst has run:
       // "that was the last one". Two celebrations on top of each other is one
       // celebration nobody can read.
-      const finished = pendingCompletionRef.current;
-      if (finished) {
-        pendingCompletionRef.current = null;
+      if (isSecret && slot.completedCollection && pendingCompletionsRef.current.includes(i)) {
+        const rest = pendingCompletionsRef.current.filter((n) => n !== i);
+        pendingCompletionsRef.current = rest;
         await new Promise((r) => setTimeout(r, COMPLETION_BEAT_MS));
-        setCompletion(finished);
+        setCompletion(slot.completedCollection);
         // And only once it has actually fired does the row let go of it. Cleared
         // with the ref instead, a reload during the beat above would lose the
         // ceremony exactly as it used to.
-        setPendingCompletion(null);
+        setPendingCompletions(rest);
       }
     } finally {
       revealingRef.current = false;
@@ -1421,16 +988,11 @@ function PackPage() {
   // Written on every step rather than only on tear, so a phone that loses the tab
   // mid-reveal comes back to the cards it had already flipped.
   useEffect(() => {
-    if (!dealtIds || !stateLoaded) return;
+    if (!slots || slots.length === 0 || !stateLoaded) return;
     // Never write this pack under an identity it was not dealt to. `identity`
     // moves a whole render before the resume load can answer — a claim in another
     // tab is the case — and `stateLoaded` is still true on that render, because
-    // the resume effect's `setStateLoaded(false)` lands with the next one. So
-    // this used to stamp the guest's row with the member's name a beat before
-    // `carryPackToIdentity` looked at it, and the carry then refused a row it no
-    // longer recognised: the pack stayed, unmarked as carried, and the record
-    // loop minted every card in it a second time. Progress made inside that
-    // window is not saved, which costs at most one card's flip on the resume.
+    // the resume effect's `setStateLoaded(false)` lands with the next one.
     //
     // The day is the same argument. `dayKey` moves on the tick a render before
     // the load can answer, and writing then rewrites the row to claim yesterday's
@@ -1438,108 +1000,51 @@ function PackPage() {
     if (dealtForRef.current !== identity || dealtOnRef.current !== dayKey) return;
     void savePackState({
       dayKey,
-      ids: dealtIds,
+      // The roster ids alone, in lockstep with `cards`: `carriedAdopted` and the
+      // unrecorded row name roster ids, and the e2e suite reads this field.
+      ids: slots.filter((s) => s.kind === "roster").map((s) => s.id),
+      cards: slots.map((s) => slotRef(s, localBefore[s.id])),
       revealed,
-      secretRevealed,
       identity: identity ?? undefined,
       cursor,
       // Both survive the reload for the same reason the reveal progress does:
       // whoever loads this row next has to know the pack was carried, and that a
       // ceremony is still owed.
       carriedFrom: carriedFromRef.current ?? undefined,
-      carriedAdopted: carriedAdoptedRef.current ? [...carriedAdoptedRef.current] : undefined,
-      pendingCompletion: pendingCompletion ?? undefined,
+      carriedAdopted: carriedFromRef.current ? [...carriedAdoptedRef.current] : undefined,
+      pendingCompletions: pendingCompletions.length > 0 ? pendingCompletions : undefined,
     });
-  }, [
-    dealtIds,
-    dayKey,
-    revealed,
-    secretRevealed,
-    stateLoaded,
-    identity,
+  }, [slots, dayKey, revealed, stateLoaded, identity, cursor, pendingCompletions, localBefore]);
+
+  const stage = packStage({
+    torn,
+    opening,
+    packSize: slots?.length ?? PACK_SIZE,
     cursor,
-    pendingCompletion,
-  ]);
-
-  const secretSlot: SecretSlot = !torn
-    ? "hidden"
-    : // No identity yet means the guest session is still in flight, so this is a
-      // blank slot for a beat rather than a wall. Guests get the card.
-      !actor
-      ? "pending"
-      : secret
-        ? secretRevealed
-          ? "open"
-          : "sealed"
-        : secretUnavailable
-          ? "hidden"
-          : secretFailed
-            ? "failed"
-            : secretPulling
-              ? "pending"
-              : "hidden";
-
-  const stage = packStage({ torn, opening, packSize: pack.length, cursor, secretSlot });
-  const onSecretStep = cursor >= pack.length;
+  });
 
   // Insurance. `entering` is normally cleared by the stand landing, but a stand
-  // that never mounts — an empty pack, or the day tick re-sealing underneath —
-  // would otherwise leave a deck of card backs pinned over a screen that has
+  // that never mounts — a deal that failed, or the day tick re-sealing underneath
+  // — would otherwise leave a deck of card backs pinned over a screen that has
   // moved on.
   useEffect(() => {
     if (stage !== "revealing" && entering) setEntering(null);
   }, [stage, entering]);
 
   /**
-   * Wait for a pull that is still in the air.
-   *
-   * Reads refs rather than the closure, which is already stale by the time the
-   * roster sequence has finished awaiting three cards. Bounded by the pull's own
-   * timeout, which flips it to `failed` and clears `secretPulling`, so this
-   * cannot outlive the request it is waiting on.
-   */
-  async function settledSecret(): Promise<SecretCardView | null> {
-    const deadline = Date.now() + SECRET_PULL_TIMEOUT_MS;
-    while (!secretRef.current && pullingRef.current && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 120));
-    }
-    return secretRef.current;
-  }
-
-  /**
-   * Wait for the stand to actually have the secret on it.
-   *
-   * Set by PackStand when its phase machine finishes the handover. Read rather
-   * than assumed, because the handover ends when the outgoing card reports
-   * having unmounted — an animation callback, with a long fallback behind it for
-   * a backgrounded tab. A fixed delay guessed against that is a race, and losing
-   * it means the run turns a card that is not on screen and then steps past it,
-   * finishing without ever having shown the fourth card.
-   */
-  const secretStagedRef = useRef(false);
-  async function stagedSecret(): Promise<boolean> {
-    const deadline = Date.now() + SECRET_STAGE_TIMEOUT_MS;
-    while (!secretStagedRef.current && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 60));
-    }
-    return secretStagedRef.current;
-  }
-
-  /**
    * Turn every card, in order, without waiting for a tap between them.
    *
    * Kept sequential: the chimes are tuned to land one after another, and firing
-   * them together stacks into noise. The secret goes last or its hold lands
-   * underneath the hit's and neither of them reads.
+   * them together stacks into noise.
    */
   async function revealEverything() {
     // Two taps used to start two sequences over the same cards, each collecting
     // and celebrating them again.
-    if (autoRef.current) return;
+    if (autoRef.current || !slots) return;
     autoRef.current = true;
     setAutoRunning(true);
     try {
-      for (let i = cursor; i < pack.length; i++) {
+      for (let i = cursor; i < slots.length; i++) {
         setCursor(i);
         // Let the card arrive face-down and paint before it turns. Without this
         // the cursor move and the reveal batch into one render, so the stand
@@ -1549,24 +1054,7 @@ function PackPage() {
         await revealAt(i);
         await new Promise((r) => setTimeout(r, AUTO_STEP_MS));
       }
-      // Cleared before the step, not after: the stand answers this the moment
-      // its handover finishes, which can be sooner than the next line runs.
-      secretStagedRef.current = false;
-      setCursor(pack.length);
-      // A pull that was still in flight when the button was pressed has had
-      // three cards' worth of time to land by now. Reading the closure's stale
-      // `secret` left the run stranded on a sealed card the user then had to tap.
-      if (!(await settledSecret())) return;
-      // And the stand has to have finished handing the stage over. It clears the
-      // last roster card off first and holds a beat with nothing on the mark, so
-      // the card this is about to turn does not exist yet.
-      if (!(await stagedSecret())) return;
-      // The same beat every other card gets: arrive face-down and paint before
-      // the flip, or there is no flip to see.
-      await new Promise((r) => setTimeout(r, AUTO_MOUNT_MS));
-      await revealSecret();
-      await new Promise((r) => setTimeout(r, AUTO_STEP_MS));
-      setCursor(pack.length + 1);
+      setCursor(slots.length);
     } finally {
       autoRef.current = false;
       setAutoRunning(false);
@@ -1578,26 +1066,22 @@ function PackPage() {
   // and nothing else in the app preloads — the vault grid can afford to stream in
   // because nothing there is a surprise.
   useEffect(() => {
-    // Started during the ceremony, not when the stand appears. The pack is dealt
-    // the instant the rip commits, so the first two fronts get the whole opening
-    // to fetch and decode in — which is exactly the head start this comment used
-    // to say the flip could not do without.
     if (stage !== "revealing" && stage !== "opening") return;
-    for (const ep of [pack[cursor], pack[cursor + 1]]) {
-      if (ep) void preloadCard(cards.data?.[ep.id]?.front ?? null);
+    for (const s of [slots?.[cursor], slots?.[cursor + 1]]) {
+      if (!s) continue;
+      void preloadCard(s.kind === "secret" ? s.card.artUrl : (cards.data?.[s.id]?.front ?? null));
     }
-    if (secret?.artUrl) void preloadCard(secret.artUrl);
-  }, [stage, cursor, pack, cards.data, secret?.artUrl]);
+  }, [stage, cursor, slots, cards.data]);
 
   const collectedCount = mine.collectedCount;
   const total = bundle?.participants.length ?? 0;
 
-  // Nothing on this screen survives a league nobody can reach: no roster means no
-  // pack to deal, and `tearOpen` refuses on an empty one without a word. Said out
-  // loud here rather than above the wrapper, because on the commonest version of
-  // this — a pack already torn today — `dealtIds` comes back from IndexedDB while
-  // `pack` is still empty, and the guard below would sit on "Loading…" for good.
-  // The same shape /leaderboard and /analytics use for a read they cannot make.
+  // Nothing on this screen survives a league nobody can reach: no roster means
+  // no cards to draw. Said out loud here rather than above the wrapper, because
+  // on the commonest version of this — a pack already torn today — the row comes
+  // back from IndexedDB while the roster is still empty, and the guard below
+  // would sit on "Loading…" for good. The same shape /leaderboard and /analytics
+  // use for a read they cannot make.
   if (eventFailed) {
     return (
       <div className="card-bg min-h-[var(--page-min-h)]">
@@ -1613,12 +1097,7 @@ function PackPage() {
 
   // The sealed pack must not flash on a day already opened, so nothing renders
   // until the stored state has been read.
-  //
-  // The second condition covers a reload: the dealt ids come back from IndexedDB
-  // well before the roster query resolves, and for those frames `pack` is empty.
-  // Rendering the stage off that would step straight past a stand with nothing on
-  // it and flash "Pack Complete" over an empty grid.
-  if (!stateLoaded || (torn && pack.length === 0)) {
+  if (!stateLoaded) {
     return <div className="p-10 text-center text-sm text-muted-foreground">Loading…</div>;
   }
 
@@ -1631,16 +1110,15 @@ function PackPage() {
   // from a different trigger. Three things key off it and they must not drift.
   const presentingAny = presenting || milestoneReveal !== null;
 
+  /** The wrapper is off and the cards are not here yet, or never will be. */
+  const dealing = torn && !opening && (slots == null || slots.length === 0);
+
   return (
     <div className="card-bg min-h-[var(--page-min-h)]">
-      {/* The same banner five other screens show. This one watches the event
-          channel too and said nothing when it went down — a frozen screen
-          with no signal is the exact failure the health states exist for.
-
-          Silent while the ceremony has the screen, though. Tiers really can move
-          under you mid-pack, but a warning strip over the one moment this app is
-          asking for your attention is noise, and the pack is not where anybody
-          can act on it. It comes back the instant the summary lands. */}
+      {/* The same banner five other screens show. Silent while the ceremony has
+          the screen: a warning strip over the one moment this app is asking for
+          your attention is noise, and the pack is not where anybody can act on
+          it. It comes back the instant the summary lands. */}
       {!presentingAny && (realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
       <PresentationMode active={presentingAny} />
       <PresentationStage active={presentingAny} />
@@ -1681,12 +1159,8 @@ function PackPage() {
         {stage === "sealed" && <CollectorSignupGate className="mb-3" />}
         {/* Only while the pack is still sealed. A phone screen is short, and this
             row is 90px of running total above a card whose whole job is to be the
-            biggest thing on it.
-
-            It used to come back with the finished pack, which is where a
-            collection counter belongs — but the summary owns that now, and owns
-            the way back to the vault with it. Two counters carrying the same test
-            id on one screen is also a trap the e2e suite would walk into. */}
+            biggest thing on it. The summary owns the counter once the pack is
+            done, and owns the way back to the vault with it. */}
         {(stage === "sealed" || stage === "opening") && (
           // For the opening it fades out and goes inert rather than unmounting.
           //
@@ -1695,10 +1169,7 @@ function PackPage() {
           // a link somebody can reach. What it deliberately does *not* do is give
           // its 90px back: taking those out of the flow at the moment the rip
           // commits slides the pack, the strip and the cards in it upward on the
-          // one frame the tear is meant to be the only thing moving. The ceremony
-          // does not need the room — the fan clears the top of the pack by a wide
-          // margin even on a short phone — so the reserved space costs nothing and
-          // the jump would cost the whole effect.
+          // one frame the tear is meant to be the only thing moving.
           <motion.div
             inert={stage === "opening"}
             animate={{ opacity: stage === "opening" ? 0 : 1 }}
@@ -1712,10 +1183,6 @@ function PackPage() {
               >
                 <ArrowLeft className="h-3.5 w-3.5" /> Vault
               </Link>
-              {/* The sound switch used to be here, beside the Vault link. It is
-                  fixed to the corner of the screen now — see SoundToggle above.
-                  This row fades to zero and goes inert when the tear commits, so
-                  a mute living in it was gone for the whole ceremony. */}
             </div>
             {/* Height-matched to the Collected block beside it, so the row still
                 gives back none of its 90px when it fades for the tear. */}
@@ -1724,15 +1191,11 @@ function PackPage() {
               <div className="font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 Collected
               </div>
-              {/* Dashed until reconciled — this counter used to read the whole
-                  roster off a local store the old collect-on-sight write had
-                  filled.
-
-                  Also the one place on this screen that says out loud whether the
-                  collection has landed, which is what decides whether a rip will
-                  take at all: `tearOpen` refuses while `packBaseline` is still
-                  null. The e2e suite waits on the dash clearing for exactly that
-                  reason, hence the test id. */}
+              {/* Dashed until reconciled. Also the one place on this screen that
+                  says out loud whether the collection has landed, which is part
+                  of what decides whether a rip will take at all — `tearOpen`
+                  refuses while it is still out. The e2e suite waits on the dash
+                  clearing for exactly that reason, hence the test id. */}
               <div
                 data-testid="collected-count"
                 className="font-display text-lg font-black text-primary"
@@ -1757,16 +1220,8 @@ function PackPage() {
                 Today&apos;s Pack
               </h1>
               <p className="mt-1 max-w-xs px-2 text-meta leading-snug text-muted-foreground sm:mt-2 sm:max-w-sm">
-                {/* The rule, and only the rule. "Rip the top off to open it" used
-                    to follow it, which is the third time this screen explains one
-                    gesture — the perforation is tagged RIP and the line under the
-                    pack says "drag across the tear · or press Enter", and that one
-                    is the accurate one. */}
                 One pack a day, dealt to you and nobody else.
               </p>
-              {/* No test id: the flame above already carries one, and a second
-                  node saying the same number is how the e2e suite ends up
-                  matching two. */}
               {streak && streakLine(streak) && (
                 <p
                   className="mt-1 text-xs font-bold sm:mt-2"
@@ -1778,19 +1233,16 @@ function PackPage() {
             </motion.div>
 
             <PackOpening
-              seed={seed ?? ""}
+              // Only the jitter is seeded off this — which way each card leans as
+              // it leaves the pack. Nothing about which cards they are.
+              seed={`${dayKey}:${identity ?? ""}`}
               artUrl={packBack.data?.urls ?? null}
               packSize={PACK_SIZE}
               year={String(event?.year ?? "")}
-              // What the pack actually holds, not the nominal three. `dealPack`
-              // hands back only what the roster has, so a league that has not
-              // filled up yet gets a two-card pack — and a ceremony hard-coded to
-              // three would fly out a card that then never appears on the stand.
-              // `pack` is `nextPack` until the rip commits and the dealt row
-              // afterwards, so it is right on both sides of the tear. The secret
-              // is a real fourth card on a day with a drop, and rides along.
-              slots={pack.length + (secretComing ? 1 : 0)}
-              secret={secretComing}
+              // Three, always: the server deals exactly that many, and every one
+              // shows the same back. Which of them is a secret is the stand's
+              // news to break.
+              slots={PACK_SIZE}
               onTear={tearOpen}
               onDone={closeCeremony}
             />
@@ -1803,84 +1255,95 @@ function PackPage() {
               Drag across the tear · or press Enter
             </motion.div>
           </div>
+        ) : dealing ? (
+          // The wrapper is off and the cards are still on their way — or the
+          // server could not deal any. Never a toast: a toast announces the
+          // pack to whoever is glancing at the phone over your shoulder.
+          <div className="mx-auto flex max-w-[320px] flex-col items-center gap-3 py-6 text-center">
+            {openState === "failed" ? (
+              <button
+                onClick={() => {
+                  setOpenState("pending");
+                  setOpenRequest((r) => ({ kind: r?.kind ?? "tear", nonce: (r?.nonce ?? 0) + 1 }));
+                }}
+                data-testid="pack-retry"
+                className="wax-foil flex aspect-[5/7] w-full flex-col items-center justify-center gap-2 rounded-xl border border-white/15 p-4 text-center opacity-60"
+              >
+                <span className="font-display text-badge font-black uppercase tracking-[0.08em]">
+                  No signal
+                </span>
+                <span className="text-meta leading-snug text-muted-foreground">
+                  Tap to try again — today&apos;s pack is still yours.
+                </span>
+              </button>
+            ) : openState === "unavailable" ? (
+              <>
+                <div className="wax-foil flex aspect-[5/7] w-full items-center justify-center rounded-xl border border-white/15 opacity-60">
+                  <span className="font-display text-badge font-black uppercase tracking-[0.08em]">
+                    Nothing to deal today
+                  </span>
+                </div>
+                <Link to="/players" className="neon-btn-lg neon-btn-hero w-full">
+                  <PackageOpen className="h-4 w-4" />
+                  View collection
+                </Link>
+              </>
+            ) : (
+              // The same sealed-back sweep the old fourth slot showed while its
+              // pull was in the air.
+              <div
+                data-testid="pack-dealing"
+                className="wax-foil pack-seal-wait relative flex aspect-[5/7] w-full items-center justify-center overflow-hidden rounded-xl border border-white/15"
+              />
+            )}
+          </div>
         ) : stage === "revealing" ? (
           // No heading. The card is the interface — a title over it is a web page
           // telling you what the thing below it is for, and with the shell gone
           // the only thing on screen should be the card.
           <div className="space-y-3">
             <PackStand
-              pack={pack}
+              slots={standSlots}
               bundle={bundle}
               cursor={cursor}
               cards={cards.data}
-              rarities={rarities}
-              editions={editions}
               revealed={revealed}
               universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
               pullCounts={pullCounts.data}
-              secretSlot={secretSlot}
-              secret={secret}
-              secretRarity={secretRarity}
-              secretRevealed={secretRevealed}
-              secretDuplicate={secretDuplicate}
-              secretSellValue={sellValue}
-              copies={rosterCopies}
-              secretCopies={secretCopies}
-              sellValues={rosterSellValues}
-              secretPeeking={secretPeeking}
-              peeking={peeking}
+              peeking={peeking === cursor}
               busy={autoRunning}
               fromPack={ceremonyRanRef.current}
               enteringFrom={entering}
               onEntered={() => setEntering(null)}
-              onSecretStaged={() => {
-                secretStagedRef.current = true;
-              }}
               onReveal={(i) => void revealAt(i)}
-              onRevealSecret={() => void revealSecret()}
               onAdvance={() => setCursor((c) => c + 1)}
             />
 
-            {/* Kept off the secret's step: an escape hatch under the one card the
-                whole sequence is building to reads as a way past it. */}
-            {!onSecretStep && (
-              <div className="flex justify-center pt-2">
-                {/* Kept, and kept findable by name — the e2e suite drives the
-                    whole sequence through it — but demoted to a ghost. An escape
-                    hatch competing with the card for attention is an invitation
-                    to skip the thing you came for. */}
-                <button
-                  onClick={() => void revealEverything()}
-                  // Also off while the deck is still landing: for those few
-                  // hundred milliseconds the real card is invisible behind the
-                  // flight, and this would turn a card nobody can see.
-                  disabled={autoRunning || entering != null}
-                  className="inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground/70"
-                >
-                  Reveal all
-                </button>
-              </div>
-            )}
+            <div className="flex justify-center pt-2">
+              {/* Kept, and kept findable by name — the e2e suite drives the
+                  whole sequence through it — but demoted to a ghost. An escape
+                  hatch competing with the card for attention is an invitation
+                  to skip the thing you came for. */}
+              <button
+                onClick={() => void revealEverything()}
+                // Also off while the deck is still landing: for those few
+                // hundred milliseconds the real card is invisible behind the
+                // flight, and this would turn a card nobody can see.
+                disabled={autoRunning || entering != null}
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground/70"
+              >
+                Reveal all
+              </button>
+            </div>
           </div>
         ) : (
           <PackSummary
-            pack={pack}
+            slots={standSlots}
             bundle={bundle}
             cards={cards.data}
-            rarities={rarities}
-            editions={editions}
             revealed={revealed}
             pullCounts={pullCounts.data}
             universalBack={urlFromSet(packBack.data?.urls) ? (packBack.data?.urls ?? null) : null}
-            secretSlot={secretSlot}
-            secret={secret}
-            secretRarity={secretRarity}
-            secretDuplicate={secretDuplicate}
-            secretSellValue={sellValue}
-            secretPulled={status.data?.pulled ?? 0}
-            copies={rosterCopies}
-            secretCopies={secretCopies}
-            sellValues={rosterSellValues}
             collected={collectedCount}
             total={total}
             eventYear={event?.year ?? null}
@@ -1891,16 +1354,6 @@ function PackPage() {
             claimError={claimError}
             onClaim={() => {
               if (claimable) void claimMilestone(claimable.days);
-            }}
-            onRetrySecret={() => {
-              pullFiredRef.current = false;
-              setSecretFailed(false);
-              // Held on through the render between the tap and the effect. With
-              // every flag false the slot computes to "hidden" and the fourth
-              // card disappears instead of showing that it is trying again.
-              setSecretPulling(true);
-              // The dependency that actually re-runs the effect.
-              setRetryNonce((n) => n + 1);
             }}
           />
         )}
