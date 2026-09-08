@@ -661,6 +661,52 @@ describe("deletes", () => {
     ]);
   });
 
+  it("refuses to delete a participant from another event and removes nothing", async () => {
+    // Same gap storeCard documents: requireAdmin vouches for the event id, not
+    // the roster row beside it, and the storage remove is permanent.
+    withDb({
+      "event_participants.select": { data: null },
+      "storage.remove": { data: null, error: null },
+      "event_participants.update": { data: null, error: null },
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.deleteParticipantCard, {
+        data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front" },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it("scopes both the lookup and the update in deleteParticipantCard to the event", async () => {
+    withDb({
+      "event_participants.select": {
+        data: {
+          id: CARD_ID,
+          card_path: null,
+          card_path_thumb: null,
+          card_path_medium: null,
+          card_back_path: null,
+          card_back_path_thumb: null,
+          card_back_path_medium: null,
+        },
+      },
+      "storage.remove": { data: null, error: null },
+      "event_participants.update": { data: null, error: null },
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.deleteParticipantCard, {
+      data: { eventId: EVENT_ID, eventParticipantId: CARD_ID, side: "front" },
+      headers: asAdmin(),
+    });
+    const [lookup] = mock.callsFor("event_participants", "select");
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(mock.eqValue(lookup, "event_id")).toBe(EVENT_ID);
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
+  });
+
   it("propagates database errors from deleteEventCardBack instead of returning ok: true", async () => {
     withDb({
       "events.select": {
