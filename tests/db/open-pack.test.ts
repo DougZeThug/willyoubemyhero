@@ -487,7 +487,49 @@ describe("the pack travels with the rest of a guest's history", () => {
     expect(rows).toMatchObject([{ participant_id: IDS.alice, guest_id: null }]);
     expect(rows[0].cards).toEqual(pack?.cards);
     // And the member's own open today is now a replay of that pack.
-    expect(await open(IDS.alice)).toMatchObject({ fresh: false, cards: pack?.cards });
+    const replay = await open(IDS.alice);
+    expect(replay).toMatchObject({ fresh: false });
+    expect(replay?.cards.map((c) => c.id)).toEqual(pack?.cards.map((c) => c.id));
+  });
+
+  it("a member replaying a guest's pack is handed the roster cards the guest was never minted", async () => {
+    // Nobody but the roster in the pool, so every slot is a card that a guest
+    // holds only on their phone.
+    const pack = await openAsGuest(GUEST_A);
+    expect(roster(pack)).toHaveLength(3);
+    expect(roster(pack).every((c) => !("edition" in c))).toBe(true);
+    await sql("SELECT public.claim_guest_packs($1, $2)", [IDS.alice, GUEST_A]);
+    expect(await copyRows()).toEqual([]);
+
+    const replay = await open(IDS.alice);
+    // One standard copy per card, filed as an adoption rather than a mint: the
+    // pack never went through the mint cap and should not start counting now.
+    const copies = await copyRows();
+    expect(copies.map((c) => c.event_participant_id).sort()).toEqual(roster(pack).map((c) => c.id).sort()); // prettier-ignore
+    expect(copies.every((c) => c.participant_id === IDS.alice && c.edition === "standard" && c.source === "adopt")).toBe(true); // prettier-ignore
+    expect(replay?.cards).toEqual(roster(pack).map((c) => ({ ...c, adopted: true })));
+    // Persisted, so the next replay neither looks again nor files twice.
+    expect((await packRows())[0].cards).toEqual(replay?.cards);
+    expect(await open(IDS.alice)).toEqual(replay);
+    expect(await copyRows()).toHaveLength(3);
+    expect(await sql("SELECT count(*)::int AS n FROM public.card_mints")).toEqual([{ n: 0 }]);
+  });
+
+  it("does not re-file a card the member already held when a guest's pack replays", async () => {
+    const pack = await openAsGuest(GUEST_A);
+    const first = roster(pack)[0].id;
+    await sql("SELECT public.adopt_card_copies($1, $2, NULL)", [IDS.alice, [first]]);
+    await sql("SELECT public.claim_guest_packs($1, $2)", [IDS.alice, GUEST_A]);
+    await open(IDS.alice);
+    const copies = await copyRows();
+    expect(copies).toHaveLength(3);
+    expect(copies.filter((c) => c.event_participant_id === first)).toHaveLength(1);
+  });
+
+  it("a guest replaying their own pack is not handed anything", async () => {
+    const pack = await openAsGuest(GUEST_A);
+    expect(await openAsGuest(GUEST_A)).toEqual({ ...pack, fresh: false });
+    expect(await copyRows()).toEqual([]);
   });
 
   it("claim_guest_secrets moves every secret from a three-secret pack", async () => {

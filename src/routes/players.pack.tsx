@@ -565,17 +565,16 @@ function PackPage() {
    * Whether the wrapper can be torn right now.
    *
    * The server has to know the day (so the row is keyed right), the guest
-   * session has to exist (so there is somebody to deal to), and the collection
-   * has to be reconciled (so a guest's "held before" snapshot is honest). The
+   * session has to exist (so there is somebody to deal to), the bundle has to
+   * have answered (so the cards dealt can be drawn), and the collection has to
+   * be reconciled (so a guest's "held before" snapshot is honest). The
    * Collected counter's dash is what says the last of those out loud.
+   *
+   * NOT the roster having anybody on it. The server deals from the secrets
+   * alone when the event has no roster yet, and a gate here would keep a pack
+   * the server is willing to deal from ever being asked for.
    */
-  const canTear =
-    !torn &&
-    !!identity &&
-    !!actor &&
-    !!status.data &&
-    collectionLoaded &&
-    (bundle?.participants.length ?? 0) > 0;
+  const canTear = !torn && !!identity && !!actor && !!status.data && !!bundle && collectionLoaded;
 
   /**
    * Tear today's pack. Answers whether it did.

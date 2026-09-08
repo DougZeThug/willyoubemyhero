@@ -128,6 +128,33 @@ BEGIN
      AND ((_participant_id IS NOT NULL AND participant_id = _participant_id)
        OR (_guest_id IS NOT NULL AND guest_id = _guest_id));
   IF FOUND AND _row.cards IS NOT NULL THEN
+    -- A GUEST'S PACK, NOW A MEMBER'S. claim_guest_packs re-parents the row when
+    -- a guest claims a player, and a guest's roster slots were never minted
+    -- (there was nobody to mint them for). The phone files each one through
+    -- adopt_card_copies as it is flipped, but a phone that never comes back
+    -- to the pack — or one that claimed from another device — would leave the
+    -- cards dealt and never held. So the replay files them here, once: a
+    -- guest-shaped slot is one with no `edition` key, and it is marked
+    -- `adopted` so the next replay does not look again. adopt_card_copies is
+    -- idempotent (one standard copy per card not already held), so the phone
+    -- doing the same for the same card is a no-op either way.
+    IF _participant_id IS NOT NULL THEN
+      SELECT coalesce(array_agg((s->>'id')::uuid), '{}'::uuid[]) INTO _roster
+        FROM jsonb_array_elements(_row.cards) AS s
+       WHERE s->>'kind' = 'roster' AND NOT (s ? 'edition') AND NOT (s ? 'adopted');
+      IF cardinality(_roster) > 0 THEN
+        PERFORM public.adopt_card_copies(_participant_id, _roster, NULL);
+        SELECT jsonb_agg(
+                 CASE WHEN s->>'kind' = 'roster' AND NOT (s ? 'edition') AND NOT (s ? 'adopted')
+                      THEN s || '{"adopted": true}'::jsonb
+                      ELSE s END)
+          INTO _slots
+          FROM jsonb_array_elements(_row.cards) AS s;
+        UPDATE public.pack_opens SET cards = _slots
+         WHERE participant_id = _participant_id AND opened_on = _day;
+        _row.cards := _slots;
+      END IF;
+    END IF;
     SELECT count(*)::int INTO _n FROM public.pack_opens
      WHERE (_participant_id IS NOT NULL AND participant_id = _participant_id)
         OR (_guest_id IS NOT NULL AND guest_id = _guest_id);
