@@ -188,9 +188,13 @@
      rule can outrank, and its mobile breakpoint is 600px where the nav's is
      768px. It is handed this variable, so the media query below is what
      actually decides the number. */
-  --above-tab-bar: calc(5rem + env(safe-area-inset-bottom));
+  /* max() rather than the bare env(), and the same floor pb-safe uses: these
+     three have to agree with the bar's own padding or the room reserved under
+     it stops matching the room it takes. */
+  --safe-bottom: max(env(safe-area-inset-bottom), 0.75rem);
+  --above-tab-bar: calc(5rem + var(--safe-bottom));
   /* The same slot with the offline banner already standing in it. */
-  --above-offline-banner: calc(7.75rem + env(safe-area-inset-bottom));
+  --above-offline-banner: calc(7.75rem + var(--safe-bottom));
   /* The bar itself, as opposed to the room reserved under it. Two screens park
      a control just above the bar and used to each guess at this — 4.5rem on the
      Trading Post, 3.75rem on the pack — so a bar that ever changes height took
