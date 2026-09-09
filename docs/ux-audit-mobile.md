@@ -113,18 +113,18 @@ Current bar: **Vault · Pack · Trade · (Shop) · Board · League** (`src/lib/n
 
 **Problems**
 
-- **Two products share five slots.** Board and League are the combine; they take 40% of the bar all year for a week of use. The brief's expected shape (Home · Collection · Packs · Trading · Profile) is closer to how the app is actually used the other 51 weeks.
-- **The bar changes shape** (five rows ↔ six) when the commissioner flips dust, acknowledged as a deliberate cost in `nav.ts:38-45`. The half of it that was not deliberate is fixed: the shape is remembered per device (`src/lib/nav-shape.ts`), so a cold load no longer draws five rows and then re-shapes to six a round trip later. What remains is the switch actually being flipped, which is once a season.
-- **Profile has no home.** Account, claim code, sound, tilt, sign out are spread across the header icon menu, the pack screen (sound), the player page overflow (tilt/pin/sound) and `/claim`.
+- **Two products share five slots.** Board and League are the combine; they take 40% of the bar all year for a week of use. The brief's expected shape (Home · Collection · Packs · Trading · Profile) is closer to how the app is actually used the other 51 weeks. **Answered differently, and the audit withdraws the recommendation below**: the rows are the commissioner's now (`events.nav_hidden`, `NavRowsPanel`, `e2e/nav-rows.spec.ts`), so a league that never trades can take Trade off and one that lives on the board can keep it. A fixed five would take that back.
+- **The bar changes shape** (five rows ↔ six) when the commissioner flips dust, acknowledged as a deliberate cost in `nav.ts:38-45`. The half of it that was not deliberate is fixed: the shape is remembered per device (`src/lib/nav-shape.ts`), so a cold load no longer draws five rows and then re-shapes to six a round trip later. What remains is the switch actually being flipped, which is once a season — and it is now flexibility the app is built around rather than a cost it pays.
+- **Profile has no home.** Fixed: `/you` holds the player and code status, the account and sign-out, the streak ladder and every rung it has ever paid, the collection counters PR 5 took off the vault's header, the dust balance, and sound, haptics and tilt. Haptics had no switch anywhere before it, and tilt was `useState` on the player page and forgot itself on every navigation; both are device preferences now. The header's person icon goes there instead of opening a menu that only existed while signed in.
 - Labels are 11 px uppercase at 0.08 em and `whitespace-nowrap`, which is the bar's height contract — a label that wrapped grew the bar past the room `main` reserves for it.
 - Both `<nav>`s carry an `aria-label`; the badge dots are aria-hidden with the text on the link (good).
 
 **Recommendation** (Priority: High, Moderate effort)
 
-- **Vault · Pack · Trade · League · You.** Fold Board into the League hub (it is already the first thing people want from the combine) and put Shop inside the Vault as a dust chip destination (the chip already links there) and as a League-hub tile while dust is on. The bar never reflows.
-- **"You"** = profile: name, code, streak ladder and history, dust balance, sound/haptics/tilt, sign out, admin link.
-- Keep the two dots (secret waiting on Pack, offer on Trade). Add a third state, not a dot: the Pack icon swaps to a torn-pack glyph while today's pack is mid-reveal.
-- Labels 11 px, tracking 0.08 em, `min-h-14` tiles.
+- ~~**Vault · Pack · Trade · League · You.** Fold Board into the League hub and put Shop inside the Vault as a dust chip destination and as a League-hub tile while dust is on. The bar never reflows.~~ **Withdrawn.** A fixed five was the answer to a bar nobody could shape; the commissioner can shape this one, and the audit would rather have that than a bar that never moves. Board and Shop keep their rows, the League hub keeps only the screens with no row at all, and `/leaderboard` is reachable from its tab — which is a gap if a commissioner ever hides that row, and the one thing left open here.
+- **"You"** = profile: name, code, streak ladder and history, dust balance, sound/haptics/tilt, sign out, admin link. **Done** — `src/routes/you.tsx`, reached from the header's person icon rather than from a tab, so the bar stays the commissioner's.
+- Keep the two dots (secret waiting on Pack, offer on Trade). Add a third state, not a dot: the Pack icon swaps to a torn-pack glyph while today's pack is mid-reveal. **Done** — the resting glyph is a sealed pack so the swap reads as an event, and the state is the stored pack row the vault already reads.
+- Labels 11 px, tracking 0.08 em, `min-h-14` tiles. **Done in PR 0/1.**
 - Bottom sheets for sort/filter (Vault), partner and card pickers (Trade), and a contextual "…" on the player page instead of the 26 px overflow chip.
 
 ---
@@ -658,7 +658,7 @@ Passing: bottom tabs, Open Pack (46 px), shelf headers (`min-h-11`), dust chip (
 
 - **Works**: five clear tiles; fetches nothing.
 - **UX/mobile**: 2-col tiles fine; the admin line is a 15 px link.
-- **Changes**: absorb Board as the first tile; house Shop while dust is on; 44 px admin link.
+- **Changes**: none. Absorbing Board and housing Shop were consequences of the withdrawn five-tab bar — both keep their own rows — and the hub stays what its test says it is: the only door to the screens with no row at all. The 44 px admin link landed in PR 1.
 - **Priority: Low.**
 
 ### Leaderboard — `/leaderboard`
@@ -677,9 +677,9 @@ Passing: bottom tabs, Open Pack (46 px), shelf headers (`min-h-11`), dust chip (
 
 ### Global shell (header, tabs, toasts, errors)
 
-- **Problems**: remaining — two products share five slots, and the bar still re-shapes the once when the dust switch is actually flipped (§4).
-- **Fixed**: single-line wordmark; safe-area top and bottom, live now that the viewport carries `viewport-fit=cover`; 44 px account target; 11 px nav labels that cannot wrap; toasts bottom-centre above the bar; themed 404, error boundary and SSR error page.
-- **Changes**: remaining — fixed five tabs (Vault · Pack · Trade · League · You), which is PR 9.
+- **Problems**: none outstanding. The bar re-shaping when the dust switch is flipped is deliberate, and so is every other row on it being the commissioner's (§4).
+- **Fixed**: single-line wordmark; safe-area top and bottom, live now that the viewport carries `viewport-fit=cover`; 44 px account target; 11 px nav labels that cannot wrap; toasts bottom-centre above the bar; themed 404, error boundary and SSR error page; the profile has a home at `/you` and the header's person icon goes to it.
+- **Changes**: none. The five-fixed-tabs half of PR 9 was withdrawn in favour of the commissioner-configurable bar; the profile half shipped.
 - **Priority: Low** (was High).
 
 ---
@@ -868,7 +868,7 @@ Project guardrails for willyoubemyhero (read CLAUDE.md first):
 | 6   | Acquisitions read and "new since last visit"    | §12                | new server function + test, vault, player page                             | Medium |
 | 7   | Full-screen card viewer                         | §6, §9             | new `card-viewer.tsx`, `players.$id.tsx`, `secret-card-sheet.tsx`          | High   |
 | 8   | Trade builder                                   | §10                | `players.trade.tsx` split, `trade-offer-card.tsx`, new `trade-builder.tsx` | High   |
-| 9   | Navigation and profile                          | §4                 | `nav.ts`, `site-nav.tsx`, `league.ts`, new `routes/you.tsx`                | Medium |
+| 9   | Navigation and profile                          | §4                 | `site-nav.tsx`, new `routes/you.tsx`, streak history read                  | Medium |
 | 10  | Two-beat reveal and set mystery slot            | §7, §9, §14        | `pack-stand.tsx`, `players.index.tsx`                                      | Medium |
 
 ### PR 0 — Design tokens and control sizes
@@ -1073,6 +1073,15 @@ Done when:
 ### PR 9 — Navigation and profile
 
 Branch `ux/09-nav-profile`. Title: **Five fixed tabs and a profile screen**.
+
+> **What actually shipped**: items 4 and 5 (the profile, and the header icon and
+> torn-pack glyph). Items 1 and 2 were withdrawn — see §4. The bar became the
+> commissioner's between this prompt being written and being run, and fixing it
+> at five would have taken that back; Board and Shop keep their rows, so the
+> League hub needs neither tile. `/you` therefore has no tab and hangs off the
+> header's person icon, and `nav.ts`, `nav.test.ts`, `league.ts` and
+> `league.test.ts` are untouched but for the Pack tab's resting glyph. The prompt
+> below is left as it was written.
 
 ```text
 Goal: the tab bar never changes shape and every setting has one home. Implements §4 of docs/ux-audit-mobile.md.

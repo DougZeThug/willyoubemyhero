@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { MessageSquare, Send, Trash2 } from "lucide-react";
 import { deleteComment, postComment, toggleReaction } from "@/lib/social.functions";
+import { buzz } from "@/lib/card-sfx";
 import { useMemberSession } from "@/lib/member-token";
 import { useEnsureGuestSession } from "@/hooks/use-guest-session";
 import type { CommentRow, ReactionRow } from "@/hooks/use-event-social";
@@ -160,7 +161,7 @@ export function CardSocial({
     setOptimistic((prev) => ({ ...prev, [emoji]: (prev[emoji] ?? 0) + (adding ? 1 : -1) }));
     if (adding && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       setBursting(emoji);
-      navigator.vibrate?.([8]);
+      buzz([8]);
     }
     try {
       await toggleFn({

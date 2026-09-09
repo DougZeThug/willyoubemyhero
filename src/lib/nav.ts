@@ -5,7 +5,7 @@
 // nothing else — a mixed module breaks fast refresh for everything importing it,
 // which here is the app shell.
 
-import { Layers, PackageOpen, ArrowLeftRight, Sparkles, Timer, Trophy, type LucideIcon } from "lucide-react"; // prettier-ignore
+import { Layers, Package, ArrowLeftRight, Sparkles, Timer, Trophy, type LucideIcon } from "lucide-react"; // prettier-ignore
 
 /**
  * The rows the bar can hold, as ids rather than paths.
@@ -63,7 +63,10 @@ export function activeTab(path: string, tos: readonly string[]): string | null {
 /** Every row the bar knows about, in order, before anything is switched off. */
 const ALL_ROWS: NavTab[] = [
   { id: "vault", to: "/players", label: "Vault", icon: Layers },
-  { id: "pack", to: "/players/pack", label: "Pack", icon: PackageOpen },
+  // A SEALED pack at rest. site-nav swaps it for the torn one while today's
+  // pack is mid-reveal, and that swap only says anything if the resting glyph
+  // is the unopened state.
+  { id: "pack", to: "/players/pack", label: "Pack", icon: Package },
   { id: "trade", to: "/players/trade", label: "Trade", icon: ArrowLeftRight },
   { id: "shop", to: "/players/shop", label: "Shop", icon: Sparkles },
   { id: "board", to: "/leaderboard", label: "Board", icon: Timer },

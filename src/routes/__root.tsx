@@ -20,7 +20,7 @@ import { AccountBridge } from "@/components/account-bridge";
 import { TrophyCeremonyHost } from "@/components/trophy-ceremony-host";
 import { useIsPresenting } from "@/hooks/use-presentation";
 import { useIsOnline } from "@/hooks/use-online";
-import { hydrateCardSfxMuted } from "@/lib/card-sfx";
+import { hydrateCardSfxMuted, hydrateHapticsOff } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
   return (
@@ -185,6 +185,7 @@ function RootComponent() {
   // is tapped, and card-sfx is imported by components far below this one.
   useEffect(() => {
     hydrateCardSfxMuted();
+    hydrateHapticsOff();
   }, []);
 
   return (

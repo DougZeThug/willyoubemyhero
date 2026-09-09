@@ -63,6 +63,30 @@ test.describe("the dust shop", () => {
     await expect(page).toHaveURL(/\/players\/shop$/);
   });
 
+  test("the profile carries the balance and the same way through", async ({ page, server }) => {
+    // The second place a balance is read out. It is gated on the switch AND on a
+    // claimed member for the same reason the vault's chip is: dust nobody can
+    // hold, with nowhere to spend it, is a round trip for a chip that will not
+    // render.
+    await asMember(page);
+    server.set("getActiveEvent", withDust(true));
+    server.set("getDustBalance", { balance: 140 });
+    await page.goto("/you");
+
+    const chip = page.getByRole("main").getByRole("link", { name: /140 dust/i });
+    await expect(chip).toBeVisible();
+    await chip.click();
+    await expect(page).toHaveURL(/\/players\/shop$/);
+  });
+
+  test("keeps dust off the profile while the switch is off", async ({ page, server }) => {
+    await asMember(page);
+    server.set("getDustBalance", { balance: 140 });
+    await page.goto("/you");
+    await expect(page.getByRole("heading", { name: /^you$/i })).toBeVisible();
+    await expect(page.getByRole("main").getByText(/dust/i)).toHaveCount(0);
+  });
+
   test("still answers on a bookmarked URL after dust is switched off", async ({ page, server }) => {
     // The tab disappears but the link somebody saved does not, and a 404 on a
     // screen that worked yesterday reads as a broken app rather than a switch.

@@ -1,22 +1,12 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { UserRound, LogIn } from "lucide-react";
-import { toast } from "sonner";
+import { PackageOpen, UserRound } from "lucide-react";
 import { useIsPresenting } from "@/hooks/use-presentation";
 import { useTradeBadge } from "@/hooks/use-trade-badge";
 import { useSecretActor } from "@/hooks/use-daily-secret";
+import { usePackProgress } from "@/hooks/use-pack-progress";
 import { usePackStatus } from "@/hooks/use-pack-status";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
-import { signOutAccount, useAuthUser } from "@/hooks/use-account";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { packWaiting as packStillSealed } from "@/lib/pack";
 import { activeTab, navTabs, type NavRowId } from "@/lib/nav";
 import { useActiveEvent } from "@/hooks/use-active-event";
@@ -34,6 +24,17 @@ export function SiteNav() {
   // nav share one round trip rather than making two.
   const packStatus = usePackStatus(useSecretActor());
   const packWaiting = packStillSealed(packStatus.data);
+  // The third state on the Pack tab, and deliberately not a third dot: a dot
+  // says "something is waiting" and this says "you are already in it". The
+  // stored pack row is the same one the vault reads for "Finish your pack", so
+  // the bar and the Today card can never disagree about which it is.
+  //
+  // It reads IndexedDB rather than the network, but it does reach usePackIdentity,
+  // which mints a device id if there is not one — so the shell now mints on every
+  // screen rather than only on the vault. Cheap in practice: `/` redirects to
+  // /players, which has always minted one, and the only person newly affected is
+  // somebody who lands straight on /tv or /leaderboard and never opens the cards.
+  const packTorn = usePackProgress().state === "torn";
   // Which rows the bar holds: the shop answers to the dust switch, the rest to
   // the commissioner's hidden set. Both ride the same event, so this is one read
   // and not two. useActiveEvent rather than useEventBundle on purpose — see the
@@ -140,7 +141,7 @@ export function SiteNav() {
               );
             })}
           </nav>
-          <AccountMenu />
+          <ProfileLink current={path === "/you"} />
         </div>
       </motion.header>
 
@@ -160,7 +161,10 @@ export function SiteNav() {
             above already relies on. */}
         <ul className="mx-auto flex max-w-md">
           {links.map((l) => {
-            const Icon = l.icon;
+            // A pack halfway through its reveal wears the torn glyph. The
+            // resting one is a sealed pack, which is what makes the swap read as
+            // an event rather than as a different tab.
+            const Icon = l.id === "pack" && packTorn ? PackageOpen : l.icon;
             const waiting = badge(l.id);
             return (
               <li key={l.to} className="min-w-0 flex-1">
@@ -238,68 +242,30 @@ function WaitingDot({ className, color }: { className?: string; color?: string }
 }
 
 /**
- * Session-driven sign-in affordance.
+ * The way in to /you.
  *
- * Rendered from the auth session rather than as a static "Sign in" link: a header
- * that still says "Sign in" after a successful sign-in reads as a broken login.
+ * It used to be a dropdown that only existed while signed in, holding two links,
+ * an admin shortcut and the app's only sign-out. All four moved to /you, which
+ * is a screen a signed-out person can also read — the menu's own state was the
+ * thing that made "where do I change this" have two answers.
+ *
+ * One glyph in both states, and it is the person rather than the old sign-in
+ * arrow: the destination no longer depends on whether there is an account behind
+ * it. `aria-current` because /you has no tab to light, and "say which page you
+ * are on" is a rule the whole app keeps.
  */
-function AccountMenu() {
-  const { user } = useAuthUser();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-
-  if (!user) {
-    return (
-      <Link
-        to="/auth"
-        aria-label="Sign in"
-        className="flex h-11 w-11 items-center justify-center text-muted-foreground transition-colors hover:text-primary md:w-16 md:justify-end"
-      >
-        <LogIn className="h-5 w-5" strokeWidth={1.75} />
-      </Link>
-    );
-  }
-
+function ProfileLink({ current }: { current: boolean }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Account"
-        className="flex h-11 w-11 items-center justify-center text-primary transition-opacity hover:opacity-80 md:w-16 md:justify-end"
-      >
-        <UserRound className="h-5 w-5" strokeWidth={1.75} />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
-          {user.email ?? "Signed in"}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => void navigate({ to: "/auth" })}>Account</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void navigate({ to: "/claim" })}>
-          Player code
-        </DropdownMenuItem>
-        {/* Off the bar and in here now that the tabs belong to the cards. Shown
-            to anybody signed in rather than to a commissioner we cannot identify
-            from the client: /admin is PIN-gated, so the worst a curious member
-            finds is the PIN prompt. A signed-out commissioner still has the
-            League hub's admin row. */}
-        <DropdownMenuItem onSelect={() => void navigate({ to: "/admin" })}>Admin</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={() => {
-            void (async () => {
-              // Cancel before the sign-out so in-flight queries don't land as errors,
-              // and clear so Back cannot restore a shell hydrated from this account.
-              await queryClient.cancelQueries();
-              queryClient.clear();
-              await signOutAccount();
-              toast.success("Signed out");
-              void navigate({ to: "/auth", replace: true });
-            })();
-          }}
-        >
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Link
+      to="/you"
+      aria-label="You"
+      aria-current={current ? "page" : undefined}
+      className={cn(
+        "flex h-11 w-11 items-center justify-center transition-colors hover:text-primary md:w-16 md:justify-end",
+        current ? "text-primary" : "text-muted-foreground",
+      )}
+    >
+      <UserRound className="h-5 w-5" strokeWidth={1.75} />
+    </Link>
   );
 }
