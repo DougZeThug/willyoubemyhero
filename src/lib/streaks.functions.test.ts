@@ -397,6 +397,32 @@ describe("getStreakHistory", () => {
     expect(res[0]?.card).toBeNull();
   });
 
+  it("keeps each rung's own level when one card paid two of them", async () => {
+    // Every copy of a secret rolls its own level, and a milestone payout is a
+    // copy — so two runs can be paid by the same card at two levels. The signed
+    // view carries the level, so a cache keyed on the card alone made the second
+    // rung wear the first one's word and pips.
+    const OTHER = "00000000-0000-4000-8000-00000000ce04";
+    withHistory(
+      [
+        { milestone: 3, streak_started_on: "2026-08-01", claimed_on: "2026-08-03", reward_ref: PULL }, // prettier-ignore
+        { milestone: 3, streak_started_on: "2026-06-01", claimed_on: "2026-06-03", reward_ref: OTHER }, // prettier-ignore
+      ],
+      [
+        { id: PULL, secret_card_id: CARD, tier: "mythic" },
+        { id: OTHER, secret_card_id: CARD, tier: "common" },
+      ],
+      [{ id: CARD, name: "Ghost", art_path: null, back_path: null }],
+    );
+    const { getStreakHistory } = await import("./streaks.functions");
+    const res = await callServerFn<{ card: { name: string; tier: string } | null }[]>(
+      getStreakHistory,
+      { headers: asMe() },
+    );
+    expect(res.map((r) => r.card?.tier)).toEqual(["mythic", "common"]);
+    expect(res.every((r) => r.card?.name === "Ghost")).toBe(true);
+  });
+
   it("carries no count of anything but this actor's own claims", async () => {
     // The silence rule, asserted by exact keys rather than by reading the
     // markup: a set size added here would reach the profile screen, and every

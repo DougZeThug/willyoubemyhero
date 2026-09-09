@@ -33,7 +33,7 @@ import { HoloCard } from "@/components/holo-card";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
 import { cardBadge, editionRank, editionStyle, toEdition, type Edition } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
-import { requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
+import { hasLiveGyro, requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { CardSocial } from "@/components/card-social";
@@ -134,13 +134,31 @@ function PlayerCardPage() {
   const favourites = useVaultFavourites();
 
   const [flipped, setFlipped] = useState(false);
-  // Seeded from the device preference set on /you rather than starting flat
-  // every time. `useTiltWanted` reads storage in an effect, so the first frame
-  // still matches the server's and the card leans a tick later — which is the
-  // right way round; the other order is a card that leans and then snaps back.
+  // Restored from the device preference set on /you rather than starting flat
+  // every time — but only once a real reading proves the grant is still live.
+  // The preference says what the person wants; it cannot say whether iOS still
+  // allows it, and a grant does not survive a browsing session there. Trusting
+  // the preference alone lit the chip over a card that never moved, which is the
+  // failure gyro.ts was written to end. When the grant has lapsed this leaves
+  // tilt off and the chip below asks properly, from a tap.
+  //
+  // The first frame is flat either way, which is the right order: the other one
+  // is a card that leans and then snaps back.
   const tiltWanted = useTiltWanted();
   const [gyro, setGyro] = useState(false);
-  useEffect(() => setGyro(tiltWanted), [tiltWanted]);
+  useEffect(() => {
+    if (!tiltWanted) {
+      setGyro(false);
+      return;
+    }
+    let watching = true;
+    void hasLiveGyro().then((live) => {
+      if (watching && live) setGyro(true);
+    });
+    return () => {
+      watching = false;
+    };
+  }, [tiltWanted]);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   // Seeded from the search parameter, which is the whole reason it exists:

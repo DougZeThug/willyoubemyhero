@@ -328,23 +328,30 @@ export const getStreakHistory = createServerFn({ method: "GET" }).handler(
 
     const pullById = new Map(pulls.map((p) => [p.id, p]));
     const cardById = new Map(cards.map((c) => [c.id, c]));
-    // Signed once per distinct card rather than once per claim: the same card can
-    // pay two rungs across two runs, and signPath is a round trip.
+    // Keyed on the card AND the level, never the card alone. The level belongs to
+    // the PULL — every copy rolls its own — and signSecretCard bakes it into the
+    // view, so two rungs paid by two copies of one card would both have worn the
+    // first one's word and pips. Same card at the same level is genuinely the
+    // same view, which is where the round trip signPath costs is still saved.
     const signed = new Map<string, SecretCardView>();
+    const viewKey = (cardId: string, tier: string) => `${cardId}:${tier}`;
 
     const out: StreakHistoryEntry[] = [];
     for (const row of rows) {
       const pull = row.reward_ref ? pullById.get(row.reward_ref) : undefined;
       const card = pull ? cardById.get(pull.secret_card_id) : undefined;
-      if (pull && card && !signed.has(card.id)) {
-        signed.set(card.id, await signSecretCard(card, pull.tier));
+      let view: SecretCardView | null = null;
+      if (pull && card) {
+        const key = viewKey(card.id, pull.tier);
+        if (!signed.has(key)) signed.set(key, await signSecretCard(card, pull.tier));
+        view = signed.get(key) ?? null;
       }
       out.push({
         milestone: row.milestone,
         label: streakMilestone(row.milestone)?.label ?? null,
         claimedOn: row.claimed_on,
         streakStartedOn: row.streak_started_on,
-        card: card ? (signed.get(card.id) ?? null) : null,
+        card: view,
       });
     }
     return out;

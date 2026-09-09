@@ -39,6 +39,17 @@ export async function requestGyroAccess(): Promise<GyroAccess> {
   }
   // No prompt to answer, so the only honest test is whether a reading arrives.
   // A browser with no gyroscope behind the API stays silent forever.
+  return awaitReading();
+}
+
+/**
+ * Wait for one real orientation reading, or give up.
+ *
+ * Asks for nothing: it only listens. Shared by `requestGyroAccess`'s no-prompt
+ * branch and by `hasLiveGyro` below, which is the whole reason it is its own
+ * function — the two want the same evidence for different questions.
+ */
+function awaitReading(): Promise<GyroAccess> {
   return new Promise<GyroAccess>((resolve) => {
     let settled = false;
     const done = (result: GyroAccess) => {
@@ -56,6 +67,27 @@ export async function requestGyroAccess(): Promise<GyroAccess> {
     const timer = setTimeout(() => done("unsupported"), FIRST_EVENT_TIMEOUT_MS);
     window.addEventListener("deviceorientation", onReading);
   });
+}
+
+/**
+ * Whether orientation events are arriving RIGHT NOW, without asking for anything.
+ *
+ * The question a stored preference cannot answer on its own. A grant does not
+ * outlive a browsing session on iOS, and there is no way to query one — so a
+ * remembered "tilt wanted" restored straight into an active tilt is a chip lit
+ * over a card that never moves, which is the exact failure the top of this file
+ * says the old boolean caused.
+ *
+ * Deliberately never calls `requestPermission`: a prompt outside a user gesture
+ * is refused anyway, and a screen the person merely opened is not a screen they
+ * asked a question on. Silence for 600ms reads as "not live", the tilt stays off
+ * and the card's own chip is still there to ask properly from a tap.
+ */
+export function hasLiveGyro(): Promise<boolean> {
+  if (typeof window === "undefined" || !("DeviceOrientationEvent" in window)) {
+    return Promise.resolve(false);
+  }
+  return awaitReading().then((access) => access === "granted");
 }
 
 // ------- The preference, as opposed to the permission -------

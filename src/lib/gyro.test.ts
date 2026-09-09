@@ -5,7 +5,7 @@
 // Chrome and Firefox. The chip lit, nothing moved, and nothing said why.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { isTiltWanted, requestGyroAccess, setTiltWanted, useTiltWanted } from "./gyro";
+import { hasLiveGyro, isTiltWanted, requestGyroAccess, setTiltWanted, useTiltWanted } from "./gyro";
 
 const original = Object.getOwnPropertyDescriptor(window, "DeviceOrientationEvent");
 
@@ -67,6 +67,45 @@ describe("requestGyroAccess", () => {
     window.dispatchEvent(new Event("deviceorientation"));
     await vi.advanceTimersByTimeAsync(700);
     await expect(pending).resolves.toBe("unsupported");
+  });
+});
+
+describe("hasLiveGyro", () => {
+  // The question a stored preference cannot answer. A grant does not outlive a
+  // browsing session on iOS and there is no way to query one, so a remembered
+  // "tilt wanted" restored straight into an active tilt is a chip lit over a
+  // card that never moves — which is the failure the top of gyro.ts describes.
+
+  it("is false when the event type does not exist at all", async () => {
+    Reflect.deleteProperty(window as unknown as Record<string, unknown>, "DeviceOrientationEvent");
+    await expect(hasLiveGyro()).resolves.toBe(false);
+  });
+
+  it("is true while readings are actually arriving", async () => {
+    withOrientation(async () => "granted");
+    const pending = hasLiveGyro();
+    const event = new Event("deviceorientation") as Event & { beta: number | null };
+    Object.defineProperty(event, "beta", { value: 12 });
+    window.dispatchEvent(event);
+    await expect(pending).resolves.toBe(true);
+  });
+
+  it("is false when the grant has lapsed and nothing fires", async () => {
+    withOrientation(async () => "granted");
+    const pending = hasLiveGyro();
+    await vi.advanceTimersByTimeAsync(700);
+    await expect(pending).resolves.toBe(false);
+  });
+
+  it("never asks for permission — a page nobody tapped is not a question", async () => {
+    // A prompt outside a user gesture is refused anyway, and iOS is the only
+    // platform that has one. The card's own chip is still there to ask from a tap.
+    const requestPermission = vi.fn(async () => "granted" as const);
+    withOrientation(requestPermission);
+    const pending = hasLiveGyro();
+    await vi.advanceTimersByTimeAsync(700);
+    await expect(pending).resolves.toBe(false);
+    expect(requestPermission).not.toHaveBeenCalled();
   });
 });
 
