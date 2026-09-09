@@ -199,7 +199,7 @@
      a control just above the bar and used to each guess at this — 4.5rem on the
      Trading Post, 3.75rem on the pack — so a bar that ever changes height took
      one of them with it and left the other behind. */
-  --tab-bar-h: calc(3.625rem + env(safe-area-inset-bottom));
+  --tab-bar-h: calc(3.625rem + var(--safe-bottom));
   /* What a route may fill without pushing the page past one screen: the viewport
      less the sticky header, less the notch above it, less the bar's clearance
      below. dvh and not vh — vh is the LARGE viewport on mobile Safari, so a page
