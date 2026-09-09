@@ -540,3 +540,27 @@ test.describe("tap targets", () => {
     expect(await shortTargets(page)).toEqual([]);
   });
 });
+
+/**
+ * A caller that states its own size keeps it on both pointers.
+ *
+ * `Input` releases to `pointer-fine:text-sm`, and a variant-prefixed utility
+ * outranks an unprefixed one however the two merge — so a bare `text-2xl` on
+ * the member code box rendered 24px on a phone and 14px on a laptop, on the one
+ * field whose whole job is to be read a character at a time at 0.4em tracking.
+ *
+ * Deliberately NOT skipped on desktop: the fine pointer is the half that broke,
+ * and it is the only thing in this file a mouse is the right instrument for.
+ */
+test.describe("field sizing", () => {
+  test("gives the member code the size it asks for on either pointer", async ({ page }) => {
+    await page.goto("/claim");
+    await expect(page.getByRole("heading", { name: /claim your player/i })).toBeVisible();
+
+    expect(
+      await page.locator("#member-code").evaluate((el) => getComputedStyle(el).fontSize),
+      "the code box lost its size to the primitive's pointer-fine: release — a " +
+        "caller that sets text-* has to set the pointer-fine: one too.",
+    ).toBe("24px");
+  });
+});

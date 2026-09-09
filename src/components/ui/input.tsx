@@ -25,6 +25,14 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         // `useMediaQuery`, so the server render and the first client render are
         // the same bytes and nothing flashes at 36px on the way in.
         //
+        // The one sharp edge, and the reason there is no `min-` form of a font
+        // size to hide behind: `pointer-fine:text-sm` is variant-prefixed, so it
+        // outranks a caller's unprefixed `text-*` no matter what order they
+        // merge in. A caller that sets its own size has to set the released one
+        // too — the member code box in claim.tsx and the PIN gate in admin.tsx
+        // are the two that do, both `text-2xl pointer-fine:text-2xl`, and
+        // e2e/smoke.spec.ts measures the first on a mouse so they cannot drift.
+        //
         // A floor for a TEXT field. A file input centres its
         // `::file-selector-button` differently, so it would sit top-aligned in
         // the extra height — there are none behind this primitive today.

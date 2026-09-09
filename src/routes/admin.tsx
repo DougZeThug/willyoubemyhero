@@ -225,7 +225,10 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
               // The one place wide tracking survives the §16 cap: a code is read
               // and typed character by character, and the gaps are what let a
               // thumb find its place in it.
-              className="text-center font-display text-2xl tracking-[0.4em]"
+              // Stated twice for the reason the member code box gives: the
+              // primitive's `pointer-fine:` release would otherwise take this to
+              // 14px on the laptop the console is usually run from.
+              className="text-center font-display text-2xl tracking-[0.4em] pointer-fine:text-2xl"
             />
             <Button type="submit" disabled={busy || !pin} className="w-full">
               {busy ? "Checking…" : "Unlock"}

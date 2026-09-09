@@ -298,7 +298,13 @@ function ClaimPage() {
               // The one place wide tracking survives the §16 cap: a code is read
               // and typed character by character, and the gaps are what let a
               // thumb find its place in it.
-              className="text-center font-display text-2xl tracking-[0.4em]"
+              //
+              // The size is stated twice on purpose. `Input` releases to
+              // `pointer-fine:text-sm`, and a variant-prefixed utility outranks
+              // an unprefixed one whatever the merge order, so a bare `text-2xl`
+              // here would win on a phone and quietly lose to 14px on a mouse —
+              // which is the one size this field cannot be, tracked this wide.
+              className="text-center font-display text-2xl tracking-[0.4em] pointer-fine:text-2xl"
             />
           </div>
 
