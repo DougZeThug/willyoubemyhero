@@ -271,6 +271,10 @@ export const DEFAULT_RESPONSES: Responses = {
     canClaim: false,
     milestones: [],
   },
+  // Empty by default: nobody has cashed a rung in the fixture, so /you renders
+  // the ladder and no history. "getStreakHistory" and "getStreakStatus" are
+  // neither one a substring of the other, which is what the rule above wants.
+  getStreakHistory: [],
   listSecretCards: { cards: [], claimedMembers: 0, exhausted: false },
   // Empty by default, so packedByLabel renders nothing and no existing spec
   // has to know this feature exists.

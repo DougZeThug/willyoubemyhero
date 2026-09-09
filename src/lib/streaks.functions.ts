@@ -3,14 +3,15 @@ import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { optionalActor, requireActor } from "./require-auth.server";
 import { signSecretCard } from "./secret-cards.functions";
-import type { SecretCardRow, PackOpenRow } from "./secret-cards-rows";
-import type { ClaimStreakMilestoneResult } from "./streaks-rows";
+import type { SecretCardRow, SecretPullRow, PackOpenRow } from "./secret-cards-rows";
+import type { ClaimStreakMilestoneResult, StreakClaimRow } from "./streaks-rows";
 import type { SecretCardView } from "./secret-cards";
 import type { SecretTier } from "./secret-rarity";
 import {
   STREAK_MILESTONES,
   STREAK_RESET_MILESTONE,
   isStreakMilestone,
+  streakMilestone,
   walkStreak,
   type Streak,
 } from "./streaks";
@@ -248,3 +249,104 @@ export const claimStreakMilestone = createServerFn({ method: "POST" })
       card: await signSecretCard(card, result.reward.tier),
     };
   });
+
+/** One rung, cashed: which it was, when, and what came out of the wrapper. */
+export type StreakHistoryEntry = {
+  /** The rung, as stored. A rung this deploy no longer lists still renders. */
+  milestone: number;
+  /** Null when the rung has been retired since it was cashed. */
+  label: string | null;
+  claimedOn: string;
+  /** Which run paid it, so two claims of the same rung are tellable apart. */
+  streakStartedOn: string;
+  /** Null when the payout was not a secret, or its pull has since gone. */
+  card: SecretCardView | null;
+};
+
+/** Enough to see the shape of a habit; not enough to walk somebody's whole ledger. */
+const HISTORY_LIMIT = 20;
+
+/**
+ * Every milestone this actor has ever cashed, and the card each one paid.
+ *
+ * Separate from `getStreakStatus` rather than folded into it, for two reasons.
+ * That read answers a question about the RUN you are on — its `claimed` flags are
+ * scoped to the current `streak_started_on` window and go false the day a run
+ * breaks — and it is asked from the nav, the vault and the pack screen on every
+ * focus. This one outlives every run, and it is asked from one screen somebody
+ * has deliberately opened.
+ *
+ * `optionalActor` for the same reason its neighbour uses it: a device with no
+ * identity has claimed nothing, which is an empty list and not an error.
+ *
+ * The set-size rule holds by construction. Every card here came out of THIS
+ * actor's own claim rows, and each is signed by `signSecretCard` — the same view
+ * `getMySecrets` returns — so there is no denominator to leak, and no id from a
+ * request anywhere in the path.
+ */
+export const getStreakHistory = createServerFn({ method: "GET" }).handler(
+  async (): Promise<StreakHistoryEntry[]> => {
+    noStore();
+    const actor = optionalActor();
+    if (!actor) return [];
+
+    const sb = await admin();
+    // One column per actor kind rather than an `.or()` filter, same as the walk
+    // above: PostgREST would take the or, but the test double does not model it,
+    // and a query whose only coverage is production is not covered.
+    const { data: claims, error } = await sb
+      .from("streak_milestone_claims")
+      .select("milestone, streak_started_on, claimed_on, reward_ref")
+      .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
+      .order("claimed_on", { ascending: false })
+      .limit(HISTORY_LIMIT)
+      .returns<Pick<StreakClaimRow, "milestone" | "streak_started_on" | "claimed_on" | "reward_ref">[]>(); // prettier-ignore
+    if (error) throw error;
+
+    const rows = claims ?? [];
+    // Two hops rather than an embed: reward_ref deliberately carries no foreign
+    // key — a pull moves between identities when a guest claims, so the column is
+    // a receipt and not a live reference — and PostgREST can only embed across
+    // one. The `.in(...)` on ids this actor's own rows named is what keeps the
+    // second hop from being a read of the whole ledger.
+    const refs = [...new Set(rows.map((r) => r.reward_ref).filter((v): v is string => !!v))];
+    const pulls = refs.length
+      ? ((
+          await sb
+            .from("secret_card_pulls")
+            .select("id, secret_card_id, tier")
+            .in("id", refs)
+            .returns<Pick<SecretPullRow, "id" | "secret_card_id" | "tier">[]>()
+        ).data ?? [])
+      : [];
+
+    const cardIds = [...new Set(pulls.map((p) => p.secret_card_id))];
+    const cards = cardIds.length
+      ? ((await sb.from("secret_cards").select("*").in("id", cardIds).returns<SecretCardRow[]>())
+          .data ?? [])
+      : [];
+
+    const pullById = new Map(pulls.map((p) => [p.id, p]));
+    const cardById = new Map(cards.map((c) => [c.id, c]));
+    // Signed once per distinct card rather than once per claim: the same card can
+    // pay two rungs across two runs, and signPath is a round trip.
+    const signed = new Map<string, SecretCardView>();
+
+    const out: StreakHistoryEntry[] = [];
+    for (const row of rows) {
+      const pull = row.reward_ref ? pullById.get(row.reward_ref) : undefined;
+      const card = pull ? cardById.get(pull.secret_card_id) : undefined;
+      if (pull && card && !signed.has(card.id)) {
+        signed.set(card.id, await signSecretCard(card, pull.tier));
+      }
+      out.push({
+        milestone: row.milestone,
+        label: streakMilestone(row.milestone)?.label ?? null,
+        claimedOn: row.claimed_on,
+        streakStartedOn: row.streak_started_on,
+        card: card ? (signed.get(card.id) ?? null) : null,
+      });
+    }
+    return out;
+  },
+);

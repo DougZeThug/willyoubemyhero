@@ -17,6 +17,9 @@ const ROUTES = [
   { path: "/awards", title: /Awards/i },
   { path: "/league", title: /League/i },
   { path: "/claim", title: /Claim/i },
+  // No tab lights it — it hangs off the header's person icon — so this is the
+  // only place the render sweep sees it at all.
+  { path: "/you", title: /You/i },
   // These three render the same data the rest do and were simply missed.
   { path: "/analytics", title: /Analytics/i },
   { path: "/tv", title: /TV|Board|Combine/i },
@@ -81,6 +84,17 @@ test.describe("smoke", () => {
     const current = page.locator('[aria-current="page"]:visible');
     await expect(current).toHaveCount(1);
     await expect(current).toHaveAttribute("href", "/leaderboard");
+  });
+
+  test("says so on the profile too, which has no tab to light", async ({ page, server }) => {
+    // /you hangs off the header's person icon rather than the bar, and the bar
+    // is deliberately the commissioner's to shape — so the icon is what carries
+    // "you are here". Without this the app had one screen that answered nothing.
+    void server;
+    await page.goto("/you");
+    const current = page.locator('[aria-current="page"]:visible');
+    await expect(current).toHaveCount(1);
+    await expect(current).toHaveAttribute("href", "/you");
   });
 
   test("puts a skip link ahead of the whole nav", async ({ page, server }) => {
@@ -272,6 +286,22 @@ const TAP_TARGET_ROUTES: {
       // getActiveEvent — useEventBundle takes its event from there, see
       // use-event-bundle.ts:15 — which is why the arrange sets that one.)
       await expect(page.getByText(/has not switched dust on/i)).toHaveCount(0);
+    },
+  },
+  {
+    // With dust on and a claimed member, which is the only state in which every
+    // section of this screen exists — the dust chip is gated on both.
+    path: "/you",
+    member: true,
+    arrange: (server) => {
+      server.set("getActiveEvent", { ...BUNDLE.event, dust_enabled: true });
+      server.set("getDustBalance", { balance: 140 });
+    },
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: /^you$/i })).toBeVisible();
+      // The three device settings are the rows this screen exists for, and they
+      // are the last thing to mount.
+      await expect(page.getByRole("button", { name: /^tilt/i })).toBeVisible();
     },
   },
   {
