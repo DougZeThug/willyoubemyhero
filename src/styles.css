@@ -264,7 +264,12 @@
 }
 
 @utility pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
+  /* The max() floor is for Chrome on Android: plenty of versions report
+     safe-area-inset-bottom as 0 while the gesture bar (or the 3-button bar in
+     an installed/fullscreen context) still overlays the bottom of the page,
+     which put the tab bar's labels under the system buttons. Where the inset
+     is real it wins; where it lies, 12px keeps the bar's content tappable. */
+  padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
 }
 
 /* Landscape only, in practice: portrait insets are 0 either way, and the bars
