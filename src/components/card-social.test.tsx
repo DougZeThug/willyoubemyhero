@@ -159,6 +159,37 @@ describe("when signed out", () => {
   });
 });
 
+describe("the touch floor", () => {
+  // jsdom has no layout, so the height itself is measured in e2e. What is worth
+  // pinning here is the pair of classes: the 16px is what stops iOS zooming and
+  // the release has to be `pointer-fine:`, because a width breakpoint hands the
+  // 14px back on a landscape phone (§23 F2).
+  it("keeps the comment box at 16px until the pointer is a mouse", async () => {
+    await renderSocial();
+    const box = screen.getByRole("textbox");
+    expect(box).toHaveClass(
+      "min-h-11",
+      "text-base",
+      "pointer-fine:min-h-0",
+      "pointer-fine:text-sm",
+    );
+  });
+
+  it("keeps the prompt that focuses itself at 16px too", async () => {
+    await renderSocial();
+    await userEvent.type(screen.getByRole("textbox"), "hello");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+
+    const named = await screen.findByPlaceholderText("Your name");
+    expect(named).toHaveClass(
+      "min-h-11",
+      "text-base",
+      "pointer-fine:min-h-0",
+      "pointer-fine:text-sm",
+    );
+  });
+});
+
 describe("reactions", () => {
   beforeEach(signIn);
 

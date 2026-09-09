@@ -85,7 +85,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
               aria-label="Athlete on deck"
               value={pick}
               onChange={(e) => setSelected(e.target.value)}
-              className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-sm font-semibold uppercase"
+              className="min-h-11 min-w-0 flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-base font-semibold uppercase pointer-fine:min-h-0 pointer-fine:text-sm"
             >
               {queued.map((p) => (
                 <option key={p.id} value={p.participant_id}>

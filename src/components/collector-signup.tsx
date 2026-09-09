@@ -70,7 +70,7 @@ export function CollectorSignup({ className }: { className?: string }) {
         onChange={(e) => setName(e.target.value)}
         maxLength={32}
         placeholder="Your name"
-        className="mt-3 w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none focus:border-primary/60"
+        className="mt-3 min-h-11 w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-base text-foreground outline-none focus:border-primary/60 pointer-fine:min-h-0 pointer-fine:text-sm"
       />
       <button
         type="submit"

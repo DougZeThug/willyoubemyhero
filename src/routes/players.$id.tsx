@@ -1056,8 +1056,14 @@ function NavButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
+      // `md:block` decides whether the arrows exist at all — below it a phone
+      // swipes instead. The floor decides how big they are once they do, and
+      // the two are different questions: 844px is past `md:`, so a phone turned
+      // sideways shows these with the thumb still the input. Without the floor
+      // it showed them at 38px, which is the width-breakpoint mistake this
+      // file's own inputs were just fixed for (§18).
       className={cn(
-        "surface-panel absolute top-1/2 hidden -translate-y-1/2 rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 md:block",
+        "surface-panel absolute top-1/2 hidden min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 pointer-fine:min-h-0 pointer-fine:min-w-0 md:flex",
         className,
       )}
     >

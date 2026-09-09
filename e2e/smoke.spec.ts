@@ -157,8 +157,40 @@ test.describe("smoke", () => {
  */
 const MIN_TARGET = 44;
 
-/** Everything a thumb can land on. An <a> with no href is not one. */
-const CONTROLS = 'button, a[href], [role="button"]';
+/**
+ * Everything a thumb can land on. An <a> with no href is not one.
+ *
+ * The fields joined late (§23 F1): the floor lived in `ui/button.tsx` while
+ * `ui/input.tsx` was a bare `h-9`, and this selector is the reason nobody
+ * noticed — it measured the buttons around the member code field and never the
+ * field itself.
+ *
+ * `select` and `textarea` are here for the next one rather than for anything
+ * they catch today: every one in the app is behind the commissioner's PIN or,
+ * for the marshal's athlete-on-deck box, behind `useAdminSession()` on /live,
+ * so this sweep cannot reach them. That box was raised by hand alongside this
+ * change; a select that lands on a player route from now on is measured.
+ *
+ * Watch `sr-only`: Playwright counts a 1x1 clipped box as visible, which is why
+ * EXEMPT exists below. The only one today is the radio in secret-look-picker,
+ * and that is admin-only.
+ */
+const CONTROLS = 'button, a[href], [role="button"], input, select, textarea';
+
+/**
+ * Under 16px iOS Safari zooms the page when a field takes focus, and zooms it
+ * around the caret rather than back out again afterwards.
+ *
+ * Its own rule and its own sweep rather than a second column on the one above:
+ * a field can be tall enough and still 14px, and a failure should say which of
+ * the two broke.
+ *
+ * `ui/textarea.tsx` still carries the `md:text-sm` this PR took off `Input`. It
+ * is out of scope because every <Textarea> is admin-only — so if this sweep
+ * ever reddens on a textarea, that is the reason, and the fix is the same pair.
+ */
+const FIELDS = "input, select, textarea";
+const MIN_FONT = 16;
 
 /**
  * Controls allowed under the floor, each with the reason it is allowed.
@@ -198,6 +230,31 @@ async function shortTargets(page: Page): Promise<string[]> {
   return measured
     .filter((t) => t.height < MIN_TARGET && !EXEMPT.some((e) => e.name.test(t.name)))
     .map((t) => `${t.height.toFixed(0)}px <${t.tag}> "${t.name || "(unnamed)"}" — ${t.hint}`);
+}
+
+/** Every visible field small enough to zoom the page on focus. */
+async function zoomingFields(page: Page): Promise<string[]> {
+  const measured = await page
+    .locator(FIELDS)
+    .filter({ visible: true })
+    .evaluateAll((els) =>
+      els.map((el) => ({
+        px: parseFloat(getComputedStyle(el).fontSize),
+        tag: el.tagName.toLowerCase(),
+        // A field's own name is rarely its text, so the label hooks come first.
+        name: (
+          el.getAttribute("aria-label") ??
+          el.getAttribute("id") ??
+          el.getAttribute("placeholder") ??
+          ""
+        ).slice(0, 50),
+        hint: (el.getAttribute("class") ?? "").split(/\s+/).filter(Boolean).slice(0, 3).join(" "),
+      })),
+    );
+
+  return measured
+    .filter((f) => f.px < MIN_FONT)
+    .map((f) => `${f.px}px <${f.tag}> "${f.name || "(unnamed)"}" — ${f.hint}`);
 }
 
 /** A member token these stubs never verify — the server is mocked out. */
@@ -383,6 +440,12 @@ test.describe("tap targets", () => {
         `Controls under ${MIN_TARGET}px on ${route.path}. Grow the hit box ` +
           `(min-h-11, or h-11 w-11 with the glyph centred) — not the glyph.`,
       ).toEqual([]);
+
+      expect(
+        await zoomingFields(page),
+        `Fields under ${MIN_FONT}px on ${route.path}, which iOS Safari zooms ` +
+          `the page to reach. Use text-base with a pointer-fine:text-sm release.`,
+      ).toEqual([]);
     });
   }
 
@@ -406,5 +469,98 @@ test.describe("tap targets", () => {
       `Controls under ${MIN_TARGET}px on /players in landscape. The floor is a ` +
         `pointer rule, not a width one — check for a stray sm: step.`,
     ).toEqual([]);
+  });
+
+  /**
+   * The same argument one breakpoint further out, for the fields (§23 F2).
+   *
+   * 844px is past `md:` as well as `sm:`, so a `md:text-sm` — which is what
+   * ui/input.tsx said until this suite could see it — reports 16px in the
+   * portrait run above and 14px here, on the same phone, in the same hand.
+   *
+   * The routes are the three that actually have a field on them, and they are
+   * taken from the table above rather than re-listed, so they keep their real
+   * settle: a screen measured before it has filled in has no fields on it yet
+   * and passes for the wrong reason.
+   */
+  const LANDSCAPE_FIELD_ROUTES = ["/claim", "/auth", `/players/${PLAYERS[0].ep}`].map((path) => {
+    const route = TAP_TARGET_ROUTES.find((r) => r.path === path);
+    if (!route) throw new Error(`${path} left TAP_TARGET_ROUTES; this run needs its settle`);
+    return route;
+  });
+
+  for (const route of LANDSCAPE_FIELD_ROUTES) {
+    test(`keeps ${route.path}'s fields off the zoom threshold sideways`, async ({
+      page,
+      server,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== "mobile", "a coarse pointer is the whole point of this");
+      route.arrange?.(server);
+
+      await page.setViewportSize({ width: 844, height: 390 });
+      expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+
+      await page.goto(route.path);
+      await route.settle(page);
+
+      expect(
+        await zoomingFields(page),
+        `Fields under ${MIN_FONT}px on ${route.path} at 844px. A landscape phone ` +
+          `is past md: with the thumb still the input — the release is pointer-fine:.`,
+      ).toEqual([]);
+      expect(await shortTargets(page)).toEqual([]);
+    });
+  }
+
+  /**
+   * The guest-name prompt, which is the one field F2 singles out: it carries
+   * `autoFocus`, so a 14px version zooms the page as it appears rather than
+   * waiting to be tapped.
+   *
+   * Sideways for the same reason as the runs above — that is where a width
+   * breakpoint hands the 14px back, and this is the field least able to afford
+   * it. It only exists after a guest tries to post, and `ensureIdentity` opens
+   * it and returns before any server call, so the interaction costs nothing.
+   */
+  test("holds the floor on the prompt that focuses itself", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "a coarse pointer is the whole point of this");
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+
+    await page.goto(`/players/${PLAYERS[0].ep}`);
+    await expect(page.getByRole("heading", { name: PLAYERS[0].name })).toBeVisible();
+
+    await page.getByPlaceholder(/talk your talk/i).fill("first");
+    await page.getByRole("button", { name: "Post" }).click();
+
+    // Also the only assertion here that proves `autoFocus` survives hydration.
+    await expect(page.getByPlaceholder("Your name")).toBeFocused();
+    expect(await zoomingFields(page)).toEqual([]);
+    expect(await shortTargets(page)).toEqual([]);
+  });
+});
+
+/**
+ * A caller that states its own size keeps it on both pointers.
+ *
+ * `Input` releases to `pointer-fine:text-sm`, and a variant-prefixed utility
+ * outranks an unprefixed one however the two merge — so a bare `text-2xl` on
+ * the member code box rendered 24px on a phone and 14px on a laptop, on the one
+ * field whose whole job is to be read a character at a time at 0.4em tracking.
+ *
+ * Deliberately NOT skipped on desktop: the fine pointer is the half that broke,
+ * and it is the only thing in this file a mouse is the right instrument for.
+ */
+test.describe("field sizing", () => {
+  test("gives the member code the size it asks for on either pointer", async ({ page }) => {
+    await page.goto("/claim");
+    await expect(page.getByRole("heading", { name: /claim your player/i })).toBeVisible();
+
+    expect(
+      await page.locator("#member-code").evaluate((el) => getComputedStyle(el).fontSize),
+      "the code box lost its size to the primitive's pointer-fine: release — a " +
+        "caller that sets text-* has to set the pointer-fine: one too.",
+    ).toBe("24px");
   });
 });
