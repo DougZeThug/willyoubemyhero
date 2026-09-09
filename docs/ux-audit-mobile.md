@@ -1,16 +1,85 @@
 # Will YOU Be My Hero? — Mobile UI/UX Audit
 
-_Trading-card experience, audited phone-first. September 2026._
+_Trading-card experience, audited phone-first. Re-audited September 2026 at commit `93e7e8e`._
+
+**Renders: [Vault Field Report](https://claude.ai/code/artifact/08a80918-7acc-425a-af6b-f5111ee65338)** — 25 screens and states at 320, 390 and 430 px, with the measurements behind every number below.
 
 ## How this audit was made
 
-- **Code read**: every player-facing route and component under `src/routes/players*.tsx`, `src/components/`, `src/lib/`, the design tokens in `src/styles.css`, and the 51 behaviour documents in `product-description/` (verified at commit `b46f330`; 166 commits have landed since, and this audit reads the code as it stands today).
-- **Real renders**: the app was run locally against the same server-function stubs the e2e suite uses (`e2e/fixtures.ts`), with a member who owns three roster cards, two secrets, a five-day streak with a reward to claim, one incoming trade offer and dust switched on. Every player-facing screen was screenshotted at **320, 375, 390 and 430 px** widths and measured for horizontal overflow, control sizes and font sizes. Card art was not available in the stub environment, so tiles render the app's initials placeholder; sizes and layout are unaffected.
-- **Already-known defects** in `product-description/bug-triage.md` are not re-raised. Five product calls there remain open (B-07, B-23, B-32, B-33, B-38) and are referenced where they touch the experience.
-- **Vocabulary**: what the brief calls "Common → Mythic" is the app's secret-card **level**; "series" is a secret **set**; roster cards carry an earned **tier** (champion, podium, stationKing, penaltyBox, dnf, base) and a per-copy **edition** (Platinum, Gold, Silver, Bronze, Standard). These six tier ids and the award ids are persisted and must never be renamed.
-- **One rule of the product is respected throughout**: how many secret cards exist is deliberately withheld everywhere except a completed-set trophy. Recommendations never ask for "x of N".
+This is the second pass. The first ended in an eleven-phase plan (§28); **PR 0 through PR 10 have all landed**, so most of this document now describes work that is done. §0 is the ledger of what closed and what did not; the body sections are kept because their reasoning is still the argument for the parts that remain.
 
-Priority scale: **Critical** (blocks the emotional loop or usability on a phone) · **High** (materially weakens collecting, trading or readability) · **Medium** · **Low**.
+- **Real renders, measured.** The app was run against the e2e suite's own server-function stubs (`e2e/fixtures.ts`) and driven in Chromium at 320 × 568, 390 × 844 and 430 × 932. Every number below — overflow, control size, text size, clipped label, contrast — was taken off the live DOM or off a composited pixel, not read out of the source.
+- **The member is not empty**: three roster cards with duplicates and finishes, one secret, a five-day streak with a claimable rung, an unread trade offer, and a dust-enabled variant. Zero server functions went unstubbed, so no empty state in this pass is a fixture artefact.
+- **Three fidelity guards**, each of which changed a finding:
+  - **The real typeface.** Barlow Condensed is narrower than the system fallback. Served from a local mirror and asserted per capture — against the fallback the secret caption appears to clip at 390 px, and with the real face it only clips at 320.
+  - **A coarse pointer.** `ui/button.tsx` releases its 44 px floor on `pointer-fine:`. A desktop-shaped context reports every button at 36 px; each capture asserts `pointer: coarse` before measuring.
+  - **Contrast from pixels.** This palette is `oklch()` and composites through `oklab()` alpha, which a `getComputedStyle` parser reads wrong in ways that look plausible. Every ratio here was taken by painting the token on a canvas and reading the result.
+- **Scope: player-facing only.** The twelve routes a partygoer touches. `admin.tsx` and the commissioner panels are exempt from the phone type and touch rules by design; findings that landed there are listed once, at the end of §0, rather than dropped.
+- **Already-known defects** in `product-description/bug-triage.md` are not re-raised.
+- **Vocabulary**: secret-card **level** (common → mythic), secret **set**, roster **tier** (champion, podium, stationKing, penaltyBox, dnf, base) and per-copy **edition** (Platinum → Standard). These ids are persisted and must never be renamed.
+- **One product rule is respected throughout**: how many secret cards exist is withheld everywhere except a completed-set trophy. No recommendation here asks for "x of N".
+
+Priority scale: **Critical** (blocks the emotional loop or usability on a phone) · **High** · **Medium** · **Low**.
+
+---
+
+## 0. Reconciliation ledger
+
+What the first pass raised, and where it stands. Evidence is either a `file:line` that was checked at this commit or a measurement from the render set.
+
+### Closed
+
+| §       | Finding                             | Evidence                                                                                                                   |
+| ------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| §2      | Sideways scroll / viewport formulas | Zero horizontal overflow on 25 screens × 3 widths. One `--page-min-h` token in `dvh`, net of both insets.                  |
+| §2, §4  | Wordmark wrapped at 320             | Single line at all three widths; header 65 px throughout.                                                                  |
+| §2      | Safe area was a no-op               | `viewport-fit=cover` in `__root.tsx:97`, which is what makes `env(safe-area-inset-*)` report anything on iOS.              |
+| §3      | Home did not say what to do now     | The Today card ships: pack state, streak rungs, claimable cue, new-since strip.                                            |
+| §5      | Sort chips wrapped; no filter       | `VaultSortSheet` — sort, filter and density in a drawer behind one control.                                                |
+| §5, §19 | No skeletons                        | `card-skeleton.tsx`, six tiles until the collection reconciles.                                                            |
+| §6      | Card detail was a stats page        | Full-screen viewer at `?view=1`; a tile tap opens the card, not the page.                                                  |
+| §7, §12 | No NEW / ×N on the reveal           | Ribbon and edition line on the stand — verified in the render set.                                                         |
+| §10     | Trade builder was a form            | Offers/Feed tabs, sticky "Make an offer", builder drawer. The pill row and 84 px strips are gone.                          |
+| §16     | 8–10 px label layer                 | Nothing player-facing renders below 11 px. `text-label` (12 px) has 131 uses and `text-meta` 106.                          |
+| §18     | ~40 controls under 44 px            | Five remain, and three are text inputs (F1). The floor lives in `ui/button.tsx:39-44` and is gated by `e2e/smoke.spec.ts`. |
+| §19     | Toasts top-centre, unthemed errors  | Bottom-centre above the bar; themed 404 and error boundary; offline banner.                                                |
+| §20     | No global focus ring                | `:focus-visible` in `@layer base` at 13.54:1, deliberately not the cyan accent.                                            |
+| §4      | Profile had no home                 | `/you` — player, account, streak ladder and history, collection, dust, and sound/haptics/tilt as device preferences.       |
+
+### Withdrawn
+
+| §   | Finding                                | Why                                                                                                                                                    |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| §4  | Five fixed tabs, Board/League rehoused | Superseded by a better answer: every row but the Vault is the commissioner's (`events.nav_hidden`, `NavRowsPanel`). A fixed five would take that back. |
+| §22 | "Secret sheet (dialog from the Vault)" | The component no longer exists. A secret tile opens the same full-screen `CardViewer` as a roster card.                                                |
+
+### Still open
+
+Full detail, with the renders, in **[the field report](https://claude.ai/code/artifact/08a80918-7acc-425a-af6b-f5111ee65338)**. Summarised in §23.
+
+| Id  | Finding                                                     | Severity |
+| --- | ----------------------------------------------------------- | -------- |
+| F1  | Text inputs are the only controls left under 44 px          | High     |
+| F2  | Three raw inputs zoom the page on focus in iOS Safari       | High     |
+| F3  | Component edges sit at 1.25:1                               | Medium   |
+| F4  | Disabled "Reveal all" is invisible at 1.40:1                | Medium   |
+| F5  | Motion ignores the OS reduced-motion setting in five places | Medium   |
+| F6  | Pack-summary card names are 18 px tall                      | Medium   |
+| F7  | Player names clip in the filmstrip at every width           | Medium   |
+| F8  | The secret caption clips at 320                             | Medium   |
+| F9  | The vault still opens on text rather than on a card         | Low      |
+| F10 | Half the type scale shipped; the rest is still literals     | Low      |
+| F11 | Press feedback is thin on touch                             | Low      |
+| F12 | A claimable streak rung says only "Waiting"                 | Low      |
+| F13 | The empty trade inbox offers the same action twice          | Low      |
+
+### Out of scope — the commissioner console
+
+Found while measuring, kept here so they are not lost. The admin screens are exempt from the phone rules by design and are not part of a player-facing audit.
+
+- `admin.tsx:214` — the PIN field is `type="password"`, which makes iOS ignore its `inputMode="numeric"` and open a QWERTY keyboard instead of a keypad.
+- Seven admin sheets size themselves in `vh` rather than `dvh`, so their submit row can sit under Safari's toolbar: `member-admin-panel.tsx`, `card-bulk-upload.tsx`, `card-prompt-tools.tsx`, `secret-cards-panel.tsx`, `stations-panel.tsx`, `edit-result-sheet.tsx`, `admin.tsx`.
+- `ui/dialog.tsx:41` and `ui/alert-dialog.tsx:37` have no `max-h` and no safe-area padding. No player-facing screen mounts either today.
 
 ---
 
@@ -41,16 +110,17 @@ Priority scale: **Critical** (blocks the emotional loop or usability on a phone)
 
 ## 2. Mobile-first design
 
-**Measured on real renders** (stubbed data, Chromium, device scale 2×):
+**Measured on real renders** (stubbed data, Chromium, device scale 2×, real Barlow Condensed, `pointer: coarse`):
 
-| Width | Horizontal overflow | Header height                         | Vault: first card visible above the fold? | Stand card width | Summary roster card width |
-| ----- | ------------------- | ------------------------------------- | ----------------------------------------- | ---------------- | ------------------------- |
-| 320   | none                | ≈ 90 px (wordmark wraps to two lines) | no — hero + shelf header fill the screen  | ≈ 185 px         | ≈ 80 px                   |
-| 375   | none                | ≈ 48 px                               | top edge only                             | ≈ 265 px         | ≈ 95 px                   |
-| 390   | none                | ≈ 48 px                               | top edge only                             | ≈ 315 px         | ≈ 100 px                  |
-| 430   | none                | ≈ 48 px                               | yes                                       | 320 px (cap)     | ≈ 110 px                  |
+| Width | Viewport | Horizontal overflow | Header | Vault (full): document height | First card top | Card above the fold? |
+| ----- | -------- | ------------------- | ------ | ----------------------------- | -------------- | -------------------- |
+| 320   | 568      | none                | 65 px  | 1342 px                       | 745 px         | no                   |
+| 390   | 844      | none                | 65 px  | 1489 px                       | 794 px         | 50 px of one         |
+| 430   | 932      | none                | 65 px  | 1573 px                       | 822 px         | 110 px of one        |
 
-No screen scrolls sideways; `html, body { overflow-x: hidden }` (`src/styles.css:121-125`) guarantees that, at the cost of hiding any overflow bug rather than surfacing it.
+Measured across 25 screens and states at each width: **no screen scrolls sideways at any width**. `html, body { overflow-x: hidden }` still backstops that, at the cost of hiding an overflow bug rather than surfacing it — so the number above is the one that matters, and it was taken from `scrollWidth - clientWidth` on every capture rather than from the absence of a scrollbar.
+
+The wordmark no longer wraps: the header is 65 px at every width, where it was 90 px at 320 in the first pass.
 
 **What works**
 
@@ -163,7 +233,7 @@ Current bar: **Vault · Pack · Trade · (Shop) · Board · League** (`src/lib/n
 
 ## 6. Card detail screen
 
-Roster card: `/players/$id` (`src/routes/players.$id.tsx`). Secret: a centred dialog (`src/components/secret-card-sheet.tsx`), deliberately without a URL.
+Roster card: `/players/$id` (`src/routes/players.$id.tsx`). Secret: the same full-screen `CardViewer`, opened from a vault tile and deliberately without a URL. (`secret-card-sheet.tsx`, the centred dialog this section originally described, no longer exists — PR 7 replaced both paths with one viewer.)
 
 **What works**: the card is full-width (`max-w-sm`), pinch-zoom to 4×, double-tap 2.4×, tap flips with a proper card-stock turn, swipe steps through the roster, gyro tilt behind a permission tap, the "acrylic slab" with a serial plate, a locked state that shows the universal back and "Rip a pack to see this card", filmstrip of the whole set, an exported 1080×1350 share image.
 
@@ -590,153 +660,135 @@ Passing: bottom tabs, Open Pack (46 px), shelf headers (`min-h-11`), dust chip (
 
 ## 22. Screen-by-screen audit
 
+Rewritten against this pass's renders. Each screen links to its frames in the [field report](https://claude.ai/code/artifact/08a80918-7acc-425a-af6b-f5111ee65338); measurements are at 390 px unless a width is named.
+
 ### The Vault (home) — `/players`
 
-- **What works**: shelves as binder pages; 2-up tiles at a readable size; tinted set panels; locked cards as the universal back; Open Pack as the biggest control; the "Offer waiting" pill; per-device layout; no leaks about unpulled secrets.
-- **UX problems**: does not answer "what now"; no pack countdown; no claimable-reward cue; no new-cards strip; no dupes on roster tiles; no filter/search; sort is Roster-only and colour-only; "printed" is an admin word.
-- **Mobile problems**: ≈ 640 px of header before the first card at 390; no card visible above the fold at 320; sort chips wrap at 320; hero grows in five steps as queries land; star (36 px) over a link.
-- **Visual problems**: 9 px tier/finish captions; every owned tile glows; circuit background and cyan glow compete with foils; six control styles in the first screen.
-- **Recommended changes**: a fixed-height "Today" card (pack state, streak strip, claimable rung, new-since-last-visit); one-line collection summary; sort/filter/density in a bottom sheet; 12 px captions with finish · ×N · packed-by; ×N pip on tiles; skeleton tiles; glow by rank only.
-- **Priority: Critical.**
+- **Works**: shelves as binder pages; 2-up tiles at a readable size; the Today card answering pack state, streak and claimable rung in one fixed-height block; a one-line collection summary; sort, filter and density in a drawer; skeleton tiles while the collection reconciles; locked cards as the universal back; no leaks about unpulled secrets.
+- **Fixed since the first pass**: the "what now" question, the sort chips that wrapped at 320, the five-step hero growth, the missing skeletons, and the 9 px captions.
+- **Remaining**: the card is still not the hero — the first tile starts at 745 px on a 568 px screen, 794 px on 844, 822 px on 932 (F9). The secret caption clips at 320 (F8). A single secret in a 2-up grid leaves a dead column beside it.
+- **Priority: Medium** (was Critical).
 
 ### Pack — sealed — `/players/pack`
 
-- **Works**: the wrapper is a real object; the perforation hint; "Drag across the tear · or press Enter"; streak line; Collected counter.
-- **UX**: the streak sentence and the flame duplicate each other; no "resets at" for a finished pack; guest sees no secret cue; CollectorSignupGate can push the pack down a full screen.
-- **Mobile**: header row of back-link (16 px tall), 16 px sound icon, flame, counter; wrapper capped at 260 px so at 430 px it floats in space.
-- **Visual**: fine; the wax foil is good.
-- **Changes**: 44 px header controls; wrapper up to 300 px; sound control persistent at bottom-left; move the collector signup to a dismissible line.
-- **Priority: Medium.**
+- **Works**: the wrapper as an object; the tear hint; the collected counter; a persistent mute that now survives the tear.
+- **Remaining**: the wrapper is still capped at 260 px, so at 430 it floats in space. The streak sentence and the flame still say the same thing twice.
+- **Priority: Low** (was Medium).
 
 ### Pack — ceremony and stand
 
-- **Works**: nearly everything (section 7).
-- **UX**: no NEW/×N; rarity all at once; no mute mid-reveal; "Reveal all" hidden on the secret step (right) but a ghost elsewhere.
-- **Mobile**: card 185 px at 320 × 568 (acceptable), 315 px at 390; Next 36 px; Skip 27 px; Reveal all 22 px.
-- **Changes**: NEW/×N ribbons; two-beat reveal for special pulls; 44 px Skip/Reveal all/Next; mute on the stand; pending-secret sweep and time-based copy.
-- **Priority: High.**
+- **Works**: nearly everything (§7). NEW and ×N ribbons landed, the edition line reads off the card, and the two-beat reveal lands on special pulls.
+- **Remaining**: the disabled "Reveal all" is 1.40:1 against the ground — correctly sized at 106 × 44, and invisible while it is held (F4). Motion here ignores the OS reduced-motion setting: `stand-entrance.tsx` springs up to five cards onto the stand regardless (F5).
+- **Priority: Medium** (was High).
 
 ### Pack — summary
 
-- **Works**: the secret is the biggest thing; streak claim is here; share is here; inline failures.
-- **UX**: roster cards become thumbnails; tier/finish in 8–9 px (54 of 107 text nodes under 11 px); no dupe/NEW marks; guest hits "Sign in to claim".
-- **Mobile**: ≈ 100 px roster cards at 390, 80 px at 320; 330 px of blocks under the cards; three 34 px buttons.
-- **Changes**: secret full-width, roster cards in a snap row at ≥ 140 px, ribbons, 12 px captions, 48 px buttons, "Next pack in N h", Share as a first-class exit.
-- **Priority: High.**
+- **Works**: the secret leads; the roster cards sit in a snap row rather than as thumbnails; the streak claim is here; inline failures.
+- **Remaining**: the roster card name links measure 140 × 18 px, directly under a tile that is itself tappable and goes elsewhere (F6). The entrance animation is ungated (F5).
+- **Priority: Medium** (was High).
 
 ### Player card — `/players/$id`
 
-- **Works**: full-width card; zoom/flip/swipe/tilt; the slab and serial plate; locked state with a CTA; filmstrip; share export.
-- **UX**: card is 45% of a 2 100 px stats page; the landing chime replays each session and confetti re-fires for top cards; no trade entry; thin provenance; tier badge shown on locked cards (product call B-32 territory).
-- **Mobile**: 29 px action chips, 28 px overflow trigger, 32 px zoom buttons, 16 px back link; six reaction chips at 34 px; QR at 140 px on a phone that is the printed card's twin, not its reader.
-- **Visual**: the tier wash is good; chips and tiles use four radii.
-- **Changes**: full-screen viewer first, details second; 44 px controls; celebration keyed to first view after acquisition; "Offer this card" / "Ask for it"; provenance line; hide the QR behind "Printed card" unless the device is desktop.
-- **Priority: High.**
+- **Works**: the full-screen viewer is the default for a tap (`?view=1`), so examining a card starts with the card; zoom, flip, swipe and tilt; the slab and serial plate; the locked state with a route into a pack; the compare drawer; share export.
+- **Remaining**: the comment box is a raw 14 px input, so iOS zooms the page on focus, and it measures 38 px tall (F1, F2). Filmstrip names clip at every width — all four of them on a locked card (F7). At 320 the card's own "Draft Combine 2026" line clips by 21 px.
+- **Priority: Medium** (was High).
 
-### Secret sheet (dialog from the Vault)
+### Card viewer (full-screen)
 
-- **Works**: dialog not route; swipe across held secrets; level + odds; flavour line; "only one who has found this".
-- **UX**: raw ISO date "PULLED 2026-07-28"; no set name; no share by rule; no trade entry.
-- **Mobile**: 16 px close; card capped at 320 px in a 92 vw box; nav visible behind the sheet.
-- **Changes**: same full-screen viewer as roster cards; formatted date ("Pulled 28 Jul"); set chip; 44 px close; level pips.
-- **Priority: Medium.**
+- Replaces the first pass's "Secret sheet (dialog from the Vault)". One component now serves roster cards and secrets alike: a dark room, an svh-sized card, swipe, flip, pinch, bottom controls, and Escape / ✕ / the phone's own back gesture all closing it.
+- **Remaining**: nothing measured against it.
+- **Priority: none.**
 
 ### Trading Post — `/players/trade`
 
-- See section 10. **Priority: High.** Structural: Offers/Feed tabs, sticky Make an offer, full-screen builder with trays and review, stacked You give / You get on phones, confirm on Accept.
+- **Works**: Offers and Feed as tabs with the unread count on the tab; a sticky "Make an offer" in the thumb zone; the builder as a drawer reached by `?make=1`, so the back gesture closes it; spares-only with the reason shown.
+- **Fixed since the first pass**: the wrapping pill row, the 84 px tile strips, the builder sitting below the fold, and the empty inbox with no way forward.
+- **Remaining**: the empty state offers the same action twice, ~600 px apart (F13).
+- **Priority: Low** (was High).
 
 ### Shop — `/players/shop`
 
-- **Works**: the most readable screen (12 px body throughout); prices on buttons; refusals as sentences; market-first order is argued and reasonable; "Nothing for sale right now".
-- **UX**: "Settle a finish" rows read "— unsettled" with no card name (stub artefact of missing names, but the row design relies on a name that may be absent); the ladder table is the only place the rarity ladder is visible in the whole app; `window.confirm` on last copy.
-- **Mobile**: fixed — every control now clears 44 px (`neon-btn-sm` on the shelf, `neon-btn-quiet` on rows, `neon-btn` on the two CTAs), and a row is a 44 px target in its own right rather than a 32 px button inside a 36 px line. Seven panels of prose remain, one per section.
-- **Visual**: fixed — the seven identical `border-border` boxes were the app's only non-conforming panel style. Headings and prose now sit on the page ground and only the row lists get a `surface-panel`, so a surface means "a list of things you can act on". Buttons are the `neon-btn` family throughout.
-- **Changes**: remaining — collapse the explanatory prose to one line each with "?"; lift the ladder into the profile/rarity guide; app dialog instead of `window.confirm`; show a card thumbnail on each row.
-- **Priority: Low** (was Medium; the touch targets and the panel chrome are done).
+- **Works**: the most readable screen in the app; prices on buttons; refusals as sentences; every control clears 44 px; the market stall stays up when dust is off so listed cards are never stranded.
+- **Remaining**: the "Back to the vault" link in the dust-off state measures 17 px tall at 320 (it clears the floor at 390 and 430).
+- **Priority: Low.**
+
+### You — `/you`
+
+- **Works**: player, account, streak ladder and history, collection counters, dust, and sound / haptics / tilt as device preferences rather than per-page state. Type is generous throughout and every control clears the floor.
+- **Remaining**: a claimable rung renders as "Waiting" with no adjacent reason; the explanation sits two sections higher under ACCOUNT (F12).
+- **Priority: Low.**
 
 ### League hub — `/league`
 
 - **Works**: five clear tiles; fetches nothing.
-- **UX/mobile**: 2-col tiles fine; the admin line is a 15 px link.
-- **Changes**: none. Absorbing Board and housing Shop were consequences of the withdrawn five-tab bar — both keep their own rows — and the hub stays what its test says it is: the only door to the screens with no row at all. The 44 px admin link landed in PR 1.
+- **Remaining**: the tile blurbs are 11 px where the 12 px meta token would be consistent (F10).
 - **Priority: Low.**
 
 ### Leaderboard — `/leaderboard`
 
-- **Works**: readable (16–24 px), share per row, ranks computed from one rule.
-- **Mobile**: 36 px share icons; 23 px name links.
-- **Changes**: 44 px rows; move behind League.
-- **Priority: Low.**
+- **Works**: readable; share per row; ranks from one rule. Nothing measured against it.
+- **Priority: none.**
 
 ### Claim and Auth — `/claim`, `/auth`
 
-- **Works**: 2-col name grid, big code input, clear failure copy, links between the two.
-- **Mobile/visual**: `auth` has no `circuit-bg`, so it is the one light-feeling screen; the mode toggle is a 16 px text link; 36 px submit buttons.
-- **Changes**: 48 px submit; 44 px toggle; theme consistent with the rest.
-- **Priority: Low.**
+- **Works**: the 2-col name grid; a big typed code; clear failure copy that distinguishes a wrong code from too many tries; links between the two; an honest "an account is optional" footer.
+- **Remaining**: the code field and both auth fields are 36 px (F1). The code field has no `inputMode` or `enterKeyHint`, so a thumb must reach past the keyboard to the button. The privacy explainer and "Not on the roster?" sit at 11 px.
+- **Priority: Medium** (was Low) — this is the front door, and F1 lands squarely on it.
 
 ### Global shell (header, tabs, toasts, errors)
 
-- **Problems**: none outstanding. The bar re-shaping when the dust switch is flipped is deliberate, and so is every other row on it being the commissioner's (§4).
-- **Fixed**: single-line wordmark; safe-area top and bottom, live now that the viewport carries `viewport-fit=cover`; 44 px account target; 11 px nav labels that cannot wrap; toasts bottom-centre above the bar; themed 404, error boundary and SSR error page; the profile has a home at `/you` and the header's person icon goes to it.
-- **Changes**: none. The five-fixed-tabs half of PR 9 was withdrawn in favour of the commissioner-configurable bar; the profile half shipped.
-- **Priority: Low** (was High).
+- **Problems**: none outstanding. Single-line wordmark at 65 px on every width; live safe-area insets; 44 px account target; 11 px nav labels that cannot wrap; toasts bottom-centre above the bar; themed 404, error boundary and SSR error page.
+- **Priority: none.**
 
 ---
 
-## 23. Top 10 UX problems
+## 23. What is still open
 
-| #   | Problem                                                                                                                                    | User impact                                                                                                            | Location                                               | Recommended fix                                                                                                       | Difficulty  |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ----------- |
-| 1   | **Label layer at 8–10 px uppercase, widely tracked** (28–54% of text nodes under 11 px on card screens)                                    | Tier, finish, level, counts and instructions are unreadable outdoors; every small control inherits the size            | Vault tiles, stand, summary, trade tiles, player chips | Type scale in §16: 11 px floor, 12 px metadata, tracking ≤ 0.08 em                                                    | Easy        |
-| 2   | **Home does not say what to do now**                                                                                                       | Daily loop depends on remembering; claimable rewards and finished packs are invisible; guests never see the secret cue | `/players` hero                                        | "Today" card: pack state + countdown, streak strip with claimable rung, new-since-last-visit strip                    | Moderate    |
-| 3   | **~40 controls under 44 px**, including 16 px mute and close                                                                               | Mis-taps, especially in a garden; the star navigates                                                                   | see §18                                                | `min-h-11` floor, `neon-btn` sizes, 44 px icon buttons                                                                | Easy        |
-| 4   | **Trade builder is a form, not a table** — pills, 84 px strips, no tray, no review, no confirm, below the fold                             | Trades feel risky and fiddly; Accept moves two collections with one tap                                                | `/players/trade`                                       | Full-screen builder with Who → trays → Review; stacked You give / You get; confirm on Accept                          | Significant |
-| 5   | **Pack summary shrinks the cards to ≈ 100 px** and shows no NEW/×N                                                                         | The payoff screen undersells the pull; dupes look like hits                                                            | `pack-summary.tsx:178`                                 | Secret full-width, roster snap row ≥ 140 px, NEW/×N ribbons                                                           | Moderate    |
-| 6   | **Rarity of secrets is a 9 px coloured caption**; base foil = UI cyan; everything glows                                                    | A Mythic and a Common look alike on the shelf; base cards look like buttons                                            | tiles, stand, trade                                    | Level pips, edition corner tab, base hue shift, glow by rank only                                                     | Moderate    |
-| 7   | **The room competes with the card** — circuit background, cyan bloom on every panel and control                                            | Art is not the centrepiece; the page reads as a HUD                                                                    | `styles.css` `circuit-bg`, `hud-glow`, `neon-btn`      | Flat ground on card screens; glow only on the primary CTA and ranked cards                                            | Easy        |
-| 8   | **Card detail is a stats page with a card on top**; no trade entry from a card                                                             | Examining a collectible feels like reading a profile; trading starts from a blank form                                 | `/players/$id`, secret sheet                           | Full-screen viewer first; "Offer / Ask for this card"                                                                 | Significant |
-| 9   | **Collection has no dupes on tiles, no filter/sort sheet, no skeleton**                                                                    | Trading decisions start blind; the page pops from locked to owned                                                      | `players.index.tsx`                                    | ×N pip, sort & filter sheet, skeleton tiles                                                                           | Moderate    |
-| 10  | **Feedback surfaces are misplaced or missing**: toasts top-centre, no offline state, unthemed errors, degraded banner on the pack, no undo | Errors look foreign; the best screen gets interrupted; nothing is reversible                                           | `__root.tsx`, `error-page.ts`, `feed-state.tsx`        | Bottom toasts above the bar, offline banner, themed errors, banner hidden while presenting, undo on Decline/Take back | Easy        |
+The first pass's top ten is closed — items 1, 2, 3, 4, 5, 8, 9 and 10 shipped outright, 6 and 7 shipped in part (§8's level pips and §15's quieter ground landed; the base-tier hue shift did not). This is the list as it stands, ranked by what it costs someone in a garden holding a beer. Every measurement is reproducible from the harness in the [field report](https://claude.ai/code/artifact/08a80918-7acc-425a-af6b-f5111ee65338).
+
+| Id  | Problem                                                                                                                                                                                                                                                                         | Measured                                                                                                                                                                                      | Location                                                                                                                          | Fix                                                                        | Difficulty |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------- |
+| F1  | **Text inputs are the only controls left under 44 px.** The floor lives in `ui/button.tsx:39-44` with a comment arguing it belongs in the primitive; it never reached `Input`.                                                                                                  | Member code 36 px, both auth fields 36 px, card comment box 38 px. Every other player-facing control clears 44.                                                                               | `ui/input.tsx:11`, `claim.tsx:285`, `auth.tsx:252,263`, `card-social.tsx:353`                                                     | `min-h-11 pointer-fine:min-h-0` on the primitive                           | Easy       |
+| F2  | **Three raw inputs zoom the page on focus in iOS Safari.** Under 16 px Safari zooms. The `Input` primitive is closer, at `text-base md:text-sm`, but `md:` is a width breakpoint: a landscape phone crosses it with a thumb still the input, so 14 px comes back exactly there. | 14 px each. `card-social.tsx:385` also carries `autoFocus`, so the zoom fires as the prompt appears.                                                                                          | `card-social.tsx:353,385`, `collector-signup.tsx:73`                                                                              | `text-base pointer-fine:text-sm`, and the same on `Input`                  | Easy       |
+| F3  | **Every component edge is 1.25:1.** The text palette is excellent and needs nothing; the boundaries are the failure. WCAG 1.4.11 asks 3:1 for the edge of a control or panel.                                                                                                   | `--border` → `#191a1a` on `#030a11`. `--input` 1.32:1. For contrast: foreground 18.80:1, muted 8.73:1, primary 11.93:1.                                                                       | `styles.css:126-127`                                                                                                              | Split the token: 10% decorative, ~24% for interactive edges                | Easy       |
+| F4  | **Disabled "Reveal all" cannot be seen.** `text-muted-foreground/70` and `disabled:opacity-30` multiply.                                                                                                                                                                        | Enabled 4.73:1; disabled **1.40:1**. Correctly sized at 106 × 44. The neon buttons' own disabled state manages 3.09:1.                                                                        | `players.pack.tsx:1333`                                                                                                           | Drop the `/70` on the disabled branch, or raise opacity to ~0.5            | Easy       |
+| F5  | **Motion ignores the OS setting in five components.** The CSS half is exemplary — nine `prefers-reduced-motion` blocks, each holding a meaningful still frame. The JS half is absent.                                                                                           | No `<MotionConfig reducedMotion="user">` anywhere; Motion does not honour the preference unless told.                                                                                         | `stand-entrance.tsx:43`, `pack-summary.tsx:146`, `card-social.tsx:281`, `finish-celebration.tsx:86`, `bought-pull-reveal.tsx:112` | One `<MotionConfig>` in `__root.tsx` covers all fourteen files             | Easy       |
+| F6  | **The pack summary's card names are a third of the touch floor**, directly under a tile that is itself tappable and goes elsewhere.                                                                                                                                             | 140 × 18 px at 320, 390 and 430 alike.                                                                                                                                                        | `pack-summary.tsx`                                                                                                                | Give the link the tile's hit area, or pad to 44 px                         | Easy       |
+| F7  | **Player names clip in the filmstrip at every width.** 11 px with `truncate`.                                                                                                                                                                                                   | "Carol Crush" over by 32 px, "Alice Ace" 9, "Bob Blitz" 8, "Dave Dnf" 6 — at 390. All four clip on the locked card page.                                                                      | `roster-filmstrip.tsx`                                                                                                            | `line-clamp-2`, or a wider cell                                            | Easy       |
+| F8  | **The secret caption clips at 320.** The finding that most needed a real render: against the fallback font it appears to clip at 390 too, and does not.                                                                                                                         | "Common · 70% pull" over by 23 px at 320; fits at 390 and 430. "Draft Combine 2026" over by 21 px on the card page at 320.                                                                    | `players.index.tsx:882`                                                                                                           | Wrap to two lines below 360 px, or shorten the phrasing                    | Easy       |
+| F9  | **The vault still opens on text.** The Today card fixed the layout shift; it did not change the order.                                                                                                                                                                          | First tile top: 745 px at 320 (viewport 568 — no card at all), 794 at 390 (844), 822 at 430 (932).                                                                                            | `players.index.tsx`, `vault-hero.tsx`                                                                                             | Fold the summary line into the Today card, or start the first shelf higher | Moderate   |
+| F10 | **Half the type scale shipped.** The label and meta tokens are load-bearing; body, title and the whole spacing scale are not.                                                                                                                                                   | `text-label` 131, `text-meta` 106, `text-badge` 31 — against `text-title` 0, `text-body` 2, and 158 `text-sm` + 134 `text-xs`. The three spacing tokens appear only in their own declaration. | `styles.css`, all screens                                                                                                         | Finish the migration, or delete the tokens nothing uses                    | Moderate   |
+| F11 | **Press feedback is thin on touch.** On a phone `:hover` either never fires or latches after a tap.                                                                                                                                                                             | 165 `hover:` against 51 `active:`, the latter across 20 files. The neon-button family already gates hover correctly.                                                                          | app-wide; pattern at `styles.css:492`                                                                                             | An `@media (hover: none)` rule promoting hover to active                   | Easy       |
+| F12 | **A claimable streak rung says only "Waiting".** The reason — that claiming needs an account — is real, and stated two sections higher.                                                                                                                                         | Day-5 streak, `canClaim` true, no account.                                                                                                                                                    | `/you`, `streak-ladder.tsx`                                                                                                       | Say what it waits for, on the rung                                         | Easy       |
+| F13 | **The empty trade inbox offers the same action twice**, ~600 px apart, on a screen whose whole content is the empty state.                                                                                                                                                      | "Start the first offer" and the sticky "Make an offer", at all three widths.                                                                                                                  | `players.trade.tsx`                                                                                                               | Drop the panel one; the sticky control survives a scroll                   | Easy       |
+
+Eleven of the thirteen are an hour's work each. **F1, F2, F3 and F4 are the ones that change how the app feels in a garden**, and none of them is a redesign.
 
 ---
 
 ## 24. Quick wins
 
-Each is a day or less and touches no data model.
+The first pass's eighteen are all shipped or superseded. What is left, in the order it is worth doing:
 
-1. **Type floor**: replace `text-[8px]`/`text-[9px]`/`text-[10px]` with `text-[11px]`/`text-xs` and cap `tracking-[0.3em]` at `0.08em` on labels, across `players.index.tsx`, `pack-summary.tsx`, `pack-stand.tsx`, `trade-offer-card.tsx`, `players.$id.tsx`.
-2. **44 px everywhere**: `min-h-11` on sort chips, partner pills, action chips, Reveal all, Skip, Next, back links, "Claim your player", "Offer waiting"; pad the sound toggle and dialog close to 44 × 44; give `neon-btn` `sm/md/lg` classes and delete the `!px/!py` overrides.
-3. **Roster ×N on tiles** (`players.index.tsx:574-591`) from `collected[id].count`.
-4. **NEW / ×N ribbons** on the stand and summary: roster from the pack baseline, the secret from the pull result's `duplicate` flag. (The "new since last visit" strip is not a quick win; see §25 item 1.)
-5. **Streak strip** with the five rungs and the next promise (`nextMilestoneLine`) on the vault hero and sealed pack.
-6. **"Next pack in N h"** on the summary and the hero from `SecretDayStatus.resetsAt`.
-7. **Mute on the stand**, same spot as the sealed screen.
-8. **Flat ground on card screens**: remove `circuit-bg` from Vault, Pack, player, Trade, Shop; keep it on League/Board/TV.
-9. **Glow by rank**: drop the per-tile tier glow for base/dnf/penalty; keep it for champion/podium, Gold+, Legendary+.
-10. **Base foil hue** off primary; base border to 24% white.
-11. **Toaster** to `bottom-center` with an offset above the tab bar; suppress while presenting.
-12. **Fix `hover:text-danger`** → `destructive`; add a global `:focus-visible` ring; `aria-pressed` on sort chips and partner pills; `aria-label` on both navs; `aria-modal` + focus trap on `MilestoneReveal`.
-13. **Single-line wordmark** below `sm`; `safe-area-inset-top` on the header.
-14. **Skeleton tiles** until `mine.ready`; reserve the hero's line heights.
-15. **Theme the 404, error boundary and SSR error page**; drop the unused Inter request or apply it.
-16. **Lazy + thumb rendition** for the universal back on locked tiles.
-17. **Secret sheet**: formatted date, set chip, 44 px close.
-18. **Empty inbox**: add the Make an offer button under "Nobody wants your cards. Yet."
+1. **The input floor** — one line in `ui/input.tsx`, 28 call sites, including the app's front door (F1).
+2. **`text-base pointer-fine:text-sm` on the three raw inputs, and on `Input` itself** (F2). Stops iOS zooming on the comment box and both name prompts, on a landscape phone as well as a portrait one.
+3. **`<MotionConfig reducedMotion="user">` in `__root.tsx`** (F5). One line, fourteen files.
+4. **Raise the interactive border token** (F3). The cheapest single change for sunlight.
+5. **Un-dim the disabled "Reveal all"** (F4).
+6. **Pad the pack-summary name links to the tile's hit area** (F6).
+7. **`line-clamp-2` on filmstrip names** (F7).
+8. **Let the secret caption wrap below 360 px** (F8).
+9. **Say what the streak rung is waiting for** (F12).
+10. **Delete one of the two trade CTAs** (F13).
 
 ---
 
 ## 25. Larger redesign opportunities
 
-1. **Home as "Today"** (§3): a fixed-height state card for the pack, streak and rewards, a new-since-last-visit strip backed by an acquisitions query (§12), then the binder. Replaces the hero.
-2. **Collection browser** (§5): sort/filter/density bottom sheet, ×N pips, level pips and edition tabs on tiles, mystery slot per set, skeletons, Complete shelf first. Reuses `VaultSection` and `HoloCard`.
-3. **Full-screen card viewer** (§6): one component for roster cards and secrets — dark room, svh-sized card, swipe, flip, pinch, bottom controls, pull to dismiss; details as a second step. Built from `ZoomPanFrame` + `HoloCard` + the stand's sizing rule.
-4. **Trade builder** (§10): Who → trays → Review, stacked sides, confirm on Accept, Offers/Feed tabs, sticky Make an offer. Server functions unchanged.
-5. **Navigation** (§4): five fixed tabs with a profile tab; Board and Shop rehoused; the profile holds account, code, streak ladder and history, dust, sound/haptics/tilt.
-6. **Pack summary and reveal refinements** (§7): two-beat special reveal, ribbons, summary reflow, pending-secret treatment.
-7. **Design system** (§26): tokens for type, spacing, control sizes, surfaces and glow, replacing ad-hoc utility strings; a `Button`/`Chip` API used by all card screens so the shop and the vault stop looking like two apps.
+All seven of the first pass's items shipped. Two things remain that are more than a quick win:
 
-Suggested order: 7 (tokens) → quick wins → 1 → 2 → 3 → 4 → 5 → 6. Each step ships on its own.
+1. **The vault's opening screen** (F9). The Today card answers "what now"; it did not make the card the hero. Options, in increasing order of change: fold the one-line collection summary into the Today card; let the first shelf start above the fold once a collection exists; or make the Today card collapse to a single line on scroll with the pack action moving to a floating pill.
+2. **Finish the design system** (F10). The scale is half-adopted, which is the expensive state: two competing vocabularies for the same thing. Either migrate the remaining 158 `text-sm` and 134 `text-xs` literals and put the spacing tokens to work, or delete the four tokens nothing uses so the system stops promising more than it delivers.
 
 ---
 
@@ -776,23 +828,23 @@ Glow: only champion/podium tiers, gold/platinum editions, legendary/mythic level
 
 **Shape and size**
 
-| Token                     | Value                                                           |
-| ------------------------- | --------------------------------------------------------------- |
-| radius-card               | 12 px (5:7 cards), 16 px for the viewer                         |
-| radius-panel              | 12 px                                                           |
-| radius-chip / pill button | 999 px                                                          |
-| radius-secondary button   | 10 px                                                           |
-| button-height             | 44 (sm) · 48 (md, default) · 56 (lg, Open Pack / Send / Accept) |
-| icon-button               | 44 × 44                                                         |
-| input-height              | 48                                                              |
-| chip-height               | 44 (all tappable chips)                                         |
-| page-padding-x            | 16                                                              |
-| card-grid-gap             | 12                                                              |
-| section-gap               | 24                                                              |
-| stack-gap                 | 8                                                               |
-| tab-bar                   | 56 + safe-bottom, five fixed tabs                               |
-| header                    | 48 + safe-top                                                   |
-| sheet                     | 16 px padding, 20 px top radius, 85 dvh max                     |
+| Token                     | Value                                                                |
+| ------------------------- | -------------------------------------------------------------------- |
+| radius-card               | 12 px (5:7 cards), 16 px for the viewer                              |
+| radius-panel              | 12 px                                                                |
+| radius-chip / pill button | 999 px                                                               |
+| radius-secondary button   | 10 px                                                                |
+| button-height             | 44 (sm) · 48 (md, default) · 56 (lg, Open Pack / Send / Accept)      |
+| icon-button               | 44 × 44                                                              |
+| input-height              | 48                                                                   |
+| chip-height               | 44 (all tappable chips)                                              |
+| page-padding-x            | 16                                                                   |
+| card-grid-gap             | 12                                                                   |
+| section-gap               | 24                                                                   |
+| stack-gap                 | 8                                                                    |
+| tab-bar                   | 56 + safe-bottom; rows are the commissioner's (§4), not a fixed five |
+| header                    | 48 + safe-top                                                        |
+| sheet                     | 16 px padding, 20 px top radius, 85 dvh max                          |
 
 **Icons**: lucide, 1.75 stroke, 20 px in the bar, 18 px in chips, 16 px inline. Rarity uses shapes (pips, tabs), not icons.
 
@@ -855,264 +907,98 @@ Project guardrails for willyoubemyhero (read CLAUDE.md first):
 - When done, open a PR against main with the title given in the prompt, describe the change, attach a 390 px phone screenshot of each changed screen, and link the relevant section of docs/ux-audit-mobile.md.
 ```
 
-### Phase overview
+### Phase overview — PR 0 to PR 10, shipped
 
-| PR  | Title                                           | Implements         | Touches                                                                    | Risk   |
-| --- | ----------------------------------------------- | ------------------ | -------------------------------------------------------------------------- | ------ |
-| 0   | Design tokens and control sizes                 | §16, §17, §18, §26 | `src/styles.css`, `site-nav.tsx`, every `neon-btn` caller                  | Low    |
-| 1   | Readability and touch-target sweep              | §16, §18, §20      | vault, pack, player, trade, secret sheet, dialog                           | Low    |
-| 2   | Quieter room, rarity by rank                    | §8, §15            | `styles.css`, `card-rarity.ts` colours, `holo-card.tsx`, tiles             | Medium |
-| 3   | Pack ribbons, summary reflow, mute on the stand | §7, §12            | `players.pack.tsx`, `pack-stand.tsx`, `pack-summary.tsx`                   | Medium |
-| 4   | Feedback surfaces                               | §19, §21           | `__root.tsx`, `error-page.ts`, vault skeletons, `milestone-reveal.tsx`     | Low    |
-| 5   | Home "Today" card and streak strip              | §3, §11, §13, §5   | `players.index.tsx`, `vault-hero.tsx` → `today-card.tsx`                   | Medium |
-| 6   | Acquisitions read and "new since last visit"    | §12                | new server function + test, vault, player page                             | Medium |
-| 7   | Full-screen card viewer                         | §6, §9             | new `card-viewer.tsx`, `players.$id.tsx`, `secret-card-sheet.tsx`          | High   |
-| 8   | Trade builder                                   | §10                | `players.trade.tsx` split, `trade-offer-card.tsx`, new `trade-builder.tsx` | High   |
-| 9   | Navigation and profile                          | §4                 | `site-nav.tsx`, new `routes/you.tsx`, streak history read                  | Medium |
-| 10  | Two-beat reveal and set mystery slot            | §7, §9, §14        | `pack-stand.tsx`, `players.index.tsx`                                      | Medium |
+The first pass's eleven phases are all merged. Kept as a record rather than as instructions; the prompts themselves have been removed now that the work is done.
 
-### PR 0 — Design tokens and control sizes
+| PR  | Title                                           | What landed                                                                                                                         |
+| --- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | Design tokens and control sizes                 | The type and spacing tokens, the `neon-btn` size classes, the global `:focus-visible` ring, and the 44 px floor in `ui/button.tsx`. |
+| 1   | Readability and touch-target sweep              | The 11 px floor and the 0.08 em tracking cap, and the tap-target sweep in `e2e/smoke.spec.ts` that keeps them.                      |
+| 2   | Quieter room, rarity by rank                    | Three levels of glow, a ring outside the bloom, and the per-tile tier glow dropped for the lower tiers.                             |
+| 3   | Pack ribbons, summary reflow, mute on the stand | NEW and ×N on the stand and summary; the summary's snap row; a persistent mute.                                                     |
+| 4   | Feedback surfaces                               | Skeleton tiles, bottom-centre toasts, the offline banner, and themed 404 / error / SSR pages.                                       |
+| 5   | Home "Today" card and streak strip              | `today-card.tsx`, the streak rungs, and the sort-and-filter sheet.                                                                  |
+| 6   | Acquisitions read and "new since last visit"    | `getRecentAcquisitions` and the new-since strip.                                                                                    |
+| 7   | Full-screen card viewer                         | `card-viewer.tsx`, reached from a tile tap and from `?view=1`.                                                                      |
+| 8   | Trade builder                                   | Offers/Feed tabs, the sticky CTA, and the builder drawer.                                                                           |
+| 9   | Navigation and profile                          | `/you`. The five-fixed-tab half was withdrawn in favour of the commissioner-configurable bar.                                       |
+| 10  | Two-beat reveal and set mystery slot            | The second beat on special pulls, and a single non-counting "More in this set" marker.                                              |
 
-Branch `ux/00-tokens`. Title: **Design tokens and control sizes**.
+### PR 11 — The input floor and mobile keyboards
+
+Branch `ux/11-inputs`. Title: **The floor the buttons got, and the inputs did not**. Implements §23 F1 and F2.
 
 ```text
-Goal: give the app one type scale, one spacing scale and one set of control sizes, so the later UX phases change tokens rather than utility strings. Implements §16, §17, §18 and §26 of docs/ux-audit-mobile.md.
+Goal: make every player-facing text field meet the same touch floor the buttons already have, and stop three of them zooming the page on iOS.
 
-Do this in src/styles.css and the components named below only; do not change any screen's layout yet.
+1. In src/components/ui/input.tsx, add `min-h-11 pointer-fine:min-h-0` alongside the existing h-9, mirroring src/components/ui/button.tsx:39-44. Read the comment above that block first — it explains why the release is `pointer-fine:` and not a width breakpoint, and the same reasoning applies here. Add a comment saying the floor belongs to the primitive, in the same voice.
+2. src/components/card-social.tsx:353 and :385, and src/components/collector-signup.tsx:73 are hand-rolled <input> elements at text-sm. Under 16px iOS Safari zooms the page on focus, and :385 carries autoFocus so it fires as the prompt appears. Give all three `text-base pointer-fine:text-sm` and a min-h-11 floor. NOT `md:text-sm`, which is what ui/input.tsx does today: `md:` is a width breakpoint and a landscape phone crosses it with the thumb still the input, so the 14px — and Safari's focus zoom with it — comes back exactly there. This is the argument the comment above ui/button.tsx:39 already makes for the height floor; apply it to the font size too, and change ui/input.tsx:11 to match while you are in it.
+3. src/routes/claim.tsx:285 is the member code field. Add inputMode="text" and enterKeyHint="go" — the code is alphanumeric so a QWERTY keyboard is right, but the keyboard should offer the action key rather than making a thumb reach past it to the button.
 
-1. In @theme inline, add font-size tokens for the scale in §16 (title 30/32, section 18/22, card-name 15/18, viewer-name 22/24, body 15/22, label 12/16, meta 12/16, badge 13/16, nav 11/14, button 15/20) and spacing tokens for §17 (page-x 16, section-gap 24, stack-gap 8, grid-gap 12, control-gap 8). Add --focus: oklch(0.98 0.01 240 / 85%) and point --ring at it so focus rings stop matching --primary.
-2. Decide the body face: apply Inter via --font-sans (it is already requested in src/routes/__root.tsx) OR remove the Inter family from that Google Fonts request. Pick one; do not leave an unused download.
-3. Replace the neon-btn @utility's fixed padding/font-size with three size classes: neon-btn-sm (min-height 44px), neon-btn (48px) and neon-btn-lg (56px), all with a visible :focus-visible ring using --focus. Then update every caller that currently overrides with !px-* !py-* !text-* (vault-hero.tsx, pack-summary.tsx, players.trade.tsx, players.$id.tsx, collector-signup.tsx, milestone-reveal.tsx, bought-pull-reveal.tsx, claim.tsx, collection-complete.tsx) to use a size class and drop the overrides. Open Pack, Send offer and Accept get neon-btn-lg.
-4. Add a global :focus-visible rule in @layer base (2px outline, 2px offset, colour --focus) so raw <button> elements get a ring without per-component classes.
-5. In src/components/site-nav.tsx: aria-label="Primary" on the bottom <nav> and aria-label="Sections" on the desktop <nav>; make the account/sign-in control 44x44 (keep the icon size); prevent the wordmark from wrapping below 640px (single line, smaller tracking); add padding-top: env(safe-area-inset-top) to the sticky header.
-6. Fix the stale "electric green accent" comment at the top of src/styles.css.
-
-Done when:
-- bun run lint, typecheck and test are green.
-- grep -rn "neon-btn" src | grep -c "!py-" returns 0.
-- The header is one line at a 320px viewport (check e2e mobile project or a manual screenshot).
-- Tabbing through the vault shows a visible focus ring that is not the same colour as a selected chip.
-- No screen's layout has changed beyond button heights and the header.
+Done when: every visible input on /claim, /auth, /players/$id and the collector prompt measures at least 44px tall in a `pointer: coarse` context and renders at 16px there — check a landscape viewport (>=768px CSS width) with a coarse pointer too, which is where a `md:` breakpoint would hand the 14px back; and e2e/smoke.spec.ts's tap-target sweep passes with inputs included in its CONTROLS selector.
 ```
 
-### PR 1 — Readability and touch-target sweep
+### PR 12 — Edges you can see, and motion you can decline
 
-Branch `ux/01-readability-targets`. Title: **Readability and touch-target sweep**.
+Branch `ux/12-edges-motion`. Title: **Edges you can see in the sun**. Implements §23 F3, F4 and F5.
 
 ```text
-Goal: nothing a player reads is under 11px and nothing a player taps is under 44px. Implements §16, §18 and §20 of docs/ux-audit-mobile.md. Use the tokens from PR 0; do not restructure any screen.
+Goal: fix the app's one real contrast failure and honour the OS reduced-motion setting in the five components that ignore it.
 
-Scope: src/routes/players.index.tsx, players.$id.tsx, players.pack.tsx, players.trade.tsx, players.shop.tsx, src/components/pack-stand.tsx, pack-summary.tsx, pack-opening.tsx, trade-offer-card.tsx, secret-card-tile.tsx, secret-card-sheet.tsx, zoom-pan-frame.tsx, vault-hero.tsx, vault-section.tsx, favourite-button.tsx, card-social.tsx, card-compare.tsx, feed-state.tsx, and src/components/ui/dialog.tsx (close button only).
+1. src/styles.css:126 — `--border: oklch(100% 0 0 / .1)` composites to 1.25:1 against the ground. WCAG 1.4.11 asks 3:1 for the boundary of a control or panel. Introduce a second token (e.g. --border-strong at roughly 24% white, ~3.1:1) and use it for interactive edges — inputs, buttons, tiles, panel outlines a thumb aims at — leaving --border for decorative rules. Do not raise --border wholesale; the faint rule is right in places.
+2. src/routes/players.pack.tsx:1333 — "Reveal all" stacks text-muted-foreground/70 with disabled:opacity-30, which multiplies to 1.40:1. Enabled it is 4.73:1. Drop the /70 on the disabled branch or raise the opacity so the disabled state lands near 3:1, where the neon buttons already sit.
+3. Add <MotionConfig reducedMotion="user"> in src/routes/__root.tsx, inside the providers. Motion does not honour the OS preference unless told to, and five components animate unconditionally: stand-entrance.tsx:43-47, pack-summary.tsx:146-150, card-social.tsx:281-292, finish-celebration.tsx:86-90, bought-pull-reveal.tsx:112-116. Do not remove their animations — MotionConfig holds them, the same way the nine prefers-reduced-motion blocks in styles.css hold their CSS counterparts at a meaningful still frame.
 
-1. Replace every text-[7px]..text-[10px] on player-facing surfaces with the label/meta tokens (12px) or, for badges, the badge token (13px). Cap letter-spacing at 0.08em below 14px. Keep uppercase for display, labels and buttons; metadata such as "Packed by 7" and "Pulled ×3" becomes sentence case. Do not touch admin panels or the TV route.
-2. Give every tappable chip, pill and link min-h-11 with enough horizontal padding: vault sort chips and Shuffle, Rearrange, "Claim your player", "Offer waiting", back links ("← Vault", "← The Vault"), the player page action chips and its phone overflow trigger, award pills, the reveal stand's Next, Reveal all (keep its quiet styling, raise opacity to 60%), the ceremony Skip, trade partner pills, Decline and Take it back, the shop's Burn/Sell/Re-roll (Button size="default" instead of "sm"), the leaderboard share icons, reaction chips and Post.
-3. Icon-only controls become 44x44 with the glyph centred: the pack screen's sound toggle, the dialog close in ui/dialog.tsx, the zoom-pan-frame buttons, the vault section move arrows in rearrange mode, the comment delete (also make it visible on touch, not hover-only).
-4. The favourite star: 44x44, and give the tile link an inset so a star tap never navigates; keep aria-pressed and the existing labels.
-5. Semantics: aria-pressed on the vault sort chips (or role="radiogroup"), aria-pressed on the trade partner pills, a visible text status ("Pending") on pending offer cards, aria-modal="true" and a focus trap on MilestoneReveal matching BoughtPullReveal, and replace hover:text-danger in players.trade.tsx with the destructive token.
-6. Format dates shown to players (secret sheet "Pulled 2026-07-28") with the existing formatting helpers in src/lib/format.ts, adding one if none fits.
-
-Done when:
-- bun run lint, typecheck and test are green; update any test that asserted old text sizes or labels.
-- rg -n "text-\[(7|8|9|10)px\]" src/routes/players*.tsx src/components/{pack,trade,vault,secret,holo,card}*.tsx returns nothing.
-- A Playwright check (add it to e2e/smoke.spec.ts) asserts that on /players, /players/pack and /players/trade every visible button, link and [role=button] has a bounding box of at least 44px in height, excluding the skip link.
-- Screenshots at 320 and 390 show the sort chips on one row and nothing clipped.
+Done when: the interactive border token measures at least 3:1 against --background by canvas readback; the disabled "Reveal all" clears 3:1; and with prefers-reduced-motion set, the reveal stand, the pack summary and the finish celebration all reach their resting state without a spring.
 ```
 
-### PR 2 — Quieter room, rarity by rank
+### PR 13 — Labels that fit
 
-Branch `ux/02-room-and-rarity`. Title: **Quieter room, rarity by rank**.
+Branch `ux/13-labels`. Title: **Words that fit the phone they are on**. Implements §23 F6, F7, F8, F12 and F13.
 
 ```text
-Goal: the page behind the cards goes quiet and rarity becomes readable at tile size without colour alone. Implements §8 and §15 of docs/ux-audit-mobile.md. Presentation only: no id, weight or odds changes.
+Goal: five small, independent fixes to text and targets that a render caught.
 
-1. Ground: remove circuit-bg from the card routes (players.index, players.pack, players.$id, players.trade, players.shop) and give them a flat --bg of oklch(0.13 0.015 240) with one soft top vignette. Keep circuit-bg on league, leaderboard, live, order, draft, awards, analytics and tv.
-2. Glow budget: the primary CTA keeps --glow-primary. Remove hud-glow and glowing box-shadows from the active tab underline, waiting dots, selected partner pills, offer cards and the open secret set panel; use a 2px ring or a chip instead. On vault tiles, the tier glow renders only for champion and podium; a Gold or Platinum edition and a Legendary or Mythic secret get their own glow; base, penaltyBox, dnf and Standard get none.
-3. Base tier: border to oklch(1 0 0 / 24%); holoA/holoB shifted about 20 degrees off the UI primary (toward teal-green) in src/lib/card-rarity.ts so base cards stop matching buttons. Add a unit assertion that the six tier ids are unchanged.
-4. Level pips: a small LevelPips component (one to five filled diamonds in the level's accent, aria-label "Epic, 3 of 5") rendered under a secret's name on vault tiles, the reveal stand, the pack summary, the secret sheet, trade tiles and shop rows. Mythic forces the prism ring's shimmer at hero size.
-5. Edition tab: a small 45-degree corner tab in the edition metal on tiles and trade tiles for bronze, silver, gold and platinum; nothing for standard. Reuse the --edn-* custom properties holo-card.tsx already sets.
-6. Panels: one surface token (oklch(0.17 0.02 240), 1px border at 8% white, 12px radius) for shelves, panels and sheets; keep hud-bezel only on the sealed pack, the card slab and the trophy plaque.
-7. Theme the 404 and error boundary in src/routes/__root.tsx (dark surface, display font, neon-btn) and make src/lib/error-page.ts dark to match.
+1. src/components/roster-filmstrip.tsx — names are 11px with `truncate` and clip at every width; "Carol Crush" overflows by 32px. Allow two lines (line-clamp-2) or widen the cell.
+2. src/routes/players.index.tsx:882 — the secret tile's caption is a single-line `truncate text-meta` and clips at 320 only ("Common · 70% pull", 23px over). Let it wrap below 360px. Check the same page's "Draft Combine 2026", which clips by 21px at 320.
+3. src/components/pack-summary.tsx — the roster card name links measure 140x18. Give the link the tile's own hit area, or pad it to 44px. Do not create two overlapping targets that go to different places.
+4. The streak ladder on /you renders a claimable rung as "Waiting" with no adjacent reason. The reason is that claiming needs an account, and it is stated two sections higher. Say it on the rung.
+5. src/routes/players.trade.tsx — the empty inbox shows "Start the first offer" in the panel and a sticky "Make an offer" ~600px below it. Same destination. Keep the sticky one.
 
-Done when:
-- lint/typecheck/test green; card-rarity.test.ts still passes with the id assertion added.
-- On /players with the e2e stubs, a base card tile has no box-shadow glow and a champion tile does (add an e2e assertion using getComputedStyle).
-- LevelPips has a unit test for 1..5 and an aria-label.
-- Screenshots of vault, pack stand and trade at 390 attached, before and after.
+Done when: no player-facing text node reports scrollWidth > clientWidth with text-overflow:ellipsis at 320, 390 or 430; every link on the pack summary measures at least 44px tall; and the empty trading post offers one way to start an offer.
 ```
 
-### PR 3 — Pack ribbons, summary reflow, mute on the stand
+### PR 14 — Press feedback on a touch screen
 
-Branch `ux/03-pack-payoff`. Title: **Pack ribbons, summary reflow, mute on the stand**.
+Branch `ux/14-press`. Title: **Something happens when you press it**. Implements §23 F11.
 
 ```text
-Goal: the pack's last screen is as big a moment as its first, and every pull says whether it is new. Implements §7 and §12 of docs/ux-audit-mobile.md. Do not change the ceremony timings, the stand's phase machine (src/lib/stand-phase.ts) or anything in src/lib/pack-ceremony.ts.
+Goal: give the roughly 110 controls that only have a :hover state something visible under a thumb.
 
-1. NEW / ×N ribbons, two predicates:
-   - Roster cards: read packBaseline in src/routes/players.pack.tsx (keyed by event_participants.id). held === 0 shows "NEW"; held > 0 shows "×{held+1}". Pass the value into PackStand and PackSummary as a prop; do not recompute from the live collection (it already includes the pull once the record lands).
-   - The secret: packBaseline holds no secrets. Use SecretPullResult.duplicate from the pull response: false shows "NEW", true shows "×N" with N from getMySecrets count for that card id.
-   Render the ribbon as a small corner label on the card frame on the stand and in the summary, with aria text. Keep the existing "Already yours" caption and dust sell-hint for secret dupes; add the same sell-hint for roster dupes when dust is on (worth comes from src/lib/dust.ts MILL_BY_EDITION).
-2. Summary reflow in src/components/pack-summary.tsx: the secret full-width first (same sizing rule as the stand, max 320px), then the three roster cards in a horizontal snap row with each card at least 140px wide (scrolls on 320px, fits at 430px), captions at 12px (tier word, finish, ×N), then the streak block, the collected counter, and two neon-btn-lg buttons: View collection (primary) and Share pack. Keep the share export unchanged.
-3. Mute on the stand: render the sound toggle (44x44, aria-pressed) at the bottom-left of the stand and the summary as well as the sealed screen, outside the presentation fade, so it can be reached mid-reveal.
-4. Pending secret: replace the plain pulse with a foil sweep on the sealed back every second and a hint that changes at 2s ("Still sealed…") and 4s ("Slow signal — it's yours either way"); keep the 6s timeout and inline retry exactly as they are.
-5. Hide FeedDegradedBanner while presentation mode is active on the pack route.
+src/styles.css:487-492 already solves this for the neon-btn family by gating hover behind `@media (hover: hover) and (pointer: fine)`. Extend the same idea app-wide rather than per component: add an `@media (hover: none)` block that promotes the common hover treatments to :active. There are 165 `hover:` utilities against 51 `active:` across the components; do not hand-edit all of them.
 
-Done when:
-- lint/typecheck/test green; pack-summary.test.tsx and pack-stand.test.tsx cover both ribbon predicates (roster held 0 and 2; secret duplicate false and true).
-- e2e/journeys.spec.ts or secrets.spec.ts asserts "NEW" on a first pull and "×2" on a duplicate secret using the existing withSecret helper.
-- At 390px the summary's roster cards measure at least 140px wide (assert via boundingBox in e2e).
-- Screenshots of stand and summary at 320 and 390 attached.
+Start with the highest-traffic controls and verify each in a coarse-pointer context: vault-sort-sheet.tsx:156,178; vault-hero.tsx:83,91; card-viewer.tsx:387,401,438; card-social.tsx:331,359,390; trade-offers.tsx:124,162,280; site-nav.tsx:135,264; roster-filmstrip.tsx:86; new-since-strip.tsx:199.
+
+Done when: on a coarse pointer, pressing any of the controls above changes something visible before the release, and no control latches a hover style after a tap.
 ```
 
-### PR 4 — Feedback surfaces
+### PR 15 — Finish or retire the token scale
 
-Branch `ux/04-feedback`. Title: **Feedback surfaces: skeletons, toasts, offline, errors**.
-
-```text
-Goal: every wait, failure and arrival is shown in the right place. Implements §19 and §21 of docs/ux-audit-mobile.md.
-
-1. Toasts: in src/routes/__root.tsx move <Toaster> to position="bottom-center" with an offset above the tab bar (5rem + safe-area on phones, 1rem at md+), and suppress rendering while presentation mode is active (read useIsPresenting inside a small wrapper).
-2. Skeletons: in src/routes/players.index.tsx, while !mine.ready render 5:7 skeleton tiles (use ui/skeleton.tsx, a slow shimmer, reduced-motion safe) in place of the locked→owned pop. Reserve the hero's heights: the dust chip, streak flame, packs line, secrets line, streak sentence and offer pill each keep a fixed slot (min-height) so the grid does not move as queries land.
-3. Offline: a small hook (navigator.onLine + online/offline events) and a slim banner above the tab bar: "You're offline — the vault still works; packs record when you're back". Disable Send offer, Accept, Decline, Burn, Sell, Buy and Claim while offline, with that reason as a title/aria-description.
-4. Error pages: theme NotFoundComponent and ErrorComponent in __root.tsx (dark surface, display font, neon-btn) and make src/lib/error-page.ts dark.
-5. Locked tiles: src/components/pack-card-back.tsx takes loading="lazy" and the thumb rendition (VARIANT_WIDTHS.thumb) when rendered inside a grid; the sealed pack keeps large.
-6. Undo: after Decline and Take it back, show a 5s toast with an Undo action that re-opens the offer through a new server function reopenTradeOffer (requireMember(), only the same actor, only within 60s, only if still declined/cancelled and every staked copy is still held). Add a unit test via callServerFn and a db test if a SQL helper is needed. If the server change is out of scope for you, leave the toast without Undo and say so in the PR.
-
-Done when:
-- lint/typecheck/test green.
-- e2e: /players with a delayed getMyCardStats (server.delay) shows skeleton tiles before real ones; a toast on /players/trade renders above the tab bar (assert its y is above the nav's).
-- Offline banner appears when page.context().setOffline(true) in a new e2e test.
-- The 404 route screenshot matches the app's theme.
-```
-
-### PR 5 — Home "Today" card and streak strip
-
-Branch `ux/05-today-card`. Title: **Home "Today" card, streak strip and sort sheet**.
+Branch `ux/15-tokens`. Title: **One vocabulary for type and spacing**. Implements §23 F10.
 
 ```text
-Goal: the home screen answers "what should I do right now" in one fixed-height card, and the binder starts within one screen height. Implements §3, §11, §13 and the sort/filter part of §5 in docs/ux-audit-mobile.md.
+Goal: end the half-adopted state, which is the expensive one — two vocabularies for the same thing.
 
-1. New src/components/today-card.tsx replacing the top half of VaultHero on /players. Fixed height (no layout shift; reserve slots). Three pack states from the data the vault already fetches (useSecretStatus, the stored pack state via the same helpers players.pack.tsx uses, useStreak):
-   - sealed: "Open today's pack" (neon-btn-lg) with the secret-waiting ring/dot as today;
-   - torn, unfinished: "Finish your pack · N cards left";
-   - done: "Next pack in Nh" from SecretDayStatus.resetsAt (fall back to the device-local midnight the pack uses when resetsAt is null), plus the streak sentence.
-   A guest sees the same three states; the secret cue stays members-only as it is now.
-2. Streak strip inside the card (only when streak.current > 0): flame + "Day N", then five rung markers 3 · 7 · 14 · 30 · 100 from STREAK_MILESTONES with passed rungs filled and the next rung labelled from nextMilestoneLine. At-risk state (alive, not openedToday): amber outline and "Keep it alive". If a rung is claimable and canClaim, the strip becomes a "Claim {label}" button that opens MilestoneReveal here (reuse the claim flow from players.pack.tsx; move it into a hook if needed). If !canClaim, show "Sign in to claim" linking to /auth?mode=signup&next=/players.
-3. Below the card: one line "Roster 3 / 13 · Secrets 3 across 2 sets · 1 set complete" (never a secret denominator), then the shelves. Remove "cards printed" and "packs opened" from the player-facing hero (keep the data for the profile later).
-4. Sort & filter sheet: replace the Rearrange row and the sort chips with one "Sort & filter" chip on the Roster shelf header that opens a vaul Drawer (already in ui/drawer.tsx) containing sort (Name/Order/Pick/Rarity/Newest), filters (Owned, Missing, Spares), density (2-up/3-up) and the Rearrange toggle. Persist choices in the existing vault-layout storage.
-5. ×N pip on roster tiles from collected[id].count when count > 1; never on locked tiles.
-6. The Complete shelf moves above the set shelves by default (vault-layout default order only; user order still wins).
+Measured at this commit: text-label 131 uses, text-meta 106, text-badge 31 — against text-title 0 uses and text-body 2 (both in secret-back-panel.tsx), and 158 raw text-sm plus 134 text-xs. --spacing-page-x, --spacing-stack-gap and --spacing-control-gap appear exactly once each, in their own declaration in src/styles.css.
 
-Done when:
-- lint/typecheck/test green; today-card.test.tsx covers the three pack states, the at-risk state and the claimable state; use-my-collection and vault-layout tests still pass.
-- e2e/favourites.spec.ts and secrets.spec.ts updated for the new sheet; a new assertion that at 390x844 the first roster tile's top is within the first viewport height.
-- No secret set size appears anywhere (keep the existing "not.toContainText(/of \d+ secrets/)" assertion).
-- Screenshots at 320 and 390 attached.
-```
+Pick one and carry it through:
+(a) Migrate. Replace the text-sm and text-xs literals on player-facing screens with the scale tokens, and put the three spacing tokens to work on the page shells they were written for.
+(b) Retire. Delete --text-title and the three spacing tokens, which have no uses at all. --text-body is NOT unused: src/components/secret-back-panel.tsx:85 and :91 set it on the large-card branches, so either keep the token or replace those two classes first. Then say in §26 that the scale is labels and metadata only.
 
-### PR 6 — Acquisitions read and "new since last visit"
+(a) is the better outcome and the larger diff. Do not leave it where it is.
 
-Branch `ux/06-acquisitions`. Title: **Acquisitions read and "new since last visit" strip**.
-
-```text
-Goal: the app can say what arrived since you last looked, from server data rather than guesses. Implements the strip in §12 of docs/ux-audit-mobile.md and the first-view celebration in §6.
-
-1. New server function getRecentAcquisitions in src/lib/acquisitions.functions.ts (method GET). First line requireMember(). Input: { eventId: uuid, since: ISO timestamp }. Reads, for the token's participant only: card_copies rows with acquired_on >= since (return event_participant_id, edition, source, acquired_on) and secret_card_pulls rows pulled on or after since (return the secret card id, name, art path signed the same way getMySecrets does, tier, and whether it was a duplicate). Never return a set id count, a set size, or another participant's rows. Cap at 50 rows, newest first. Cache-Control private, no-store like the streak function.
-2. Test it in src/lib/acquisitions.functions.test.ts with callServerFn + memberHeaders(): a guest or anonymous caller is refused; the participant id is taken from the token, not the payload; the response has no key that could carry a set size (mirror the key-exact assertions the secret tests use).
-3. Client: a hook useRecentAcquisitions(eventId, since) with the same query conventions as useMySecrets (staleTime 60s, refetch on focus, retry false). The device stores wwbh:vault-last-seen; the vault reads it before fetching and writes the current time when the strip is dismissed or after 24h.
-4. Strip: inside the Today card from PR 5, a horizontal snap row of small cards (roster via HoloCard subtle, secrets with LevelPips) with a "NEW" or "×N" corner label from the response. Tapping a card opens it (route for roster, secret sheet for secrets) and marks the strip seen. Hidden when empty.
-5. Player page celebration: in src/routes/players.$id.tsx replace the module-scoped revealed Set with a device-stored seen set keyed by event_participant_id + acquired_on from the acquisitions data (fall back to the current per-session guard when the data is missing). The chime and confetti fire the first time a card is opened after it was acquired and not again on reload. Keep the existing tier/edition gate for confetti.
-
-Done when:
-- lint/typecheck/test green; the new functions test passes; if you add SQL, tests/db replays it from empty.
-- e2e: stub getRecentAcquisitions in e2e/fixtures.ts (check the substring rule) and assert the strip renders two items and disappears after tapping.
-- No response from the new function contains a set size (assert exact keys).
-```
-
-### PR 7 — Full-screen card viewer
-
-Branch `ux/07-card-viewer`. Title: **Full-screen card viewer**.
-
-```text
-Goal: tapping a card shows the card, as big as the phone allows, before anything else. Implements §6 and the sheet half of §9 in docs/ux-audit-mobile.md. Reuse ZoomPanFrame, HoloCard (tilt="hero") and useCardZoom; do not fork them.
-
-1. New src/components/card-viewer.tsx: a full-screen layer (role="dialog", aria-modal, focus trap, Escape and pull-down to dismiss) on a dark wash with a vignette, the card sized by the same svh rule the reveal stand uses, name and tier/finish badge (or LevelPips for a secret) beneath. Bottom row of 44px controls: Close (left), Flip (centre), More (right: Share, Pin, Compare, "Offer this card" when the viewer has spares, "Ask for this card" when it is locked). Swipe left/right steps through the list the caller passes (roster in running order, or the visible secrets), wrapping. Pinch and double-tap zoom as on the player page. Presentation mode on while open. Reduced motion: no transitions.
-2. Vault: a tap on a roster tile opens the viewer (locked cards open it face-down with "Rip a pack to see this card"); a tap on a secret tile opens the same viewer instead of SecretCardSheet. Keep the URL for roster cards: push /players/$id?view=1 so back closes the viewer; secrets keep no URL (they must not be shareable).
-3. Player page (/players/$id): opens directly into the viewer when ?view=1; a "Details" swipe-up or chip reveals the existing slab, stats, filmstrip and social below. Landing celebration rules from PR 6 apply inside the viewer, not on the details page.
-4. "Offer this card" navigates to /players/trade with the copy pre-staged (search param or in-memory store the trade route reads once); "Ask for this card" opens the partner picker filtered to owners (from getCardPullCounts) — if PR 8 is not merged yet, land on the existing compose panel with the card pre-selected.
-5. Remove SecretCardSheet once the viewer covers it, and move its tests.
-
-Done when:
-- lint/typecheck/test green; card-viewer.test.tsx covers open/close, swipe wrap, flip, and that a secret never sets a URL.
-- e2e: from /players, tapping a tile opens the viewer with the card at least 300px wide at 390x844; Escape closes it; the back button closes a roster viewer.
-- The accessibility assertions in e2e/smoke.spec.ts still pass.
-- Screenshots at 375 and 390 attached, roster and secret.
-```
-
-### PR 8 — Trade builder
-
-Branch `ux/08-trade-builder`. Title: **Trade builder: trays, review and confirm**.
-
-```text
-Goal: building an offer reads as "you give / you get", never as a form, and answering one is deliberate. Implements §10 of docs/ux-audit-mobile.md. Server functions (createTradeOffer, acceptTradeOffer, decline, cancel) and their payloads do not change.
-
-1. Split src/routes/players.trade.tsx into: trade-offers.tsx (inbox, outbox, receipts), trade-feed.tsx, and a new trade-builder.tsx. The route shows two tabs (Offers, Feed) and a sticky "Make an offer" neon-btn-lg above the tab bar. The signed-out and collector gates stay exactly as they are.
-2. Builder as a full-screen flow (presentation mode, Escape/back closes, state kept in memory until sent or cancelled):
-   - Who: a list, not pills — initials avatar, name, one line "N spares" from getTradeSpares (and "wants …" later). 56px rows, aria-pressed on the selected row.
-   - Give / Get: stacked on phones. "You give" tray (staged cards 2-up with LevelPips/edition tab/×N, 44px remove buttons) with "+ Add your cards" opening a vaul Drawer picker: a 3-up grid of full cards, tap to toggle (aria-pressed), blocked cards greyed with the reason from BLOCKED_LABEL, last-copy in words, the 4-per-side cap shown as "3 / 4". Then "You get" tray with "+ Ask for their cards" on their spares, concealed art for cards you have not pulled exactly as today.
-   - Review: both trays as small cards, the one-line summary from tradeItemsLabel at 16px, a last-copy warning, then Send offer (neon-btn-lg). On success return to Offers with the new outbox card highlighted.
-3. Answering: TradeOfferCard stacks You give above You get on phones (each a snap row at ≥110px per card), shows a status chip at every state including Pending, uses "1 of 3" text instead of dot spans, Accept (neon-btn-lg) and Decline (quiet 44px). Accept opens a confirm sheet: "Swap your Standard Alice for Bob's Gold Bob?" with Confirm / Cancel. Decline and Take it back need no confirm.
-4. Empty inbox keeps "Nobody wants your cards. Yet." and gains the Make an offer button beneath it.
-
-Done when:
-- lint/typecheck/test green; trade-builder.test.tsx covers step navigation, the 4-per-side cap, blocked cards not selectable, and the summary text.
-- e2e/trades.spec.ts updated: composing posts the same recipientId/gives payload as before (keep the existing posted-body assertion); Accept requires the confirm; the signed-out redirect to /claim is unchanged.
-- At 390px the give and get trays are stacked (assert the get tray's top is below the give tray's bottom).
-- Screenshots of Who, trays, Review and an incoming offer at 390 attached.
-```
-
-### PR 9 — Navigation and profile
-
-Branch `ux/09-nav-profile`. Title: **Five fixed tabs and a profile screen**.
-
-> **What actually shipped**: items 4 and 5 (the profile, and the header icon and
-> torn-pack glyph). Items 1 and 2 were withdrawn — see §4. The bar became the
-> commissioner's between this prompt being written and being run, and fixing it
-> at five would have taken that back; Board and Shop keep their rows, so the
-> League hub needs neither tile. `/you` therefore has no tab and hangs off the
-> header's person icon, and `nav.ts`, `nav.test.ts`, `league.ts` and
-> `league.test.ts` are untouched but for the Pack tab's resting glyph. The prompt
-> below is left as it was written.
-
-```text
-Goal: the tab bar never changes shape and every setting has one home. Implements §4 of docs/ux-audit-mobile.md.
-
-1. src/lib/nav.ts: navTabs returns five tabs always — Vault (/players), Pack (/players/pack), Trade (/players/trade), League (/league), You (/you). Shop is no longer a tab; keep dustOn as an input only if a badge needs it. Update nav.test.ts (no 5↔6 reflow; activeTab rules unchanged; /players/shop lights Vault; /you lights You).
-2. src/lib/league.ts: Board (/leaderboard) becomes the first hub tile; add a Shop tile (/players/shop) that exists only while dust is on. Update the hub test that guards against stranded screens.
-3. Dust chip in the Today card keeps linking to /players/shop.
-4. New src/routes/you.tsx: name and player code status (from useMemberSession and the claim helpers), account (sign in/out, reuse AccountMenu logic), streak ladder and history (from useStreak; history = milestones with claimed=true, each with the label; if PR 6 landed, show the card each paid), dust balance, sound (the mute toggle from card-sfx), haptics, tilt (gyro permission), the Admin link (PIN-gated route as today), and the collection numbers removed from the hero in PR 5. Title and meta like other routes. Header account icon links here.
-5. site-nav.tsx: five columns, 11px labels, min-h-14 tiles; keep the two dots and their aria text; add the torn-pack glyph variant for the Pack tab while today's pack is mid-reveal (read the stored pack state the vault already reads).
-
-Done when:
-- lint/typecheck/test green; nav.test.ts and the league hub test updated; e2e/smoke.spec.ts renders /you and asserts aria-current on the You tab.
-- e2e/dust.spec.ts: with dust on, the bar still has five tabs and Shop is reachable from the League hub and the dust chip.
-- Screenshot of /you and the bar at 320 and 390 attached.
-```
-
-### PR 10 — Two-beat reveal and set mystery slot
-
-Branch `ux/10-reveal-beat-mystery`. Title: **Two-beat reveal for special pulls; one mystery slot per set**.
-
-```text
-Goal: a good pull gets one more beat, and a set page has a horizon without a denominator. Implements the reveal pacing in §7 and the mystery slot in §9/§14 of docs/ux-audit-mobile.md. Do not change src/lib/stand-phase.ts or the ceremony table.
-
-1. Two-beat reveal in src/components/pack-stand.tsx: for champion or podium tiers, Silver or better editions, and Rare or better secret levels, the flip lands on a face dimmed to 60% for 250ms, then the edition frame / prism ring blooms to full with the existing holo-shine sweep and the second cue (playEditionShine, or the secret's own chime) fires. Common pulls keep the current single beat. Reduced motion: no dim, one beat. The "known" guard stays: a card whose finish the server has not answered gets no second beat.
-2. Mystery slot in src/routes/players.index.tsx: at the end of every open secret set shelf (not Favourites, not Complete, not the unsorted "Secrets" pile), render one face-down tile using the event's universal back with a "?" and the caption "More in this set". This is the one exception the Project guardrails name, and it is allowed only in this exact shape: exactly one tile per open set whether one card or twenty remain, never a second one, never a number, never a per-card silhouette. It is not a link, never counts toward the shelf's number, carries aria-hidden text only ("Unknown cards remain"), and is not rendered for a set that has a completion trophy. Add a comment at the render site explaining why this does not leak: one slot regardless of how many remain.
-3. Set chip: print the set name (from the set list the vault already fetches, falling back to the shipped labels) as a small chip on secret captions in the viewer/sheet, trade tiles and shop rows, coloured with the set accent.
-
-Done when:
-- lint/typecheck/test green; pack-stand.test.tsx covers the two-beat path for a gold edition and the single beat for standard; players.index tests cover the mystery slot present on an incomplete set, absent on a completed one, and excluded from the count.
-- e2e/secrets.spec.ts: the existing "no total, no empty slots" assertion is updated to allow exactly one "More in this set" tile per open set and still forbids /of \d+ secrets/.
-- Screenshots of a set shelf and a gold reveal at 390 attached.
+Done when: either no player-facing component sets a font size with a raw text-sm/text-xs literal, or the unused tokens are gone from styles.css and §26 records the decision.
 ```
 
 ### Tool notes
