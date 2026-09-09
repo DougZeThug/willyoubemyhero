@@ -350,7 +350,7 @@ export function CardSocial({
             value={draft}
             onChange={(e) => setDraft(e.target.value.slice(0, 280))}
             placeholder={`Talk your talk, ${me?.name ?? (guestName || "guest")}…`}
-            className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary/50"
+            className="min-h-11 min-w-0 flex-1 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-base outline-none placeholder:text-muted-foreground focus:border-primary/50 pointer-fine:min-h-0 pointer-fine:text-sm"
           />
           <button
             type="submit"
@@ -377,12 +377,17 @@ export function CardSocial({
               }}
               className="mt-2 flex items-center gap-2"
             >
+              {/* `text-base` on a coarse pointer is doing more work here than
+                  on the box above: this field takes focus the moment the prompt
+                  appears, so at 14px iOS would zoom the page out from under
+                  somebody who never asked for a keyboard. Same floor and same
+                  release as ui/input.tsx, which carries the argument. */}
               <input
                 autoFocus
                 value={nameDraft}
                 onChange={(e) => setNameDraft(e.target.value.slice(0, 40))}
                 placeholder="Your name"
-                className="min-w-0 flex-1 rounded-md border border-white/10 bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
+                className="min-h-11 min-w-0 flex-1 rounded-md border border-white/10 bg-background px-3 py-2 text-base outline-none focus:border-primary/50 pointer-fine:min-h-0 pointer-fine:text-sm"
               />
               <button
                 type="submit"

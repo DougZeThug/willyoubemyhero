@@ -289,6 +289,11 @@ function ClaimPage() {
               autoComplete="off"
               autoCapitalize="characters"
               spellCheck={false}
+              // Alphanumeric, so QWERTY is the right keyboard — but it should
+              // offer the action key rather than make a thumb travel back past
+              // it to the Claim button under the field.
+              inputMode="text"
+              enterKeyHint="go"
               placeholder="XXXXXX"
               // The one place wide tracking survives the §16 cap: a code is read
               // and typed character by character, and the gaps are what let a
