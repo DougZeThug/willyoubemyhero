@@ -151,10 +151,10 @@ The trophy is on your Complete shelf in [the vault](the-vault.md), drawn as a
 plaque rather than a card,
 because a set is not a card and drawing it as one puts a fourteenth thing on a
 shelf of thirteen. The plaque prints the medal, the set's name, the size, and the
-date it was finished. A backfilled trophy prints no date at all: nothing in the
-data records when a given person acquired a given card, and a traded card keeps
-the date the _giver_ pulled it, so the app would rather say nothing than state a
-day it cannot support — or have eight people appear to finish the same afternoon.
+date it was finished. A backfilled trophy prints no date at all: each of its
+copies predates the column that records when its holder acquired it, leaving
+only the day it was minted; the app would rather say nothing than state a day it
+cannot support — or have eight people appear to finish the same afternoon.
 
 ## Told about it somewhere else
 
