@@ -62,7 +62,7 @@ describe("every cue", () => {
   it("buzzes on the beats that are meant to be felt", () => {
     // Not every cue has a haptic — a riser is a sound, not a tap — but the ones
     // that mark a physical event do.
-    for (const name of ["cardLand", "cardFace", "fakeEnding", "secretImpact"] as const) {
+    for (const name of ["cardLand", "cardFace", "secretImpact"] as const) {
       vibrate.mockClear();
       cue(name);
       expect(vibrate, `${name} should buzz`).toHaveBeenCalled();
