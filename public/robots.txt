@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /claim
+Disallow: /analytics
+Disallow: /you
+
+Sitemap: https://willyoubemyhero.com/sitemap.xml
