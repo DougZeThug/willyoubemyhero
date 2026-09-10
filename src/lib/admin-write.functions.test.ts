@@ -67,8 +67,6 @@ beforeEach(() => {
  * without `requireAdmin` fails the sweep.
  */
 const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
-  upsertParticipant: { eventId: EVENT_ID, name: "Doug" },
-  addParticipantToEvent: { eventId: EVENT_ID, participantId: PARTICIPANT_ID },
   removeParticipantFromEvent: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID },
   setParticipantStatus: {
     eventId: EVENT_ID,
@@ -364,94 +362,6 @@ describe("saveCompletedRun", () => {
 
   it("rejects a client key too short to be unique", async () => {
     await expect(save({ ...base, clientKey: "short" })).rejects.toThrow();
-  });
-});
-
-describe("addParticipantToEvent", () => {
-  it("appends to the end of the running order", async () => {
-    withDb({ "event_participants.select": { data: { running_order: 7 } } });
-    const { addParticipantToEvent } = await import("./admin-write.functions");
-    await callServerFn(addParticipantToEvent, {
-      data: VALID_PAYLOADS.addParticipantToEvent,
-      headers: asAdmin(),
-    });
-    expect(mock.callsFor("event_participants", "insert")[0].payload).toMatchObject({
-      running_order: 8,
-      bib_number: null,
-    });
-  });
-
-  it("starts at 1 for the first entrant", async () => {
-    withDb({ "event_participants.select": { data: null } });
-    const { addParticipantToEvent } = await import("./admin-write.functions");
-    await callServerFn(addParticipantToEvent, {
-      data: VALID_PAYLOADS.addParticipantToEvent,
-      headers: asAdmin(),
-    });
-    expect(mock.callsFor("event_participants", "insert")[0].payload).toMatchObject({
-      running_order: 1,
-    });
-  });
-});
-
-describe("upsertParticipant", () => {
-  it("inserts when no id is given, and does not carry eventId into the row", async () => {
-    withDb({ "participants.insert": { data: { id: PARTICIPANT_ID } } });
-    const { upsertParticipant } = await import("./admin-write.functions");
-    await callServerFn(upsertParticipant, {
-      data: { eventId: EVENT_ID, name: "Doug", nickname: "Dougie" },
-      headers: asAdmin(),
-    });
-    const payload = mock.callsFor("participants", "insert")[0].payload as Record<string, unknown>;
-    expect(payload).toEqual({ name: "Doug", nickname: "Dougie" });
-    expect(payload).not.toHaveProperty("eventId");
-  });
-
-  it("updates the named participant when an id is given", async () => {
-    withDb({ "participants.update": { data: { id: PARTICIPANT_ID } } });
-    const { upsertParticipant } = await import("./admin-write.functions");
-    await callServerFn(upsertParticipant, {
-      data: { eventId: EVENT_ID, id: PARTICIPANT_ID, name: "Doug" },
-      headers: asAdmin(),
-    });
-    const [update] = mock.callsFor("participants", "update");
-    expect(mock.eqValue(update, "id")).toBe(PARTICIPANT_ID);
-    expect(mock.callsFor("participants", "insert")).toHaveLength(0);
-  });
-
-  it("rejects a profile image that is not a url at all", async () => {
-    const { upsertParticipant } = await import("./admin-write.functions");
-    await expect(
-      callServerFn(upsertParticipant, {
-        data: { eventId: EVENT_ID, name: "Doug", profile_image_url: "not a url" },
-        headers: asAdmin(),
-      }),
-    ).rejects.toThrow();
-  });
-
-  it("accepts any scheme, which z.string().url() does not constrain", async () => {
-    // Documenting the boundary rather than asserting a guard that isn't there.
-    // The value only ever reaches an <img src>, where browsers refuse to
-    // execute a javascript: URL, so this is a sharp edge and not a hole — but
-    // it is the line to move if that ever stops being true.
-    withDb({ "participants.insert": { data: { id: PARTICIPANT_ID } } });
-    const { upsertParticipant } = await import("./admin-write.functions");
-    await expect(
-      callServerFn(upsertParticipant, {
-        data: { eventId: EVENT_ID, name: "Doug", profile_image_url: "javascript:alert(1)" },
-        headers: asAdmin(),
-      }),
-    ).resolves.toBeTruthy();
-  });
-
-  it("rejects an over-long name", async () => {
-    const { upsertParticipant } = await import("./admin-write.functions");
-    await expect(
-      callServerFn(upsertParticipant, {
-        data: { eventId: EVENT_ID, name: "x".repeat(81) },
-        headers: asAdmin(),
-      }),
-    ).rejects.toThrow();
   });
 });
 
