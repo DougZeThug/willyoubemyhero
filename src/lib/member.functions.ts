@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { hashCode, signMemberToken } from "./session.server";
-import { optionalGuest, requireAdmin, requireMember } from "./require-auth.server";
+import { optionalGuest, requireAdmin } from "./require-auth.server";
 import { timingSafeEq } from "./session.server";
 import { uuid as zuuid } from "./zod-uuid";
 
@@ -151,18 +151,6 @@ export const claimPlayer = createServerFn({ method: "POST" })
     const { token, expiresAt } = signMemberToken(data.participantId);
     return { ok: true as const, token, expiresAt, name: participant?.name ?? "Player" };
   });
-
-/** Who am I, according to the token this request carried. */
-export const getMe = createServerFn({ method: "GET" }).handler(async () => {
-  const participantId = await requireMember();
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data } = await supabaseAdmin
-    .from("participants")
-    .select("id, name, nickname, fantasy_team_name")
-    .eq("id", participantId)
-    .maybeSingle();
-  return data;
-});
 
 // ---------- Admin ----------
 
