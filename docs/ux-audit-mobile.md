@@ -699,7 +699,7 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 ### Player card — `/players/$id`
 
 - **Works**: the full-screen viewer is the default for a tap (`?view=1`), so examining a card starts with the card; zoom, flip, swipe and tilt; the slab and serial plate; the locked state with a route into a pack; the compare drawer; share export.
-- **Remaining**: the comment box is a raw 14 px input, so iOS zooms the page on focus, and it measures 38 px tall (F1, F2). Filmstrip names clip at every width — all four of them on a locked card (F7). At 320 the card's own "Draft Combine 2026" line clips by 21 px.
+- **Remaining**: Filmstrip names clip at every width — all four of them on a locked card (F7). At 320 the card's own "Draft Combine 2026" line clips by 21 px.
 - **Priority: Medium** (was High).
 
 ### Card viewer (full-screen)
@@ -741,8 +741,8 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 ### Claim and Auth — `/claim`, `/auth`
 
 - **Works**: the 2-col name grid; a big typed code; clear failure copy that distinguishes a wrong code from too many tries; links between the two; an honest "an account is optional" footer.
-- **Remaining**: the code field and both auth fields are 36 px (F1). The code field has no `inputMode` or `enterKeyHint`, so a thumb must reach past the keyboard to the button. The privacy explainer and "Not on the roster?" sit at 11 px.
-- **Priority: Medium** (was Low) — this is the front door, and F1 lands squarely on it.
+- **Remaining**: the privacy explainer and "Not on the roster?" sit at 11 px.
+- **Priority: Medium** (was Low) — this is the front door.
 
 ### Global shell (header, tabs, toasts, errors)
 
