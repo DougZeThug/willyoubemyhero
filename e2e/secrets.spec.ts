@@ -20,6 +20,7 @@ import {
   tearPack,
   type ServerFnMock,
   swipeNext,
+  turnCard,
 } from "./fixtures";
 import type { Page } from "@playwright/test";
 
@@ -362,32 +363,7 @@ test.describe("a secret in the pack", () => {
     const step = page.getByTestId("stand-step");
     await expect(step).toHaveText("1 / 3");
 
-    /**
-     * Turn the card on the stand, pressing until it takes.
-     *
-     * One tap is not enough on a loaded runner. `revealAt` holds its re-entrancy
-     * latch for the whole of the previous card's celebration, so a tap that
-     * lands while confetti is still in the air is swallowed on purpose. The hint
-     * is the signal: the stand's own copy is "tap for the back" once a card has
-     * turned, so `aria-pressed` — which tracks that flip — is only good enough
-     * to say "not currently showing its back".
-     */
-    const hint = page.getByText(/swipe/i).first();
-    async function turnCard() {
-      await expect
-        .poll(
-          async () => {
-            if (await hint.count()) return true;
-            if ((await card.getAttribute("aria-pressed")) === "false") await card.click();
-            await page.waitForTimeout(400);
-            return (await hint.count()) > 0;
-          },
-          { timeout: 25_000, intervals: [200] },
-        )
-        .toBe(true);
-    }
-
-    await turnCard();
+    await turnCard(page);
     await swipeNext(page);
 
     // The secret's step: an ordinary position in the heading, the ring on the
@@ -395,14 +371,14 @@ test.describe("a secret in the pack", () => {
     await expect(step).toHaveText("2 / 3");
     await expect(page.locator(".secret-seal")).toHaveCount(1);
     await expect(page.getByText(/not on the roster/i).first()).toBeVisible();
-    await turnCard();
+    await turnCard(page);
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".secret-seal")).toHaveCount(0);
 
     // And on past it, to the last roster card, with nothing owed after that.
     await swipeNext(page);
     await expect(step).toHaveText("3 / 3");
-    await turnCard();
+    await turnCard(page);
     await swipeNext(page);
     await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 15_000 });
     expect((await packRow(page))?.ids).toEqual(["ep-alice", "ep-bob"]);

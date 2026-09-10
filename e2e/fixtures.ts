@@ -364,35 +364,113 @@ export async function tearPack(page: Page) {
 /** The card currently on the reveal stand. */
 export const standCard = (page: Page) => page.locator('[role="button"][aria-pressed]').first();
 
+/** One leftward throw across the card, in as few round trips as it can be done. */
+async function throwCardLeft(page: Page) {
+  const box = (await standCard(page).boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.85, y);
+  await page.mouse.down();
+  // One move, not four. Only the pointerdown and pointerup coordinates decide
+  // the swipe — the stand binds down/up/cancel and never reads pointermove
+  // (pack-stand.tsx:598-614) — so interpolated steps change `dx` not at all and
+  // `ms` a great deal. Each one is a round trip, and each one also runs
+  // holo-card's pointermove (holo-card.tsx:531-546), forcing a layout read and
+  // a rAF tilt write, all of it inside the 700ms being measured.
+  await page.mouse.move(box.x + box.width * 0.15, y);
+  await page.mouse.up();
+}
+
+/**
+ * Turn the card on the stand, pressing until it takes.
+ *
+ * The tap's own version of what `swipeNext` handles for the throw, and swallowed
+ * for a related reason: `revealAt` holds a re-entrancy latch for the whole of
+ * the previous card's celebration (players.pack.tsx:883), so a tap that lands
+ * while confetti is still in the air does nothing at all — and nothing says so.
+ * A bare click then leaves the card face-down and whatever the test asserts next
+ * waits out its timeout for a reveal that was never started.
+ *
+ * The hint is the signal rather than `aria-pressed`: the stand's own copy is
+ * "tap for the back" once a card has turned, so aria-pressed is only good enough
+ * to say "not currently showing its back" — which is why it guards the press
+ * rather than ending the loop. Pressing a card that HAS turned would flip it to
+ * its back, which is the trap the walk in journeys.spec.ts:540-552 documents.
+ */
+export async function turnCard(page: Page) {
+  const card = standCard(page);
+  const hint = page.getByText(/swipe/i).first();
+  await expect
+    .poll(
+      async () => {
+        if (await hint.count()) return true;
+        if ((await card.getAttribute("aria-pressed")) === "false") await card.click();
+        await page.waitForTimeout(400);
+        return (await hint.count()) > 0;
+      },
+      { timeout: 25_000, intervals: [200] },
+    )
+    .toBe(true);
+}
+
 /**
  * Step to the next card the way a thumb does: a fast leftward throw across the
  * revealed card. There is no Next button in the intended flow — the stand reads
  * the gesture with swipeDirection() from src/lib/zoom.ts, which wants >=48px of
  * mostly horizontal travel inside 700ms.
  *
- * The wait in front of it is the point. pack-stand.tsx:468 drops a throw
- * outright when `canAdvance` is false — mid-celebration, mid-hold, or while the
- * card is peeking — and a dropped throw is silent: the step stays where it was
- * and the assertion after it waits out its whole timeout for a number that is
- * never coming. That is the shape of every flake this helper has produced, and
- * it gets worse the more loaded the runner is.
+ * Thrown until it takes, because a throw can be dropped two different ways and
+ * both are silent — the step just stays where it was and the assertion after it
+ * waits out its whole timeout for a number that is never coming.
  *
- * `canAdvance` needs no guessing from the outside. The stand's own Next control
- * (pack-stand.tsx:962, kept in the tree for a keyboard and a screen reader, and
- * merely transparent when it is off) carries it as `disabled`, so waiting for
- * that to be enabled is waiting for exactly the flag the throw is about to be
- * tested against. Retrying the throw instead would be the wrong fix twice over:
- * it cannot tell a swallowed throw from one whose re-render has not landed yet,
- * and doubling a throw that did land steps two cards on.
+ * The first way is the gate: pack-stand.tsx:468 ignores a throw when
+ * `canAdvance` is false. That one needs no guessing, so it is waited out rather
+ * than retried — the stand's own Next control (pack-stand.tsx:962, kept in the
+ * tree for a keyboard and merely transparent when off) carries `canAdvance` as
+ * `disabled`.
+ *
+ * The second way is the clock, and it is why waiting on the gate alone was not
+ * enough. swipeDirection rejects anything slower than 700ms (zoom.ts:79,83), and
+ * the secret's celebration outlives the await that precedes this: celebrateSecret
+ * fires two 60-particle cannons and resolves as soon as they are queued
+ * (players.pack.tsx:960), so the gate opens while the main thread is still
+ * animating them. A throw issued into that can spend its whole budget in transit
+ * and be read as "a drag that happened to end off to one side".
+ *
+ * Hence the loop, and hence its guard: re-throw only while the step has not
+ * moved AND the stand is still idle on the same card. `onAdvance()` runs
+ * synchronously in the pointerup handler, so a throw that WAS read has already
+ * moved the step by the time the next pass looks — a re-throw can therefore only
+ * ever follow one that was rejected, and can never step two cards on. Each pass
+ * also gets a fresh 700ms against confetti that is decaying.
  */
 export async function swipeNext(page: Page) {
-  await expect(page.getByRole("button", { name: /^next$/i })).toBeEnabled();
-  const box = (await standCard(page).boundingBox())!;
-  const y = box.y + box.height / 2;
-  await page.mouse.move(box.x + box.width * 0.85, y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.15, y, { steps: 4 });
-  await page.mouse.up();
+  const step = page.getByTestId("stand-step");
+  const next = page.getByRole("button", { name: /^next$/i });
+  // Null once the stand has handed the screen to the summary, which is a change
+  // like any other and is how the last throw of a pack ends this loop. Read in
+  // one call rather than count-then-read: the last throw unmounts the stand, and
+  // a pair of calls can straddle exactly that.
+  const readStep = () => step.textContent({ timeout: 1_000 }).catch(() => null);
+
+  await expect(next).toBeEnabled();
+  const before = await readStep();
+
+  await expect
+    .poll(
+      async () => {
+        if ((await readStep()) !== before) return true;
+        // Same treatment, and for the same moment: the control goes with the
+        // stand, and a bare isEnabled() would block rather than answer.
+        const idle = await next.isEnabled({ timeout: 1_000 }).catch(() => false);
+        if (idle) await throwCardLeft(page);
+        // Long enough that an unmoved step means the throw was really dropped,
+        // rather than that React had not committed yet.
+        await page.waitForTimeout(300);
+        return (await readStep()) !== before;
+      },
+      { timeout: 20_000, intervals: [200] },
+    )
+    .toBe(true);
 }
 
 /**

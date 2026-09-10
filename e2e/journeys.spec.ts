@@ -15,6 +15,7 @@ import {
   tearPack,
   standCard,
   swipeNext,
+  turnCard,
 } from "./fixtures";
 import { editionLabel } from "../src/lib/card-edition";
 import { CEREMONY_MS } from "../src/lib/pack-ceremony";
@@ -1038,7 +1039,10 @@ test.describe("opening a pack", () => {
     // reveal is the only thing that will ever file them, one at a time.
     await swipeNext(page);
     await expect(standStep(page)).toHaveText("2 / 3");
-    await standCard(page).click();
+    // Pressed until it takes: the card ahead of this one has just celebrated,
+    // and a tap into the tail of that is swallowed by revealAt's latch, leaving
+    // nothing to file and the poll below to time out on a reveal that never ran.
+    await turnCard(page);
     await expect.poll(() => filedWith(guestIds[1]), { timeout: 15_000 }).toBe(1);
     // But never again the one they had turned: adoption filed that at the claim.
     expect(filedWith(guestIds[0])).toBe(1);
