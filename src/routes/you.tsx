@@ -283,7 +283,7 @@ function SettingRow({
       <span
         className={cn(
           "shrink-0 rounded-full border px-3 py-1 text-meta font-bold uppercase tracking-[0.08em]",
-          on ? "border-primary/60 text-primary" : "border-white/15 text-muted-foreground",
+          on ? "border-primary/60 text-primary" : "border-border-strong text-muted-foreground",
         )}
       >
         {on ? onWord : offWord}

@@ -119,7 +119,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
               "cursor-pointer rounded-lg border border-dashed p-5 text-center transition-colors",
               dragging
                 ? "border-primary bg-primary/10"
-                : "border-white/15 hover:border-primary/50 hover:bg-white/[0.02]",
+                : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
               busy && "pointer-events-none opacity-60",
             )}
           >

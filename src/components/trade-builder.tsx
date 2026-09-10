@@ -478,7 +478,7 @@ function WhoRow({
         // Selection is a 2px ring, not a bloom (§15).
         selected
           ? "border-primary/60 bg-primary/10 ring-2 ring-primary/50"
-          : "border-white/10 bg-white/5 hover:border-primary/40",
+          : "border-border-strong bg-white/5 hover:border-primary",
       )}
     >
       {/* The initials repeat the name beside them, so they are decoration —
@@ -602,7 +602,7 @@ function Tray({
           <button
             type="button"
             onClick={onRetry}
-            className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-white/10 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
+            className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-border-strong px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
           >
             Try again
           </button>

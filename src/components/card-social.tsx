@@ -255,7 +255,7 @@ export function CardSocial({
                     "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-transform duration-150 active:scale-90 disabled:opacity-50",
                     active
                       ? "border-primary bg-primary/15"
-                      : "border-white/10 bg-white/[0.02] hover:border-primary/40",
+                      : "border-border-strong bg-white/[0.02] hover:border-primary",
                   )}
                 >
                   <span aria-hidden>{emoji}</span>
@@ -350,7 +350,7 @@ export function CardSocial({
             value={draft}
             onChange={(e) => setDraft(e.target.value.slice(0, 280))}
             placeholder={`Talk your talk, ${me?.name ?? (guestName || "guest")}…`}
-            className="min-h-11 min-w-0 flex-1 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-base outline-none placeholder:text-muted-foreground focus:border-primary/50 pointer-fine:min-h-0 pointer-fine:text-sm"
+            className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-white/[0.02] px-3 py-2 text-base outline-none placeholder:text-muted-foreground focus:border-primary/50 pointer-fine:min-h-0 pointer-fine:text-sm"
           />
           <button
             type="submit"
@@ -387,7 +387,7 @@ export function CardSocial({
                 value={nameDraft}
                 onChange={(e) => setNameDraft(e.target.value.slice(0, 40))}
                 placeholder="Your name"
-                className="min-h-11 min-w-0 flex-1 rounded-md border border-white/10 bg-background px-3 py-2 text-base outline-none focus:border-primary/50 pointer-fine:min-h-0 pointer-fine:text-sm"
+                className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-background px-3 py-2 text-base outline-none focus:border-primary/50 pointer-fine:min-h-0 pointer-fine:text-sm"
               />
               <button
                 type="submit"

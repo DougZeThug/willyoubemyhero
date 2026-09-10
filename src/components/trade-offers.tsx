@@ -121,7 +121,7 @@ export function TradeOffersPanel({
                       onClick={() => onDecline(offer.id)}
                       disabled={pending === offer.id || offline}
                       {...offlineReason(offline)}
-                      className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-white/10 px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50 sm:w-auto"
+                      className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-border-strong px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-50 sm:w-auto"
                     >
                       Decline
                     </button>
@@ -277,7 +277,7 @@ function ConfirmAcceptSheet({
           <button
             type="button"
             onClick={onCancel}
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-white/10 px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-border-strong px-6 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
           >
             Cancel
           </button>

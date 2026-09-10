@@ -40,7 +40,7 @@ export function SetAccentPicker({
           disabled={disabled}
           aria-label={`Colour for ${setLabel}`}
           className={cn(
-            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/15 disabled:opacity-30 pointer-fine:h-9 pointer-fine:w-9",
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border-strong disabled:opacity-30 pointer-fine:h-9 pointer-fine:w-9",
           )}
         >
           <span
@@ -68,7 +68,7 @@ export function SetAccentPicker({
             <span
               className={cn(
                 "flex h-7 w-7 items-center justify-center rounded-full border text-[10px] text-muted-foreground",
-                !accent ? "border-primary ring-2 ring-primary/50" : "border-white/20",
+                !accent ? "border-primary ring-2 ring-primary/50" : "border-border-strong",
               )}
             >
               ✕
@@ -88,7 +88,7 @@ export function SetAccentPicker({
                   "h-7 w-7 rounded-full border transition-transform",
                   accent === a.id
                     ? "scale-110 border-white/60 ring-2 ring-white/40"
-                    : "border-white/15",
+                    : "border-border-strong",
                 )}
                 style={{ background: a.oklch }}
               />

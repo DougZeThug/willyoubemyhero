@@ -384,7 +384,7 @@ export function CardViewer({
             }}
             disabled={locked}
             aria-pressed={flipped}
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 justify-self-center rounded-md border border-white/10 bg-background/70 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 justify-self-center rounded-md border border-border-strong bg-background/70 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
           >
             <RotateCw className="h-4 w-4" aria-hidden />
             {flipped ? "Front" : "Flip"}
@@ -398,7 +398,7 @@ export function CardViewer({
                 type="button"
                 aria-label="More actions"
                 disabled={menu.length === 0}
-                className="inline-flex h-11 w-11 items-center justify-center justify-self-end rounded-md border border-white/10 bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
+                className="inline-flex h-11 w-11 items-center justify-center justify-self-end rounded-md border border-border-strong bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
               >
                 <MoreHorizontal className="h-5 w-5" />
               </button>
@@ -507,7 +507,7 @@ function ViewerButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`inline-flex h-11 w-11 items-center justify-center rounded-md border border-white/10 bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary ${className ?? ""}`}
+      className={`inline-flex h-11 w-11 items-center justify-center rounded-md border border-border-strong bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary ${className ?? ""}`}
     >
       {children}
     </button>

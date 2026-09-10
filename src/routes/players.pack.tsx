@@ -1151,7 +1151,7 @@ function PackPage() {
           screen, mid-reveal and on the summary alike — the same corner every
           time. Lifted to clear the mobile tab bar, which is fixed at the bottom
           and only exists below md. */}
-      <SoundToggle className="fixed bottom-[calc(var(--tab-bar-h)+0.25rem)] left-1 z-40 rounded-full border border-white/10 bg-background/70 backdrop-blur-sm md:bottom-4" />
+      <SoundToggle className="fixed bottom-[calc(var(--tab-bar-h)+0.25rem)] left-1 z-40 rounded-full border border-border-strong bg-background/70 backdrop-blur-sm md:bottom-4" />
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-3 sm:py-6">
         {/* Same gate as the vault, and here for the same reason: a pack opened
             before they pick a name lands on the device, not on them. Kept out of
@@ -1330,7 +1330,12 @@ function PackPage() {
                 // hundred milliseconds the real card is invisible behind the
                 // flight, and this would turn a card nobody can see.
                 disabled={autoRunning || entering != null}
-                className="inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground/70"
+                // Disabled is not a rare state here — it covers the whole auto-run and
+                // the hand-off after the tear — and stacking the /70 under opacity-30
+                // multiplied to 1.40:1, which is nothing at all in a garden. Full-strength
+                // muted at a single opacity step is what the neon family already does;
+                // 0.55 lands at 3.28:1, just above where their 0.45 puts them.
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-primary disabled:text-muted-foreground disabled:opacity-55 disabled:hover:text-muted-foreground"
               >
                 Reveal all
               </button>

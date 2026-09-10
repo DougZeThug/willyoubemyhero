@@ -256,7 +256,7 @@ function ClaimPage() {
                         "flex min-h-11 items-center rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
                         selected === p.id
                           ? "border-primary bg-primary/15 text-primary"
-                          : "border-white/10 bg-white/[0.02] text-foreground hover:border-primary/40",
+                          : "border-border-strong bg-white/[0.02] text-foreground hover:border-primary",
                       )}
                     >
                       {/* Its own element, because the button is a flex container

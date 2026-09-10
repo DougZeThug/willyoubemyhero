@@ -200,7 +200,7 @@ function AnalyticsPage() {
                     <Link
                       to="/recap/$slug"
                       params={{ slug: a.slug }}
-                      className="flex min-h-11 items-center justify-between rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2 text-sm hover:border-primary/40"
+                      className="flex min-h-11 items-center justify-between rounded-md border border-primary/50 bg-[oklch(0.16_0.02_240)] px-3 py-2 text-sm hover:border-primary"
                     >
                       <span className="font-semibold uppercase tracking-wide">
                         {a.event_name} {a.event_year ?? ""}
