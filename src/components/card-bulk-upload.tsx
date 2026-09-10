@@ -235,7 +235,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
           "cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors",
           dragging
             ? "border-primary bg-primary/10"
-            : "border-white/15 hover:border-primary/50 hover:bg-white/[0.02]",
+            : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
         )}
       >
         <p className="font-display text-sm font-bold uppercase tracking-widest text-foreground">
@@ -304,7 +304,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                           ),
                         )
                       }
-                      className="min-h-11 w-full rounded border border-white/10 bg-transparent px-1 py-0.5 text-base font-semibold uppercase text-foreground sm:min-h-0 sm:text-xs"
+                      className="min-h-11 w-full rounded border border-border-strong bg-transparent px-1 py-0.5 text-base font-semibold uppercase text-foreground sm:min-h-0 sm:text-xs"
                     >
                       <option value="">— unmatched —</option>
                       {targets.map((t) => (
@@ -318,7 +318,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
 
                 {/* Side toggle and remove wrap to their own line on phones. */}
                 <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-                  <div className="flex shrink-0 overflow-hidden rounded border border-white/10">
+                  <div className="flex shrink-0 overflow-hidden rounded border border-border-strong">
                     {(["front", "back"] as const).map((side) => (
                       <button
                         key={side}

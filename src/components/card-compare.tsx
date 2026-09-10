@@ -73,7 +73,7 @@ export function CardCompare({
                   <li key={p.id}>
                     <button
                       onClick={() => onPick(p.id)}
-                      className="flex min-h-11 w-full items-center gap-2 rounded-md border border-white/10 bg-white/[0.02] px-3 text-left transition-colors hover:border-primary/40"
+                      className="flex min-h-11 w-full items-center gap-2 rounded-md border border-border-strong bg-white/[0.02] px-3 text-left transition-colors hover:border-primary"
                     >
                       <span
                         className="font-display shrink-0 text-xs font-black uppercase"
@@ -129,7 +129,7 @@ export function CardCompare({
 
               <button
                 onClick={() => onPick(null)}
-                className="mx-auto flex min-h-11 items-center rounded-full border border-white/10 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground hover:border-primary/50 hover:text-primary"
+                className="mx-auto flex min-h-11 items-center rounded-full border border-border-strong px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground hover:border-primary/50 hover:text-primary"
               >
                 Pick someone else
               </button>

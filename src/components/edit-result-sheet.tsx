@@ -328,7 +328,7 @@ export function EditResultSheet({
                         ),
                       )
                     }
-                    className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs uppercase"
+                    className="min-w-0 flex-1 rounded-md border border-border-strong bg-white/5 px-2 py-2 text-xs uppercase"
                   >
                     <option value="">No station</option>
                     {stations.map((st) => (

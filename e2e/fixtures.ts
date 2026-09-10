@@ -361,6 +361,40 @@ export async function tearPack(page: Page) {
   await sealedPack(page).press("Enter");
 }
 
+/** The card currently on the reveal stand. */
+export const standCard = (page: Page) => page.locator('[role="button"][aria-pressed]').first();
+
+/**
+ * Step to the next card the way a thumb does: a fast leftward throw across the
+ * revealed card. There is no Next button in the intended flow — the stand reads
+ * the gesture with swipeDirection() from src/lib/zoom.ts, which wants >=48px of
+ * mostly horizontal travel inside 700ms.
+ *
+ * The wait in front of it is the point. pack-stand.tsx:468 drops a throw
+ * outright when `canAdvance` is false — mid-celebration, mid-hold, or while the
+ * card is peeking — and a dropped throw is silent: the step stays where it was
+ * and the assertion after it waits out its whole timeout for a number that is
+ * never coming. That is the shape of every flake this helper has produced, and
+ * it gets worse the more loaded the runner is.
+ *
+ * `canAdvance` needs no guessing from the outside. The stand's own Next control
+ * (pack-stand.tsx:962, kept in the tree for a keyboard and a screen reader, and
+ * merely transparent when it is off) carries it as `disabled`, so waiting for
+ * that to be enabled is waiting for exactly the flag the throw is about to be
+ * tested against. Retrying the throw instead would be the wrong fix twice over:
+ * it cannot tell a swallowed throw from one whose re-render has not landed yet,
+ * and doubling a throw that did land steps two cards on.
+ */
+export async function swipeNext(page: Page) {
+  await expect(page.getByRole("button", { name: /^next$/i })).toBeEnabled();
+  const box = (await standCard(page).boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.85, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.15, y, { steps: 4 });
+  await page.mouse.up();
+}
+
 /**
  * The path segment after `/_serverFn/` is base64url JSON, e.g.
  * `{"file":"/src/lib/event.functions.ts?tss-serverfn-split",

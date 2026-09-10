@@ -137,7 +137,7 @@ export function SecretCardTile({
         <button
           onClick={onEdit}
           aria-label={`Edit ${card.name}`}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary pointer-fine:h-9 pointer-fine:w-9"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary pointer-fine:h-9 pointer-fine:w-9"
         >
           <Pencil className="h-4 w-4" />
         </button>
@@ -173,7 +173,7 @@ export function SecretCardTile({
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
               disabled={savingWeight}
-              className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base tabular-nums sm:min-h-0 sm:h-7 sm:w-20 sm:text-xs"
+              className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base tabular-nums sm:min-h-0 sm:h-7 sm:w-20 sm:text-xs"
               aria-label={`Pull weight for ${card.name}`}
             />
             {savingWeight && (
@@ -224,7 +224,7 @@ export function SecretCardTile({
           <select
             value={card.collection ?? ""}
             onChange={(e) => onSaveCollection(e.target.value || null)}
-            className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:h-7 sm:min-h-0 sm:text-xs"
+            className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground sm:h-7 sm:min-h-0 sm:text-xs"
             aria-label={`Set for ${card.name}`}
           >
             <option value="">Unsorted</option>
@@ -257,7 +257,7 @@ export function SecretCardTile({
               value={grantTarget}
               onChange={(e) => onGrantTargetChange(e.target.value)}
               disabled={busy}
-              className="min-h-11 min-w-0 flex-1 rounded border border-white/15 bg-background px-1.5 text-base sm:min-h-0 sm:h-7 sm:text-xs"
+              className="min-h-11 min-w-0 flex-1 rounded border border-border-strong bg-background px-1.5 text-base sm:min-h-0 sm:h-7 sm:text-xs"
               aria-label={`Grant ${card.name} to`}
             >
               <option value="">Grant to…</option>

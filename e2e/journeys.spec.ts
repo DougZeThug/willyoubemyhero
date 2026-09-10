@@ -13,6 +13,8 @@ import {
   serverFnName,
   stubServerFns,
   tearPack,
+  standCard,
+  swipeNext,
 } from "./fixtures";
 import { editionLabel } from "../src/lib/card-edition";
 import { CEREMONY_MS } from "../src/lib/pack-ceremony";
@@ -348,10 +350,6 @@ test.describe("opening a pack", () => {
     );
   }
 
-  /** The card currently on the reveal stand. */
-  const standCard = (page: import("@playwright/test").Page) =>
-    page.locator('[role="button"][aria-pressed]').first();
-
   /**
    * Which step the stand is on, and therefore that the stand has the screen.
    *
@@ -364,21 +362,6 @@ test.describe("opening a pack", () => {
   /** The line that says the card on the stand is revealed and swiping steps on. */
   const swipeHint = (page: import("@playwright/test").Page) =>
     page.getByText(/swipe for the next card/i);
-
-  /**
-   * Step to the next card the way a thumb does: a fast leftward throw across
-   * the revealed card. There is no Next button — the stand reads the gesture
-   * with swipeDirection() from src/lib/zoom.ts, which wants ≥48px of mostly
-   * horizontal travel inside 700ms.
-   */
-  async function swipeNext(page: import("@playwright/test").Page) {
-    const box = (await standCard(page).boundingBox())!;
-    const y = box.y + box.height / 2;
-    await page.mouse.move(box.x + box.width * 0.85, y);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.15, y, { steps: 4 });
-    await page.mouse.up();
-  }
 
   /** Where the perforation runs, as a fraction of the pack's height. */
   const TEAR_LINE = 0.15;

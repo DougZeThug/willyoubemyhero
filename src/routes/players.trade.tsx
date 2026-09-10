@@ -592,7 +592,7 @@ function TabButton({
         "inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg font-display text-badge font-bold uppercase tracking-[0.08em] transition-colors",
         on
           ? "bg-primary/15 text-primary ring-2 ring-primary/50"
-          : "border border-white/10 text-muted-foreground hover:text-foreground",
+          : "border border-border-strong text-muted-foreground hover:text-foreground",
       )}
     >
       {children}

@@ -605,7 +605,7 @@ export function SecretCardsPanel() {
           "mt-3 cursor-pointer rounded-lg border border-dashed p-5 text-center transition-colors",
           dragging
             ? "border-primary bg-primary/10"
-            : "border-white/15 hover:border-primary/50 hover:bg-white/[0.02]",
+            : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
           busy && "pointer-events-none opacity-60",
         )}
       >
@@ -650,7 +650,7 @@ export function SecretCardsPanel() {
           <select
             value={uploadCollection ?? ""}
             onChange={(e) => setUploadCollection(e.target.value || null)}
-            className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+            className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
             aria-label="Set for new uploads"
           >
             <option value="">Unsorted</option>
@@ -724,7 +724,7 @@ export function SecretCardsPanel() {
                           ),
                         )
                       }
-                      className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+                      className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
                     >
                       <option value="">Unsorted</option>
                       {pickerSets.map((c) => (
@@ -738,7 +738,7 @@ export function SecretCardsPanel() {
                 <button
                   onClick={() => removeDraft(d.key)}
                   aria-label={`Remove ${d.file.name}`}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -872,7 +872,7 @@ export function SecretCardsPanel() {
                     onClick={() => moveSet(i, -1)}
                     disabled={i === 0 || setBusyId !== null}
                     aria-label={`Move ${s.label} up`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground disabled:opacity-30"
                   >
                     <ChevronUp className="h-4 w-4" />
                   </button>
@@ -881,7 +881,7 @@ export function SecretCardsPanel() {
                     onClick={() => moveSet(i, 1)}
                     disabled={i === allSets.length - 1 || setBusyId !== null}
                     aria-label={`Move ${s.label} down`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground disabled:opacity-30"
                   >
                     <ChevronDown className="h-4 w-4" />
                   </button>
@@ -897,7 +897,7 @@ export function SecretCardsPanel() {
                     }
                     disabled={setBusyId !== null}
                     aria-label={s.active ? `Hide ${s.label}` : `Show ${s.label}`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground"
                   >
                     {s.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -929,7 +929,7 @@ export function SecretCardsPanel() {
                     }}
                     disabled={setBusyId !== null}
                     aria-label={`Delete ${s.label}`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground hover:border-destructive/50 hover:text-destructive"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground hover:border-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -1070,7 +1070,7 @@ export function SecretCardsPanel() {
                     <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                       Card art
                     </span>
-                    <span className="mt-1 flex min-h-11 cursor-pointer items-center justify-center rounded border border-white/15 px-3 text-xs font-bold uppercase tracking-widest text-primary transition-colors hover:border-primary/50">
+                    <span className="mt-1 flex min-h-11 cursor-pointer items-center justify-center rounded border border-border-strong px-3 text-xs font-bold uppercase tracking-widest text-primary transition-colors hover:border-primary/50">
                       Replace art
                       <input
                         type="file"
@@ -1122,7 +1122,7 @@ export function SecretCardsPanel() {
                     onChange={(e) =>
                       saveLook(editingCard.id, { collection: e.target.value || null })
                     }
-                    className="mt-1 min-h-11 w-full rounded border border-white/15 bg-background px-2 text-base text-foreground"
+                    className="mt-1 min-h-11 w-full rounded border border-border-strong bg-background px-2 text-base text-foreground"
                   >
                     <option value="">Unsorted</option>
                     {pickerSets.map((c) => (

@@ -129,7 +129,7 @@ function FrameButton({
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-white/10 bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border-strong bg-background/70 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30"
     >
       {children}
     </button>

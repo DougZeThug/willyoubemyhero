@@ -19,6 +19,7 @@ import {
   serverFnName,
   tearPack,
   type ServerFnMock,
+  swipeNext,
 } from "./fixtures";
 import type { Page } from "@playwright/test";
 
@@ -361,16 +362,6 @@ test.describe("a secret in the pack", () => {
     const step = page.getByTestId("stand-step");
     await expect(step).toHaveText("1 / 3");
 
-    /** Throw the card away leftward, the way the stand's own gesture reads. */
-    async function swipeNext() {
-      const box = (await card.boundingBox())!;
-      const y = box.y + box.height / 2;
-      await page.mouse.move(box.x + box.width * 0.85, y);
-      await page.mouse.down();
-      await page.mouse.move(box.x + box.width * 0.15, y, { steps: 4 });
-      await page.mouse.up();
-    }
-
     /**
      * Turn the card on the stand, pressing until it takes.
      *
@@ -397,7 +388,7 @@ test.describe("a secret in the pack", () => {
     }
 
     await turnCard();
-    await swipeNext();
+    await swipeNext(page);
 
     // The secret's step: an ordinary position in the heading, the ring on the
     // card, and the one line that says what it is — before it is turned.
@@ -409,10 +400,10 @@ test.describe("a secret in the pack", () => {
     await expect(page.locator(".secret-seal")).toHaveCount(0);
 
     // And on past it, to the last roster card, with nothing owed after that.
-    await swipeNext();
+    await swipeNext(page);
     await expect(step).toHaveText("3 / 3");
     await turnCard();
-    await swipeNext();
+    await swipeNext(page);
     await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 15_000 });
     expect((await packRow(page))?.ids).toEqual(["ep-alice", "ep-bob"]);
   });

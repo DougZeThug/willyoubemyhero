@@ -469,7 +469,7 @@ function TimingConsole() {
                             ? "border-primary/40 bg-primary/10"
                             : disabled
                               ? "border-white/5 bg-white/5 opacity-60"
-                              : "border-white/10 bg-white/5 hover:border-primary hover:bg-primary/10")
+                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10")
                         }
                       >
                         <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -915,7 +915,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
 
               {/* Upload controls take a full second line on phones. */}
               <div className="flex w-full items-center gap-1.5 sm:w-auto">
-                <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-white/10 px-3 text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:border-primary/60 hover:text-primary sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
+                <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-border-strong px-3 text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:border-primary/60 hover:text-primary sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
                   <Camera className="mr-1 inline h-3 w-3 shrink-0" />
                   {uploadingId === p.id ? "…" : "Photo"}
                   <input

@@ -288,7 +288,7 @@ export function CompactLookSelect({
           value={selected}
           aria-label={ariaLabel}
           onChange={(e) => onChange(e.target.value)}
-          className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+          className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
         >
           {options.map((o) => (
             <option key={o.id} value={o.id}>

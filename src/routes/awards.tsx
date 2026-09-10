@@ -208,7 +208,7 @@ function AwardsPage() {
                             "flex min-h-11 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:opacity-50",
                             chosen
                               ? "border-primary bg-primary/15"
-                              : "border-white/10 bg-white/[0.02] hover:border-primary/40",
+                              : "border-border-strong bg-white/[0.02] hover:border-primary",
                           )}
                         >
                           <ParticipantAvatar
