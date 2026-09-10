@@ -190,7 +190,12 @@ function LeaderboardPage() {
                             params={{ id: row.ep.id }}
                             className="flex min-h-11 items-center hover:text-primary"
                           >
-                            <span className="truncate font-display text-lg font-bold uppercase leading-tight">
+                            {/* Clamped, not truncated: at text-lg in a basis-24
+                                column "Carol Crush" lost its tail at 430 as well
+                                as at 320, and a leaderboard that will not say
+                                whose row it is has stopped being one (§23 F8's
+                                rule, one screen over). */}
+                            <span className="line-clamp-2 font-display text-lg font-bold uppercase leading-tight">
                               {row.ep.participant?.name ?? "—"}
                             </span>
                           </Link>

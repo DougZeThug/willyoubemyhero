@@ -29,27 +29,32 @@ What the first pass raised, and where it stands. Evidence is either a `file:line
 
 ### Closed
 
-| §        | Finding                                             | Evidence                                                                                                                                                                                                                     |
-| -------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| §2       | Sideways scroll / viewport formulas                 | Zero horizontal overflow on 25 screens × 3 widths. One `--page-min-h` token in `dvh`, net of both insets.                                                                                                                    |
-| §2, §4   | Wordmark wrapped at 320                             | Single line at all three widths; header 65 px throughout.                                                                                                                                                                    |
-| §2       | Safe area was a no-op                               | `viewport-fit=cover` in `__root.tsx:97`, which is what makes `env(safe-area-inset-*)` report anything on iOS.                                                                                                                |
-| §3       | Home did not say what to do now                     | The Today card ships: pack state, streak rungs, claimable cue, new-since strip.                                                                                                                                              |
-| §5       | Sort chips wrapped; no filter                       | `VaultSortSheet` — sort, filter and density in a drawer behind one control.                                                                                                                                                  |
-| §5, §19  | No skeletons                                        | `card-skeleton.tsx`, six tiles until the collection reconciles.                                                                                                                                                              |
-| §6       | Card detail was a stats page                        | Full-screen viewer at `?view=1`; a tile tap opens the card, not the page.                                                                                                                                                    |
-| §7, §12  | No NEW / ×N on the reveal                           | Ribbon and edition line on the stand — verified in the render set.                                                                                                                                                           |
-| §10      | Trade builder was a form                            | Offers/Feed tabs, sticky "Make an offer", builder drawer. The pill row and 84 px strips are gone.                                                                                                                            |
-| §16      | 8–10 px label layer                                 | Nothing player-facing renders below 11 px. `text-label` (12 px) has 131 uses and `text-meta` 106.                                                                                                                            |
-| §18      | ~40 controls under 44 px                            | None remain. The floor lives in `ui/button.tsx:39-44` and `ui/input.tsx:11`, and is gated by `e2e/smoke.spec.ts`.                                                                                                            |
-| §18, §23 | Text inputs were the last controls under 44 px (F1) | `min-h-11 pointer-fine:min-h-0` on the `Input` primitive. The tap-target sweep measures `input`, `select` and `textarea` now, so it can see them.                                                                            |
-| §23      | Three raw inputs zoomed iOS on focus (F2)           | `text-base pointer-fine:text-sm` on the primitive and on all three raw fields. A second sweep asserts 16 px at 844 px, which is where `md:` handed 14 px back.                                                               |
-| §23      | Every component edge was 1.25:1 (F3)                | `--border-strong` at 35% white, and `--input` pointed at it. 3.10:1 on `--bg`, 3.12 `--background`, 3.18 `--surface`, 3.21 `--card`, pinned in `color.test.ts` and read back off real pixels in `e2e/control-edges.spec.ts`. |
-| §23      | Disabled "Reveal all" was 1.40:1 (F4)               | Full-strength muted at one opacity step, the neon family's own idiom. 3.28:1, measured in the browser while the auto-run holds the button.                                                                                   |
-| §23      | Motion ignored the OS preference (F5)               | One `<MotionConfig reducedMotion="user">` in `__root.tsx`, covering all fourteen `motion/react` files. `journeys.spec.ts:1352` drives the whole pack under `reducedMotion: "reduce"`.                                        |
-| §19      | Toasts top-centre, unthemed errors                  | Bottom-centre above the bar; themed 404 and error boundary; offline banner.                                                                                                                                                  |
-| §20      | No global focus ring                                | `:focus-visible` in `@layer base` at 13.54:1, deliberately not the cyan accent.                                                                                                                                              |
-| §4       | Profile had no home                                 | `/you` — player, account, streak ladder and history, collection, dust, and sound/haptics/tilt as device preferences.                                                                                                         |
+| §        | Finding                                                   | Evidence                                                                                                                                                                                                                     |
+| -------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §2       | Sideways scroll / viewport formulas                       | Zero horizontal overflow on 25 screens × 3 widths. One `--page-min-h` token in `dvh`, net of both insets.                                                                                                                    |
+| §2, §4   | Wordmark wrapped at 320                                   | Single line at all three widths; header 65 px throughout.                                                                                                                                                                    |
+| §2       | Safe area was a no-op                                     | `viewport-fit=cover` in `__root.tsx:97`, which is what makes `env(safe-area-inset-*)` report anything on iOS.                                                                                                                |
+| §3       | Home did not say what to do now                           | The Today card ships: pack state, streak rungs, claimable cue, new-since strip.                                                                                                                                              |
+| §5       | Sort chips wrapped; no filter                             | `VaultSortSheet` — sort, filter and density in a drawer behind one control.                                                                                                                                                  |
+| §5, §19  | No skeletons                                              | `card-skeleton.tsx`, six tiles until the collection reconciles.                                                                                                                                                              |
+| §6       | Card detail was a stats page                              | Full-screen viewer at `?view=1`; a tile tap opens the card, not the page.                                                                                                                                                    |
+| §7, §12  | No NEW / ×N on the reveal                                 | Ribbon and edition line on the stand — verified in the render set.                                                                                                                                                           |
+| §10      | Trade builder was a form                                  | Offers/Feed tabs, sticky "Make an offer", builder drawer. The pill row and 84 px strips are gone.                                                                                                                            |
+| §16      | 8–10 px label layer                                       | Nothing player-facing renders below 11 px. `text-label` (12 px) has 131 uses and `text-meta` 106.                                                                                                                            |
+| §18      | ~40 controls under 44 px                                  | None remain. The floor lives in `ui/button.tsx:39-44` and `ui/input.tsx:11`, and is gated by `e2e/smoke.spec.ts`.                                                                                                            |
+| §18, §23 | Text inputs were the last controls under 44 px (F1)       | `min-h-11 pointer-fine:min-h-0` on the `Input` primitive. The tap-target sweep measures `input`, `select` and `textarea` now, so it can see them.                                                                            |
+| §23      | Three raw inputs zoomed iOS on focus (F2)                 | `text-base pointer-fine:text-sm` on the primitive and on all three raw fields. A second sweep asserts 16 px at 844 px, which is where `md:` handed 14 px back.                                                               |
+| §23      | Every component edge was 1.25:1 (F3)                      | `--border-strong` at 35% white, and `--input` pointed at it. 3.10:1 on `--bg`, 3.12 `--background`, 3.18 `--surface`, 3.21 `--card`, pinned in `color.test.ts` and read back off real pixels in `e2e/control-edges.spec.ts`. |
+| §23      | Disabled "Reveal all" was 1.40:1 (F4)                     | Full-strength muted at one opacity step, the neon family's own idiom. 3.28:1, measured in the browser while the auto-run holds the button.                                                                                   |
+| §23      | Motion ignored the OS preference (F5)                     | One `<MotionConfig reducedMotion="user">` in `__root.tsx`, covering all fourteen `motion/react` files. `journeys.spec.ts:1352` drives the whole pack under `reducedMotion: "reduce"`.                                        |
+| §7, §23  | Pack-summary card names were 18 px tall (F6)              | `min-h-11 pointer-fine:min-h-0` on the name itself rather than over the card, which is a flip button and not a second route to the same place. `journeys.spec.ts` measures every link in the row.                            |
+| §6, §23  | Player names clipped in the filmstrip (F7)                | `line-clamp-2` on the no-art cell, which is the branch a locked card page is made of. All four names fitted at 320, 390 and 430.                                                                                             |
+| §5, §23  | The secret caption clipped at 320 (F8)                    | The caption wraps, the two tile names and the slab plate clamp. Gated by a third sweep in `e2e/smoke.spec.ts` that reports any `text-overflow: ellipsis` actually firing, on thirteen routes at three widths.                |
+| §11, §23 | A claimable rung said only "Waiting" (F12)                | `streak-ladder.tsx` reads the `canClaim` it already had and says "An account is what claims it." on the rung that is next to be cashed.                                                                                      |
+| §10, §23 | The empty trade inbox offered the same action twice (F13) | The panel button is gone; the route's `fixed` CTA is the one way forward and is up without a scroll.                                                                                                                         |
+| §19      | Toasts top-centre, unthemed errors                        | Bottom-centre above the bar; themed 404 and error boundary; offline banner.                                                                                                                                                  |
+| §20      | No global focus ring                                      | `:focus-visible` in `@layer base` at 13.54:1, deliberately not the cyan accent.                                                                                                                                              |
+| §4       | Profile had no home                                       | `/you` — player, account, streak ladder and history, collection, dust, and sound/haptics/tilt as device preferences.                                                                                                         |
 
 ### Withdrawn
 
@@ -64,14 +69,9 @@ Full detail, with the renders, in **[the field report](https://claude.ai/code/ar
 
 | Id  | Finding                                                 | Severity |
 | --- | ------------------------------------------------------- | -------- |
-| F6  | Pack-summary card names are 18 px tall                  | Medium   |
-| F7  | Player names clip in the filmstrip at every width       | Medium   |
-| F8  | The secret caption clips at 320                         | Medium   |
 | F9  | The vault still opens on text rather than on a card     | Low      |
 | F10 | Half the type scale shipped; the rest is still literals | Low      |
 | F11 | Press feedback is thin on touch                         | Low      |
-| F12 | A claimable streak rung says only "Waiting"             | Low      |
-| F13 | The empty trade inbox offers the same action twice      | Low      |
 
 ### Out of scope — the commissioner console
 
@@ -675,7 +675,7 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 
 - **Works**: shelves as binder pages; 2-up tiles at a readable size; the Today card answering pack state, streak and claimable rung in one fixed-height block; a one-line collection summary; sort, filter and density in a drawer; skeleton tiles while the collection reconciles; locked cards as the universal back; no leaks about unpulled secrets.
 - **Fixed since the first pass**: the "what now" question, the sort chips that wrapped at 320, the five-step hero growth, the missing skeletons, and the 9 px captions.
-- **Remaining**: the card is still not the hero — the first tile starts at 745 px on a 568 px screen, 794 px on 844, 822 px on 932 (F9). The secret caption clips at 320 (F8). A single secret in a 2-up grid leaves a dead column beside it.
+- **Remaining**: the card is still not the hero — the first tile starts at 745 px on a 568 px screen, 794 px on 844, 822 px on 932 (F9). A single secret in a 2-up grid leaves a dead column beside it.
 - **Priority: Medium** (was Critical).
 
 ### Pack — sealed — `/players/pack`
@@ -693,13 +693,13 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 ### Pack — summary
 
 - **Works**: the secret leads; the roster cards sit in a snap row rather than as thumbnails; the streak claim is here; inline failures.
-- **Remaining**: the roster card name links measure 140 × 18 px, directly under a tile that is itself tappable and goes elsewhere (F6). The entrance animation is ungated (F5).
-- **Priority: Medium** (was High).
+- **Remaining**: nothing measured against it. The name links carry the touch floor, and the tile above each is a flip button rather than a second route to the same place.
+- **Priority: none** (was High).
 
 ### Player card — `/players/$id`
 
 - **Works**: the full-screen viewer is the default for a tap (`?view=1`), so examining a card starts with the card; zoom, flip, swipe and tilt; the slab and serial plate; the locked state with a route into a pack; the compare drawer; share export.
-- **Remaining**: the comment box is a raw 14 px input, so iOS zooms the page on focus, and it measures 38 px tall (F1, F2). Filmstrip names clip at every width — all four of them on a locked card (F7). At 320 the card's own "Draft Combine 2026" line clips by 21 px.
+- **Remaining**: nothing measured against it. The filmstrip's names take two lines and the slab plate wraps the event's own name rather than cutting it.
 - **Priority: Medium** (was High).
 
 ### Card viewer (full-screen)
@@ -712,8 +712,8 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 
 - **Works**: Offers and Feed as tabs with the unread count on the tab; a sticky "Make an offer" in the thumb zone; the builder as a drawer reached by `?make=1`, so the back gesture closes it; spares-only with the reason shown.
 - **Fixed since the first pass**: the wrapping pill row, the 84 px tile strips, the builder sitting below the fold, and the empty inbox with no way forward.
-- **Remaining**: the empty state offers the same action twice, ~600 px apart (F13).
-- **Priority: Low** (was High).
+- **Remaining**: nothing measured against it. The empty state says who could answer and leaves the way forward to the CTA fixed above the tab bar.
+- **Priority: none** (was High).
 
 ### Shop — `/players/shop`
 
@@ -724,8 +724,8 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 ### You — `/you`
 
 - **Works**: player, account, streak ladder and history, collection counters, dust, and sound / haptics / tilt as device preferences rather than per-page state. Type is generous throughout and every control clears the floor.
-- **Remaining**: a claimable rung renders as "Waiting" with no adjacent reason; the explanation sits two sections higher under ACCOUNT (F12).
-- **Priority: Low.**
+- **Remaining**: nothing measured against it. A rung that cannot be claimed yet says why on the rung.
+- **Priority: none.**
 
 ### League hub — `/league`
 
@@ -735,7 +735,8 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 
 ### Leaderboard — `/leaderboard`
 
-- **Works**: readable; share per row; ranks from one rule. Nothing measured against it.
+- **Works**: readable; share per row; ranks from one rule.
+- **Fixed since the first pass**: the name in a rank row lost its tail at 430 as well as at 320 — the one clipped label outside the card screens that was worth PR 13's time, because a leaderboard that will not say whose row it is has stopped being one.
 - **Priority: none.**
 
 ### Claim and Auth — `/claim`, `/auth`
@@ -755,18 +756,15 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 
 The first pass's top ten is closed — items 1, 2, 3, 4, 5, 8, 9 and 10 shipped outright, 6 and 7 shipped in part (§8's level pips and §15's quieter ground landed; the base-tier hue shift did not). This is the list as it stands, ranked by what it costs someone in a garden holding a beer. Every measurement is reproducible from the harness in the [field report](https://claude.ai/code/artifact/08a80918-7acc-425a-af6b-f5111ee65338).
 
-| Id  | Problem                                                                                                                                                 | Measured                                                                                                                                                                                      | Location                              | Fix                                                                        | Difficulty |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------- | ---------- |
-| F6  | **The pack summary's card names are a third of the touch floor**, directly under a tile that is itself tappable and goes elsewhere.                     | 140 × 18 px at 320, 390 and 430 alike.                                                                                                                                                        | `pack-summary.tsx`                    | Give the link the tile's hit area, or pad to 44 px                         | Easy       |
-| F7  | **Player names clip in the filmstrip at every width.** 11 px with `truncate`.                                                                           | "Carol Crush" over by 32 px, "Alice Ace" 9, "Bob Blitz" 8, "Dave Dnf" 6 — at 390. All four clip on the locked card page.                                                                      | `roster-filmstrip.tsx`                | `line-clamp-2`, or a wider cell                                            | Easy       |
-| F8  | **The secret caption clips at 320.** The finding that most needed a real render: against the fallback font it appears to clip at 390 too, and does not. | "Common · 70% pull" over by 23 px at 320; fits at 390 and 430. "Draft Combine 2026" over by 21 px on the card page at 320.                                                                    | `players.index.tsx:882`               | Wrap to two lines below 360 px, or shorten the phrasing                    | Easy       |
-| F9  | **The vault still opens on text.** The Today card fixed the layout shift; it did not change the order.                                                  | First tile top: 745 px at 320 (viewport 568 — no card at all), 794 at 390 (844), 822 at 430 (932).                                                                                            | `players.index.tsx`, `vault-hero.tsx` | Fold the summary line into the Today card, or start the first shelf higher | Moderate   |
-| F10 | **Half the type scale shipped.** The label and meta tokens are load-bearing; body, title and the whole spacing scale are not.                           | `text-label` 131, `text-meta` 106, `text-badge` 31 — against `text-title` 0, `text-body` 2, and 158 `text-sm` + 134 `text-xs`. The three spacing tokens appear only in their own declaration. | `styles.css`, all screens             | Finish the migration, or delete the tokens nothing uses                    | Moderate   |
-| F11 | **Press feedback is thin on touch.** On a phone `:hover` either never fires or latches after a tap.                                                     | 165 `hover:` against 51 `active:`, the latter across 20 files. The neon-button family already gates hover correctly.                                                                          | app-wide; pattern at `styles.css:492` | An `@media (hover: none)` rule promoting hover to active                   | Easy       |
-| F12 | **A claimable streak rung says only "Waiting".** The reason — that claiming needs an account — is real, and stated two sections higher.                 | Day-5 streak, `canClaim` true, no account.                                                                                                                                                    | `/you`, `streak-ladder.tsx`           | Say what it waits for, on the rung                                         | Easy       |
-| F13 | **The empty trade inbox offers the same action twice**, ~600 px apart, on a screen whose whole content is the empty state.                              | "Start the first offer" and the sticky "Make an offer", at all three widths.                                                                                                                  | `players.trade.tsx`                   | Drop the panel one; the sticky control survives a scroll                   | Easy       |
+| Id  | Problem                                                                                                                       | Measured                                                                                                                                                                                      | Location                              | Fix                                                                        | Difficulty |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------- | ---------- |
+| F9  | **The vault still opens on text.** The Today card fixed the layout shift; it did not change the order.                        | First tile top: 745 px at 320 (viewport 568 — no card at all), 794 at 390 (844), 822 at 430 (932).                                                                                            | `players.index.tsx`, `vault-hero.tsx` | Fold the summary line into the Today card, or start the first shelf higher | Moderate   |
+| F10 | **Half the type scale shipped.** The label and meta tokens are load-bearing; body, title and the whole spacing scale are not. | `text-label` 131, `text-meta` 106, `text-badge` 31 — against `text-title` 0, `text-body` 2, and 158 `text-sm` + 134 `text-xs`. The three spacing tokens appear only in their own declaration. | `styles.css`, all screens             | Finish the migration, or delete the tokens nothing uses                    | Moderate   |
+| F11 | **Press feedback is thin on touch.** On a phone `:hover` either never fires or latches after a tap.                           | 165 `hover:` against 51 `active:`, the latter across 20 files. The neon-button family already gates hover correctly.                                                                          | app-wide; pattern at `styles.css:492` | An `@media (hover: none)` rule promoting hover to active                   | Easy       |
 
-All eight left are an hour's work each, and none is a redesign. F1 and F2 shipped in PR 11 — the input floor and the 16 px that stops iOS zooming. F3, F4 and F5 shipped in PR 12: the interactive edge, the disabled "Reveal all", and the OS reduced-motion setting. All five are recorded in §0.
+The three left are an hour's work each, and none is a redesign. F1 and F2 shipped in PR 11 — the input floor and the 16 px that stops iOS zooming. F3, F4 and F5 shipped in PR 12: the interactive edge, the disabled "Reveal all", and the OS reduced-motion setting. F6, F7, F8, F12 and F13 shipped in PR 13. All ten are recorded in §0.
+
+PR 13 left a gate behind it as well as five fixes: a third sweep in `e2e/smoke.spec.ts` walks the same thirteen routes as the tap-target one at 320, 390 and 430 and fails on any node whose `text-overflow: ellipsis` is actually firing. Two of F8's three sites needed arranging before it could see them at all — a secret shelf exists only once you hold a secret, and the slab plate only squeezes its event line once there is a collection mark beside it — so both have a test of their own. The sweep also found four clips the render set had not: both of the vault's tile names, "Not packed yet" 6 px over at 320, and a leaderboard row losing the player's name at 430 as well as at 320. All four are fixed. Three findings on `/live`, `/analytics` and `/awards` are exempted by name with their reason rather than fixed — all three are the combine's screens rather than the card app's, all three clip the longest name in the roster at 320 only, and each is one word to change if a later pass wants them.
 
 One correction worth keeping, because this document was wrong and the code now disagrees with it on purpose: **F3's proposed 24% white measures 2.05:1, not the ~3.1:1 claimed here.** Compositing `oklch(1 0 0 / A)` over these grounds in gamma-encoded sRGB — which is what a browser does — 24% reaches 2.03–2.15 and **35% is the first value that clears 3:1 on all four** (3.10 `--bg`, 3.12 `--background`, 3.18 `--surface`, 3.21 `--card`). The same method reproduces every other measurement in this table, including F3's own 1.25:1 and F4's 1.40:1, so the error was in the target, not in the readings. §26 has been corrected.
 
@@ -781,11 +779,11 @@ The first pass's eighteen are all shipped or superseded. What is left, in the or
 3. ~~**`<MotionConfig reducedMotion="user">` in `__root.tsx`** (F5). One line, fourteen files.~~ Shipped in PR 12.
 4. ~~**Raise the interactive border token** (F3). The cheapest single change for sunlight.~~ Shipped in PR 12, at 35% rather than 24%; §23 says why.
 5. ~~**Un-dim the disabled "Reveal all"** (F4).~~ Shipped in PR 12.
-6. **Pad the pack-summary name links to the tile's hit area** (F6).
-7. **`line-clamp-2` on filmstrip names** (F7).
-8. **Let the secret caption wrap below 360 px** (F8).
-9. **Say what the streak rung is waiting for** (F12).
-10. **Delete one of the two trade CTAs** (F13).
+6. ~~**Pad the pack-summary name links to the tile's hit area** (F6).~~ Shipped in PR 13, on the link rather than over the card — the card is a flip button, and a link laid over it would be two targets doing different things.
+7. ~~**`line-clamp-2` on filmstrip names** (F7).~~ Shipped in PR 13.
+8. ~~**Let the secret caption wrap below 360 px** (F8).~~ Shipped in PR 13, and at every width rather than below 360: the caption is one of five fixed strings, and 3-up density clips it on a wide phone too.
+9. ~~**Say what the streak rung is waiting for** (F12).~~ Shipped in PR 13.
+10. ~~**Delete one of the two trade CTAs** (F13).~~ Shipped in PR 13; the panel's went, the fixed one stayed.
 
 ---
 

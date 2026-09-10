@@ -23,6 +23,16 @@ import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { cn } from "@/lib/utils";
 
 /**
+ * The box a pulled card's name sits in, link or not.
+ *
+ * `min-h-11 pointer-fine:min-h-0` for the reason ui/button.tsx:28 already
+ * argues: 44px is a touch guideline and a width breakpoint releases it on a
+ * landscape phone, where the thumb is still the pointer.
+ */
+const NAME_BOX =
+  "flex min-h-11 items-center justify-center font-display text-sm font-black uppercase leading-tight tracking-wide pointer-fine:min-h-0";
+
+/**
  * Where the pack ends up.
  *
  * The sequence used to stop rather than finish: the last card was turned and the
@@ -251,18 +261,28 @@ export function PackSummary({
                   className="text-center"
                 >
                   {/* Two lines at most. The column is 140px now rather than 80,
-                      which is what lets these read at 12px instead of 8. */}
+                      which is what lets these read at 12px instead of 8.
+
+                      The roster name is the column's only link — the card above
+                      it is a flip button, not a second route to the same place —
+                      so the touch floor goes on the link itself rather than over
+                      the card, which would stack a link on a button that does
+                      something else. It measured 140x18 (§23 F6). The secret's
+                      name is not a link and takes the same box anyway, so the
+                      captions under the three columns stay level. The clamp
+                      moves to the span: line-clamp is display:-webkit-box and
+                      cannot share an element with the flex that centres it. */}
                   {isSecret ? (
-                    <div className="line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide">
-                      {name}
+                    <div className={NAME_BOX}>
+                      <span className="line-clamp-2">{name}</span>
                     </div>
                   ) : (
                     <Link
                       to="/players/$id"
                       params={{ id: slot.id }}
-                      className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary"
+                      className={cn(NAME_BOX, "hover:text-primary")}
                     >
-                      {name}
+                      <span className="line-clamp-2">{name}</span>
                     </Link>
                   )}
                   {isSecret ? (

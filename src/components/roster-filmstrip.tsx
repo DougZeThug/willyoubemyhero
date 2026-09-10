@@ -106,14 +106,20 @@ export function RosterFilmstrip({
               ) : (
                 // HoloCard's own placeholder is typeset for a full-size card and
                 // overflows a 64px chip. A card with no art is just a name here.
+                //
+                // Two lines, because one clipped every name in the strip: at 11px
+                // in a 64px cell there are 56px of room and "Carol Crush" wants
+                // 88 (§23 F7). Clamped rather than truncated so a name that still
+                // does not fit loses its tail without an ellipsis promising a
+                // hover that a phone does not have.
                 <div
-                  className="surface-panel flex aspect-[5/7] w-full flex-col items-center justify-center gap-0.5 rounded-lg border p-1 text-center"
+                  className="surface-panel flex aspect-[5/7] w-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg border p-1 text-center"
                   style={{ borderColor: entry.rarity.border }}
                 >
                   <span className="font-display text-base font-black uppercase leading-none text-primary/70">
                     {initialsOf(entry.name) || "?"}
                   </span>
-                  <span className="w-full truncate text-nav font-bold uppercase tracking-wider text-muted-foreground">
+                  <span className="w-full line-clamp-2 break-words text-nav font-bold uppercase tracking-wider text-muted-foreground">
                     {entry.name}
                   </span>
                 </div>

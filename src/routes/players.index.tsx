@@ -869,7 +869,10 @@ function PlayersPage() {
           />
         </div>
         <div className="text-center">
-          <div className="truncate font-display text-card-name font-black uppercase tracking-wide">
+          {/* Clamped like the summary's and the filmstrip's: at 15px in a
+              124px tile "Gary The Grill" was 20px over at 320, and a secret you
+              cannot read the name of is a poor trophy. */}
+          <div className="line-clamp-2 font-display text-card-name font-black uppercase tracking-wide">
             {s.name}
           </div>
           {/* The level of your copy leads, in its own colour — the same
@@ -877,8 +880,12 @@ function PlayersPage() {
               above the word rather than below it because at this size they are
               the thing that is actually read. */}
           <LevelPips tier={s.tier} className="mt-0.5" />
+          {/* Wraps outright rather than clamping like the name above it: this
+              line is one of five fixed captions, so a second line is the worst
+              it can ever cost — and at 320, or at 3-up on any phone, it costs
+              one: "Common · 70% pull" wants 23px more than a tile has (§23 F8). */}
           <div
-            className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
+            className="text-meta font-semibold uppercase tracking-[0.08em]"
             style={{ color: secretTierStyle(s.tier).accent }}
           >
             {secretTierCaption(s.tier)}
@@ -968,7 +975,10 @@ function PlayersPage() {
             )}
           </div>
           <div className="mt-2 text-center">
-            <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
+            {/* Same rule as the secret tile's name beside it on the same shelf
+                — two kinds of tile, one way of handling a name that is longer
+                than the tile is wide. */}
+            <div className="line-clamp-2 font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
               {name}
             </div>
             {/* A tick, not a word: the label is the line's real content,
@@ -979,8 +989,13 @@ function PlayersPage() {
               {!locked && (
                 <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
               )}
+              {/* Wraps rather than truncates: "Not packed yet" ran 6px over at
+                  320, and it is the line that says the tile is a card you have
+                  not got. The tick and this label never share a line — the tick
+                  means packed and this text only reaches its full length when it
+                  is not. */}
               <span
-                className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
+                className="text-meta font-semibold uppercase tracking-[0.08em]"
                 style={{
                   color: locked
                     ? undefined
