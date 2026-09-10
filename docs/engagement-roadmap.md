@@ -127,7 +127,7 @@ created_at)` — **no secret_card_id column and no edition column** (editions
     server-side and sign the art path. `flexId` is a reference minted by the
     flexer's own action, never a secret id. `no-store`.
 - UI: "Flex this" in the post-reveal moment (`pack-summary.tsx`,
-  `secret-card-sheet.tsx`, reusing `share-card-graphic.tsx` visuals); "Today's
+  `card-viewer.tsx`, reusing `share-card-graphic.tsx` visuals); "Today's
   flexes" strip on `players.index.tsx`; new `flex-feed.tsx` + `use-flexes.ts`.
 
 ### 2c. New award category (S)
