@@ -106,6 +106,59 @@ async function topEdgeContrast(page: Page, target: Locator): Promise<number> {
 }
 
 /**
+ * The contrast of text against the background *directly behind it*.
+ *
+ * Column by column, because this button is transparent over the pack screen's
+ * radial ground and the rarity wash `RevealAmbience` lays over it. Taking the
+ * brightest and darkest pixel of the whole box would pair a glyph with a patch
+ * of backdrop from somewhere else entirely, and on a gradient that overstates
+ * the ratio — the failure mode where a sub-3:1 regression still passes.
+ *
+ * So: the glyph is the brightest pixel in the text band of one column, and its
+ * background is the padding above and below it in that same column, a dozen
+ * pixels away, where the wash has not meaningfully moved. Columns with no glyph
+ * in them read as no delta and are skipped. The answer is the best-covered
+ * column, since partial anti-aliased coverage only ever reads dimmer than the
+ * colour actually being drawn.
+ */
+function glyphContrast(g: Grid): number {
+  const bandTop = Math.round(g.height * 0.3);
+  const bandBottom = Math.round(g.height * 0.7);
+  // Two rows at each end: padding on a min-h-11 button with a 12px label.
+  const padRows = [0, 1, g.height - 2, g.height - 1];
+
+  let best = 0;
+  let columnsWithGlyph = 0;
+  for (let x = 0; x < g.width; x++) {
+    const bg = padRows
+      .map((y) => pixelAt(g, x, y))
+      .reduce<LinearRgb>(
+        (acc, p) => [acc[0] + p[0] / 4, acc[1] + p[1] / 4, acc[2] + p[2] / 4],
+        [0, 0, 0],
+      );
+
+    let glyph = bg;
+    for (let y = bandTop; y <= bandBottom; y++) {
+      const p = pixelAt(g, x, y);
+      if (relativeLuminance(p) > relativeLuminance(glyph)) glyph = p;
+    }
+
+    // A column of bare background reads as no delta. The threshold is well
+    // under the ~3:1 being measured and well over the wash's drift across the
+    // dozen pixels between the padding and the text.
+    if (relativeLuminance(glyph) - relativeLuminance(bg) < 0.005) continue;
+    columnsWithGlyph += 1;
+    best = Math.max(best, contrast(glyph, bg));
+  }
+
+  // Measuring nothing must fail loudly rather than report a number.
+  if (columnsWithGlyph < 5) {
+    throw new Error(`found ${columnsWithGlyph} glyph columns; the label was not rendered here`);
+  }
+  return best;
+}
+
+/**
  * Read at dsf 1, on the desktop project only.
  *
  * The phone project is the iPhone 13 preset at device-scale factor 3, where a
@@ -185,25 +238,12 @@ test.describe("control edges clear 3:1", () => {
     if (!box) throw new Error("no box for Reveal all");
     const g = await readback(page, box);
 
-    // Text, not an edge: the brightest pixel is a glyph's core and the darkest
-    // is the ground showing through the padding. Anti-aliasing can only pull the
-    // two together, so this understates the real ratio.
-    let glyph: LinearRgb = [0, 0, 0];
-    let ground: LinearRgb = [1, 1, 1];
-    for (let y = 0; y < g.height; y++) {
-      for (let x = 0; x < g.width; x++) {
-        const p = pixelAt(g, x, y);
-        if (relativeLuminance(p) > relativeLuminance(glyph)) glyph = p;
-        if (relativeLuminance(p) < relativeLuminance(ground)) ground = p;
-      }
-    }
-
     // Re-checked after the readback rather than before it: the auto-run holds
     // the button for about 2.2s, and a screenshot taken after it finished would
     // be measuring the enabled state and passing for the wrong reason.
     await expect(revealAll).toBeDisabled();
 
-    const ratio = contrast(glyph, ground);
+    const ratio = glyphContrast(g);
     expect(ratio, `disabled "Reveal all" reads ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
       FLOOR,
     );
