@@ -15,6 +15,7 @@ import {
   tearPack,
   standCard,
   swipeNext,
+  turnCard,
 } from "./fixtures";
 import { editionLabel } from "../src/lib/card-edition";
 import { CEREMONY_MS } from "../src/lib/pack-ceremony";
@@ -511,7 +512,10 @@ test.describe("opening a pack", () => {
     // before it turns; the last is simply the one with nothing to swipe on to.
     for (const n of [1, 2]) {
       await expect(standStep(page)).toHaveText(`${n} / 3`);
-      await standCard(page).click();
+      // Waits for the stand to say it will take a tap before spending one. The
+      // card before this has just celebrated, and until `revealing` was mirrored
+      // out of its ref the next card answered a tap it was going to discard.
+      await turnCard(page);
       await expect(swipeHint(page)).toBeVisible();
       await swipeNext(page);
     }
@@ -568,16 +572,17 @@ test.describe("opening a pack", () => {
 
     // A MutationObserver sees every intermediate render, which is what makes
     // this deterministic — the face-down beat is only ~300ms and polling would
-    // race it. The stand's helper line is the tell: it reads "tap the card to
-    // turn it" only while the card on it has not been turned.
+    // race it. `data-face-down` on the stand's card is the tell. It used to be
+    // the "tap the card to turn it" helper line, which is prose and stopped
+    // saying that the moment the line started telling the truth: it is blank
+    // whenever the tap would be refused, and under "Reveal all" it always is.
     await page.evaluate(() => {
       const seen = new Set<string>();
       (window as unknown as { __faceDown: Set<string> }).__faceDown = seen;
       const sample = () => {
         const step = document.querySelector('[data-testid="stand-step"]')?.textContent ?? "";
         const at = step.match(/(\d)\s*\/\s*3/);
-        const text = document.body.textContent ?? "";
-        if (at && /tap the card to turn it/i.test(text)) seen.add(at[1]);
+        if (at && document.querySelector('[data-face-down="true"]')) seen.add(at[1]);
       };
       sample();
       new MutationObserver(sample).observe(document.body, {
@@ -1054,7 +1059,10 @@ test.describe("opening a pack", () => {
     // reveal is the only thing that will ever file them, one at a time.
     await swipeNext(page);
     await expect(standStep(page)).toHaveText("2 / 3");
-    await standCard(page).click();
+    // Pressed until it takes: the card ahead of this one has just celebrated,
+    // and a tap into the tail of that is swallowed by revealAt's latch, leaving
+    // nothing to file and the poll below to time out on a reveal that never ran.
+    await turnCard(page);
     await expect.poll(() => filedWith(guestIds[1]), { timeout: 15_000 }).toBe(1);
     // But never again the one they had turned: adoption filed that at the claim.
     expect(filedWith(guestIds[0])).toBe(1);
