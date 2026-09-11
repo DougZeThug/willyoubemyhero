@@ -2,8 +2,8 @@
 //
 // Tailwind v4 compiles every `hover:` utility inside `@media (hover: hover)`, so
 // until styles.css's `@custom-variant hover` promoted them a thumb reached none
-// of them: roughly a
-// hundred controls changed nothing between touch-down and the screen moving on.
+// of them: roughly a hundred controls changed nothing between touch-down and the
+// screen moving on.
 // This file is the proof that they do now, and — the half that is easy to lose —
 // that none of them stays changed once the finger comes off.
 //
