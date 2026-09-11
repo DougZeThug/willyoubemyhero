@@ -496,6 +496,71 @@ describe("pull_bonus_secret_card", () => {
   });
 });
 
+// reward_ref names a secret_card_pulls row, and that row's `tier` is a live
+// value rather than a record: pull_secret_card and pull_bonus_secret_card both
+// raise the owning copy in place when a later duplicate rolls better. That is
+// the rule the vault wants and the wrong one for a receipt — and on a first
+// acquisition reward_ref points straight at the row that moves.
+describe("what a rung paid", () => {
+  it("writes the tier onto the claim, not just a pointer to a row that moves", async () => {
+    await seedSecrets();
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(60);
+
+    // Day 60's floor is mythic and roll_secret_tier_at_least cannot go above it,
+    // so this is the one rung whose payout is knowable from outside.
+    const res = await claim(60);
+    expect(res.reward?.tier).toBe("mythic");
+    const [row] = await sql<{ reward_tier: string | null }>(
+      "SELECT reward_tier FROM public.streak_milestone_claims WHERE milestone = 60",
+    );
+    expect(row.reward_tier).toBe("mythic");
+  });
+
+  it("keeps an older rung's tier when a later duplicate upgrades the copy it named", async () => {
+    // One card in the catalogue, so day 60's mythic has to come back as a
+    // duplicate — which is exactly when the owning copy is raised underneath it.
+    await seedSecrets(1);
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(60);
+
+    const first = await claim(3);
+    expect(first.ok).toBe(true);
+    const [three] = await sql<{ id: string; reward_ref: string; reward_tier: string | null }>(
+      "SELECT id, reward_ref, reward_tier FROM public.streak_milestone_claims WHERE milestone = 3",
+    );
+    expect(three.reward_tier).toBe(first.reward?.tier);
+
+    // Day 3 has no floor, so what it rolled is chance. Both sides are put on
+    // common — the claim-time state exactly, receipt and copy agreeing — so that
+    // the upgrade below is visible whatever the roll happened to be.
+    await sql("UPDATE public.secret_card_pulls SET tier = 'common' WHERE id = $1", [
+      three.reward_ref,
+    ]);
+    await sql("UPDATE public.streak_milestone_claims SET reward_tier = 'common' WHERE id = $1", [
+      three.id,
+    ]);
+
+    const second = await claim(60);
+    expect(second.reward?.duplicate).toBe(true);
+
+    // The copy rose, which is the vault's rule and is not in question.
+    const [owning] = await sql<{ tier: string }>(
+      "SELECT tier FROM public.secret_card_pulls WHERE id = $1",
+      [three.reward_ref],
+    );
+    expect(owning.tier).toBe("mythic");
+
+    // The receipt did not follow it. Before this column, /you showed the rung as
+    // having paid a mythic, over a claim toast that had said common.
+    const [after] = await sql<{ reward_tier: string | null }>(
+      "SELECT reward_tier FROM public.streak_milestone_claims WHERE id = $1",
+      [three.id],
+    );
+    expect(after.reward_tier).toBe("common");
+  });
+});
+
 describe("carrying a guest's claims", () => {
   it("moves them onto the participant so nothing pays twice", async () => {
     await seedSecrets();

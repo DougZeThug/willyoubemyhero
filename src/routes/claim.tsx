@@ -16,6 +16,7 @@ import {
 import { carryPackToIdentity } from "@/lib/card-collection";
 import { carryTrophySeen } from "@/lib/trophy-seen";
 import { deviceId } from "@/lib/device-id";
+import { FeedError } from "@/components/feed-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,12 @@ function ClaimPage() {
     queryFn: () => rosterFn(),
     staleTime: 60_000,
   });
+
+  // Collectors are signed-in traders, not athletes — there is no paper code to
+  // type here for them. Filtered once rather than inside the grid, because the
+  // empty branch below has to ask about the list this screen actually offers: a
+  // league of nothing but collectors has a roster and still nothing to tap.
+  const pickable = (roster.data ?? []).filter((p) => !p.isCollector);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -241,36 +248,55 @@ function ClaimPage() {
             </Label>
             {roster.isLoading ? (
               <p className="text-meta text-muted-foreground">Loading roster…</p>
+            ) : roster.isError && !roster.data ? (
+              // The list IS the picker on this screen, which is what makes a
+              // failed read worth its own branch here and not on the two other
+              // screens that share this query — there the roster is a fallback
+              // for a name, and a miss degrades to "Someone". Here it fell
+              // through to an empty grid over a dead Claim button, which reads
+              // as a league with nobody on it rather than a list that never
+              // arrived. On the connection this app is used on that is the
+              // common case, and it is the one with something to do about it.
+              //
+              // `&& !roster.data` is the same shape every spectator screen uses
+              // (`error && !bundle`), and it earns its keep here rather than
+              // being copied: a refetch that fails leaves the names it already
+              // has, and a roster twelve people long does not go stale in a way
+              // that stops a code working. Dropping a usable picker to say the
+              // network wobbled would be this fix causing the bug it is for.
+              <FeedError message={roster.error?.message} onRetry={() => void roster.refetch()} />
+            ) : pickable.length === 0 ? (
+              // Said out loud for the same reason: the branch above only helps
+              // if the silent grid underneath it no longer means two things.
+              <p className="text-meta text-muted-foreground">
+                Nobody on the roster yet — ask the commissioner to add you.
+              </p>
             ) : (
               <div className="grid grid-cols-2 gap-1.5">
-                {/* Collectors are signed-in traders, not athletes — there is no
-                    paper code to type here for them. */}
-                {(roster.data ?? [])
-                  .filter((p) => !p.isCollector)
-                  .map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setSelected(p.id)}
-                      className={cn(
-                        "flex min-h-11 items-center rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
-                        selected === p.id
-                          ? "border-primary bg-primary/15 text-primary"
-                          : "border-border-strong bg-white/[0.02] text-foreground hover:border-primary",
-                      )}
-                    >
-                      {/* Its own element, because the button is a flex container
-                          now and `text-overflow: ellipsis` does not reach an
-                          anonymous text child — a long name would be cut, not
-                          truncated. */}
-                      <span className="min-w-0 truncate">{p.name}</span>
-                      {p.claimed && (
-                        <span className="ml-1 shrink-0 text-label font-bold tracking-widest text-muted-foreground">
-                          ✓
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                {pickable.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelected(p.id)}
+                    className={cn(
+                      "flex min-h-11 items-center rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
+                      selected === p.id
+                        ? "border-primary bg-primary/15 text-primary"
+                        : "border-border-strong bg-white/[0.02] text-foreground hover:border-primary",
+                    )}
+                  >
+                    {/* Its own element, because the button is a flex container
+                        now and `text-overflow: ellipsis` does not reach an
+                        anonymous text child — a long name would be cut, not
+                        truncated. */}
+                    <span className="min-w-0 truncate">{p.name}</span>
+                    {p.claimed && (
+                      <span className="ml-1 shrink-0 text-label font-bold tracking-widest text-muted-foreground">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -343,3 +369,5 @@ function ClaimPage() {
     </div>
   );
 }
+
+export default ClaimPage;

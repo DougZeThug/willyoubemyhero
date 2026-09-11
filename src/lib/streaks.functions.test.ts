@@ -423,6 +423,41 @@ describe("getStreakHistory", () => {
     expect(res.every((r) => r.card?.name === "Ghost")).toBe(true);
   });
 
+  it("says what the rung paid, not what the copy has since been upgraded to", async () => {
+    // reward_ref names a pull, and a pull's `tier` is a live value: both
+    // pull_secret_card and pull_bonus_secret_card raise the owning copy in place
+    // when a later duplicate rolls better. That is the rule the vault wants —
+    // "what do I hold" — and the wrong one for a receipt. On a first acquisition
+    // reward_ref points at that owning row, so a mythic pulled months later
+    // rewrote what this rung was shown to have paid, against a claim toast that
+    // had said "common" on the day.
+    withHistory(
+      [{ milestone: 3, streak_started_on: "2026-08-01", claimed_on: "2026-08-03", reward_ref: PULL, reward_tier: "common" }], // prettier-ignore
+      [{ id: PULL, secret_card_id: CARD, tier: "mythic" }],
+      [{ id: CARD, name: "Ghost", art_path: null, back_path: null }],
+    );
+    const { getStreakHistory } = await import("./streaks.functions");
+    const res = await callServerFn<{ card: { tier: string } | null }[]>(getStreakHistory, {
+      headers: asMe(),
+    });
+    expect(res[0]?.card?.tier).toBe("common");
+  });
+
+  it("falls back to the pull for a claim made before the tier was written down", async () => {
+    // Rows claimed before 20260911120000 have no reward_tier, and the pull is
+    // the only thing that knows — the same value those rows already rendered.
+    withHistory(
+      [{ milestone: 3, streak_started_on: "2026-08-01", claimed_on: "2026-08-03", reward_ref: PULL, reward_tier: null }], // prettier-ignore
+      [{ id: PULL, secret_card_id: CARD, tier: "epic" }],
+      [{ id: CARD, name: "Ghost", art_path: null, back_path: null }],
+    );
+    const { getStreakHistory } = await import("./streaks.functions");
+    const res = await callServerFn<{ card: { tier: string } | null }[]>(getStreakHistory, {
+      headers: asMe(),
+    });
+    expect(res[0]?.card?.tier).toBe("epic");
+  });
+
   it("carries no count of anything but this actor's own claims", async () => {
     // The silence rule, asserted by exact keys rather than by reading the
     // markup: a set size added here would reach the profile screen, and every

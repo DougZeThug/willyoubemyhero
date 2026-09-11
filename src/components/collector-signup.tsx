@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { createCollectorIdentity } from "@/lib/collector.functions";
-import { setMemberToken, useMemberSession } from "@/lib/member-token";
+import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member-token";
 import { useAuthUser } from "@/hooks/use-account";
 import { clearGuestToken } from "@/lib/guest-token";
 import { clearAccountHandoff } from "@/lib/account-handoff";
@@ -38,11 +38,32 @@ export function CollectorSignup({ className }: { className?: string }) {
       const res = await createFn({ data: { displayName } });
       clearGuestToken();
       clearAccountHandoff();
+      // The claim screen's rule, which this door used to be the only one to
+      // skip. `createCollector` reparents the guest's `pack_opens` rows but
+      // mints no `card_copies` — this call is the only thing that files the
+      // cards themselves — so a swallowed failure left the token on over a
+      // server record that has never heard of them, and the next stats read
+      // said "you own nothing" rather than "we don't know". `useMyCollection`
+      // believes it and `forgetCards` deletes them. Today's cards come back on
+      // a re-tear; an earlier league day's do not. So if the upload does not
+      // stick, the token comes straight back off: no member, no reconciliation,
+      // nothing pruned, and the next sign-in replays the whole handoff against
+      // a store the prune has not been through.
       setMemberToken(res.token, res.name);
       try {
         await adoptLocalCollection(held);
       } catch {
-        /* named without the upload: the cards can be granted back */
+        try {
+          // One retry, because the usual failure here is a flaky first request
+          // from a phone that has just woken up on garden wifi.
+          await adoptLocalCollection(held);
+        } catch {
+          clearMemberToken();
+          toast.error(
+            "Named, but your cards couldn't be transferred — sign in again on a better connection.",
+          );
+          return;
+        }
       }
       await qc.invalidateQueries();
       toast.success(`You're in, ${res.name}`);
