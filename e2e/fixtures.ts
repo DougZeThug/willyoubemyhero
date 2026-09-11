@@ -381,35 +381,38 @@ async function throwCardLeft(page: Page) {
 }
 
 /**
- * Turn the card on the stand, pressing until it takes.
+ * Turn the card on the stand.
  *
- * The tap's own version of what `swipeNext` handles for the throw, and swallowed
- * for a related reason: `revealAt` holds a re-entrancy latch for the whole of
- * the previous card's celebration (players.pack.tsx:883), so a tap that lands
- * while confetti is still in the air does nothing at all — and nothing says so.
- * A bare click then leaves the card face-down and whatever the test asserts next
- * waits out its timeout for a reveal that was never started.
- *
- * The hint is the signal rather than `aria-pressed`: the stand's own copy is
- * "tap for the back" once a card has turned, so aria-pressed is only good enough
- * to say "not currently showing its back" — which is why it guards the press
- * rather than ending the loop. Pressing a card that HAS turned would flip it to
- * its back, which is the trap the walk in journeys.spec.ts:540-552 documents.
+ * One tap, because the stand now says when it will take one. `revealAt` holds a
+ * re-entrancy latch across a reveal and its celebration, and it used to hold it
+ * behind a bare ref — so the next card went on offering a tap that would be
+ * dropped on the floor, and this helper compensated by clicking until one stuck.
+ * That hid the defect rather than finding it: a real user gets one tap and no
+ * loop. The latch is mirrored into state now and the card carries `aria-disabled`
+ * for every window where the tap would go nowhere, so waiting for that to clear
+ * is deterministic and the tap that follows is the only one.
  */
 export async function turnCard(page: Page) {
   const card = standCard(page);
-  const hint = page.getByText(/swipe/i).first();
+  await expect(card).not.toHaveAttribute("aria-disabled", "true");
+  // And settled where it is. A card stepped to is still flying in on a spring,
+  // and a tap delivered into that flight does not reach it at all — the element
+  // it lands on is not the one it started on. Playwright's own stability check
+  // is per-action and clears before the spring does, so the box is read twice
+  // and compared. This is a wait, not a retry: the tap below is still the only
+  // one, which is the whole point of the stand saying when it will take it.
   await expect
     .poll(
       async () => {
-        if (await hint.count()) return true;
-        if ((await card.getAttribute("aria-pressed")) === "false") await card.click();
-        await page.waitForTimeout(400);
-        return (await hint.count()) > 0;
+        const a = await card.boundingBox();
+        await page.waitForTimeout(120);
+        const b = await card.boundingBox();
+        return a && b && a.x === b.x && a.y === b.y && a.width === b.width;
       },
-      { timeout: 25_000, intervals: [200] },
+      { timeout: 10_000, intervals: [100] },
     )
     .toBe(true);
+  await card.click();
 }
 
 /**

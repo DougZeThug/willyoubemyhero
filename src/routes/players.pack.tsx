@@ -276,6 +276,15 @@ function PackPage() {
    */
   const revealingRef = useRef(false);
   /**
+   * The same latch, where the UI can see it.
+   *
+   * A ref alone is invisible to render, so the stand went on offering a tap this
+   * would discard. Its two siblings already do this — `autoRef`/`autoRunning`
+   * below, and `claimingRef`/`setClaiming` in use-milestone-claim — and this was
+   * the only one of the three without a mirror.
+   */
+  const [revealing, setRevealing] = useState(false);
+  /**
    * The revealed indices, readable synchronously.
    *
    * `revealAt` guarded on the `revealed` *state*, which a second call in the
@@ -887,6 +896,7 @@ function PackPage() {
     const isSecret = slot.kind === "secret";
 
     revealingRef.current = true;
+    setRevealing(true);
     try {
       // Hold on the glowing edge before a card worth waiting for lands. The
       // pause is the whole trick — and a duplicate secret you have seen three
@@ -981,6 +991,7 @@ function PackPage() {
       }
     } finally {
       revealingRef.current = false;
+      setRevealing(false);
       releaseDeferredResume();
     }
   }
@@ -1312,6 +1323,7 @@ function PackPage() {
               pullCounts={pullCounts.data}
               peeking={peeking === cursor}
               busy={autoRunning}
+              revealing={revealing}
               fromPack={ceremonyRanRef.current}
               enteringFrom={entering}
               onEntered={() => setEntering(null)}

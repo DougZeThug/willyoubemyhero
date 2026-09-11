@@ -8,6 +8,7 @@
 // sit in any slot, that the stand treats it as a step like any other while
 // still giving it the room it is owed.
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { PackStand, type StandSlot } from "./pack-stand";
 import { rarityStyle } from "@/lib/card-rarity";
@@ -123,6 +124,7 @@ function renderStand(over: Partial<React.ComponentProps<typeof PackStand>> = {})
       pullCounts={undefined}
       peeking={false}
       busy={false}
+      revealing={false}
       onEntered={onEntered}
       onReveal={() => {}}
       onAdvance={() => {}}
@@ -253,6 +255,7 @@ describe("a secret in its slot", () => {
         pullCounts={undefined}
         peeking={false}
         busy={false}
+        revealing={false}
         onReveal={() => {}}
         onAdvance={() => {}}
       />,
@@ -292,6 +295,7 @@ describe("a secret in its slot", () => {
         pullCounts={undefined}
         peeking={false}
         busy={false}
+        revealing={false}
         onReveal={() => {}}
         onAdvance={() => {}}
       />,
@@ -314,6 +318,72 @@ describe("the peek line", () => {
   it("says a better copy is coming", () => {
     renderStand({ slots: [roster(0, { outcome: "upgrade" })], peeking: true });
     expect(screen.getByText("Better than yours…")).toBeInTheDocument();
+  });
+});
+
+describe("a tap the stand will not take", () => {
+  /**
+   * The card face-down on the stand, found the way the landing test finds it.
+   */
+  const faceDown = (container: HTMLElement) =>
+    container.querySelector('[role="button"][aria-pressed]') as HTMLElement;
+
+  it("offers the tap when nothing is in the way", async () => {
+    const onReveal = vi.fn();
+    const { container } = renderStand({ onReveal });
+    const card = faceDown(container);
+
+    expect(card).not.toHaveAttribute("aria-disabled");
+    expect(screen.getByText(/tap the card to turn it/i)).toBeInTheDocument();
+    await userEvent.click(card);
+    expect(onReveal).toHaveBeenCalledWith(0);
+  });
+
+  it("refuses it, and stops advertising it, while the card before is still revealing", async () => {
+    // The window the stand could not see until `revealing` was passed down:
+    // revealAt clears `peeking` before its celebration, so the step after a hold
+    // used to leave this card fully interactive while the latch was still held,
+    // and its first tap went on the floor.
+    const onReveal = vi.fn();
+    const { container } = renderStand({ onReveal, revealing: true });
+    const card = faceDown(container);
+
+    expect(card).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText(/tap the card to turn it/i)).toBeNull();
+    await userEvent.click(card);
+    expect(onReveal).not.toHaveBeenCalled();
+  });
+
+  it("does not quietly flip the card instead", async () => {
+    // Withholding onClick is not a refusal on its own: HoloCard falls through to
+    // its own flip, so a refused tap would turn a face-down card to its sealed
+    // back — answering, just not with the thing it offered.
+    const { container } = renderStand({ revealing: true });
+    const card = faceDown(container);
+
+    expect(card).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(card);
+    expect(card).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("refuses it while the automatic run owns the sequence", async () => {
+    const onReveal = vi.fn();
+    const { container } = renderStand({ onReveal, busy: true });
+
+    await userEvent.click(faceDown(container));
+    expect(onReveal).not.toHaveBeenCalled();
+  });
+
+  it("still takes the tap that turns a revealed card over", async () => {
+    // The refusal is about a card that cannot be revealed yet, not about every
+    // tap: once it is revealed, tapping it to read its back is the whole point,
+    // and that path stays live even while its own celebration runs.
+    const { container } = renderStand({ revealed: [0], revealing: true });
+    const card = faceDown(container);
+
+    expect(card).not.toHaveAttribute("aria-disabled");
+    await userEvent.click(card);
+    expect(card).toHaveAttribute("aria-pressed", "true");
   });
 });
 

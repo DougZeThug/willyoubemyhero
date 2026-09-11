@@ -187,6 +187,7 @@ export function PackStand({
   pullCounts,
   peeking,
   busy,
+  revealing,
   fromPack = false,
   enteringFrom,
   onEntered,
@@ -204,6 +205,16 @@ export function PackStand({
   peeking: boolean;
   /** True while "Reveal all" is driving, so a tap cannot cut across it. */
   busy: boolean;
+  /**
+   * A reveal is in flight — somewhere between the tap that started it and the
+   * end of its celebration.
+   *
+   * Its own prop rather than folded into `busy`, because `busy` also feeds
+   * `canAdvance` and would freeze the swipe, the arrow key and the Next button
+   * with it. Stepping on while the confetti falls is fine; what is not fine is
+   * the *next* card offering a tap that `revealAt`'s latch will discard.
+   */
+  revealing: boolean;
   /**
    * The stand is mounting straight out of the opening ceremony.
    *
@@ -237,6 +248,15 @@ export function PackStand({
   const ep = current?.ep ?? null;
   const secret = current?.slot.kind === "secret" ? current.slot.card : null;
   const isRevealed = revealed.includes(shownIndex);
+  /**
+   * This card is face-down and its tap would go nowhere.
+   *
+   * `revealing` is the one the stand could not see before: `revealAt` clears
+   * `peeking` before its celebration runs, so the step after a hold leaves the
+   * next card fully interactive while the latch is still held, and its first tap
+   * is dropped on the floor. The three windows are one rule.
+   */
+  const tapRefused = !isRevealed && (peeking || busy || revealing);
   /**
    * What is on the stand, as an identity rather than a position.
    *
@@ -632,7 +652,7 @@ export function PackStand({
               e2e suite both read to know what the card wants — but dimmed to the
               edge of legibility once there is a card to look at instead. */}
           <p className="mt-1 h-5 text-meta leading-snug text-muted-foreground/70">
-            {peeking
+            {peeking || tapRefused
               ? ""
               : onSecret
                 ? isRevealed
@@ -786,11 +806,17 @@ export function PackStand({
                     // revealed is what re-arms HoloCard's own flip, so examining the
                     // back needs no code here.
                     //
-                    // Dropped during the hold and while the automatic run owns the
-                    // sequence. A card holds face-down for 900ms (1600ms for a
+                    // Dropped during the hold, while the automatic run owns the
+                    // sequence, and while the card before this one is still being
+                    // revealed. A card holds face-down for 900ms (1600ms for a
                     // secret) before it turns, and every tap in that window used to
                     // start another ceremony over the same card.
-                    onClick={isRevealed || peeking || busy ? undefined : () => onReveal(shownIndex)}
+                    onClick={isRevealed || tapRefused ? undefined : () => onReveal(shownIndex)}
+                    // And refused rather than merely unhandled. Without this a tap
+                    // in those windows falls through to HoloCard's own flip and
+                    // turns a face-down card to its sealed back — the card would
+                    // answer, just not with the thing it offered.
+                    tapDisabled={tapRefused}
                     // A horizontal throw is the stand's own gesture now — it means
                     // "next card", read by the wrapper above — so the card must not
                     // also answer to it. Same split as the player detail page.

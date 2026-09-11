@@ -512,7 +512,10 @@ test.describe("opening a pack", () => {
     // before it turns; the last is simply the one with nothing to swipe on to.
     for (const n of [1, 2]) {
       await expect(standStep(page)).toHaveText(`${n} / 3`);
-      await standCard(page).click();
+      // Waits for the stand to say it will take a tap before spending one. The
+      // card before this has just celebrated, and until `revealing` was mirrored
+      // out of its ref the next card answered a tap it was going to discard.
+      await turnCard(page);
       await expect(swipeHint(page)).toBeVisible();
       await swipeNext(page);
     }
