@@ -52,8 +52,16 @@ const ATHLETE = {
 };
 const COLLECTOR = { ...ATHLETE, id: "p-jane", name: "Jane", isCollector: true };
 
-/** The shape `useQuery` hands back, with only the four fields the page reads. */
-function rosterState(over: Partial<ReturnType<typeof useQuery>> = {}) {
+/** The shape `useQuery` hands back, with only the parts the page reads. */
+type RosterState = {
+  data: (typeof ATHLETE)[];
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  refetch: () => void;
+};
+
+function rosterState(over: Partial<RosterState> = {}): RosterState {
   return { data: [], isLoading: false, isError: false, error: null, refetch: vi.fn(), ...over };
 }
 
