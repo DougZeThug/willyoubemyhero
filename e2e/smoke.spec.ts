@@ -1,6 +1,15 @@
 // Every public route renders, hydrates, and survives having no data.
 import type { Page } from "@playwright/test";
-import { test, expect, BUNDLE, PLAYERS, sealedPack, type ServerFnMock } from "./fixtures";
+import {
+  test,
+  expect,
+  BUNDLE,
+  PLAYERS,
+  SECRET_CARD,
+  sealedPack,
+  tearPack,
+  type ServerFnMock,
+} from "./fixtures";
 
 const ROUTES = [
   { path: "/", title: /Draft Combine|Hero/i },
@@ -202,6 +211,36 @@ const MIN_FONT = 16;
 const EXEMPT = [{ name: /^skip to content$/i, why: "sr-only until focused" }];
 
 /**
+ * Text allowed to clip, each with the route it is on and the reason it is
+ * allowed. Same contract as EXEMPT above.
+ *
+ * All three are the combine's own screens rather than the card app's — the
+ * running order a marshal reads, the commissioner's numbers, and the ballot —
+ * and all three clip the longest name in the roster at 320 only. §0 sets the
+ * console aside from the phone type and touch rules by design, and PR 13 was
+ * costed as the five findings in §23. Scoped to path AND class so the sweep
+ * still gates everything else on those routes, and so the same class on a card
+ * screen is not quietly excused with them. Each is one word to fix.
+ */
+const CLIP_EXEMPT: { path: string; hint: RegExp; why: string }[] = [
+  {
+    path: "/live",
+    hint: /truncate text-sm font-semibold|flex-1 truncate text-sm/,
+    why: "the marshal's running order; console screens are out of the audit's scope",
+  },
+  {
+    path: "/analytics",
+    hint: /flex-1 truncate text-sm/,
+    why: "the commissioner's numbers, same scope note",
+  },
+  {
+    path: "/awards",
+    hint: /min-w-0 flex-1 truncate/,
+    why: "a ballot option at 320 only; nothing in §22 or §23 measures this screen",
+  },
+];
+
+/**
  * Every visible control that is too short, named well enough to find in the
  * source from the failure text alone.
  *
@@ -255,6 +294,63 @@ async function zoomingFields(page: Page): Promise<string[]> {
   return measured
     .filter((f) => f.px < MIN_FONT)
     .map((f) => `${f.px}px <${f.tag}> "${f.name || "(unnamed)"}" — ${f.hint}`);
+}
+
+/**
+ * The three phone widths the audit measures at.
+ *
+ * The mobile project is the iPhone 13 preset, so 390 is what every other sweep
+ * in this file runs at. Clipping is the one failure that is a function of width
+ * rather than of the pointer: a label that fits at 390 loses its tail at 320,
+ * which is what §23 F7, F8 and their render set are.
+ */
+const CLIP_WIDTHS = [320, 390, 430];
+
+/**
+ * Text that is actually being cut off, as opposed to text that merely could be.
+ *
+ * `text-overflow: ellipsis` is the marker rather than `overflow: hidden`: it is
+ * what `truncate` sets and what draws the "…" a phone has no hover to resolve.
+ * `line-clamp` deliberately does not set it, which is why wrapping a name to two
+ * lines reads here as a fix and not as a second failure — the tail of something
+ * clamped is gone, but nothing promised the rest of it.
+ *
+ * `getClientRects()` rather than `offsetParent`, which is null for a `fixed`
+ * element as well as for a hidden one — the trading post's own CTA is fixed.
+ *
+ * The 1px slack is rounding: scrollWidth and clientWidth are integers over a
+ * layout that is not, so a subpixel-wide box reports one pixel of overflow it
+ * does not have.
+ */
+const CLIP_SLACK = 1;
+
+/**
+ * Every route in the table is swept; the three screens the audit puts outside
+ * its scope answer for what they carry through CLIP_EXEMPT rather than by being
+ * skipped, so a new clip on one of them still fails.
+ */
+async function clippedText(page: Page, width: number, path: string): Promise<string[]> {
+  const measured = await page.evaluate(
+    (slack) =>
+      Array.from(document.querySelectorAll<HTMLElement>("*"))
+        .filter(
+          (el) =>
+            getComputedStyle(el).textOverflow === "ellipsis" &&
+            el.scrollWidth - el.clientWidth > slack &&
+            el.getClientRects().length > 0,
+        )
+        .map((el) => ({
+          over: el.scrollWidth - el.clientWidth,
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
+          hint: (el.getAttribute("class") ?? "").split(/\s+/).filter(Boolean).slice(0, 3).join(" "),
+        })),
+    CLIP_SLACK,
+  );
+
+  return measured
+    .filter((c) => !CLIP_EXEMPT.some((e) => e.path === path && e.hint.test(c.hint)))
+    .map((c) => `${width}px: <${c.tag}> "${c.text}" over by ${c.over}px — ${c.hint}`);
 }
 
 /** A member token these stubs never verify — the server is mocked out. */
@@ -419,9 +515,15 @@ const TAP_TARGET_ROUTES: {
   },
 ];
 
-test.describe("tap targets", () => {
+// Three rules over one page load each: nothing a thumb can land on under 44px,
+// no field iOS Safari would zoom the page to reach, and no label losing its tail
+// to an ellipsis at any of the three phone widths.
+test.describe("phone sweeps", () => {
   for (const route of TAP_TARGET_ROUTES) {
-    test(`${route.path} has nothing smaller than a thumb`, async ({ page, server }, testInfo) => {
+    test(`${route.path} holds the thumb, keyboard and width floors`, async ({
+      page,
+      server,
+    }, testInfo) => {
       test.skip(
         testInfo.project.name !== "mobile",
         "44px is a touch rule; the desktop chrome is mouse-driven and 24px is its bar.",
@@ -446,8 +548,73 @@ test.describe("tap targets", () => {
         `Fields under ${MIN_FONT}px on ${route.path}, which iOS Safari zooms ` +
           `the page to reach. Use text-base with a pointer-fine:text-sm release.`,
       ).toEqual([]);
+
+      // Resized rather than reloaded: clipping is a layout answer and the page
+      // has already settled, so a second and third round trip would buy nothing
+      // but the flake of settling twice more.
+      const clipped: string[] = [];
+      for (const width of CLIP_WIDTHS) {
+        await page.setViewportSize({ width, height: page.viewportSize()?.height ?? 844 });
+        clipped.push(...(await clippedText(page, width, route.path)));
+      }
+      expect(
+        clipped,
+        `Text clipped by an ellipsis on ${route.path}. On a phone there is no ` +
+          `hover to resolve one, so wrap it (line-clamp-2) or give it the room.`,
+      ).toEqual([]);
     });
   }
+
+  // The sweep above runs the routes as the tap-target table arranges them, and
+  // two of §23 F8's three sites need more than that: a secret shelf only exists
+  // once you hold a secret, and the slab plate only squeezes its event line once
+  // there is a collection mark beside it. Both were measured with a full member
+  // in the audit's render set, so both are arranged here rather than left to a
+  // sweep that cannot see them.
+  test("does not clip a secret's caption on the shelf", async ({ page, server }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "a width finding, measured on the phone project");
+    await signInAsMember(page);
+    server.set("getSecretCollections", {
+      collections: [{ id: "pets", label: "Pets", accent: "mint" }],
+    });
+    server.set("getMySecrets", {
+      pulled: 1,
+      cards: [
+        {
+          ...SECRET_CARD,
+          collection: "pets",
+          firstPulledOn: "2026-07-28",
+          count: 1,
+          ownerCount: 3,
+        },
+      ],
+    });
+
+    await page.goto("/players");
+    // "Common · 70% pull" — the widest of the five, and the one the audit
+    // measured 23px over at 320.
+    await expect(page.getByText(/70% pull/i).first()).toBeVisible();
+
+    await page.setViewportSize({ width: 320, height: 568 });
+    expect(await clippedText(page, 320, "/players")).toEqual([]);
+  });
+
+  test("does not clip the event's own name on the slab plate", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "a width finding, measured on the phone project");
+    // A pack rather than a stub: the collection is IndexedDB on the device, and
+    // opening one is how a device comes to have a mark on the plate at all.
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await page.getByRole("button", { name: /reveal all/i }).click();
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    await page.goto(`/players/${PLAYERS[0].ep}`);
+    // .first(): the share graphic offscreen carries the same line.
+    await expect(page.getByText("Draft Combine 2026").first()).toBeVisible();
+
+    await page.setViewportSize({ width: 320, height: 568 });
+    expect(await clippedText(page, 320, `/players/${PLAYERS[0].ep}`)).toEqual([]);
+  });
 
   test("holds the floor on a phone turned sideways", async ({ page, server }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile", "a coarse pointer is the whole point of this");

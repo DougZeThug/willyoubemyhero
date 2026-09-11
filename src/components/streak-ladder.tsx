@@ -44,6 +44,9 @@ export function StreakLadder({
   }
 
   const claimable = streak.milestones.find((m) => m.earned && !m.claimed) ?? null;
+  // Earned, unclaimed, and no account to cash it against — which the server
+  // works out from whether this actor has one at all (streaks.functions.ts:172).
+  const blocked = claimable != null && !streak.canClaim;
 
   return (
     <div>
@@ -92,6 +95,18 @@ export function StreakLadder({
                   {m.label}
                 </span>
                 <span className="block text-meta text-muted-foreground">{m.blurb}</span>
+                {/* What "Waiting" is waiting for, on the rung itself. The reason
+                    is real and it was two sections up under ACCOUNT, which is not
+                    where somebody reading a rung is looking (§23 F12). Only on
+                    the rung that is actually next to be cashed, and only while it
+                    cannot be: one reason, once. It goes in this column rather
+                    than in the state word, which is shrink-0 and would squeeze
+                    the label rather than wrap. */}
+                {blocked && m.days === claimable?.days && (
+                  <span className="block text-meta text-muted-foreground">
+                    An account is what claims it.
+                  </span>
+                )}
               </span>
               {/* The state in words, never the colour alone. "Claimed" beats
                   "reached" where both are true: it is the later fact. */}

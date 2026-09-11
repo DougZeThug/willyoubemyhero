@@ -31,8 +31,6 @@ export type TradeOffersPanelProps = {
   onCancel: (offerId: string) => void;
   /** The offer just sent, rung for a few seconds so it can be found. */
   highlightId: string | null;
-  /** The way forward from an empty inbox. The sticky one is the route's own. */
-  onMakeOffer: () => void;
   /** How many people could actually answer an offer, for the empty state's hint. */
   reachableCount: number;
 };
@@ -58,7 +56,6 @@ export function TradeOffersPanel({
   onDecline,
   onCancel,
   highlightId,
-  onMakeOffer,
   reachableCount,
 }: TradeOffersPanelProps) {
   /**
@@ -81,13 +78,14 @@ export function TradeOffersPanel({
         {inbox.length === 0 ? (
           <div className="surface-panel rounded-xl border p-4">
             <p className="text-sm text-muted-foreground">Nobody wants your cards. Yet.</p>
-            {/* A way forward, which one 12px sentence was not (§10 problem 7).
-                Named differently from the sticky button below it on purpose: two
-                controls with the same accessible name, 200px apart, is a thing a
-                screen reader cannot tell apart. */}
-            <button type="button" onClick={onMakeOffer} className="neon-btn-sm mt-3">
-              Start the first offer
-            </button>
+            {/* No button here. This panel used to carry its own, named
+                differently from the route's sticky one so a screen reader could
+                tell the two apart — but the two are the same action about 600px
+                apart on a screen whose entire content is this empty state (§23
+                F13), and the sticky one is `fixed` to the bottom of the viewport,
+                so it is already up without scrolling. The way forward §10 asked
+                for is the one that never scrolls away; this is the line that says
+                who could answer it. */}
             {reachableCount > 0 && (
               <p className="mt-2 text-meta text-muted-foreground">
                 {reachableCount} {reachableCount === 1 ? "player is" : "players are"} on their

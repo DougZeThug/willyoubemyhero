@@ -57,14 +57,19 @@ export function CardSlab({
       }}
     >
       {/*
-        One line, three parts: collection mark, event, serial. The tier badge
+        One row, three parts: collection mark, event, serial. The tier badge
         above the card already carries the grade and why it was earned, so
         repeating either here would just be noise — this is the serial plate,
         not a second label.
       */}
       <div className="mb-2 flex items-baseline gap-2 px-1.5">
         <CollectionMark collected={collected} />
-        <span className="min-w-0 flex-1 truncate text-center text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        {/* Clamped rather than truncated: the mark and the serial either side are
+            both shrink-0, so at 320 this middle slot is about 114px against the
+            135 "Draft Combine 2026" wants, and it clipped the event's own name
+            (§23 F8). Two lines is the cap because the name is admin-authored and
+            has no length rule of its own. */}
+        <span className="min-w-0 flex-1 line-clamp-2 text-center text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
           {slabTitle(eventName, eventYear)}
         </span>
         <span className="font-display tabular shrink-0 text-label font-black uppercase tracking-[0.08em] text-foreground/80">

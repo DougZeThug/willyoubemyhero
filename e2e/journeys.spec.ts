@@ -633,7 +633,7 @@ test.describe("opening a pack", () => {
     expect((await readPackState(page))?.cards?.map((c) => c.id)).toEqual(DEFAULT_PACK_IDS);
   });
 
-  test("keeps the summary's cards big enough to read", async ({ page }) => {
+  test("keeps the summary's cards big enough to read", async ({ page }, testInfo) => {
     // The pack used to get SMALLER at the payoff: a three-column grid put the
     // roster cards at ~100px on a phone, a second after the stand had shown the
     // same card at 315. They are a snap row now, so they keep a readable size
@@ -653,6 +653,22 @@ test.describe("opening a pack", () => {
     for (let i = 0; i < PACK_SIZE; i += 1) {
       const box = (await columns.nth(i).boundingBox())!;
       expect(box.width).toBeGreaterThanOrEqual(140);
+    }
+
+    // The names under them are the columns' only links — the cards themselves are
+    // flip buttons — and they measured 140x18 (§23 F6). The floor is on the link
+    // rather than over the card, so a tap on the art still turns it.
+    //
+    // Mobile only, on the same rule as the tap-target sweep: the floor is
+    // released on `pointer-fine:`, so the desktop project is measuring a mouse
+    // and 44px is not its bar.
+    if (testInfo.project.name === "mobile") {
+      const links = await page.getByTestId("summary-card").locator("a[href]").all();
+      expect(links.length).toBeGreaterThan(0);
+      for (const link of links) {
+        const box = (await link.boundingBox())!;
+        expect(box.height, `"${(await link.textContent())?.trim()}"`).toBeGreaterThanOrEqual(44);
+      }
     }
   });
 

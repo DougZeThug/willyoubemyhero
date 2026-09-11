@@ -541,7 +541,6 @@ function TradePage() {
             onDecline={(id) => void resolve(id, "decline")}
             onCancel={(id) => void resolve(id, "cancel")}
             highlightId={highlightId}
-            onMakeOffer={openBuilder}
             reachableCount={counterparties.length}
           />
         ) : (

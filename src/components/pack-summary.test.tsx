@@ -200,6 +200,37 @@ describe("a secret in its slot", () => {
   });
 });
 
+describe("the name under a card", () => {
+  // §23 F6. It measured 140x18: a link a third of the touch floor, sitting under
+  // a card that is a flip button rather than a second route to the same place —
+  // so the floor goes on the link, not over the card.
+  const FLOOR = "min-h-11";
+
+  it("gives the roster name the touch floor, on the link itself", () => {
+    renderSummary({ slots: [roster(0), roster(1), secret()] });
+    const link = screen.getByRole("link", { name: "Alice Ace" });
+    expect(link).toHaveAttribute("href", "/players/$id");
+    expect(link.className).toContain(FLOOR);
+  });
+
+  it("gives the secret's name the same box, so the captions stay level", () => {
+    // Not a link — there is no route for a secret — but the same height, or the
+    // three columns' captions sit a row apart from each other.
+    renderSummary({ slots: [roster(0), roster(1), secret()] });
+    const nameBox = screen.getAllByTestId("summary-card")[2].querySelector(`.${FLOOR}`)!;
+    expect(nameBox).toHaveTextContent("Pickles");
+    expect(nameBox.tagName).toBe("DIV");
+  });
+
+  it("still clamps a long name to two lines", () => {
+    renderSummary({ slots: [roster(0), roster(1), secret()] });
+    const link = screen.getByRole("link", { name: "Alice Ace" });
+    // The clamp moved to an inner span: line-clamp is display:-webkit-box and
+    // cannot share an element with the flex that centres it in the taller box.
+    expect(link.querySelector(".line-clamp-2")).not.toBeNull();
+  });
+});
+
 describe("what a spare is worth", () => {
   const worth = () =>
     screen.queryAllByText(/^Sell for \d+$/).filter((el) => !el.closest(".sr-only"));
