@@ -145,7 +145,7 @@ function ShopPage() {
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Sparkles className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               Economy
             </span>
           </div>

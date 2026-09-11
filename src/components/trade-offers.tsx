@@ -258,7 +258,7 @@ function ConfirmAcceptSheet({
       <DrawerContent className="max-h-[85dvh]">
         <DrawerHeader>
           <DrawerTitle className="font-display text-base font-bold">{question}</DrawerTitle>
-          <DrawerDescription className="text-xs">
+          <DrawerDescription className="text-meta">
             Both collections change the moment you confirm. There is no undo on this one.
           </DrawerDescription>
         </DrawerHeader>

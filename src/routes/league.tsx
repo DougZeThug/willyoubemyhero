@@ -31,14 +31,14 @@ function LeaguePage() {
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Trophy className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               Combine
             </span>
           </div>
           <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">
             The League
           </h1>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-meta text-muted-foreground">
             The combine sleeps until next summer. The cards don't.
           </p>
         </div>

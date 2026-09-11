@@ -794,7 +794,7 @@ function PlayersPage() {
           className="h-9 w-9"
           style={{ color: TROPHY_RARITY.accent, filter: "drop-shadow(0 0 10px currentColor)" }}
         />
-        <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+        <div className="truncate font-display text-label font-black uppercase tracking-wide">
           {t.label}
         </div>
         <div
@@ -1106,7 +1106,7 @@ function PlayersPage() {
           No participants yet.
         </div>
       ) : rosterRows.length === 0 ? (
-        <p className="p-6 text-center text-xs text-muted-foreground">{emptyRosterLine}</p>
+        <p className="p-6 text-center text-meta text-muted-foreground">{emptyRosterLine}</p>
       ) : (
         cardGrid(rosterRows.map(rosterTile))
       )}
@@ -1230,7 +1230,7 @@ function PlayersPage() {
 
         {/* Reserved whether or not the collection has reconciled, so the shelves
             below do not step down by a line when it does. */}
-        <p className="mb-4 min-h-4 text-xs text-muted-foreground">{summary}</p>
+        <p className="mb-4 min-h-4 text-meta text-muted-foreground">{summary}</p>
 
         <VaultSortSheet
           open={sortSheetOpen}

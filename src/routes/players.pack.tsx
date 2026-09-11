@@ -1235,7 +1235,7 @@ function PackPage() {
               </p>
               {streak && streakLine(streak) && (
                 <p
-                  className="mt-1 text-xs font-bold sm:mt-2"
+                  className="mt-1 text-meta font-bold sm:mt-2"
                   style={{ color: "oklch(0.82 0.19 85)" }}
                 >
                   {streakLine(streak)}

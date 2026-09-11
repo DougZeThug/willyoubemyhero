@@ -64,7 +64,7 @@ export function VaultSortSheet({
           <DrawerTitle className="font-display text-sm font-bold uppercase tracking-wide">
             Sort &amp; filter
           </DrawerTitle>
-          <DrawerDescription className="text-xs">
+          <DrawerDescription className="text-meta">
             How the roster reads. Kept on this phone.
           </DrawerDescription>
         </DrawerHeader>

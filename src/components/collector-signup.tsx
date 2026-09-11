@@ -61,7 +61,7 @@ export function CollectorSignup({ className }: { className?: string }) {
       <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-primary">
         Pick a trading name
       </h2>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 text-meta text-muted-foreground">
         You&apos;re not in the combine, but you can still collect and trade. This is the name the
         league sees on your offers.
       </p>

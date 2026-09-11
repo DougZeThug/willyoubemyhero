@@ -117,7 +117,7 @@ function PackFace({
         )}
       >
         <Sparkles className="h-8 w-8 text-primary" />
-        <div className="font-display text-xs font-black uppercase tracking-[0.08em] text-primary/90">
+        <div className="font-display text-label font-black uppercase tracking-[0.08em] text-primary/90">
           Will YOU Be My Hero?
         </div>
         <div className="font-display text-3xl font-black uppercase leading-none">Draft Combine</div>

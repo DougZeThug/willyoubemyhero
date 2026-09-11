@@ -308,7 +308,7 @@ export function CardSocial({
         </div>
 
         {comments.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nothing yet. Someone start something.</p>
+          <p className="text-meta text-muted-foreground">Nothing yet. Someone start something.</p>
         ) : (
           <ul className="space-y-1.5">
             {comments.map((c) => {
@@ -367,7 +367,7 @@ export function CardSocial({
             <p className="text-label font-bold uppercase tracking-[0.08em] text-primary">
               What should we call you?
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-meta text-muted-foreground">
               Shown next to your reactions and comments. Stored on this device only.
             </p>
             <form

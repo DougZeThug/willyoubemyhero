@@ -77,7 +77,7 @@ function RecapPage() {
         </header>
 
         <section>
-          <h2 className="mb-2 font-display text-xs font-black uppercase tracking-[0.08em] text-primary/80">
+          <h2 className="mb-2 font-display text-label font-black uppercase tracking-[0.08em] text-primary/80">
             Final Leaderboard
           </h2>
           <ol className="space-y-1.5">
@@ -102,7 +102,7 @@ function RecapPage() {
 
         {drafts.length > 0 && (
           <section>
-            <h2 className="mb-2 font-display text-xs font-black uppercase tracking-[0.08em] text-primary/80">
+            <h2 className="mb-2 font-display text-label font-black uppercase tracking-[0.08em] text-primary/80">
               Final Draft Order
             </h2>
             <ol className="space-y-1.5">

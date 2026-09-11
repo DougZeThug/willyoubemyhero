@@ -76,12 +76,12 @@ export function CardCompare({
                       className="flex min-h-11 w-full items-center gap-2 rounded-md border border-border-strong bg-white/[0.02] px-3 text-left transition-colors hover:border-primary"
                     >
                       <span
-                        className="font-display shrink-0 text-xs font-black uppercase"
+                        className="font-display shrink-0 text-label font-black uppercase"
                         style={{ color: p.rarity.accent }}
                       >
                         {initialsOf(p.name) || "?"}
                       </span>
-                      <span className="truncate text-xs text-foreground/90">{p.name}</span>
+                      <span className="truncate text-meta text-foreground/90">{p.name}</span>
                     </button>
                   </li>
                 ))}
@@ -102,7 +102,7 @@ export function CardCompare({
                       <li key={row.id} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                         <span
                           className={cn(
-                            "text-right text-xs tabular",
+                            "text-right text-meta tabular",
                             aWins ? "font-bold" : "text-muted-foreground",
                           )}
                           style={aWins ? { color: left.rarity.accent } : undefined}
@@ -114,7 +114,7 @@ export function CardCompare({
                         </span>
                         <span
                           className={cn(
-                            "text-xs tabular",
+                            "text-meta tabular",
                             bWins ? "font-bold" : "text-muted-foreground",
                           )}
                           style={bWins ? { color: right.rarity.accent } : undefined}

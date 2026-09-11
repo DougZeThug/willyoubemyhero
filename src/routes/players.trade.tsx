@@ -621,7 +621,7 @@ function Header() {
           on a screen whose point is the offer waiting on you — the eye went to
           the word rather than to Accept. */}
       <h1 className="mt-2 font-display text-4xl font-black uppercase leading-none">Trading Post</h1>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-meta text-muted-foreground">
         Player cards: spares only, you always keep one. Secrets: anything you hold, even your last
         copy. The finish travels with the card.
       </p>
