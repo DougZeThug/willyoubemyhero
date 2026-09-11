@@ -296,11 +296,11 @@ export const getStreakHistory = createServerFn({ method: "GET" }).handler(
     // and a query whose only coverage is production is not covered.
     const { data: claims, error } = await sb
       .from("streak_milestone_claims")
-      .select("milestone, streak_started_on, claimed_on, reward_ref")
+      .select("milestone, streak_started_on, claimed_on, reward_ref, reward_tier")
       .eq(actor.kind === "member" ? "participant_id" : "guest_id", actor.id)
       .order("claimed_on", { ascending: false })
       .limit(HISTORY_LIMIT)
-      .returns<Pick<StreakClaimRow, "milestone" | "streak_started_on" | "claimed_on" | "reward_ref">[]>(); // prettier-ignore
+      .returns<Pick<StreakClaimRow, "milestone" | "streak_started_on" | "claimed_on" | "reward_ref" | "reward_tier">[]>(); // prettier-ignore
     if (error) throw error;
 
     const rows = claims ?? [];
@@ -342,8 +342,18 @@ export const getStreakHistory = createServerFn({ method: "GET" }).handler(
       const card = pull ? cardById.get(pull.secret_card_id) : undefined;
       let view: SecretCardView | null = null;
       if (pull && card) {
-        const key = viewKey(card.id, pull.tier);
-        if (!signed.has(key)) signed.set(key, await signSecretCard(card, pull.tier));
+        // The claim row's own tier first, and the pull's only as a fallback.
+        // This is a receipt — what the rung paid on the day — and a pull's tier
+        // is not one: pull_secret_card raises the owning copy in place when a
+        // later duplicate rolls better, which is the rule the VAULT wants, since
+        // the vault answers "what do I hold". Read straight it meant a mythic
+        // pulled in October rewrote what September's rung was shown to have
+        // paid, against a claim toast that had said something else. The fallback
+        // is for claims made before the column existed and is the same value
+        // those rows already rendered — no history moves the day this ships.
+        const tier = row.reward_tier ?? pull.tier;
+        const key = viewKey(card.id, tier);
+        if (!signed.has(key)) signed.set(key, await signSecretCard(card, tier));
         view = signed.get(key) ?? null;
       }
       out.push({

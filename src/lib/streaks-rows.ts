@@ -14,6 +14,16 @@ export type StreakClaimRow = {
   claimed_on: string;
   reward_kind: string;
   reward_ref: string | null;
+  /**
+   * What the rung paid, frozen at claim time.
+   *
+   * Not derivable from `reward_ref` afterwards: a pull's `tier` is raised in
+   * place by later duplicates of the same card, so the row this points at tells
+   * you the best copy you now hold rather than what came out of that wrapper.
+   * NULL on a claim made before 20260911120000 could reach it — read with a
+   * fallback, never assumed.
+   */
+  reward_tier: string | null;
   event_id: string | null;
   created_at: string;
 };
