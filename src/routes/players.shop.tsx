@@ -118,7 +118,7 @@ function ShopPage() {
   if (loading && !bundle) {
     return (
       <div className="card-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-6">
+        <div className="mx-auto max-w-3xl px-page-x py-6">
           <FeedLoading label="Reading the combine…" />
         </div>
       </div>
@@ -128,7 +128,7 @@ function ShopPage() {
   if (error && !bundle) {
     return (
       <div className="card-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-6">
+        <div className="mx-auto max-w-3xl px-page-x py-6">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
       </div>
@@ -137,7 +137,7 @@ function ShopPage() {
 
   return (
     <div className="card-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-3xl px-page-x py-6">
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
           with no signal is the exact failure the health states exist for. */}

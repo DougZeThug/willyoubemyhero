@@ -94,7 +94,7 @@ function AwardsPage() {
   if (loading && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="mx-auto max-w-3xl px-page-x py-10">
           <FeedLoading label="Reading the awards…" />
         </div>
       </div>
@@ -104,7 +104,7 @@ function AwardsPage() {
   if (error && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="mx-auto max-w-3xl px-page-x py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
       </div>
@@ -113,7 +113,7 @@ function AwardsPage() {
 
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-3xl px-page-x py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">

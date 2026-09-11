@@ -1172,7 +1172,7 @@ function PlayersPage() {
           }}
         />
       )}
-      <div className="mx-auto max-w-6xl px-4 py-6" inert={openSecretIndex !== null}>
+      <div className="mx-auto max-w-6xl px-page-x py-6" inert={openSecretIndex !== null}>
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing at all when it went down — a frozen
           screen with no signal is the exact failure the health states exist

@@ -153,7 +153,7 @@ function ClaimPage() {
   if (session) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto grid max-w-md place-items-center px-4 py-12">
+        <div className="mx-auto grid max-w-md place-items-center px-page-x py-12">
           {/* No hud-bezel. §15 keeps that treatment for the three objects meant
               to feel physical — the slab, the pack wrapper, the trophy plaque —
               and a radial gradient plus a three-layer shadow around an identity
@@ -214,7 +214,7 @@ function ClaimPage() {
 
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-lg px-4 py-8">
+      <div className="mx-auto max-w-lg px-page-x py-8">
         <div className="mb-5 border-b border-primary/20 pb-4 text-center">
           <div className="flex items-center justify-center gap-2 text-primary">
             <UserRoundCheck className="h-5 w-5" />

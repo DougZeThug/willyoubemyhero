@@ -649,7 +649,7 @@ function PlayerCardPage() {
               "radial-gradient(ellipse 65% 55% at 50% 20%, color-mix(in oklab, var(--tier) 24%, transparent) 0%, transparent 70%)",
           }}
         />
-        <div className="relative mx-auto max-w-3xl px-4 py-6">
+        <div className="relative mx-auto max-w-3xl px-page-x py-6">
           <div className="mb-2 flex items-center justify-between gap-3 sm:mb-4 sm:items-start">
             <Link
               to="/players"

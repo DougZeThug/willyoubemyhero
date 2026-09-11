@@ -27,7 +27,7 @@ export const Route = createFileRoute("/league")({
 function LeaguePage() {
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-6xl px-page-x py-6">
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Trophy className="h-5 w-5" />

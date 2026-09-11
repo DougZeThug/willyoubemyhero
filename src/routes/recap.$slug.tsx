@@ -65,7 +65,7 @@ function RecapPage() {
   const drafts = [...snap.drafts].sort((a, b) => a.draft_position - b.draft_position);
 
   return (
-    <div className="circuit-bg min-h-[var(--page-min-h)] px-4 py-6">
+    <div className="circuit-bg min-h-[var(--page-min-h)] px-page-x py-6">
       <div className="mx-auto max-w-3xl space-y-6">
         <header>
           <div className="font-display text-label font-black uppercase tracking-[0.08em] text-primary">
