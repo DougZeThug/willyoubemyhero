@@ -94,7 +94,7 @@ function AwardsPage() {
   if (loading && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="mx-auto max-w-3xl px-page-x py-10">
           <FeedLoading label="Reading the awards…" />
         </div>
       </div>
@@ -104,7 +104,7 @@ function AwardsPage() {
   if (error && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="mx-auto max-w-3xl px-page-x py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
       </div>
@@ -113,19 +113,19 @@ function AwardsPage() {
 
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-3xl px-page-x py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Award className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               Superlatives
             </span>
           </div>
           <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">
             League Awards
           </h1>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-meta text-muted-foreground">
             {locked
               ? "Voting is closed. Here's how it landed."
               : "One vote per category. You can change your mind until the commissioner closes voting — nobody sees the tally before then."}
@@ -159,7 +159,7 @@ function AwardsPage() {
                   </h2>
                   {locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                 </div>
-                <p className="mb-3 text-xs text-muted-foreground">{cat.blurb}</p>
+                <p className="mb-3 text-meta text-muted-foreground">{cat.blurb}</p>
 
                 {locked ? (
                   winners.length ? (
@@ -187,7 +187,7 @@ function AwardsPage() {
                     // The AWARDS query, not the event bundle. Reading the
                     // bundle's failure list here meant a failed splits or
                     // penalties read claimed the votes were unreadable.
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-meta text-muted-foreground">
                       {awards.isError
                         ? "Couldn't read the votes just now — retrying."
                         : "No votes cast."}
@@ -221,7 +221,7 @@ function AwardsPage() {
                           />
                           <span
                             className={cn(
-                              "min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide",
+                              "min-w-0 flex-1 truncate text-label font-semibold uppercase tracking-wide",
                               chosen ? "text-primary" : "text-foreground",
                             )}
                           >

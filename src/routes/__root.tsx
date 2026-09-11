@@ -25,7 +25,7 @@ import { hydrateCardSfxMuted, hydrateHapticsOff } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
   return (
-    <div className="card-bg flex min-h-dvh items-center justify-center px-4">
+    <div className="card-bg flex min-h-dvh items-center justify-center px-page-x">
       <div className="surface-panel w-full max-w-md rounded-xl border p-6 text-center">
         <h1 className="font-display text-7xl font-black leading-none text-primary/70">404</h1>
         <h2 className="mt-4 font-display text-section font-black uppercase tracking-wide">
@@ -52,7 +52,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="card-bg flex min-h-dvh items-center justify-center px-4">
+    <div className="card-bg flex min-h-dvh items-center justify-center px-page-x">
       <div className="surface-panel w-full max-w-md rounded-xl border p-6 text-center">
         <h1 className="font-display text-section font-black uppercase tracking-wide">
           This page didn&apos;t load

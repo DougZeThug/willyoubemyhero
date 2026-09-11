@@ -484,7 +484,7 @@ export function PackSummary({
       </div>
 
       {/* Polite, so it does not interrupt the reveal it sits under. */}
-      <p role="status" aria-live="polite" className="mt-2 text-center text-xs text-warn">
+      <p role="status" aria-live="polite" className="mt-2 text-center text-meta text-warn">
         {shareFailed ? "Couldn't build that image — try again in a moment." : ""}
       </p>
 

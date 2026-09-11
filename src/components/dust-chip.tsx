@@ -34,7 +34,7 @@ export function DustChip({
   const body = (
     <>
       <Sparkles className="h-3.5 w-3.5" aria-hidden />
-      <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">{label}</span>
+      <span className="font-display text-label font-bold uppercase tracking-[0.08em]">{label}</span>
     </>
   );
   const base =

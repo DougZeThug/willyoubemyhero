@@ -110,7 +110,7 @@ function YouPage() {
 
   return (
     <div className="card-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-3xl px-page-x py-6">
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <UserRound className="h-5 w-5" />

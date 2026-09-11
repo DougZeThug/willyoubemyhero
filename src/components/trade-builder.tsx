@@ -668,7 +668,7 @@ function SparePickerDrawer({
             {title}
           </DrawerTitle>
           {/* The cap where the choosing happens, not only on the tray behind. */}
-          <DrawerDescription className="text-xs">
+          <DrawerDescription className="text-meta">
             {staged.length} / {MAX_PER_SIDE} chosen
           </DrawerDescription>
         </DrawerHeader>

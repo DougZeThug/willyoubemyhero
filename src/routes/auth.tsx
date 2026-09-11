@@ -143,7 +143,7 @@ function AuthPage() {
 
   if (user) {
     return (
-      <div className="mx-auto max-w-md px-4 py-10">
+      <div className="mx-auto max-w-md px-page-x py-10">
         <Card className="border-primary/20 bg-card/70">
           <CardContent className="space-y-4 p-6 text-center">
             {sync.status === "ready" ? (
@@ -196,7 +196,7 @@ function AuthPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-10">
+    <div className="mx-auto max-w-md px-page-x py-10">
       <header className="mb-6 text-center">
         <h1 className="font-display text-2xl font-black uppercase tracking-[0.08em] text-foreground">
           {mode === "signup" ? "Create an account" : "Sign in"}
@@ -289,7 +289,7 @@ function AuthPage() {
             type="button"
             className={cn(
               "flex min-h-11 w-full items-center justify-center text-center",
-              "text-xs font-semibold uppercase tracking-[0.08em]",
+              "text-label font-semibold uppercase tracking-[0.08em]",
               "text-muted-foreground transition-colors hover:text-primary",
             )}
             onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
@@ -301,7 +301,7 @@ function AuthPage() {
 
       {/* The signed-out screen had no route to /claim at all, so somebody
           holding a paper code — who needs no account — was left creating one. */}
-      <p className="mt-4 text-center text-xs text-muted-foreground">
+      <p className="mt-4 text-center text-meta text-muted-foreground">
         Got a player code from the commissioner?{" "}
         <Link
           to="/claim"
@@ -311,7 +311,7 @@ function AuthPage() {
         </Link>{" "}
         instead — no account needed.
       </p>
-      <p className="mt-2 text-center text-xs text-muted-foreground">
+      <p className="mt-2 text-center text-meta text-muted-foreground">
         An account is optional — you can keep playing as a guest on this phone.
       </p>
     </div>

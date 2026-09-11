@@ -440,7 +440,7 @@ function TradePage() {
   if (!me) {
     return (
       <div className="card-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-6">
+        <div className="mx-auto max-w-3xl px-page-x py-6">
           <Header />
           {/* Signed in but nobody yet: they are not on the roster, so a paper
               code will never arrive. Name themselves and they can trade. */}
@@ -506,7 +506,7 @@ function TradePage() {
         />
       )}
 
-      <div className="mx-auto max-w-3xl px-4 pb-32 pt-6">
+      <div className="mx-auto max-w-3xl px-page-x pb-32 pt-6">
         <Header />
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
@@ -558,7 +558,7 @@ function TradePage() {
           `z-20` keeps it under the nav's z-30: a CTA that paints over a tab is
           worse than one that scrolls under it. */}
       {!builderOpen && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 pb-[calc(var(--tab-bar-h)+0.5rem)] md:pb-4">
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-page-x pb-[calc(var(--tab-bar-h)+0.5rem)] md:pb-4">
           <div className="pointer-events-auto mx-auto max-w-3xl">
             <button type="button" onClick={openBuilder} className="neon-btn-lg w-full">
               <ArrowLeftRight className="h-4 w-4" />
@@ -621,7 +621,7 @@ function Header() {
           on a screen whose point is the offer waiting on you — the eye went to
           the word rather than to Accept. */}
       <h1 className="mt-2 font-display text-4xl font-black uppercase leading-none">Trading Post</h1>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-meta text-muted-foreground">
         Player cards: spares only, you always keep one. Secrets: anything you hold, even your last
         copy. The finish travels with the card.
       </p>

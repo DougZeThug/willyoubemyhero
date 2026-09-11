@@ -97,7 +97,7 @@ function LeaderboardPage() {
   if (loading && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-4xl px-4 py-10">
+        <div className="mx-auto max-w-4xl px-page-x py-10">
           <FeedLoading label="Reading the standings…" />
         </div>
       </div>
@@ -107,7 +107,7 @@ function LeaderboardPage() {
   if (error && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-4xl px-4 py-10">
+        <div className="mx-auto max-w-4xl px-page-x py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
       </div>
@@ -116,7 +116,7 @@ function LeaderboardPage() {
 
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-4xl px-4 py-6">
+      <div className="mx-auto max-w-4xl px-page-x py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <PageHeader
           eyebrow="Standings"
@@ -126,7 +126,7 @@ function LeaderboardPage() {
             rows.length > 0 ? (
               <span className="timer-digits tabular text-primary text-lg">
                 {rows.length}{" "}
-                <span className="text-muted-foreground text-xs font-bold uppercase tracking-widest">
+                <span className="text-muted-foreground text-label font-bold uppercase tracking-widest">
                   finished
                 </span>
               </span>
@@ -204,7 +204,7 @@ function LeaderboardPage() {
                             —
                           </div>
                         )}
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="truncate text-meta text-muted-foreground">
                           {row.ep?.participant?.fantasy_team_name ??
                             row.ep?.participant?.nickname ??
                             "—"}
@@ -280,7 +280,7 @@ function PageHeader({
         <div>
           <div className="flex items-center gap-2 text-primary">
             {icon}
-            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               {eyebrow}
             </span>
           </div>

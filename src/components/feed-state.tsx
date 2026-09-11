@@ -43,7 +43,7 @@ export function FeedError({
           <p className="font-display text-sm font-black uppercase tracking-widest text-warn">
             Can&apos;t reach the combine
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-meta text-muted-foreground">
             {message ?? "The connection dropped. Nothing is lost — this screen is read-only."}
           </p>
         </div>
