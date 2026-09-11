@@ -119,12 +119,16 @@
   --text-button: 0.9375rem;
   --text-button--line-height: 1.25rem;
 
-  /* Spacing scale (§17). 4pt base, 8pt rhythm. */
+  /* Spacing scale (§17). 4pt base, 8pt rhythm.
+     Three, not the five §17 proposed. --spacing-stack-gap and
+     --spacing-control-gap were both 0.5rem, both spelled `gap-2`, and §17's
+     distinction between them — lines inside a block versus chips beside each
+     other — compiles to the same declaration and survives into no artefact a
+     reviewer or a test could read. Two names for one value can only be told
+     apart by whoever typed them, which makes the second one a comment. */
   --spacing-page-x: 1rem;
   --spacing-section-gap: 1.5rem;
-  --spacing-stack-gap: 0.5rem;
   --spacing-grid-gap: 0.75rem;
-  --spacing-control-gap: 0.5rem;
 }
 
 :root {
