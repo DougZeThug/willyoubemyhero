@@ -647,6 +647,10 @@ test.describe("the vault's Today card", () => {
   test("counts down to the next one once today's is spent", async ({ page, server }) => {
     // A day that resets far enough ahead that the countdown is stable however
     // long the run takes.
+    // asMember is required so that usePackStatus is enabled (gated on actor) and
+    // the stubbed resetsAt is actually used; without it the countdown falls back
+    // to nextLocalMidnight which can be under an hour on CI and the regex fails.
+    await asMember(page);
     server.set("getPackStatus", {
       claimed: true,
       day: LEAGUE_DAY,
