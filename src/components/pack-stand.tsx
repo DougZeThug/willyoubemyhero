@@ -652,7 +652,7 @@ export function PackStand({
               e2e suite both read to know what the card wants — but dimmed to the
               edge of legibility once there is a card to look at instead. */}
           <p className="mt-1 h-5 text-meta leading-snug text-muted-foreground/70">
-            {peeking || tapRefused
+            {peeking
               ? ""
               : onSecret
                 ? isRevealed
@@ -660,7 +660,12 @@ export function PackStand({
                   : "Not on the roster. Yours for good."
                 : isRevealed
                   ? "Swipe for the next card · tap for the back"
-                  : "Tap the card to turn it"}
+                  : // Only the invitation goes quiet when the tap would be
+                    // refused. The secret's line above is a statement about the
+                    // card, not an offer, so it has nothing to take back.
+                    tapRefused
+                    ? ""
+                    : "Tap the card to turn it"}
           </p>
           {peeking && (
             <p
@@ -707,6 +712,13 @@ export function PackStand({
             {current && (
               <motion.div
                 key={shownKey}
+                // A fact about the card on the stand, for the suite that has to
+                // catch the ~300ms beat where it sits face-down before it turns.
+                // That used to be read off the "tap the card to turn it" helper
+                // line, which stopped being a reliable tell the moment the line
+                // started telling the truth: it is blank whenever the tap would
+                // be refused, and during "Reveal all" every card's would be.
+                data-face-down={isRevealed ? undefined : "true"}
                 // While the deck is landing the entrance owns every pixel of motion
                 // and the card underneath simply waits. `false` rather than a
                 // zeroed initial, so nothing here animates at all and there is no

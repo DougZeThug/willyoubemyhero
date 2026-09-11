@@ -572,16 +572,17 @@ test.describe("opening a pack", () => {
 
     // A MutationObserver sees every intermediate render, which is what makes
     // this deterministic — the face-down beat is only ~300ms and polling would
-    // race it. The stand's helper line is the tell: it reads "tap the card to
-    // turn it" only while the card on it has not been turned.
+    // race it. `data-face-down` on the stand's card is the tell. It used to be
+    // the "tap the card to turn it" helper line, which is prose and stopped
+    // saying that the moment the line started telling the truth: it is blank
+    // whenever the tap would be refused, and under "Reveal all" it always is.
     await page.evaluate(() => {
       const seen = new Set<string>();
       (window as unknown as { __faceDown: Set<string> }).__faceDown = seen;
       const sample = () => {
         const step = document.querySelector('[data-testid="stand-step"]')?.textContent ?? "";
         const at = step.match(/(\d)\s*\/\s*3/);
-        const text = document.body.textContent ?? "";
-        if (at && /tap the card to turn it/i.test(text)) seen.add(at[1]);
+        if (at && document.querySelector('[data-face-down="true"]')) seen.add(at[1]);
       };
       sample();
       new MutationObserver(sample).observe(document.body, {
