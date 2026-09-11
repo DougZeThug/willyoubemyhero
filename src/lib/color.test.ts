@@ -190,8 +190,14 @@ describe("the interactive border token", () => {
   it("keeps the quiet button's hover edge brighter than its resting one", () => {
     // The trap in raising a rest state: this hover was 25% white, chosen to sit
     // above a 15% rest. Against 35% it would have read as a dimmer edge under
-    // the thumb — and Tailwind's hover: variants are not gated by the
-    // (hover: hover) media query the way styles.css's own rules are.
+    // whatever was touched last.
+    //
+    // This comment used to finish "and Tailwind's hover: variants are not gated
+    // by the (hover: hover) media query the way styles.css's own rules are",
+    // which is false: v4 compiles every hover: utility inside that query, so a
+    // thumb never reached one. It does now — styles.css's `@custom-variant hover`
+    // promotes them to :active where there is no hover — which is what finally
+    // makes the inversion this test guards against something a phone can show.
     const hover = /\.neon-btn-quiet:hover\s*\{[^}]*border-color:\s*(oklch\([^)]*\));/.exec(
       css,
     )?.[1];

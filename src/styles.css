@@ -5,6 +5,40 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
+ * Every `hover:` utility in the app, promoted to the press on a pointer that
+ * cannot hover.
+ *
+ * Tailwind v4 compiles `hover:` inside `@media (hover: hover)`, so on a phone a
+ * hover utility does not latch — it never fires at all, and roughly a hundred
+ * controls say nothing between touch-down and the screen changing. Redefining
+ * the variant once here is what the `@media (hover: hover) and (pointer: fine)`
+ * gate below does for the neon family, minus
+ * the hundred hand-edits: same treatment, same control, arriving on `:active`
+ * where there is no hover to arrive on.
+ *
+ * The two branches are exactly complementary, which is the point. A hybrid that
+ * reports `hover: hover` with a touchscreen keeps working hover and still cannot
+ * latch, and no control ever gets both rules at once.
+ *
+ * `order` survives a redefinition upstream, so `hover` stays ahead of `active`
+ * in the cascade and an explicit `active:` utility still outranks the promoted
+ * one — which is what keeps players.index.tsx's pressed tile shrinking to 0.99
+ * rather than growing to the 1.02 its hover asks for.
+ */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+  @media (hover: none) {
+    &:active {
+      @slot;
+    }
+  }
+}
+
+/*
  * Will YOU Be My Hero? Draft Combine — dark sports-broadcast design system.
  * Broadcast-grade black ground, electric cyan/teal HUD accents, warning amber/red.
  * Bold condensed display font for scoreboard numerals.
@@ -577,6 +611,26 @@
   .neon-btn-lg,
   .neon-btn-quiet {
     transition: none;
+  }
+}
+
+/*
+ * The one treatment the promotion cannot carry on its own. Fifteen links wear
+ * `hover:underline` and nothing else, and a thumb lands on top of the underline
+ * it just drew — the press is real and invisible under the finger that made it.
+ * A brightness step reads at the edges of the contact patch instead.
+ *
+ * The selector is Tailwind's own generated class because the alternative is
+ * fifteen hand-edits, which is the thing this whole change exists not to do.
+ * `filter` rather than a colour, because those fifteen rest at four different
+ * colours (primary, primary/80, inherited, foreground) and a brightness step is
+ * the only one of them that can never come out a no-op.
+ */
+@layer utilities {
+  @media (hover: none) {
+    .hover\:underline:active {
+      filter: brightness(1.25);
+    }
   }
 }
 
@@ -1375,13 +1429,29 @@
 .tier-chip {
   border-color: var(--border-strong);
   color: var(--color-muted-foreground);
-  &:hover:not(:disabled) {
-    /* 75%, not the 50% this was against a 10% rest: dnf's accent is deliberately
-       the dullest thing in the palette, and at 50% it composites *below* the
-       35% white the chip now rests at — a hover that reads as the control going
-       away. At 75% every tier stays above it, dnf at 3.53:1. */
+  /* Gated for the same reason the neon family is, and this is the rule that made
+     the reason concrete: ungated, it latched on the last chip tapped, and a
+     latched chip wears the tier colour on its edge and its text — which is
+     `.is-active` below, give or take a fill. The one control in the app whose
+     stuck hover claimed to be the selected filter. */
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      /* 75%, not the 50% this was against a 10% rest: dnf's accent is deliberately
+         the dullest thing in the palette, and at 50% it composites *below* the
+         35% white the chip now rests at — a hover that reads as the control going
+         away. At 75% every tier stays above it, dnf at 3.53:1. */
+      border-color: color-mix(in oklab, var(--tier, var(--color-primary)) 75%, transparent);
+      color: var(--tier, var(--color-primary));
+    }
+  }
+  /* What a thumb gets instead: the hover's own edge, plus the neon family's press
+     language from `.neon-btn:active`. The 1px is what keeps a press legible on a
+     chip that is
+     already selected, where the colour has nowhere left to go. */
+  &:active:not(:disabled) {
     border-color: color-mix(in oklab, var(--tier, var(--color-primary)) 75%, transparent);
     color: var(--tier, var(--color-primary));
+    transform: translateY(1px);
   }
   &.is-active {
     border-color: var(--tier, var(--color-primary));
