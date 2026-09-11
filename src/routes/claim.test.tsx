@@ -54,7 +54,7 @@ const COLLECTOR = { ...ATHLETE, id: "p-jane", name: "Jane", isCollector: true };
 
 /** The shape `useQuery` hands back, with only the parts the page reads. */
 type RosterState = {
-  data: (typeof ATHLETE)[];
+  data: (typeof ATHLETE)[] | undefined;
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
@@ -88,7 +88,9 @@ describe("the name picker", () => {
   it("says the read failed, rather than drawing a league with nobody in it", async () => {
     const refetch = vi.fn();
     useQuery.mockReturnValue(
-      rosterState({ isError: true, error: new Error("Failed to fetch"), refetch }),
+      // `data: undefined` is a read that never landed — nothing cached to fall
+      // back on, which is the state a first visit fails into.
+      rosterState({ data: undefined, isError: true, error: new Error("Failed to fetch"), refetch }),
     );
     render(<ClaimPage />);
 
@@ -96,6 +98,18 @@ describe("the name picker", () => {
     expect(screen.getByText("Failed to fetch")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /try again/i }));
     expect(refetch).toHaveBeenCalled();
+  });
+
+  it("keeps the names it has when a refetch fails, rather than dropping the picker", () => {
+    // The shape every spectator screen uses — `error && !bundle`. A roster this
+    // short does not go stale in a way that stops a code working, so a wobble on
+    // a background refetch must not take a usable picker off the screen.
+    useQuery.mockReturnValue(
+      rosterState({ data: [ATHLETE], isError: true, error: new Error("Failed to fetch") }),
+    );
+    render(<ClaimPage />);
+    expect(screen.getByRole("button", { name: "Doug" })).toBeInTheDocument();
+    expect(screen.queryByText(/can't reach the combine/i)).not.toBeInTheDocument();
   });
 
   it("keeps the empty roster distinguishable from the failed one", () => {

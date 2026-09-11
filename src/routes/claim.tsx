@@ -248,7 +248,7 @@ function ClaimPage() {
             </Label>
             {roster.isLoading ? (
               <p className="text-meta text-muted-foreground">Loading roster…</p>
-            ) : roster.isError ? (
+            ) : roster.isError && !roster.data ? (
               // The list IS the picker on this screen, which is what makes a
               // failed read worth its own branch here and not on the two other
               // screens that share this query — there the roster is a fallback
@@ -257,6 +257,13 @@ function ClaimPage() {
               // as a league with nobody on it rather than a list that never
               // arrived. On the connection this app is used on that is the
               // common case, and it is the one with something to do about it.
+              //
+              // `&& !roster.data` is the same shape every spectator screen uses
+              // (`error && !bundle`), and it earns its keep here rather than
+              // being copied: a refetch that fails leaves the names it already
+              // has, and a roster twelve people long does not go stale in a way
+              // that stops a code working. Dropping a usable picker to say the
+              // network wobbled would be this fix causing the bug it is for.
               <FeedError message={roster.error?.message} onRetry={() => void roster.refetch()} />
             ) : pickable.length === 0 ? (
               // Said out loud for the same reason: the branch above only helps
