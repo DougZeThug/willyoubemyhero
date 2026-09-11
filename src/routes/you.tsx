@@ -16,6 +16,7 @@ import { useMyCollection } from "@/hooks/use-my-collection";
 import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
 import { useStreakStatus } from "@/hooks/use-streak";
+import { useAccountSyncState } from "@/lib/account-sync-state";
 import { packsOpenedLabel } from "@/lib/card-pulls";
 import { useCardSfx, useHaptics } from "@/lib/card-sfx";
 import { trophiesFor } from "@/lib/collection-trophies";
@@ -94,7 +95,17 @@ function YouPage() {
 
   const myTrophies = trophiesFor(allTrophies.data?.trophies ?? [], member?.participantId ?? null);
   const ownedSecrets = secrets.data?.cards ?? [];
-  const summary = mine.ready
+  // The vault's second gate, which this screen was written without. A phone that
+  // has just signed in has no member token yet, so `useMyCollection` settles off
+  // the local store alone — and that store is per-device, not per-person. On a
+  // handset the league passes around, the number under it is the LAST person's
+  // roster count, stated as this one's for as long as the link takes. One flag
+  // the way the vault folds it, so the line below and the counters under it can
+  // never disagree about whether the answer is known — "Counting your cards…"
+  // over "No packs opened yet." is the section contradicting itself.
+  const sync = useAccountSyncState();
+  const ready = mine.ready && sync.status !== "syncing";
+  const summary = ready
     ? vaultSummaryLine({
         rosterHeld: mine.collectedCount,
         rosterSize: rosterIds.length,
@@ -107,6 +118,14 @@ function YouPage() {
     : null;
   const packs = packsOpenedLabel(mine.packsOpened);
   const spares = mine.dupes;
+  // Off the stats query rather than the local store, so these two never carried
+  // the previous person's cards — but "No packs opened yet." is still an answer,
+  // and giving it while the account is mid-link is the same mistake in the
+  // quieter direction.
+  const counters =
+    [packs, spares > 0 ? `${spares} spare${spares === 1 ? "" : "s"} to trade` : null]
+      .filter(Boolean)
+      .join(" · ") || "No packs opened yet.";
 
   return (
     <div className="card-bg min-h-[var(--page-min-h)]">
@@ -168,11 +187,7 @@ function YouPage() {
             {/* The two counters PR 5 took off the vault's header. They belong to
                 somebody looking themselves up, not to the screen whose job is
                 "what should I do right now". */}
-            <p className="mt-1 text-meta text-muted-foreground">
-              {[packs, spares > 0 ? `${spares} spare${spares === 1 ? "" : "s"} to trade` : null]
-                .filter(Boolean)
-                .join(" · ") || "No packs opened yet."}
-            </p>
+            {ready && <p className="mt-1 text-meta text-muted-foreground">{counters}</p>}
           </section>
 
           {dustOn && (
