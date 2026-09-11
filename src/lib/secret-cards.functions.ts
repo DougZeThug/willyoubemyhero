@@ -230,7 +230,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
   const sb = await admin();
   const db = await secrets();
 
-  const [{ data: rows }, { data: pulls }, { count: claimedCount }] = await Promise.all([
+  const [{ data: rows }, { data: pulls }, { data: claimedRows }] = await Promise.all([
     db
       .from("secret_cards")
       .select("*")
@@ -243,27 +243,41 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
       .returns<Pick<SecretPullRow, "secret_card_id" | "participant_id">[]>(),
     // Claimed, not issued. Counting every code printed would include people who
     // never used one, and `exhausted` below is measured against this number.
+    //
+    // The ids rather than a `head: true` count, because `exhausted` needs both
+    // ends of its comparison drawn from the SAME population, and a bare number
+    // cannot say who is in it. See `memberOwners` below.
     sb
       .from("member_codes")
-      .select("participant_id", { count: "exact", head: true })
-      .not("claimed_at", "is", null),
+      .select("participant_id")
+      .not("claimed_at", "is", null)
+      .returns<{ participant_id: string }[]>(),
   ]);
+
+  const claimedIds = new Set((claimedRows ?? []).map((r) => r.participant_id));
 
   // Two counts, because they answer different questions. `owners` is how many
   // people hold a card — guests included, matching the number everyone else sees.
   // `memberOwners` is the one `exhausted` is measured with, because it is
   // compared against the claimed-member count: guests would push it over the line
   // while members still had cards to find, and the panel would go quiet early.
+  //
+  // Counted over the claimed roster rather than over anyone with an identity,
+  // for the same reason and one the guest rule alone does not cover. Re-issuing
+  // codes nulls `member_codes.claimed_at` and leaves the participant's pulls
+  // standing, so between a rotation and everybody re-claiming their slip, a
+  // rotated player's historical pulls were clearing the bar for members who are
+  // genuinely still looking — and the panel went quiet on a drop that had not.
   const owners = new Map<string, number>();
   const memberOwners = new Map<string, number>();
   for (const p of pulls ?? []) {
     owners.set(p.secret_card_id, (owners.get(p.secret_card_id) ?? 0) + 1);
-    if (p.participant_id) {
+    if (p.participant_id && claimedIds.has(p.participant_id)) {
       memberOwners.set(p.secret_card_id, (memberOwners.get(p.secret_card_id) ?? 0) + 1);
     }
   }
 
-  const claimed = claimedCount ?? 0;
+  const claimed = claimedIds.size;
   const cards = await Promise.all(
     (rows ?? []).map(async (row) => ({
       id: row.id,
