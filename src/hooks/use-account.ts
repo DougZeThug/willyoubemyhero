@@ -14,6 +14,7 @@ import { carryPackToIdentity } from "@/lib/card-collection";
 import { carryTrophySeen } from "@/lib/trophy-seen";
 import { deviceId } from "@/lib/device-id";
 import { clearAccountHandoff } from "@/lib/account-handoff";
+import { stashAuthNext } from "@/lib/auth-next";
 import { setAccountSyncState } from "@/lib/account-sync-state";
 
 /** The Supabase user this browser is signed in as, or null. */
@@ -265,4 +266,8 @@ export async function signOutAccount() {
   await supabase.auth.signOut();
   clearMemberToken();
   clearAdminToken();
+  // A destination held for an auth round trip that never finished. Handsets
+  // change hands in this league, so it must not be waiting for whoever signs in
+  // next on this phone.
+  stashAuthNext(null);
 }

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LoaderCircle, LogIn, LogOut, ShieldCheck, UserRoundPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { preserveAccountHandoff } from "@/lib/account-handoff";
+import { sanitizeNext, stashAuthNext, takeAuthNext } from "@/lib/auth-next";
 import { useAccountSyncState } from "@/lib/account-sync-state";
 
 export const Route = createFileRoute("/auth")({
@@ -21,12 +22,9 @@ export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>): { mode?: "signup"; next?: string } => ({
     mode: search["mode"] === "signup" ? ("signup" as const) : undefined,
     // Same-origin paths only — a protocol-relative "//evil.com" is not a path.
-    next:
-      typeof search["next"] === "string" &&
-      search["next"].startsWith("/") &&
-      !search["next"].startsWith("//")
-        ? search["next"]
-        : undefined,
+    // The rule lives in auth-next.ts because the stash that carries this across
+    // an OAuth round trip has to apply exactly the same one on the way back.
+    next: sanitizeNext(search["next"]),
   }),
   head: () => ({
     meta: [
@@ -85,15 +83,45 @@ function AuthPage() {
     if (!loading && !user) setWasSignedOut(true);
   }, [loading, user]);
 
+  /**
+   * The `next` a round trip left behind, claimed back on the way in.
+   *
+   * Google and the email confirmation link both return here as a fresh load with
+   * a bare URL, so `next` above is empty on exactly the two paths that asked for
+   * one. Read in an effect rather than in a `useState` initialiser because the
+   * banners below render off this: taking it during the first render would hand
+   * the client a different answer to the one the server rendered.
+   *
+   * Guarded by a ref because the read consumes the stash, and an effect that
+   * runs twice on one mount — which is what StrictMode does — would otherwise
+   * find nothing the second time and blank what it had just claimed.
+   */
+  const [stashedNext, setStashedNext] = useState<string | undefined>(undefined);
+  const claimedStash = useRef(false);
+  useEffect(() => {
+    if (claimedStash.current) return;
+    claimedStash.current = true;
+    // A `next` on the URL is the live one and wins; leaving the stash alone here
+    // is deliberate, so opening /auth in a second tab mid-round-trip does not
+    // pick the first tab's destination out from under it.
+    if (next) return;
+    setStashedNext(takeAuthNext());
+  }, [next]);
+  const goTo = next ?? stashedNext;
+
   useEffect(() => {
     if (!user || sync.status !== "ready" || sync.userId !== user.id) return;
-    if (!next && !wasSignedOut) return;
-    void navigate({ to: next ?? "/players" });
-  }, [user, sync, navigate, next, wasSignedOut]);
+    if (!goTo && !wasSignedOut) return;
+    void navigate({ to: goTo ?? "/players" });
+  }, [user, sync, navigate, goTo, wasSignedOut]);
 
   async function signInWithGoogle() {
     setBusy(true);
     preserveAccountHandoff();
+    // The return URL is bare `/auth` and has to stay that way — it is matched
+    // against a redirect allow-list, not composed per destination — so where
+    // this person was headed waits on the device instead.
+    stashAuthNext(goTo);
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: `${window.location.origin}/auth`,
     });
@@ -112,6 +140,10 @@ function AuthPage() {
     try {
       if (mode === "signup") {
         preserveAccountHandoff();
+        // Same as Google, and for the same reason: with confirmation on, the
+        // link in the email is the next thing that loads this page, and it
+        // arrives with nothing on the URL.
+        stashAuthNext(goTo);
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -201,7 +233,7 @@ function AuthPage() {
         <h1 className="font-display text-2xl font-black uppercase tracking-[0.08em] text-foreground">
           {mode === "signup" ? "Create an account" : "Sign in"}
         </h1>
-        {next === "/players/trade" && (
+        {goTo === "/players/trade" && (
           <p className="mt-2 text-sm font-bold text-primary">
             Trading needs an account — it's how the other player knows who they're swapping with.
           </p>
@@ -210,7 +242,7 @@ function AuthPage() {
             the pack summary (§11) — and somebody who arrived here from a "Sign
             in to claim" needs the reason on the page they landed on, whichever
             of the two sent them. */}
-        {(next === "/players/pack" || next === "/players") && (
+        {(goTo === "/players/pack" || goTo === "/players") && (
           <p className="mt-2 text-sm font-bold text-primary">
             Your streak reward is waiting — an account is what keeps the card once you take it.
           </p>
@@ -317,3 +349,7 @@ function AuthPage() {
     </div>
   );
 }
+
+// Same as the other tested pages in this folder: the test imports the component
+// as the module's default, and a route file otherwise exports only `Route`.
+export default AuthPage;
