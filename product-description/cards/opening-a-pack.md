@@ -131,8 +131,8 @@ the revealed list yet.
 A card worth waiting for holds face-down on a glowing edge for a beat before it
 turns — every secret, and any roster card that is new to you or better than
 yours. A plain duplicate turns straight over. For the whole of the hold the card
-is still tappable, which used to be enough to run the entire sequence twice over
-one card.
+is not tappable — tapping it used to be enough to run the entire sequence twice
+over one card.
 
 Nothing else on the screen is disabled. The Skip control is still there, and the
 nav bars are faded and inert because a ceremony has the device.
@@ -157,9 +157,9 @@ decorative: it is what forces the cursor move and the reveal into separate
 renders. Batched together, the stand mounts the card already face-up and there is
 no flip to see.
 
-**The hold answers taps, and that used to be a bug.** For the whole of it the
-card is still face-down and still tappable, so a second tap started an entire
-second ceremony over the same card: two holds, two chimes, two confetti bursts,
+**The hold refuses taps, and answering them used to be a bug.** For the whole
+of it the card is still face-down but not tappable. A second tap started an
+entire second ceremony over the same card: two holds, two chimes, two confetti bursts,
 two writes into the collection. It is latched now, and the latch is read
 synchronously rather than from state, because neither a second tap in the same
 tick nor a tap during the hold is visible in the revealed list yet.
