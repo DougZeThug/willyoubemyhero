@@ -347,22 +347,6 @@ function playCardFace() {
 }
 
 /**
- * The pack turning out not to be over.
- *
- * Detuned on purpose — two sines a semitone and a bit apart, which beat against
- * each other rather than making a chord. Every other tone in this file is
- * consonant; this is the one that is meant to sound wrong, because it is the
- * moment the screen stops telling the truth.
- */
-function playFakeEnding() {
-  thud(110, 55, 0.5, 0.085);
-  thud(116.5, 58, 0.5, 0.06);
-  // Two pulses rather than one. A single buzz reads as a notification; a pair
-  // reads as something knocking.
-  buzz([18, 90, 26]);
-}
-
-/**
  * The secret landing. The loudest thing the app does, and deliberately so.
  *
  * Roughly twice the gain of anything else here, over a longer fall, with a noise
@@ -630,8 +614,6 @@ const CUES = {
   cardLand: playCardLand,
   /** A card's face hitting front-on. */
   cardFace: playCardFace,
-  /** The pack turning out not to be over. */
-  fakeEnding: playFakeEnding,
   /** The secret landing. */
   secretImpact: playSecretImpact,
   /** A set closing: the last card seating into it. */
