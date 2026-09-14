@@ -121,16 +121,29 @@ function AuthPage() {
     // The return URL is bare `/auth` and has to stay that way — it is matched
     // against a redirect allow-list, not composed per destination — so where
     // this person was headed waits on the device instead.
+    //
+    // Written BEFORE the call, because the browser may leave during it and
+    // there is no "after" on that path. Which makes the rule for the ones that
+    // come back: the stash is earned by actually leaving, and every path that
+    // returns to this still-mounted page has to put it down again. `goTo` is
+    // already in state, so clearing costs this page nothing — and a stash that
+    // outlived its trip is one that fires on the next bare /auth and bounces
+    // somebody straight off their own account screen.
     stashAuthNext(goTo);
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: `${window.location.origin}/auth`,
     });
     if (result.error) {
+      stashAuthNext(null);
       setBusy(false);
       toast.error("Google sign-in didn't work", { description: result.error.message });
       return;
     }
+    // Gone. The stash is the only thing that carries the destination back.
     if (result.redirected) return;
+    // Signed in without leaving — the provider handed back tokens and they were
+    // set here. Nothing will ever come back to consume this.
+    stashAuthNext(null);
     setBusy(false);
   }
 
@@ -140,9 +153,10 @@ function AuthPage() {
     try {
       if (mode === "signup") {
         preserveAccountHandoff();
-        // Same as Google, and for the same reason: with confirmation on, the
+        // Same as Google, and under the same rule: with confirmation on, the
         // link in the email is the next thing that loads this page, and it
-        // arrives with nothing on the URL.
+        // arrives with nothing on the URL. Put down again below on every path
+        // where no such link is coming.
         stashAuthNext(goTo);
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -151,12 +165,16 @@ function AuthPage() {
         });
         if (error) throw error;
         // With email confirmation on, signUp returns no session — the account is
-        // not signed in until the link is clicked.
+        // not signed in until the link is clicked. That click is the round trip,
+        // so the stash stays.
         if (!data.session) {
           setSentTo(email);
           toast.success("Check your email to confirm your account");
           return;
         }
+        // Confirmation is off: signed in right here, and this page redirects off
+        // `goTo` without ever loading again.
+        stashAuthNext(null);
         toast.success("You're in");
       } else {
         preserveAccountHandoff();
@@ -165,6 +183,9 @@ function AuthPage() {
         toast.success("Welcome back");
       }
     } catch (err) {
+      // Where a thrown signUp lands, holding a stash for a confirmation email
+      // that was never sent.
+      stashAuthNext(null);
       toast.error(mode === "signup" ? "Couldn't create that account" : "Couldn't sign you in", {
         description: err instanceof Error ? err.message : undefined,
       });

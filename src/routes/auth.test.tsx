@@ -104,6 +104,59 @@ describe("leaving for an auth round trip", () => {
     expect(takeAuthNext()).toBe("/players/pack");
   });
 
+  // The stash is earned by LEAVING. Every path below writes it and then comes
+  // straight back to a page that is still mounted, so nothing will ever load
+  // /auth again to consume it — and a stash that outlives its trip fires on the
+  // next bare /auth and bounces a signed-in person off their account screen,
+  // which is the complaint `wasSignedOut` exists to answer.
+  it("puts it down again when Google refuses", async () => {
+    search.mockReturnValue({ next: "/players/pack" });
+    signInWithOAuth.mockResolvedValue({ error: new Error("popup closed") });
+    render(<AuthPage />);
+    await userEvent.click(screen.getByRole("button", { name: /continue with google/i }));
+
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalled());
+    expect(takeAuthNext()).toBeUndefined();
+  });
+
+  it("puts it down again when Google signs you in without leaving", async () => {
+    // The provider can hand tokens straight back, which the integration sets
+    // here — so `redirected` is false and the browser never went anywhere.
+    search.mockReturnValue({ next: "/players/pack" });
+    signInWithOAuth.mockResolvedValue({ redirected: false });
+    render(<AuthPage />);
+    await userEvent.click(screen.getByRole("button", { name: /continue with google/i }));
+
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalled());
+    expect(takeAuthNext()).toBeUndefined();
+  });
+
+  it("puts it down again when the account is created with no email to confirm", async () => {
+    // Confirmation off: signUp returns a session, this page redirects off `goTo`
+    // and never loads again.
+    search.mockReturnValue({ mode: "signup", next: "/players/pack" });
+    signUp.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
+    render(<AuthPage />);
+    await userEvent.type(screen.getByLabelText(/email/i), "doug@example.com");
+    await userEvent.type(screen.getByLabelText(/password/i), "hunter22");
+    await userEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => expect(signUp).toHaveBeenCalled());
+    expect(takeAuthNext()).toBeUndefined();
+  });
+
+  it("puts it down again when the sign-up fails outright", async () => {
+    search.mockReturnValue({ mode: "signup", next: "/players/pack" });
+    signUp.mockResolvedValue({ data: { session: null }, error: new Error("already taken") });
+    render(<AuthPage />);
+    await userEvent.type(screen.getByLabelText(/email/i), "doug@example.com");
+    await userEvent.type(screen.getByLabelText(/password/i), "hunter22");
+    await userEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => expect(signUp).toHaveBeenCalled());
+    expect(takeAuthNext()).toBeUndefined();
+  });
+
   it("holds nothing when nobody asked to be sent on", async () => {
     render(<AuthPage />);
     await userEvent.click(screen.getByRole("button", { name: /continue with google/i }));
