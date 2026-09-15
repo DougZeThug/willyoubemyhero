@@ -169,7 +169,7 @@ export function MilestoneReveal({
         </div>
         {/* What the run bought, printed next to the days that bought it. Not
             secretTierCaption: that prints the base pull rate, and under a card
-            this rung guaranteed, "3.5% pull" is the odds of the thing that did
+            this rung guaranteed, "3.5%" is the odds of the thing that did
             not happen. */}
         {tierFloor && (
           <div

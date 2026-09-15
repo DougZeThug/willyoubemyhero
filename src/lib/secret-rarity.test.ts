@@ -57,13 +57,13 @@ describe("secret rarity ladder", () => {
   });
 
   it("prints the level with the rate that produced it", () => {
-    expect(secretTierCaption("mythic")).toBe("Mythic · 0.5% pull");
-    expect(secretTierCaption("rare")).toBe("Rare · 18% pull");
+    expect(secretTierCaption("mythic")).toBe("Mythic · 0.5%");
+    expect(secretTierCaption("rare")).toBe("Rare · 18%");
   });
 
   it("prints a floor as a promise, not as a rate", () => {
     // Deliberately NOT the caption. A milestone that guaranteed a legendary
-    // would otherwise print "3.5% pull" under it — the odds of the thing that
+    // would otherwise print "3.5%" under it — the odds of the thing that
     // did not happen.
     expect(secretTierFloorLabel("legendary")).toBe("Legendary or better");
     expect(secretTierFloorLabel("rare")).toBe("Rare or better");

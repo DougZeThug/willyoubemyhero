@@ -883,7 +883,7 @@ function PlayersPage() {
           {/* Wraps outright rather than clamping like the name above it: this
               line is one of five fixed captions, so a second line is the worst
               it can ever cost — and at 320, or at 3-up on any phone, it costs
-              one: "Common · 70% pull" wants 23px more than a tile has (§23 F8). */}
+              one: "Common · 70%" wants 23px more than a tile has (§23 F8). */}
           <div
             className="text-meta font-semibold uppercase tracking-[0.08em]"
             style={{ color: secretTierStyle(s.tier).accent }}
