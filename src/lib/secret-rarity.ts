@@ -109,11 +109,12 @@ export function secretTierLabel(tier: string | null | undefined): string {
 }
 
 /**
- * "0.5% pull". Derived from the odds table rather than written out, so the copy
- * printed under a card cannot drift from the rate that produced it.
+ * "0.5%". Derived from the odds table rather than written out, so the copy
+ * printed under a card cannot drift from the rate that produced it. No "pull"
+ * suffix — the tier word beside it already says what the number is about.
  */
 export function secretTierOddsLabel(tier: string | null | undefined): string {
-  return `${WEIGHT_BP[toSecretTier(tier)] / 100}% pull`;
+  return `${WEIGHT_BP[toSecretTier(tier)] / 100}%`;
 }
 
 /** "MYTHIC · 0.5% pull" — the one line printed under a secret. */
