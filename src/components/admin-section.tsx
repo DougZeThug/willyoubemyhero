@@ -42,13 +42,20 @@ export function AdminSection({
           <CollapsibleTrigger className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:pointer-events-none md:min-h-0">
             <span className="flex min-w-0 items-center gap-2 text-primary">
               {icon}
-              <h2 className="truncate font-display text-sm font-black uppercase tracking-[0.08em]">
+              {/* line-clamp-2 rather than truncate, and the third pass caused
+                  the need for it: raising the counter beside this from 10px to
+                  the 12px scale token widened it by enough to squeeze
+                  "Card Ownership Audit" 7px past its box at 390. A clamp has no
+                  ellipsis to fire, so the title wraps instead of losing its
+                  tail — and a panel that will not say which panel it is has
+                  the same problem the running order had. */}
+              <h2 className="line-clamp-2 font-display text-sm font-black uppercase tracking-[0.08em]">
                 {title}
               </h2>
             </span>
             <span className="flex shrink-0 items-center gap-2">
               {meta && (
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                   {meta}
                 </span>
               )}

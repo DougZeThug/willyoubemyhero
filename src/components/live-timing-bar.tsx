@@ -243,7 +243,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="shrink-0 px-2 text-label uppercase tracking-widest"
+                      className="shrink-0 px-2 text-label uppercase tracking-[0.08em]"
                       onClick={() => setEditing(p.participant_id)}
                     >
                       <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
@@ -252,7 +252,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="shrink-0 px-2 text-label uppercase tracking-widest text-destructive hover:bg-destructive/10"
+                    className="shrink-0 px-2 text-label uppercase tracking-[0.08em] text-destructive hover:bg-destructive/10"
                     onClick={() => {
                       if (confirm(`Clear ${playerName}'s run and put them back in the queue?`)) {
                         resetAthlete(p.participant_id);

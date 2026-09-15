@@ -265,7 +265,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
             size="sm"
             variant={renames ? "default" : "ghost"}
             onClick={() => (renames ? setRenames(null) : startRenaming())}
-            className="min-h-9 shrink-0"
+            className="min-h-11 shrink-0 pointer-fine:min-h-9"
           >
             <Pencil className="mr-1 h-3.5 w-3.5" />
             {renames ? "Cancel" : "Rename all"}
@@ -277,7 +277,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
               setRenames(null);
               setRearranging((v) => !v);
             }}
-            className="min-h-9 shrink-0"
+            className="min-h-11 shrink-0 pointer-fine:min-h-9"
           >
             <ArrowUpDown className="mr-1 h-3.5 w-3.5" />
             {rearranging ? "Done" : "Rearrange"}
@@ -329,7 +329,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
               </div>
             );
           })}
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-meta text-muted-foreground">
             Long name shows in the admin lists; the short label is what appears on cards, the ladder
             and the timing buttons.
           </p>
@@ -358,7 +358,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
                 <span className="block truncate font-display text-sm font-bold uppercase">
                   {s.name}
                 </span>
-                <span className="block truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+                <span className="block truncate text-label uppercase tracking-[0.08em] text-muted-foreground">
                   {s.short_name ?? "—"}
                   {!s.active && " · inactive"}
                   {s.penalty_amount_ms > 0 && ` · +${Math.round(s.penalty_amount_ms / 1000)}s pen`}
@@ -402,9 +402,9 @@ export function StationsPanel({ eventId }: { eventId: string }) {
       </Button>
 
       <Sheet open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
-        <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+        <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto">
           <SheetHeader>
-            <SheetTitle className="font-display uppercase tracking-widest">
+            <SheetTitle className="font-display uppercase tracking-[0.08em]">
               {draft?.id ? "Edit station" : "New station"}
             </SheetTitle>
             <SheetDescription className="text-xs">

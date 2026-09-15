@@ -183,7 +183,12 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
                             // Every neighbouring dropdown carries one; this
                             // was the only one announcing itself as "combo box".
                             aria-label="Which player this device belongs to"
-                            className="min-h-10 w-full min-w-0 rounded-md border border-primary/30 bg-background px-2 text-xs uppercase tracking-wider text-foreground"
+                            // 40px and 12px unconditionally, where its neighbours are
+                            // touch-first with a `pointer-fine:` release. Under
+                            // 16px iOS zooms the page on focus, and this is the
+                            // one control that ends a "why can't I see my card"
+                            // conversation.
+                            className="min-h-11 w-full min-w-0 rounded-md border border-primary/30 bg-background px-2 text-base uppercase tracking-wider text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
                             value={targets[d.guestId] ?? ""}
                             onChange={(e) =>
                               setTargets((t) => ({ ...t, [d.guestId]: e.target.value }))
@@ -310,7 +315,7 @@ function Stat({ label, value, muted }: { label: string; value: number | string; 
       )}
     >
       <span className="block text-xs font-bold tabular-nums leading-tight">{value}</span>
-      <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+      <span className="block text-label uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
     </span>

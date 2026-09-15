@@ -172,7 +172,12 @@ function DraftPage() {
                 <Link
                   to="/players/$id"
                   params={{ id: currentPicker.ep.id }}
-                  className="font-display text-3xl font-black uppercase hover:text-primary"
+                  // `inline-flex items-center` and the floor, because a bare
+                  // inline <a> is only as tall as its line box — 36px here,
+                  // under the §18 floor, and the one control in the app still
+                  // below it when the third pass measured. This route was in no
+                  // sweep, which is the only reason it survived.
+                  className="inline-flex min-h-11 items-center font-display text-3xl font-black uppercase hover:text-primary pointer-fine:min-h-0"
                 >
                   {currentPicker.ep.participant?.name}
                 </Link>
@@ -225,7 +230,7 @@ function DraftPage() {
                   >
                     {pos}
                   </div>
-                  <div className="mt-2 text-label font-bold uppercase tracking-widest text-muted-foreground">
+                  <div className="mt-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                     {holder?.participant?.name ?? (isTaken ? "" : "Open")}
                   </div>
                 </button>

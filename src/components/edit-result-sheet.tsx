@@ -218,7 +218,7 @@ export function EditResultSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto">
+      <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-display uppercase">
             {creating ? "Add result" : "Edit result"}
@@ -328,7 +328,10 @@ export function EditResultSheet({
                         ),
                       )
                     }
-                    className="min-w-0 flex-1 rounded-md border border-border-strong bg-white/5 px-2 py-2 text-xs uppercase"
+                    // Same floor as every other field on a phone: 44px, and
+                    // 16px so focusing it does not zoom the sheet. Fixing a
+                    // result happens at the side of the course, on a phone.
+                    className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-white/5 px-2 py-2 text-base uppercase pointer-fine:min-h-0 pointer-fine:text-xs"
                   >
                     <option value="">No station</option>
                     {stations.map((st) => (

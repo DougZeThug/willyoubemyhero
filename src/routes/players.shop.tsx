@@ -174,7 +174,10 @@ function ShopPage() {
           <>
             <p className="text-sm text-muted-foreground">
               Nothing to spend and nothing to earn until it is.{" "}
-              <Link to="/players" className="font-bold text-primary hover:underline">
+              <Link
+                to="/players"
+                className="inline-flex min-h-11 items-center font-bold text-primary hover:underline pointer-fine:min-h-0"
+              >
                 Back to the vault
               </Link>
             </p>

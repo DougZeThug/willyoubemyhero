@@ -111,7 +111,7 @@ function AnalyticsPage() {
 
         <Card className="hud-bezel border-primary/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm uppercase tracking-widest text-primary/80">
+            <CardTitle className="text-sm uppercase tracking-[0.08em] text-primary/80">
               Average Split by Station
             </CardTitle>
           </CardHeader>
@@ -152,7 +152,7 @@ function AnalyticsPage() {
 
         <Card className="hud-bezel border-primary/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm uppercase tracking-widest text-primary/80">
+            <CardTitle className="text-sm uppercase tracking-[0.08em] text-primary/80">
               Personal Bests
             </CardTitle>
           </CardHeader>
@@ -173,7 +173,7 @@ function AnalyticsPage() {
                     <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 text-label font-black text-primary">
                       {i + 1}
                     </span>
-                    <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
+                    <span className="flex-1 line-clamp-2 text-sm font-semibold uppercase tracking-wide">
                       {b.name}
                     </span>
                     <span className="timer-digits text-primary">{formatTime(b.bestMs)}</span>
@@ -186,7 +186,7 @@ function AnalyticsPage() {
 
         <Card className="hud-bezel border-primary/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm uppercase tracking-widest text-primary/80">
+            <CardTitle className="text-sm uppercase tracking-[0.08em] text-primary/80">
               Archive
             </CardTitle>
           </CardHeader>
@@ -205,7 +205,7 @@ function AnalyticsPage() {
                       <span className="font-semibold uppercase tracking-wide">
                         {a.event_name} {a.event_year ?? ""}
                       </span>
-                      <span className="text-label uppercase tracking-widest text-muted-foreground">
+                      <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                         {new Date(a.created_at).toLocaleDateString()}
                       </span>
                     </Link>

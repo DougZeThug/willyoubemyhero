@@ -40,7 +40,7 @@ export function FeedError({
       <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
         <WifiOff className="h-6 w-6 text-warn" />
         <div>
-          <p className="font-display text-sm font-black uppercase tracking-widest text-warn">
+          <p className="font-display text-sm font-black uppercase tracking-[0.08em] text-warn">
             Can&apos;t reach the combine
           </p>
           <p className="mt-1 text-meta text-muted-foreground">

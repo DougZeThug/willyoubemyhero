@@ -1,9 +1,10 @@
 // Every public route renders, hydrates, and survives having no data.
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import {
   test,
   expect,
   BUNDLE,
+  EVENT_ID,
   PLAYERS,
   SECRET_CARD,
   sealedPack,
@@ -32,6 +33,12 @@ const ROUTES = [
   // These three render the same data the rest do and were simply missed.
   { path: "/analytics", title: /Analytics/i },
   { path: "/tv", title: /TV|Board|Combine/i },
+  // And so were these two, for three passes. Both are public, both are in
+  // sitemap.xml, and neither had the stated reason /admin and /recap/$slug have
+  // — they were never added. The third pass's render set found a 36px link on
+  // /draft and four clipped names on /order the first time anything looked.
+  { path: "/draft", title: /Draft/i },
+  { path: "/order", title: /Order/i },
   // /recap/$slug is not in this list on purpose: its loader runs during the SSR
   // render, where the browser-side stub cannot reach it, so a direct visit is a
   // genuine 404 against a dead Supabase. It is covered below by walking to it
@@ -202,43 +209,52 @@ const FIELDS = "input, select, textarea";
 const MIN_FONT = 16;
 
 /**
- * Controls allowed under the floor, each with the reason it is allowed.
+ * Controls whose BOX is under the floor for a reason that is not about the
+ * target. Every entry needs a reason of that kind, and a test that checks the
+ * thing the box no longer proves.
  *
- * The skip link is the only one: it is `sr-only` until focused, which Playwright
- * still counts as visible because it has a box. Anything added here needs a
- * reason of the same kind beside it.
+ * The skip link is `sr-only` until focused, which Playwright still counts as
+ * visible because it has a box.
+ *
+ * The switch and the checkbox are 20px and 16px because that is what those
+ * controls look like; both take the floor as a 44px `::before` instead, and
+ * `getBoundingClientRect` does not include a pseudo-element. They are covered by
+ * "gives the switch and the checkbox a thumb-sized target" below, which asks
+ * `elementFromPoint` what is at the corner of that square — a stronger check
+ * than the box measurement, because it tests the rule rather than a proxy for
+ * it. An entry here without that second test is just an excuse.
  */
-const EXEMPT = [{ name: /^skip to content$/i, why: "sr-only until focused" }];
+const EXEMPT: { name?: RegExp; role?: string; why: string }[] = [
+  { name: /^skip to content$/i, why: "sr-only until focused" },
+  { role: "switch", why: "20px track, 44px ::before hit area — see the elementFromPoint test" },
+  { role: "checkbox", why: "16px box, 44px ::before hit area — same" },
+];
 
 /**
  * Text allowed to clip, each with the route it is on and the reason it is
  * allowed. Same contract as EXEMPT above.
  *
- * All three are the combine's own screens rather than the card app's — the
- * running order a marshal reads, the commissioner's numbers, and the ballot —
- * and all three clip the longest name in the roster at 320 only. §0 sets the
- * console aside from the phone type and touch rules by design, and PR 13 was
- * costed as the five findings in §23. Scoped to path AND class so the sweep
- * still gates everything else on those routes, and so the same class on a card
- * screen is not quietly excused with them. Each is one word to fix.
+ * This list is now EMPTY, and the reason it is empty is worth more than the list
+ * was.
+ *
+ * All three entries rested on one sentence — "§0 sets the console aside from the
+ * phone type and touch rules by design" — and the third pass revoked exactly
+ * that premise: it audited the console under the same rules as everything else.
+ * An exemption whose justification has been withdrawn is not an exemption, so
+ * the two console screens were fixed rather than re-excused.
+ *
+ * The third was never a console screen at all. `/awards` is a player-facing
+ * ballot, and its entry said so: "nothing in §22 or §23 measures this screen".
+ * That is an exemption resting on the audit's own coverage gap rather than on a
+ * decision anyone made — the most expensive kind, because it reads like a
+ * judgement and is actually a blind spot.
+ *
+ * Keep the shape. If a clip ever does earn an exemption, it is scoped to path
+ * AND class so the sweep still gates everything else on that route, and so the
+ * same class on a card screen is not quietly excused with it. What an entry
+ * needs is a reason that stays true when the scope changes.
  */
-const CLIP_EXEMPT: { path: string; hint: RegExp; why: string }[] = [
-  {
-    path: "/live",
-    hint: /truncate text-sm font-semibold|flex-1 truncate text-sm/,
-    why: "the marshal's running order; console screens are out of the audit's scope",
-  },
-  {
-    path: "/analytics",
-    hint: /flex-1 truncate text-sm/,
-    why: "the commissioner's numbers, same scope note",
-  },
-  {
-    path: "/awards",
-    hint: /min-w-0 flex-1 truncate/,
-    why: "a ballot option at 320 only; nothing in §22 or §23 measures this screen",
-  },
-];
+const CLIP_EXEMPT: { path: string; hint: RegExp; why: string }[] = [];
 
 /**
  * Every visible control that is too short, named well enough to find in the
@@ -263,11 +279,19 @@ async function shortTargets(page: Page): Promise<string[]> {
         // The class fragment is what makes a failure actionable: this is a
         // class-driven floor, so it is the string you grep for.
         hint: (el.getAttribute("class") ?? "").split(/\s+/).filter(Boolean).slice(0, 3).join(" "),
+        // Radix sets an implicit role on the two controls whose hit area is
+        // larger than their box, and the role is the stable handle: their
+        // accessible names come from whatever row they sit in.
+        role: el.getAttribute("role") ?? "",
       })),
     );
 
   return measured
-    .filter((t) => t.height < MIN_TARGET && !EXEMPT.some((e) => e.name.test(t.name)))
+    .filter(
+      (t) =>
+        t.height < MIN_TARGET &&
+        !EXEMPT.some((e) => (e.role ? e.role === t.role : e.name?.test(t.name))),
+    )
     .map((t) => `${t.height.toFixed(0)}px <${t.tag}> "${t.name || "(unnamed)"}" — ${t.hint}`);
 }
 
@@ -513,6 +537,24 @@ const TAP_TARGET_ROUTES: {
       await expect(page.getByRole("heading", { name: /^sign in$/i })).toBeVisible();
     },
   },
+  {
+    // The draft board. A grid of position tiles and a row of player links, and
+    // the links were 36px — the only control under the floor anywhere in the app
+    // when the third pass measured, on a route nothing had ever measured.
+    path: "/draft",
+    settle: async (page) => {
+      await expect(page.getByRole("main")).toContainText(/on the clock/i);
+    },
+  },
+  {
+    // The running order a marshal reads at a start line. Every name on it clips
+    // at 320; two of them by more than 16px. PR 13 made this exact argument
+    // about the leaderboard and fixed it there.
+    path: "/order",
+    settle: async (page) => {
+      await expect(page.getByRole("heading", { name: /running order/i })).toBeVisible();
+    },
+  },
 ];
 
 // Three rules over one page load each: nothing a thumb can land on under 44px,
@@ -564,6 +606,172 @@ test.describe("phone sweeps", () => {
       ).toEqual([]);
     });
   }
+
+  /**
+   * Two controls whose hit area is bigger than their box, proved the way the
+   * rule actually reads.
+   *
+   * A switch is 20px tall and a checkbox 16px, because that is what those
+   * controls look like — growing either to 44 draws something else. So both take
+   * the floor as a 44px `::before` instead, and `getBoundingClientRect` cannot
+   * see a pseudo-element: the sweep above reports them at 20 and 16 however big
+   * the thumb's target really is.
+   *
+   * Exempting them would be the easy answer and the wrong one — this pass spent
+   * its time deleting exemptions that had outlived their reason. The rule is
+   * "a thumb can land on it", so test that: ask the document what is at the
+   * corner of the 44px square and require it to be the control.
+   */
+  test("gives the switch and the checkbox a thumb-sized target", async ({
+    page,
+    server,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "44px is a touch rule; see the sweep above");
+    server.set("getActiveEvent", { ...BUNDLE.event, dust_enabled: true });
+    // The console mounts every panel at once — AdminSection uses forceMount, so
+    // a collapsed one is display:none rather than absent — which means every
+    // panel's query fires on load. None of these five is in DEFAULT_RESPONSES,
+    // because until this pass nothing in the browser suite had ever opened
+    // /admin. The shapes are empty on purpose: this test is about a hit area,
+    // not about what the panels say.
+    server.set("listCardPromptTemplates", { templates: [] });
+    server.set("listCardPromptRuns", { runs: [] });
+    server.set("listMemberClaims", []);
+    server.set("getAwardTally", { tally: {}, totalVotes: 0 });
+    server.set("getOwnershipAudit", { players: [], stranded: [] });
+
+    // The client only checks the SHAPE of this token — three dot-parts and a
+    // future expiry, src/lib/admin-token.ts:8-16 — but admin.tsx compares its
+    // first part against the event id, so a fresh uuid here would leave the
+    // console showing PinGate and this test measuring the wrong screen.
+    await page.addInitScript(([key, token]) => localStorage.setItem(key, token), [
+      "wwbh:admin-token",
+      `${EVENT_ID}.${Date.now() + 12 * 3600_000}.e2e-signature`,
+    ] as const);
+    await page.goto("/admin");
+    await expect(page.getByRole("heading", { name: /timing console/i })).toBeVisible();
+
+    /**
+     * Presses each corner of the 44px square and requires the control to answer.
+     *
+     * A tap, not `elementFromPoint`. The first version of this asked the
+     * document what element sat at the corner and required it to be the control
+     * — which passed for the switch and failed for the checkbox, for a reason
+     * that has nothing to do with either hit area: the switch is rendered AFTER
+     * its label so its `::before` paints on top, and the checkbox BEFORE its
+     * label text, which paints over it. Both are reachable by a thumb in exactly
+     * the same way. The identity of the topmost element was never the rule.
+     *
+     * Four corners in turn, each press required to flip the state, so the whole
+     * square is proved rather than one lucky point.
+     */
+    const cornersRespond = async (control: Locator, label: string) => {
+      await expect(control).toBeVisible();
+      // Centred first, and this is not a nicety. `page.mouse.click` takes
+      // viewport coordinates and does not scroll, unlike `locator.click()` —
+      // and the phone's tab bar is `fixed` over the bottom 71px. The batch
+      // checkbox sits at y=801 in an 844px viewport on first render, so every
+      // press landed on the nav and the control looked like four dead corners
+      // while being perfectly fine.
+      await control.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      const box = await control.boundingBox();
+      if (!box) throw new Error(`${label}: no box to measure`);
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      // Just inside each corner of the 44px square the ::before draws.
+      const reach = 21;
+      const dead: string[] = [];
+      for (const [dx, dy] of [
+        [-reach, -reach],
+        [reach, -reach],
+        [-reach, reach],
+        [reach, reach],
+      ]) {
+        const was = await control.getAttribute("data-state");
+        await page.mouse.click(cx + dx, cy + dy);
+        const now = await control.getAttribute("data-state");
+        if (now === was) dead.push(`(${dx}, ${dy}) did nothing`);
+      }
+      return dead;
+    };
+
+    // The nav-rows panel is the app's only Switch, one per row. Toggling is
+    // local draft state until Save, so pressing it four times writes nothing.
+    //
+    // NOT `.first()`, which is the Vault row: it is pinned, so its switch is
+    // disabled, and a disabled control correctly does nothing when pressed. That
+    // reads back as four dead corners on a control that is behaving perfectly.
+    await page
+      .getByRole("button", { name: /^Navigation/i })
+      .first()
+      .click();
+    expect(
+      await cornersRespond(page.locator('[role="switch"]:not([disabled])').first(), "switch"),
+      "Part of the switch's 44px square is a dead zone. The ::before in " +
+        "ui/switch.tsx is what provides it; check `relative` is still on the root.",
+    ).toEqual([]);
+
+    // And the app's only Checkbox, two disclosures deep: the Card Prompt Studio
+    // panel, then Batch Production inside it. Reaching it is the point — EXEMPT
+    // exempts every role="checkbox" in the app, so without this a regression in
+    // ui/checkbox.tsx would pass the whole suite. Selecting players only arms a
+    // Build Batch button that nothing here presses.
+    //
+    // Measured, for whoever changes this next: the target here is the 280x44
+    // `<label>` around it, which forwards its click to the Radix button. The
+    // `::before` in ui/checkbox.tsx is belt to that braces — it is what a
+    // checkbox with no label would fall back on, and it is overlapped by the
+    // label's own text wherever there IS one.
+    await page
+      .getByRole("button", { name: /^Card Prompt Studio/i })
+      .first()
+      .click();
+    await page.getByText("Batch Production", { exact: true }).click();
+    expect(
+      await cornersRespond(page.locator('[role="checkbox"]:not([disabled])').first(), "checkbox"),
+      "Part of the checkbox's 44px square is a dead zone. Either the ::before in " +
+        "ui/checkbox.tsx or the min-h-11 label around it should be answering.",
+    ).toEqual([]);
+  });
+
+  /**
+   * The one control the sweep above structurally cannot reach.
+   *
+   * A closed menu has no items in the DOM, so `shortTargets` walks straight past
+   * `DropdownMenuItem` no matter how many routes it visits — which is how a 32px
+   * row survived three passes on a menu that is player-facing. It is the "more
+   * actions" overflow on the card page and in the viewer, and it is where Share,
+   * Compare and the card settings live on a phone.
+   *
+   * Opened here rather than measured in place, because there is no other way:
+   * the rule is not "these routes are clean", it is "nothing under 44px", and a
+   * sweep that only sees what happens to be mounted cannot say that.
+   */
+  test("holds the floor inside the card page's overflow menu", async ({
+    page,
+    server,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "44px is a touch rule; see the sweep above");
+    void server;
+    await signInAsMember(page);
+    await page.goto(`/players/${PLAYERS[0].ep}`);
+    await expect(page.getByRole("heading", { name: PLAYERS[0].name })).toBeVisible();
+
+    await page.getByRole("button", { name: "More actions" }).first().click();
+    // `menuitemcheckbox`, not `menuitem`: this particular menu is Tilt and
+    // Sound, which are CheckboxItems. Waiting on the wrong role passes the click
+    // and then times out on a menu that is already open — and the reason this
+    // test exists is that the floor was on `DropdownMenuItem` alone, which is
+    // not what this menu is made of.
+    await expect(page.getByRole("menu", { name: "More actions" })).toBeVisible();
+    await expect(page.getByRole("menuitemcheckbox").first()).toBeVisible();
+
+    expect(
+      await shortTargets(page),
+      "Controls under 44px with the overflow menu open. The floor belongs to " +
+        "ui/dropdown-menu.tsx, not to the call site.",
+    ).toEqual([]);
+  });
 
   // The sweep above runs the routes as the tap-target table arranges them, and
   // two of §23 F8's three sites need more than that: a secret shelf only exists

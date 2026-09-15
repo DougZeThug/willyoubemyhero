@@ -238,7 +238,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
             : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
         )}
       >
-        <p className="font-display text-sm font-bold uppercase tracking-widest text-foreground">
+        <p className="font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
           <span className="max-sm:hidden">Drop card images here</span>
           <span className="sm:hidden">Tap to choose card images</span>
         </p>
@@ -261,7 +261,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
 
       {items.length > 0 && (
         <>
-          <div className="mt-4 max-h-[60vh] space-y-1.5 overflow-auto pr-1 sm:max-h-80">
+          <div className="mt-4 max-h-[60dvh] space-y-1.5 overflow-auto pr-1 sm:max-h-80">
             {items.map((item) => (
               <div
                 key={item.id}
@@ -304,7 +304,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                           ),
                         )
                       }
-                      className="min-h-11 w-full rounded border border-border-strong bg-transparent px-1 py-0.5 text-base font-semibold uppercase text-foreground sm:min-h-0 sm:text-xs"
+                      className="min-h-11 w-full rounded border border-border-strong bg-transparent px-1 py-0.5 text-base font-semibold uppercase text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
                     >
                       <option value="">— unmatched —</option>
                       {targets.map((t) => (
