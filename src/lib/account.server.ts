@@ -9,8 +9,24 @@
 // that phone back the same member or guest token it would have had all along, so
 // nothing downstream has to know accounts exist.
 import { randomUUID } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { signGuestToken, signMemberToken } from "./session.server";
+
+/**
+ * The same client, widened, for the one RPC `types.ts` has not been regenerated
+ * against yet.
+ *
+ * The escape hatch draft-db.server.ts and trades-rows.ts open, for the same
+ * reason: src/integrations/supabase/types.ts is `supabase gen types` output,
+ * must not be hand-edited, and is .prettierignore'd — so `bind_account_to_player`
+ * (supabase/migrations/20260911140000_bind_account_in_one_transaction.sql) is a
+ * compile error against the generated `Database` type. Regenerating types.ts
+ * makes this a two-call-site removal.
+ */
+function untypedDb(): SupabaseClient {
+  return supabaseAdmin as unknown as SupabaseClient;
+}
 
 export type AccountIdentity = {
   kind: "member" | "guest";
@@ -139,27 +155,24 @@ export async function syncAccount(
 
   // The phone has since claimed a roster player: that is strictly more identity
   // than a guest id, so the account is upgraded and the guest's secrets ride along.
+  //
+  // Same RPC as bindParticipant, and for the same reason: the upgrade and the
+  // three moves that empty the guest id it is abandoning belong in one
+  // transaction. The guest id is handed over explicitly because it was read
+  // before this call — if a bind from another device won the race in between,
+  // the row's own `guest_id` has already been cleared by the winner and this
+  // collection would be stranded by the very write meant to rescue it. The RPC
+  // files it against whoever the row belongs to, which is exactly what the two
+  // branches this replaces both did.
   if (identity.kind === "guest" && device.memberId) {
-    const guestId = identity.id;
-    // Guarded so a bindParticipant racing this call cannot be overwritten: only
-    // a still-unbound row is upgraded, otherwise the winner's binding stands.
-    const { data: upgraded, error } = await supabaseAdmin
-      .from("account_identities")
-      .update({ participant_id: device.memberId, guest_id: null })
-      .eq("user_id", userId)
-      .is("participant_id", null)
-      .select("user_id, participant_id, guest_id");
+    const { data, error } = await untypedDb().rpc("bind_account_to_player", {
+      _user_id: userId,
+      _participant_id: device.memberId,
+      _guest_id: identity.id,
+    });
     if (error) throw error;
-    if (upgraded && upgraded.length > 0) {
-      identity = { kind: "member", id: device.memberId };
-      await mergeGuestInto(identity, guestId);
-    } else {
-      const winner = await readRow(userId);
-      if (winner?.participant_id) {
-        identity = { kind: "member", id: winner.participant_id };
-        await mergeGuestInto(identity, guestId);
-      }
-    }
+    const res = (data ?? {}) as { boundParticipantId?: string | null };
+    if (res.boundParticipantId) identity = { kind: "member", id: res.boundParticipantId };
   }
 
   // A different guest id on this phone — pulls made here before signing in, or on
@@ -185,55 +198,29 @@ export class AccountAlreadyLinkedError extends Error {
   }
 }
 
-/** Bind an account to a participant the device has just claimed with a paper code. */
+/**
+ * Bind an account to a participant the device has just claimed with a paper code.
+ *
+ * One statement, because the row and the collection it claims to own have to
+ * move together. This used to be an insert-or-update followed by the three
+ * `claim_guest_*` calls, each its own request and its own transaction: a failure
+ * partway left the account bound to the player with some of its old guest
+ * collection still filed under the dead guest id, and no rollback of the row
+ * write that had already committed. The shape `attach_device_to_player` was
+ * written to retire, still standing on the path a player actually walks.
+ *
+ * Re-claiming the same player stays a no-op rather than an error — the phone may
+ * simply have lost its token and re-run the code — and a second, DIFFERENT
+ * roster player is still refused rather than taken over. Both live in the RPC
+ * now, where they can be decided under the row's own lock.
+ */
 export async function bindParticipant(userId: string, participantId: string) {
-  const row = await readRow(userId);
-  const priorGuest = row?.guest_id ?? null;
-
-  // Re-claiming the same player is a no-op rather than an error: the phone may
-  // simply have lost its local token and re-run the paper code.
-  if (row?.participant_id === participantId) {
-    return { kind: "member" as const, id: participantId, name: await nameFor(participantId) };
-  }
-
-  // A second, DIFFERENT roster player is refused instead of silently taking over.
-  // syncAccount treats this row as authoritative, so an overwrite would re-mint
-  // every other device onto the new player and strand the first identity with no
-  // recovery path. Guest -> member is still an upgrade, handled below.
-  if (row?.participant_id) {
-    throw new AccountAlreadyLinkedError(await nameFor(row.participant_id));
-  }
-
-  // The read above is only a fast path — the write itself has to be the guard, or
-  // two concurrent binds both pass the check and the last one silently wins.
-  let bound = false;
-  const { error: insertError } = await supabaseAdmin
-    .from("account_identities")
-    .insert({ user_id: userId, participant_id: participantId, guest_id: null });
-  if (!insertError) {
-    bound = true;
-  } else if (insertError.code === "23505") {
-    const { data: updated, error: updateError } = await supabaseAdmin
-      .from("account_identities")
-      .update({ participant_id: participantId, guest_id: null })
-      .eq("user_id", userId)
-      .is("participant_id", null)
-      .select("user_id");
-    if (updateError) throw updateError;
-    bound = (updated?.length ?? 0) > 0;
-  } else {
-    throw insertError;
-  }
-
-  if (!bound) {
-    const winner = await readRow(userId);
-    if (winner?.participant_id !== participantId) {
-      throw new AccountAlreadyLinkedError(
-        winner?.participant_id ? await nameFor(winner.participant_id) : null,
-      );
-    }
-  }
-
-  if (priorGuest) await mergeGuestInto({ kind: "member", id: participantId }, priorGuest);
-  return { kind: "member" as const, id: participantId, name: await nameFor(participantId) };
+  const { data, error } = await untypedDb().rpc("bind_account_to_player", {
+    _user_id: userId,
+    _participant_id: participantId,
+  });
+  if (error) throw error;
+  const res = (data ?? {}) as { bound?: boolean; name?: string | null; boundName?: string | null };
+  if (!res.bound) throw new AccountAlreadyLinkedError(res.boundName ?? null);
+  return { kind: "member" as const, id: participantId, name: res.name ?? null };
 }

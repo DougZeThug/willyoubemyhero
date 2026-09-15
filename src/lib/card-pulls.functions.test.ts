@@ -272,6 +272,45 @@ describe("grantCard", () => {
     });
   });
 
+  it("carries the event its token authorizes into the database too", async () => {
+    // `requireAdmin(eventId)` proves the caller runs THIS combine and nothing
+    // more. Dropping the event after that check left the RPC asking only whether
+    // the two ids existed, so the token's whole point — one commissioner, one
+    // event — stopped at the guard and never reached the write.
+    withDb({ "rpc.grant_card_copy_once": { data: { copies: 1, repeat: false } } });
+    const { grantCard } = await import("./card-pulls.functions");
+    await callServerFn(grantCard, {
+      data: {
+        eventId: EVENT_ID,
+        participantId: ME,
+        eventParticipantId: CARD_A,
+        grantKey: "grant-key-1",
+      },
+      headers: adminHeaders(signAdminToken(EVENT_ID).token),
+    });
+    expect(mock.rpcCalls("grant_card_copy_once")[0]).toMatchObject({ _event_id: EVENT_ID });
+  });
+
+  it("takes the event from the token's own check, never from anywhere else", async () => {
+    // Belt to the braces above: `data.eventId` is the value requireAdmin just
+    // verified the token against, so an id in the payload can only ever be the
+    // one the caller is already authorized for.
+    withDb({ "rpc.grant_card_copy_once": { data: { copies: 1, repeat: false } } });
+    const { grantCard } = await import("./card-pulls.functions");
+    await expect(
+      callServerFn(grantCard, {
+        data: {
+          eventId: OTHER_EVENT,
+          participantId: ME,
+          eventParticipantId: CARD_A,
+          grantKey: "grant-key-1",
+        },
+        headers: adminHeaders(signAdminToken(EVENT_ID).token),
+      }),
+    ).rejects.toThrow("Admin PIN required");
+    expect(mock.rpcCalls("grant_card_copy_once")).toHaveLength(0);
+  });
+
   it("reports a replayed key rather than a fresh copy", async () => {
     withDb({ "rpc.grant_card_copy_once": { data: { copies: 1, repeat: true } } });
     const { grantCard } = await import("./card-pulls.functions");

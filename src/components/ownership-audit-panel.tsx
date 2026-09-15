@@ -149,6 +149,17 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
                         {d.secrets} secret{d.secrets === 1 ? "" : "s"}
                         <span className="block text-[11px] font-semibold text-muted-foreground">
                           {d.packOpens} pack{d.packOpens === 1 ? "" : "s"}
+                          {/* Only when there are any. A device is listed the
+                              moment it holds packs or rungs as well as secrets,
+                              so a row reading "0 secrets, 0 packs" with nothing
+                              else on it would be the panel pointing at a device
+                              and declining to say why. */}
+                          {d.milestoneClaims > 0 && (
+                            <>
+                              {" "}
+                              · {d.milestoneClaims} rung{d.milestoneClaims === 1 ? "" : "s"}
+                            </>
+                          )}
                         </span>
                       </span>
                       <ChevronDown

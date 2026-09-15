@@ -306,11 +306,12 @@ describe("roster slots", () => {
   it("reports the best copy held before, not the copy just minted", async () => {
     // A platinum handed over earlier is what today's standard has to beat.
     const [ep] = await rosterIds();
-    await sql("SELECT public.grant_card_copy_once($1, $2, $3, $4)", [
+    await sql("SELECT public.grant_card_copy_once($1, $2, $3, $4, $5)", [
       "k-1",
       IDS.alice,
       ep,
       "platinum",
+      IDS.event,
     ]);
     const pack = await open();
     const slot = roster(pack).find((c) => c.id === ep)!;

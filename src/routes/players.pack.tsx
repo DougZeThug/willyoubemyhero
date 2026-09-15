@@ -147,16 +147,30 @@ function slotRef(slot: PackSlot, local: LocalBefore | undefined): PackSlotRef {
 }
 
 function PackPage() {
-  const { event, bundle, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
+  const {
+    event,
+    bundle,
+    error,
+    loading: eventLoading,
+    failedTables,
+    realtimeDegraded,
+    refetch,
+  } = useEventBundle();
   // A read that failed, as opposed to one still on its way — and all three ways
   // it can fail, because every one of them ends with no roster to draw the cards
   // on screen from. The event can be missing, the bundle query can reject, or
   // the bundle can come back fine with the roster table coalesced to `[]` —
   // which is the case `failed` exists to name, and the one an error check alone
-  // cannot see. This is both what unblocks `useMyCollection` below and what the
-  // render bails out on.
+  // cannot see. This is what the render bails out on.
   const eventFailed =
     (!!error && (!event || !bundle)) || failedTables.includes("event_participants");
+  // What unblocks `useMyCollection` below, and deliberately a wider question than
+  // the one above: the hook only needs to know that no event id is coming, and a
+  // combine that simply is not on answers that just as finally as a read that
+  // broke. Passing `eventFailed` here left a member between combines reconciling
+  // for good, because out of season the read SUCCEEDS with no event — so the
+  // stats query never runs, never settles, and the counter stayed dashed.
+  const noEventComing = (!event && !eventLoading) || eventFailed;
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never a player's — see the note on useEventCardBack. The
   // wrapper is shown before anything has been dealt, so a per-player back here
@@ -168,7 +182,7 @@ function PackPage() {
   // For a member the server is the collection; for a guest the local store is,
   // and it is what the ribbon counts a guest's pulls against.
   const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
-  const mine = useMyCollection(event?.id ?? null, rosterIds, eventFailed);
+  const mine = useMyCollection(event?.id ?? null, rosterIds, noEventComing);
   const collected = mine.collection;
   const collectionLoaded = mine.ready;
 
@@ -1378,3 +1392,7 @@ function PackPage() {
     </div>
   );
 }
+
+// Same as the other tested pages in this folder: the test imports the component
+// as the module's default, and a route file otherwise exports only `Route`.
+export default PackPage;

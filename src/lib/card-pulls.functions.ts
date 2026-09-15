@@ -164,6 +164,13 @@ export const grantCard = createServerFn({ method: "POST" })
       _participant_id: data.participantId,
       _event_participant_id: data.eventParticipantId,
       _edition: data.edition ?? "standard",
+      // The event the token actually authorizes, carried into the write rather
+      // than checked and dropped. Without it the guard above proved only that
+      // the caller runs SOME event: the RPC checked that the card and the
+      // recipient existed, not that either belonged here, so an admin for this
+      // combine could mint a copy of a card from somebody else's — and bump
+      // that event's public "packed by" count doing it.
+      _event_id: data.eventId,
     });
     if (error) throw new Error(error.message);
     const row = (res ?? {}) as { copies?: number; repeat?: boolean };

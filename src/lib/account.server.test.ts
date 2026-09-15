@@ -20,6 +20,7 @@ const USER = "10000000-0000-4000-8000-000000000001";
 const PLAYER = "00000000-0000-4000-8000-0000000000aa";
 const GUEST_ACCOUNT = "00000000-0000-4000-8000-0000000000e1";
 const GUEST_DEVICE = "00000000-0000-4000-8000-0000000000e2";
+const OTHER_PLAYER = "00000000-0000-4000-8000-0000000000bb";
 
 function withDb(responses: SupabaseResponses = {}) {
   mock = createSupabaseMock(responses);
@@ -100,14 +101,59 @@ describe("syncAccount", () => {
   });
 
   it("upgrades a guest account once the phone claims a roster player", async () => {
-    withDb(existing({ guest_id: GUEST_ACCOUNT }));
+    withDb({
+      ...existing({ guest_id: GUEST_ACCOUNT }),
+      "rpc.bind_account_to_player": {
+        data: { bound: true, boundParticipantId: PLAYER, boundName: "Alice", name: "Alice" },
+      },
+    });
     const res = await sync({ memberId: PLAYER, guestId: null });
 
     expect(res).toMatchObject({ kind: "member", id: PLAYER });
-    expect(mock.client.rpc).toHaveBeenCalledWith("claim_guest_secrets", {
+    // One statement, not a row write followed by three moves. The upgrade and
+    // the emptying of the guest id it abandons have to commit together, or a
+    // failure between them leaves the account holding a player and part of its
+    // old collection filed under a guest id nothing reads again.
+    expect(mock.client.rpc).toHaveBeenCalledWith("bind_account_to_player", {
+      _user_id: USER,
       _participant_id: PLAYER,
       _guest_id: GUEST_ACCOUNT,
     });
+    expect(mock.client.rpc).not.toHaveBeenCalledWith("claim_guest_secrets", expect.anything());
+    expect(mock.callsFor("account_identities", "update")).toHaveLength(0);
+  });
+
+  it("takes the player another device bound first, rather than the one it asked for", async () => {
+    // Two handsets claiming at once. The row is authoritative and the winner's
+    // binding stands; what must not happen is this device's guest collection
+    // being left behind because the bind it attempted lost.
+    withDb({
+      ...existing({ guest_id: GUEST_ACCOUNT }),
+      "rpc.bind_account_to_player": {
+        data: { bound: false, boundParticipantId: OTHER_PLAYER, boundName: "Bob", name: "Alice" },
+      },
+    });
+    const res = await sync({ memberId: PLAYER, guestId: null });
+    expect(res).toMatchObject({ kind: "member", id: OTHER_PLAYER });
+  });
+
+  it("stays a guest when the account turns out to be bound to nobody", async () => {
+    withDb({
+      ...existing({ guest_id: GUEST_ACCOUNT }),
+      "rpc.bind_account_to_player": { data: { bound: false, boundParticipantId: null } },
+    });
+    const res = await sync({ memberId: PLAYER, guestId: null });
+    expect(res).toMatchObject({ kind: "guest", id: GUEST_ACCOUNT });
+  });
+
+  it("refuses to hand back an identity when the upgrade fails", async () => {
+    // The whole point of doing this in one statement: a failure has to leave the
+    // device exactly where it was, with its guest token still good.
+    withDb({
+      ...existing({ guest_id: GUEST_ACCOUNT }),
+      "rpc.bind_account_to_player": { error: { message: "nope" } },
+    });
+    await expect(sync({ memberId: PLAYER, guestId: null })).rejects.toEqual({ message: "nope" });
   });
 
   it("refuses to replace the device identity when a merge fails", async () => {
@@ -128,5 +174,51 @@ describe("syncAccount", () => {
       _into_guest: GUEST_ACCOUNT,
       _from_guest: GUEST_DEVICE,
     });
+  });
+});
+
+describe("bindParticipant", () => {
+  async function bind(participantId = PLAYER) {
+    const { bindParticipant } = await import("./account.server");
+    return bindParticipant(USER, participantId);
+  }
+
+  it("binds and moves the collection in one statement", async () => {
+    // This used to be an insert-or-update followed by three separate
+    // `claim_guest_*` requests, each its own transaction. A timeout on the
+    // second left the account bound to the player with its packs and streak
+    // rungs still filed under the guest id — and nothing to roll the row back.
+    withDb({
+      "rpc.bind_account_to_player": { data: { bound: true, name: "Alice" } },
+    });
+    const res = await bind();
+
+    expect(res).toEqual({ kind: "member", id: PLAYER, name: "Alice" });
+    expect(mock.client.rpc).toHaveBeenCalledWith("bind_account_to_player", {
+      _user_id: USER,
+      _participant_id: PLAYER,
+    });
+    expect(mock.callsFor("account_identities", "insert")).toHaveLength(0);
+    expect(mock.callsFor("account_identities", "update")).toHaveLength(0);
+    expect(mock.client.rpc).not.toHaveBeenCalledWith("claim_guest_packs", expect.anything());
+  });
+
+  it("refuses an account already spoken for, and says by whom", async () => {
+    // A named refusal rather than a throw the caller cannot tell from a flaky
+    // request: the claim screen said "Welcome" to both, while the account went
+    // on pointing at the old player for every other device.
+    withDb({
+      "rpc.bind_account_to_player": { data: { bound: false, boundName: "Bob", name: "Alice" } },
+    });
+    const { AccountAlreadyLinkedError } = await import("./account.server");
+    await expect(bind()).rejects.toBeInstanceOf(AccountAlreadyLinkedError);
+    await expect(bind()).rejects.toMatchObject({ reason: "already_linked", boundName: "Bob" });
+  });
+
+  it("writes nothing at all when the statement fails", async () => {
+    withDb({ "rpc.bind_account_to_player": { error: { message: "nope" } } });
+    await expect(bind()).rejects.toEqual({ message: "nope" });
+    expect(mock.callsFor("account_identities", "insert")).toHaveLength(0);
+    expect(mock.callsFor("account_identities", "update")).toHaveLength(0);
   });
 });

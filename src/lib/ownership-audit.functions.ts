@@ -44,6 +44,8 @@ export type StrandedDevice = {
   guestId: string;
   secrets: number;
   packOpens: number;
+  /** Streak rungs claimed on this device, still filed against it. */
+  milestoneClaims: number;
   firstSeen: string | null;
   lastSeen: string | null;
   /** A signed-in account is attached to this device but has no player of its own. */
@@ -91,6 +93,14 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
 
     const { data: packs } = await sb
       .from("pack_opens")
+      .select("participant_id, guest_id")
+      .returns<{ participant_id: string | null; guest_id: string | null }[]>();
+
+    // The third thing a device can be left holding. Read for the same reason the
+    // packs are: a guest-held rung is a payout this person cannot reach, and the
+    // panel is the only place anybody can see one to move it.
+    const { data: rungs } = await sb
+      .from("streak_milestone_claims")
       .select("participant_id, guest_id")
       .returns<{ participant_id: string | null; guest_id: string | null }[]>();
 
@@ -145,19 +155,34 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
       };
     });
 
-    // Device-held rows: the whole point of the panel.
-    const strandedIds = [
-      ...new Set(
-        (pulls ?? [])
-          .filter((r) => !r.participant_id && r.guest_id)
-          .map((r) => r.guest_id as string),
-      ),
-    ];
     const packsByGuest = new Map<string, number>();
     for (const row of packs ?? []) {
       if (row.participant_id || !row.guest_id) continue;
       packsByGuest.set(row.guest_id, (packsByGuest.get(row.guest_id) ?? 0) + 1);
     }
+    const rungsByGuest = new Map<string, number>();
+    for (const row of rungs ?? []) {
+      if (row.participant_id || !row.guest_id) continue;
+      rungsByGuest.set(row.guest_id, (rungsByGuest.get(row.guest_id) ?? 0) + 1);
+    }
+
+    // Device-held rows: the whole point of the panel.
+    //
+    // All three tables, not just the secrets. A guest collection moves in three
+    // steps and a failure between any two leaves only some of it behind, so
+    // "secrets moved, packs did not" is a real state — and while this list was
+    // built from secret_card_pulls alone, it was a state with no secrets left to
+    // notice it by. The device that most needs finding here was the one the
+    // panel could not see.
+    const strandedIds = [
+      ...new Set([
+        ...(pulls ?? [])
+          .filter((r) => !r.participant_id && r.guest_id)
+          .map((r) => r.guest_id as string),
+        ...packsByGuest.keys(),
+        ...rungsByGuest.keys(),
+      ]),
+    ];
 
     const { data: cardNames } = await sb.from("secret_cards").select("id, name");
     const nameOfCard = new Map((cardNames ?? []).map((c) => [c.id, c.name]));
@@ -170,6 +195,7 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
           guestId,
           secrets: rows.length,
           packOpens: packsByGuest.get(guestId) ?? 0,
+          milestoneClaims: rungsByGuest.get(guestId) ?? 0,
           firstSeen: days[0] ?? null,
           lastSeen: days[days.length - 1] ?? null,
           signedIn: accountGuests.has(guestId),
@@ -178,7 +204,16 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
           ].slice(0, 4),
         };
       })
-      .sort((a, b) => b.secrets - a.secrets);
+      // By everything it is holding, not by secrets alone — a device with only
+      // packs or only rungs would otherwise sort to the bottom at zero, under
+      // every device that has nothing to do with it.
+      .sort(
+        (a, b) =>
+          b.secrets +
+          b.packOpens +
+          b.milestoneClaims -
+          (a.secrets + a.packOpens + a.milestoneClaims),
+      );
 
     return { players, stranded };
   });

@@ -30,10 +30,16 @@ Confirm with the user before adding anything to `minimumReleaseAgeExcludes`.
 | `bun run format`    | Prettier write; run this before `lint` if it complains    |
 | `bun run test`      | Unit, hook and component tests (Vitest)                   |
 | `bun run test:db`   | Database integration tests (starts its own Postgres)      |
-| `bun run test:e2e`  | Playwright, phone and desktop                             |
+| `bun run test:e2e`  | Playwright, phone and desktop — **CI only, see below**    |
 
 Prettier runs through `eslint-plugin-prettier`, so a formatting slip fails
 `bun run lint`, not just `format`. Run `format` then `lint`.
+
+**Do not run `test:e2e` locally or in an agent session.** It is CI's job, and
+the `e2e` workflow gates the sync just as hard either way. Running it here buys
+nothing and costs a browser download, a production-shaped build and twenty
+minutes. Before pushing, run `format`, `lint`, `typecheck`, `test` and — when a
+migration or an RPC changed — `test:db`; leave the browser to GitHub.
 
 `test:db` finds `initdb` on PATH-style layouts (`/bin`, `/usr/bin`) and the
 usual Debian ones (`/usr/lib/postgresql/<v>/bin`). If yours lives somewhere
@@ -162,6 +168,9 @@ This is a faithful stand-in for the _database_ — grants, policies, RPCs. It is
 not PostgREST or GoTrue, and does not pretend to be.
 
 ### E2E
+
+Run in CI, not here — see Commands. What follows is for reading and editing the
+specs, which is the part that happens locally.
 
 Server-function responses are stubbed in the browser, so the suite never touches
 Supabase. Two things about that are non-obvious and cost real time to work out:
