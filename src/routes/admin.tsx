@@ -189,13 +189,13 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
   }
 
   return (
-    <div className="mx-auto grid min-h-[60vh] max-w-md place-items-center px-4 py-10">
+    <div className="mx-auto grid min-h-[60dvh] max-w-md place-items-center px-4 py-10">
       <Card className="hud-bezel w-full border-white/10">
         <CardContent className="p-5 sm:p-6">
           <div className="mb-4">
             <div className="flex items-center gap-2 text-primary">
               <LockKeyhole className="h-4 w-4" />
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
+              <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
                 Console
               </span>
             </div>
@@ -211,7 +211,19 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
             <Label htmlFor="pin">Event PIN</Label>
             <Input
               id="pin"
-              type="password"
+              // `text` and not `password`, which is what this said and what cost
+              // the keypad. iOS ignores `inputMode` on a password field and
+              // opens QWERTY — so a commissioner at a start line, holding a
+              // phone in one hand, hunts for four digits on a letter keyboard.
+              //
+              // The masking comes back as `-webkit-text-security`, which Safari
+              // and Chrome both honour and which leaves `inputMode` alone. The
+              // trade is explicit: Firefox does not implement it, so the PIN is
+              // visible while typing there. That is the right way round for this
+              // field — it is a four-digit event PIN shared across a league,
+              // guarding a console whose real protection is the HMAC'd token
+              // the server issues, and the phone is where it is actually typed.
+              type="text"
               inputMode="numeric"
               autoComplete="off"
               autoFocus
@@ -228,7 +240,7 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
               // Stated twice for the reason the member code box gives: the
               // primitive's `pointer-fine:` release would otherwise take this to
               // 14px on the laptop the console is usually run from.
-              className="text-center font-display text-2xl tracking-[0.4em] pointer-fine:text-2xl"
+              className="text-center font-display text-2xl tracking-[0.4em] [-webkit-text-security:disc] pointer-fine:text-2xl"
             />
             <Button type="submit" disabled={busy || !pin} className="w-full">
               {busy ? "Checking…" : "Unlock"}
@@ -286,10 +298,10 @@ function TimingConsole() {
         <div>
           <div className="flex items-center gap-2 text-primary">
             <TimerIcon className="h-4 w-4" />
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               Console
             </span>
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[9px] uppercase">
+            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-label uppercase">
               Admin
             </Badge>
           </div>
@@ -308,7 +320,7 @@ function TimingConsole() {
           <div className="mb-2">
             <div className="flex items-center gap-2 text-primary">
               <Camera className="h-4 w-4" />
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
+              <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
                 Event Setup
               </span>
             </div>
@@ -442,7 +454,7 @@ function TimingConsole() {
 
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="font-display text-sm font-bold uppercase tracking-widest text-muted-foreground">
+                <h3 className="font-display text-sm font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   Stations & Splits
                 </h3>
                 <Button
@@ -472,7 +484,7 @@ function TimingConsole() {
                               : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10")
                         }
                       >
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        <div className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                           {st.short_name ?? `#${st.station_order}`}
                         </div>
                         <div className="truncate font-display text-lg font-black uppercase leading-tight">
@@ -488,7 +500,7 @@ function TimingConsole() {
                             addPenalty(st.id, st.penalty_amount_ms, `${st.name} penalty`)
                           }
                           disabled={finished}
-                          className="min-h-9 rounded-md border border-warn/30 bg-warn/10 py-1 text-[10px] font-bold uppercase tracking-widest text-warn hover:bg-warn/20 disabled:opacity-50 sm:min-h-0"
+                          className="min-h-9 rounded-md border border-warn/30 bg-warn/10 py-1 text-label font-bold uppercase tracking-[0.08em] text-warn hover:bg-warn/20 disabled:opacity-50 sm:min-h-0"
                         >
                           <Plus className="mr-1 inline h-3 w-3" />+
                           {formatTime(st.penalty_amount_ms)} pen
@@ -502,7 +514,7 @@ function TimingConsole() {
 
             {run.penalties.length > 0 && (
               <div className="mt-4">
-                <h3 className="mb-1 font-display text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                <h3 className="mb-1 font-display text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   Penalties
                 </h3>
                 <ul className="space-y-1 text-sm">
@@ -560,7 +572,7 @@ function StartCard({
             }
           />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+            <div className="text-label uppercase tracking-[0.08em] text-muted-foreground">
               {slot.onClock ? "On the clock" : "Up next on the crowd screens"}
             </div>
             <div className="truncate text-sm font-semibold uppercase">
@@ -582,7 +594,7 @@ function StartCard({
             </Button>
           )}
         </div>
-        <div className="max-h-[55vh] overflow-auto rounded border border-white/5 divide-y divide-white/5 sm:max-h-72">
+        <div className="max-h-[55dvh] overflow-auto rounded border border-white/5 divide-y divide-white/5 sm:max-h-72">
           {queued.map((p) => {
             const sel = p.participant_id === selectedParticipantId;
             return (
@@ -844,7 +856,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
             href={liveUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 break-all text-primary hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 break-all text-primary hover:underline pointer-fine:min-h-0"
           >
             <ExternalLink className="h-3 w-3 shrink-0" /> {liveUrl}
           </a>
@@ -853,7 +865,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
               href={tvUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 break-all text-primary/80 hover:underline"
+              className="inline-flex min-h-11 items-center gap-1 break-all text-primary/80 hover:underline pointer-fine:min-h-0"
             >
               <ExternalLink className="h-3 w-3 shrink-0" /> TV big-screen: /tv
             </a>
@@ -887,7 +899,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                 : "Regenerate image sizes"}
             </Button>
             {!regenState.running && regenState.total > 0 && (
-              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              <span className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
                 {regenState.done}/{regenState.total} done
                 {regenState.failed > 0 ? ` · ${regenState.failed} failed` : ""}
               </span>
@@ -915,7 +927,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
 
               {/* Upload controls take a full second line on phones. */}
               <div className="flex w-full items-center gap-1.5 sm:w-auto">
-                <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-border-strong px-3 text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:border-primary/60 hover:text-primary sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
+                <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-border-strong px-3 text-label font-bold uppercase tracking-[0.08em] text-primary/80 hover:border-primary/60 hover:text-primary sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
                   <Camera className="mr-1 inline h-3 w-3 shrink-0" />
                   {uploadingId === p.id ? "…" : "Photo"}
                   <input
@@ -934,7 +946,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                   const busy = uploadingCardId === `${p.id}:${side}`;
                   return (
                     <span key={side} className="flex flex-1 items-center sm:flex-none">
-                      <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-primary/30 bg-primary/10 px-3 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20 sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
+                      <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-primary/30 bg-primary/10 px-3 text-label font-bold uppercase tracking-[0.08em] text-primary hover:bg-primary/20 sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
                         <IdCard className="mr-1 inline h-3 w-3 shrink-0" />
                         {busy ? "…" : has ? `${side} ✓` : side}
                         <input
@@ -1075,7 +1087,7 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
       <form onSubmit={onAdd} className="space-y-2">
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
-            <Label htmlFor="new-player-name" className="text-[10px] uppercase tracking-widest">
+            <Label htmlFor="new-player-name" className="text-label uppercase tracking-[0.08em]">
               Name
             </Label>
             <Input
@@ -1088,7 +1100,7 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
             />
           </div>
           <div>
-            <Label htmlFor="new-player-nick" className="text-[10px] uppercase tracking-widest">
+            <Label htmlFor="new-player-nick" className="text-label uppercase tracking-[0.08em]">
               Nickname (optional)
             </Label>
             <Input
@@ -1135,7 +1147,7 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
                     <Button
                       size="sm"
                       variant={isIn ? "secondary" : "ghost"}
-                      className="h-8 px-2 text-[10px] uppercase tracking-widest"
+                      className="h-8 px-2 text-label uppercase tracking-[0.08em]"
                       onClick={() => toggleIn(p.id, playerName, isIn)}
                     >
                       {isIn ? (

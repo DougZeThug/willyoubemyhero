@@ -235,7 +235,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <span
               className={
-                "text-[10px] font-bold uppercase tracking-[0.08em] " +
+                "text-label font-bold uppercase tracking-[0.08em] " +
                 (saved ? "text-primary" : "text-warn")
               }
             >
@@ -251,13 +251,13 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
             <span className="flex items-center gap-3">
               <button
                 onClick={copyAll}
-                className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
+                className="inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
               >
                 <Copy className="h-3 w-3" /> Copy all
               </button>
               <button
                 onClick={printAll}
-                className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
+                className="inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
               >
                 <Printer className="h-3 w-3" /> Print
               </button>
@@ -266,14 +266,14 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
               {!saved && (
                 <button
                   onClick={() => setSaved(true)}
-                  className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
+                  className="inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
                 >
                   <Check className="h-3 w-3" /> Got them
                 </button>
               )}
             </span>
           </div>
-          <ul className="max-h-[50vh] space-y-0.5 overflow-auto rounded-md border border-warn/30 bg-warn/5 p-2 sm:max-h-56">
+          <ul className="max-h-[50dvh] space-y-0.5 overflow-auto rounded-md border border-warn/30 bg-warn/5 p-2 sm:max-h-56">
             {freshCodes.map((i) => (
               <li key={i.participantId} className="flex items-center justify-between gap-2 text-xs">
                 <span className="truncate uppercase">{i.name}</span>
@@ -287,7 +287,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
       )}
 
       {!issued && (claims.data?.length ?? 0) > 0 && (
-        <ul className="mt-3 max-h-[50vh] space-y-0.5 overflow-auto pr-1 sm:max-h-40">
+        <ul className="mt-3 max-h-[50dvh] space-y-0.5 overflow-auto pr-1 sm:max-h-40">
           {(bundle?.participants ?? []).map((p) => {
             const claim = claims.data?.find((c) => c.participant_id === p.participant_id);
             const fresh = singles[p.participant_id];
@@ -304,8 +304,8 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
                     <span
                       className={
                         claim?.claimed_at
-                          ? "text-[10px] uppercase tracking-widest text-primary"
-                          : "text-[10px] uppercase tracking-widest text-muted-foreground"
+                          ? "text-label uppercase tracking-[0.08em] text-primary"
+                          : "text-label uppercase tracking-[0.08em] text-muted-foreground"
                       }
                     >
                       {claim?.claimed_at ? "claimed" : claim ? "code issued" : "no code"}
@@ -315,7 +315,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
                     type="button"
                     disabled={busy}
                     onClick={() => issueOne(p.participant_id, p.participant?.name ?? "this player")}
-                    className="inline-flex min-h-8 items-center gap-1 px-1.5 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline disabled:opacity-50"
+                    className="inline-flex min-h-11 items-center gap-1 px-1.5 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline disabled:opacity-50 pointer-fine:min-h-8"
                   >
                     <RefreshCw className="h-3 w-3" />
                     {fresh ? "Again" : "Issue"}
@@ -392,13 +392,13 @@ export function AwardsAdminPanel({ eventId, locked }: { eventId: string; locked:
           : "Only you can see this tally. Members see nothing until you close voting."}
       </p>
 
-      <div className="max-h-[50vh] space-y-2 overflow-auto pr-1 sm:max-h-56">
+      <div className="max-h-[50dvh] space-y-2 overflow-auto pr-1 sm:max-h-56">
         {AWARD_CATEGORIES.map((cat) => {
           const counts = tally.data?.tally?.[cat.id] ?? {};
           const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
           return (
             <div key={cat.id}>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-primary/80">
+              <div className="text-label font-bold uppercase tracking-[0.08em] text-primary/80">
                 {cat.icon} {cat.label}
               </div>
               {ranked.length === 0 ? (

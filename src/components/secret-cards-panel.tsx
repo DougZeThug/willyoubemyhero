@@ -610,7 +610,7 @@ export function SecretCardsPanel() {
         )}
       >
         <UploadCloud className="mx-auto h-8 w-8 text-primary/70" aria-hidden />
-        <p className="mt-2 font-display text-sm font-bold uppercase tracking-widest text-foreground">
+        <p className="mt-2 font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
           {busy ? "Uploading…" : <span className="max-sm:hidden">Drop card art here</span>}
           {!busy && <span className="sm:hidden">Add card art</span>}
         </p>
@@ -650,7 +650,7 @@ export function SecretCardsPanel() {
           <select
             value={uploadCollection ?? ""}
             onChange={(e) => setUploadCollection(e.target.value || null)}
-            className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+            className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
             aria-label="Set for new uploads"
           >
             <option value="">Unsorted</option>
@@ -724,7 +724,7 @@ export function SecretCardsPanel() {
                           ),
                         )
                       }
-                      className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+                      className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
                     >
                       <option value="">Unsorted</option>
                       {pickerSets.map((c) => (
@@ -1051,7 +1051,7 @@ export function SecretCardsPanel() {
           icon taps in a scrolling row — this is the editing that needs a keyboard
           and room, and on a phone the row never had either. */}
       <Sheet open={!!editingCard} onOpenChange={(open) => !open && setEditing(null)}>
-        <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+        <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto">
           {editingCard && (
             <>
               <SheetHeader className="text-left">
@@ -1070,7 +1070,7 @@ export function SecretCardsPanel() {
                     <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                       Card art
                     </span>
-                    <span className="mt-1 flex min-h-11 cursor-pointer items-center justify-center rounded border border-border-strong px-3 text-xs font-bold uppercase tracking-widest text-primary transition-colors hover:border-primary/50">
+                    <span className="mt-1 flex min-h-11 cursor-pointer items-center justify-center rounded border border-border-strong px-3 text-xs font-bold uppercase tracking-[0.08em] text-primary transition-colors hover:border-primary/50">
                       Replace art
                       <input
                         type="file"

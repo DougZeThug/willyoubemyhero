@@ -103,7 +103,7 @@ export function FinishCelebration({
               {formatTime(timeMs ?? 0)}
             </div>
             {deltaMs != null && (
-              <div className="mt-2 text-sm font-bold uppercase tracking-widest">
+              <div className="mt-2 text-sm font-bold uppercase tracking-[0.08em]">
                 {deltaMs === 0 ? (
                   <span className="text-primary">New leader</span>
                 ) : (

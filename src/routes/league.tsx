@@ -56,9 +56,7 @@ function LeaguePage() {
                 <div className="mt-2 font-display text-sm font-black uppercase tracking-[0.08em]">
                   {l.label}
                 </div>
-                <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                  {l.blurb}
-                </div>
+                <div className="mt-0.5 text-meta leading-snug text-muted-foreground">{l.blurb}</div>
               </Link>
             );
           })}

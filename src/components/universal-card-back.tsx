@@ -123,7 +123,7 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
               busy && "pointer-events-none opacity-60",
             )}
           >
-            <p className="font-display text-sm font-bold uppercase tracking-widest text-foreground">
+            <p className="font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
               {busy ? "Uploading…" : url ? "Replace card back" : "Upload card back"}
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">

@@ -178,7 +178,7 @@ function AwardsPage() {
                         </Link>
                       ))}
                       {winners.length > 1 && (
-                        <span className="self-center text-label uppercase tracking-widest text-muted-foreground">
+                        <span className="self-center text-label uppercase tracking-[0.08em] text-muted-foreground">
                           tied
                         </span>
                       )}
@@ -221,7 +221,7 @@ function AwardsPage() {
                           />
                           <span
                             className={cn(
-                              "min-w-0 flex-1 truncate text-label font-semibold uppercase tracking-wide",
+                              "min-w-0 flex-1 line-clamp-2 text-label font-semibold uppercase tracking-wide",
                               chosen ? "text-primary" : "text-foreground",
                             )}
                           >

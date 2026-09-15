@@ -455,7 +455,7 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
               id="generated-prompt"
               value={generated?.prompt ?? ""}
               readOnly
-              className="min-h-72 font-mono text-xs"
+              className="min-h-72 font-mono text-base pointer-fine:text-xs"
               placeholder="Complete the required subject fields, then generate."
             />
           </div>

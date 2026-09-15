@@ -220,7 +220,7 @@ function LivePage() {
               <h2 className="font-display text-xs font-black uppercase tracking-[0.08em] text-primary/80">
                 Top 5
               </h2>
-              <span className="text-label uppercase tracking-widest text-muted-foreground">
+              <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                 {done}/{total} done
               </span>
               <Trophy className="h-3.5 w-3.5 text-primary/60" />
@@ -260,12 +260,12 @@ function LivePage() {
                         params={{ id: row.ep.id }}
                         className="flex min-h-11 min-w-0 flex-1 items-center hover:text-primary"
                       >
-                        <span className="truncate text-sm font-semibold uppercase tracking-wide">
+                        <span className="line-clamp-2 text-sm font-semibold uppercase tracking-wide">
                           {row.ep.participant?.name ?? "—"}
                         </span>
                       </Link>
                     ) : (
-                      <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
+                      <span className="flex-1 line-clamp-2 text-sm font-semibold uppercase tracking-wide">
                         —
                       </span>
                     )}

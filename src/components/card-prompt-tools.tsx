@@ -69,7 +69,7 @@ export function CardPromptTemplateManager({ templates }: { templates: PromptTemp
           Manage Series Prompts
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-auto">
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-auto">
         <DialogHeader>
           <DialogTitle>Manage Series Prompts</DialogTitle>
         </DialogHeader>
@@ -135,7 +135,7 @@ export function CardPromptHistory({
   const rows = (history.data?.runs ?? []) as PromptHistoryRow[];
   return (
     <details className="mt-5 rounded-md border border-white/10 p-3">
-      <summary className="min-h-11 cursor-pointer font-display text-xs font-bold uppercase tracking-widest">
+      <summary className="min-h-11 cursor-pointer font-display text-xs font-bold uppercase tracking-[0.08em]">
         Recent Prompts ({rows.length})
       </summary>
       <div className="mt-2 max-h-80 space-y-2 overflow-auto">
@@ -344,7 +344,7 @@ export function CardPromptBatch({
       onToggle={(e) => setOpen(e.currentTarget.open)}
       className="mt-5 rounded-md border border-primary/20 p-3"
     >
-      <summary className="min-h-11 cursor-pointer font-display text-xs font-bold uppercase tracking-widest">
+      <summary className="min-h-11 cursor-pointer font-display text-xs font-bold uppercase tracking-[0.08em]">
         Batch Production
       </summary>
       <div className="mt-3 space-y-4">
@@ -538,7 +538,11 @@ export function CardPromptBatch({
               {index + 1} of {queue.length} — {current.subjectName}{" "}
               {copied.has(current.key) ? "✓ copied" : ""}
             </p>
-            <Textarea readOnly className="min-h-64 font-mono text-xs" value={current.prompt} />
+            <Textarea
+              readOnly
+              className="min-h-64 font-mono text-base pointer-fine:text-xs"
+              value={current.prompt}
+            />
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Button
                 type="button"

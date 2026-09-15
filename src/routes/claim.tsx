@@ -291,7 +291,7 @@ function ClaimPage() {
                         truncated. */}
                     <span className="min-w-0 truncate">{p.name}</span>
                     {p.claimed && (
-                      <span className="ml-1 shrink-0 text-label font-bold tracking-widest text-muted-foreground">
+                      <span className="ml-1 shrink-0 text-label font-bold tracking-[0.08em] text-muted-foreground">
                         ✓
                       </span>
                     )}

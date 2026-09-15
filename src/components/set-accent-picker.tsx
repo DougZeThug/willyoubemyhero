@@ -67,7 +67,7 @@ export function SetAccentPicker({
           >
             <span
               className={cn(
-                "flex h-7 w-7 items-center justify-center rounded-full border text-[10px] text-muted-foreground",
+                "flex h-7 w-7 items-center justify-center rounded-full border text-meta text-muted-foreground",
                 !accent ? "border-primary ring-2 ring-primary/50" : "border-border-strong",
               )}
             >

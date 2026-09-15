@@ -166,12 +166,12 @@ function OrderPage() {
                         params={{ id: r.id }}
                         className="flex min-h-11 items-center hover:text-primary"
                       >
-                        <span className="truncate font-display text-lg font-bold uppercase leading-tight">
+                        <span className="line-clamp-2 font-display text-lg font-bold uppercase leading-tight">
                           {r.participant?.name ?? "—"}
                         </span>
                       </Link>
                       {r.participant?.fantasy_team_name && (
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="line-clamp-2 text-xs text-muted-foreground">
                           {r.participant.fantasy_team_name}
                         </div>
                       )}
@@ -198,7 +198,7 @@ function StatusBadge({ status }: { status: string }) {
           ? "bg-destructive/20 text-destructive"
           : "bg-white/10 text-muted-foreground";
   return (
-    <span className={`rounded px-2 py-0.5 text-label font-bold uppercase tracking-widest ${cls}`}>
+    <span className={`rounded px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em] ${cls}`}>
       {status.replace(/_/g, " ")}
     </span>
   );

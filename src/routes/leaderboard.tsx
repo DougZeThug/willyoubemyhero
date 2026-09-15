@@ -126,7 +126,7 @@ function LeaderboardPage() {
             rows.length > 0 ? (
               <span className="timer-digits tabular text-primary text-lg">
                 {rows.length}{" "}
-                <span className="text-muted-foreground text-label font-bold uppercase tracking-widest">
+                <span className="text-muted-foreground text-label font-bold uppercase tracking-[0.08em]">
                   finished
                 </span>
               </span>
