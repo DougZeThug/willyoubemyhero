@@ -392,7 +392,7 @@ describe("the level on the stand", () => {
 
   it("announces the level beside the pips on a fresh pull", () => {
     // The caption says it in words, so the pips only add the rank. Saying both
-    // would read "Mythic, 5 of 5" and then "Mythic · 0.5% pull" to a screen
+    // would read "Mythic, 5 of 5" and then "Mythic · 0.5%" to a screen
     // reader — the same word twice, one node apart.
     renderStand(onSecret);
     expect(screen.getByRole("img", { name: /^Level \d of \d$/ })).toBeInTheDocument();
