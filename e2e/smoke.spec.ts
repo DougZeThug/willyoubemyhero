@@ -388,14 +388,25 @@ async function clippedText(page: Page, width: number, path: string): Promise<str
  * render set by hand, which is how the ballot's 9.6px initials survived all
  * three of them.
  *
- * The cap is a px ceiling rather than a ratio, and that is the load-bearing
- * part. letter-spacing inherits as a computed length, so 0.08em on a 13px
- * parent is 1.04px, and 1.04px on a 12px child reads back as 0.087em — over
- * the cap, on an element carrying no tracking class at all. §0 records that
- * false positive against the trade tab's unread badge, and the fix it names is
- * to read the number rather than the ratio. 1.12px is 0.08em at 14px, the size
- * the rule stops at: the badge's 1.04px passes, a tracking-widest 12px label
- * at 1.2px does not.
+ * The cap is an em, and the awkward part is that letter-spacing inherits as a
+ * computed *length*: 0.08em on a 13px parent is 1.04px, and that same 1.04px
+ * on a 12px child reads back as 0.087em — over the cap, on an element carrying
+ * no tracking class at all. §0 records that false positive against the trade
+ * tab's unread badge.
+ *
+ * The first version of this sweep dodged it with a flat 1.12px ceiling, which
+ * is 0.08em at 14px. That let the badge through, and an 11px label through with
+ * it: 0.1em there is 1.10px, under the ceiling and over the cap, so the sweep
+ * could not see tracking-widest coming back on the smallest labels in the app —
+ * one of the two regressions it exists to catch. A cap calibrated at the top of
+ * a range is loosest at the bottom of it.
+ *
+ * So the cap is proportional again, and the inheritance is handled where it
+ * actually lives: an element whose computed letter-spacing equals its parent's
+ * did not set it, and is not the element to blame for it. The parent is
+ * measured on its own terms and answers there. No epsilon — px * 0.08 is exact
+ * at every size in the scale (11 → 0.88, 12 → 0.96, 12.8 → 1.024, 13 → 1.04)
+ * and the comparison is strict, so a value sitting exactly on the cap passes.
  *
  * /tv is in no sweep here, for the reason it is in none of the others — a board
  * read from across a garden, where the tracking is doing legibility work at
@@ -404,7 +415,7 @@ async function clippedText(page: Page, width: number, path: string): Promise<str
  */
 const MIN_TEXT = 11;
 const TRACKED_BELOW = 14;
-const MAX_TRACKING = 1.12;
+const MAX_TRACKING_EM = 0.08;
 
 /**
  * Every visible element that owns its text, measured where it is drawn.
@@ -419,7 +430,7 @@ const MAX_TRACKING = 1.12;
  */
 async function offScaleText(page: Page, width: number): Promise<string[]> {
   const measured = await page.evaluate(
-    ([floor, below, maxTrack]) =>
+    ([floor, below, maxEm]) =>
       Array.from(document.querySelectorAll<HTMLElement>("*"))
         .filter(
           (el) =>
@@ -433,11 +444,15 @@ async function offScaleText(page: Page, width: number): Promise<string[]> {
           // "normal" is the one value letter-spacing computes to that is not a
           // length, and it is the overwhelming majority of them.
           const track = cs.letterSpacing === "normal" ? 0 : parseFloat(cs.letterSpacing);
+          // Same computed length as the parent means the parent set it. <html>
+          // has no parentElement, so it always answers for its own.
+          const parent = el.parentElement;
+          const owned = !parent || getComputedStyle(parent).letterSpacing !== cs.letterSpacing;
           return {
             px,
             track,
             small: px < floor,
-            loose: px < below && track > maxTrack,
+            loose: px < below && owned && track > px * maxEm,
             tag: el.tagName.toLowerCase(),
             text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
             hint: (el.getAttribute("class") ?? "")
@@ -448,13 +463,16 @@ async function offScaleText(page: Page, width: number): Promise<string[]> {
           };
         })
         .filter((m) => m.small || m.loose),
-    [MIN_TEXT, TRACKED_BELOW, MAX_TRACKING] as const,
+    [MIN_TEXT, TRACKED_BELOW, MAX_TRACKING_EM] as const,
   );
 
   return measured.map((m) => {
     const why = [
       m.small ? `${m.px}px, under the ${MIN_TEXT}px floor` : null,
-      m.loose ? `tracked ${m.track}px at ${m.px}px, over the ${MAX_TRACKING}px cap` : null,
+      m.loose
+        ? `tracked ${m.track}px at ${m.px}px — ` +
+          `${(m.track / m.px).toFixed(3)}em, over the ${MAX_TRACKING_EM}em cap`
+        : null,
     ]
       .filter(Boolean)
       .join("; ");
@@ -694,9 +712,9 @@ test.describe("phone sweeps", () => {
 
       expect(
         offScale,
-        `Type off §16's scale on ${route.path}. The floor is ${MIN_TEXT}px and ` +
-          `the cap 0.08em — ${MAX_TRACKING}px at the ${TRACKED_BELOW}px the rule ` +
-          `stops at. Name the size (text-label, text-meta) rather than setting it.`,
+        `Type off §16's scale on ${route.path}. The floor is ${MIN_TEXT}px, and ` +
+          `the cap ${MAX_TRACKING_EM}em on anything under ${TRACKED_BELOW}px. ` +
+          `Name the size (text-label, text-meta) rather than setting it.`,
       ).toEqual([]);
     });
   }
