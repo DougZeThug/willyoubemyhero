@@ -377,6 +377,91 @@ async function clippedText(page: Page, width: number, path: string): Promise<str
     .map((c) => `${width}px: <${c.tag}> "${c.text}" over by ${c.over}px — ${c.hint}`);
 }
 
+/**
+ * §16's two type rules, and the first gate either of them has ever had.
+ *
+ * §28's ledger credits PR 1 with "the 11px floor and the 0.08em tracking cap,
+ * and the tap-target sweep in e2e/smoke.spec.ts that keeps them" — but the
+ * sweep PR 1 left keeps the tap targets. MIN_FONT above measures fields, for
+ * iOS zoom, and nothing in this repo has ever measured a text node's size or
+ * its tracking. Three passes found type violations by counting them off a
+ * render set by hand, which is how the ballot's 9.6px initials survived all
+ * three of them.
+ *
+ * The cap is a px ceiling rather than a ratio, and that is the load-bearing
+ * part. letter-spacing inherits as a computed length, so 0.08em on a 13px
+ * parent is 1.04px, and 1.04px on a 12px child reads back as 0.087em — over
+ * the cap, on an element carrying no tracking class at all. §0 records that
+ * false positive against the trade tab's unread badge, and the fix it names is
+ * to read the number rather than the ratio. 1.12px is 0.08em at 14px, the size
+ * the rule stops at: the badge's 1.04px passes, a tracking-widest 12px label
+ * at 1.2px does not.
+ *
+ * /tv is in no sweep here, for the reason it is in none of the others — a board
+ * read from across a garden, where the tracking is doing legibility work at
+ * distance (§18). The wordmark and the claim screen's typed code are not
+ * exceptions to the cap but outside it: both are set above 14px.
+ */
+const MIN_TEXT = 11;
+const TRACKED_BELOW = 14;
+const MAX_TRACKING = 1.12;
+
+/**
+ * Every visible element that owns its text, measured where it is drawn.
+ *
+ * "Owns" is a direct child text node. An ancestor's textContent includes its
+ * descendants', so a wrapper would be blamed for a size it does not set and the
+ * same string would report once per level of nesting it happens to sit under.
+ *
+ * getClientRects() for the reason clippedText gives — offsetParent is null for
+ * a fixed element as well as a hidden one — and it drops a collapsed
+ * AdminSection with it, which is display:none rather than unmounted.
+ */
+async function offScaleText(page: Page, width: number): Promise<string[]> {
+  const measured = await page.evaluate(
+    ([floor, below, maxTrack]) =>
+      Array.from(document.querySelectorAll<HTMLElement>("*"))
+        .filter(
+          (el) =>
+            Array.from(el.childNodes).some(
+              (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim() !== "",
+            ) && el.getClientRects().length > 0,
+        )
+        .map((el) => {
+          const cs = getComputedStyle(el);
+          const px = parseFloat(cs.fontSize);
+          // "normal" is the one value letter-spacing computes to that is not a
+          // length, and it is the overwhelming majority of them.
+          const track = cs.letterSpacing === "normal" ? 0 : parseFloat(cs.letterSpacing);
+          return {
+            px,
+            track,
+            small: px < floor,
+            loose: px < below && track > maxTrack,
+            tag: el.tagName.toLowerCase(),
+            text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
+            hint: (el.getAttribute("class") ?? "")
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 3)
+              .join(" "),
+          };
+        })
+        .filter((m) => m.small || m.loose),
+    [MIN_TEXT, TRACKED_BELOW, MAX_TRACKING] as const,
+  );
+
+  return measured.map((m) => {
+    const why = [
+      m.small ? `${m.px}px, under the ${MIN_TEXT}px floor` : null,
+      m.loose ? `tracked ${m.track}px at ${m.px}px, over the ${MAX_TRACKING}px cap` : null,
+    ]
+      .filter(Boolean)
+      .join("; ");
+    return `${width}px: <${m.tag}> "${m.text}" — ${why} — ${m.hint}`;
+  });
+}
+
 /** A member token these stubs never verify — the server is mocked out. */
 async function signInAsMember(page: Page) {
   const me = PLAYERS[0];
@@ -595,14 +680,23 @@ test.describe("phone sweeps", () => {
       // has already settled, so a second and third round trip would buy nothing
       // but the flake of settling twice more.
       const clipped: string[] = [];
+      const offScale: string[] = [];
       for (const width of CLIP_WIDTHS) {
         await page.setViewportSize({ width, height: page.viewportSize()?.height ?? 844 });
         clipped.push(...(await clippedText(page, width, route.path)));
+        offScale.push(...(await offScaleText(page, width)));
       }
       expect(
         clipped,
         `Text clipped by an ellipsis on ${route.path}. On a phone there is no ` +
           `hover to resolve one, so wrap it (line-clamp-2) or give it the room.`,
+      ).toEqual([]);
+
+      expect(
+        offScale,
+        `Type off §16's scale on ${route.path}. The floor is ${MIN_TEXT}px and ` +
+          `the cap 0.08em — ${MAX_TRACKING}px at the ${TRACKED_BELOW}px the rule ` +
+          `stops at. Name the size (text-label, text-meta) rather than setting it.`,
       ).toEqual([]);
     });
   }

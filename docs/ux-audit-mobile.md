@@ -43,7 +43,7 @@ Both sets were taken with the same captures, the same stubs and the same guards 
 | Screens scrolling sideways        | **0**   | **0**   | nothing — closed in the second pass, still closed                                                                |
 | Fields iOS would zoom             | **4**   | **0**   | nothing                                                                                                          |
 | Labels clipped by an ellipsis     | **9**   | **0**   | nothing                                                                                                          |
-| Text under 11 px                  | **303** | **72**  | the ballot's avatar initials at 9.6 px (G12), four of them at three widths                                       |
+| Text under 11 px                  | **303** | **0**   | nothing. The 72 this pass left were all one component — four initials × six award categories × three widths      |
 | Tracking over 0.08 em             | **345** | **114** | the wordmark (105, a stated exception), `/tv` (3, exempt by design) and the badge-inheritance artefact above (6) |
 | Controls whose **box** is < 44 px | **49**  | **10**  | the `Switch` and the `Checkbox`, whose hit area is 44 px and whose box is not — see below                        |
 
@@ -82,9 +82,28 @@ This is the same finding §16 made about the player screens in the first pass, o
 | G9  | **Ten surfaces size in `vh`, not `dvh`**, across eight files — the second pass counted seven. Their submit rows sit under Safari's toolbar.                                                                                                                                                                                                                                                                                                                              | Medium   | fixed                                   |
 | G10 | **`ui/textarea.tsx` still carries the `md:text-sm`** PR 11 took off `Input`. `smoke.spec.ts:196` names it and exempts it, because every `<Textarea>` was the commissioner's. The scope change is the only thing that moved here; the code was not wrong under the rules it was written to.                                                                                                                                                                               | Medium   | fixed                                   |
 | G11 | **`SelectTrigger` has no floor**, and `card-prompt-studio.tsx` pays for it by hand at all twelve of its triggers. A rule held up by twelve call sites remembering it is a rule the thirteenth will not have.                                                                                                                                                                                                                                                             | Low      | fixed                                   |
-| G12 | **`/awards` renders 9.6 px avatar initials** on the ballot, and they are not `aria-hidden` — the only sub-11 px text left on a player-facing screen.                                                                                                                                                                                                                                                                                                                     | Low      | open — see §22                          |
+| G12 | **`/awards` renders 9.6 px avatar initials** on the ballot, and they are not `aria-hidden` — the only sub-11 px text left on a player-facing screen.                                                                                                                                                                                                                                                                                                                     | Low      | fixed in PR 17, and now gated           |
 | G13 | **0.1 em tracking on 12 px labels**, against §16's 0.08 em cap, on the console and on six combine screens besides. The cap's stated exceptions are a typed code, a poster and the wordmark; none of these is one. `/tv` keeps its 0.2 em, which §18 exempts by design — a board read across a garden, where the tracking is doing legibility work at distance.                                                                                                           | Low      | fixed, 34 sites                         |
-| G14 | **No `apple-mobile-web-app-*` tags and no `apple-touch-icon`.** The manifest is a remote Progressier URL, so what iOS actually receives is not knowable from this repo.                                                                                                                                                                                                                                                                                                  | Low      | open — needs a real device              |
+| G14 | **No `apple-mobile-web-app-*` tags and no `apple-touch-icon`.** The manifest is a remote Progressier URL, so what iOS actually receives is not knowable from this repo.                                                                                                                                                                                                                                                                                                  | Low      | withdrawn in PR 17 — see below          |
+| G15 | **Progressier overrides the app's own `theme-color`.** `__root.tsx:109` sets `#0a1420`, the shell's chrome, deliberately enough that `error-page.ts:22-24` writes down why it is not `--bg`. Progressier injects `#102457` from its manifest at head index 5; the app's own sits at index 54, and a browser takes the first. The chosen value has never once been used.                                                                                                  | Low      | open — the fix is not in this repo      |
+
+**G14 was answerable all along, and the answer is the opposite of the finding.** This document said
+the remote manifest made iOS's view unknowable from here, and that somebody would have to open the
+app on an iPhone and look. What it needed was not a phone but a browser: the tags are injected at
+runtime, so a browser reads them by running the script. Loaded under an iPhone 13 user agent,
+`https://willyoubemyhero.com` serves **all four** of the tags the finding says are missing —
+`apple-mobile-web-app-capable`, `-status-bar-style`, `-title` and `mobile-web-app-capable` — plus a
+180 × 180 `apple-touch-icon` and a pair of `apple-touch-startup-image` splash screens as base64
+data URIs, matched to device metrics. Progressier supplies every one. Adding them to `__root.tsx`
+would have duplicated what was already there, which is what the finding's own "check before adding
+anything" was protecting against. **G14 is withdrawn: true of the source, false of the page.**
+
+What the same dump did find is G15, which is a better finding than the one it replaces, because it
+is about a value someone chose rather than a tag nobody wrote. The head carries **two**
+`theme-color` metas. A browser uses the first whose media matches, and Progressier's is first by
+forty-nine elements. So the app's chrome is `#102457` — a mid blue out of a PWA dashboard — and
+never the `#0a1420` the shell asks for. It cannot be fixed here: the value lives in the Progressier
+project, not in this repo, and no edit to `__root.tsx` can win a fight it loses on document order.
 
 **One reading in the tracking sweep is an artefact of how tracking is measured, and it is worth knowing about because it looks exactly like a finding.** The trade tab's unread badge reports 0.087 em — over the cap — and carries no tracking class at all. `letter-spacing` inherits as a computed length in px, so a parent's 0.08 em at 13 px is 1.04 px, and 1.04 px on a 12 px child reads back as 0.087 em. The letters are the same distance apart; only the denominator changed. Any sweep that derives em from `letterSpacing / fontSize` will report this, and the fix is to read the number rather than the ratio.
 
@@ -134,9 +153,11 @@ This is the same finding §16 made about the player screens in the first pass, o
 
 Full detail, with the renders, in **[the field report](https://claude.ai/code/artifact/08a80918-7acc-425a-af6b-f5111ee65338)**. Summarised in §23.
 
-| Id  | Finding                                             | Severity |
-| --- | --------------------------------------------------- | -------- |
-| F9  | The vault still opens on text rather than on a card | Low      |
+| Id  | Finding                                                             | Severity |
+| --- | ------------------------------------------------------------------- | -------- |
+| F9  | The vault still opens on text rather than on a card                 | Low      |
+| F10 | The `text-sm` half of the type scale, against a scale with no 14 px | Low      |
+| G15 | Progressier's `theme-color` wins over the app's; not fixable here   | Low      |
 
 ### Out of scope — the commissioner console
 
@@ -566,7 +587,9 @@ The Shop, built from stock shadcn components, was the most readable screen in th
 
 **The third pass closed the exception.** The sentence here used to read "nothing outside the admin console, the TV board and the share renderers reads below 11 px" — and the console was carrying **25 distinct strings at 9 and 10 px**, which is to say the whole label layer of every panel. That is not an exception, it is the same finding this section made about the card screens, held at arm's length by a scope note. 27 literals became `text-label` or `text-meta`, and the 0.08 em cap went on 34 sites that were still at 0.1 em, on the console and on six combine screens besides.
 
-So the rule now has two exceptions rather than three, and both are about distance rather than about who is looking: **the TV board**, read across a garden, where the tracking is doing legibility work; and **the share renderers**, which are 1080 × 1350 images rather than screens. Nothing a thumb can reach reads below 11 px, and the one remaining sub-11 px string on a player-facing screen is the ballot's avatar initials at 9.6 px (G12).
+So the rule now has two exceptions rather than three, and both are about distance rather than about who is looking: **the TV board**, read across a garden, where the tracking is doing legibility work; and **the share renderers**, which are 1080 × 1350 images rather than screens. Nothing a thumb can reach reads below 11 px — the ballot's 9.6 px avatar initials (G12) were the last, and PR 17 floored them.
+
+**And this section's two rules are the last in the document to get a gate, which is why they were the last to be obeyed.** §28 credits PR 1 with "the 11 px floor and the 0.08 em tracking cap, and the tap-target sweep in `e2e/smoke.spec.ts` that keeps them" — but the sweep PR 1 left keeps the tap targets. `MIN_FONT` measures form fields, for iOS zoom; nothing in this repo had ever measured a text node's size or its tracking. Three passes counted type violations by hand off a render set, which is exactly how a 9.6 px string survives three passes on a player-facing screen. The sweep added in PR 17 walks every element that owns its text, on the same fifteen routes and the same three widths as the tap-target and clipping sweeps, and it reproduced this pass's own reading before it fixed it: **72 nodes under 11 px on `/awards`, and 72 exactly** — four initials, six award categories, three widths.
 
 **Recommended scale** (rem, phone; two display sizes, one body family, one utility)
 
@@ -584,7 +607,21 @@ So the rule now has two exceptions rather than three, and both are about distanc
 | Button                              | Barlow Condensed                      | 15 / 20     | 800    | upper, 0.08 em           |
 | Numerals (times, counts)            | JetBrains Mono                        | as context  | 700    | tabular                  |
 
-Rules: nothing under 11 px; tracking never above 0.1 em below 14 px; uppercase only for display, labels and buttons; body and metadata in sentence case. Decide on Inter (set `--font-sans` and keep the request) or remove the request; today it is a 4-weight download for nothing.
+Rules: nothing under 11 px; tracking never above **0.08 em** below 14 px; uppercase only for display, labels and buttons; body and metadata in sentence case.
+
+> This line used to say 0.1 em, and it was the only place in the document that did — the table above
+> it says 0.08, PR 1 shipped 0.08, and G13 capped 34 sites at 0.08 against "§16's 0.08 em cap". A
+> rule with two numbers is a rule an argument can be had about, which is roughly what happened: the
+> PR 17 list still carried G13 as open, three months after it shipped. **Both rules are gated now**,
+> by the type sweep in `e2e/smoke.spec.ts`, so the number that counts is the one in the code.
+>
+> The cap applies **below 14 px**, and that settles an exception list this document has stated two
+> different ways. The wordmark (16 px) and the claim screen's typed code (24 px) are not exceptions
+> to the cap; they are above it, and were never in scope. Below 14 px there are exactly two: the TV
+> board, exempt by design in §18 — a board read across a garden, where the tracking is doing
+> legibility work at distance — and the member codes in the commissioner's own panel, which are a
+> code read and typed a character at a time. The share renderers are 1080 × 1350 images rather than
+> screens and are not measured by anything. Decide on Inter (set `--font-sans` and keep the request) or remove the request; today it is a 4-weight download for nothing.
 
 ---
 
@@ -906,14 +943,13 @@ Audited under the player-screen rules for the first time. §0 has the findings; 
 
 The first pass's top ten is closed — items 1, 2, 3, 4, 5, 8, 9 and 10 shipped outright, 6 and 7 shipped in part (§8's level pips and §15's quieter ground landed; the base-tier hue shift did not). This is the list as it stands, ranked by what it costs someone in a garden holding a beer. Every measurement is reproducible from the harness in the [field report](https://claude.ai/code/artifact/08a80918-7acc-425a-af6b-f5111ee65338).
 
-| Id  | Problem                                                                                                                                            | Measured                                                                                                                                                              | Location                               | Fix                                                                                        | Difficulty |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------ | ---------- |
-| F9  | **The vault opens on text — less of it than before.** The Today card fixed the layout shift; the summary line still sits between it and the shelf. | First card top **432 px at all three widths**, from 745 / 794 / 822 in the second pass. Above the fold at 390 and 430; about 65 px of card clears the tab bar at 320. | `players.index.tsx`, `vault-hero.tsx`  | Fold the summary line into the Today card, or start the first shelf higher                 | Moderate   |
-| F10 | **The `text-sm` half is still literals.** The `text-xs` half, the page gutter and the dead spacing tokens shipped in PR 15.                        | 65 raw `text-sm` on player-facing screens, against a scale that steps 13 px (badge) → 15 px (body) with nothing at 14.                                                | `styles.css`, all screens              | Give the scale a 14 px step, or resize the 65 deliberately, by the group table in PR 15    | Moderate   |
-| G12 | **9.6 px avatar initials on the ballot**, not `aria-hidden` — the only sub-11 px text on a player-facing screen.                                   | 9.6 px on four initials, at all three widths.                                                                                                                         | `awards.tsx`, `participant-avatar.tsx` | Scale the initials with the avatar, or hide them from the accessibility tree and grow them | Easy       |
-| G14 | **No iOS web-app meta and no `apple-touch-icon`.** The manifest is remote (Progressier), so this is not answerable here.                           | Not measurable from a render — flagged from source, **unverified on a device**.                                                                                       | `__root.tsx:96-140`                    | Check what Progressier injects on a real iPhone before adding anything                     | Unknown    |
+| Id  | Problem                                                                                                                                                             | Measured                                                                                                                                                              | Location                                | Fix                                                                                     | Difficulty      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------- | --------------- |
+| F9  | **The vault opens on text — less of it than before.** The Today card fixed the layout shift; the summary line still sits between it and the shelf.                  | First card top **432 px at all three widths**, from 745 / 794 / 822 in the second pass. Above the fold at 390 and 430; about 65 px of card clears the tab bar at 320. | `players.index.tsx`, `vault-hero.tsx`   | Fold the summary line into the Today card, or start the first shelf higher              | Moderate        |
+| F10 | **The `text-sm` half is still literals.** The `text-xs` half, the page gutter and the dead spacing tokens shipped in PR 15.                                         | 65 raw `text-sm` on player-facing screens, against a scale that steps 13 px (badge) → 15 px (body) with nothing at 14.                                                | `styles.css`, all screens               | Give the scale a 14 px step, or resize the 65 deliberately, by the group table in PR 15 | Moderate        |
+| G15 | **The app's `theme-color` has never been the app's.** `__root.tsx:109` asks for `#0a1420`; Progressier injects `#102457` ahead of it and a browser takes the first. | Two `theme-color` metas at head index 5 and 54, read off the live site under an iPhone 13 user agent.                                                                 | Not this repo — the Progressier project | Set the manifest's `theme_color` to `#0a1420` in the Progressier dashboard              | Easy, elsewhere |
 
-F9 and the `text-sm` remainder of F10 are what the earlier passes left, and neither is a redesign. G12 and G14 are this pass's. G12 is easy, and was left only because it is a judgement about the avatar's own type rather than a floor being missed — §16 should take it with the `text-sm` group. G14 is the one item in this document that cannot be settled from this repo at all: the manifest is a remote URL, so somebody has to open the app on an iPhone and look. F1 and F2 shipped in PR 11 — the input floor and the 16 px that stops iOS zooming. F3, F4 and F5 shipped in PR 12: the interactive edge, the disabled "Reveal all", and the OS reduced-motion setting. F6, F7, F8, F12 and F13 shipped in PR 13, F11 in PR 14, and F10's free half in PR 15. All twelve are recorded in §0.
+F9 and the `text-sm` remainder of F10 are what the earlier passes left, and neither is a redesign. Both of this pass's own items are gone: G12 shipped in PR 17, and G14 was withdrawn there — §0 has the argument, but the short version is that it was true of the source and false of the page, and it took a browser rather than a phone to find that out. G15 is what the same measurement found instead, and it is the first finding in this document whose fix is not in this repo. F1 and F2 shipped in PR 11 — the input floor and the 16 px that stops iOS zooming. F3, F4 and F5 shipped in PR 12: the interactive edge, the disabled "Reveal all", and the OS reduced-motion setting. F6, F7, F8, F12 and F13 shipped in PR 13, F11 in PR 14, and F10's free half in PR 15. All twelve are recorded in §0.
 
 PR 13 left a gate behind it as well as five fixes: a third sweep in `e2e/smoke.spec.ts` walks the same thirteen routes as the tap-target one at 320, 390 and 430 and fails on any node whose `text-overflow: ellipsis` is actually firing. Two of F8's three sites needed arranging before it could see them at all — a secret shelf exists only once you hold a secret, and the slab plate only squeezes its event line once there is a collection mark beside it — so both have a test of their own. The sweep also found four clips the render set had not: both of the vault's tile names, "Not packed yet" 6 px over at 320, and a leaderboard row losing the player's name at 430 as well as at 320. All four are fixed. Three findings on `/live`, `/analytics` and `/awards` were exempted by name with their reason rather than fixed — **and the third pass took all three back**, because the reason turned out not to survive a scope change. §0 has the argument; the short version is that two of the three were excused for being console screens, which this pass no longer accepts, and the third was excused for a reason that reads like a judgement and is actually a blind spot: _"nothing in §22 or §23 measures this screen"_. `/awards` is a player-facing ballot. `CLIP_EXEMPT` is now empty, and the shape is kept only so that an entry which earns its place later still has to name a path, a class and a reason.
 
@@ -954,7 +990,9 @@ The third pass added eleven more and shipped all of them in one change, because 
 22. ~~**The console’s sub-11 px label layer** (§0).~~ 27 literals to `text-label` / `text-meta`, by the codebase’s own 93 % habit: the token that says what a thing is, not the size it happens to be.
 23. ~~**The 0.08 em tracking cap, everywhere it was not** (G13).~~ 34 sites. `/tv` keeps its 0.2 em, which §18 exempts by design.
 
-What is left of the quick wins is G12, the ballot's 9.6 px avatar initials. It is easy, and it was left only because it is a judgement about the avatar's own type rather than a floor being missed — §16 should take it together with the `text-sm` group.
+24. ~~**The ballot's 9.6 px avatar initials** (G12).~~ Shipped in PR 17, in the primitive rather than at the one call site that broke the floor — and with the sweep that would have caught it three passes ago.
+
+The quick wins are done. What remains is F9 and F10, which are in §25 because neither is quick.
 
 ---
 
@@ -1103,19 +1141,19 @@ Project guardrails for willyoubemyhero (read CLAUDE.md first):
 
 The first pass's eleven phases are all merged. Kept as a record rather than as instructions; the prompts themselves have been removed now that the work is done.
 
-| PR  | Title                                           | What landed                                                                                                                         |
-| --- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 0   | Design tokens and control sizes                 | The type and spacing tokens, the `neon-btn` size classes, the global `:focus-visible` ring, and the 44 px floor in `ui/button.tsx`. |
-| 1   | Readability and touch-target sweep              | The 11 px floor and the 0.08 em tracking cap, and the tap-target sweep in `e2e/smoke.spec.ts` that keeps them.                      |
-| 2   | Quieter room, rarity by rank                    | Three levels of glow, a ring outside the bloom, and the per-tile tier glow dropped for the lower tiers.                             |
-| 3   | Pack ribbons, summary reflow, mute on the stand | NEW and ×N on the stand and summary; the summary's snap row; a persistent mute.                                                     |
-| 4   | Feedback surfaces                               | Skeleton tiles, bottom-centre toasts, the offline banner, and themed 404 / error / SSR pages.                                       |
-| 5   | Home "Today" card and streak strip              | `today-card.tsx`, the streak rungs, and the sort-and-filter sheet.                                                                  |
-| 6   | Acquisitions read and "new since last visit"    | `getRecentAcquisitions` and the new-since strip.                                                                                    |
-| 7   | Full-screen card viewer                         | `card-viewer.tsx`, reached from a tile tap and from `?view=1`.                                                                      |
-| 8   | Trade builder                                   | Offers/Feed tabs, the sticky CTA, and the builder drawer.                                                                           |
-| 9   | Navigation and profile                          | `/you`. The five-fixed-tab half was withdrawn in favour of the commissioner-configurable bar.                                       |
-| 10  | Two-beat reveal and set mystery slot            | The second beat on special pulls, and a single non-counting "More in this set" marker.                                              |
+| PR  | Title                                           | What landed                                                                                                                                                                                |
+| --- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0   | Design tokens and control sizes                 | The type and spacing tokens, the `neon-btn` size classes, the global `:focus-visible` ring, and the 44 px floor in `ui/button.tsx`.                                                        |
+| 1   | Readability and touch-target sweep              | The 11 px floor and the 0.08 em tracking cap, and the tap-target sweep in `e2e/smoke.spec.ts`. The sweep keeps the targets; the two type rules waited until PR 17 for a gate of their own. |
+| 2   | Quieter room, rarity by rank                    | Three levels of glow, a ring outside the bloom, and the per-tile tier glow dropped for the lower tiers.                                                                                    |
+| 3   | Pack ribbons, summary reflow, mute on the stand | NEW and ×N on the stand and summary; the summary's snap row; a persistent mute.                                                                                                            |
+| 4   | Feedback surfaces                               | Skeleton tiles, bottom-centre toasts, the offline banner, and themed 404 / error / SSR pages.                                                                                              |
+| 5   | Home "Today" card and streak strip              | `today-card.tsx`, the streak rungs, and the sort-and-filter sheet.                                                                                                                         |
+| 6   | Acquisitions read and "new since last visit"    | `getRecentAcquisitions` and the new-since strip.                                                                                                                                           |
+| 7   | Full-screen card viewer                         | `card-viewer.tsx`, reached from a tile tap and from `?view=1`.                                                                                                                             |
+| 8   | Trade builder                                   | Offers/Feed tabs, the sticky CTA, and the builder drawer.                                                                                                                                  |
+| 9   | Navigation and profile                          | `/you`. The five-fixed-tab half was withdrawn in favour of the commissioner-configurable bar.                                                                                              |
+| 10  | Two-beat reveal and set mystery slot            | The second beat on special pulls, and a single non-counting "More in this set" marker.                                                                                                     |
 
 ### Phase overview — PR 11 to PR 15, shipped
 
@@ -1142,14 +1180,50 @@ What landed, and the one thing to know about each:
 - **The PIN keypad**, `type="text"` plus `-webkit-text-security`. The trade is written at the call site: Firefox does not implement the masking, and the phone is where the PIN is actually typed.
 - **Nine admin fields off `sm:`, ten surfaces off `vh`.** Mechanical, and the reason the console needed a scope change rather than a bug report: none of it was wrong under the rules it was written to.
 
-### What a PR 17 would carry
+### PR 17 — The rule that had no gate
 
-Not written as a prompt, because both remaining items are decisions rather than edits and should be taken together with §16's type scale:
+Branch `claude/vibrant-darwin-xtfpex`. **Implements G12, withdraws G14, records G15.**
 
-- **G12** — the ballot's 9.6 px avatar initials, the last sub-11 px text on a player-facing screen.
-- **G13** — 0.1 em tracking on 12 px labels across six combine screens, against a cap whose stated exceptions are a typed code, a poster and the wordmark.
-- **G14** — the iOS web-app meta, which cannot be settled from this repo at all: the manifest is a remote Progressier URL and the only way to know what an iPhone receives is to look at one.
-- **F9 and F10**, unchanged from §23 and §25.
+The list this section used to carry was written as three open items, and reading it back against the
+code found only one. That is worth keeping as a note about the document rather than about the app:
+
+- **G13 was already shipped** when the list was written — §0 says "fixed, 34 sites" and §24 item 23
+  is struck through. It stayed on the list because §16's prose rule said 0.1 em while its own table
+  said 0.08, so the finding read as unresolved against half of its own section. The prose is
+  corrected in §16 and the exception list is stated once there.
+- **G14 was answerable without the phone it asked for.** A browser run under an iPhone user agent
+  shows Progressier injecting all four web-app tags, a 180 × 180 `apple-touch-icon` and two startup
+  images. Withdrawn, and the "check before adding anything" it carried was the right instinct: the
+  edit it warned against would have duplicated tags that were already there.
+- **G15 is what that measurement found instead** — two `theme-color` metas, the app's losing to
+  Progressier's on document order. It is the first finding here that cannot be fixed in this repo.
+
+What landed, and the one thing to know about each:
+
+- **The ballot's initials, floored in the primitive.** `participant-avatar.tsx` computed
+  `size * 0.4`, which is right from 28 px up and put the awards ballot's `size={24}` at 9.6 px.
+  `Math.max(11, …)` goes in the component rather than at the call site, for the reason G11 gave
+  about `SelectTrigger`: a rule held up by call sites remembering it is a rule the next one will
+  not have.
+- **`aria-hidden` moved off one call site and into the component.** `trade-builder.tsx` had already
+  made the argument in a comment — the initials repeat the name beside them, so a row announced as
+  "BB Bob Blitz 5 spares" — and the photo branch had said the same with `alt=""` since it was
+  written. It was true of all eleven call sites and applied at one.
+- **The sweep §16's two rules never had.** It walks every element that owns a direct text node, on
+  the fifteen routes and three widths the tap-target and clipping sweeps already use. The cap is a
+  **px ceiling, not a ratio** — 1.12 px, which is 0.08 em at the 14 px the rule stops at — because
+  `letter-spacing` inherits as a length and a ratio re-derives it against the child's own size,
+  which is the false positive §0 records against the trade tab's badge.
+- **It reproduced this pass's reading before it changed it.** 72 nodes under 11 px on `/awards`,
+  against §0's 72, from a different instrument: four initials × six award categories × three
+  widths. Zero over the tracking cap, which is G13's independent confirmation. After the fix, zero
+  of both on all fifteen routes.
+
+### What a PR 18 would carry
+
+**F9 and F10**, unchanged from §23 and §25 — the vault's opening screen, and the 65 `text-sm`
+against a scale with no 14 px step. Both are in §25 because neither is a quick win. **G15** is not a
+PR at all: it is one field in the Progressier dashboard.
 
 ### Tool notes
 
