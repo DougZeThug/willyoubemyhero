@@ -377,6 +377,109 @@ async function clippedText(page: Page, width: number, path: string): Promise<str
     .map((c) => `${width}px: <${c.tag}> "${c.text}" over by ${c.over}px — ${c.hint}`);
 }
 
+/**
+ * §16's two type rules, and the first gate either of them has ever had.
+ *
+ * §28's ledger credits PR 1 with "the 11px floor and the 0.08em tracking cap,
+ * and the tap-target sweep in e2e/smoke.spec.ts that keeps them" — but the
+ * sweep PR 1 left keeps the tap targets. MIN_FONT above measures fields, for
+ * iOS zoom, and nothing in this repo has ever measured a text node's size or
+ * its tracking. Three passes found type violations by counting them off a
+ * render set by hand, which is how the ballot's 9.6px initials survived all
+ * three of them.
+ *
+ * The cap is an em, and the awkward part is that letter-spacing inherits as a
+ * computed *length*: 0.08em on a 13px parent is 1.04px, and that same 1.04px
+ * on a 12px child reads back as 0.087em — over the cap, on an element carrying
+ * no tracking class at all. §0 records that false positive against the trade
+ * tab's unread badge.
+ *
+ * The first version of this sweep dodged it with a flat 1.12px ceiling, which
+ * is 0.08em at 14px. That let the badge through, and an 11px label through with
+ * it: 0.1em there is 1.10px, under the ceiling and over the cap, so the sweep
+ * could not see tracking-widest coming back on the smallest labels in the app —
+ * one of the two regressions it exists to catch. A cap calibrated at the top of
+ * a range is loosest at the bottom of it.
+ *
+ * So the cap is proportional again, and the inheritance is handled where it
+ * actually lives: an element whose computed letter-spacing equals its parent's
+ * did not set it, and is not the element to blame for it. The parent is
+ * measured on its own terms and answers there. No epsilon — px * 0.08 is exact
+ * at every size in the scale (11 → 0.88, 12 → 0.96, 12.8 → 1.024, 13 → 1.04)
+ * and the comparison is strict, so a value sitting exactly on the cap passes.
+ *
+ * /tv is in no sweep here, for the reason it is in none of the others — a board
+ * read from across a garden, where the tracking is doing legibility work at
+ * distance (§18). The wordmark and the claim screen's typed code are not
+ * exceptions to the cap but outside it: both are set above 14px.
+ */
+const MIN_TEXT = 11;
+const TRACKED_BELOW = 14;
+const MAX_TRACKING_EM = 0.08;
+
+/**
+ * Every visible element that owns its text, measured where it is drawn.
+ *
+ * "Owns" is a direct child text node. An ancestor's textContent includes its
+ * descendants', so a wrapper would be blamed for a size it does not set and the
+ * same string would report once per level of nesting it happens to sit under.
+ *
+ * getClientRects() for the reason clippedText gives — offsetParent is null for
+ * a fixed element as well as a hidden one — and it drops a collapsed
+ * AdminSection with it, which is display:none rather than unmounted.
+ */
+async function offScaleText(page: Page, width: number): Promise<string[]> {
+  const measured = await page.evaluate(
+    ([floor, below, maxEm]) =>
+      Array.from(document.querySelectorAll<HTMLElement>("*"))
+        .filter(
+          (el) =>
+            Array.from(el.childNodes).some(
+              (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim() !== "",
+            ) && el.getClientRects().length > 0,
+        )
+        .map((el) => {
+          const cs = getComputedStyle(el);
+          const px = parseFloat(cs.fontSize);
+          // "normal" is the one value letter-spacing computes to that is not a
+          // length, and it is the overwhelming majority of them.
+          const track = cs.letterSpacing === "normal" ? 0 : parseFloat(cs.letterSpacing);
+          // Same computed length as the parent means the parent set it. <html>
+          // has no parentElement, so it always answers for its own.
+          const parent = el.parentElement;
+          const owned = !parent || getComputedStyle(parent).letterSpacing !== cs.letterSpacing;
+          return {
+            px,
+            track,
+            small: px < floor,
+            loose: px < below && owned && track > px * maxEm,
+            tag: el.tagName.toLowerCase(),
+            text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
+            hint: (el.getAttribute("class") ?? "")
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 3)
+              .join(" "),
+          };
+        })
+        .filter((m) => m.small || m.loose),
+    [MIN_TEXT, TRACKED_BELOW, MAX_TRACKING_EM] as const,
+  );
+
+  return measured.map((m) => {
+    const why = [
+      m.small ? `${m.px}px, under the ${MIN_TEXT}px floor` : null,
+      m.loose
+        ? `tracked ${m.track}px at ${m.px}px — ` +
+          `${(m.track / m.px).toFixed(3)}em, over the ${MAX_TRACKING_EM}em cap`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("; ");
+    return `${width}px: <${m.tag}> "${m.text}" — ${why} — ${m.hint}`;
+  });
+}
+
 /** A member token these stubs never verify — the server is mocked out. */
 async function signInAsMember(page: Page) {
   const me = PLAYERS[0];
@@ -595,14 +698,23 @@ test.describe("phone sweeps", () => {
       // has already settled, so a second and third round trip would buy nothing
       // but the flake of settling twice more.
       const clipped: string[] = [];
+      const offScale: string[] = [];
       for (const width of CLIP_WIDTHS) {
         await page.setViewportSize({ width, height: page.viewportSize()?.height ?? 844 });
         clipped.push(...(await clippedText(page, width, route.path)));
+        offScale.push(...(await offScaleText(page, width)));
       }
       expect(
         clipped,
         `Text clipped by an ellipsis on ${route.path}. On a phone there is no ` +
           `hover to resolve one, so wrap it (line-clamp-2) or give it the room.`,
+      ).toEqual([]);
+
+      expect(
+        offScale,
+        `Type off §16's scale on ${route.path}. The floor is ${MIN_TEXT}px, and ` +
+          `the cap ${MAX_TRACKING_EM}em on anything under ${TRACKED_BELOW}px. ` +
+          `Name the size (text-label, text-meta) rather than setting it.`,
       ).toEqual([]);
     });
   }

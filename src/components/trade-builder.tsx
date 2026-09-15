@@ -481,12 +481,7 @@ function WhoRow({
           : "border-border-strong bg-white/5 hover:border-primary",
       )}
     >
-      {/* The initials repeat the name beside them, so they are decoration —
-          and left in the accessibility tree they turn every row's name into
-          "BB Bob Blitz 5 spares". */}
-      <span aria-hidden>
-        <ParticipantAvatar name={person.name} size={40} />
-      </span>
+      <ParticipantAvatar name={person.name} size={40} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-display text-sm font-black uppercase tracking-wide">
           {person.name}
