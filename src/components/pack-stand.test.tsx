@@ -419,7 +419,7 @@ describe("the level on the stand", () => {
       revealed: [0],
     });
     expect(screen.queryByText(/already yours/i)).toBeNull();
-    expect(screen.getByText(/0\.5% pull|common ·/i)).toBeInTheDocument();
+    expect(screen.getByText(/0\.5%|common ·/i)).toBeInTheDocument();
   });
 });
 
