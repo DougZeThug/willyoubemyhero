@@ -314,12 +314,23 @@
   /* A drawer, a full-screen reveal and a horizontal snap row all scroll inside a
      page that also scrolls. Without containment the parent takes over at the
      end of the child — so a flick through the roster filmstrip scrolls the card
-     page behind it, and a bottom sheet dragged past its end drags the vault. */
+     page behind it, and a bottom sheet dragged past its end drags the vault.
+
+     Per AXIS, not the shorthand. A horizontal strip is `overflow-x: auto` with
+     a `y` that CSS computes to `auto` alongside it, so the shorthand would
+     contain a vertical gesture that merely STARTED over the filmstrip — the
+     page would refuse to scroll under a thumb that landed on a row of cards.
+     The containment each one needs is the axis it actually scrolls in; a
+     drawer and a modal are whole surfaces and take both. */
   [data-vaul-drawer],
-  [role="dialog"],
-  .overflow-x-auto,
-  .overflow-y-auto {
+  [role="dialog"] {
     overscroll-behavior: contain;
+  }
+  .overflow-x-auto {
+    overscroll-behavior-x: contain;
+  }
+  .overflow-y-auto {
+    overscroll-behavior-y: contain;
   }
 
   /* Keyboard focus is visible everywhere, including raw <button> elements that

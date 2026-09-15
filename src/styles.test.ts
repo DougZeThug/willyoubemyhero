@@ -121,13 +121,40 @@ describe("scroll containment", () => {
     ).toBe(true);
   });
 
-  it("stops a drawer and a snap row handing their scroll to the page", () => {
-    // A filmstrip flicked to its end scrolls the card page behind it; a bottom
-    // sheet dragged past its end drags the vault.
+  it("stops a drawer and a modal handing their scroll to the page", () => {
+    // A bottom sheet dragged past its end drags the vault. These two are whole
+    // surfaces, so they take both axes.
     expect(
-      /overscroll-behavior:\s*contain/.test(css),
-      "No scroll container sets overscroll-behavior: contain, so every drawer, " +
-        "reveal and horizontal snap row chains to its parent at the end.",
+      /\[data-vaul-drawer\],\s*\[role="dialog"\]\s*\{\s*overscroll-behavior:\s*contain/.test(css),
+      "Drawers and dialogs need overscroll-behavior: contain, or a sheet dragged " +
+        "past its end drags the page behind it.",
     ).toBe(true);
+  });
+
+  it("contains each scroller on the axis it actually scrolls, and no other", () => {
+    // The shorthand was the first version of this and it was wrong, which is
+    // the whole reason this test names the axis.
+    //
+    // A `.overflow-x-auto` strip is a horizontal scroller whose `y` CSS
+    // computes to `auto` alongside it. Containing `y` there would swallow a
+    // VERTICAL page gesture that merely started over the filmstrip — the page
+    // refusing to scroll under a thumb that happened to land on a row of cards.
+    // A dead zone, in exchange for nothing: that strip has no vertical scroll
+    // to chain in the first place.
+    expect(
+      /\.overflow-x-auto\s*\{\s*overscroll-behavior-x:\s*contain/.test(css),
+      "Horizontal strips need overscroll-behavior-X only.",
+    ).toBe(true);
+    expect(
+      /\.overflow-y-auto\s*\{\s*overscroll-behavior-y:\s*contain/.test(css),
+      "Vertical panes need overscroll-behavior-Y only.",
+    ).toBe(true);
+    // The shorthand must not come back on either of them.
+    expect(
+      /\.overflow-[xy]-auto\s*\{\s*overscroll-behavior:\s/.test(css),
+      "A scroller is using the overscroll-behavior shorthand again. It contains " +
+        "the axis that scroller does not scroll in, which is a dead zone for the " +
+        "page gesture that crosses it.",
+    ).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 // Every public route renders, hydrates, and survives having no data.
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import {
   test,
   expect,
@@ -651,40 +651,86 @@ test.describe("phone sweeps", () => {
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: /timing console/i })).toBeVisible();
 
-    // The nav-rows panel is the app's only Switch, one per row.
-    await page
-      .getByRole("button", { name: /^Navigation/i })
-      .first()
-      .click();
-    const sw = page.getByRole("switch").first();
-    await expect(sw).toBeVisible();
-
-    const misses = await sw.evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
+    /**
+     * Presses each corner of the 44px square and requires the control to answer.
+     *
+     * A tap, not `elementFromPoint`. The first version of this asked the
+     * document what element sat at the corner and required it to be the control
+     * — which passed for the switch and failed for the checkbox, for a reason
+     * that has nothing to do with either hit area: the switch is rendered AFTER
+     * its label so its `::before` paints on top, and the checkbox BEFORE its
+     * label text, which paints over it. Both are reachable by a thumb in exactly
+     * the same way. The identity of the topmost element was never the rule.
+     *
+     * Four corners in turn, each press required to flip the state, so the whole
+     * square is proved rather than one lucky point.
+     */
+    const cornersRespond = async (control: Locator, label: string) => {
+      await expect(control).toBeVisible();
+      // Centred first, and this is not a nicety. `page.mouse.click` takes
+      // viewport coordinates and does not scroll, unlike `locator.click()` —
+      // and the phone's tab bar is `fixed` over the bottom 71px. The batch
+      // checkbox sits at y=801 in an 844px viewport on first render, so every
+      // press landed on the nav and the control looked like four dead corners
+      // while being perfectly fine.
+      await control.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      const box = await control.boundingBox();
+      if (!box) throw new Error(`${label}: no box to measure`);
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
       // Just inside each corner of the 44px square the ::before draws.
       const reach = 21;
-      const out: string[] = [];
+      const dead: string[] = [];
       for (const [dx, dy] of [
         [-reach, -reach],
         [reach, -reach],
         [-reach, reach],
         [reach, reach],
       ]) {
-        const hit = document.elementFromPoint(cx + dx, cy + dy);
-        if (hit !== el && !el.contains(hit)) {
-          out.push(`(${dx}, ${dy}) hits <${hit?.tagName.toLowerCase() ?? "nothing"}>`);
-        }
+        const was = await control.getAttribute("data-state");
+        await page.mouse.click(cx + dx, cy + dy);
+        const now = await control.getAttribute("data-state");
+        if (now === was) dead.push(`(${dx}, ${dy}) did nothing`);
       }
-      return out;
-    });
+      return dead;
+    };
 
+    // The nav-rows panel is the app's only Switch, one per row. Toggling is
+    // local draft state until Save, so pressing it four times writes nothing.
+    //
+    // NOT `.first()`, which is the Vault row: it is pinned, so its switch is
+    // disabled, and a disabled control correctly does nothing when pressed. That
+    // reads back as four dead corners on a control that is behaving perfectly.
+    await page
+      .getByRole("button", { name: /^Navigation/i })
+      .first()
+      .click();
     expect(
-      misses,
-      "The switch's 44px hit area is not reaching its corners. The ::before in " +
-        "ui/switch.tsx is what provides it; check `relative` is still on the root " +
-        "and that nothing is painted over it.",
+      await cornersRespond(page.locator('[role="switch"]:not([disabled])').first(), "switch"),
+      "Part of the switch's 44px square is a dead zone. The ::before in " +
+        "ui/switch.tsx is what provides it; check `relative` is still on the root.",
+    ).toEqual([]);
+
+    // And the app's only Checkbox, two disclosures deep: the Card Prompt Studio
+    // panel, then Batch Production inside it. Reaching it is the point — EXEMPT
+    // exempts every role="checkbox" in the app, so without this a regression in
+    // ui/checkbox.tsx would pass the whole suite. Selecting players only arms a
+    // Build Batch button that nothing here presses.
+    //
+    // Measured, for whoever changes this next: the target here is the 280x44
+    // `<label>` around it, which forwards its click to the Radix button. The
+    // `::before` in ui/checkbox.tsx is belt to that braces — it is what a
+    // checkbox with no label would fall back on, and it is overlapped by the
+    // label's own text wherever there IS one.
+    await page
+      .getByRole("button", { name: /^Card Prompt Studio/i })
+      .first()
+      .click();
+    await page.getByText("Batch Production", { exact: true }).click();
+    expect(
+      await cornersRespond(page.locator('[role="checkbox"]:not([disabled])').first(), "checkbox"),
+      "Part of the checkbox's 44px square is a dead zone. Either the ::before in " +
+        "ui/checkbox.tsx or the min-h-11 label around it should be answering.",
     ).toEqual([]);
   });
 
