@@ -214,6 +214,12 @@ export type HoloCardProps = {
    * the gesture would trap the scroll across half the screen.
    */
   tilt?: TiltVariant;
+  /**
+   * This card sits on a page that scrolls, so the vertical axis stays the
+   * browser's. Only matters for `tilt="hero"`, which otherwise claims both axes
+   * and traps the scroll across most of a phone screen.
+   */
+  pageScroll?: boolean;
   /** Device-orientation tilt, enabled by the caller after a permission grant. */
   gyro?: boolean;
   /** Start face-down (shows the back) regardless of art availability. */
