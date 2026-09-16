@@ -269,6 +269,7 @@ function HoloCardImpl({
   flickToFlip = true,
   intensity = "full",
   tilt = "calm",
+  pageScroll = false,
   gyro = false,
   faceDown = false,
   flipMs = DEFAULT_FLIP_MS,
