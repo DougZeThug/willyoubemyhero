@@ -672,7 +672,13 @@ function HoloCardImpl({
     // mid-gesture does nothing to the in-flight gesture, and re-capturing after a
     // pointercancel cannot reclaim a pan. The only alternative is "none" plus a JS
     // scroll proxy, which costs momentum and rubber-banding.
-    touchAction: dragTilt && interactive && !reduced ? t.touchAct : undefined,
+    // ...except where the card sits on a page that still has to scroll under a
+    // thumb. A hero card is most of a phone screen, so "none" there means the
+    // page cannot be scrolled from anywhere the card covers. `pageScroll` gives
+    // the vertical axis back to the browser and keeps the rest — the lean on
+    // touch is then horizontal only, which is the trade those callers want.
+    touchAction:
+      dragTilt && interactive && !reduced ? (pageScroll ? "pan-y" : t.touchAct) : undefined,
   } as React.CSSProperties;
 
   // A resting card only crawls if the tier earned it, and only at hero size —
