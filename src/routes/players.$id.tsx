@@ -725,6 +725,7 @@ function PlayerCardPage() {
                         onFlippedChange={setFlipped}
                         gyro={gyro}
                         tilt="hero"
+                        pageScroll
                         // While magnified the frame owns the pointer; a card leaning
                         // under a pan would make the thing you are reading move.
                         interactive={!zoomed}
