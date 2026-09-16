@@ -158,3 +158,67 @@ describe("scroll containment", () => {
     ).toBe(false);
   });
 });
+
+/**
+ * The room a short route may fill has to match the header actually standing
+ * above it.
+ *
+ * Both halves are derived rather than restated, because a literal echoed from
+ * one file into a test only proves the echo. This walks site-nav's own classes
+ * for the header's height and the token for what it reserves, so changing the
+ * header's padding — or the token — without the other one trips it.
+ *
+ * jsdom cannot stand in: it has no layout engine, so a rendered SiteNav measures
+ * zero in every direction. What a browser would prove by scrolling, this proves
+ * about the source.
+ */
+describe("the page-height token reserves the header that is really there", () => {
+  const nav = readFileSync(resolve(process.cwd(), "src/components/site-nav.tsx"), "utf8");
+
+  // Tailwind's default 0.25rem step. The sheet names spacing tokens of its own
+  // (--spacing-page-x and friends) but never redefines the scale itself, and the
+  // arithmetic below is wrong if it ever starts to.
+  const STEP_PX = 4;
+  it("still uses Tailwind's default spacing scale", () => {
+    expect(/--spacing:\s/.test(css)).toBe(false);
+  });
+
+  /** The sticky header element, from its opening tag to its close. */
+  const header = /<motion\.header[\s\S]*?<\/motion\.header>/.exec(nav)?.[0] ?? "";
+  const headerClass = /className="(sticky top-0[^"]*)"/.exec(header)?.[1] ?? "";
+  const rowClass = /className="(mx-auto flex max-w-6xl[^"]*)"/.exec(header)?.[1] ?? "";
+
+  it("reads a header it can measure", () => {
+    expect(headerClass, "site-nav's sticky header moved or was renamed").toContain("pt-safe");
+    expect(rowClass, "site-nav's header row moved or was renamed").toMatch(/py-[\d.]/);
+  });
+
+  /** py-N, both sides. */
+  const rowPadPx = Number(/\bpy-([\d.]+)\b/.exec(rowClass)?.[1] ?? 0) * STEP_PX * 2;
+  /** The tallest floor any child of the row sets — what the row cannot shrink past. */
+  const rowFloorPx =
+    Math.max(0, ...[...header.matchAll(/\bmin-h-(\d+)\b/g)].map((m) => Number(m[1]))) * STEP_PX;
+  const borderPx = /\bborder-b\b/.test(headerClass) ? 1 : 0;
+  const headerPx = rowPadPx + rowFloorPx + borderPx;
+
+  /**
+   * What the mobile token subtracts for the header: every subtrahend that is not
+   * the notch or the tab bar's clearance, which are carried as env()/var() and
+   * cancel against the header's own pt-safe and main's padding.
+   */
+  const tokenLine = /--page-min-h:\s*calc\(100dvh([^)]*(?:\)[^)]*)*?)\);/.exec(css)?.[1] ?? "";
+  const reservedPx = [...tokenLine.matchAll(/-\s*([\d.]+)(rem|px)\b/g)]
+    .map(([, n, unit]) => Number(n) * (unit === "rem" ? 16 : 1))
+    .reduce((a, b) => a + b, 0);
+
+  it("reserves exactly the header's height, notch aside", () => {
+    // 65px: a 44px row floor, 20px of py-2.5, and the 1px border-b under it.
+    expect(headerPx).toBe(65);
+    expect(
+      reservedPx,
+      `--page-min-h reserves ${reservedPx}px for a header that renders ${headerPx}px. ` +
+        `Short routes ${reservedPx < headerPx ? "scroll" : "under-fill"} by ` +
+        `${Math.abs(headerPx - reservedPx)}px because of it.`,
+    ).toBe(headerPx);
+  });
+});

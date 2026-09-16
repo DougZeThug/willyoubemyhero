@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
+import { subscribeToEventChannel } from "@/lib/event-channel";
 import { getEventSocial, getAwards } from "@/lib/social.functions";
 
 export type ReactionRow = {
@@ -46,15 +46,14 @@ export function useEventSocial(eventId: string | null | undefined) {
 
   useEffect(() => {
     if (!eventId) return;
-    const invalidate = () => qc.invalidateQueries({ queryKey: ["event-social", eventId] });
-    const channel = supabase
-      .channel(`social:${eventId}:${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "card_reactions" }, invalidate)
-      .on("postgres_changes", { event: "*", schema: "public", table: "card_comments" }, invalidate)
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // The shared channel rather than one of our own: it is the only subscription
+    // here that notices a dead socket and polls harder while it is down. Health
+    // is somebody else's to report — use-event-bundle already draws the banner,
+    // and a second one over the same socket would say the same thing twice.
+    return subscribeToEventChannel(eventId, {
+      change: () => qc.invalidateQueries({ queryKey: ["event-social", eventId] }),
+      health: () => {},
+    });
   }, [eventId, qc]);
 
   return query;
@@ -74,20 +73,22 @@ export function useEventAwards(eventId: string | null | undefined) {
 
   useEffect(() => {
     if (!eventId) return;
-    const channel = supabase
-      .channel(`awards:${eventId}:${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "awards" }, () => {
+    // On the shared channel, which is the half of this that was missing. A bare
+    // subscription here had no status callback and no poll behind it, so a dead
+    // socket went unnoticed — while `awards_locked` kept arriving on the event
+    // row, which IS polled. The lock flipped, the winners never came, and the
+    // reveal said "No votes cast." over a vote that had them.
+    return subscribeToEventChannel(eventId, {
+      change: () => {
         qc.invalidateQueries({ queryKey: ["event-awards", eventId] });
         // And the event itself, because `awards_locked` rides on it with a 60s
         // stale time and no subscription of its own. Winners arrived at once
         // while the ballot stayed open for up to a minute, and every tap on it
         // was refused — which reads as a bug to the voter, not as a closed vote.
         qc.invalidateQueries({ queryKey: ["active-event"] });
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      },
+      health: () => {},
+    });
   }, [eventId, qc]);
 
   const byParticipant = useMemo(() => {

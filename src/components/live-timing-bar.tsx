@@ -103,7 +103,11 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
               {slot.onClock ? "Clear" : "On clock"}
             </Button>
           </div>
-          <Button className="h-12 w-full" disabled={!pick} onClick={startRun}>
+          {/* `pick`, not the hook's selection: the picker below defaults to the
+              next athlete without committing that to state, so the button has to
+              hand the athlete across the same way the On-clock button above it
+              already does. Passing nothing here started nobody. */}
+          <Button className="h-12 w-full" disabled={!pick} onClick={() => startRun(pick)}>
             <Play className="mr-2 h-5 w-5" /> Start Timer
           </Button>
         </div>

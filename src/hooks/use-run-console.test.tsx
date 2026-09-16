@@ -110,6 +110,40 @@ describe("useRunConsole", () => {
     });
   });
 
+  it("starts the athlete it is handed, with nothing picked", async () => {
+    // Live's bar never writes its default to the selection — it shows whoever is
+    // next and hands that athlete over on the tap. Reading the selection alone
+    // meant the common case, one tap on Start, wrote no run at all.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const { result } = await mount([alice]);
+
+    expect(result.current.selectedParticipantId).toBe("");
+    await act(async () => {
+      await result.current.startRun(alice.participant_id);
+    });
+
+    expect(result.current.run?.participantId).toBe(alice.participant_id);
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "running" },
+    });
+  });
+
+  it("prefers the athlete it is handed over the one already picked", async () => {
+    // The bar passes whatever its picker is showing, which IS the selection once
+    // the commissioner has touched it — but if the two ever disagree, the one the
+    // person is looking at wins.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });
+    const { result } = await mount([alice, bob]);
+
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun(bob.participant_id);
+    });
+
+    expect(result.current.run?.participantId).toBe(bob.participant_id);
+  });
+
   it("does not crash or call the server when the selected athlete is removed from the roster", async () => {
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
     const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });

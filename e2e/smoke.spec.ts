@@ -911,9 +911,11 @@ test.describe("phone sweeps", () => {
     });
 
     await page.goto("/players");
-    // "Common · 70% pull" — the widest of the five, and the one the audit
-    // measured 23px over at 320.
-    await expect(page.getByText(/70% pull/i).first()).toBeVisible();
+    // "Common · 70%" — the widest of the five, and the one the audit measured
+    // 23px over at 320. Matched on the whole caption rather than the number
+    // alone, so this still fails if the tier word beside it goes missing: the
+    // finding is about the width of the LINE.
+    await expect(page.getByText(/common · 70%/i).first()).toBeVisible();
 
     await page.setViewportSize({ width: 320, height: 568 });
     expect(await clippedText(page, 320, "/players")).toEqual([]);

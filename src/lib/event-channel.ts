@@ -112,13 +112,16 @@ function openChannel(eventId: string): Entry {
       },
       fanOut,
     )
-    // Unlike the three above, these two carry no event_id of their own — they
-    // hang off a run — so there is nothing to filter on and every event's
-    // splits fan out to every watcher. Invisible while one combine is active,
+    // Unlike the three above, these four carry no event_id of their own — splits
+    // and penalties hang off a run, reactions and comments off an
+    // event_participant — so there is nothing to filter on and every event's
+    // rows fan out to every watcher. Invisible while one combine is active,
     // and a refetch of this event's bundle either way; the note is here so
     // the asymmetry reads as known rather than as an oversight.
     .on("postgres_changes", { event: "*", schema: "public", table: "splits" }, fanOut)
     .on("postgres_changes", { event: "*", schema: "public", table: "penalties" }, fanOut)
+    .on("postgres_changes", { event: "*", schema: "public", table: "card_reactions" }, fanOut)
+    .on("postgres_changes", { event: "*", schema: "public", table: "card_comments" }, fanOut)
     // The event row itself, so a commissioner flipping dust or saving the nav
     // rows reaches every other phone rather than only their own. Filtered on the
     // primary key: this is the one table where an unfiltered listener would wake
@@ -126,6 +129,17 @@ function openChannel(eventId: string): Entry {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "events", filter: `id=eq.${eventId}` },
+      fanOut,
+    )
+    // Published winners. Here rather than on a channel of their own because
+    // `close_award_voting` writes these rows and flips `awards_locked` on the
+    // event above in ONE transaction: read them off two channels and a socket
+    // that drops either half leaves /awards locked over an empty winners list,
+    // stating "No votes cast." about a vote that had them. The poll below is the
+    // backstop that makes the two halves land together.
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "awards", filter: `event_id=eq.${eventId}` },
       fanOut,
     )
     .subscribe((status) => {

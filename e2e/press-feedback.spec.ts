@@ -77,6 +77,62 @@ async function settle(el: Locator, done: (s: string) => boolean, budget = 1500) 
 
 const UNDER_TEST = "data-press-under-test";
 
+type Box = { x: number; y: number; width: number; height: number };
+
+/**
+ * Whether the centre of `box` actually lands on `target`.
+ *
+ * `page.mouse` presses a coordinate, not an element, so anything drawn over that
+ * coordinate takes the press silently — and the control is then reported as
+ * having felt nothing, which sends the reader looking for a missing treatment
+ * that is not missing.
+ */
+async function pressPointIsOn(target: Locator, box: Box) {
+  return target.evaluate(
+    (node, [x, y]) => {
+      const hit = document.elementFromPoint(x as number, y as number);
+      return !!hit && node.contains(hit);
+    },
+    [box.x + box.width / 2, box.y + box.height / 2],
+  );
+}
+
+/**
+ * A box the layout has stopped moving, whose centre is on the control.
+ *
+ * Two different things used to move a target out from under its own measurement,
+ * and both read afterwards as a control that felt nothing:
+ *
+ *  1. These screens fill in from a stubbed server function after the heading
+ *     lands, so a box measured during that reflow is stale by the time the
+ *     pointer arrives — the press goes to whatever slid into the gap.
+ *  2. The app's header is `sticky top-0`, and scrollIntoViewIfNeeded is
+ *     satisfied the moment a control touches the viewport. A control below the
+ *     fold is parked at y=0, underneath that header, and the press lands on the
+ *     wordmark.
+ *
+ * So: wait for two identical reads before trusting one, and only re-centre when
+ * the point is genuinely covered — centring unconditionally moves controls that
+ * were already fine, and several of these reflow when pressed.
+ */
+async function settledBox(target: Locator): Promise<Box | null> {
+  let box = await target.boundingBox();
+  for (let i = 0; i < 20 && box; i++) {
+    await target.page().waitForTimeout(50);
+    const next = await target.boundingBox();
+    if (!next) return null;
+    const stillThere = next.x === box.x && next.y === box.y;
+    box = next;
+    if (!stillThere) continue;
+    if (await pressPointIsOn(target, box)) return box;
+    await target.evaluate((node) => (node as Element).scrollIntoView({ block: "center" }));
+    box = await target.boundingBox();
+  }
+  // Out of patience: press it anyway and let the finding say the point was
+  // covered, which is more use than skipping the control silently.
+  return box;
+}
+
 /** Hold, watch, release, watch. Findings go in `out`; nothing throws. */
 async function pressAndRelease(target: Locator, label: string, out: string[]) {
   const page = target.page();
@@ -97,7 +153,7 @@ async function pressAndRelease(target: Locator, label: string, out: string[]) {
     return void out.push(`${label}: disabled, so a press could not reach it`);
   }
   await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
+  const box = await settledBox(target);
   if (!box) return void out.push(`${label}: no box to press`);
 
   // Marked, then watched through the mark rather than through the name it was
@@ -116,8 +172,16 @@ async function pressAndRelease(target: Locator, label: string, out: string[]) {
     await page.mouse.up();
     const after = await settle(el, (s) => s === rest);
 
-    if (held === rest) out.push(`${label}: nothing changed while it was held — ${rest}`);
-    else if (after !== rest) out.push(`${label}: kept ${after} after release (rest is ${rest})`);
+    if (held === rest) {
+      // "Nothing changed" reads as a missing treatment and is just as often a
+      // press that never reached the control, so say which. Re-checked here
+      // rather than reused from above because the press itself can move things.
+      const onIt = await pressPointIsOn(el, box);
+      out.push(
+        `${label}: nothing changed while it was held — ${rest}` +
+          (onIt ? "" : " (and the press point was not on it)"),
+      );
+    } else if (after !== rest) out.push(`${label}: kept ${after} after release (rest is ${rest})`);
   } finally {
     await el.evaluate((node, attr) => node.removeAttribute(attr), UNDER_TEST);
     // Anything the press opened is closed again, or it covers the next target.

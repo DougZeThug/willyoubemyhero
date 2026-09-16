@@ -15,7 +15,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { useStreakStatus } from "@/hooks/use-streak";
+import { streakHistoryKey, useStreakStatus } from "@/hooks/use-streak";
 import { useAccountSyncState } from "@/lib/account-sync-state";
 import { packsOpenedLabel } from "@/lib/card-pulls";
 import { useCardSfx, useHaptics } from "@/lib/card-sfx";
@@ -248,7 +248,7 @@ function YouPage() {
 function useStreakHistory(actorId: string | null) {
   const fn = useServerFn(getStreakHistory);
   return useQuery({
-    queryKey: ["streak-history", actorId] as const,
+    queryKey: streakHistoryKey(actorId),
     queryFn: () => fn() as Promise<StreakHistoryEntry[]>,
     enabled: !!actorId,
     staleTime: 5 * 60_000,

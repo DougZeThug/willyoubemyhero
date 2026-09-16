@@ -627,11 +627,15 @@ function StartCard({
             </div>
           )}
         </div>
+        {/* Wrapped, not passed by reference: startRun now reads its first
+            argument as the athlete to start, and a bare reference would hand it
+            React's click event. This card seeds the selection above instead, so
+            it has nothing to pass. */}
         <Button
           className="mt-4 w-full"
           size="lg"
           disabled={!selectedParticipantId}
-          onClick={onStart}
+          onClick={() => onStart()}
         >
           <Play className="mr-2 h-5 w-5" />
           Start Timer
