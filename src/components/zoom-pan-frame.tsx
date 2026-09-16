@@ -23,6 +23,7 @@ export function ZoomPanFrame({
   onVerticalSwipe,
   onTap,
   canNavigate = false,
+  allowPageScroll = false,
   prevLabel,
   nextLabel,
   position,
