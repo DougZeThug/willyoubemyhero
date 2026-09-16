@@ -36,7 +36,8 @@ export function currentAthlete<T extends QueueEntry>(entries: readonly T[]): Ath
  *
  * Anybody out of contention is out of the denominator too: they are never going
  * to finish, so counting them holds the screen at "12 of 13" forever. The
- * numerator counts distinct athletes, not official runs — see /live.
+ * numerator is the standings row count — one athlete each, out of contention
+ * already dropped — so both halves leave out the same people; see /live.
  */
 export function fieldSize(entries: readonly QueueEntry[]): number {
   return entries.filter((e) => !OUT_OF_CONTENTION_STATUSES.has(e.participation_status ?? ""))
