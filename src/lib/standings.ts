@@ -28,12 +28,17 @@ export type StandingsRun = {
   participant_id: string;
   official_time_ms: number | null;
   is_official: boolean;
-  status: string;
+  /**
+   * Optional because an archived snapshot may predate the column — recap.$slug
+   * reads one. Absent is not "disqualified"; see outOfContention.
+   */
+  status?: string;
 };
 
 export type StandingsParticipant = {
   participant_id: string;
-  participation_status: string;
+  /** Optional for the same reason as StandingsRun.status. */
+  participation_status?: string;
 };
 
 export type StandingsBundle<
@@ -77,7 +82,10 @@ export function compareOfficialTime(
 export function outOfContention(bundle: StandingsBundle): Set<string> {
   const out = new Set(bundle.runs.filter((r) => r.status === "dq").map((r) => r.participant_id));
   for (const p of bundle.participants) {
-    if (OUT_OF_CONTENTION_STATUSES.has(p.participation_status)) out.add(p.participant_id);
+    // A field an archived snapshot may not carry at all, and the default has to be
+    // the forgiving one: reading absent as out-of-contention would empty an old
+    // recap's board entirely rather than degrade it.
+    if (OUT_OF_CONTENTION_STATUSES.has(p.participation_status ?? "")) out.add(p.participant_id);
   }
   return out;
 }

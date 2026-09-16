@@ -9,8 +9,8 @@ import { FinishCelebration } from "@/components/finish-celebration";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
-import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
-import { compareOfficialTime } from "@/lib/standings";
+import { currentAthlete, idleFieldState } from "@/lib/current-athlete";
+import { outOfContention, standings } from "@/lib/standings";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { onClockElapsedMs, type OnClockEntry } from "@/lib/live-clock";
 import { computeElapsedMs } from "@/lib/active-run";
@@ -66,24 +66,33 @@ function LivePage() {
 
   const { current, onClock, leaderboard, done, total } = useMemo(() => {
     const parts = bundle?.participants ?? [];
-    const runs = bundle?.runs ?? [];
     const slot = currentAthlete(parts);
-    const finished = runs
-      .filter((r) => r.is_official)
-      .map((r) => {
-        const ep = parts.find((p) => p.participant_id === r.participant_id);
-        return { run: r, ep };
-      })
-      .sort((a, b) => compareOfficialTime(a.run, b.run));
+    // The board's own rows. Ranking official runs listed anybody re-timed twice
+    // in a Top 5 of five, beside a counter that had already learned to count them
+    // once -- the screen contradicting itself.
+    const excluded = outOfContention(bundle ?? { participants: [], runs: [] });
+    const placed = standings(bundle).map((s) => ({
+      run: s.run,
+      place: s.place,
+      ep: parts.find((p) => p.participant_id === s.participantId),
+    }));
     return {
       current: slot.athlete,
       onClock: slot.onClock,
-      leaderboard: finished.slice(0, 5),
-      // Distinct athletes, not official runs: an athlete re-timed has two, and
-      // enough of those tipped the screen into "everyone is done" while people
-      // were still queueing.
-      done: new Set(finished.map((f) => f.run.participant_id)).size,
-      total: fieldSize(parts),
+      leaderboard: placed.slice(0, 5),
+      // Both halves of this fraction drop exactly the same people, which is the
+      // only way the tally can ever close. Counting distinct athletes across every
+      // official run counted the scratched ones, so one scratched finisher pushed
+      // done past total and printed "Every athlete is done. Nice work." over a
+      // queue that was still moving.
+      //
+      // The denominator is outOfContention rather than fieldSize because being out
+      // has two grounds and fieldSize can only see one: it takes roster rows, which
+      // carry no participant id, so a run marked dq is invisible to it. An athlete
+      // whose roster row says finished but whose run was dq'd left the numerator
+      // and stayed in the denominator, and the field could never reach all-done.
+      done: placed.length,
+      total: parts.filter((p) => !excluded.has(p.participant_id)).length,
     };
   }, [bundle]);
 
@@ -229,7 +238,7 @@ function LivePage() {
               <p className="text-xs text-muted-foreground">No official times yet.</p>
             ) : (
               <ol className="space-y-1.5">
-                {leaderboard.map((row, i) => (
+                {leaderboard.map((row) => (
                   <li
                     key={row.run.id}
                     className="flex items-center gap-2 rounded-md border border-primary/5 bg-[oklch(0.16_0.02_240)] px-2 py-2"
@@ -237,12 +246,12 @@ function LivePage() {
                     <span
                       className={
                         "grid h-7 w-7 place-items-center rounded-full text-[11px] font-black " +
-                        (i === 0
+                        (row.place === 1
                           ? "bg-primary text-primary-foreground shadow-[0_0_10px_var(--color-primary)]"
                           : "bg-primary/10 text-primary")
                       }
                     >
-                      {i + 1}
+                      {row.place}
                     </span>
                     <ParticipantAvatar
                       name={row.ep?.participant?.name ?? "?"}
@@ -288,3 +297,5 @@ function LivePage() {
     </div>
   );
 }
+
+export default LivePage;

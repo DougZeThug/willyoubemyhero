@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getArchivedRecap } from "@/lib/media.functions";
 import { formatTime } from "@/lib/format";
-import { compareOfficialTime } from "@/lib/standings";
+import { standings } from "@/lib/standings";
 
 export const Route = createFileRoute("/recap/$slug")({
   head: ({ params }) => ({
@@ -39,6 +39,9 @@ type Snapshot = {
   participants: Array<{
     id: string;
     participant_id: string;
+    // Optional because an archive written before the column existed has no such
+    // key, and standings() reads absent as in contention rather than out.
+    participation_status?: string;
     participant?: { name: string; fantasy_team_name?: string | null } | null;
   }>;
   runs: Array<{
@@ -46,6 +49,8 @@ type Snapshot = {
     participant_id: string;
     is_official: boolean;
     official_time_ms: number | null;
+    /** Optional for the same reason as participation_status above. */
+    status?: string;
   }>;
   drafts: Array<{ selection_order: number; participant_id: string; draft_position: number }>;
 };
@@ -55,13 +60,15 @@ function RecapPage() {
   // Typed off the server function because useLoaderData doesn't infer it here.
   const recap = Route.useLoaderData() as NonNullable<Awaited<ReturnType<typeof getArchivedRecap>>>;
   const snap = recap.snapshot as Snapshot;
-  const results = snap.runs
-    .filter((r) => r.is_official)
-    .map((r) => {
-      const ep = snap.participants.find((p) => p.participant_id === r.participant_id);
-      return { run: r, ep };
-    })
-    .sort((a, b) => compareOfficialTime(a.run, b.run));
+  // The board's own rules, so an archived leaderboard says what the live one said:
+  // one row per athlete, a dead heat sharing its number, anybody out of contention
+  // off it. An archive carrying no statuses keeps everybody, which is the old
+  // behaviour exactly.
+  const results = standings(snap).map((s) => ({
+    run: s.run,
+    place: s.place,
+    ep: snap.participants.find((p) => p.participant_id === s.participantId),
+  }));
   const drafts = [...snap.drafts].sort((a, b) => a.draft_position - b.draft_position);
 
   return (
@@ -81,13 +88,13 @@ function RecapPage() {
             Final Leaderboard
           </h2>
           <ol className="space-y-1.5">
-            {results.map((r, i) => (
+            {results.map((r) => (
               <li
                 key={r.run.id}
                 className="flex items-center gap-3 rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2"
               >
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-primary/15 text-[11px] font-black text-primary">
-                  {i + 1}
+                  {r.place}
                 </span>
                 <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
                   {r.ep?.participant?.name ?? "?"}

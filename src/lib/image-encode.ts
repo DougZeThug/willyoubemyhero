@@ -25,6 +25,65 @@ export type EncodedImageSizes = {
   large: string;
 };
 
+/**
+ * Types that carry no information — what a browser reports when it could not
+ * work out what the file is, rather than a claim about it.
+ */
+const GENERIC_TYPES: ReadonlySet<string> = new Set([
+  "",
+  "application/octet-stream",
+  "binary/octet-stream",
+]);
+
+/** The extensions the three upload gates admit by name when the browser gives no type. */
+const EXTENSION_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+};
+
+/**
+ * A file's image type, repaired from its extension when the browser gave none.
+ *
+ * Several browsers report an empty MIME for a DRAGGED file, which the upload
+ * gates already know — card-bulk-upload, universal-card-back and
+ * secret-cards-panel all admit one by extension rather than silently dropping
+ * it. What none of them did was carry that decision any further: FileReader
+ * writes the blob's type into the data URL prefix, and an empty type writes no
+ * image type there at all, so decodeImageDataUrl on the server refused the
+ * result as "Unsupported image format". A card dragged in failed; the same card
+ * picked from the file dialog worked, because a dialog filtered on `accept`
+ * cannot produce an empty type.
+ *
+ * THE EXTENSION, NOT THE BYTES. It is the same claim the gate upstream admitted
+ * the file on, so this label can never say something that gate would have
+ * refused. Sniffing would mean a second read of a handle that may already be
+ * dead, which is the whole reason snapshotFile exists, and could only ever
+ * narrow to these same four names.
+ *
+ * ONLY when the browser said nothing useful. A type it actually reported wins,
+ * even one the server will refuse: a gif named card.png clears the upload gate
+ * on its name, and relabelling it image/png would walk gif bytes past the
+ * server's format check and store them as a png. The refusal is the better
+ * answer, and repairing only the generic types keeps it.
+ */
+export function imageTypeOf(file: File): string {
+  if (!GENERIC_TYPES.has(file.type)) return file.type;
+  return EXTENSION_TYPES[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? file.type;
+}
+
+/**
+ * The same file, relabelled. Wrapping a Blob does not read it — the new File
+ * references the same data and never touches the OS handle — so this is safe on
+ * the Android handle snapshotFile exists to defeat. It is a label, not a copy.
+ */
+function withImageType(file: File): File {
+  const type = imageTypeOf(file);
+  if (type === file.type) return file;
+  return new File([file], file.name, { type, lastModified: file.lastModified });
+}
+
 function readAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -83,7 +142,11 @@ function resizeCanvas(source: CanvasImageSource, width: number, height: number):
  * is already small, so a designer-optimised asset does not take a second generation
  * hit.
  */
-export async function encodeUploadImageVariants(file: File): Promise<EncodedImageSizes> {
+export async function encodeUploadImageVariants(input: File): Promise<EncodedImageSizes> {
+  // Every passthrough below forwards the original bytes, and the server reads the
+  // type off the data URL prefix — so the type has to be settled before the first
+  // read, including the one in the catch.
+  const file = withImageType(input);
   try {
     const source = await loadImage(file);
     const w = "naturalWidth" in source ? source.naturalWidth : source.width;
@@ -161,7 +224,9 @@ export async function snapshotFile(file: File): Promise<File> {
   try {
     const buf = await file.arrayBuffer();
     return new File([buf], file.name, {
-      type: file.type,
+      // Repaired here too, so the staged copy that feeds the preview and the
+      // encoder carries a type the server will accept.
+      type: imageTypeOf(file),
       lastModified: file.lastModified,
     });
   } catch {

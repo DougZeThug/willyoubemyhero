@@ -34,9 +34,11 @@ export function currentAthlete<T extends QueueEntry>(entries: readonly T[]): Ath
 /**
  * Athletes that count toward the "x/y done" tally.
  *
- * Anybody out of contention is out of the denominator too: they are never going
- * to finish, so counting them holds the screen at "12 of 13" forever. The
- * numerator counts distinct athletes, not official runs — see /live.
+ * Roster status only, which is all a QueueEntry carries. That makes this a
+ * headcount of who is nominally in — what /admin's "N in · M out" wants — and
+ * NOT the denominator for a done tally: a run marked dq puts somebody out of
+ * contention without touching their roster row, and this cannot see it. /live
+ * takes both halves of its fraction from outOfContention for that reason.
  */
 export function fieldSize(entries: readonly QueueEntry[]): number {
   return entries.filter((e) => !OUT_OF_CONTENTION_STATUSES.has(e.participation_status ?? ""))
