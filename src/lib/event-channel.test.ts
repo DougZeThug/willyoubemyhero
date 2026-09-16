@@ -90,7 +90,10 @@ describe("subscribeToEventChannel", () => {
       "draft_selections",
       "splits",
       "penalties",
+      "card_reactions",
+      "card_comments",
       "events",
+      "awards",
     ]);
     const runs = bindings[0].cfg as { filter?: string };
     expect(runs.filter).toBe(`event_id=eq.${EVENT_ID}`);

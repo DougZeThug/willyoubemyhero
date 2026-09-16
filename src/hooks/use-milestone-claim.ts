@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { packStatusKey } from "@/hooks/use-pack-status";
-import { streakStatusKey } from "@/hooks/use-streak";
+import { streakHistoryKey, streakStatusKey } from "@/hooks/use-streak";
 import { claimStreakMilestone, type StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { StreakStatus } from "@/lib/streaks.functions";
 import { streakMilestone } from "@/lib/streaks";
@@ -69,6 +69,13 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
         // A bonus pull is a non-duplicate row like any other, so the "pulled"
         // count behind the secret slot moves with it.
         qc.invalidateQueries({ queryKey: packStatusKey(who) }),
+        // The row this claim just wrote is the newest one /you's history selects,
+        // and nothing else ever refreshes that list: streak_milestone_claims is
+        // deliberately off the realtime publication, so there is no catch-up to
+        // wait for. Without this the ladder contradicts itself for five minutes —
+        // the rung reads "Claimed" off the status above while "What you claimed"
+        // omits the card it paid.
+        qc.invalidateQueries({ queryKey: streakHistoryKey(who) }),
       ]);
     },
     [qc],

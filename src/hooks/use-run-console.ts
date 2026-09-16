@@ -91,9 +91,18 @@ export function useRunConsole() {
 
   const usedStationIds = new Set(run?.splits.map((s) => s.stationId) ?? []);
 
-  async function startRun() {
-    if (!event?.id || !selectedParticipantId) return;
-    const ep = participants.find((p) => p.participant_id === selectedParticipantId);
+  /**
+   * @param participantId the athlete to start, for a caller whose control shows a
+   * default it never committed to state. Live's bar is the one that does: its
+   * picker falls back to whoever is next in running order, so a bare tap on Start
+   * was reading an empty selection and returning without writing a run — enabled
+   * button, no timer, no error. Admin's card seeds the selection instead and can
+   * still call this with nothing.
+   */
+  async function startRun(participantId?: string) {
+    const target = participantId || selectedParticipantId;
+    if (!event?.id || !target) return;
+    const ep = participants.find((p) => p.participant_id === target);
     if (!ep) {
       // The athlete was removed from the roster while this screen was open.
       // Starting a timer for a ghost row would leave an orphaned local run that
@@ -109,7 +118,7 @@ export function useRunConsole() {
       v: ACTIVE_RUN_VERSION,
       clientKey: newClientKey(),
       eventId: event.id,
-      participantId: selectedParticipantId,
+      participantId: target,
       startedAtIso: new Date(startedAt).toISOString(),
       startedAt,
       status: "running",

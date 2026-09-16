@@ -47,11 +47,14 @@ function streak(over: Partial<StreakStatus> = {}): StreakStatus {
 }
 
 function mount(actor: string | null, status: StreakStatus | null) {
-  const { wrapper } = createQueryWrapper();
-  return renderHook(({ a, s }) => useMilestoneClaim(a, s), {
-    wrapper,
-    initialProps: { a: actor, s: status },
-  });
+  const { wrapper, client } = createQueryWrapper();
+  return {
+    ...renderHook(({ a, s }) => useMilestoneClaim(a, s), {
+      wrapper,
+      initialProps: { a: actor, s: status },
+    }),
+    client,
+  };
 }
 
 describe("which rung is offered", () => {
@@ -250,6 +253,40 @@ describe("claiming", () => {
       await result.current.claim(3);
     });
     expect(result.current.claimError).toMatch(/no signal/i);
+  });
+});
+
+describe("what a claim refreshes", () => {
+  it("asks again for every cache the claim moved, the history list included", async () => {
+    // The row this wrote is the newest one /you's history selects, and nothing
+    // else refreshes it — streak_milestone_claims is deliberately off the
+    // realtime publication. Miss it and StreakLadder contradicts itself: the rung
+    // reads "Claimed" while the list of what you claimed omits the card it paid.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({
+      ok: true,
+      milestone: 7,
+      streak: 7,
+      duplicate: false,
+      card: CARD,
+      startedOn: RUN,
+    });
+    const { result, client } = mount("m:alice", streak({ current: 7 }));
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    await act(async () => {
+      await result.current.claim(7);
+    });
+
+    const keys = invalidate.mock.calls.map((c) => c[0]?.queryKey);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        ["pack-streak", "m:alice"],
+        ["my-secrets", "m:alice"],
+        ["pack-status", "m:alice"],
+        ["streak-history", "m:alice"],
+      ]),
+    );
   });
 });
 

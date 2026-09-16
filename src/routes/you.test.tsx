@@ -62,7 +62,13 @@ vi.mock("@/hooks/use-secret-collections", () => ({ useSecretCollections: () => u
 vi.mock("@/hooks/use-collection-trophies", () => ({
   useCollectionTrophies: () => ({ data: { trophies: [] } }),
 }));
-vi.mock("@/hooks/use-streak", () => ({ useStreakStatus: () => useStreakStatus() }));
+// Only the hook is stubbed. streakHistoryKey is a pure key factory, and a mock
+// that replaced it would hand this screen a different cache key than the claim
+// invalidates — which is the drift the shared factory exists to stop.
+vi.mock("@/hooks/use-streak", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/use-streak")>()),
+  useStreakStatus: () => useStreakStatus(),
+}));
 vi.mock("@/hooks/use-dust", () => ({ useDustBalance: () => ({ data: { balance: 140 } }) }));
 vi.mock("@/hooks/use-my-collection", () => ({ useMyCollection: () => useMyCollection() }));
 vi.mock("@/hooks/use-account", () => ({

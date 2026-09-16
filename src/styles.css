@@ -255,8 +255,17 @@
      less the sticky header, less the notch above it, less the bar's clearance
      below. dvh and not vh — vh is the LARGE viewport on mobile Safari, so a page
      sized off it grows by the height of the toolbar the moment the toolbar
-     collapses, which is a jump under the thumb on every scroll. */
-  --page-min-h: calc(100dvh - 3rem - env(safe-area-inset-top) - var(--above-tab-bar));
+     collapses, which is a jump under the thumb on every scroll.
+
+     The header term is measured, not rounded: site-nav's row is min-h-11 (4rem
+     once py-2.5 is added) and the sticky wrapper adds a 1px border-b, so it
+     occupies 65px plus the notch — and the notch cancels against the env() below,
+     which is why the pt-safe on the header and the subtraction here have to stay
+     in step. This read 3rem, from §17 of the mobile audit, whose 48px was
+     recorded before the wordmark stopped wrapping; §2 of the same audit had
+     already measured 65px at every width. Seventeen pixels short is exactly how
+     far every short route scrolled on a screen it was meant to fill. */
+  --page-min-h: calc(100dvh - 4rem - 1px - env(safe-area-inset-top) - var(--above-tab-bar));
 }
 
 /* md, where the bottom bar is `md:hidden` and the clearance goes with it. */

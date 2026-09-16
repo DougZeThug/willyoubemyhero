@@ -147,9 +147,17 @@ export function useNavShape(event: unknown): NavShape {
   // not on every render of every screen the bar is mounted on.
   const answered = useMemo(() => shapeOfEvent(event), [event]);
 
+  // Only a shape a real event confirmed is worth remembering. `null` is both "no
+  // active event" and — because getActiveEvent logs a failed read and hands back
+  // the null anyway — "the read did not land", and nothing here can tell the two
+  // apart. Persisting the default for the second lets one bad round trip wipe the
+  // bar this device learned, which is the re-shape this module exists to prevent.
+  // Only the write is gated: a null event still RENDERS the default bar below.
+  const confirmed = event == null ? null : answered;
+
   useEffect(() => {
-    if (answered) writeNavShape(answered);
-  }, [answered]);
+    if (confirmed) writeNavShape(confirmed);
+  }, [confirmed]);
 
   return answered ?? remembered ?? DEFAULT_NAV_SHAPE;
 }

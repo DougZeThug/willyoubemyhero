@@ -60,10 +60,22 @@ const RUN = {
 
 describe("LiveTimingBar", () => {
   it("starts the athlete the running order says is next", async () => {
+    // WITH the athlete, not just at all. The picker defaults to whoever is next
+    // without writing that to the console's selection, so a Start that passed
+    // nothing left the hook reading an empty string and returning — an enabled
+    // button that started no timer and said nothing. Asserting only that the
+    // click landed is what let that ship.
     const rc = console_();
     render(<LiveTimingBar console={rc} />);
     await userEvent.click(screen.getByRole("button", { name: /start timer/i }));
-    expect(rc.startRun).toHaveBeenCalled();
+    expect(rc.startRun).toHaveBeenCalledWith("p-a");
+  });
+
+  it("starts the athlete the commissioner picked once they have picked one", async () => {
+    const rc = console_({ selectedParticipantId: "p-b" });
+    render(<LiveTimingBar console={rc} />);
+    await userEvent.click(screen.getByRole("button", { name: /start timer/i }));
+    expect(rc.startRun).toHaveBeenCalledWith("p-b");
   });
 
   it("records a split per station while running", async () => {
