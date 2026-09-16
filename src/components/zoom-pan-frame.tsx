@@ -67,8 +67,12 @@ export function ZoomPanFrame({
         {...zoomer.handlers}
         className="relative overflow-hidden rounded-xl"
         // Claimed outright: a pinch that the browser turns into a page zoom is
-        // gone for good, and touch-action is read once at gesture start.
-        style={{ touchAction: "none" }}
+        // gone for good, and touch-action is read once at gesture start. On a
+        // scrolling page the 1x state gives the vertical axis back, or the card
+        // is a hole the page cannot be scrolled from; a two-finger pinch is
+        // still ours under pan-y, and the moment we are magnified we take both
+        // axes because every drag is then a pan.
+        style={{ touchAction: allowPageScroll && !zoomed ? "pan-y" : "none" }}
       >
         <div
           ref={zoomer.contentRef}
