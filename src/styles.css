@@ -271,10 +271,17 @@
 }
 
 @layer base {
-  html,
-  body {
+  html {
     color-scheme: dark;
-    overflow-x: hidden;
+    max-width: 100%;
+  }
+  body {
+    /* `clip` on the body alone, not `hidden` on both elements. `overflow-x:
+       hidden` on <html> makes the document element a scroll container, and on
+       several Android browsers that is enough to leave the page unscrollable by
+       touch. `clip` cuts the sideways bleed without creating a scroll box at
+       all, which is the only thing that rule was ever for. */
+    overflow-x: clip;
     max-width: 100%;
   }
   * {
