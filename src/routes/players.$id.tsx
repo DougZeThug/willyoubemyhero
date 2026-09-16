@@ -706,6 +706,9 @@ function PlayerCardPage() {
                       setFlipped((f) => !f);
                     }}
                     canNavigate={roster.length > 1}
+                    // This card is on a page with a stat block under it, not in
+                    // a viewer, so the page has to stay scrollable through it.
+                    allowPageScroll
                     prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
                     nextLabel={`Next: ${next?.participant?.name ?? ""}`}
                     position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
@@ -722,6 +725,7 @@ function PlayerCardPage() {
                         onFlippedChange={setFlipped}
                         gyro={gyro}
                         tilt="hero"
+                        pageScroll
                         // While magnified the frame owns the pointer; a card leaning
                         // under a pan would make the thing you are reading move.
                         interactive={!zoomed}

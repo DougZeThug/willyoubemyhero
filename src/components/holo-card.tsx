@@ -214,6 +214,12 @@ export type HoloCardProps = {
    * the gesture would trap the scroll across half the screen.
    */
   tilt?: TiltVariant;
+  /**
+   * This card sits on a page that scrolls, so the vertical axis stays the
+   * browser's. Only matters for `tilt="hero"`, which otherwise claims both axes
+   * and traps the scroll across most of a phone screen.
+   */
+  pageScroll?: boolean;
   /** Device-orientation tilt, enabled by the caller after a permission grant. */
   gyro?: boolean;
   /** Start face-down (shows the back) regardless of art availability. */
@@ -263,6 +269,7 @@ function HoloCardImpl({
   flickToFlip = true,
   intensity = "full",
   tilt = "calm",
+  pageScroll = false,
   gyro = false,
   faceDown = false,
   flipMs = DEFAULT_FLIP_MS,
@@ -672,7 +679,13 @@ function HoloCardImpl({
     // mid-gesture does nothing to the in-flight gesture, and re-capturing after a
     // pointercancel cannot reclaim a pan. The only alternative is "none" plus a JS
     // scroll proxy, which costs momentum and rubber-banding.
-    touchAction: dragTilt && interactive && !reduced ? t.touchAct : undefined,
+    // ...except where the card sits on a page that still has to scroll under a
+    // thumb. A hero card is most of a phone screen, so "none" there means the
+    // page cannot be scrolled from anywhere the card covers. `pageScroll` gives
+    // the vertical axis back to the browser and keeps the rest — the lean on
+    // touch is then horizontal only, which is the trade those callers want.
+    touchAction:
+      dragTilt && interactive && !reduced ? (pageScroll ? "pan-y" : t.touchAct) : undefined,
   } as React.CSSProperties;
 
   // A resting card only crawls if the tier earned it, and only at hero size —

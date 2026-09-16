@@ -23,6 +23,7 @@ export function ZoomPanFrame({
   onVerticalSwipe,
   onTap,
   canNavigate = false,
+  allowPageScroll = false,
   prevLabel,
   nextLabel,
   position,
@@ -40,6 +41,14 @@ export function ZoomPanFrame({
   onVerticalSwipe?: (dir: -1 | 1) => void;
   onTap?: () => void;
   canNavigate?: boolean;
+  /**
+   * The frame is on a scrolling page rather than in a full-screen viewer, so at
+   * 1x the vertical axis belongs to the browser. Without this the card is a
+   * dead zone the page cannot be scrolled from — which on a phone is most of
+   * the screen. Above 1x the frame takes both axes back, because then a drag is
+   * a pan of the magnified card.
+   */
+  allowPageScroll?: boolean;
   prevLabel?: string;
   nextLabel?: string;
   /** e.g. "3 / 11". Shown between the arrows. */
@@ -58,8 +67,12 @@ export function ZoomPanFrame({
         {...zoomer.handlers}
         className="relative overflow-hidden rounded-xl"
         // Claimed outright: a pinch that the browser turns into a page zoom is
-        // gone for good, and touch-action is read once at gesture start.
-        style={{ touchAction: "none" }}
+        // gone for good, and touch-action is read once at gesture start. On a
+        // scrolling page the 1x state gives the vertical axis back, or the card
+        // is a hole the page cannot be scrolled from; a two-finger pinch is
+        // still ours under pan-y, and the moment we are magnified we take both
+        // axes because every drag is then a pan.
+        style={{ touchAction: allowPageScroll && !zoomed ? "pan-y" : "none" }}
       >
         <div
           ref={zoomer.contentRef}
