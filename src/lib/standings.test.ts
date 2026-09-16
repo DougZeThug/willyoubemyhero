@@ -106,4 +106,19 @@ describe("standings", () => {
   it("returns nothing for a bundle that has not landed", () => {
     expect(standings(null)).toEqual([]);
   });
+
+  it("places the finishers in an archived snapshot that carries no statuses", () => {
+    // /recap reads a snapshot written years ago, and the two status columns this
+    // leans on may simply not be in it. Absent has to read as in contention:
+    // treating it as out would empty an old recap's board rather than degrade it.
+    const rows = standings({
+      participants: [{ participant_id: "p1" }, { participant_id: "p2" }],
+      runs: [
+        { participant_id: "p1", official_time_ms: 90_000, is_official: true },
+        { participant_id: "p2", official_time_ms: 40_000, is_official: true },
+      ],
+    });
+    expect(rows.map((r) => r.participantId)).toEqual(["p2", "p1"]);
+    expect(rows.map((r) => r.place)).toEqual([1, 2]);
+  });
 });
