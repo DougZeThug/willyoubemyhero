@@ -25,6 +25,16 @@ export type EncodedImageSizes = {
   large: string;
 };
 
+/**
+ * Types that carry no information — what a browser reports when it could not
+ * work out what the file is, rather than a claim about it.
+ */
+const GENERIC_TYPES: ReadonlySet<string> = new Set([
+  "",
+  "application/octet-stream",
+  "binary/octet-stream",
+]);
+
 /** The extensions the three upload gates admit by name when the browser gives no type. */
 const EXTENSION_TYPES: Record<string, string> = {
   png: "image/png",
@@ -50,12 +60,16 @@ const EXTENSION_TYPES: Record<string, string> = {
  * the file on, so this label can never say something that gate would have
  * refused. Sniffing would mean a second read of a handle that may already be
  * dead, which is the whole reason snapshotFile exists, and could only ever
- * narrow to these same four names. A type we cannot improve on is left alone:
- * mislabelling a gif as a webp to get it past the server's check would be worse
- * than the honest refusal it gets today.
+ * narrow to these same four names.
+ *
+ * ONLY when the browser said nothing useful. A type it actually reported wins,
+ * even one the server will refuse: a gif named card.png clears the upload gate
+ * on its name, and relabelling it image/png would walk gif bytes past the
+ * server's format check and store them as a png. The refusal is the better
+ * answer, and repairing only the generic types keeps it.
  */
 export function imageTypeOf(file: File): string {
-  if (/^image\/(png|jpe?g|webp)$/.test(file.type)) return file.type;
+  if (!GENERIC_TYPES.has(file.type)) return file.type;
   return EXTENSION_TYPES[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? file.type;
 }
 

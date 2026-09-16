@@ -91,6 +91,32 @@ describe("LivePage standings", () => {
     expect(screen.getByText("2/2 done")).toBeInTheDocument();
   });
 
+  it("counts a dq'd run out of both halves, so the field can finish", () => {
+    // standings() drops an athlete on a run marked dq even when their roster row
+    // says finished, but fieldSize only ever sees the roster — so the dq'd one
+    // stayed in the denominator and the tally could never close.
+    const clean = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-c", name: "Alice Ace", nickname: null },
+    });
+    const dqd = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-d", name: "Dave Dropout", nickname: null },
+    });
+    showBundle({
+      participants: [clean, dqd],
+      runs: [
+        makeRun({ participant_id: clean.participant_id, official_time_ms: 60_000 }),
+        makeRun({ participant_id: dqd.participant_id, official_time_ms: 40_000, status: "dq" }),
+      ],
+    });
+
+    render(<LivePage />);
+    expect(screen.getByText("1/1 done")).toBeInTheDocument();
+    expect(screen.getByText("Every athlete is done. Nice work.")).toBeInTheDocument();
+    expect(screen.queryByText("Dave Dropout")).toBeNull();
+  });
+
   it("does not congratulate the field while a scratched athlete pads the count", () => {
     // done counted every athlete with an official run, total left the scratched
     // out — so one scratched finisher pushed done past total and the screen said

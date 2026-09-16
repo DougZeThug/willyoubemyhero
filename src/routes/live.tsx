@@ -9,8 +9,8 @@ import { FinishCelebration } from "@/components/finish-celebration";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinishWatcher } from "@/hooks/use-finish-watcher";
-import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
-import { standings } from "@/lib/standings";
+import { currentAthlete, idleFieldState } from "@/lib/current-athlete";
+import { outOfContention, standings } from "@/lib/standings";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 import { onClockElapsedMs, type OnClockEntry } from "@/lib/live-clock";
 import { computeElapsedMs } from "@/lib/active-run";
@@ -70,6 +70,7 @@ function LivePage() {
     // The board's own rows. Ranking official runs listed anybody re-timed twice
     // in a Top 5 of five, beside a counter that had already learned to count them
     // once -- the screen contradicting itself.
+    const excluded = outOfContention(bundle ?? { participants: [], runs: [] });
     const placed = standings(bundle).map((s) => ({
       run: s.run,
       place: s.place,
@@ -79,13 +80,19 @@ function LivePage() {
       current: slot.athlete,
       onClock: slot.onClock,
       leaderboard: placed.slice(0, 5),
-      // Both halves of this fraction now drop the same people. Counting distinct
-      // athletes across every official run counted the scratched ones too, while
-      // fieldSize below has always left them out, so one scratched athlete with a
-      // time pushed done past total and printed "Every athlete is done. Nice
-      // work." over a queue that was still moving.
+      // Both halves of this fraction drop exactly the same people, which is the
+      // only way the tally can ever close. Counting distinct athletes across every
+      // official run counted the scratched ones, so one scratched finisher pushed
+      // done past total and printed "Every athlete is done. Nice work." over a
+      // queue that was still moving.
+      //
+      // The denominator is outOfContention rather than fieldSize because being out
+      // has two grounds and fieldSize can only see one: it takes roster rows, which
+      // carry no participant id, so a run marked dq is invisible to it. An athlete
+      // whose roster row says finished but whose run was dq'd left the numerator
+      // and stayed in the denominator, and the field could never reach all-done.
       done: placed.length,
-      total: fieldSize(parts),
+      total: parts.filter((p) => !excluded.has(p.participant_id)).length,
     };
   }, [bundle]);
 

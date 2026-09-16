@@ -39,6 +39,19 @@ describe("imageTypeOf", () => {
     expect(imageTypeOf(new File([], "card.webp", { type: "" }))).toBe("image/webp");
   });
 
+  it("does not overwrite a real type that disagrees with the extension", () => {
+    // A gif named card.png clears the upload gate on its name. Relabelling it
+    // image/png would walk it straight past the server's format check and store
+    // gif bytes as a png; the honest refusal is the better answer.
+    expect(imageTypeOf(new File([], "card.png", { type: "image/gif" }))).toBe("image/gif");
+  });
+
+  it("repairs the generic type some browsers report instead of an empty one", () => {
+    expect(imageTypeOf(new File([], "card.png", { type: "application/octet-stream" }))).toBe(
+      "image/png",
+    );
+  });
+
   it("leaves a type it cannot improve on alone", () => {
     // An honest refusal downstream beats mislabelling a gif as a png to get it
     // past the server's check.
@@ -85,6 +98,13 @@ describe("encodeUploadImageVariants", () => {
     const file = new File([new Uint8Array([1, 2, 3])], "card.webp", { type: "image/webp" });
     const sizes = await encodeUploadImageVariants(file);
     expect(sizes.large.startsWith("data:image/webp;base64,")).toBe(true);
+  });
+
+  it("refuses a gif wearing a .png name rather than relabelling it", async () => {
+    decodesAs(1, 1);
+    const file = new File([new Uint8Array([1, 2, 3])], "card.png", { type: "image/gif" });
+    const sizes = await encodeUploadImageVariants(file);
+    expect(sizes.large).not.toMatch(SERVER_ACCEPTS);
   });
 
   it("still refuses a file it can identify no other way", async () => {
