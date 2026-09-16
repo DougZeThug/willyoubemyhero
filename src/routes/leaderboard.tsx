@@ -238,7 +238,15 @@ function LeaderboardPage() {
                       // thirteen identical controls out of context.
                       aria-label={`Share ${row.ep?.participant?.name ?? "this"} result card`}
                       onClick={() => handleShare(row.run.id)}
-                      disabled={sharingRunId === row.run.id}
+                      // The whole group, not this row. One cardRef and one
+                      // offscreen ResultCard serve all thirteen, so a tap on B
+                      // while A is still exporting repoints that single node and
+                      // A's PNG rasterises B under A's filename — Bob's card,
+                      // saved as Alice's, into the group chat. Whichever handler
+                      // lands first then clears sharingRunId and unmounts the
+                      // node under the other. Same shape as secret-cards-panel's
+                      // setBusyId.
+                      disabled={sharingRunId !== null}
                     >
                       <Share2 className="h-4 w-4" />
                     </Button>
@@ -291,3 +299,5 @@ function PageHeader({
     </div>
   );
 }
+
+export default LeaderboardPage;
