@@ -65,7 +65,8 @@ export type MarketPanelProps = {
   backUrl: ImageUrlSet | string | null;
   /**
    * The commissioner's switch. False renders the STALL ALONE — no shelf, no
-   * listing flow — and nothing at all if there is nothing on it.
+   * listing flow — and nothing at all when there is neither a listing up nor a
+   * settled sale to report.
    *
    * Not simply "hide the whole panel", which is what this did and what made
    * `cancel_market_listing`'s promise a lie. That RPC is the one in the feature
@@ -357,15 +358,22 @@ export function MarketPanel({
     putUp.mutate({ item: staged.item, price: asking });
   }
 
-  // With the economy off and nothing on the shelf there is nothing to say, and the
-  // route's "not switched on yet" line says it already. Below every hook, because
-  // an early return above one would change the hook order between renders.
+  // With the economy off and nothing on the shelf AND nothing settled there is
+  // nothing to say, and the route's "not switched on yet" line says it already.
+  // Below every hook, because an early return above one would change the hook
+  // order between renders.
+  //
+  // `recent` counts as much as `active` does. The settled half is the only place
+  // a sale is ever visible — it writes no row into `trades` and reaches no public
+  // feed — so a seller who was not on this tab when their card sold learned about
+  // it as "huh, I have more dust", which is the exact failure the Lately strip
+  // was built to prevent.
   //
   // `!stall.isLoading` matters: this path exists so a seller can always take a
   // listing down after dust is switched off, and returning null while the stall
   // was still in flight rendered a blank frame that then popped in — which,
   // right there, reads as "my cards are gone".
-  if (!dustOn && active.length === 0 && !stall.isLoading) return null;
+  if (!dustOn && active.length === 0 && recent.length === 0 && !stall.isLoading) return null;
 
   return (
     <div className="space-y-section-gap">
@@ -450,7 +458,11 @@ export function MarketPanel({
         <p className="text-meta text-muted-foreground">
           {dustOn
             ? "Spares only, and a roster card always leaves you one. A sale is between you and the buyer — nobody else is told."
-            : "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."}
+            : active.length > 0
+              ? "The market is shut while dust is off, so nothing here can sell — but these are still yours to take back."
+              : // Nothing up, so there is nothing to take back — and with dust off
+                // the panel is only on screen at all because something settled.
+                "The market is shut while dust is off. Nothing of yours is on it."}
         </p>
 
         {stall.isLoading ? (
