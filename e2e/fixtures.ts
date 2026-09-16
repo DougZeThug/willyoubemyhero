@@ -631,6 +631,11 @@ export async function stubServerFns(
   return mock;
 }
 
+// The second argument of a fixture is `use` in Playwright's own docs. It is
+// passed positionally, so the name is ours, and `provide` is the one that keeps
+// static analysis quiet: `use(value)` inside a function that is neither a
+// component nor a `use`-prefixed hook is exactly what React's rules-of-hooks
+// check is looking for, and it cannot tell this `use` from React's.
 export const test = base.extend<{ server: ServerFnMock; consoleErrors: string[] }>({
   // `auto` matters. Playwright only builds a fixture a test actually
   // destructures, so a test taking just `{ page }` would run with no stubbing at
@@ -640,10 +645,10 @@ export const test = base.extend<{ server: ServerFnMock; consoleErrors: string[] 
   // unstubbed call has to land somewhere the test can see it, and only
   // smoke.spec.ts asks for the array by name.
   server: [
-    async ({ page, consoleErrors }, use) => {
+    async ({ page, consoleErrors }, provide) => {
       liveMocks.clear();
       const mock = await stubServerFns(page, (message) => consoleErrors.push(message));
-      await use(mock);
+      await provide(mock);
       // In teardown, so an unstubbed call fails the test even when the screen
       // shrugged the 500 off and the test never looked at `consoleErrors`. Over
       // every mock in the test rather than this one, so a second tab counts.
@@ -655,13 +660,13 @@ export const test = base.extend<{ server: ServerFnMock; consoleErrors: string[] 
   ],
   // Surfaced as a fixture rather than asserted automatically, so a test that
   // expects an error can opt in to ignoring it.
-  consoleErrors: async ({ page }, use) => {
+  consoleErrors: async ({ page }, provide) => {
     const errors: string[] = [];
     page.on("console", (msg) => {
       if (msg.type() === "error") errors.push(msg.text());
     });
     page.on("pageerror", (err) => errors.push(String(err)));
-    await use(errors);
+    await provide(errors);
   },
 });
 

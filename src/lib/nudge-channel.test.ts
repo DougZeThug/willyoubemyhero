@@ -66,8 +66,12 @@ const fire = () => {
   for (const b of bindings) b.cb();
 };
 
+// Not `cb`: supabase hands `subscribe` a status callback, not a node-style
+// error-first one, so the status lands in the argument the error-first
+// convention reserves for an Error — which is what a literal there looks like
+// to a linter when the callee is named `cb`.
 const join = () => {
-  for (const cb of statusCallbacks) cb("SUBSCRIBED");
+  for (const onStatus of statusCallbacks) onStatus("SUBSCRIBED");
 };
 
 beforeEach(() => {
