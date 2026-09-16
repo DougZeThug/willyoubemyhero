@@ -14,6 +14,7 @@ import { ParticipantAvatar } from "@/components/participant-avatar";
 import { formatTime } from "@/lib/format";
 import { standings } from "@/lib/standings";
 import { currentAthlete } from "@/lib/current-athlete";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tv")({
   head: () => ({
@@ -101,22 +102,22 @@ function TvPage() {
         {rows.slice(0, 16).map((row) => (
           <div
             key={row.run.id}
-            className={
-              "flex items-center gap-4 rounded-2xl border p-4 " +
-              (row.place === 1
+            className={cn(
+              "flex items-center gap-4 rounded-2xl border p-4",
+              row.place === 1
                 ? "hud-bezel border-primary/60 hud-glow"
-                : "border-primary/15 bg-[oklch(0.16_0.02_240)]")
-            }
+                : "border-primary/15 bg-[oklch(0.16_0.02_240)]",
+            )}
           >
+            {/* place, not the row index: a three-way tie for first is three
+                medals and a fourth place, not a medal for whoever sorted third. */}
             <span
-              className={
-                "grid h-14 w-14 place-items-center rounded-full font-display text-2xl font-black " +
-                // place, not the row index: a three-way tie for first is three
-                // medals and a fourth place, not a medal for whoever sorted third.
-                (row.place <= 3
+              className={cn(
+                "grid h-14 w-14 place-items-center rounded-full font-display text-2xl font-black",
+                row.place <= 3
                   ? "bg-primary text-primary-foreground"
-                  : "bg-primary/10 text-primary")
-              }
+                  : "bg-primary/10 text-primary",
+              )}
             >
               {row.place}
             </span>

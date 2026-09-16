@@ -168,21 +168,21 @@ describe("AnalyticsPage personal bests", () => {
     // being defined across updates — and this list re-renders on every realtime
     // nudge, which is exactly when a row would swap its time for the other Dave's.
     const warn = vi.spyOn(console, "error").mockImplementation(() => {});
-    const a = makeParticipant({
+    const fastDave = makeParticipant({
       participation_status: "finished",
       participant: { id: "p-a", name: "Dave", nickname: null },
     });
-    const b = makeParticipant({
+    const slowDave = makeParticipant({
       participation_status: "finished",
       participant: { id: "p-b", name: "Dave", nickname: null },
     });
     useEventBundle.mockReturnValue({
       event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
       bundle: makeBundle({
-        participants: [a, b],
+        participants: [fastDave, slowDave],
         runs: [
-          makeRun({ participant_id: a.participant_id, official_time_ms: 50_000 }),
-          makeRun({ participant_id: b.participant_id, official_time_ms: 60_000 }),
+          makeRun({ participant_id: fastDave.participant_id, official_time_ms: 50_000 }),
+          makeRun({ participant_id: slowDave.participant_id, official_time_ms: 60_000 }),
         ],
       }),
       loading: false,

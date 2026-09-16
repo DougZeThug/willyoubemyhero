@@ -99,19 +99,19 @@ describe("TvPage standings", () => {
   });
 
   it("shares the number on a dead heat rather than numbering it 1 and 2", () => {
-    const a = makeParticipant({
+    const alice = makeParticipant({
       participation_status: "finished",
       participant: { id: "p-a", name: "Alice Ace", nickname: null },
     });
-    const b = makeParticipant({
+    const bob = makeParticipant({
       participation_status: "finished",
       participant: { id: "p-b", name: "Bob Bison", nickname: null },
     });
     showBundle({
-      participants: [a, b],
+      participants: [alice, bob],
       runs: [
-        makeRun({ participant_id: a.participant_id, official_time_ms: 60_000 }),
-        makeRun({ participant_id: b.participant_id, official_time_ms: 60_000 }),
+        makeRun({ participant_id: alice.participant_id, official_time_ms: 60_000 }),
+        makeRun({ participant_id: bob.participant_id, official_time_ms: 60_000 }),
       ],
     });
 

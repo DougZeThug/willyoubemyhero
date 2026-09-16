@@ -100,7 +100,8 @@ describe("LeaderboardPage sharing", () => {
 
   it("hands the buttons back once the export settles", async () => {
     twoFinishers();
-    exportCardPng.mockResolvedValue(undefined);
+    // beforeEach resets it to a bare vi.fn(), whose undefined return awaits
+    // straight through — an export that settles on the next tick.
 
     render(<LeaderboardPage />);
     const buttons = screen.getAllByRole("button", { name: /share .* result card/i });
