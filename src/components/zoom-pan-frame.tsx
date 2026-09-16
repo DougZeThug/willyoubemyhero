@@ -40,6 +40,14 @@ export function ZoomPanFrame({
   onVerticalSwipe?: (dir: -1 | 1) => void;
   onTap?: () => void;
   canNavigate?: boolean;
+  /**
+   * The frame is on a scrolling page rather than in a full-screen viewer, so at
+   * 1x the vertical axis belongs to the browser. Without this the card is a
+   * dead zone the page cannot be scrolled from — which on a phone is most of
+   * the screen. Above 1x the frame takes both axes back, because then a drag is
+   * a pan of the magnified card.
+   */
+  allowPageScroll?: boolean;
   prevLabel?: string;
   nextLabel?: string;
   /** e.g. "3 / 11". Shown between the arrows. */
