@@ -1,0 +1,29 @@
+version = 1
+
+test_patterns = [
+  "src/**/*.test.ts",
+  "src/**/*.test.tsx",
+  "tests/**",
+  "e2e/**"
+]
+
+exclude_patterns = [
+  "src/routeTree.gen.ts",
+  "src/integrations/supabase/types.ts",
+  "src/components/ui/**",
+  "public/progressier.js",
+  "product-description/**"
+]
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+  [analyzers.meta]
+  environment = ["browser", "nodejs", "vitest"]
+  plugins = ["react"]
+  dialect = "typescript"
+
+[[analyzers]]
+name = "secrets"
+enabled = true
