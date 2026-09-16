@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import AnalyticsPage from "./analytics";
-import { EVENT_ID, makeBundle, makeStation } from "@/test/fixtures";
+import {
+  EVENT_ID,
+  makeBundle,
+  makeParticipant,
+  makeRun,
+  makeStation,
+  resetFixtureIds,
+} from "@/test/fixtures";
 
 const useEventBundle = vi.fn();
 
@@ -68,6 +75,7 @@ function healthyBundle() {
 }
 
 beforeEach(() => {
+  resetFixtureIds();
   useEventBundle.mockReset();
   useEventBundle.mockReturnValue({
     event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
@@ -117,5 +125,108 @@ describe("AnalyticsPage station averages", () => {
     });
     render(<AnalyticsPage />);
     expect(screen.getByText("No split data yet.")).toBeInTheDocument();
+  });
+});
+
+describe("AnalyticsPage personal bests", () => {
+  it("drops a scratched athlete the leaderboard has already dropped", () => {
+    // Both routes are public and read one bundle. Filtering official runs without
+    // asking about contention let this screen name a fastest athlete that
+    // /leaderboard did not, live, the moment the commissioner scratched them.
+    const clean = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-clean", name: "Alice Ace", nickname: null },
+    });
+    const gone = makeParticipant({
+      participation_status: "scratched",
+      participant: { id: "p-gone", name: "Dave Dropout", nickname: null },
+    });
+    useEventBundle.mockReturnValue({
+      event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+      bundle: makeBundle({
+        participants: [clean, gone],
+        runs: [
+          makeRun({ participant_id: clean.participant_id, official_time_ms: 90_000 }),
+          makeRun({ participant_id: gone.participant_id, official_time_ms: 40_000 }),
+        ],
+      }),
+      loading: false,
+      error: null,
+      failedTables: [],
+      realtimeDegraded: false,
+      refetch: vi.fn(async () => {}),
+    });
+
+    render(<AnalyticsPage />);
+    expect(screen.queryByText("Dave Dropout")).toBeNull();
+    expect(screen.getByText("Alice Ace")).toBeInTheDocument();
+    expect(screen.getByText("1:30.00")).toBeInTheDocument();
+  });
+
+  it("gives two athletes who share a name distinct keys", () => {
+    // key={b.name} collided. React warns and its reconciliation of the list stops
+    // being defined across updates — and this list re-renders on every realtime
+    // nudge, which is exactly when a row would swap its time for the other Dave's.
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    const a = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-a", name: "Dave", nickname: null },
+    });
+    const b = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-b", name: "Dave", nickname: null },
+    });
+    useEventBundle.mockReturnValue({
+      event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+      bundle: makeBundle({
+        participants: [a, b],
+        runs: [
+          makeRun({ participant_id: a.participant_id, official_time_ms: 50_000 }),
+          makeRun({ participant_id: b.participant_id, official_time_ms: 60_000 }),
+        ],
+      }),
+      loading: false,
+      error: null,
+      failedTables: [],
+      realtimeDegraded: false,
+      refetch: vi.fn(async () => {}),
+    });
+
+    render(<AnalyticsPage />);
+    expect(screen.getAllByText("Dave")).toHaveLength(2);
+    expect(warn.mock.calls.flat().join(" ")).not.toMatch(/same key/i);
+    warn.mockRestore();
+  });
+
+  it("leaves out an athlete whose only official run has no time yet", () => {
+    // Math.min over `?? Infinity` gave them a top-ten row with an em dash where
+    // the time belongs — the state a live combine passes through every run.
+    const timed = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-t", name: "Alice Ace", nickname: null },
+    });
+    const untimed = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-u", name: "Bob Bison", nickname: null },
+    });
+    useEventBundle.mockReturnValue({
+      event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+      bundle: makeBundle({
+        participants: [timed, untimed],
+        runs: [
+          makeRun({ participant_id: timed.participant_id, official_time_ms: 60_000 }),
+          makeRun({ participant_id: untimed.participant_id, official_time_ms: null }),
+        ],
+      }),
+      loading: false,
+      error: null,
+      failedTables: [],
+      realtimeDegraded: false,
+      refetch: vi.fn(async () => {}),
+    });
+
+    render(<AnalyticsPage />);
+    expect(screen.queryByText("Bob Bison")).toBeNull();
+    expect(screen.getByText("Alice Ace")).toBeInTheDocument();
   });
 });
