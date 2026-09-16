@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { resetParticipantRuns, setParticipantStatus } from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
+import { useWakeLock } from "@/hooks/use-wake-lock";
 import { newClientKey } from "@/lib/format";
 import {
   ACTIVE_RUN_CLEARED_EVENT,
@@ -33,6 +34,11 @@ export function useRunConsole() {
 
   const [run, setRun] = useState<ActiveRun | null>(null);
   const [selectedParticipantId, setSelected] = useState<string>("");
+
+  // Any run on this phone — running, paused, or stopped and waiting on Save —
+  // keeps the screen awake. The one moment a commissioner cannot be fumbling a
+  // lock screen is the moment an athlete sprints at the line.
+  useWakeLock(run != null);
 
   // Hydrate active run on mount.
   useEffect(() => {
