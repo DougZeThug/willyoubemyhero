@@ -790,9 +790,19 @@
  * context, which on this card means the flip stops being a rotation in space and
  * becomes a squash. box-shadow has no such effect, and an animation beats the
  * inline style the component writes for the resting state.
+ *
+ * No fill mode, and that is the whole point. holo-card arms `.holo-turning` with
+ * a one-way latch, so the class stays on for the rest of the mount and every
+ * later turn is a restartAnimation rather than a re-add — which made `both` mean
+ * "forever", not "until this flip lands". The 100% frame below is a single
+ * layer, the tier glow, while the resting boxShadow the component writes is two:
+ * the tier glow AND the edition accent. Filled forward, the accent bloom on a
+ * lifted hero card disappeared the first time it was turned over and never came
+ * back. There is no animation-delay here, so the backwards half of `both` was
+ * doing nothing to lose.
  */
 .holo-turning {
-  animation: holo-flip-light var(--holo-flip-ms, 500ms) cubic-bezier(0.5, 0, 0.25, 1.18) 1 both;
+  animation: holo-flip-light var(--holo-flip-ms, 500ms) cubic-bezier(0.5, 0, 0.25, 1.18) 1;
 }
 
 @keyframes holo-flip-light {

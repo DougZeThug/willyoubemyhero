@@ -222,3 +222,39 @@ describe("the page-height token reserves the header that is really there", () =>
     ).toBe(headerPx);
   });
 });
+
+/**
+ * The flip's light show is a pass, not a repaint.
+ *
+ * holo-card arms `.holo-turning` with a one-way latch — the class has to stay on
+ * so each later turn can restart the animation rather than re-add it — so a fill
+ * mode here does not expire when the flip lands. It lasts the whole mount, and
+ * an animation outranks both the inline style the component writes and the
+ * `.shadow-2xl` the element carries.
+ *
+ * jsdom has no animation engine and no cascade to ask, so the sheet is the only
+ * place this is provable.
+ */
+describe("the flip hands the card back when it lands", () => {
+  it("does not forward-fill holo-flip-light over the card's resting shadow", () => {
+    const shorthand = /\.holo-turning \{\s*animation:([^;]*);/.exec(css)?.[1];
+    expect(shorthand, ".holo-turning lost its animation shorthand").toBeDefined();
+    expect(
+      /\b(both|forwards)\b/.test(shorthand!),
+      "`.holo-turning` fills holo-flip-light forward. Its 100% frame is a single " +
+        "layer — the tier glow — while the resting boxShadow holo-card writes is " +
+        "two, tier glow AND edition accent. Filled, the accent bloom on a lifted " +
+        "hero card goes at the first turn and never comes back.",
+    ).toBe(false);
+  });
+
+  it("keeps the frame it lands on equal to the tier glow it started from", () => {
+    // Without a fill the last painted frame has to match what the card wears at
+    // rest, or dropping the fill trades a permanent loss for a visible snap.
+    const frames = /@keyframes holo-flip-light \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    const first = /0% \{\s*box-shadow:([^;]*);/.exec(frames)?.[1]?.trim();
+    const last = /100% \{\s*box-shadow:([^;]*);/.exec(frames)?.[1]?.trim();
+    expect(first, "holo-flip-light lost its 0% box-shadow").toBeDefined();
+    expect(last).toBe(first);
+  });
+});
