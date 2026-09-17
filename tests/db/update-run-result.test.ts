@@ -180,7 +180,7 @@ describe("update_run_result", () => {
 
   it("refuses a run belonging to another event, touching nothing", async () => {
     const other = "00000000-0000-4000-8000-00000000b0ff";
-    await sql(`INSERT INTO public.events (id, name, year, active) VALUES ($1, 'Last year', 2025, false)`, [other]); // prettier-ignore
+    await sql("INSERT INTO public.events (id, name, year, active) VALUES ($1, 'Last year', 2025, false)", [other]); // prettier-ignore
 
     await expect(
       sql("SELECT public.update_run_result($1, $2, $3, $4, $5::jsonb, $6::jsonb)", [

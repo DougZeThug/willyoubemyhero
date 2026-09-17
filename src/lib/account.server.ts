@@ -79,7 +79,7 @@ async function guestIdsSpokenFor(userId: string, guestIds: string[]): Promise<Se
   // Deliberately not swallowed. Guessing "nobody owns these" on a failed read is
   // exactly the assumption this function exists to stop making.
   if (error) throw error;
-  return new Set((data ?? []).map((row) => row.guest_id).filter((id): id is string => !!id));
+  return new Set((data ?? []).map((row) => row.guest_id).filter((id): id is string => Boolean(id)));
 }
 
 function toIdentity(row: Row): AccountIdentity {

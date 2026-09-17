@@ -518,12 +518,12 @@ describe("attach_device_to_player", () => {
     // refuses to get into that state, which is what lets the read stay singular.
     const first = "00000000-0000-4000-8000-00000000ac01";
     const second = "00000000-0000-4000-8000-00000000ac02";
-    await sql(`INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)`, [
+    await sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [
       first,
       GUEST,
     ]);
     await expect(
-      sql(`INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)`, [
+      sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [
         second,
         GUEST,
       ]),
