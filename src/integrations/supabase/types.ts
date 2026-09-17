@@ -2182,6 +2182,10 @@ export type Database = {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number
       }
+      merge_guests_into_collector: {
+        Args: { _guest_ids: string[]; _participant_id: string }
+        Returns: undefined
+      }
       mill_card_copy: {
         Args: { _card_copy_id: string; _participant_id: string }
         Returns: Json
