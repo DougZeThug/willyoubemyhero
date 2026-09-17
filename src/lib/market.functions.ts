@@ -313,7 +313,25 @@ export const getMyStall = createServerFn({ method: "GET" }).handler(async (): Pr
 
   // At most MARKET_MAX_ACTIVE + RECENT_LIMIT rows reach the hydration below,
   // whatever the member's history looks like.
-  const rows = [...(live ?? []), ...(settled ?? [])];
+  //
+  // DE-DUPLICATED BY ID, SETTLED WINNING. The two reads above are dispatched
+  // together, so they are two snapshots: a listing that sells between them
+  // satisfies `status = 'active'` against the first and `status != 'active'`
+  // against the second, and comes back twice — once carrying the stale "active"
+  // it held when the live read ran. Splitting by status below cannot tell that
+  // copy from a genuinely live row, so the same card appeared in `active`, under
+  // a Take down button its own RPC would refuse, AND in `recent` as sold.
+  //
+  // Settled wins because it is the later snapshot of the two answers, and
+  // because the failure it avoids is the worse one: a listing shown as live when
+  // it is gone invites a tap, where one shown as settled a beat early is only
+  // early. Overwriting rather than skipping, so a key already present keeps its
+  // insertion position — Map.set leaves that alone — and the row order the two
+  // ORDER BYs above produced survives the de-duplication untouched.
+  const byId = new Map<string, MarketListingRow>();
+  for (const r of live ?? []) byId.set(r.id, r);
+  for (const r of settled ?? []) byId.set(r.id, r);
+  const rows = [...byId.values()];
   // Everything on this list is the caller's own, so nothing is concealed from
   // them — but a secret they LISTED and no longer own (it sold) is no longer in
   // their holdings, and the tile would go face-down on the one screen that has to
@@ -337,9 +355,10 @@ export const getMyStall = createServerFn({ method: "GET" }).handler(async (): Pr
     ];
   });
 
-  // Split by status rather than by which query a row came from, so a listing that
-  // settled between the two reads above lands in `recent` rather than showing as
-  // live with a dead Take down button on it.
+  // Split by status, which is now an honest question to ask: the de-duplication
+  // above is what makes each id appear once, so a listing that settled between
+  // the two reads lands in `recent` on its settled snapshot rather than showing
+  // as live with a dead Take down button on it.
   return {
     active: hydrated.filter((l) => l.status === "active"),
     recent: hydrated.filter((l) => l.status !== "active"),
