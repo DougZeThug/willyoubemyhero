@@ -15,8 +15,8 @@ vi.mock("@/lib/image-encode", () => ({
   // The real one copies the bytes through arrayBuffer; the copy is not what is
   // under test and keeping the same File keeps its name, which is how the
   // assertions below tell one staged preview from another.
-  snapshotFile: vi.fn(async (file: File) => file),
-  encodeUploadImageVariants: vi.fn(async () => ({ full: "data:,", thumb: "data:," })),
+  snapshotFile: vi.fn((file: File) => Promise.resolve(file)),
+  encodeUploadImageVariants: vi.fn(() => Promise.resolve({ full: "data:,", thumb: "data:," })),
 }));
 
 vi.mock("@tanstack/react-start", async (importOriginal) => {
@@ -25,7 +25,7 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
 });
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn(async () => {}) }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn(() => Promise.resolve()) }),
 }));
 
 vi.mock("@/components/admin-section", () => ({

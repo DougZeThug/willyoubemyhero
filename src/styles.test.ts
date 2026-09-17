@@ -237,10 +237,10 @@ describe("the page-height token reserves the header that is really there", () =>
  */
 describe("the flip hands the card back when it lands", () => {
   it("does not forward-fill holo-flip-light over the card's resting shadow", () => {
-    const shorthand = /\.holo-turning \{\s*animation:([^;]*);/.exec(css)?.[1];
-    expect(shorthand, ".holo-turning lost its animation shorthand").toBeDefined();
+    const shorthand = /\.holo-turning \{\s*animation:([^;]*);/.exec(css)?.[1] ?? "";
+    expect(shorthand, ".holo-turning lost its animation shorthand").not.toBe("");
     expect(
-      /\b(both|forwards)\b/.test(shorthand!),
+      /\b(both|forwards)\b/.test(shorthand),
       "`.holo-turning` fills holo-flip-light forward. Its 100% frame is a single " +
         "layer — the tier glow — while the resting boxShadow holo-card writes is " +
         "two, tier glow AND edition accent. Filled, the accent bloom on a lifted " +

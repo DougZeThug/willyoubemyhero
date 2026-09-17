@@ -275,7 +275,7 @@ describe("a split nobody measured", () => {
       error: null,
       failedTables: [],
       realtimeDegraded: false,
-      refetch: vi.fn(async () => {}),
+      refetch: vi.fn(() => Promise.resolve()),
     });
   }
 

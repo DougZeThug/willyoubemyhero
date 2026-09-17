@@ -134,7 +134,8 @@ export function StationsPanel({ eventId }: { eventId: string }) {
   }
 
   /** Typed something, and it is not a time. Reddens the box and blocks the save. */
-  const badPenalty = !!draft && draft.penalty.trim() !== "" && parseTime(draft.penalty) == null;
+  const badPenalty =
+    draft !== null && draft.penalty.trim() !== "" && parseTime(draft.penalty) == null;
 
   async function save(d: Draft) {
     await saveFn({

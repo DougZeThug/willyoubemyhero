@@ -59,7 +59,9 @@ export function useEventSocial(eventId: string | null | undefined) {
   });
 
   useEffect(() => {
-    if (!eventId) return;
+    // Explicit, so both arms of this effect return the same shape: there is
+    // no channel to leave, so there is no cleanup to give back.
+    if (!eventId) return undefined;
     // The shared channel rather than one of our own: it is the only subscription
     // here that notices a dead socket and polls harder while it is down. Health
     // is somebody else's to report — use-event-bundle already draws the banner,
@@ -89,7 +91,9 @@ export function useEventAwards(eventId: string | null | undefined) {
   });
 
   useEffect(() => {
-    if (!eventId) return;
+    // Explicit, so both arms of this effect return the same shape: there is
+    // no channel to leave, so there is no cleanup to give back.
+    if (!eventId) return undefined;
     // On the shared channel, which is the half of this that was missing. A bare
     // subscription here had no status callback and no poll behind it, so a dead
     // socket went unnoticed — while `awards_locked` kept arriving on the event

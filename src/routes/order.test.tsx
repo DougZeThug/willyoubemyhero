@@ -8,8 +8,8 @@ import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds } from "@/test/f
 
 const useEventBundle = vi.fn();
 const useAdminSession = vi.fn();
-const setRunningOrder = vi.fn(async () => ({ ok: true }));
-const recordRandomization = vi.fn(async () => ({ ok: true }));
+const setRunningOrder = vi.fn(() => Promise.resolve({ ok: true }));
+const recordRandomization = vi.fn(() => Promise.resolve({ ok: true }));
 
 vi.mock("@/hooks/use-event-bundle", () => ({
   useEventBundle: (...args: unknown[]) => useEventBundle(...args),
@@ -35,7 +35,7 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
 });
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn(async () => {}) }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn(() => Promise.resolve()) }),
 }));
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
@@ -77,7 +77,7 @@ function asAdminWith(
     error: null,
     failedTables,
     realtimeDegraded: false,
-    refetch: vi.fn(async () => {}),
+    refetch: vi.fn(() => Promise.resolve()),
   });
 }
 
