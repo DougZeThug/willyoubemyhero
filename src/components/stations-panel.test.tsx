@@ -28,7 +28,7 @@ vi.mock("@/hooks/use-event-bundle", () => ({
 
 const EVENT = "00000000-0000-4000-8000-0000000000ff";
 
-function station(id: string, name: string, order: number) {
+function station(id: string, name: string, order: number, penaltyMs = 0) {
   return {
     id,
     name,
@@ -37,7 +37,7 @@ function station(id: string, name: string, order: number) {
     station_order: order,
     icon: null,
     split_enabled: true,
-    penalty_amount_ms: 0,
+    penalty_amount_ms: penaltyMs,
     active: true,
   };
 }
@@ -157,5 +157,96 @@ describe("StationsPanel when the times cannot be read", () => {
 
     expect(serverFnMock).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/can't read/i));
+  });
+});
+
+describe("StationsPanel penalties", () => {
+  /** Sprint carries a 2.5s penalty; everything else is as the suite leaves it. */
+  function withSubSecondPenalty() {
+    bundle.current = {
+      ...bundle.current,
+      stations: [station("a", "Sprint", 1, 2_500), station("b", "Tire Flip", 2)],
+    };
+  }
+
+  it("shows the penalty that will actually be applied, not a rounded one", () => {
+    // The console's own penalty button labels itself with formatTime, so a list
+    // rounding 2500ms to "+3s" disagreed with the button that applies it.
+    withSubSecondPenalty();
+    renderPanel();
+    expect(screen.getByRole("button", { name: /Sprint/ })).toHaveTextContent("+02.50 pen");
+  });
+
+  it("keeps a sub-second penalty across a save that never touched it", async () => {
+    // The drift. The draft used to round 2500ms to 3 seconds on the way in, so
+    // opening a station to change its NAME and pressing Save rewrote the
+    // penalty to 3000ms — silently, and only once, which is what made it hard
+    // to catch.
+    withSubSecondPenalty();
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /Sprint/ }));
+    const name = await screen.findByLabelText("Name");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Sled Push");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    expect(serverFnMock.mock.calls[0][0].data).toMatchObject({
+      name: "Sled Push",
+      penalty_amount_ms: 2_500,
+    });
+  });
+
+  it("keeps it across a bulk rename too", async () => {
+    // Same round trip, reached from the other side: renaming every station at
+    // once routes through the same draft, so it drifted every penalty it saw.
+    withSubSecondPenalty();
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: /rename all/i }));
+    const field = screen.getByLabelText("Sprint name");
+    await user.clear(field);
+    await user.type(field, "Dash");
+    await user.click(screen.getByRole("button", { name: /save all names/i }));
+
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalledTimes(1));
+    expect(serverFnMock.mock.calls[0][0].data).toMatchObject({
+      name: "Dash",
+      penalty_amount_ms: 2_500,
+    });
+  });
+
+  it("stores the sub-second penalty an admin types", async () => {
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /Sprint/ }));
+    const pen = await screen.findByLabelText("Penalty");
+    await userEvent.type(pen, "2.5");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    expect(serverFnMock.mock.calls[0][0].data).toMatchObject({ penalty_amount_ms: 2_500 });
+  });
+
+  it("refuses a penalty it cannot read rather than storing nothing", async () => {
+    // Quietly saving 0 would drop the penalty entirely, and a station's penalty
+    // is applied at the push of a button in the timing console.
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /Sprint/ }));
+    await userEvent.type(await screen.findByLabelText("Penalty"), "two and a bit");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(serverFnMock).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/must be a time/i));
+  });
+
+  it("reads a blank box as no penalty", async () => {
+    withSubSecondPenalty();
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: /Sprint/ }));
+    await userEvent.clear(await screen.findByLabelText("Penalty"));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    expect(serverFnMock.mock.calls[0][0].data).toMatchObject({ penalty_amount_ms: 0 });
   });
 });

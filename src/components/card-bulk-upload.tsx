@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -165,6 +165,18 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
     setItems([]);
   }
 
+  // A blob url outlives the component that made it: it is scoped to the
+  // document, and this app routes on the client, so walking off /admin with
+  // files still staged pinned every one of them — and each pins a whole byte
+  // copy, because addFiles snapshots the file before previewing it. Through a
+  // ref and an empty dep list so this fires on unmount only; keyed on `items` it
+  // would revoke the previews on the very render that added them.
+  const itemsRef = useRef<Candidate[]>(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  });
+  useEffect(() => () => itemsRef.current.forEach((i) => URL.revokeObjectURL(i.previewUrl)), []);
+
   const ready = useMemo(() => items.filter((i) => i.eventParticipantId && !i.oversize), [items]);
   const unmatched = items.length - ready.length;
 
@@ -187,16 +199,19 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
         clearAll();
       } else {
         toast.error(`${failed.length} of ${res.results.length} failed: ${failed[0]?.error ?? ""}`);
-        // Keep only the failures on screen so they can be retried.
+        // Keep only the failures on screen so they can be retried. One predicate
+        // for both halves, so the rows dropped and the previews released cannot
+        // drift apart: the ones that uploaded are leaving the list, and every
+        // other path out of it revokes on the way.
         const failedKeys = new Set(failed.map((f) => `${f.eventParticipantId}:${f.side}`));
-        setItems((prev) =>
-          prev.filter(
-            (p) =>
-              !p.eventParticipantId ||
-              p.oversize ||
-              failedKeys.has(`${p.eventParticipantId}:${p.side}`),
-          ),
-        );
+        const keep = (p: Candidate) =>
+          !p.eventParticipantId ||
+          p.oversize ||
+          failedKeys.has(`${p.eventParticipantId}:${p.side}`);
+        setItems((prev) => {
+          prev.filter((p) => !keep(p)).forEach((p) => URL.revokeObjectURL(p.previewUrl));
+          return prev.filter(keep);
+        });
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Bulk upload failed");

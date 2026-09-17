@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Gift, Loader2, Pencil } from "lucide-react";
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
 import { type SecretCollection, secretCollectionLabel } from "@/lib/secret-cards";
@@ -107,6 +108,26 @@ export function SecretCardTile({
   onEdit: () => void;
   busy: boolean;
 }) {
+  // The in-flight text, or null when the box should be showing what is saved.
+  //
+  // This was `defaultValue={card.weight}` under a stable `key={card.id}`, which
+  // meant the DOM value was written once at mount and never again while
+  // card.weight refreshed around it. The onBlur guard below then compared a
+  // stale box against a fresh prop, so a focus and a blur with no typing at all
+  // — clicking the "Weight" label does exactly that — could re-save the old
+  // number over another commissioner's change. Local state rather than a
+  // controlled `card.weight` so typing still never refires the query.
+  const [draft, setDraft] = useState<string | null>(null);
+  // Let go of the edit once the round-trip has landed. savingWeight only clears
+  // after saveWeight's invalidateQueries has resolved, so card.weight is already
+  // fresh by then and the box does not flash the old value on the way back. It
+  // is in the deps as well as card.weight because clearing a box saves the 100
+  // baseline, which for a card already at 100 changes nothing for card.weight to
+  // report — and the box would have stayed empty forever.
+  useEffect(() => {
+    if (!savingWeight) setDraft(null);
+  }, [card.weight, savingWeight]);
+
   return (
     <div
       className={cn(
@@ -164,8 +185,8 @@ export function SecretCardTile({
               min={0}
               max={10000}
               step={10}
-              defaultValue={card.weight}
-              // Uncontrolled so typing doesn't refire the query on every keystroke.
+              value={draft ?? String(card.weight)}
+              onChange={(e) => setDraft(e.target.value)}
               onBlur={(e) => {
                 if (Number(e.target.value) !== card.weight) onSaveWeight(e.target.value);
               }}

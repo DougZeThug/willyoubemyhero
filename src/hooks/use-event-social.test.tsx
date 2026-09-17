@@ -38,6 +38,15 @@ vi.mock("@/lib/event-channel", () => ({
   },
 }));
 
+// Who the device is signed as. The real hooks read localStorage through a
+// store subscription; what matters here is only that the value can change
+// between renders the way a claim or a sign-out changes it.
+const memberSession = vi.fn();
+const guestSession = vi.fn();
+
+vi.mock("@/lib/member-token", () => ({ useMemberSession: () => memberSession() }));
+vi.mock("@/lib/guest-token", () => ({ useGuestSession: () => guestSession() }));
+
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
 const AWARD = {
   participant_id: "p-1",
@@ -53,6 +62,8 @@ function fanOut() {
 }
 
 beforeEach(() => {
+  memberSession.mockReset().mockReturnValue(null);
+  guestSession.mockReset().mockReturnValue(null);
   subscribers.length = 0;
   unsubscribe.mockReset();
   getEventSocial.mockReset().mockResolvedValue({ reactions: [], comments: [] });
@@ -126,5 +137,82 @@ describe("useEventSocial", () => {
 
     const keys = invalidate.mock.calls.map((c) => c[0]?.queryKey);
     expect(keys).toEqual(expect.arrayContaining([["event-social", EVENT_ID]]));
+  });
+});
+
+describe("useEventSocial when the device changes hands", () => {
+  const ALICE = "participant-alice";
+  const reactionsOf = (participantId: string) => ({
+    reactions: [
+      {
+        id: "r1",
+        event_participant_id: "ep-1",
+        participant_id: participantId,
+        emoji: "🔥",
+        created_at: "2026-09-01T00:00:00Z",
+        mine: true,
+      },
+    ],
+    comments: [],
+  });
+
+  async function mountFor(wrapper: ReturnType<typeof createQueryWrapper>["wrapper"]) {
+    const { useEventSocial } = await import("./use-event-social");
+    return renderHook(() => useEventSocial(EVENT_ID), { wrapper });
+  }
+
+  it("does not hand the next identity the last one's answer", async () => {
+    // `mine` is resolved server-side against the token on the request, and the
+    // token rides a header the cache key cannot see. Keyed on the event alone,
+    // a claim or a sign-out went on serving the previous identity's rows: their
+    // chips lit as yours, and a trash icon on trash talk that is not yours.
+    guestSession.mockReturnValue({ guestId: "guest-1", expiresAt: 0, token: "g" });
+    getEventSocial.mockResolvedValue(reactionsOf("someone-else"));
+
+    const { wrapper } = createQueryWrapper();
+    const first = await mountFor(wrapper);
+    await waitFor(() => expect(first.result.current.data).toBeDefined());
+    expect(getEventSocial).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    // The claim: this device is Alice now, and the server would say so.
+    memberSession.mockReturnValue({ participantId: ALICE, expiresAt: 0, token: "m", name: null });
+    getEventSocial.mockResolvedValue(reactionsOf(ALICE));
+
+    const second = await mountFor(wrapper);
+    await waitFor(() => expect(getEventSocial).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(second.result.current.data?.reactions[0].participant_id).toBe(ALICE),
+    );
+  });
+
+  it("still serves the same identity from cache rather than refetching", async () => {
+    // The other half: identity in the key must not turn every remount into a
+    // round trip for a device that has not changed hands.
+    memberSession.mockReturnValue({ participantId: ALICE, expiresAt: 0, token: "m", name: null });
+    getEventSocial.mockResolvedValue(reactionsOf(ALICE));
+
+    const { wrapper } = createQueryWrapper();
+    const first = await mountFor(wrapper);
+    await waitFor(() => expect(getEventSocial).toHaveBeenCalledTimes(1));
+    first.unmount();
+
+    const second = await mountFor(wrapper);
+    await waitFor(() => expect(second.result.current.data).toBeDefined());
+    expect(getEventSocial).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the realtime invalidation reaching the identity-keyed entry", async () => {
+    // The channel fan-out invalidates on the two-element prefix. If that ever
+    // stopped matching, trash talk would stop appearing for everyone.
+    memberSession.mockReturnValue({ participantId: ALICE, expiresAt: 0, token: "m", name: null });
+    getEventSocial.mockResolvedValue(reactionsOf(ALICE));
+
+    const { wrapper } = createQueryWrapper();
+    await mountFor(wrapper);
+    await waitFor(() => expect(getEventSocial).toHaveBeenCalledTimes(1));
+
+    fanOut();
+    await waitFor(() => expect(getEventSocial).toHaveBeenCalledTimes(2));
   });
 });

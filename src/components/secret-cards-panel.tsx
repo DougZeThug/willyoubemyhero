@@ -129,10 +129,13 @@ export function SecretCardsPanel() {
   // Per-row pending flags so each row shows its own spinner and neighbour rows
   // stay interactive while one card is saving.
   const [grantingId, setGrantingId] = useState<string | null>(null);
-  const [savingWeightId, setSavingWeightId] = useState<string | null>(null);
-  // A set rather than a single id like the two above: look saves fire on every
+  // Sets rather than single ids: a weight saves on blur and a look on every
   // pick, so two rows can genuinely be in flight at once and one row's finally
-  // must not clear the other's spinner.
+  // must not clear the other's spinner. Weight was a single id until the tile
+  // started reading that flag to decide when to let go of what the admin typed
+  // — at which point B's save clearing on A's finish put a stale number back in
+  // B's box and re-enabled it mid-flight.
+  const [savingWeightIds, setSavingWeightIds] = useState<ReadonlySet<string>>(new Set());
   const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
   // Sets currently having a whole-collection look applied ("" for unsorted).
   const [savingSetIds, setSavingSetIds] = useState<ReadonlySet<string>>(new Set());
@@ -361,7 +364,7 @@ export function SecretCardsPanel() {
       toast.error("Weight must be a whole number between 0 and 10,000");
       return;
     }
-    setSavingWeightId(id);
+    setSavingWeightIds((prev) => new Set(prev).add(id));
     const p = updateFn({ data: { id, weight: parsed } }).then(async (r) => {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
       return r;
@@ -377,7 +380,11 @@ export function SecretCardsPanel() {
     } catch {
       // toast.promise already surfaced the error
     } finally {
-      setSavingWeightId(null);
+      setSavingWeightIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -1017,7 +1024,7 @@ export function SecretCardsPanel() {
                         setGrantTarget((prev) => ({ ...prev, [card.id]: participantId }))
                       }
                       granting={grantingId === card.id}
-                      savingWeight={savingWeightId === card.id}
+                      savingWeight={savingWeightIds.has(card.id)}
                       savingLook={savingLookIds.has(card.id)}
                       lookRow={lookRow === card.id}
                       onLookRowChange={(active) =>

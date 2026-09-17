@@ -47,7 +47,12 @@ function OrderPage() {
   );
 
   async function reshuffle() {
-    if (!event?.id) return;
+    // An empty `rows` is either a roster nobody has filled in yet or a roster
+    // read that failed — and the second is the dangerous one, because shuffling
+    // then writes an empty order over a field that actually exists. Either way
+    // there is nothing to draw, and the success toast below was announcing a
+    // randomization of nothing.
+    if (!event?.id || rows.length === 0) return;
     setBusy(true);
     try {
       const seed = newSeed();
@@ -123,7 +128,7 @@ function OrderPage() {
               decoration. See B-27 in the triage: the lock was dropped rather
               than built. */}
           {isAdmin && (
-            <Button onClick={reshuffle} disabled={busy} size="sm">
+            <Button onClick={reshuffle} disabled={busy || rows.length === 0} size="sm">
               <Shuffle className="mr-1.5 h-4 w-4" />
               {busy ? "Shuffling…" : "Re-randomize"}
             </Button>
@@ -203,3 +208,5 @@ function StatusBadge({ status }: { status: string }) {
     </span>
   );
 }
+
+export default OrderPage;
