@@ -67,6 +67,20 @@ function signIn() {
   setMemberToken(`m.${ME}.${Date.now() + 60_000}.signature`, "Doug");
 }
 
+/**
+ * Let the oldest request still in flight answer, and let the state it settles
+ * land. Throws rather than quietly doing nothing, so a test that has miscounted
+ * its own requests fails where the mistake is instead of two assertions later.
+ */
+async function releaseOldest(queue: (() => void)[]) {
+  const next = queue.shift();
+  if (!next) throw new Error("nothing in flight to release");
+  await act(async () => {
+    next();
+    await Promise.resolve();
+  });
+}
+
 async function renderSocial(
   props: Partial<{ reactions: ReactionRow[]; comments: CommentRow[] }> = {},
 ) {
@@ -470,14 +484,12 @@ describe("when the card changes underneath it", () => {
     expect(screen.getByRole("button", { name: "React with 🔥" })).toBeDisabled();
 
     // The card they LEFT answers first.
-    await act(async () => {
-      releases[0]!();
-    });
+    await releaseOldest(releases);
 
     const fire = screen.getByRole("button", { name: "React with 🔥" });
     expect(fire).toHaveTextContent("1");
     expect(fire).toBeDisabled();
-    releases[1]!();
+    await releaseOldest(releases);
   });
 
   it("does not let a post finishing on the last card re-arm this one", async () => {
@@ -495,14 +507,12 @@ describe("when the card changes underneath it", () => {
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
     expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
 
-    await act(async () => {
-      releases[0]!();
-    });
+    await releaseOldest(releases);
 
     // Still sending this card's comment, so the button stays down. Re-armed, it
     // takes a second Post and the comment goes up twice.
     expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
-    releases[1]!();
+    await releaseOldest(releases);
   });
 
   it("leaves the name this device already gave alone", async () => {

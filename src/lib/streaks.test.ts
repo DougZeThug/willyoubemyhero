@@ -115,12 +115,12 @@ describe("walkStreak after the capstone", () => {
     // today's pack is still sealed, and the cut then leaves nothing. Read as a
     // dead streak this took the whole strip down — flame, day line and the "open
     // today's pack" nudge — at exactly the moment the nudge is the point.
-    const s = walkStreak(["2026-08-22", "2026-08-23"], TODAY, TODAY);
-    expect(s.current).toBe(1);
-    expect(s.startedOn).toBe(TODAY);
-    expect(s.openedToday).toBe(false);
+    const streak = walkStreak(["2026-08-22", "2026-08-23"], TODAY, TODAY);
+    expect(streak.current).toBe(1);
+    expect(streak.startedOn).toBe(TODAY);
+    expect(streak.openedToday).toBe(false);
     // Nothing was opened today, so nothing may claim to have been.
-    expect(s.lastOpenedOn).toBeNull();
+    expect(streak.lastOpenedOn).toBeNull();
   });
 
   it("does not jump the count when they then open today's pack", () => {
@@ -136,15 +136,15 @@ describe("walkStreak after the capstone", () => {
   it("is dead the next day when they never did open", () => {
     // The anchor is today's nudge, not a day nobody opened a pack on. Skipping
     // it breaks the run like any other gap.
-    const s = walkStreak(["2026-08-22", "2026-08-23"], "2026-08-25", TODAY);
-    expect(s.current).toBe(0);
-    expect(s.startedOn).toBeNull();
+    const streak = walkStreak(["2026-08-22", "2026-08-23"], "2026-08-25", TODAY);
+    expect(streak.current).toBe(0);
+    expect(streak.startedOn).toBeNull();
   });
 
   it("starts at day one again off the next open after a skipped claim day", () => {
-    const s = walkStreak(["2026-08-22", "2026-08-23", "2026-08-25"], "2026-08-25", TODAY);
-    expect(s.current).toBe(1);
-    expect(s.startedOn).toBe("2026-08-25");
+    const streak = walkStreak(["2026-08-22", "2026-08-23", "2026-08-25"], "2026-08-25", TODAY);
+    expect(streak.current).toBe(1);
+    expect(streak.startedOn).toBe("2026-08-25");
   });
 });
 

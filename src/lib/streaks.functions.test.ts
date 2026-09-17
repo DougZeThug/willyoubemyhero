@@ -10,7 +10,7 @@ import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock
 import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/server-fn";
 import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
 import type { StreakStatus } from "./streaks.functions";
-import { STREAK_MILESTONES } from "./streaks";
+import { previousDay, STREAK_MILESTONES } from "./streaks";
 import { leagueDay } from "./trades";
 
 let mock = createSupabaseMock();
@@ -43,6 +43,13 @@ const asGuest = () => guestHeaders(signGuestToken(GUEST).token);
  * New York is still on yesterday, so a UTC-built ladder ended a day in the future
  * and the streak read as broken — a real failure every night, only in CI.
  */
+/** The first day of a fixture run, without asserting the array is non-empty. */
+function firstDay(days: { opened_on: string }[]): string {
+  const first = days[0];
+  if (!first) throw new Error("the fixture built no days");
+  return first.opened_on;
+}
+
 function daysEndingToday(n: number) {
   const out: { opened_on: string }[] = [];
   const [y, m, d] = leagueDay().split("-").map(Number);
@@ -185,7 +192,7 @@ describe("getStreakStatus", () => {
     withDb({
       "pack_opens.select": { data: days },
       "streak_milestone_claims.select": {
-        data: [{ milestone: 60, streak_started_on: days[0]!.opened_on, claimed_on: today }],
+        data: [{ milestone: 60, streak_started_on: firstDay(days), claimed_on: today }],
       },
       "account_identities.select": { data: [{ user_id: "u" }] },
     });
@@ -201,13 +208,13 @@ describe("getStreakStatus", () => {
   it("is dead the day after a capstone claim nobody followed with a pack", async () => {
     // The anchor above is today's nudge, not a day nobody opened. Once it is
     // yesterday, the gap is a gap like any other.
-    const [y, m, d] = leagueDay().split("-").map(Number);
-    const yesterday = new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
+    // The walk's own step-back, rather than hand-rolled Date maths beside it.
+    const yesterday = previousDay(leagueDay());
     const days = daysEndingToday(61).slice(0, 59);
     withDb({
       "pack_opens.select": { data: days },
       "streak_milestone_claims.select": {
-        data: [{ milestone: 60, streak_started_on: days[0]!.opened_on, claimed_on: yesterday }],
+        data: [{ milestone: 60, streak_started_on: firstDay(days), claimed_on: yesterday }],
       },
       "account_identities.select": { data: [{ user_id: "u" }] },
     });

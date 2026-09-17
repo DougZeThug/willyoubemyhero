@@ -132,6 +132,17 @@ describe("useEventBundle", () => {
     return view;
   }
 
+  /** Fire one channel signal, and let the invalidations it queues settle. */
+  async function fireSignal(signal: "change" | "eventRow") {
+    await act(async () => {
+      for (const s of subscribers) {
+        if (signal === "change") s.sub.change();
+        else s.sub.eventRow?.();
+      }
+      await Promise.resolve();
+    });
+  }
+
   const cardUrlsInvalidated = (client: QueryClient) => [
     client.getQueryState(["event-card-back", EVENT.id])?.isInvalidated,
     client.getQueryState(["card-urls", EVENT.id])?.isInvalidated,
@@ -144,9 +155,7 @@ describe("useEventBundle", () => {
     // the old signed URLs point at, and neither query refetches on focus.
     const { client } = await withCardUrls();
 
-    await act(async () => {
-      for (const s of subscribers) s.sub.eventRow?.();
-    });
+    await fireSignal("eventRow");
 
     expect(cardUrlsInvalidated(client)).toEqual([true, true]);
   });
@@ -159,9 +168,7 @@ describe("useEventBundle", () => {
     // a nonsense of the three-hour refresh the query is tuned for.
     const { client } = await withCardUrls();
 
-    await act(async () => {
-      for (const s of subscribers) s.sub.change();
-    });
+    await fireSignal("change");
 
     expect(cardUrlsInvalidated(client)).toEqual([false, false]);
   });
@@ -172,9 +179,7 @@ describe("useEventBundle", () => {
     await waitFor(() => expect(result.current.bundle).toEqual(BUNDLE));
     const before = getEventBundle.mock.calls.length;
 
-    await act(async () => {
-      for (const s of subscribers) s.sub.change();
-    });
+    await fireSignal("change");
 
     await waitFor(() => expect(getEventBundle.mock.calls.length).toBeGreaterThan(before));
   });
@@ -186,9 +191,7 @@ describe("useEventBundle", () => {
     await waitFor(() => expect(result.current.bundle).toEqual(BUNDLE));
     client.setQueryData(["event-card-back", "other-event"], { url: "old-back" });
 
-    await act(async () => {
-      for (const s of subscribers) s.sub.eventRow?.();
-    });
+    await fireSignal("eventRow");
 
     expect(client.getQueryState(["event-card-back", "other-event"])?.isInvalidated).toBe(false);
   });

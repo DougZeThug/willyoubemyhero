@@ -219,11 +219,9 @@ export function CardSocial({
       // own request is still running, freeing a second tap whose toggle undoes
       // the first. Left alone, the new card's own `finally` tidies up after it.
       if (shownCardRef.current === card) {
-        setOptimistic((prev) => {
-          const next = { ...prev };
-          delete next[emoji];
-          return next;
-        });
+        setOptimistic((prev) =>
+          Object.fromEntries(Object.entries(prev).filter(([key]) => key !== emoji)),
+        );
         setPending(null);
       }
     }

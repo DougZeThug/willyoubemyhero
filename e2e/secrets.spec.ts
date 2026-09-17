@@ -270,7 +270,7 @@ test.describe("a secret in the pack", () => {
       .poll(
         async () => {
           const row = await packRow(page);
-          return !!row?.revealed.includes(0) && !!row?.pendingCompletions?.includes(0);
+          return Boolean(row?.revealed.includes(0) && row?.pendingCompletions?.includes(0));
         },
         { intervals: Array.from({ length: 60 }, () => 100), timeout: 20_000 },
       )

@@ -27,7 +27,7 @@
  * refused, and a reason this does not know is far likelier to be a new
  * validation than a new kind of conflict.
  */
-export function setEditRefusal(reason: string | undefined): string {
+export function setEditRefusal(reason?: string): string {
   switch (reason) {
     case "in_use":
       return "That set still has cards in it — hide it instead";

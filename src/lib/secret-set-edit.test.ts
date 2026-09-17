@@ -39,6 +39,6 @@ describe("setEditRefusal", () => {
     expect(setEditRefusal("something_new")).toBe(
       "That name doesn't work — try letters and numbers",
     );
-    expect(setEditRefusal(undefined)).toBe("That name doesn't work — try letters and numbers");
+    expect(setEditRefusal()).toBe("That name doesn't work — try letters and numbers");
   });
 });

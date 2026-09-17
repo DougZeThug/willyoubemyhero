@@ -323,7 +323,7 @@ describe("CardPromptStudio", () => {
         return Promise.resolve({ templates: [], runs: [] });
       });
       const user = userEvent.setup();
-      vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+      vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
       renderStudio(
         <CardPromptStudio
           eventId="event"
