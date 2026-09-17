@@ -175,7 +175,15 @@ function RootComponent() {
   const firstRoute = useRef(true);
   useEffect(() => {
     // Not on the first render: stealing focus on load is its own problem.
+    //
+    // "/" is not a render, it is a redirect — src/routes/index.tsx sends it
+    // straight to the vault — so arriving there is still that first load, and
+    // spending the guard on it left the real landing to fire the focus call.
+    // The cost was the skip link: on the one URL people actually paste, the
+    // first Tab went into main and the link could never be reached. So the
+    // guard waits for the route that actually draws something.
     if (firstRoute.current) {
+      if (pathname === "/") return;
       firstRoute.current = false;
       return;
     }
