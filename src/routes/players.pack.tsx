@@ -733,7 +733,7 @@ function PackPage() {
       setOpenState("failed");
     }, OPEN_TIMEOUT_MS);
 
-    void (async () => {
+    (async () => {
       try {
         const res = await open();
         settled = true;

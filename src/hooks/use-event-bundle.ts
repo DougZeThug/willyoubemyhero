@@ -32,7 +32,9 @@ export function useEventBundle() {
   useEffect(() => {
     if (!eventId) {
       setHealth("connecting");
-      return;
+      // Explicit, so both arms of this effect return the same shape: there is
+      // no channel to leave, so there is no cleanup to give back.
+      return undefined;
     }
     return subscribeToEventChannel(eventId, {
       change: () => {
