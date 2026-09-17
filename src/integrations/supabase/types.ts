@@ -2297,6 +2297,17 @@ export type Database = {
         Args: { _event_id: string }
         Returns: string
       }
+      update_run_result: {
+        Args: {
+          _event_id: string
+          _penalties: Json
+          _penalty_ms: number
+          _raw_time_ms: number
+          _run_id: string
+          _splits: Json
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
