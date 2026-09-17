@@ -65,7 +65,11 @@ function asAdminWith(
   participants: ReturnType<typeof makeParticipant>[],
   failedTables: string[] = [],
 ) {
-  useAdminSession.mockReturnValue({ eventId: EVENT_ID, expiresAt: Date.now() + 60_000, token: "t" });
+  useAdminSession.mockReturnValue({
+    eventId: EVENT_ID,
+    expiresAt: Date.now() + 60_000,
+    token: "t",
+  });
   useEventBundle.mockReturnValue({
     event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
     bundle: makeBundle({ participants, failed: failedTables }),

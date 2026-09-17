@@ -18,7 +18,9 @@ afterEach(() => {
 describe("FinishCelebration", () => {
   it("shows the finisher and auto-dismisses after the hold", () => {
     const onDone = vi.fn();
-    render(<FinishCelebration runId="r-aj" name="AJ" timeMs={60_810} deltaMs={0} onDone={onDone} />);
+    render(
+      <FinishCelebration runId="r-aj" name="AJ" timeMs={60_810} deltaMs={0} onDone={onDone} />,
+    );
     expect(screen.getByText("AJ")).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(4_200));
     expect(onDone).toHaveBeenCalledTimes(1);
@@ -37,8 +39,18 @@ describe("FinishCelebration", () => {
     // A null render between finishers. /live does NOT do this — it advances
     // with slice(1), which promotes the next payload in the same commit — so
     // the no-gap cases below are the ones that match the real screen.
-    rerender(<FinishCelebration runId={null} name={null} timeMs={null} deltaMs={null} onDone={onDone} />);
-    rerender(<FinishCelebration runId="r-doug" name="Doug" timeMs={66_410} deltaMs={5_600} onDone={onDone} />);
+    rerender(
+      <FinishCelebration runId={null} name={null} timeMs={null} deltaMs={null} onDone={onDone} />,
+    );
+    rerender(
+      <FinishCelebration
+        runId="r-doug"
+        name="Doug"
+        timeMs={66_410}
+        deltaMs={5_600}
+        onDone={onDone}
+      />,
+    );
     expect(screen.getByText("Doug")).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(4_200));
     expect(onDone).toHaveBeenCalledTimes(2);
@@ -54,7 +66,9 @@ describe("FinishCelebration", () => {
       <FinishCelebration runId="r-aj" name="AJ" timeMs={60_810} deltaMs={0} onDone={first} />,
     );
     act(() => vi.advanceTimersByTime(2_000));
-    rerender(<FinishCelebration runId="r-aj" name="AJ" timeMs={60_810} deltaMs={0} onDone={second} />);
+    rerender(
+      <FinishCelebration runId="r-aj" name="AJ" timeMs={60_810} deltaMs={0} onDone={second} />,
+    );
     // 4.2s from the finish, not from the re-render — and the latest callback wins.
     act(() => vi.advanceTimersByTime(2_200));
     expect(second).toHaveBeenCalledTimes(1);
@@ -69,7 +83,15 @@ describe("FinishCelebration", () => {
       <FinishCelebration runId="r-aj" name="AJ" timeMs={60_810} deltaMs={0} onDone={onDone} />,
     );
     act(() => vi.advanceTimersByTime(3_000));
-    rerender(<FinishCelebration runId="r-doug" name="Doug" timeMs={66_410} deltaMs={5_600} onDone={onDone} />);
+    rerender(
+      <FinishCelebration
+        runId="r-doug"
+        name="Doug"
+        timeMs={66_410}
+        deltaMs={5_600}
+        onDone={onDone}
+      />,
+    );
     act(() => vi.advanceTimersByTime(1_300));
     // AJ's timer would have fired by now; Doug's must not have.
     expect(onDone).not.toHaveBeenCalled();
@@ -88,13 +110,17 @@ describe("FinishCelebration", () => {
     expect(dialog).toHaveFocus();
     fireEvent.keyDown(document, { key: "Tab" });
     expect(document.activeElement).toBe(dialog);
-    rerender(<FinishCelebration runId={null} name={null} timeMs={null} deltaMs={null} onDone={vi.fn()} />);
+    rerender(
+      <FinishCelebration runId={null} name={null} timeMs={null} deltaMs={null} onDone={vi.fn()} />,
+    );
     expect(opener).toHaveFocus();
     opener.remove();
   });
 
   it("renders nothing between finishes", () => {
-    render(<FinishCelebration runId={null} name={null} timeMs={null} deltaMs={null} onDone={vi.fn()} />);
+    render(
+      <FinishCelebration runId={null} name={null} timeMs={null} deltaMs={null} onDone={vi.fn()} />,
+    );
     expect(screen.queryByText("Finish")).toBeNull();
   });
 });

@@ -389,7 +389,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
                   {/* formatTime, as the console's own penalty button does it:
                     rounding to whole seconds here hid the value that would
                     actually be applied. */}
-                {s.penalty_amount_ms > 0 && ` · +${formatTime(s.penalty_amount_ms)} pen`}
+                  {s.penalty_amount_ms > 0 && ` · +${formatTime(s.penalty_amount_ms)} pen`}
                 </span>
               </span>
             </button>
