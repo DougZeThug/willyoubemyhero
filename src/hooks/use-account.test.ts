@@ -28,6 +28,14 @@ vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   snapshotLocalCollection: vi.fn(),
 }));
 
+// Real in the app and spied on here, because the only thing this file has to say
+// about it is WHEN it runs relative to the member token landing.
+const carryTrophySeen = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/trophy-seen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/trophy-seen")>()),
+  carryTrophySeen: (...args: unknown[]) => carryTrophySeen(...args),
+}));
+
 // The state module is a singleton; read it the way the app does.
 let lastState: AccountSyncState | null = null;
 vi.mock("@/lib/account-sync-state", async (importOriginal) => {
@@ -118,6 +126,7 @@ describe("useAccountSync", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    carryTrophySeen.mockReset();
     vi.mocked(adoptLocalCollection).mockReset();
     vi.mocked(syncAccountSession).mockReset();
     vi.mocked(snapshotLocalCollection).mockReset();
@@ -139,6 +148,38 @@ describe("useAccountSync", () => {
     expect(window.localStorage.getItem("wwbh:guest-token")).toBeNull();
     expect(adoptLocalCollection).toHaveBeenCalledWith(held);
     expect(lastState).toMatchObject({ status: "ready", userId: "user-1" });
+  });
+
+  it("carries the guest's ceremonies across before the member token lands", async () => {
+    // The token is what gives the root ceremony host a participant id, and the
+    // trophy row is already banked by the time this runs — so a carry that waits
+    // for the adoption leaves a window where the realtime refetch finds the set
+    // unmarked under the member key and replays a ceremony this device already
+    // threw as a guest. It marks it celebrated on the way, so the duplicate is
+    // not retractable.
+    //
+    // Asserted as "what was on the device when the carry ran" rather than as a
+    // call order, because the token landing is the event that opens the window.
+    window.localStorage.setItem("wwbh:device-id", "dev-1");
+    const tokenWhenCarried: (string | null)[] = [];
+    carryTrophySeen.mockImplementation(() => {
+      tokenWhenCarried.push(window.localStorage.getItem("wwbh:member-token"));
+    });
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "p-alice",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(carryTrophySeen).toHaveBeenCalledWith("d:dev-1", "p-alice");
+    expect(tokenWhenCarried).toEqual([null]);
+    // And the sync still finished, so this is an ordering change and nothing else.
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(MEMBER_TOKEN);
   });
 
   it("takes the member token back off when the cards cannot be filed", async () => {

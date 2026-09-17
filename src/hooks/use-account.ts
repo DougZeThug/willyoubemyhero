@@ -147,6 +147,18 @@ export function useAccountSync(user: User | null) {
       const res = await syncAccountSession({ data: undefined });
       if (cancelled) return;
       if (res.kind === "member") {
+        const carryFrom = deviceId();
+        // BEFORE the token, for the reason claim.tsx spells out at length: the
+        // token is what gives the root ceremony host a participant id, and the
+        // trophy row is already banked by the time this function runs. Left until
+        // after the adoption, the realtime refetch could get there first and
+        // replay a ceremony this device has already thrown as a guest.
+        //
+        // No `getMemberToken() === wrote` gate, unlike the pack carry below. That
+        // gate is about not rewriting a pack row for an account already switched
+        // away from; re-filing seen-keys is idempotent and costs nothing if the
+        // run turns out to be stale.
+        if (carryFrom) carryTrophySeen(`d:${carryFrom}`, res.id);
         setMemberToken(res.token, res.name ?? "Player");
         wrote = res.token;
         // Every await below is a moment the account can change under this sync.
@@ -173,9 +185,8 @@ export function useAccountSync(user: User | null) {
           }
         }
         if (cancelled) return;
-        // The claim screen's move, for the same two reasons — a sign-in is the
-        // other way a guest becomes a member, and B-07 and B-13 do not care which
-        // door was used.
+        // The claim screen's move — a sign-in is the other way a guest becomes a
+        // member, and B-07 does not care which door was used.
         //
         // Gated on the token this run actually wrote still being the one on the
         // device, which is the same compare-and-clear the cleanup below makes and
@@ -186,8 +197,6 @@ export function useAccountSync(user: User | null) {
         const device = deviceId();
         if (device && getMemberToken() === wrote) {
           await carryPackToIdentity(`d:${device}`, `m:${res.id}`, adoptableIds(held));
-          if (cancelled) return;
-          carryTrophySeen(`d:${device}`, res.id);
         }
         // Only now. Clearing it before the upload left a phone whose adoption
         // failed with no identity at all, and its cards filed under neither.

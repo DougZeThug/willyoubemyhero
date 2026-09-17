@@ -87,6 +87,25 @@ function ClaimPage() {
         setCode("");
         return;
       }
+      const device = deviceId();
+      // THE CEREMONIES GO ACROSS BEFORE THE TOKEN, and that ordering is the whole
+      // point of this line. `claim_guest_secrets` has already banked the trophy
+      // by now, and `setMemberToken` below is what hands the root ceremony host a
+      // participant id — so between the two, the realtime INSERT can invalidate
+      // and refetch, find `<participantId>:<set>` unmarked, and queue a ceremony
+      // the pack screen already threw during the guest phase. It then marks it
+      // celebrated, so the duplicate cannot be taken back.
+      //
+      // This used to sit below the adoption, two awaited round trips away, where
+      // it narrowed that window rather than closing it. Nothing here needs the
+      // network: it is a localStorage re-file of `d:<deviceId>:<set>` keys onto
+      // `<participantId>:<set>`, so it can simply happen first. It is also
+      // idempotent, which is what makes running it before a claim that might
+      // still roll back harmless — the guest genuinely saw that ceremony, so
+      // suppressing it on a later re-claim is the right answer anyway.
+      //
+      // The pack row does NOT come with it. See below: that carry has to wait.
+      if (device) carryTrophySeen(`d:${device}`, selected);
       // The token has to land first — `adoptCollection` authenticates as the
       // member it is filing cards for. But the moment it lands, the collection
       // hook starts reconciling this device against a server record that has
@@ -110,17 +129,16 @@ function ClaimPage() {
           return;
         }
       }
-      // Their guest pack and their guest ceremonies follow them across, now that
-      // the cards themselves have. Both are keyed on the identity `usePackIdentity`
-      // hands out, and a claim moves that from `d:<deviceId>` to `m:<participantId>`
-      // — which every screen keyed on it reads as the handset changing hands. See
-      // B-07 on the pack row and B-13 on the trophies. After the adoption, because
-      // the adoption is what makes carrying the pack safe: it is the record for
-      // these cards, so the member must not file them a second time.
-      const device = deviceId();
+      // Their guest pack follows them across, now that the cards themselves have.
+      // It is keyed on the identity `usePackIdentity` hands out, and a claim moves
+      // that from `d:<deviceId>` to `m:<participantId>` — which every screen keyed
+      // on it reads as the handset changing hands. See B-07.
+      //
+      // AFTER the adoption, unlike the trophy carry above, because the adoption is
+      // what makes carrying the pack safe: it is the record for these cards, so the
+      // member must not file them a second time.
       if (device) {
         await carryPackToIdentity(`d:${device}`, `m:${selected}`, adoptableIds(held));
-        carryTrophySeen(`d:${device}`, selected);
       }
       // Signed in? Then the player follows the account, not the handset. Awaited
       // so the next screen's reads already see the bound identity. A THROW here

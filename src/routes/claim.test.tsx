@@ -36,10 +36,45 @@ vi.mock("@/hooks/use-account", () => ({
   signOutAccount: vi.fn(),
 }));
 
+// Spied on rather than stubbed out: the claim ordering test below is entirely
+// about WHEN this lands relative to the trophy carry, so the real one would work
+// as well — this just makes the moment observable.
+const setMemberToken = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/member-token", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
-  return { ...actual, useMemberSession: () => useMemberSession() };
+  return {
+    ...actual,
+    useMemberSession: () => useMemberSession(),
+    setMemberToken: (...args: unknown[]) => setMemberToken(...args),
+  };
 });
+
+const claimPlayer = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/member.functions", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  claimPlayer: (...args: unknown[]) => claimPlayer(...args),
+}));
+
+const carryTrophySeen = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/trophy-seen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/trophy-seen")>()),
+  carryTrophySeen: (...args: unknown[]) => carryTrophySeen(...args),
+}));
+
+const carryPackToIdentity = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/card-collection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/card-collection")>()),
+  carryPackToIdentity: (...args: unknown[]) => carryPackToIdentity(...args),
+}));
+
+const adoptLocalCollection = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/adopt-collection")>()),
+  adoptLocalCollection: (...args: unknown[]) => adoptLocalCollection(...args),
+  snapshotLocalCollection: async () => ({}),
+}));
+
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
 const ATHLETE = {
   id: "p-doug",
@@ -66,9 +101,14 @@ function rosterState(over: Partial<RosterState> = {}): RosterState {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   window.localStorage.clear();
+  window.localStorage.setItem("wwbh:device-id", "dev-1");
   useMemberSession.mockReturnValue(null);
   useQuery.mockReturnValue(rosterState({ data: [ATHLETE] }));
+  claimPlayer.mockResolvedValue({ ok: true, token: "m.tok", name: "Doug" });
+  adoptLocalCollection.mockResolvedValue(1);
+  carryPackToIdentity.mockResolvedValue(undefined);
 });
 
 describe("the name picker", () => {
@@ -121,5 +161,50 @@ describe("the name picker", () => {
     // Collectors only: a roster that arrived, with nothing on it to claim.
     expect(screen.getByText(/nobody on the roster/i)).toBeInTheDocument();
     expect(screen.queryByText(/can't reach the combine/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("claiming a player", () => {
+  async function claim() {
+    render(<ClaimPage />);
+    await userEvent.click(screen.getByRole("button", { name: /doug/i }));
+    await userEvent.type(screen.getByLabelText(/your code/i), "ABC123");
+    await userEvent.click(screen.getByRole("button", { name: /^claim$/i }));
+  }
+
+  it("re-files the guest's ceremonies before the member token lands", async () => {
+    // `claim_guest_secrets` banks the trophy inside the claim itself, and
+    // `setMemberToken` is what hands the root ceremony host a participant id to
+    // ask about. Between the two, the realtime INSERT can invalidate, refetch and
+    // queue a ceremony the pack screen already threw during the guest phase — and
+    // the watcher marks it celebrated on the way out, so the duplicate cannot be
+    // taken back. The carry used to sit two awaited round trips the other side of
+    // that, which narrowed the window rather than closing it.
+    await claim();
+
+    expect(carryTrophySeen).toHaveBeenCalledWith("d:dev-1", "p-doug");
+    expect(setMemberToken).toHaveBeenCalled();
+    expect(carryTrophySeen.mock.invocationCallOrder[0]).toBeLessThan(
+      setMemberToken.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("still waits for the adoption before rewriting the pack row", async () => {
+    // The other carry has the opposite constraint and keeps it: the adoption is
+    // the record for these cards, so the member must not file them a second time.
+    await claim();
+
+    expect(carryPackToIdentity).toHaveBeenCalledWith("d:dev-1", "m:p-doug", expect.anything());
+    expect(adoptLocalCollection.mock.invocationCallOrder[0]).toBeLessThan(
+      carryPackToIdentity.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("carries nothing on a code that does not match", async () => {
+    claimPlayer.mockResolvedValue({ ok: false, reason: "no_match" });
+    await claim();
+
+    expect(carryTrophySeen).not.toHaveBeenCalled();
+    expect(setMemberToken).not.toHaveBeenCalled();
   });
 });
