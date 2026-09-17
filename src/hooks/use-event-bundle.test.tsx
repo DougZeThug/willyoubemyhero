@@ -3,6 +3,7 @@
 // socket has to be visible rather than a page that quietly stops updating.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import { createQueryWrapper } from "@/test/query";
 import { makeBundle } from "@/test/fixtures";
 import type { ChannelHealth, EventChannelSubscriber } from "@/lib/event-channel";
@@ -122,22 +123,60 @@ describe("useEventBundle", () => {
     await waitFor(() => expect(getEventBundle.mock.calls.length).toBeGreaterThan(before));
   });
 
+  /** Seed both card-back queries so there is something to invalidate. */
+  async function withCardUrls() {
+    const view = await mount();
+    await waitFor(() => expect(view.result.current.bundle).toEqual(BUNDLE));
+    view.client.setQueryData(["event-card-back", EVENT.id], { url: "old-back" });
+    view.client.setQueryData(["card-urls", EVENT.id], { "ep-1": { front: "old-front" } });
+    return view;
+  }
+
+  const cardUrlsInvalidated = (client: QueryClient) => [
+    client.getQueryState(["event-card-back", EVENT.id])?.isInvalidated,
+    client.getQueryState(["card-urls", EVENT.id])?.isInvalidated,
+  ];
+
   it("refreshes the card back other phones are still showing", async () => {
     // The universal back lives on the events row, so the upload that replaces it
     // rides this channel like the dust switch does. It was the one change the
     // handler dropped — and the costly one: the upload hard-deletes the objects
     // the old signed URLs point at, and neither query refetches on focus.
-    const { result, client } = await mount();
-    await waitFor(() => expect(result.current.bundle).toEqual(BUNDLE));
-    client.setQueryData(["event-card-back", EVENT.id], { url: "old-back" });
-    client.setQueryData(["card-urls", EVENT.id], { "ep-1": { front: "old-front" } });
+    const { client } = await withCardUrls();
+
+    await act(async () => {
+      for (const s of subscribers) s.sub.eventRow?.();
+    });
+
+    expect(cardUrlsInvalidated(client)).toEqual([true, true]);
+  });
+
+  it("does not re-sign every card url on the backstop poll", async () => {
+    // `change` is not a change. Every table on the channel fans out to it, and
+    // so does the 15s poll, on a timer, whether or not anything happened — so
+    // invalidating the card urls there walked the whole roster and re-signed
+    // every participant's images four times a minute, on every phone, and made
+    // a nonsense of the three-hour refresh the query is tuned for.
+    const { client } = await withCardUrls();
 
     await act(async () => {
       for (const s of subscribers) s.sub.change();
     });
 
-    expect(client.getQueryState(["event-card-back", EVENT.id])?.isInvalidated).toBe(true);
-    expect(client.getQueryState(["card-urls", EVENT.id])?.isInvalidated).toBe(true);
+    expect(cardUrlsInvalidated(client)).toEqual([false, false]);
+  });
+
+  it("still refetches the bundle on that same poll", async () => {
+    // The guard above must not cost the backstop the one thing it is for.
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.bundle).toEqual(BUNDLE));
+    const before = getEventBundle.mock.calls.length;
+
+    await act(async () => {
+      for (const s of subscribers) s.sub.change();
+    });
+
+    await waitFor(() => expect(getEventBundle.mock.calls.length).toBeGreaterThan(before));
   });
 
   it("leaves another event's card back alone", async () => {
@@ -148,7 +187,7 @@ describe("useEventBundle", () => {
     client.setQueryData(["event-card-back", "other-event"], { url: "old-back" });
 
     await act(async () => {
-      for (const s of subscribers) s.sub.change();
+      for (const s of subscribers) s.sub.eventRow?.();
     });
 
     expect(client.getQueryState(["event-card-back", "other-event"])?.isInvalidated).toBe(false);

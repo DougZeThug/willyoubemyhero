@@ -3,7 +3,7 @@
 // and the reaction count is optimistic on top of that. Both are easy to get
 // subtly wrong.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
 import { setMemberToken } from "@/lib/member-token";
@@ -448,6 +448,61 @@ describe("when the card changes underneath it", () => {
     expect(fire).toHaveTextContent("1");
     expect(fire).toBeEnabled();
     release();
+  });
+
+  it("does not let a reaction finishing on the last card unlatch this one", async () => {
+    // Moving on does not cancel the request that was already in the air, and its
+    // `finally` used to clear whatever was in state by then. With a reaction of
+    // its own still running, the new card lost its optimistic count and got its
+    // button back mid-flight — and a second tap there sends a toggle that undoes
+    // the first.
+    signIn();
+    const releases: (() => void)[] = [];
+    toggleReaction.mockImplementation(
+      () => new Promise((resolve) => releases.push(() => resolve({ ok: true }))),
+    );
+    const { go } = await renderThenGoTo(OTHER_CARD);
+
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+    go();
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+    expect(screen.getByRole("button", { name: "React with 🔥" })).toHaveTextContent("1");
+    expect(screen.getByRole("button", { name: "React with 🔥" })).toBeDisabled();
+
+    // The card they LEFT answers first.
+    await act(async () => {
+      releases[0]!();
+    });
+
+    const fire = screen.getByRole("button", { name: "React with 🔥" });
+    expect(fire).toHaveTextContent("1");
+    expect(fire).toBeDisabled();
+    releases[1]!();
+  });
+
+  it("does not let a post finishing on the last card re-arm this one", async () => {
+    signIn();
+    const releases: (() => void)[] = [];
+    postComment.mockImplementation(
+      () => new Promise((resolve) => releases.push(() => resolve({ ok: true }))),
+    );
+    const { go } = await renderThenGoTo(OTHER_CARD);
+
+    await userEvent.type(screen.getByRole("textbox"), "first card");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+    go();
+    await userEvent.type(screen.getByRole("textbox"), "second card");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+    expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
+
+    await act(async () => {
+      releases[0]!();
+    });
+
+    // Still sending this card's comment, so the button stays down. Re-armed, it
+    // takes a second Post and the comment goes up twice.
+    expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
+    releases[1]!();
   });
 
   it("leaves the name this device already gave alone", async () => {

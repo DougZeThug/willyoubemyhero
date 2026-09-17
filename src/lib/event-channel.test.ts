@@ -73,6 +73,46 @@ describe("subscribeToEventChannel", () => {
     expect(channelNames[0]).toMatch(/^event:event-1:/);
   });
 
+  // `change` is the noisy signal: every table fans out to it, and so does the
+  // poll, on a timer. `eventRow` is the narrow one, for work too expensive to
+  // do four times a minute — see the card back's signed URLs in useEventBundle.
+  it("tells a write to the events row apart from the rest of the noise", async () => {
+    const { subscribeToEventChannel } = await freshModule();
+    const sub = { change: vi.fn(), eventRow: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, sub);
+
+    fire("runs");
+    fire("card_comments");
+    expect(sub.change).toHaveBeenCalledTimes(2);
+    expect(sub.eventRow).not.toHaveBeenCalled();
+
+    fire("events");
+    expect(sub.eventRow).toHaveBeenCalledTimes(1);
+    // And still a change like any other, so the bundle refetches too.
+    expect(sub.change).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not call eventRow on the backstop poll", async () => {
+    const { subscribeToEventChannel, HEALTHY_POLL_MS } = await freshModule();
+    const sub = { change: vi.fn(), eventRow: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, sub);
+
+    vi.advanceTimersByTime(HEALTHY_POLL_MS * 3);
+
+    expect(sub.change).toHaveBeenCalled();
+    expect(sub.eventRow).not.toHaveBeenCalled();
+  });
+
+  it("shrugs at a subscriber that does not want eventRow", async () => {
+    // Optional on the type, and most subscribers have no use for it.
+    const { subscribeToEventChannel } = await freshModule();
+    const sub = { change: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, sub);
+
+    expect(() => fire("events")).not.toThrow();
+    expect(sub.change).toHaveBeenCalledTimes(1);
+  });
+
   it("opens a separate channel per event", async () => {
     const { subscribeToEventChannel } = await freshModule();
     subscribeToEventChannel(EVENT_ID, { change: vi.fn(), health: vi.fn() });

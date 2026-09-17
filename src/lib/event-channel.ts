@@ -11,6 +11,16 @@ export type ChannelHealth = "connecting" | "live" | "degraded";
 export type EventChannelSubscriber = {
   /** Something in this event changed — refetch. */
   change: () => void;
+  /**
+   * The `events` row itself changed.
+   *
+   * Separate from `change`, which is deliberately noisy: every table below fans
+   * out to it, and so does the backstop poll, on a timer, whether or not
+   * anything changed at all. Work too expensive to do on a timer, and only
+   * warranted by a write to this one row, belongs here — see the card back's
+   * signed URLs in useEventBundle.
+   */
+  eventRow?: () => void;
   health: (health: ChannelHealth) => void;
 };
 
@@ -56,6 +66,11 @@ function openChannel(eventId: string): Entry {
   // callback would otherwise mutate the set mid-loop.
   const fanOut = () => {
     for (const s of [...entry.subscribers]) s.change();
+  };
+
+  /** Only ever from the `events` binding below — never from the poll. */
+  const fanOutEventRow = () => {
+    for (const s of [...entry.subscribers]) s.eventRow?.();
   };
 
   // One timer for the whole event, not one per mounted hook. refetchInterval
@@ -129,7 +144,10 @@ function openChannel(eventId: string): Entry {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "events", filter: `id=eq.${eventId}` },
-      fanOut,
+      () => {
+        fanOut();
+        fanOutEventRow();
+      },
     )
     // Published winners. Here rather than on a channel of their own because
     // `close_award_voting` writes these rows and flips `awards_locked` on the

@@ -469,6 +469,22 @@ describe("generateMemberCodes", () => {
     expect(written.participant_id).toBe(OTHER_ID);
   });
 
+  it("surfaces a failed roster read instead of reporting nobody needs a code", async () => {
+    // The read filters the targets, so a failure and an empty combine look the
+    // same from here: no targets, no writes, `{ ok: true, issued: [] }` — and a
+    // panel that says everyone has already claimed. That is the one answer the
+    // commissioner cannot act on, and it hides a broken read behind good news.
+    withDb({
+      "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] },
+      "member_codes.select": { data: [] },
+      "event_participants.select": { data: null, error: { message: "connection lost" } },
+    });
+    await expect(generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())).rejects.toThrow(
+      "connection lost",
+    );
+    expect(mock.callsFor("member_codes", "upsert")).toHaveLength(0);
+  });
+
   it("still re-issues for every player when the whole league is asked for", async () => {
     // "Re-issue ALL" promises no number, so it stays league-wide — and must not
     // pick up the roster filter the unclaimed branch just grew.
