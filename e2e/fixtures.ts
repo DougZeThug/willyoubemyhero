@@ -249,6 +249,7 @@ export const DEFAULT_RESPONSES: Responses = {
     claimed: true,
     day: LEAGUE_DAY,
     openedToday: false,
+    dealable: true,
     secretsOwned: 0,
     resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
   },

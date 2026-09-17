@@ -833,6 +833,7 @@ test.describe("opening a pack", () => {
           claimed: true,
           day: LEAGUE_DAY,
           openedToday: true,
+          dealable: true,
           secretsOwned: 0,
           resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
         });
@@ -943,6 +944,7 @@ test.describe("opening a pack", () => {
       claimed: true,
       day: nextDay,
       openedToday: false,
+      dealable: true,
       secretsOwned: 0,
       resetsAt: `${nextDay}T04:00:00Z`,
     });

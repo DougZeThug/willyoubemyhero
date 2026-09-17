@@ -259,6 +259,7 @@ describe("getPackStatus", () => {
       claimed: false,
       day: null,
       openedToday: false,
+      dealable: false,
       secretsOwned: 0,
       resetsAt: null,
     });
@@ -269,7 +270,7 @@ describe("getPackStatus", () => {
   it("asks about the token holder", async () => {
     withDb({
       "rpc.pack_status": {
-        data: { day: "2026-09-08", openedToday: true, secretsOwned: 2, resetsAt: "2026-09-09T04:00:00Z" }, // prettier-ignore
+        data: { day: "2026-09-08", openedToday: true, dealable: true, secretsOwned: 2, resetsAt: "2026-09-09T04:00:00Z" }, // prettier-ignore
       },
     });
     const { getPackStatus } = await import("./pack.functions");
@@ -282,13 +283,14 @@ describe("getPackStatus", () => {
       claimed: true,
       day: "2026-09-08",
       openedToday: true,
+      dealable: true,
       secretsOwned: 2,
       resetsAt: "2026-09-09T04:00:00Z",
     });
   });
 
   it("asks about a guest by their guest id", async () => {
-    withDb({ "rpc.pack_status": { data: { day: "2026-09-08", openedToday: false, secretsOwned: 0, resetsAt: "x" } } }); // prettier-ignore
+    withDb({ "rpc.pack_status": { data: { day: "2026-09-08", openedToday: false, dealable: true, secretsOwned: 0, resetsAt: "x" } } }); // prettier-ignore
     const { getPackStatus } = await import("./pack.functions");
     await callServerFn(getPackStatus, { headers: asGuest() });
     expect(mock.client.rpc).toHaveBeenCalledWith("pack_status", {

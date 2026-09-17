@@ -37,6 +37,7 @@ const NOTHING_WAITING = {
   claimed: true,
   day: "2026-07-28",
   openedToday: true,
+  dealable: true,
   secretsOwned: 1,
   resetsAt: "2026-07-29T04:00:00Z",
 };
@@ -46,6 +47,23 @@ const PACK_WAITING = {
   claimed: true,
   day: "2026-07-28",
   openedToday: false,
+  dealable: true,
+  secretsOwned: 1,
+  resetsAt: "2026-07-29T04:00:00Z",
+};
+
+/**
+ * Sealed, but with nothing behind the wrapper: no combine running and no secret
+ * with art in the catalogue. open_pack deals nothing on such a day and writes no
+ * row, so `openedToday` stays false — which the cue used to read as a pack
+ * waiting, ring, dot and all, pointing at a screen that says "Nothing to deal
+ * today".
+ */
+const NOTHING_DEALABLE = {
+  claimed: true,
+  day: "2026-07-28",
+  openedToday: false,
+  dealable: false,
   secretsOwned: 1,
   resetsAt: "2026-07-29T04:00:00Z",
 };
@@ -148,6 +166,26 @@ test.describe("one scale of button glow", () => {
     const ring = shadow.split(/,(?![^(]*\))/).find((l) => /0px 0px 0px 2px/.test(l));
     expect(ring, "no 2px ring layer in the shadow").toBeDefined();
     expect(ring!.trim().startsWith(dot), `ring "${ring}" is not the dot's ${dot}`).toBe(true);
+  });
+
+  test("wears no ring and no dot on a day with nothing to deal", async ({ page, server }) => {
+    await asMember(page);
+    server.set("getPackStatus", NOTHING_DEALABLE);
+    await page.goto("/players");
+
+    const hero = page.getByRole("main").getByRole("link", { name: /^open today's pack$/i });
+    await expect(hero).toBeVisible();
+    await expect(hero.getByTestId("pack-waiting-dot")).toHaveCount(0);
+    // The bloom stays — it is the screen's one action either way. What goes is
+    // the 2px ring that claims there is something waiting.
+    const shadow = await hero.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(glowLayers(shadow)).toBe(2);
+    expect(shadow.split(/,(?![^(]*\))/).find((l) => /0px 0px 0px 2px/.test(l))).toBeUndefined();
+
+    // And the nav tab it shares the cue with is quiet too.
+    await expect(page.getByRole("link", { name: /pack — today's pack is unopened/i })).toHaveCount(
+      0,
+    );
   });
 
   test("gives a refused control no glow at all", async ({ page, server }) => {
