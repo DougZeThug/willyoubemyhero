@@ -290,6 +290,54 @@ describe("what a claim refreshes", () => {
   });
 });
 
+describe("a refusal that means the screen is behind", () => {
+  it.each(["claimed", "unavailable"])(
+    "asks the caches again when the server answers %s",
+    async (reason) => {
+      // `claimed` is somebody else having banked it. `unavailable` is overloaded:
+      // the server sends it for a paid claim whose card could not be read back,
+      // and as the fallback for an answer carrying no reason at all. Neither is a
+      // state this screen can trust what it is holding in, and the cost of asking
+      // is one refetch.
+      claimFn.mockReset();
+      claimFn.mockResolvedValue({ ok: false, reason });
+      const { result, client } = mount("m:alice", streak({ current: 3 }));
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+
+      await act(async () => {
+        await result.current.claim(3);
+      });
+
+      const keys = invalidate.mock.calls.map((c) => c[0]?.queryKey);
+      expect(keys).toEqual(
+        expect.arrayContaining([
+          ["pack-streak", "m:alice"],
+          ["my-secrets", "m:alice"],
+          ["pack-status", "m:alice"],
+          ["streak-history", "m:alice"],
+        ]),
+      );
+    },
+  );
+
+  it.each(["account_required", "not_earned"])(
+    "leaves them alone when the server answers %s",
+    async (reason) => {
+      // Nothing moved, so nothing needs re-reading.
+      claimFn.mockReset();
+      claimFn.mockResolvedValue({ ok: false, reason });
+      const { result, client } = mount("m:alice", streak({ current: 3 }));
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+
+      await act(async () => {
+        await result.current.claim(3);
+      });
+
+      expect(invalidate).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe("a phone changing hands", () => {
   it("takes the previous person's reveal off the screen", async () => {
     // Real in this league. The next person's milestones are their own, and a

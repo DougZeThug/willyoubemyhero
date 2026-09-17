@@ -279,7 +279,7 @@ describe("claimStreakMilestone", () => {
     }
   });
 
-  it("says so softly when the card behind a paid claim cannot be read back", async () => {
+  it("reports a paid claim whose card cannot be read back as already collected", async () => {
     withDb({
       "rpc.claim_streak_milestone": {
         data: {
@@ -305,7 +305,13 @@ describe("claimStreakMilestone", () => {
       data: { milestone: 7 },
       headers: asMe(),
     });
-    expect(res).toEqual({ ok: false, reason: "unavailable" });
+    // Not `unavailable`. The claim row and the bonus pull are committed by the
+    // time this read runs, so the rung is spent and the card is in the vault —
+    // only the picture is missing. `unavailable` is the RPC's word for an empty
+    // catalogue, checked BEFORE the insert, where nothing was paid; reusing it
+    // here told the ladder nothing had happened, so it went on offering a rung
+    // the next tap could only refuse.
+    expect(res).toEqual({ ok: false, reason: "claimed" });
   });
 });
 

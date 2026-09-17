@@ -140,7 +140,11 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
           // this screen believes about the ladder and the collection is a
           // response behind, so ask again rather than leaving the button
           // offering a rung that is already spent.
-          if (res.reason === "claimed") await invalidateActor(mine);
+          //
+          // `unavailable` too, which is also the fallback for an answer that
+          // carried no reason at all: from here there is no telling whether that
+          // one spent the rung, and a refetch is the cheap half of the guess.
+          if (res.reason === "claimed" || res.reason === "unavailable") await invalidateActor(mine);
           return;
         }
         // Keyed on the run the SERVER recorded this claim against, falling back
