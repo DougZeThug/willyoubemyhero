@@ -585,7 +585,7 @@ test.describe("the vault's Today card", () => {
           }
         };
         open.onsuccess = () => {
-          open.result
+          const req = open.result
             .transaction("pack-state", "readwrite")
             .objectStore("pack-state")
             .put(
@@ -601,6 +601,9 @@ test.describe("the vault's Today card", () => {
               },
               "today",
             );
+          // Signal the hook so it re-reads after the write lands, removing the
+          // race between this async put and usePackProgress's first read.
+          req.onsuccess = () => window.dispatchEvent(new Event("wwbh:pack-state-changed"));
         };
       },
       // The league day, computed here with the same formula the app uses: the
