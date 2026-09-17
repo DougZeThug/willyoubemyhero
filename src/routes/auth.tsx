@@ -112,7 +112,12 @@ function AuthPage() {
   useEffect(() => {
     if (!user || sync.status !== "ready" || sync.userId !== user.id) return;
     if (!goTo && !wasSignedOut) return;
-    void navigate({ to: goTo ?? "/players" });
+    // Replace, not push. A push leaves /auth?next=… in the stack, and Back
+    // remounts it with `next` still live and the session still linked — so the
+    // effect fires again and drops them straight back on the destination. One
+    // Back press is silently a no-op, on exactly the CTA path `?next=` exists to
+    // serve. Same reason account-panel replaces on its way here.
+    void navigate({ to: goTo ?? "/players", replace: true });
   }, [user, sync, navigate, goTo, wasSignedOut]);
 
   async function signInWithGoogle() {

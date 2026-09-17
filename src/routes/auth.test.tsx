@@ -176,7 +176,9 @@ describe("coming back from one", () => {
     setAccountSyncState({ status: "ready", userId: USER.id, message: null });
 
     render(<AuthPage />);
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/players/pack" }));
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({ to: "/players/pack", replace: true }),
+    );
   });
 
   it("waits for the collection to be linked before moving anybody", async () => {
@@ -212,7 +214,9 @@ describe("coming back from one", () => {
     setAccountSyncState({ status: "ready", userId: USER.id, message: null });
 
     render(<AuthPage />);
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/players/pack" }));
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({ to: "/players/pack", replace: true }),
+    );
     expect(takeAuthNext()).toBe("/players/trade");
   });
 
@@ -224,7 +228,24 @@ describe("coming back from one", () => {
     setAccountSyncState({ status: "ready", userId: USER.id, message: null });
     rerender(<AuthPage />);
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/players" }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/players", replace: true }));
+  });
+
+  it("overwrites /auth rather than leaving it in the back stack", async () => {
+    // A push left /auth?next=… one Back press away, still carrying the `next`
+    // and still signed in — so Back re-fired this very effect and put them back
+    // on the destination. The whole assertion is the flag: `replace` is what
+    // makes the Back button mean something on the CTA path.
+    search.mockReturnValue({ next: "/players/pack" });
+    useAuthUser.mockReturnValue({ user: USER, loading: false });
+    setAccountSyncState({ status: "ready", userId: USER.id, message: null });
+
+    render(<AuthPage />);
+
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
+    for (const [arg] of navigate.mock.calls) {
+      expect(arg).toMatchObject({ replace: true });
+    }
   });
 });
 
