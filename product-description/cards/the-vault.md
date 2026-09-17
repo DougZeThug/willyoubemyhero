@@ -96,10 +96,14 @@ trade with them.
 
 ### Leave without acting
 
-Nothing is recorded. Opening the vault, scrolling it and leaving writes nothing —
-no view count, no last-seen, no server call. The sort you chose and the shuffle
-you rolled are not remembered either; both are per-visit, and the page comes back
-in Name order.
+Nothing is written to the server while you only look at it. Recent acquisitions
+are read once on arrival so the "new since your last visit" strip has something
+to show, and the strip measures against a timestamp in this browser's storage
+that the first visit seeds silently and acting on the strip moves afterwards;
+apart from that seed, arriving, scrolling and leaving record no view count, no
+further last-visit bump, no server write of any kind. The sort you chose and
+the shuffle you rolled are not remembered either; both are per-visit, and the
+page comes back in Name order.
 
 ### The tap that starts something
 
@@ -240,9 +244,11 @@ announces itself as an image named "<player> — not packed yet".
 - **A member on a new phone** who has not claimed again gets a line saying their
   secrets are on their name rather than on this handset — set once at claim and
   never cleared, so a collection does not appear to have silently vanished.
-- **A trophy earned before the trophy table existed** prints no date. Nothing in
-  the schema records when a given person acquired a given card, and eight people
-  appearing to finish the same afternoon would be worse than saying nothing.
+- **A trophy earned before the trophy table existed** prints no date. Each copy
+  behind one predates the column that records when its current holder acquired
+  it, so each carries only the day it was minted; reading that as a finish date
+  would let eight people who finished across six weeks appear to finish the same
+  afternoon, which is worse than saying nothing.
 
 ## Open questions and verification
 
