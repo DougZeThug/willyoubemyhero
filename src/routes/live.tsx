@@ -8,7 +8,7 @@ import { HudTimer } from "@/components/hud-timer";
 import { FinishCelebration } from "@/components/finish-celebration";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
-import { useFinishWatcher } from "@/hooks/use-finish-watcher";
+import { useFinishWatcher, type FinishPayload } from "@/hooks/use-finish-watcher";
 import { currentAthlete, idleFieldState } from "@/lib/current-athlete";
 import { outOfContention, standings } from "@/lib/standings";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
@@ -51,9 +51,7 @@ function LivePage() {
    * appending keeps every finisher instead of letting the last one overwrite
    * the rest.
    */
-  const [celebrationQueue, setCelebrationQueue] = useState<
-    { name: string; timeMs: number; deltaMs: number }[]
-  >([]);
+  const [celebrationQueue, setCelebrationQueue] = useState<FinishPayload[]>([]);
   const currentCelebration = celebrationQueue[0] ?? null;
 
   // The commissioner's console, mounted here so timing can happen on the
@@ -289,6 +287,7 @@ function LivePage() {
         </Card>
       </div>
       <FinishCelebration
+        runId={currentCelebration?.runId ?? null}
         name={currentCelebration?.name ?? null}
         timeMs={currentCelebration?.timeMs ?? null}
         deltaMs={currentCelebration?.deltaMs ?? null}

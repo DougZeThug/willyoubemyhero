@@ -14,7 +14,13 @@ type Bundle = {
   }>;
 };
 
-export type FinishPayload = { name: string; timeMs: number; deltaMs: number };
+export type FinishPayload = {
+  /** The run that just went official — unique per celebration, unlike name+time. */
+  runId: string;
+  name: string;
+  timeMs: number;
+  deltaMs: number;
+};
 
 export function useFinishWatcher(
   bundle: Bundle | null | undefined,
@@ -39,6 +45,7 @@ export function useFinishWatcher(
       seen.current.add(r.id);
       const ep = bundle.participants.find((p) => p.participant_id === r.participant_id);
       onFinish({
+        runId: r.id,
         name: ep?.participant?.name ?? "Athlete",
         timeMs: r.official_time_ms ?? 0,
         deltaMs: Math.max(0, (r.official_time_ms ?? 0) - leaderMs),
