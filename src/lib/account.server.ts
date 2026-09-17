@@ -52,6 +52,36 @@ async function readRow(userId: string): Promise<Row | null> {
   return data ?? null;
 }
 
+/**
+ * The guest ids some OTHER account already answers to.
+ *
+ * A device's guest token outlives sign-out on purpose — signOutAccount says
+ * why — so two accounts signing in on one handset both arrive holding the same
+ * id. Adopting it twice is what gives attach_device_to_player two rows to pick
+ * between, and it picks arbitrarily: a paper code redeemed by the second
+ * account could promote the first one to that player instead.
+ *
+ * It rules out merging as well as adopting. A guest id that belongs to somebody
+ * else is not a collection this account may absorb, and moving it would strand
+ * the account that actually pulled those cards.
+ *
+ * Self-clearing by construction: bind_account_to_player nulls guest_id when an
+ * account upgrades to a member, so an abandoned id stops being owned and folds
+ * in normally the next time this device signs in.
+ */
+async function guestIdsSpokenFor(userId: string, guestIds: string[]): Promise<Set<string>> {
+  if (guestIds.length === 0) return new Set();
+  const { data, error } = await supabaseAdmin
+    .from("account_identities")
+    .select("guest_id")
+    .in("guest_id", guestIds)
+    .neq("user_id", userId);
+  // Deliberately not swallowed. Guessing "nobody owns these" on a failed read is
+  // exactly the assumption this function exists to stop making.
+  if (error) throw error;
+  return new Set((data ?? []).map((row) => row.guest_id).filter((id): id is string => !!id));
+}
+
 function toIdentity(row: Row): AccountIdentity {
   return row.participant_id
     ? { kind: "member", id: row.participant_id }
@@ -126,7 +156,11 @@ export async function syncAccount(
   device: { memberId: string | null; guestIds: string[] },
 ): Promise<AccountSession> {
   let row = await readRow(userId);
-  const guestIds = [...new Set(device.guestIds)];
+  const claimed = [...new Set(device.guestIds)];
+  // Only the ids this phone is holding that nobody else has a row for. Every
+  // use below goes through this list rather than the raw one.
+  const spokenFor = await guestIdsSpokenFor(userId, claimed);
+  const guestIds = claimed.filter((id) => !spokenFor.has(id));
 
   // First sign-in on this account: adopt whatever this phone is already holding,
   // so absorbing a device's cards is a no-op rather than a data move that could

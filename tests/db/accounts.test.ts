@@ -167,6 +167,32 @@ describe("account_identities", () => {
     const neither = sql("INSERT INTO public.account_identities (user_id) VALUES ($1)", [GUEST_A]);
     await expect(neither).rejects.toThrow();
   });
+
+  it("refuses a guest id a second account is already filed under", async () => {
+    // The invariant attach_device_to_player has always assumed: it reads the
+    // row for a guest with a singular SELECT INTO and no ORDER BY, so a second
+    // row means it repairs an arbitrary one of the two — and a paper code
+    // redeemed by one account could promote the other to that player.
+    await sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [GUEST_A, GUEST_B]); // prettier-ignore
+
+    const twice = sql(
+      "INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)",
+      [IDS.event, GUEST_B],
+    );
+    await expect(twice).rejects.toThrow();
+  });
+
+  it("still lets every member row sit on a NULL guest id", async () => {
+    // The index is partial for this reason: guest_id is NULL on every account
+    // that has claimed a player, and there are thirteen of those.
+    await sql("INSERT INTO public.account_identities (user_id, participant_id) VALUES ($1, $2)", [GUEST_A, IDS.alice]); // prettier-ignore
+    await sql("INSERT INTO public.account_identities (user_id, participant_id) VALUES ($1, $2)", [GUEST_B, IDS.bob]); // prettier-ignore
+
+    const rows = await sql<{ n: string }>(
+      "SELECT count(*) AS n FROM public.account_identities WHERE guest_id IS NULL",
+    );
+    expect(Number(rows[0]?.n)).toBe(2);
+  });
 });
 
 describe("merge_guest_pulls and granted rows", () => {

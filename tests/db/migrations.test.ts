@@ -166,6 +166,24 @@ describe("migrations", () => {
     ).toBe(true);
   });
 
+  it("enforces one account per guest id", async () => {
+    // attach_device_to_player reads the row for a guest with a singular SELECT
+    // INTO — no ORDER BY, no LIMIT — so two rows means plpgsql silently repairs
+    // an arbitrary one of them. Partial, because guest_id is NULL on every
+    // account that has claimed a player.
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'account_identities'",
+    );
+    expect(
+      rows.some(
+        (r) =>
+          r.indexdef.includes("UNIQUE") &&
+          r.indexdef.includes("(guest_id)") &&
+          r.indexdef.includes("guest_id IS NOT NULL"),
+      ),
+    ).toBe(true);
+  });
+
   it("enforces one pulled copy per person per card per league day", async () => {
     // The rule that stops a replayed pack minting copies. An index rather than a
     // timestamp comparison, the same shape secret_card_pulls has always used.

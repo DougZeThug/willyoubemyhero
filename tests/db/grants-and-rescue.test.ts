@@ -509,4 +509,30 @@ describe("attach_device_to_player", () => {
     );
     expect(row.participant_id).toBe(IDS.alice);
   });
+
+  it("cannot be handed two accounts to choose between", async () => {
+    // This function reads the row for a guest with a singular SELECT INTO and
+    // no ORDER BY. plpgsql does not raise on a second match, it takes whichever
+    // the scan returns first — so with two rows a code redeemed by one account
+    // promoted an arbitrary one of them, possibly the other. The database now
+    // refuses to get into that state, which is what lets the read stay singular.
+    const first = "00000000-0000-4000-8000-00000000ac01";
+    const second = "00000000-0000-4000-8000-00000000ac02";
+    await sql(`INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)`, [
+      first,
+      GUEST,
+    ]);
+    await expect(
+      sql(`INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)`, [
+        second,
+        GUEST,
+      ]),
+    ).rejects.toThrow();
+
+    await sql("SELECT public.attach_device_to_player($1, $2)", [IDS.alice, GUEST]);
+    const rows = await sql<{ user_id: string; participant_id: string | null }>(
+      "SELECT user_id::text, participant_id::text FROM public.account_identities",
+    );
+    expect(rows).toEqual([{ user_id: first, participant_id: IDS.alice }]);
+  });
 });
