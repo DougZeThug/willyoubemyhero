@@ -79,10 +79,26 @@ export function useCardZoom({
 
   const commit = useCallback(
     (next: { zoom: number; x: number; y: number }) => {
-      const clamped = clampOffset({ x: next.x, y: next.y }, next.zoom, size());
-      view.current = { zoom: next.zoom, x: clamped.x, y: clamped.y };
+      // Snapped onto MIN_ZOOM before either copy is written, because the dead
+      // band below straddles it and every gesture branch tests it exactly.
+      //
+      // The ref used to take `next.zoom` as given while the state kept whatever
+      // it had if the change was under 0.001, so the two could sit either side of
+      // 1x. Both directions were reachable and both were sticky. A pinch ending
+      // at 1.0004 left the ref above 1x and the state at it: `=== MIN_ZOOM`
+      // stopped matching, so swipe-to-next and pull-down-to-close went dead with
+      // nothing on screen saying the card was zoomed. And a pinch down to 1.0005
+      // from a double tap left the STATE above 1x, where reset() writing an exact
+      // 1 could no longer shift it — the frame stayed in its magnified chrome,
+      // position counter hidden, at a card that was actually at 1x.
+      //
+      // One number for both readings is all it takes. Offsets need no matching
+      // snap: clampOffset pins x and y to 0 at zoom 1 by its own arithmetic.
+      const zoom = Math.abs(next.zoom - MIN_ZOOM) < 0.001 ? MIN_ZOOM : next.zoom;
+      const clamped = clampOffset({ x: next.x, y: next.y }, zoom, size());
+      view.current = { zoom, x: clamped.x, y: clamped.y };
       apply();
-      setZoom((z) => (Math.abs(z - next.zoom) < 0.001 ? z : next.zoom));
+      setZoom((z) => (Math.abs(z - zoom) < 0.001 ? z : zoom));
     },
     [apply, size],
   );
