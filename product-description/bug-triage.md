@@ -275,7 +275,10 @@ in the screen rather than in the handler that cascades.
   to `false` and nothing derived it from the search parameter; the chip lit from
   `!!vs` and the sheet opened from `comparing`.
 - **Severity:** `medium`. The feature works, one tap later than intended.
-- **Fixed:** `comparing` is seeded from the parameter.
+- **Fixed:** `comparing` is seeded from `vs` and re-opened from `vs` when the
+  card unlocks. The seed alone never reached a usable frame: it was thrown away
+  by the lock-fallback effect on the first frame, before `useMyCollection` had
+  read in.
 - **Raised by:** [comparing cards](cards/comparing-cards.md#open-questions-and-verification).
 
 ### B-09: Analytics has no loading, error or degraded state
