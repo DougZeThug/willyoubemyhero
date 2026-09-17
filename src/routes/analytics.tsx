@@ -40,12 +40,22 @@ function AnalyticsPage() {
     if (!bundle.splits.length) return [];
     const byStation = new Map<string, number[]>();
     for (const s of bundle.splits) {
+      // A missing segment_time_ms is a measurement never taken, not a
+      // zero-second segment. At 0 it drags the mean down AND wins Math.min
+      // outright, so one unmeasured split made the whole station's "Best" bar
+      // read 0.00s. card-rarity.ts and card-stats.ts skip them for the same
+      // reason; this was the one place that did not.
+      if (s.segment_time_ms == null) continue;
       const st = bundle.stations.find((x) => x.id === s.station_id);
       if (!st) continue;
       const arr = byStation.get(st.name) ?? [];
-      arr.push(s.segment_time_ms ?? 0);
+      arr.push(s.segment_time_ms);
       byStation.set(st.name, arr);
     }
+    // Splits that were all unmeasured, or that name stations this event does
+    // not have, leave nothing to plot — the same nothing as no splits at all,
+    // so say so rather than drawing a row of zero bars.
+    if (byStation.size === 0) return [];
     return bundle.stations.map((st) => {
       const arr = byStation.get(st.name) ?? [];
       const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;

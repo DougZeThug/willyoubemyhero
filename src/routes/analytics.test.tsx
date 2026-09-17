@@ -8,6 +8,7 @@ import {
   makeBundle,
   makeParticipant,
   makeRun,
+  makeSplit,
   makeStation,
   resetFixtureIds,
 } from "@/test/fixtures";
@@ -59,16 +60,39 @@ vi.mock("recharts", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   const stubs: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(actual)) {
-    if (typeof value === "function") {
-      stubs[name] = (props: Record<string, unknown>) => (
-        <svg data-recharts-stub={name} {...props} />
-      );
-    } else {
-      stubs[name] = value;
+    // ResponsiveContainer is a forwardRef object rather than a function, so the
+    // typeof test below lets the REAL one through — and it reaches for a
+    // ResizeObserver jsdom does not have. It only ever wrapped children.
+    if (name === "ResponsiveContainer") {
+      stubs[name] = (props: { children?: ReactNode }) => <div>{props.children}</div>;
+      continue;
     }
+    // BarChart carries the whole computed series in one prop, and spreading an
+    // array onto an <svg> stringifies it to "[object Object]". Serialising it
+    // is the only seam a test has on what the page actually plots — everything
+    // else about these bars is drawn inside recharts.
+    if (name === "BarChart") {
+      stubs[name] = (props: { data?: unknown; children?: ReactNode }) => (
+        <svg data-recharts-stub="BarChart" data-series={JSON.stringify(props.data)}>
+          {props.children}
+        </svg>
+      );
+      continue;
+    }
+    if (typeof value !== "function") {
+      stubs[name] = value;
+      continue;
+    }
+    stubs[name] = (props: Record<string, unknown>) => <svg data-recharts-stub={name} {...props} />;
   }
   return stubs;
 });
+
+/** What the "Average Split by Station" chart was handed, station by station. */
+function plotted(): { name: string; avgSec: number; bestSec: number }[] {
+  const chart = document.querySelector("[data-recharts-stub='BarChart']");
+  return JSON.parse(chart?.getAttribute("data-series") ?? "[]");
+}
 
 function healthyBundle() {
   return makeBundle();
@@ -228,5 +252,54 @@ describe("AnalyticsPage personal bests", () => {
     render(<AnalyticsPage />);
     expect(screen.queryByText("Bob Bison")).toBeNull();
     expect(screen.getByText("Alice Ace")).toBeInTheDocument();
+  });
+});
+
+describe("a split nobody measured", () => {
+  /** One station, one run, and whatever segment times the case calls for. */
+  function withSegments(segments: (number | null)[]) {
+    const station = makeStation({ name: "Sled Push", short_name: "SLED", station_order: 1 });
+    const athlete = makeParticipant({ participation_status: "finished" });
+    const run = makeRun({ participant_id: athlete.participant_id });
+    useEventBundle.mockReturnValue({
+      event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+      bundle: makeBundle({
+        participants: [athlete],
+        stations: [station],
+        runs: [run],
+        splits: segments.map((ms) =>
+          makeSplit({ run_id: run.id, station_id: station.id, segment_time_ms: ms }),
+        ),
+      }),
+      loading: false,
+      error: null,
+      failedTables: [],
+      realtimeDegraded: false,
+      refetch: vi.fn(async () => {}),
+    });
+  }
+
+  it("leaves it out of the average instead of counting it as zero", () => {
+    // 10s and 20s measured, one never taken. Counting the third as 0 made the
+    // average 10s — a number no athlete ran, under a bar labelled "Average".
+    withSegments([10_000, 20_000, null]);
+    render(<AnalyticsPage />);
+    expect(plotted()[0]).toMatchObject({ name: "Sled Push", avgSec: 15 });
+  });
+
+  it("leaves it out of the best, which it would otherwise win outright", () => {
+    // This is the loud one: 0 beats every real time, so a single unmeasured
+    // split made the whole station's "Best" bar read 0.00s.
+    withSegments([10_000, 20_000, null]);
+    render(<AnalyticsPage />);
+    expect(plotted()[0]).toMatchObject({ bestSec: 10 });
+  });
+
+  it("says there is no split data yet when nothing was measured at all", () => {
+    // Rows exist, so the "no splits" guard above does not fire; without this
+    // the page drew a full chart of zero bars and claimed it was data.
+    withSegments([null, null]);
+    render(<AnalyticsPage />);
+    expect(screen.getByText("No split data yet.")).toBeInTheDocument();
   });
 });
