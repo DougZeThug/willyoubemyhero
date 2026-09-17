@@ -66,8 +66,11 @@ Two consequences worth stating plainly:
   says every pick is in.
 
 The picking order also inherits the leaderboard's handling of athletes out of
-contention: a scratched athlete with an official run is out of contention for
-every tier but is still in the picking order here.
+contention, which means it leaves them out. A scratched, dq'd, dnp or absent
+athlete does not pick, even holding the fastest official time on the board —
+their square simply stays Open, as the roster-sized grid above already allows
+for. The board and the leaderboard are read from one helper, so the two can
+never name a different fastest athlete.
 
 ## The interaction, event by event
 
@@ -237,8 +240,8 @@ clock has moved to the next athlete; they have to go back and read it.
 - **No official results yet** shows "No combine results yet. Draft board opens
   once athletes finish", and a failed read says so instead rather than pretending
   the combine has not started.
-- **An athlete with two official runs** appears twice in the picking order; once
-  they have a position, both entries carry it and they do not pick twice.
+- **An athlete with two official runs** appears once, at their best time. The
+  order holds one entry per athlete, not one per run.
 
 ## Open questions and verification
 

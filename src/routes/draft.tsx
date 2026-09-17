@@ -11,6 +11,7 @@ import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatTime } from "@/lib/format";
+import { standings } from "@/lib/standings";
 import { ClipboardList, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
@@ -50,18 +51,20 @@ function DraftPage() {
 
   const { rankings, taken, currentPicker } = useMemo(() => {
     const parts = bundle?.participants ?? [];
-    const runs = bundle?.runs ?? [];
-    const ranking = runs
-      .filter((r) => r.is_official)
-      .map((r) => {
-        const ep = parts.find((p) => p.participant_id === r.participant_id);
-        return { run: r, ep };
-      })
+    // The picking order IS the leaderboard's order, which is why this cannot keep
+    // a comparator of its own. The hand-inlined one ranked official runs, so it
+    // queued anybody re-timed twice and held a turn for somebody the board had
+    // already dropped -- the one thing the draft board is not allowed to do is
+    // disagree with the leaderboard about who was faster.
+    const ranking = standings(bundle)
+      .map((s) => ({ run: s.run, ep: parts.find((p) => p.participant_id === s.participantId) }))
+      // standings() builds its rows from runs, so a run whose athlete is missing
+      // from the roster still ranks -- and currentPicker.ep is dereferenced
+      // unguarded below.
       .filter(
         (row): row is { run: (typeof row)["run"]; ep: NonNullable<(typeof row)["ep"]> } =>
           row.ep != null,
-      )
-      .sort((a, b) => (a.run.official_time_ms ?? Infinity) - (b.run.official_time_ms ?? Infinity));
+      );
     const takenSet = new Set(
       parts.filter((p) => p.selected_draft_position != null).map((p) => p.selected_draft_position!),
     );
@@ -242,3 +245,5 @@ function DraftPage() {
     </div>
   );
 }
+
+export default DraftPage;

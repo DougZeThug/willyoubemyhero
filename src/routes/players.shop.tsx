@@ -169,7 +169,7 @@ function ShopPage() {
             with no dust_enabled() gate so those cards are never stranded. This
             branch is what makes that reachable. MarketPanel renders the stall
             alone here — no shelf, no listing flow — and nothing at all when there
-            is nothing on it, which is every case but this one. */}
+            is neither a listing up nor a settled sale to report. */}
         {!dustOn ? (
           <>
             <p className="text-sm text-muted-foreground">

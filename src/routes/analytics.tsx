@@ -8,6 +8,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { listArchives } from "@/lib/media.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
+import { standings } from "@/lib/standings";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 
 export const Route = createFileRoute("/analytics")({
@@ -57,20 +58,22 @@ function AnalyticsPage() {
     });
   }, [bundle]);
 
+  // The board's own rows, so these ten names are ten off the leaderboard. Reducing
+  // official runs per athlete asked nothing about contention, so a scratched
+  // athlete could hold the #1 personal best on a screen whose sibling had already
+  // dropped them -- two public pages naming a different fastest athlete off one
+  // bundle. It also kept somebody whose only official run has no time yet, parked
+  // at Infinity with an em dash where their time belongs.
   const bests = useMemo(() => {
-    if (!bundle) return [];
-    return bundle.participants
-      .map((ep) => {
-        const runs = bundle.runs.filter(
-          (r) => r.participant_id === ep.participant_id && r.is_official,
-        );
-        if (!runs.length) return null;
-        const best = Math.min(...runs.map((r) => r.official_time_ms ?? Infinity));
-        return { name: ep.participant?.name ?? "?", bestMs: best };
-      })
-      .filter((x): x is { name: string; bestMs: number } => !!x)
-      .sort((a, b) => a.bestMs - b.bestMs)
-      .slice(0, 10);
+    const parts = bundle?.participants ?? [];
+    return standings(bundle)
+      .slice(0, 10)
+      .map((s) => ({
+        participantId: s.participantId,
+        place: s.place,
+        name: parts.find((p) => p.participant_id === s.participantId)?.participant?.name ?? "?",
+        bestMs: s.run.official_time_ms,
+      }));
   }, [bundle]);
 
   // A pending fetch, a failed read and a combine nobody has run all used to
@@ -165,13 +168,16 @@ function AnalyticsPage() {
               </p>
             ) : (
               <ol className="space-y-1.5">
-                {bests.map((b, i) => (
+                {bests.map((b) => (
                   <li
-                    key={b.name}
+                    // The participant, not the name: two athletes called Dave
+                    // collided, and this list re-renders on every realtime nudge,
+                    // which is where an undefined reconciliation goes wrong.
+                    key={b.participantId}
                     className="flex items-center gap-3 rounded-md bg-[oklch(0.16_0.02_240)] px-3 py-2"
                   >
                     <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 text-label font-black text-primary">
-                      {i + 1}
+                      {b.place}
                     </span>
                     <span className="flex-1 line-clamp-2 text-sm font-semibold uppercase tracking-wide">
                       {b.name}

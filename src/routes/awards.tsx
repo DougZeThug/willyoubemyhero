@@ -42,6 +42,18 @@ function AwardsPage() {
 
   const locked = !!event?.awards_locked;
 
+  // The reveal's third state, and the lock itself is what creates it.
+  // `awards_locked` rides the event row while the winners ride a query of their
+  // own, and the realtime handler invalidates both together -- so `locked` flips
+  // on whichever answers first, regularly with the tally still in flight.
+  //
+  // isFetching, not isLoading: React Query keeps the previous `data` through a
+  // background refetch, so once the first read lands isLoading is false forever
+  // and the empty array cached while voting was open asserted "No votes cast."
+  // over real winners. Narrowed on an empty tally so one that HAS landed does not
+  // flicker back to counting -- every comment and reaction nudges this key too.
+  const countingVotes = awards.isPending || (awards.isFetching && !awards.data?.length);
+
   const myVotes = useQuery({
     queryKey: ["my-award-votes", event?.id, me?.participantId],
     queryFn: () => myVotesFn({ data: { eventId: event!.id } }),
@@ -190,7 +202,9 @@ function AwardsPage() {
                     <p className="text-meta text-muted-foreground">
                       {awards.isError
                         ? "Couldn't read the votes just now — retrying."
-                        : "No votes cast."}
+                        : countingVotes
+                          ? "Counting the votes…"
+                          : "No votes cast."}
                     </p>
                   )
                 ) : (
@@ -247,3 +261,5 @@ function AwardsPage() {
     </div>
   );
 }
+
+export default AwardsPage;

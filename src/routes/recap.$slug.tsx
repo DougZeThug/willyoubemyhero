@@ -39,14 +39,17 @@ type Snapshot = {
   participants: Array<{
     id: string;
     participant_id: string;
-    participant?: { name: string; fantasy_team_name?: string | null } | null;
+    // Optional because an archive written before the column existed has no such
+    // key, and standings() reads absent as in contention rather than out.
     participation_status?: string;
+    participant?: { name: string; fantasy_team_name?: string | null } | null;
   }>;
   runs: Array<{
     id: string;
     participant_id: string;
     is_official: boolean;
     official_time_ms: number | null;
+    /** Optional for the same reason as participation_status above. */
     status?: string;
   }>;
   drafts: Array<{ selection_order: number; participant_id: string; draft_position: number }>;
@@ -57,22 +60,11 @@ function RecapPage() {
   // Typed off the server function because useLoaderData doesn't infer it here.
   const recap = Route.useLoaderData() as NonNullable<Awaited<ReturnType<typeof getArchivedRecap>>>;
   const snap = recap.snapshot as Snapshot;
-  // The same standings the live board and the tier rules read, not a third set.
-  // Ranking the official *runs* listed anybody re-timed once per attempt and
-  // numbered a dead heat 1 and 2 — so this permanent record of an event
-  // contradicted the leaderboard the party watched on the night.
-  //
-  // Both status fields are optional on Snapshot and defaulted here: archiveEvent
-  // has always written them, but `snapshot` is untyped jsonb reached through a
-  // cast, so the type is an assertion rather than a promise. An empty string is
-  // in no status family, which is what a row with nothing recorded should be.
-  const rows = standings({
-    participants: snap.participants.map((p) => ({
-      ...p,
-      participation_status: p.participation_status ?? "",
-    })),
-    runs: snap.runs.map((r) => ({ ...r, status: r.status ?? "" })),
-  }).map((s) => ({
+  // The board's own rules, so an archived leaderboard says what the live one said:
+  // one row per athlete, a dead heat sharing its number, anybody out of contention
+  // off it. An archive carrying no statuses keeps everybody, which is the old
+  // behaviour exactly.
+  const results = standings(snap).map((s) => ({
     run: s.run,
     place: s.place,
     ep: snap.participants.find((p) => p.participant_id === s.participantId),
@@ -95,12 +87,8 @@ function RecapPage() {
           <h2 className="mb-2 font-display text-label font-black uppercase tracking-[0.08em] text-primary/80">
             Final Leaderboard
           </h2>
-          {/* An ordered list, because it is one. The place is rendered separately
-              for the look, so the marker is suppressed — and it comes from
-              standings() rather than the render index, which is what lets a dead
-              heat share a number. */}
-          <ol className="list-none space-y-1.5">
-            {rows.map((r) => (
+          <ol className="space-y-1.5">
+            {results.map((r) => (
               <li
                 key={r.run.id}
                 className="flex items-center gap-3 rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2"

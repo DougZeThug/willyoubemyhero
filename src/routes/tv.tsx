@@ -12,8 +12,9 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { formatTime } from "@/lib/format";
-import { compareOfficialTime } from "@/lib/standings";
+import { standings } from "@/lib/standings";
 import { currentAthlete } from "@/lib/current-athlete";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tv")({
   head: () => ({
@@ -34,13 +35,17 @@ function TvPage() {
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
 
+  // The same standings the board and the tier rules read. Ranking official *runs*
+  // put a re-timed athlete on the big screen twice -- pushing a real finisher off
+  // the bottom of sixteen -- kept a scratched one at slot 1 in front of the whole
+  // party, and numbered a dead heat 1 and 2.
   const rows = useMemo(() => {
     const parts = bundle?.participants ?? [];
-    const runs = bundle?.runs ?? [];
-    return runs
-      .filter((r) => r.is_official)
-      .map((r) => ({ run: r, ep: parts.find((p) => p.participant_id === r.participant_id) }))
-      .sort((a, b) => compareOfficialTime(a.run, b.run));
+    return standings(bundle).map((s) => ({
+      run: s.run,
+      place: s.place,
+      ep: parts.find((p) => p.participant_id === s.participantId),
+    }));
   }, [bundle]);
 
   const { athlete: current, onClock } = currentAthlete(bundle?.participants ?? []);
@@ -94,23 +99,27 @@ function TvPage() {
       </header>
 
       <div className="grid grid-cols-2 gap-4">
-        {rows.slice(0, 16).map((row, i) => (
+        {rows.slice(0, 16).map((row) => (
           <div
             key={row.run.id}
-            className={
-              "flex items-center gap-4 rounded-2xl border p-4 " +
-              (i === 0
+            className={cn(
+              "flex items-center gap-4 rounded-2xl border p-4",
+              row.place === 1
                 ? "hud-bezel border-primary/60 hud-glow"
-                : "border-primary/15 bg-[oklch(0.16_0.02_240)]")
-            }
+                : "border-primary/15 bg-[oklch(0.16_0.02_240)]",
+            )}
           >
+            {/* place, not the row index: a three-way tie for first is three
+                medals and a fourth place, not a medal for whoever sorted third. */}
             <span
-              className={
-                "grid h-14 w-14 place-items-center rounded-full font-display text-2xl font-black " +
-                (i < 3 ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")
-              }
+              className={cn(
+                "grid h-14 w-14 place-items-center rounded-full font-display text-2xl font-black",
+                row.place <= 3
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-primary/10 text-primary",
+              )}
             >
-              {i + 1}
+              {row.place}
             </span>
             <ParticipantAvatar
               name={row.ep?.participant?.name ?? "?"}
@@ -159,3 +168,5 @@ function TvPage() {
     </div>
   );
 }
+
+export default TvPage;
