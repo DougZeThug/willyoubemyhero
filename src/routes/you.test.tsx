@@ -13,6 +13,7 @@ import { STREAK_MILESTONES } from "@/lib/streaks";
 import { isHapticsOff, setCardSfxMuted, setHapticsOff } from "@/lib/card-sfx";
 import { isTiltWanted, setTiltWanted } from "@/lib/gyro";
 import { setAccountSyncState } from "@/lib/account-sync-state";
+import { WAS_MEMBER_KEY } from "@/lib/member-token";
 
 const useMemberSession = vi.fn();
 const useActiveEvent = vi.fn();
@@ -133,6 +134,8 @@ const COLLECTION = {
 
 beforeEach(() => {
   resetFixtureIds();
+  // The breadcrumb outlives its token by design, so it also outlives a test.
+  localStorage.removeItem(WAS_MEMBER_KEY);
   setAccountSyncState({ status: "idle", userId: null, message: null });
   useMyCollection.mockReturnValue(COLLECTION);
   useMemberSession.mockReturnValue({ participantId: "p-me", name: "Bob Blitz", expiresAt: 0, token: "t" }); // prettier-ignore
@@ -184,6 +187,30 @@ describe("/you", () => {
 
   it("prints them again the moment the link lands", () => {
     setAccountSyncState({ status: "ready", userId: "auth-2", message: null });
+    render(<YouPage />);
+    expect(screen.getByText(/roster 3 \/ 5/i)).toBeInTheDocument();
+  });
+
+  // The same handset, one window later. `syncing` covers the minute an account
+  // takes to link; this covers every minute between one player signing out and
+  // the next one claiming, which at a party is most of the evening.
+  it("states no collection number on a signed-out phone that has been signed in", () => {
+    useMemberSession.mockReturnValue(null);
+    localStorage.setItem(WAS_MEMBER_KEY, "1");
+    // No member token means no stats query, so the local store is all the hook
+    // has — and nothing clears it on sign-out. This is the last person's 3.
+    useMyCollection.mockReturnValue({ ...COLLECTION, isMember: false });
+    render(<YouPage />);
+    expect(screen.getByText(/counting your cards/i)).toBeInTheDocument();
+    expect(screen.queryByText(/roster 3 \/ 5/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/packs opened/i)).not.toBeInTheDocument();
+  });
+
+  it("still counts a guest's own cards on a phone nobody has claimed on", () => {
+    // No breadcrumb, so there is no earlier person for the store to belong to.
+    // A guest's cards are a guest's cards.
+    useMemberSession.mockReturnValue(null);
+    useMyCollection.mockReturnValue({ ...COLLECTION, isMember: false });
     render(<YouPage />);
     expect(screen.getByText(/roster 3 \/ 5/i)).toBeInTheDocument();
   });
