@@ -44,7 +44,7 @@ async function cardIds(): Promise<string[]> {
 
 async function addCard(name: string): Promise<string> {
   const [row] = await sql<{ id: string }>(
-    `INSERT INTO public.secret_cards (name, art_path) VALUES ($1, $2) RETURNING id`,
+    "INSERT INTO public.secret_cards (name, art_path) VALUES ($1, $2) RETURNING id",
     [name, `secrets/${name}/art-1.webp`],
   );
   return row.id;

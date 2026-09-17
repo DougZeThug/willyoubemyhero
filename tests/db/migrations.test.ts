@@ -88,6 +88,18 @@ describe("migrations", () => {
     ]);
   });
 
+  it("creates the run-result RPC the edit sheet calls", async () => {
+    // A wholesale replace deletes before it inserts, so from the server
+    // function a failed insert left the run with no splits and no penalties.
+    // Its existence here is what makes that one transaction.
+    const rows = await sql<{ proname: string }>(`
+      SELECT proname FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND proname = 'update_run_result'
+    `);
+    expect(rows.map((r) => r.proname)).toEqual(["update_run_result"]);
+  });
+
   it("creates the pack RPCs the app calls", async () => {
     const rows = await sql<{ proname: string }>(`
       SELECT proname FROM pg_proc p
@@ -163,6 +175,24 @@ describe("migrations", () => {
     ).toBe(true);
     expect(
       defs.some((d) => d.includes("(secret_pull_id)") && d.includes("status = 'active'::text")),
+    ).toBe(true);
+  });
+
+  it("enforces one account per guest id", async () => {
+    // attach_device_to_player reads the row for a guest with a singular SELECT
+    // INTO — no ORDER BY, no LIMIT — so two rows means plpgsql silently repairs
+    // an arbitrary one of them. Partial, because guest_id is NULL on every
+    // account that has claimed a player.
+    const rows = await sql<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'account_identities'",
+    );
+    expect(
+      rows.some(
+        (r) =>
+          r.indexdef.includes("UNIQUE") &&
+          r.indexdef.includes("(guest_id)") &&
+          r.indexdef.includes("guest_id IS NOT NULL"),
+      ),
     ).toBe(true);
   });
 
@@ -541,7 +571,7 @@ describe("migrations", () => {
     // the nav one. Nothing caught it going, which is the whole argument for
     // asserting it now.
     const [row] = await sql<{ reloptions: string[] | null }>(
-      `SELECT reloptions FROM pg_class WHERE relname = 'events_public'`,
+      "SELECT reloptions FROM pg_class WHERE relname = 'events_public'",
     );
     expect((row.reloptions ?? []).join(",")).toContain("security_invoker=true");
   });

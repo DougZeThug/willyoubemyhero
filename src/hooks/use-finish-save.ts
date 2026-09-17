@@ -100,6 +100,15 @@ export function useFinishSave({
   // client_key. It guards Retry for the same reason.
   const busy = useRef(false);
 
+  // Bumped by reset(). A save still in flight when the run is thrown away
+  // belongs to a run that no longer exists, so nothing it does on the way back
+  // may touch the one that replaced it — not the state, and above all not
+  // onSaved, which in the console clears the ACTIVE run from IndexedDB and from
+  // React. A commissioner who cancelled a slow save and started the next
+  // athlete watched that timer vanish mid-count, under a "Run saved" toast for
+  // somebody else.
+  const generation = useRef(0);
+
   // Held in refs so the callbacks stay stable across renders; the console
   // rebuilds them every time the run changes.
   const draftCb = useRef(onDraft);
@@ -109,23 +118,35 @@ export function useFinishSave({
     savedCb.current = onSaved;
   });
 
+  // `gen` is the caller's, captured before it wrote anything to this phone —
+  // not re-read here. finish() awaits an IndexedDB write on the way in, and a
+  // reset landing inside that window would otherwise hand this send a fresh
+  // generation and the very licence it is meant to lose.
   const send = useCallback(
-    async (run: FinishedRun) => {
+    async (run: FinishedRun, gen: number) => {
+      if (gen !== generation.current) return;
       setState("saving");
       setError(null);
       let stored = false;
+      let failure: string | null = null;
       try {
         await saveRunFn({ data: buildFinishPayload(run) });
         stored = true;
       } catch (e) {
-        setState("failed");
-        setError(saveErrorMessage(e));
+        failure = saveErrorMessage(e);
       }
-      // Outside the catch on purpose: the row is written by this point, so a
-      // throw from the caller's cleanup must not report the run as unsaved.
+      // The run this save was for has been thrown away since it left. Reporting
+      // either outcome now lands on whoever is on the clock instead.
+      if (gen !== generation.current) return;
+      // Reported outside the catch on purpose: the row is written by this
+      // point, so a throw from the caller's cleanup must not report the run as
+      // unsaved.
       if (stored) {
         setState("idle");
         await savedCb.current();
+      } else {
+        setState("failed");
+        setError(failure);
       }
     },
     [saveRunFn],
@@ -135,6 +156,7 @@ export function useFinishSave({
   const finish = useCallback(
     async (run: ActiveRun) => {
       if (run.status === "finished" || busy.current) return;
+      const gen = generation.current;
       busy.current = true;
       try {
         const finishedAt = Date.now();
@@ -149,9 +171,11 @@ export function useFinishSave({
         // re-reading a clock that has moved on.
         draftCb.current(draft);
         await saveActiveRun(draft);
-        await send(draft);
+        await send(draft, gen);
       } finally {
-        busy.current = false;
+        // Only while this is still the live attempt. reset() has already let
+        // the latch go, and a Finish on the next athlete may have taken it.
+        if (gen === generation.current) busy.current = false;
       }
     },
     [send],
@@ -161,17 +185,23 @@ export function useFinishSave({
   const retry = useCallback(
     async (run: FinishedRun) => {
       if (busy.current) return;
+      const gen = generation.current;
       busy.current = true;
       try {
-        await send(run);
+        await send(run, gen);
       } finally {
-        busy.current = false;
+        if (gen === generation.current) busy.current = false;
       }
     },
     [send],
   );
 
   const reset = useCallback(() => {
+    // The latch comes off with the state, and the generation moves on. Leaving
+    // the latch set made Finish on the next athlete an enabled button that did
+    // nothing until the abandoned save happened to come back.
+    generation.current += 1;
+    busy.current = false;
     setState("idle");
     setError(null);
   }, []);

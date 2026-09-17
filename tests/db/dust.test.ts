@@ -37,7 +37,7 @@ const GUEST = "99999999-9999-4999-8999-999999999999";
  * date for five hours every evening — and mill_card_copy would answer `too_fresh`
  * for a copy the test meant to be yesterday's.
  */
-const NY = `(now() AT TIME ZONE 'America/New_York')::date`;
+const NY = "(now() AT TIME ZONE 'America/New_York')::date";
 
 async function cardIds(): Promise<string[]> {
   const rows = await sql<{ id: string }>(
@@ -160,7 +160,7 @@ async function claimMember(participantId: string) {
 
 async function credit(amount: number, participantId = IDS.alice) {
   await sql(
-    `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')`,
+    "INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')",
     [participantId, amount],
   );
 }
@@ -192,7 +192,7 @@ describe("dust_ledger", () => {
   it("refuses a reason the payout rules do not know", async () => {
     await expect(
       sql(
-        `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, 5, 'vibes')`,
+        "INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, 5, 'vibes')",
         [IDS.alice],
       ),
     ).rejects.toThrow();
@@ -523,7 +523,7 @@ describe("the daily mint cap", () => {
       [IDS.alice],
     );
     const [bobSpare] = await sql<{ id: string }>(
-      `SELECT id FROM public.card_copies WHERE participant_id = $1 LIMIT 1`,
+      "SELECT id FROM public.card_copies WHERE participant_id = $1 LIMIT 1",
       [IDS.bob],
     );
 
@@ -795,7 +795,7 @@ describe("buy_bonus_secret_pull", () => {
        ON CONFLICT DO NOTHING`,
     );
     await seedSecret("only-card");
-    await sql(`UPDATE public.secret_cards SET collection = 'set-a'`);
+    await sql("UPDATE public.secret_cards SET collection = 'set-a'");
     await credit(DUST_PRICES.bonusPull);
     const res = (await buy()) as { pull: { completedCollection: unknown } };
     expect(res.pull.completedCollection).not.toBeNull();
@@ -847,7 +847,7 @@ describe("reroll_copy_edition", () => {
     await credit(DUST_PRICES.reroll * 40);
     let wentDown = false;
     for (let i = 0; i < 40 && !wentDown; i++) {
-      await sql(`UPDATE public.card_copies SET edition = 'platinum' WHERE id = $1`, [spareId]);
+      await sql("UPDATE public.card_copies SET edition = 'platinum' WHERE id = $1", [spareId]);
       const res = (await reroll(spareId, `bbbbbbbb-0000-4000-8000-${String(i).padStart(12, "0")}`)) as { to: string }; // prettier-ignore
       wentDown = res.to !== "platinum";
     }

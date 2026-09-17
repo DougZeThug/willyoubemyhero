@@ -5,7 +5,11 @@
 // move, so nothing can half-move — and every later sign-in folds a stray guest
 // id into the account's identity instead of stranding it.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
+import {
+  createSupabaseMock,
+  type RecordedCall,
+  type SupabaseResponses,
+} from "@/test/supabase-mock";
 import { verifyGuestToken, verifyMemberToken } from "./session.server";
 
 let mock = createSupabaseMock();
@@ -26,11 +30,34 @@ function withDb(responses: SupabaseResponses = {}) {
   mock = createSupabaseMock(responses);
 }
 
+/**
+ * Two different reads share the account_identities.select key.
+ *
+ * readRow asks for this account's own row and takes it with maybeSingle; the
+ * guest-ownership check asks which of the device's ids belong to somebody else
+ * and awaits a list. The terminal tells them apart — and a list is what the
+ * second one has to get back, or it has nothing to filter.
+ */
+function identitySelect(
+  row: { participant_id?: string | null; guest_id?: string | null },
+  ownedByOthers: string[] = [],
+) {
+  return (call: RecordedCall) =>
+    call.terminal === "await"
+      ? { data: ownedByOthers.map((guest_id) => ({ guest_id })) }
+      : { data: { user_id: USER, participant_id: null, guest_id: null, ...row } };
+}
+
+function identityRow(
+  row: { participant_id?: string | null; guest_id?: string | null },
+  ownedByOthers: string[] = [],
+) {
+  return { ...existing(row), "account_identities.select": identitySelect(row, ownedByOthers) };
+}
+
 function existing(row: { participant_id?: string | null; guest_id?: string | null }) {
   return {
-    "account_identities.select": {
-      data: { user_id: USER, participant_id: null, guest_id: null, ...row },
-    },
+    "account_identities.select": identitySelect(row),
     "participants.select": { data: { name: "Alice" } },
     // The guarded guest -> member upgrade reads back the rows it changed.
     "account_identities.update": { data: [{ user_id: USER }] },
@@ -170,6 +197,57 @@ describe("syncAccount", () => {
     withDb(existing({ guest_id: GUEST_ACCOUNT }));
     const { syncAccount } = await import("./account.server");
     await syncAccount(USER, { memberId: null, guestIds: [GUEST_DEVICE, GUEST_ACCOUNT] });
+    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_pulls", {
+      _into_guest: GUEST_ACCOUNT,
+      _from_guest: GUEST_DEVICE,
+    });
+  });
+
+  it("mints rather than adopting a guest id another account already holds", async () => {
+    // Two accounts on one handset. The guest token deliberately survives
+    // sign-out, so the second one arrives holding the first one's id — and
+    // adopting it again left two rows keyed on the same guest, which
+    // attach_device_to_player then picks between arbitrarily. A paper code
+    // redeemed by one account could promote the other to that player.
+    withDb({
+      "account_identities.select": (call: RecordedCall) =>
+        call.terminal === "await" ? { data: [{ guest_id: GUEST_DEVICE }] } : { data: null },
+    });
+    const res = await sync({ memberId: null, guestId: GUEST_DEVICE });
+
+    expect(res.kind).toBe("guest");
+    expect(res.id).not.toBe(GUEST_DEVICE);
+    const [saved] = mock.callsFor("account_identities", "insert");
+    expect(saved?.payload).toMatchObject({ user_id: USER, guest_id: res.id });
+  });
+
+  it("does not move a collection that belongs to another account", async () => {
+    // And it must not merge it either. A fresh id plus a merge would be worse
+    // than the duplicate row: it would carry the first account's cards away
+    // from them rather than just sharing the pointer.
+    withDb({
+      "account_identities.select": (call: RecordedCall) =>
+        call.terminal === "await" ? { data: [{ guest_id: GUEST_DEVICE }] } : { data: null },
+    });
+    await sync({ memberId: null, guestId: GUEST_DEVICE });
+
+    expect(mock.client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("leaves a foreign guest id out of an established account's merge", async () => {
+    withDb(identityRow({ guest_id: GUEST_ACCOUNT }, [GUEST_DEVICE]));
+    const { syncAccount } = await import("./account.server");
+    await syncAccount(USER, { memberId: null, guestIds: [GUEST_DEVICE] });
+
+    expect(mock.client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("still folds in an id whose owner has since become a member", async () => {
+    // bind_account_to_player nulls guest_id on the upgrade, so nobody owns the
+    // abandoned id any more and it is this device's to bring along.
+    withDb(identityRow({ guest_id: GUEST_ACCOUNT }, []));
+    await sync({ memberId: null, guestId: GUEST_DEVICE });
+
     expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_pulls", {
       _into_guest: GUEST_ACCOUNT,
       _from_guest: GUEST_DEVICE,

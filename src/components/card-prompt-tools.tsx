@@ -221,6 +221,17 @@ export function CardPromptBatch({
   const [index, setIndex] = useState(0);
   const [copied, setCopied] = useState<Set<string>>(new Set());
   const saved = useMemo(() => new Map<string, string>(), []);
+  // Which batch the bookkeeping below belongs to.
+  //
+  // `saved` and `savingKeysRef` outlive any one batch, and build() clears both.
+  // A copy still waiting on its history write holds neither — it holds the
+  // Map and the Set themselves — so when it came back it wrote its row id into
+  // the REBUILT batch's `saved`. Keys are stable across builds (a player item
+  // is keyed by its event_participants row, a subject by the key minted when it
+  // was added), so the next copy of that same item read "already saved" and
+  // skipped the write for a prompt the rebuild may well have changed. Nothing
+  // renders off `saved`, so the copy still said it worked.
+  const buildEpoch = useRef(0);
   const savingKeysRef = useRef(new Set<string>());
   const [savingKeys, setSavingKeys] = useState<ReadonlySet<string>>(new Set());
   const players = useMemo(
@@ -279,6 +290,7 @@ export function CardPromptBatch({
             },
           }));
     const next = buildBatchPrompts(inputs);
+    buildEpoch.current += 1;
     setQueue(next);
     setIndex(0);
     setCopied(new Set());
@@ -289,6 +301,7 @@ export function CardPromptBatch({
   async function copyCurrent(advance: boolean) {
     const item = queue[index];
     if (!item) return;
+    const epoch = buildEpoch.current;
     const needsHistorySave = !saved.has(item.key);
     // State alone is not enough here: two clicks can enter before React commits
     // the disabled button. The ref claims the item synchronously.
@@ -321,7 +334,12 @@ export function CardPromptBatch({
               kind: "initial",
             },
           });
-          saved.set(item.key, row.id);
+          // Only into the batch this copy came from. A rebuild while the write
+          // was out has already cleared the Map, and marking the new batch's
+          // item saved would suppress its own history row.
+          if (buildEpoch.current === epoch) {
+            saved.set(item.key, row.id);
+          }
           void qc.invalidateQueries({ queryKey: ["card-prompt-runs", eventId] });
         } catch {
           toast.warning("Prompt copied, but history could not be saved");
@@ -331,7 +349,9 @@ export function CardPromptBatch({
     } catch {
       toast.error("Could not copy to clipboard");
     } finally {
-      if (needsHistorySave) {
+      // Same rule for the claim: build() already emptied the Set, so releasing
+      // a key here after a rebuild would release one the new batch has taken.
+      if (needsHistorySave && buildEpoch.current === epoch) {
         savingKeysRef.current.delete(item.key);
         setSavingKeys(new Set(savingKeysRef.current));
       }

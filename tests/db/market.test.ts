@@ -40,7 +40,7 @@ beforeEach(async () => {
  * while this session is UTC, so a bare `current_date` is tomorrow's NY date for
  * five hours every evening.
  */
-const NY = `(now() AT TIME ZONE 'America/New_York')::date`;
+const NY = "(now() AT TIME ZONE 'America/New_York')::date";
 
 const REQ = (n: string) => `aaaaaaaa-0000-4000-8000-00000000000${n}`;
 
@@ -61,7 +61,7 @@ async function credit(amount: number, participantId: string) {
   // doing nothing — which is what a caller asking for no funds means.
   if (amount === 0) return;
   await sql(
-    `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')`,
+    "INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')",
     [participantId, amount],
   );
 }

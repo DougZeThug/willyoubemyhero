@@ -454,53 +454,53 @@ describe("anon has no write grant anywhere", () => {
     ["unlock the results", "UPDATE public.events SET results_locked = false", []],
     ["take a row off everybody's bottom bar", "UPDATE public.events SET nav_hidden = ARRAY['board']", []], // prettier-ignore
     ["rename a player", "UPDATE public.participants SET name = 'pwned'", []],
-    ["publish an award", `INSERT INTO public.awards (event_id, award_name) VALUES ($1, 'MVP')`, [IDS.event]], // prettier-ignore
-    ["stuff the ballot", `INSERT INTO public.award_votes (event_id, category, voter_participant_id, target_participant_id) VALUES ($1, 'mvp', $2, $2)`, [IDS.event, IDS.alice]], // prettier-ignore
-    ["issue itself a claim code", `INSERT INTO public.member_codes (participant_id, code_salt, code_hash) VALUES ($1, 's', 'h')`, [IDS.bob]], // prettier-ignore
-    ["set its own event PIN", `INSERT INTO public.event_secrets (event_id, pin_salt, pin_hash) VALUES ($1, 's', 'h')`, [IDS.event]], // prettier-ignore
-    ["print itself a secret card", `INSERT INTO public.secret_cards (name, art_path) VALUES ('Pwned', 'secrets/x/art.webp')`, []], // prettier-ignore
-    ["grant itself a secret pull", `INSERT INTO public.secret_card_pulls (participant_id, secret_card_id, pulled_on) SELECT $1, id, current_date FROM public.secret_cards LIMIT 1`, [IDS.alice]], // prettier-ignore
-    ["credit itself a card pull", `INSERT INTO public.card_pulls (participant_id, event_participant_id) SELECT $1, id FROM public.event_participants LIMIT 1`, [IDS.alice]], // prettier-ignore
+    ["publish an award", "INSERT INTO public.awards (event_id, award_name) VALUES ($1, 'MVP')", [IDS.event]], // prettier-ignore
+    ["stuff the ballot", "INSERT INTO public.award_votes (event_id, category, voter_participant_id, target_participant_id) VALUES ($1, 'mvp', $2, $2)", [IDS.event, IDS.alice]], // prettier-ignore
+    ["issue itself a claim code", "INSERT INTO public.member_codes (participant_id, code_salt, code_hash) VALUES ($1, 's', 'h')", [IDS.bob]], // prettier-ignore
+    ["set its own event PIN", "INSERT INTO public.event_secrets (event_id, pin_salt, pin_hash) VALUES ($1, 's', 'h')", [IDS.event]], // prettier-ignore
+    ["print itself a secret card", "INSERT INTO public.secret_cards (name, art_path) VALUES ('Pwned', 'secrets/x/art.webp')", []], // prettier-ignore
+    ["grant itself a secret pull", "INSERT INTO public.secret_card_pulls (participant_id, secret_card_id, pulled_on) SELECT $1, id, current_date FROM public.secret_cards LIMIT 1", [IDS.alice]], // prettier-ignore
+    ["credit itself a card pull", "INSERT INTO public.card_pulls (participant_id, event_participant_id) SELECT $1, id FROM public.event_participants LIMIT 1", [IDS.alice]], // prettier-ignore
     // Bob on a past date, not Alice on today's: this suite seeds once for the
     // whole file and the read test above already inserted (alice, current_date),
     // so that key would collide on the primary key and `isDenied` — which counts
     // any error as a denial — would pass without ever reaching the grant.
-    ["inflate its own pack count", `INSERT INTO public.pack_opens (participant_id, opened_on) VALUES ($1, current_date - 30)`, [IDS.bob]], // prettier-ignore
+    ["inflate its own pack count", "INSERT INTO public.pack_opens (participant_id, opened_on) VALUES ($1, current_date - 30)", [IDS.bob]], // prettier-ignore
     // `trades` is the one trading table anon can SELECT, which makes it the one
     // that needs saying out loud that the grant is read-only: a forged row here
     // is a trade announced in the feed that never happened.
-    ["announce a trade that never happened", `INSERT INTO public.trades (event_id, proposer_id, recipient_id) VALUES ($1, $2, $3)`, [IDS.event, IDS.alice, IDS.bob]], // prettier-ignore
-    ["plant an offer in somebody's inbox", `INSERT INTO public.trade_offers (event_id, proposer_id, recipient_id) VALUES ($1, $2, $3)`, [IDS.event, IDS.alice, IDS.bob]], // prettier-ignore
-    ["stake a card on an offer", `INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, card_copy_id) VALUES ($1, 'proposer', 'roster', $2)`, [OFFER_ID, COPY_ID]], // prettier-ignore
-    ["mint itself a platinum copy", `INSERT INTO public.card_copies (participant_id, event_participant_id, edition) SELECT $1, id, 'platinum' FROM public.event_participants LIMIT 1`, [IDS.alice]], // prettier-ignore
-    ["upgrade the finish on a copy", `UPDATE public.card_copies SET edition = 'platinum'`, []], // prettier-ignore
+    ["announce a trade that never happened", "INSERT INTO public.trades (event_id, proposer_id, recipient_id) VALUES ($1, $2, $3)", [IDS.event, IDS.alice, IDS.bob]], // prettier-ignore
+    ["plant an offer in somebody's inbox", "INSERT INTO public.trade_offers (event_id, proposer_id, recipient_id) VALUES ($1, $2, $3)", [IDS.event, IDS.alice, IDS.bob]], // prettier-ignore
+    ["stake a card on an offer", "INSERT INTO public.trade_offer_items (offer_id, giver_side, kind, card_copy_id) VALUES ($1, 'proposer', 'roster', $2)", [OFFER_ID, COPY_ID]], // prettier-ignore
+    ["mint itself a platinum copy", "INSERT INTO public.card_copies (participant_id, event_participant_id, edition) SELECT $1, id, 'platinum' FROM public.event_participants LIMIT 1", [IDS.alice]], // prettier-ignore
+    ["upgrade the finish on a copy", "UPDATE public.card_copies SET edition = 'platinum'", []], // prettier-ignore
     // Carol rather than Alice: the read test above already filed a dupe_secret
     // row for Alice with a null ref, and dust_ledger_earn_once would refuse a
     // second one on the unique index — which `isDenied` counts as a denial and
     // would pass without ever reaching the grant.
-    ["credit itself dust", `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, 9999, 'admin_adjust')`, [IDS.carol]], // prettier-ignore
+    ["credit itself dust", "INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, 9999, 'admin_adjust')", [IDS.carol]], // prettier-ignore
     // Bob rather than Carol: the read test above already filed (carol, today) for
     // the first roster card, and a primary-key collision would make `isDenied`
     // pass without ever reaching the grant.
-    ["forge itself a mint record", `INSERT INTO public.card_mints (participant_id, minted_on, event_participant_id) SELECT $1, current_date, id FROM public.event_participants LIMIT 1`, [IDS.bob]], // prettier-ignore
-    ["erase a mint record", `DELETE FROM public.card_mints`, []], // prettier-ignore
-    ["spend nobody's dust but its own", `UPDATE public.dust_ledger SET delta = 9999`, []], // prettier-ignore
+    ["forge itself a mint record", "INSERT INTO public.card_mints (participant_id, minted_on, event_participant_id) SELECT $1, current_date, id FROM public.event_participants LIMIT 1", [IDS.bob]], // prettier-ignore
+    ["erase a mint record", "DELETE FROM public.card_mints", []], // prettier-ignore
+    ["spend nobody's dust but its own", "UPDATE public.dust_ledger SET delta = 9999", []], // prettier-ignore
     // The UNLISTED copy, deliberately: the read test above already shelved Alice's
     // gold one, and colliding on market_listings_one_active_copy would make
     // `isDenied` pass without ever reaching the grant. Same trap as the mint
     // record two lines up.
-    ["shelve somebody else's card", `INSERT INTO public.market_listings (seller_id, kind, card_copy_id, price) SELECT $1, 'roster', cc.id, 1 FROM public.card_copies cc WHERE NOT EXISTS (SELECT 1 FROM public.market_listings l WHERE l.card_copy_id = cc.id) LIMIT 1`, [IDS.bob]], // prettier-ignore
-    ["mark a listing sold without paying for it", `UPDATE public.market_listings SET status = 'sold'`, []], // prettier-ignore
+    ["shelve somebody else's card", "INSERT INTO public.market_listings (seller_id, kind, card_copy_id, price) SELECT $1, 'roster', cc.id, 1 FROM public.card_copies cc WHERE NOT EXISTS (SELECT 1 FROM public.market_listings l WHERE l.card_copy_id = cc.id) LIMIT 1", [IDS.bob]], // prettier-ignore
+    ["mark a listing sold without paying for it", "UPDATE public.market_listings SET status = 'sold'", []], // prettier-ignore
     // The whole swap runs inside accept_trade_offer as service_role. Reaching the
     // status column directly would take both people's cards out of the loop.
-    ["accept somebody else's offer", `UPDATE public.trade_offers SET status = 'accepted'`, []], // prettier-ignore
+    ["accept somebody else's offer", "UPDATE public.trade_offers SET status = 'accepted'", []], // prettier-ignore
     // The second read-only-grant public table, and the same argument as `trades`:
     // a forged row here is a finished set announced on somebody's player page
     // that they never finished. Carol rather than Alice, and a set id the
     // positive control above does not use, so this cannot pass by colliding on
     // the primary key — `isDenied` counts any error as a denial.
-    ["award itself a trophy it never earned", `INSERT INTO public.collection_trophies (participant_id, collection_id, completed_on, size_at_completion, via) VALUES ($1, 'wags', current_date, 3, 'pull')`, [IDS.carol]], // prettier-ignore
-    ["inflate a set it did finish", `UPDATE public.collection_trophies SET size_at_completion = 99`, []], // prettier-ignore
+    ["award itself a trophy it never earned", "INSERT INTO public.collection_trophies (participant_id, collection_id, completed_on, size_at_completion, via) VALUES ($1, 'wags', current_date, 3, 'pull')", [IDS.carol]], // prettier-ignore
+    ["inflate a set it did finish", "UPDATE public.collection_trophies SET size_at_completion = 99", []], // prettier-ignore
   ];
 
   it.each(WRITES)("anon cannot %s", async (_label, statement, params) => {

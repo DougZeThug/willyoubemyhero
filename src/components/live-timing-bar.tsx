@@ -219,6 +219,11 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
             variant="ghost"
             size="sm"
             className="w-full text-destructive hover:bg-destructive/10"
+            // Not while a save is on its way: admin's Discard already refuses
+            // then, and this bar was the one door left open on throwing a run
+            // away mid-flight. The hook survives it now, but the confirm is a
+            // lie while the row is still being written.
+            disabled={finishing}
             onClick={() => {
               if (confirm("Throw this timer away and put the athlete back in the queue?")) {
                 cancelRun();

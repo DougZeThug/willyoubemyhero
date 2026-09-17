@@ -64,6 +64,41 @@ describe("signOutAccount", () => {
     expect(window.localStorage.getItem("wwbh:admin-token")).toBeNull();
     expect(window.localStorage.getItem("wwbh:member-token")).toBeNull();
   });
+
+  it("takes the handoff token off, so the next account cannot inherit this player", async () => {
+    // preserveAccountHandoff writes this before every auth round trip, and only
+    // a SUCCESSFUL sync clears it. A sync that gave up leaves a verified member
+    // token sitting in local storage with 90 days on it — and attachAccountHandoff
+    // puts it on every server-function call, where syncAccount takes it as the
+    // player to bind a first-time account to.
+    window.localStorage.setItem("wwbh:account-handoff-token", MEMBER_TOKEN);
+
+    await signOutAccount();
+
+    expect(window.localStorage.getItem("wwbh:account-handoff-token")).toBeNull();
+  });
+
+  it("drops a destination nobody came back for", async () => {
+    window.localStorage.setItem(
+      "wwbh:auth-next",
+      JSON.stringify({ next: "/players/pack", at: Date.now() }),
+    );
+
+    await signOutAccount();
+
+    expect(window.localStorage.getItem("wwbh:auth-next")).toBeNull();
+  });
+
+  it("leaves the guest token alone", async () => {
+    // Deliberate, and documented on signOutAccount: it points at a collection
+    // rather than authorising anybody, and clearing it orphans the cards an
+    // unnamed visitor pulled on this handset.
+    window.localStorage.setItem("wwbh:guest-token", GUEST_TOKEN);
+
+    await signOutAccount();
+
+    expect(window.localStorage.getItem("wwbh:guest-token")).toBe(GUEST_TOKEN);
+  });
 });
 
 describe("useAccountSync", () => {
@@ -200,6 +235,27 @@ describe("useAccountSync", () => {
 
     expect(seenAtSync).toBeNull();
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
+  });
+
+  it("takes the previous account's handoff token off too", async () => {
+    // The same identity by another door: attachAccountHandoff sends it on every
+    // call, and syncAccount falls back to it when no member token is there — so
+    // clearing only the member token moves the hole rather than closing it.
+    window.localStorage.setItem("wwbh:account-handoff-token", MEMBER_TOKEN);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), { initialProps: { u: user } });
+    await settle();
+
+    let seenAtSync: string | null = "unread";
+    vi.mocked(syncAccountSession).mockImplementation(() => {
+      seenAtSync = window.localStorage.getItem("wwbh:account-handoff-token");
+      return Promise.resolve({ kind: "guest", token: GUEST_TOKEN } as never);
+    });
+    window.localStorage.setItem("wwbh:account-handoff-token", MEMBER_TOKEN);
+    rerender({ u: { id: "user-2" } as User });
+    await settle();
+
+    expect(seenAtSync).toBeNull();
   });
 
   it("takes a previous account's token off even when the switch lands mid-sync", async () => {

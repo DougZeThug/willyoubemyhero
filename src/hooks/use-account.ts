@@ -104,6 +104,11 @@ export function useAccountSync(user: User | null) {
     // account should adopt.
     if (lastStarted.current && lastStarted.current !== userId) {
       clearMemberToken();
+      // The handoff is the same identity by another door — attachAccountHandoff
+      // puts it on EVERY server-function call, and syncAccount falls back to it
+      // when no member token is there — so clearing one without the other just
+      // moves the hole.
+      clearAccountHandoff();
       wakes.current = 0;
       heldFor.current = null;
     }
@@ -266,8 +271,14 @@ export async function signOutAccount() {
   await supabase.auth.signOut();
   clearMemberToken();
   clearAdminToken();
-  // A destination held for an auth round trip that never finished. Handsets
-  // change hands in this league, so it must not be waiting for whoever signs in
-  // next on this phone.
+  // Both of these were held for an auth round trip that never finished, and
+  // handsets change hands in this league, so neither may be waiting for whoever
+  // signs in next on this phone. The destination would bounce them somewhere
+  // they never asked for; the handoff token is worse, because syncAccount takes
+  // it as the player to bind a first-time account to — so the next person to
+  // sign in here would be linked to this one's roster player without ever
+  // having redeemed their code. Only a successful sync clears it otherwise, and
+  // a sync that gave up never gets there.
   stashAuthNext(null);
+  clearAccountHandoff();
 }

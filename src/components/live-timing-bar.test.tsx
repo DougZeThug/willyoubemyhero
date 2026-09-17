@@ -114,4 +114,37 @@ describe("LiveTimingBar", () => {
     expect(screen.getByRole("button", { name: /retry save/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /finish/i })).toBeNull();
   });
+
+  it("will not throw the timer away while the save is still going", () => {
+    // Admin's Discard already refuses while a save is in flight; this bar was
+    // the one door left open on it, and "nothing is written to the league" —
+    // what the confirm promises — is not true of a row still being written.
+    const rc = console_({
+      run: { ...RUN, status: "finished" } as never,
+      finished: true,
+      finishing: true,
+      finishedRun: { ...RUN, status: "finished", finishedAt: 1, finishedAtIso: "x" } as never,
+      finishSave: {
+        state: "saving",
+        error: null,
+        finish: vi.fn(),
+        retry: vi.fn(),
+        reset: vi.fn(),
+      } as never,
+      currentEp: ep("a", "Ryan", 1) as never,
+    });
+    render(<LiveTimingBar console={rc} />);
+    expect(screen.getByRole("button", { name: /reset timer/i })).toBeDisabled();
+  });
+
+  it("offers it again once the save has settled", () => {
+    const rc = console_({
+      run: { ...RUN, status: "finished" } as never,
+      finished: true,
+      finishedRun: { ...RUN, status: "finished", finishedAt: 1, finishedAtIso: "x" } as never,
+      currentEp: ep("a", "Ryan", 1) as never,
+    });
+    render(<LiveTimingBar console={rc} />);
+    expect(screen.getByRole("button", { name: /reset timer/i })).toBeEnabled();
+  });
 });
