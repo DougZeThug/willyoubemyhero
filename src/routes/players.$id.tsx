@@ -1120,7 +1120,3 @@ function ActionButton({
     </button>
   );
 }
-
-// Same as the other tested pages in this folder: the test imports the component
-// as the module's default, and a route file otherwise exports only `Route`.
-export default PlayerCardPage;

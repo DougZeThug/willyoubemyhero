@@ -8,8 +8,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import PlayerCardPage from "./players.$id";
+import { Route } from "./players.$id";
 import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds, uuid } from "@/test/fixtures";
+
+/**
+ * The page off the route rather than off a default export.
+ *
+ * Every other route test in this folder imports its page as the module default,
+ * and this one did too until the build objected: TanStack Router cannot
+ * code-split an export it does not own, so a second export here pulled this
+ * page — the second-largest route in the app — and everything it imports into
+ * the entry bundle for every screen. On a phone-first app that is the wrong
+ * trade for a test convenience. `createFileRoute` is mocked below, so `Route`
+ * is the plain options object and `component` is the page itself.
+ */
+const PlayerCardPage = (Route as unknown as { component: () => ReactNode }).component;
 
 const search = vi.hoisted(() => vi.fn(() => ({}) as Record<string, unknown>));
 const params = vi.hoisted(() => vi.fn(() => ({ id: "" })));
@@ -144,7 +157,7 @@ describe("a card opened from a ?vs= link", () => {
     delete (Element.prototype as Partial<Element>).scrollTo;
   });
 
-  it("has the head-to-head up once the collection has settled", async () => {
+  it("has the head-to-head up once the collection has settled", () => {
     // The bug: `locked` is true on the first committed frame of every load,
     // because useMyCollection reports nothing ready until its IndexedDB reads
     // come back. The lock-fallback effect fired on that frame and threw the
@@ -168,7 +181,7 @@ describe("a card opened from a ?vs= link", () => {
     expect(compareProps.current?.right).toMatchObject({ id: bob.id });
   });
 
-  it("stays shut on a card this device does not hold", async () => {
+  it("stays shut on a card this device does not hold", () => {
     // The rule the lock fallback exists for, unchanged: the sheet and the
     // greyed-out chip underneath it have to agree.
     const { alice, bob } = setupRoster();
@@ -184,7 +197,7 @@ describe("a card opened from a ?vs= link", () => {
     expect(screen.getByTestId("card-compare")).toHaveAttribute("data-open", "false");
   });
 
-  it("stays shut with no ?vs= on the URL", async () => {
+  it("stays shut with no ?vs= on the URL", () => {
     const { alice, bob } = setupRoster();
     params.mockReturnValue({ id: alice.id });
     const states = collectionOnce([alice.id, bob.id]);
