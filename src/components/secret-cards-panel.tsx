@@ -38,6 +38,7 @@ import {
   groupBySecretCollection,
   secretCollectionLabel,
   setAccentColor,
+  setEditRefusal,
 } from "@/lib/secret-cards";
 
 import {
@@ -197,14 +198,7 @@ export function SecretCardsPanel() {
     toast.promise(done, {
       id: `set-${id}`,
       loading: `Saving ${label}…`,
-      success: (r) =>
-        r.ok
-          ? success
-          : "reason" in r && r.reason === "in_use"
-            ? "That set still has cards in it — hide it instead"
-            : "reason" in r && r.reason === "exists"
-              ? "There's already a set with that name"
-              : "That name doesn't work — try letters and numbers",
+      success: (r) => (r.ok ? success : setEditRefusal(r.reason)),
       error: (e) => (e instanceof Error ? e.message : "Save failed"),
     });
     void done.catch(() => {}).finally(() => setSetBusyId(null));
