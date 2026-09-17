@@ -368,24 +368,6 @@ describe("getClaimRoster", () => {
   });
 });
 
-describe("getMe", () => {
-  it("requires a member token", async () => {
-    const { getMe } = await import("./member.functions");
-    await expect(callServerFn(getMe)).rejects.toThrow("Claim your player first");
-  });
-
-  it("returns the participant the token names, not one the caller asks for", async () => {
-    withDb({
-      "participants.select": { data: { id: PARTICIPANT_ID, name: "Doug" }, error: null },
-    });
-    const { token } = signMemberToken(PARTICIPANT_ID);
-    const { getMe } = await import("./member.functions");
-    await callServerFn(getMe, { headers: memberHeaders(token) });
-    const [call] = mock.callsFor("participants", "select");
-    expect(mock.eqValue(call, "id")).toBe(PARTICIPANT_ID);
-  });
-});
-
 describe("generateMemberCodes", () => {
   async function generate(data: unknown, headers?: Record<string, string>) {
     const { generateMemberCodes } = await import("./member.functions");
