@@ -302,7 +302,7 @@ describe("bind_account_to_player", () => {
   }
 
   it("upgrades a guest account and empties the guest id in one go", async () => {
-    await sql(`INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)`, [
+    await sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [
       USER,
       GUEST,
     ]);
@@ -339,7 +339,7 @@ describe("bind_account_to_player", () => {
 
   it("treats re-claiming the same player as a no-op", async () => {
     // The phone may simply have lost its token and re-run the paper code.
-    await sql(`INSERT INTO public.account_identities (user_id, participant_id) VALUES ($1, $2)`, [
+    await sql("INSERT INTO public.account_identities (user_id, participant_id) VALUES ($1, $2)", [
       USER,
       IDS.alice,
     ]);
@@ -353,7 +353,7 @@ describe("bind_account_to_player", () => {
   it("refuses a second, different player and names the one that stands", async () => {
     // syncAccount treats this row as authoritative, so taking it over would
     // re-mint every other device onto the new player.
-    await sql(`INSERT INTO public.account_identities (user_id, participant_id) VALUES ($1, $2)`, [
+    await sql("INSERT INTO public.account_identities (user_id, participant_id) VALUES ($1, $2)", [
       USER,
       IDS.alice,
     ]);
@@ -373,7 +373,7 @@ describe("bind_account_to_player", () => {
     // from another device landed in between, the row's own guest_id has already
     // been cleared by the winner — and that collection would be stranded by the
     // very write meant to rescue it.
-    await sql(`INSERT INTO public.account_identities (user_id, participant_id) VALUES ($1, $2)`, [
+    await sql("INSERT INTO public.account_identities (user_id, participant_id) VALUES ($1, $2)", [
       USER,
       IDS.alice,
     ]);
@@ -392,7 +392,7 @@ describe("bind_account_to_player", () => {
   });
 
   it("refuses a player the league has never heard of, moving nothing", async () => {
-    await sql(`INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)`, [
+    await sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [
       USER,
       GUEST,
     ]);
@@ -415,7 +415,7 @@ describe("bind_account_to_player", () => {
     // The property the three sequential requests could not have. Breaking the
     // LAST of the three moves is the harshest version: the row has been written
     // and two tables have already moved by the time it raises.
-    await sql(`INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)`, [
+    await sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [
       USER,
       GUEST,
     ]);
@@ -423,7 +423,7 @@ describe("bind_account_to_player", () => {
     // NOT VALID, so the existing row is left alone and the constraint still
     // fires on the UPDATE that re-parents it — which is the third move.
     await sql(
-      `ALTER TABLE public.streak_milestone_claims ADD CONSTRAINT tmp_boom CHECK (false) NOT VALID`,
+      "ALTER TABLE public.streak_milestone_claims ADD CONSTRAINT tmp_boom CHECK (false) NOT VALID",
     );
     try {
       await expect(
@@ -438,7 +438,7 @@ describe("bind_account_to_player", () => {
       );
       expect(row).toEqual({ participant_id: null, guest_id: GUEST });
     } finally {
-      await sql(`ALTER TABLE public.streak_milestone_claims DROP CONSTRAINT IF EXISTS tmp_boom`);
+      await sql("ALTER TABLE public.streak_milestone_claims DROP CONSTRAINT IF EXISTS tmp_boom");
     }
   });
 });
@@ -498,7 +498,7 @@ describe("attach_device_to_player", () => {
 
   it("binds an account that was still acting as this guest", async () => {
     const user = "00000000-0000-4000-8000-00000000ac01";
-    await sql(`INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)`, [
+    await sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [
       user,
       GUEST,
     ]);

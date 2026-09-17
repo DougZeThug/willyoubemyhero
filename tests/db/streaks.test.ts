@@ -623,7 +623,7 @@ describe("roll_secret_tier_at_least", () => {
   const roll = async (floor: string | null, n = 300) =>
     (
       await sql<{ tier: string }>(
-        `SELECT public.roll_secret_tier_at_least($1) AS tier FROM generate_series(1, $2::int)`,
+        "SELECT public.roll_secret_tier_at_least($1) AS tier FROM generate_series(1, $2::int)",
         [floor, n],
       )
     ).map((r) => r.tier);

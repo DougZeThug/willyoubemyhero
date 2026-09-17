@@ -571,7 +571,7 @@ describe("migrations", () => {
     // the nav one. Nothing caught it going, which is the whole argument for
     // asserting it now.
     const [row] = await sql<{ reloptions: string[] | null }>(
-      `SELECT reloptions FROM pg_class WHERE relname = 'events_public'`,
+      "SELECT reloptions FROM pg_class WHERE relname = 'events_public'",
     );
     expect((row.reloptions ?? []).join(",")).toContain("security_invoker=true");
   });
