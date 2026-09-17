@@ -193,7 +193,7 @@ test.describe("one scale of button glow", () => {
     expect(shadowLayers(shadow).find((l) => /0px 0px 0px 2px/u.test(l))).toBeUndefined();
 
     // And the nav tab it shares the cue with is quiet too.
-    await expect(page.getByRole("link", { name: /pack — today's pack is unopened/i })).toHaveCount(
+    await expect(page.getByRole("link", { name: /pack — today's pack is unopened/iu })).toHaveCount(
       0,
     );
   });
