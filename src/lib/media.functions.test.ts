@@ -833,3 +833,137 @@ describe("a card belonging to another event", () => {
     expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
   });
 });
+
+describe("a photo or a backfill aimed at another event", () => {
+  // requireAdmin proves the caller holds a session for the event id BESIDE the
+  // row id in the payload, and event_participants ids come back to anybody from
+  // getEventBundle. These two handlers took the row id and wrote by it alone —
+  // the gap storeCard and deleteParticipantCard already close. No files are
+  // destroyed here, but another combine's photo_path* columns end up pointing
+  // into this caller's own storage prefix, which is art nobody there uploaded.
+  const okStorage: SupabaseResponses = {
+    "storage.upload": { data: { path: "ok" }, error: null },
+    "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+  };
+
+  const photoArgs = {
+    eventId: EVENT_ID,
+    eventParticipantId: CARD_ID,
+    dataUrls: threeSizes(PNG),
+  };
+
+  const variantArgs = (kind: "photo" | "card_front" | "card_back", id = CARD_ID) => ({
+    eventId: EVENT_ID,
+    updates: [{ id, kind, dataUrls: threeSizes(PNG) }],
+  });
+
+  it("refuses a photo for a foreign roster row before uploading anything", async () => {
+    withDb({ "event_participants.select": { data: null }, ...okStorage });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantPhoto, { data: photoArgs, headers: asAdmin() }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+  });
+
+  it("refuses a photo when the scoped update matches no row", async () => {
+    withDb({ "event_participants.update": { data: [] }, ...okStorage });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantPhoto, { data: photoArgs, headers: asAdmin() }),
+    ).rejects.toThrow("not part of this event");
+  });
+
+  it("scopes both the lookup and the write of a photo to the event", async () => {
+    withDb(okStorage);
+    const mod = await freshModule();
+    await callServerFn(mod.uploadParticipantPhoto, { data: photoArgs, headers: asAdmin() });
+    const [lookup] = mock.callsFor("event_participants", "select");
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(mock.eqValue(lookup, "event_id")).toBe(EVENT_ID);
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
+  });
+
+  it.each(["photo", "card_front", "card_back"] as const)(
+    "refuses a %s backfill for a foreign roster row before uploading anything",
+    async (kind) => {
+      withDb({ "event_participants.select": { data: null }, ...okStorage });
+      const mod = await freshModule();
+      await expect(
+        callServerFn(mod.writeImageVariants, { data: variantArgs(kind), headers: asAdmin() }),
+      ).rejects.toThrow("not part of this event");
+      expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+      expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+    },
+  );
+
+  it("refuses a backfill when the scoped update matches no row", async () => {
+    withDb({ "event_participants.update": { data: [] }, ...okStorage });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.writeImageVariants, { data: variantArgs("photo"), headers: asAdmin() }),
+    ).rejects.toThrow("not part of this event");
+  });
+
+  it("scopes a backfill's lookup and write to the event", async () => {
+    withDb(okStorage);
+    const mod = await freshModule();
+    await callServerFn(mod.writeImageVariants, {
+      data: variantArgs("card_front"),
+      headers: asAdmin(),
+    });
+    const [lookup] = mock.callsFor("event_participants", "select");
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(mock.eqValue(lookup, "event_id")).toBe(EVENT_ID);
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
+  });
+
+  it("refuses a universal back aimed at another event, and writes its own by id", async () => {
+    // The sharpest of the three: `u.id` is an events id for this kind, so an
+    // unscoped write repointed a whole other combine's card back.
+    withDb(okStorage);
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.writeImageVariants, {
+        data: {
+          eventId: EVENT_ID,
+          updates: [{ id: OTHER_EVENT_ID, kind: "universal_back", dataUrls: threeSizes(PNG) }],
+        },
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+    expect(mock.callsFor("events", "update")).toHaveLength(0);
+
+    withDb(okStorage);
+    const again = await freshModule();
+    await callServerFn(again.writeImageVariants, {
+      data: {
+        eventId: EVENT_ID,
+        updates: [{ id: EVENT_ID, kind: "universal_back", dataUrls: threeSizes(PNG) }],
+      },
+      headers: asAdmin(),
+    });
+    const [update] = mock.callsFor("events", "update");
+    expect(mock.eqValue(update, "id")).toBe(EVENT_ID);
+  });
+
+  it("refuses both handlers to an admin holding another event's token", async () => {
+    withDb(okStorage);
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantPhoto, {
+        data: photoArgs,
+        headers: asAdmin(OTHER_EVENT_ID),
+      }),
+    ).rejects.toThrow(/admin pin/i);
+    await expect(
+      callServerFn(mod.writeImageVariants, {
+        data: variantArgs("photo"),
+        headers: asAdmin(OTHER_EVENT_ID),
+      }),
+    ).rejects.toThrow(/admin pin/i);
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+  });
+});

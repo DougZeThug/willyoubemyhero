@@ -563,18 +563,40 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    // Scoped to the event, and refused before a byte is uploaded — the same
+    // check storeCard makes, for the same reason. requireAdmin vouches for the
+    // event id BESIDE this roster row's, not for the row, and
+    // event_participants ids are publicly enumerable through getEventBundle. An
+    // unscoped update repoints another combine's photo columns at files written
+    // under this caller's own prefix.
+    const { data: prev, error: lookupError } = await supabaseAdmin
+      .from("event_participants")
+      .select("id")
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!prev) throw new Error("That athlete is not part of this event.");
+
     const basePath = `${data.eventId}/${data.eventParticipantId}-${Date.now()}`;
     const paths = await uploadSized(supabaseAdmin, basePath, data.dataUrls);
 
-    const { error: dbErr } = await supabaseAdmin
+    const { data: updated, error: dbErr } = await supabaseAdmin
       .from("event_participants")
       .update({
         photo_path: paths.large,
         photo_path_thumb: paths.thumb,
         photo_path_medium: paths.medium,
       })
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .select("id");
     if (dbErr) throw dbErr;
+    // The filter alone would match nothing and still return ok, handing back
+    // signed urls for art no row points at.
+    if (!updated || updated.length === 0) {
+      throw new Error("That athlete is not part of this event.");
+    }
     return { ok: true, urls: await signSet(paths), paths };
   });
 
@@ -627,17 +649,23 @@ export const writeImageVariants = createServerFn({ method: "POST" })
     z
       .object({
         eventId: zuuid(),
-        updates: z.array(
-          z.object({
-            id: zuuid(),
-            kind: z.enum(["photo", "card_front", "card_back", "universal_back"]),
-            dataUrls: z.object({
-              thumb: z.string().min(32),
-              medium: z.string().min(32),
-              large: z.string().min(32),
+        updates: z
+          .array(
+            z.object({
+              id: zuuid(),
+              kind: z.enum(["photo", "card_front", "card_back", "universal_back"]),
+              dataUrls: z.object({
+                thumb: z.string().min(32),
+                medium: z.string().min(32),
+                large: z.string().min(32),
+              }),
             }),
-          }),
-        ),
+          )
+          // Capped like uploadParticipantCardsBulk: three full-size data urls per
+          // entry, uploaded in a loop that holds the request open the whole time.
+          // The one caller sends them one at a time.
+          .min(1)
+          .max(40),
       })
       .parse(d),
   )
@@ -646,6 +674,28 @@ export const writeImageVariants = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     for (const u of data.updates) {
+      // Every id here comes off the payload, and the only thing requireAdmin
+      // proved is that the caller holds a session for data.eventId. Checked
+      // before the upload, the same way storeCard does it.
+      //
+      // `u.id` is polymorphic — an event_participants id for three kinds and an
+      // events id for the fourth — so the universal back is the one case where
+      // belonging to the event means BEING it. Unguarded it was the sharpest of
+      // the three: it repointed another combine's card back at a file sitting in
+      // this caller's own storage prefix.
+      if (u.kind === "universal_back") {
+        if (u.id !== data.eventId) throw new Error("That card back is not part of this event.");
+      } else {
+        const { data: row, error: lookupError } = await supabaseAdmin
+          .from("event_participants")
+          .select("id")
+          .eq("id", u.id)
+          .eq("event_id", data.eventId)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        if (!row) throw new Error("That athlete is not part of this event.");
+      }
+
       const basePath =
         u.kind === "universal_back"
           ? `cards/${data.eventId}/universal-back-backfill-${Date.now()}-${u.id}`
@@ -666,7 +716,7 @@ export const writeImageVariants = createServerFn({ method: "POST" })
             card_back_path_thumb: patchPaths.thumb,
             card_back_path_medium: patchPaths.medium,
           })
-          .eq("id", u.id);
+          .eq("id", data.eventId);
         if (error) throw error;
       } else {
         const patch: Partial<Record<CardPathColumn, string | null>> = {};
@@ -683,11 +733,16 @@ export const writeImageVariants = createServerFn({ method: "POST" })
           patch.card_back_path_thumb = patchPaths.thumb;
           patch.card_back_path_medium = patchPaths.medium;
         }
-        const { error } = await supabaseAdmin
+        const { data: updated, error } = await supabaseAdmin
           .from("event_participants")
           .update(patch)
-          .eq("id", u.id);
+          .eq("id", u.id)
+          .eq("event_id", data.eventId)
+          .select("id");
         if (error) throw error;
+        if (!updated || updated.length === 0) {
+          throw new Error("That athlete is not part of this event.");
+        }
       }
     }
     return { ok: true };
