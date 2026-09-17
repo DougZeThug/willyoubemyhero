@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { subscribeToEventChannel } from "@/lib/event-channel";
 import { getEventSocial, getAwards } from "@/lib/social.functions";
+import { useMemberSession } from "@/lib/member-token";
+import { useGuestSession } from "@/lib/guest-token";
 
 export type ReactionRow = {
   id: string;
@@ -36,9 +38,21 @@ export type CommentRow = {
 export function useEventSocial(eventId: string | null | undefined) {
   const fn = useServerFn(getEventSocial);
   const qc = useQueryClient();
+  // Whoever this device is signed as right now. Every row carries a `mine`
+  // resolved server-side against the token on the request, so the answer these
+  // rows give is only true for one identity — and the token travels in a header
+  // the cache key cannot see. Without this, claiming a player or signing out
+  // went on serving the previous identity's `mine`: their reaction chips lit,
+  // the toggle sending the wrong direction, a trash icon offered on trash talk
+  // that is not yours. The server still refuses that delete, so it is the UI
+  // that lies rather than the database that yields. Same shape as the award
+  // votes key in routes/awards.tsx.
+  const me = useMemberSession();
+  const guest = useGuestSession();
+  const identity = me?.participantId ?? guest?.guestId ?? null;
 
   const query = useQuery({
-    queryKey: ["event-social", eventId],
+    queryKey: ["event-social", eventId, identity],
     queryFn: () => fn({ data: { eventId: eventId! } }),
     enabled: !!eventId,
     staleTime: 5_000,
@@ -51,6 +65,9 @@ export function useEventSocial(eventId: string | null | undefined) {
     // is somebody else's to report — use-event-bundle already draws the banner,
     // and a second one over the same socket would say the same thing twice.
     return subscribeToEventChannel(eventId, {
+      // Two elements on purpose: query-key filters match on prefix, so this
+      // reaches whichever identity's entry is live without the effect having to
+      // re-subscribe every time the identity changes.
       change: () => qc.invalidateQueries({ queryKey: ["event-social", eventId] }),
       health: () => {},
     });
