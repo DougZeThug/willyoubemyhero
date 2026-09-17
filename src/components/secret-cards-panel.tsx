@@ -38,8 +38,8 @@ import {
   groupBySecretCollection,
   secretCollectionLabel,
   setAccentColor,
-  setEditRefusal,
 } from "@/lib/secret-cards";
+import { setEditRefusal } from "@/lib/secret-set-edit";
 
 import {
   SecretArtThumb,
