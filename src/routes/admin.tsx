@@ -86,7 +86,7 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { currentAthlete, fieldSize } from "@/lib/current-athlete";
+import { awaitingRun, currentAthlete, fieldSize } from "@/lib/current-athlete";
 import { useRunConsole } from "@/hooks/use-run-console";
 import { FeedDegradedBanner } from "@/components/feed-state";
 
@@ -550,15 +550,20 @@ function StartCard({
   onStart: () => void;
   onSetOnClock: (participantId: string | null) => void;
 }) {
-  const queued = participants.filter(
-    (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
-  );
+  const queued = participants.filter(awaitingRun);
   const slot = currentAthlete(participants);
   const nextUp = queued[0];
+  const stillQueued = queued.some((p) => p.participant_id === selectedParticipantId);
   useEffect(() => {
-    if (!selectedParticipantId && nextUp) onSelect(nextUp.participant_id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nextUp?.participant_id]);
+    // Re-selects on a STALE selection, not just an empty one. Scratching the head
+    // of the queue is one tap and no confirm, and it leaves that athlete ON the
+    // roster — so the old `!selectedParticipantId` guard no-opped, the list below
+    // dropped them, and Start Timer went on pointing at somebody this card had
+    // stopped showing. Tapping it put them back on the clock and erased the
+    // scratch.
+    if (stillQueued) return;
+    onSelect(nextUp?.participant_id ?? "");
+  }, [stillQueued, nextUp?.participant_id, onSelect]);
 
   return (
     <Card>

@@ -47,6 +47,7 @@ function withSecret(
     claimed: true,
     day: LEAGUE_DAY,
     openedToday: false,
+    dealable: true,
     secretsOwned: 1,
     resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
     ...(over.status ?? {}),
@@ -534,6 +535,7 @@ test.describe("the vault's secret shelf", () => {
       claimed: true,
       day: LEAGUE_DAY,
       openedToday: false,
+      dealable: true,
       secretsOwned: 1,
       resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
     });
@@ -551,6 +553,7 @@ test.describe("the vault's secret shelf", () => {
       claimed: true,
       day: LEAGUE_DAY,
       openedToday: true,
+      dealable: true,
       secretsOwned: 2,
       resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
     });
@@ -627,6 +630,7 @@ test.describe("the vault's Today card", () => {
       claimed: true,
       day: LEAGUE_DAY,
       openedToday: true,
+      dealable: true,
       secretsOwned: 1,
       resetsAt: new Date(Date.now() + 6 * 3_600_000).toISOString(),
     });

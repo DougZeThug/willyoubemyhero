@@ -73,6 +73,14 @@ export type PackStatus = {
   /** Null when nobody is claimed — the server tells a stranger nothing. */
   day: string | null;
   openedToday: boolean;
+  /**
+   * Is there anything to deal today?
+   *
+   * Only ever "there is something", never how much and never what. False for a
+   * stranger, and false against a server too old to answer — a missing cue is
+   * the safe way to be wrong here, a false one is not.
+   */
+  dealable: boolean;
   /** How many secrets this identity owns. Never how many exist. */
   secretsOwned: number;
   resetsAt: string | null;
@@ -85,9 +93,15 @@ export type PackStatus = {
  * places drawing the same cue off two copies of the same expression is how one
  * of them quietly starts glowing on a spent day. Leaks nothing — every field is
  * already scoped to whoever is asking, and a stranger with no status is false.
+ *
+ * `dealable` is the third term, and it is here because the pack is NOT always
+ * available: open_pack returns nothing on a day with no roster and no secrets
+ * with art, and writes no row, so `openedToday` stays false and the two terms
+ * above read that day as a pack waiting to be opened. It was the cue's whole job
+ * not to say that.
  */
 export function packWaiting(status: PackStatus | null | undefined): boolean {
-  return !!status?.claimed && !status.openedToday;
+  return !!status?.claimed && !status.openedToday && Boolean(status.dealable);
 }
 
 /**

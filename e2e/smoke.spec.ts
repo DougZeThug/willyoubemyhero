@@ -140,12 +140,20 @@ test.describe("smoke", () => {
         participants: [
           { id: "ep-1", participant_id: "p-1", participant: { name: "Doug" } },
           { id: "ep-2", participant_id: "p-2", participant: { name: "Alice" } },
+          { id: "ep-3", participant_id: "p-3", participant: { name: "Bob" } },
+          { id: "ep-4", participant_id: "p-4", participant: { name: "Carol" } },
         ],
         runs: [
+          // Doug was re-timed. The board ranks ATHLETES, so he is one row at his
+          // best — ranking the runs put him in two places at once.
+          { id: "r-0", participant_id: "p-1", is_official: true, official_time_ms: 70_000 },
           { id: "r-1", participant_id: "p-1", is_official: true, official_time_ms: 61_000 },
-          // Official with no time yet: it belongs LAST, which is the thing three
-          // screens used to get backwards.
-          { id: "r-2", participant_id: "p-2", is_official: true, official_time_ms: null },
+          // A dead heat shares its place rather than splitting on sort order.
+          { id: "r-2", participant_id: "p-2", is_official: true, official_time_ms: 75_000 },
+          { id: "r-3", participant_id: "p-3", is_official: true, official_time_ms: 75_000 },
+          // Official with no time recorded: not a place at all, the same way the
+          // live board has never given one.
+          { id: "r-4", participant_id: "p-4", is_official: true, official_time_ms: null },
         ],
         drafts: [{ selection_order: 1, participant_id: "p-1", draft_position: 1 }],
       },
@@ -156,8 +164,22 @@ test.describe("smoke", () => {
     await expect(page).toHaveURL(/\/recap\/combine-2025$/);
     await expect(page.getByText("1:01.00")).toBeVisible();
 
-    const names = await page.getByText(/^(Doug|Alice)$/).allTextContents();
-    expect(names[0]).toBe("Doug");
+    // Scoped to the leaderboard: the draft order below it renders names too.
+    const board = page.locator("section", {
+      has: page.getByRole("heading", { name: "Final Leaderboard" }),
+    });
+    await expect(board.locator("li")).toHaveCount(3);
+    expect(await board.locator("li > span:nth-child(2)").allTextContents()).toEqual([
+      "Doug",
+      "Alice",
+      "Bob",
+    ]);
+    // The places, not the row numbers. 1, 2, 2 — never 1, 2, 3.
+    expect(await board.locator("li > span:nth-child(1)").allTextContents()).toEqual([
+      "1",
+      "2",
+      "2",
+    ]);
   });
 });
 

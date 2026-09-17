@@ -148,7 +148,14 @@ export const getPackStatus = createServerFn({ method: "GET" }).handler(
     noStore();
     const actor = optionalActor();
     if (!actor) {
-      return { claimed: false, day: null, openedToday: false, secretsOwned: 0, resetsAt: null };
+      return {
+        claimed: false,
+        day: null,
+        openedToday: false,
+        dealable: false,
+        secretsOwned: 0,
+        resetsAt: null,
+      };
     }
     const { data, error } = await (
       await rpc()

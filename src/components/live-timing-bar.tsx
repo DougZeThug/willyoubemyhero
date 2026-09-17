@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EditResultSheet } from "@/components/edit-result-sheet";
 import { formatTime } from "@/lib/format";
-import { currentAthlete } from "@/lib/current-athlete";
+import { awaitingRun, currentAthlete } from "@/lib/current-athlete";
 import type { RunConsole } from "@/hooks/use-run-console";
 
 export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
@@ -46,9 +46,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
   const eventId = event?.id ?? null;
   const [editing, setEditing] = useState<string | null>(null);
 
-  const queued = participants.filter(
-    (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
-  );
+  const queued = participants.filter(awaitingRun);
   const slot = currentAthlete(participants);
   // Anyone already timed — the commissioner needs a way to undo one bad result
   // without resetting the whole combine.

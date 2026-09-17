@@ -678,6 +678,63 @@ describe("an admin token is only good for its own event", () => {
     expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
   });
 
+  it.each(["scratched", "dq", "dnp", "absent"])(
+    "refuses to put a %s athlete back on the clock",
+    async (participation_status) => {
+      // The backstop under the Start card's stale selection. `status` is a bare
+      // string here and the column has no CHECK constraint, so a request that
+      // named somebody out of the field simply un-scratched them.
+      withDb({
+        "event_participants.select": (call) =>
+          call.terminal === "maybeSingle" ? { data: { participation_status } } : { data: [] },
+      });
+      const { setParticipantStatus } = await import("./admin-write.functions");
+      await expect(
+        callServerFn(setParticipantStatus, {
+          data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "running" },
+          headers: asAdmin(),
+        }),
+      ).rejects.toThrow("out of the field");
+      expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+    },
+  );
+
+  it("still lets a scratched athlete be put back in the field", async () => {
+    // Only "running" is refused. Undoing a scratch writes its own status, and
+    // that has to keep working or there is no way back.
+    withDb({
+      "event_participants.select": (call) =>
+        call.terminal === "maybeSingle"
+          ? { data: { participation_status: "scratched" } }
+          : { data: [] },
+    });
+    const { setParticipantStatus } = await import("./admin-write.functions");
+    await callServerFn(setParticipantStatus, {
+      data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "waiting" },
+      headers: asAdmin(),
+    });
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(update?.payload).toMatchObject({ participation_status: "waiting" });
+  });
+
+  it("still lets a finished athlete be re-timed", async () => {
+    // resetParticipantRuns routes a re-time through "waiting" first, so finished
+    // is not in the refused set — and starting somebody already on the clock is
+    // the ordinary on-the-clock-then-Start sequence.
+    withDb({
+      "event_participants.select": (call) =>
+        call.terminal === "maybeSingle"
+          ? { data: { participation_status: "finished" } }
+          : { data: [] },
+    });
+    const { setParticipantStatus } = await import("./admin-write.functions");
+    await callServerFn(setParticipantStatus, {
+      data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID, status: "running" },
+      headers: asAdmin(),
+    });
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(1);
+  });
+
   // The filter alone would affect nothing and return ok, which is the same shrug
   // as no guard at all — so these writes ask for their rows back.
   it("refuses to delete a station belonging to another event", async () => {

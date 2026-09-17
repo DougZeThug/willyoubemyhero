@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { currentAthlete, fieldSize, idleFieldState } from "./current-athlete";
+import { awaitingRun, currentAthlete, fieldSize, idleFieldState } from "./current-athlete";
 
 const ep = (running_order: number, participation_status: string) => ({
   running_order,
@@ -72,5 +72,30 @@ describe("idleFieldState", () => {
 
   it("waits while there are athletes still to run", () => {
     expect(idleFieldState(1, 3, false)).toBe("waiting");
+  });
+});
+
+describe("awaitingRun", () => {
+  // The timing controls had their own narrower copy of this — "not finished and
+  // not scratched" — so a dq, dnp or absent athlete stayed at the head of the
+  // queue the Start card pointed at while currentAthlete beside it had already
+  // moved on. Same rule, one place.
+  it("says yes to anybody still due a turn", () => {
+    for (const status of ["queued", "waiting", "up_next", "on_deck", "running", "delayed"]) {
+      expect(awaitingRun(ep(1, status)), status).toBe(true);
+    }
+  });
+
+  it.each(["finished", "scratched", "dq", "dnp", "absent"])("says no to a %s athlete", (status) => {
+    expect(awaitingRun(ep(1, status))).toBe(false);
+  });
+
+  it("treats a missing status as queued, the way currentAthlete does", () => {
+    expect(awaitingRun({ participation_status: null })).toBe(true);
+  });
+
+  it("agrees with currentAthlete about who is next", () => {
+    const parts = [ep(1, "dq"), ep(2, "scratched"), ep(3, "waiting")];
+    expect(parts.filter(awaitingRun)[0]).toBe(currentAthlete(parts).athlete);
   });
 });

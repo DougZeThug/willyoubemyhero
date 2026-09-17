@@ -105,6 +105,19 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     setBusy(true);
     try {
       const res = await generateFn({ data: { eventId, scope } });
+      // An empty list is the server saying there was nobody to issue for — no
+      // error, no write. Stored anyway it is still truthy, and `issued` is what
+      // three things below read as a flag: the roster list and its per-row Issue
+      // buttons vanish until this panel is remounted, any single code pinned
+      // beside a row is hidden with them (plaintext that exists nowhere else),
+      // and the unsaved-work guard switches off — all behind an amber list with
+      // no codes in it. The count guard above cannot catch every case: it counts
+      // this event's roster while the server mints league-wide for active,
+      // non-collector players only.
+      if (!res.issued.length) {
+        toast.info("Everyone eligible has claimed — nothing to issue");
+        return;
+      }
       setIssued(res.issued);
       setSaved(false);
       await qc.invalidateQueries({ queryKey: ["member-claims", eventId] });

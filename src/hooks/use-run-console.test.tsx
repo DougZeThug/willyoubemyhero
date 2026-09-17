@@ -182,6 +182,91 @@ describe("useRunConsole", () => {
     await waitFor(() => expect(result.current.selectedParticipantId).toBe(""));
   });
 
+  it("refuses to start an athlete who was scratched out from under the selection", async () => {
+    // A scratch keeps the roster row, so the effect above never fires and the
+    // selection stays pointing at them. Starting writes "running", which
+    // un-scratches them and puts them back on the crowd clock — from a button
+    // whose own card had already stopped listing them.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });
+
+    const { result, rerender } = await mount([alice, bob]);
+    act(() => result.current.setSelected(alice.participant_id));
+
+    useEventBundle.mockReturnValue(
+      setupBundle([{ ...alice, participation_status: "scratched" }, bob]),
+    );
+    rerender();
+
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(toastError).toHaveBeenCalledWith("That athlete is out of the field.");
+    expect(result.current.selectedParticipantId).toBe("");
+    expect(result.current.run).toBeNull();
+    expect(saveActiveRun).not.toHaveBeenCalled();
+    expect(setParticipantStatus).not.toHaveBeenCalled();
+  });
+
+  it.each(["finished", "dq", "dnp", "absent"])(
+    "refuses to start a %s athlete named outright",
+    async (status) => {
+      // Live's bar passes the athlete explicitly rather than through the
+      // selection, so the guard has to sit in startRun itself.
+      const alice = makeParticipant({
+        participant: { id: uuid(), name: "Alice", nickname: null },
+        participation_status: status,
+      });
+      const { result } = await mount([alice]);
+
+      await act(async () => {
+        await result.current.startRun(alice.participant_id);
+      });
+
+      expect(setParticipantStatus).not.toHaveBeenCalled();
+      expect(result.current.run).toBeNull();
+    },
+  );
+
+  it("takes the local run back when the server refuses the start", async () => {
+    // The client check reads THIS device's last bundle, so another phone
+    // scratching the athlete in between gets past it and the server refuses. The
+    // timer is already running and saved by then — and a run left standing writes
+    // the athlete to "finished" when it is finished, undoing the scratch through
+    // a door the server guard does not cover.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    setParticipantStatus.mockRejectedValue(new Error("That athlete is out of the field."));
+
+    const { result } = await mount([alice]);
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(result.current.run).toBeNull();
+    expect(clearActiveRun).toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith("That athlete is out of the field.");
+  });
+
+  it("keeps the local run when the start write only failed on the network", async () => {
+    // The other half of the same branch, and the reason it is a branch at all: a
+    // commissioner is standing in a garden with somebody already running, and a
+    // blip must not take the timer away.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    setParticipantStatus.mockRejectedValue(new Error("Failed to fetch"));
+
+    const { result } = await mount([alice]);
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(result.current.run?.participantId).toBe(alice.participant_id);
+    expect(result.current.run?.status).toBe("running");
+    expect(clearActiveRun).not.toHaveBeenCalled();
+  });
+
   it("pauses and resumes the active run", async () => {
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
     const { result } = await mount([alice]);

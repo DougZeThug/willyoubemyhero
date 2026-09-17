@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { OUT_OF_FIELD_MESSAGE } from "./current-athlete";
 import { requireAdmin } from "./require-auth.server";
+import { OUT_OF_CONTENTION_STATUSES } from "./standings";
 import { uuid as zuuid } from "./zod-uuid";
 
 /**
@@ -292,6 +294,18 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
       .eq("event_id", data.eventId)
       .maybeSingle();
     if (!current) throw new Error("That athlete is not part of this event.");
+    // Nobody out of the field goes back on the clock by being started.
+    //
+    // Defence in depth for the stale-selection path: the Start card seeds a
+    // selection from the head of the queue and only re-read it when it was empty,
+    // so scratching that athlete — one tap, no confirm — left the button pointing
+    // at them and a tap wrote "running", erasing the scratch. The screens are
+    // fixed; this is the backstop, because `status` is a bare string here and the
+    // column has no CHECK constraint behind it. Putting somebody back in the field
+    // is its own deliberate action, and it writes a status of its own first.
+    if (data.status === "running" && OUT_OF_CONTENTION_STATUSES.has(current.participation_status)) {
+      throw new Error(OUT_OF_FIELD_MESSAGE);
+    }
     const alreadyOnClock = current.participation_status === "running";
 
     const patch =

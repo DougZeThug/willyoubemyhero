@@ -236,9 +236,17 @@ export const claimStreakMilestone = createServerFn({ method: "POST" })
       .select("*")
       .eq("id", result.reward.cardId)
       .maybeSingle<SecretCardRow>();
-    // The payout landed in Postgres either way; only the picture is missing. Say
-    // so softly rather than throwing away a claim that has already been spent.
-    if (!card) return { ok: false as const, reason: "unavailable" as const };
+    // The payout landed in Postgres either way; only the picture is missing —
+    // whether this read failed or the catalogue row has since been deleted, the
+    // claim row and the bonus pull are committed and the rung is spent.
+    //
+    // So `claimed` rather than `unavailable`. That is what it IS from the screen's
+    // side — it is in the vault, go and look — and it is the one reason the ladder
+    // reads as "everything you believe is a response behind", so it refreshes
+    // instead of re-offering a rung nobody can claim twice. `unavailable` has to
+    // keep meaning what the RPC means by it: an empty catalogue, checked before
+    // the insert, where nothing was paid and there is nothing to go and see.
+    if (!card) return { ok: false as const, reason: "claimed" as const };
 
     return {
       ok: true as const,

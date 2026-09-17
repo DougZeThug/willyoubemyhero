@@ -405,6 +405,40 @@ describe("generateMemberCodes", () => {
     await expect(generate({ eventId: EVENT_ID }, other)).rejects.toThrow("Admin PIN required");
   });
 
+  it("mints nothing, writes nothing and still succeeds when nobody is eligible", async () => {
+    // The client's count and this target set are two different sets — the button
+    // counts one event's roster, this mints league-wide for active,
+    // non-collector players — so a tap can legitimately arrive with nothing to
+    // do. That is a soft, successful nothing, and it must stay one: the panel is
+    // what has to notice, and rotating a code nobody asked for would kill a
+    // paper slip that is already in somebody's pocket.
+    withDb({ "participants.select": { data: [] } });
+    const res = (await generate({ eventId: EVENT_ID }, adminOk())) as {
+      ok: boolean;
+      issued: unknown[];
+    };
+    expect(res).toEqual({ ok: true, issued: [] });
+    expect(mock.callsFor("member_codes", "upsert")).toHaveLength(0);
+  });
+
+  it("leaves already-claimed players out of an unclaimed re-issue", async () => {
+    withDb({
+      "participants.select": {
+        data: [
+          { id: PARTICIPANT_ID, name: "Doug" },
+          { id: OTHER_ID, name: "Alice" },
+        ],
+      },
+      "member_codes.select": {
+        data: [{ participant_id: PARTICIPANT_ID, claimed_at: "2026-09-01T00:00:00.000Z" }],
+      },
+    });
+    const res = (await generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())) as {
+      issued: { name: string }[];
+    };
+    expect(res.issued.map((i) => i.name)).toEqual(["Alice"]);
+  });
+
   it("issues a code per active participant", async () => {
     withDb({
       "participants.select": {

@@ -64,7 +64,13 @@ async function openAsGuest(guestId = GUEST_A, eventId: string | null = IDS.event
 
 async function status(participantId: string | null = IDS.alice, guestId: string | null = null) {
   const [row] = await sql<{
-    pack_status: { day: string; openedToday: boolean; secretsOwned: number; resetsAt: string };
+    pack_status: {
+      day: string;
+      openedToday: boolean;
+      dealable: boolean;
+      secretsOwned: number;
+      resetsAt: string;
+    };
   }>("SELECT public.pack_status($1, $2)", [participantId, guestId]);
   return row.pack_status;
 }
@@ -448,8 +454,50 @@ describe("pack_status", () => {
     await addCard("Gary the Grill");
     await addCard("The Gazebo");
     const s = await status();
-    expect(Object.keys(s).sort()).toEqual(["day", "openedToday", "resetsAt", "secretsOwned"]);
+    expect(Object.keys(s).sort()).toEqual([
+      "day",
+      "dealable",
+      "openedToday",
+      "resetsAt",
+      "secretsOwned",
+    ]);
     expect(s.secretsOwned).toBe(0);
+    // `dealable` is the one bit about the pool that leaves this function, and it
+    // is a boolean for that reason: "there is something", never how much.
+    expect(s.dealable).toBe(true);
+  });
+
+  it("says nothing is dealable when open_pack would deal nothing", async () => {
+    // The pair that has to agree. Without an event that is on and without a
+    // secret that can be picked, open_pack returns NULL and writes no row — so
+    // openedToday stays false, and the cue read that as a pack waiting.
+    await sql("UPDATE public.events SET active = false WHERE id = $1", [IDS.event]);
+    expect(await open(IDS.alice, null)).toBeNull();
+    expect((await status()).openedToday).toBe(false);
+    expect((await status()).dealable).toBe(false);
+
+    // One secret is enough, on its own, with no combine running at all.
+    await addCard("Gary the Grill");
+    expect((await status()).dealable).toBe(true);
+    expect((await open(IDS.alice, null))?.fresh).toBe(true);
+  });
+
+  it("counts the roster half on its own, with no secrets in the catalogue", async () => {
+    expect((await status()).dealable).toBe(true);
+    expect((await open())?.cards).toHaveLength(3);
+  });
+
+  it.each([
+    ["retired", { active: false }],
+    ["without art", { artPath: null }],
+    ["weighted to zero", { weight: 0 }],
+  ])("does not count a card %s, the same way the deal does not", async (_label, over) => {
+    // The same three predicates the pool uses. A cue drawn off a looser set is
+    // a cue that fires on a day with nothing behind it.
+    await sql("UPDATE public.events SET active = false WHERE id = $1", [IDS.event]);
+    await addCard("Benched", over);
+    expect((await status()).dealable).toBe(false);
+    expect(await open(IDS.alice, null)).toBeNull();
   });
 
   it("flips openedToday without dealing anything itself", async () => {

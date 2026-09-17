@@ -18,8 +18,13 @@ Somebody sends you a link. You open it and get a header — "Recap · Archived 1
 July 2026", then the combine's name and year in the app's display type — and two
 lists.
 
-**Final Leaderboard**: every official run, fastest first, numbered, with the
-player's name and their time.
+**Final Leaderboard**: one row per athlete, fastest first, with their place,
+their name and their time. The same rules the live
+[leaderboard](the-leaderboard.md) uses, so the archive cannot contradict what the
+party watched on the night: an athlete who was re-timed appears once, at their
+best official run; a dead heat shares a place rather than being split into two;
+and anybody scratched, dq'd, dnp or absent is off the board entirely. An official
+run with no time recorded is not a place.
 
 **Final Draft Order**: the picks, in draft position order, numbered.
 
