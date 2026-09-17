@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
+  alreadyCelebrated,
   carryTrophySeen,
   markTrophiesCelebrated,
   setTrophySeen,
@@ -84,6 +85,43 @@ describe("markTrophiesCelebrated", () => {
   it("does nothing at all for an empty list", () => {
     markTrophiesCelebrated([]);
     expect(live().primed).toBe(false);
+  });
+});
+
+// The trade and pack screens fire their own ceremony and mark it so the global
+// host does not fire a second. That only works when their response beats the
+// realtime row; when it loses, the host has already queued one and the screen
+// has to ask before adding its own.
+describe("alreadyCelebrated", () => {
+  it("says no for a trophy nothing has shown yet", () => {
+    expect(alreadyCelebrated(trophyKey(ME, "pets"))).toBe(false);
+  });
+
+  it("says yes once the host has claimed it", () => {
+    markTrophiesCelebrated([trophyKey(ME, "pets")]);
+    expect(alreadyCelebrated(trophyKey(ME, "pets"))).toBe(true);
+  });
+
+  it("answers per person, not per set", () => {
+    markTrophiesCelebrated([trophyKey(ME, "pets")]);
+    expect(alreadyCelebrated(trophyKey(THEM, "pets"))).toBe(false);
+  });
+
+  it("reads the module value, so a browser refusing the write still stops the repeat", () => {
+    // Same contract markTrophiesCelebrated relies on: private mode throws on the
+    // setItem, and a re-read from storage would hand back an empty set and play
+    // the ceremony twice.
+    markTrophiesCelebrated([trophyKey(ME, "pets")]);
+    window.localStorage.clear();
+    expect(alreadyCelebrated(trophyKey(ME, "pets"))).toBe(true);
+  });
+
+  it("sees what a guest's ceremonies were carried onto", () => {
+    carryTrophySeen("d:device-1", ME);
+    expect(alreadyCelebrated(trophyKey(ME, "pets"))).toBe(false);
+    markTrophiesCelebrated([trophyKey("d:device-1", "pets")]);
+    carryTrophySeen("d:device-1", ME);
+    expect(alreadyCelebrated(trophyKey(ME, "pets"))).toBe(true);
   });
 });
 

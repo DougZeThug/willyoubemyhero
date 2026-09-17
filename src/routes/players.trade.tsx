@@ -14,7 +14,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { CollectionComplete } from "@/components/collection-complete";
 import { PresentationMode } from "@/components/presentation-mode";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
-import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
+import { alreadyCelebrated, markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMemberSession } from "@/lib/member-token";
@@ -289,6 +289,18 @@ function TradePage() {
           // Claimed before the refetch, so the global host does not play these a
           // second time. The OTHER party's trophies are deliberately left
           // unclaimed — their phone is where those belong.
+          //
+          // That only settles one direction of the race, though. The realtime
+          // INSERT on collection_trophies can arrive, invalidate and refetch
+          // while this accept is still in the air, and then the host queued its
+          // ceremony first — asked afterwards it says yes, and firing ours too
+          // puts an identical overlay underneath the one already on screen.
+          // Asked BEFORE marking, so the answer is about the host and not about
+          // the line below it — and per set rather than all-or-nothing, because
+          // one trade can close two and the host may have got to only one.
+          const unplayed = myId
+            ? mine.filter((c) => !alreadyCelebrated(trophyKey(myId, c.collection)))
+            : mine;
           if (myId) {
             markTrophiesCelebrated(mine.map((c) => trophyKey(myId, c.collection)));
           }
@@ -297,7 +309,7 @@ function TradePage() {
           // and showing one of them would be a worse bug than showing neither.
           // Append so concurrent accepts for different offers do not overwrite
           // ceremonies that are still waiting to play.
-          setCompletions((q) => [...q, ...mine]);
+          if (unplayed.length) setCompletions((q) => [...q, ...unplayed]);
         } else {
           toast.success("Trade done");
           // The same flourish a pack pull gets, at half strength: a swap is a
