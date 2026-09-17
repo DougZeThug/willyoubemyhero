@@ -164,6 +164,7 @@ function PlayerCardPage() {
   // Seeded from the search parameter, which is the whole reason it exists:
   // `?vs=` is a link you drop in the group chat, and the recipient used to
   // land on the left card with the chip lit and have to tap it themselves.
+  // The seed alone is not enough — see the lock effect below.
   const [comparing, setComparing] = useState(!!vs);
   const shareRef = useRef<HTMLDivElement>(null);
 
@@ -253,9 +254,17 @@ function PlayerCardPage() {
   // opened on a card you hold stayed open when the next card along was one you
   // have not packed, over a Compare chip greyed out underneath it. The surface
   // and the affordance have to agree, so the sheet goes with the chip.
+  //
+  // Re-opened from `vs` rather than left to the seed above, because `locked` is
+  // true on the first frame of EVERY load — useMyCollection reports nothing
+  // ready until its IndexedDB reads settle — so this effect always ran once
+  // with the card locked and threw the seed away before it could reach a
+  // usable frame. The share link then landed the recipient on an unlit chip,
+  // the one thing `?vs=` exists to prevent.
   useEffect(() => {
     if (locked) setComparing(false);
-  }, [locked]);
+    else if (vs) setComparing(true);
+  }, [locked, vs]);
 
   /**
    * When this copy arrived, if anybody knows.
@@ -1111,3 +1120,7 @@ function ActionButton({
     </button>
   );
 }
+
+// Same as the other tested pages in this folder: the test imports the component
+// as the module's default, and a route file otherwise exports only `Route`.
+export default PlayerCardPage;
