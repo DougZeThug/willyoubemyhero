@@ -17,6 +17,7 @@ import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { packStatusKey } from "@/hooks/use-pack-status";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { dustBalanceKey } from "@/hooks/use-dust";
+import { tradeSparesKey } from "@/hooks/use-trades";
 import { DUST_PRICES, SELL_BY_SECRET_TIER } from "@/lib/dust";
 import { DustShopPanel } from "./dust-shop";
 
@@ -112,6 +113,30 @@ describe("buying a pull", () => {
     expect(seen).toContain(JSON.stringify(mySecretsKey(ACTOR)));
     // And never the bare id, which is the shape that silently matched nothing.
     expect(seen).not.toContain(JSON.stringify(packStatusKey(ME)));
+  });
+
+  it("refreshes both spares lists, which a granted pull joins on the spot", async () => {
+    // buy_bonus_secret_pull mints the row `granted`, and getTradeSpares stakes a
+    // granted row the day it arrives — so the card is sellable and offerable
+    // immediately, and both lists are cached. Buying was the one mutation here
+    // that moved them without saying so, and neither list has a realtime channel
+    // to notice on its own.
+    buyFn.mockResolvedValue({
+      ok: true,
+      price: DUST_PRICES.bonusPull,
+      balance: 0,
+      pull: { completedCollection: null, duplicate: true, cardId: "sc-new" },
+    });
+    const { invalidate } = renderShop();
+
+    await userEvent.click(screen.getByRole("button", { name: /buy for/i }));
+
+    await waitFor(() => expect(buyFn).toHaveBeenCalled());
+    const seen = keys(invalidate);
+    // The shop's own "Sell a secret" list, and the Trading Post's, which read the
+    // same spares under two different keys.
+    expect(seen).toContain(JSON.stringify(["dust-spares", ME]));
+    expect(seen).toContain(JSON.stringify(tradeSparesKey(ME)));
   });
 
   it("writes the new balance straight in rather than refetching it", async () => {

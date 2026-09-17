@@ -124,6 +124,14 @@ export function DustShopPanel({
       // five-minute staleTime, so it was the one that stayed wrong longest.
       void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
       void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
+      // The two spares lists, the same pair sell, mill and re-roll refresh. A
+      // bought pull is minted `granted`, and getTradeSpares stakes granted rows
+      // straight away — so the card is sellable and offerable the instant it
+      // lands, while the sheet below and the Trading Post went on showing the
+      // list from before the purchase for a cache lifetime. Buying was the only
+      // mutation in this file that moved the spares and did not say so.
+      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       // A bought pull is a real pull: buy_bonus_secret_pull delegates to
       // pull_bonus_secret_card, which mints the row and awards the trophy. Buying
       // the card that finishes a set is the best moment this feature has, so the
