@@ -72,7 +72,7 @@ describe("CardPromptBatch", () => {
     serverFnMock.mockImplementationOnce(() => pending);
 
     const user = userEvent.setup();
-    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     renderBatch();
 
     await user.click(screen.getByRole("checkbox"));
@@ -102,7 +102,7 @@ describe("CardPromptBatch", () => {
     serverFnMock.mockImplementationOnce(() => pending);
 
     const user = userEvent.setup();
-    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     renderBatch();
 
     await user.click(screen.getByRole("checkbox"));

@@ -117,7 +117,7 @@ function AuthPage() {
     // effect fires again and drops them straight back on the destination. One
     // Back press is silently a no-op, on exactly the CTA path `?next=` exists to
     // serve. Same reason account-panel replaces on its way here.
-    void navigate({ to: goTo ?? "/players", replace: true });
+    navigate({ to: goTo ?? "/players", replace: true });
   }, [user, sync, navigate, goTo, wasSignedOut]);
 
   async function signInWithGoogle() {

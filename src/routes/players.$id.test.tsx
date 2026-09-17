@@ -67,7 +67,7 @@ vi.mock("@/hooks/use-event-bundle", () => ({
     error: null,
     loading: false,
     realtimeDegraded: false,
-    refetch: vi.fn(async () => {}),
+    refetch: vi.fn(() => Promise.resolve()),
   }),
 }));
 
@@ -103,8 +103,8 @@ vi.mock("@/lib/member-token", async (importOriginal) => {
 });
 
 vi.mock("@/lib/share-card", () => ({
-  exportCardPng: vi.fn(async () => null),
-  waitForPaint: vi.fn(async () => {}),
+  exportCardPng: vi.fn(() => Promise.resolve(null)),
+  waitForPaint: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("lucide-react", async (importOriginal) => {

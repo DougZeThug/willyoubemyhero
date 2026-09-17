@@ -247,9 +247,9 @@ describe("useAccountSync", () => {
     await settle();
 
     let seenAtSync: string | null = "unread";
-    vi.mocked(syncAccountSession).mockImplementation(async () => {
+    vi.mocked(syncAccountSession).mockImplementation(() => {
       seenAtSync = window.localStorage.getItem("wwbh:account-handoff-token");
-      return { kind: "guest", token: GUEST_TOKEN } as never;
+      return Promise.resolve({ kind: "guest", token: GUEST_TOKEN } as never);
     });
     window.localStorage.setItem("wwbh:account-handoff-token", MEMBER_TOKEN);
     rerender({ u: { id: "user-2" } as User });

@@ -120,14 +120,17 @@ test.describe("smoke", () => {
     await expect(page.getByRole("link", { name: /skip to content/i })).toBeFocused();
   });
 
-  test("still puts it there when the entry URL redirects", async ({ page, server }) => {
+  test("still puts it there when the entry URL redirects", async ({ page }) => {
     // "/" is the link people paste, and it only redirects — which used to spend
     // the root's first-render focus guard on the redirect, so the landing at
     // /players counted as a route CHANGE and focus was moved into main before
     // anybody had pressed a key. The skip link was then unreachable on the one
     // entry that matters. The test above cannot see this: /leaderboard renders
     // itself and never moves the pathname.
-    void server;
+    //
+    // No `server` in the signature: the stub fixture is `auto: true`, so it is
+    // built for every test whether or not one is named, the way 31 other specs
+    // here already rely on.
     await page.goto("/");
     await expect(page).toHaveURL(/\/players$/);
     await page.keyboard.press("Tab");
