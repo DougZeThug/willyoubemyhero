@@ -15,6 +15,7 @@ import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-st
 import { hudStatus, onClockElapsedMs, type HudStatus, type OnClockEntry } from "@/lib/live-clock";
 import { useLiveHud } from "@/hooks/use-live-hud";
 import { LiveTimingBar } from "@/components/live-timing-bar";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -258,7 +259,7 @@ function LiveHero({
             hudStatus({
               timingStatus: adminRun?.status ?? null,
               onClock,
-              hasCurrent: !!current,
+              hasCurrent: current !== null,
               loading,
             })
           ]
@@ -342,12 +343,12 @@ function LiveTopFive({
                   className="flex items-center gap-2 rounded-md border border-primary/5 bg-[oklch(0.16_0.02_240)] px-2 py-2"
                 >
                   <span
-                    className={
-                      "grid h-7 w-7 place-items-center rounded-full text-[11px] font-black " +
-                      (row.place === 1
+                    className={cn(
+                      "grid h-7 w-7 place-items-center rounded-full text-[11px] font-black",
+                      row.place === 1
                         ? "bg-primary text-primary-foreground shadow-[0_0_10px_var(--color-primary)]"
-                        : "bg-primary/10 text-primary")
-                    }
+                        : "bg-primary/10 text-primary",
+                    )}
                   >
                     {row.place}
                   </span>

@@ -19,7 +19,7 @@ import { computeElapsedMs } from "@/lib/active-run";
 export function useLiveHud(eventId: string | null) {
   const admin = useAdminSession();
   const rc = useRunConsole();
-  const isAdmin = !!eventId && admin?.eventId === eventId;
+  const isAdmin = eventId !== null && admin?.eventId === eventId;
   // A finished run is not being timed any more -- it is waiting for its result
   // to be saved -- so the ring goes back to the crowd's clock rather than
   // freezing on the last athlete's time.
