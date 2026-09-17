@@ -98,6 +98,31 @@ export function CardSocial({
   const [bursting, setBursting] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<Record<string, number>>({});
 
+  /**
+   * Everything above belongs to ONE card, and /players/$id swaps the card under
+   * this component without unmounting it — the same reason the route has to
+   * reset `flipped` by hand. Left standing, trash talk typed about Alice posts
+   * to Bob when you hit Post on his page, a guest's stashed tap replays against
+   * the card they have already left, and Bob's chip wears Alice's optimistic +1
+   * over a button his own reaction cannot use.
+   *
+   * Reset during render rather than from an effect, so the next card never
+   * paints a count that belongs to the last one. `guestName` is deliberately not
+   * in here: that is who this device is, not which card it is looking at.
+   */
+  const [shownCard, setShownCard] = useState(eventParticipantId);
+  if (shownCard !== eventParticipantId) {
+    setShownCard(eventParticipantId);
+    setNamePrompt(false);
+    setNameDraft("");
+    setPendingAction(null);
+    setDraft("");
+    setBusy(false);
+    setPending(null);
+    setBursting(null);
+    setOptimistic({});
+  }
+
   type Actor = { kind: "member" } | { kind: "guest"; guest: { name: string } };
 
   /**
@@ -189,6 +214,7 @@ export function CardSocial({
     if (!body || busy) return;
     const who = ensureIdentity(() => void submitPost());
     if (!who) return;
+    const typed = draft;
     setBusy(true);
     try {
       await postFn({
@@ -198,7 +224,11 @@ export function CardSocial({
           guest: who.kind === "guest" ? who.guest : undefined,
         },
       });
-      setDraft("");
+      // Only while the box still holds what went out. A post is a round trip,
+      // and by the time it lands the visitor may have moved to the next card —
+      // where the reset above has already emptied the box — or started a second
+      // thought on this one. Clearing either of those is somebody's typing gone.
+      setDraft((d) => (d === typed ? "" : d));
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not post");
