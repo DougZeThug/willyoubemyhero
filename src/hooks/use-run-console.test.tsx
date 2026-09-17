@@ -396,6 +396,90 @@ describe("useRunConsole", () => {
       data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "waiting" },
     });
   });
+
+  // Only one athlete is ever on the crowd's clock, and nothing below this hook
+  // enforces it: the column has no CHECK and setParticipantStatus writes the one
+  // row it is handed. setOnClock has always demoted before promoting; startRun
+  // did not, so staging one athlete and starting another left two rows "running"
+  // and the spectator screens reading the wrong one.
+  it("takes the athlete already on the clock off it before starting somebody else", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      running_order: 1,
+      participation_status: "running",
+      on_clock_since: "2026-08-22T00:00:00.000Z",
+    });
+    const bob = makeParticipant({
+      participant: { id: uuid(), name: "Bob", nickname: null },
+      running_order: 2,
+    });
+    const { result } = await mount([alice, bob]);
+
+    act(() => result.current.setSelected(bob.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "waiting" },
+    });
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: bob.id, status: "running" },
+    });
+  });
+
+  // The ordinary path: stage somebody, then start them. Demoting first would
+  // clear on_clock_since and re-stamp it at the Start tap, throwing away the
+  // moment they stepped up — which is the one thing setParticipantStatus goes
+  // out of its way to preserve.
+  it("leaves the clock alone when the athlete starting is the one already on it", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      participation_status: "running",
+      on_clock_since: "2026-08-22T00:00:00.000Z",
+    });
+    const { result } = await mount([alice]);
+
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    const statuses = setParticipantStatus.mock.calls.map(
+      (c: unknown[]) => (c[0] as { data: { status: string } }).data.status,
+    );
+    expect(statuses).toEqual(["running"]);
+  });
+
+  // The start is what the crowd is waiting on. A cleanup write that fails is a
+  // stale name on the spectator screens; a start that fails with it is a stopped
+  // clock for a run that is genuinely under way.
+  it("still starts the run when taking the previous athlete off the clock fails", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      running_order: 1,
+      participation_status: "running",
+    });
+    const bob = makeParticipant({
+      participant: { id: uuid(), name: "Bob", nickname: null },
+      running_order: 2,
+    });
+    setParticipantStatus
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ ok: true });
+    const { result } = await mount([alice, bob]);
+
+    act(() => result.current.setSelected(bob.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: bob.id, status: "running" },
+    });
+    expect(result.current.run?.participantId).toBe(bob.participant_id);
+    expect(toastError).not.toHaveBeenCalled();
+  });
 });
 
 describe("which stations the console offers", () => {

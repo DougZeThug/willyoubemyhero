@@ -140,6 +140,34 @@ export function useRunConsole() {
     setRun(nextRun);
     await saveActiveRun(nextRun);
     setSelected("");
+    // Whoever was on the clock comes off it first, which is what setOnClock has
+    // always done and this did not. Only ONE athlete is ever on the crowd's
+    // clock, but nothing enforces that: the column has no CHECK, the handler
+    // writes the one row it is given, and currentAthlete takes the first
+    // "running" row it finds in an unsorted list. So staging B and then starting
+    // C left both rows "running" and the spectator screens naming B for the whole
+    // of C's run — and still naming B after it, until somebody tapped Clear.
+    //
+    // Scoped to a DIFFERENT athlete on purpose. Starting the person already on
+    // the clock is the ordinary path, and demoting them first would clear
+    // on_clock_since and re-stamp it at the Start tap, losing the moment they
+    // actually stepped up — which setParticipantStatus goes out of its way to
+    // keep.
+    const onClockNow = participants.find(
+      (p) => p.participation_status === "running" && p.participant_id !== target,
+    );
+    if (onClockNow) {
+      try {
+        await setStatusFn({
+          data: { eventId: event.id, eventParticipantId: onClockNow.id, status: "waiting" },
+        });
+      } catch {
+        // A cleanup that fails must not swallow the start below. The timer is
+        // already running locally and the write that follows is the one the
+        // crowd is waiting on; a stale row costs one wrong name on the spectator
+        // screens, a swallowed start costs the clock.
+      }
+    }
     try {
       await setStatusFn({
         data: { eventId: event.id, eventParticipantId: ep.id, status: "running" },
