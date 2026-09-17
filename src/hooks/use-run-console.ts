@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { resetParticipantRuns, setParticipantStatus } from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
-import { awaitingRun } from "@/lib/current-athlete";
+import { awaitingRun, OUT_OF_FIELD_MESSAGE } from "@/lib/current-athlete";
 import { newClientKey } from "@/lib/format";
 import {
   ACTIVE_RUN_CLEARED_EVENT,
@@ -118,7 +118,7 @@ export function useRunConsole() {
       // panel. Starting them writes "running", which un-scratches them and puts
       // them back on the crowd clock. The effect above only clears a selection
       // whose athlete has LEFT the roster, and a scratch does not.
-      toast.error("That athlete is out of the field.");
+      toast.error(OUT_OF_FIELD_MESSAGE);
       setSelected("");
       return;
     }
@@ -145,7 +145,28 @@ export function useRunConsole() {
         data: { eventId: event.id, eventParticipantId: ep.id, status: "running" },
       });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not start the run on the server.");
+      const message = e instanceof Error ? e.message : "";
+      if (message.includes(OUT_OF_FIELD_MESSAGE)) {
+        // Refused, not dropped. The check above reads this device's last bundle,
+        // so another phone scratching this athlete in the meantime gets past it
+        // and the server is the first to know — by which point the timer is
+        // already running locally and saved to IndexedDB.
+        //
+        // Left standing, that run is worse than no run: finishing it goes
+        // through saveCompletedRun, which writes the athlete to "finished" and
+        // undoes the scratch by another door — exactly what the server guard
+        // exists to stop. So it goes, and the roster read catches this screen up.
+        await clearActiveRun();
+        setRun(null);
+        setSelected("");
+        await qc.invalidateQueries();
+        toast.error(OUT_OF_FIELD_MESSAGE);
+        return;
+      }
+      // Anything else is the network, and the run stays: a commissioner is
+      // standing in a garden with somebody already running, and losing the timer
+      // to a blip costs more than a status flag that catches up late.
+      toast.error(message || "Could not start the run on the server.");
     }
   }
 

@@ -32,6 +32,15 @@ const DONE = new Set(["finished", ...OUT_OF_CONTENTION_STATUSES]);
  * skipped them for the slot beside it. One predicate, so the athlete a screen
  * shows and the athlete its button starts cannot be two different people.
  */
+/**
+ * What a refused start says, shared because two sides have to agree on it.
+ *
+ * setParticipantStatus throws this, and useRunConsole has to tell it apart from
+ * a network failure: a blip must leave the local timer running, and a refusal
+ * must take it away.
+ */
+export const OUT_OF_FIELD_MESSAGE = "That athlete is out of the field.";
+
 export function awaitingRun(entry: Pick<QueueEntry, "participation_status">): boolean {
   return !DONE.has(entry.participation_status ?? "queued");
 }

@@ -101,7 +101,7 @@ export type PackStatus = {
  * not to say that.
  */
 export function packWaiting(status: PackStatus | null | undefined): boolean {
-  return !!status?.claimed && !status.openedToday && !!status.dealable;
+  return !!status?.claimed && !status.openedToday && Boolean(status.dealable);
 }
 
 /**

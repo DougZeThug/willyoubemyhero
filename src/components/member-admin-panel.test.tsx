@@ -15,15 +15,18 @@ vi.mock("sonner", () => ({
 
 const generate = vi.hoisted(() => vi.fn());
 const listClaims = vi.hoisted(() => vi.fn());
+
+// The panel reaches for two server fns. Rather than tell them apart by identity
+// inside useServerFn, the module is mocked to hand over the spies themselves and
+// useServerFn passes through — the same shape use-run-console.test.tsx uses.
+vi.mock("@/lib/member.functions", () => ({
+  generateMemberCodes: generate,
+  listMemberClaims: listClaims,
+}));
 vi.mock("@tanstack/react-start", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-start")>()),
-  // Both server fns come through useServerFn; the panel calls generate on a tap
-  // and listMemberClaims through a query, so they are told apart by identity.
-  useServerFn: (fn: unknown) => (fn === generateMemberCodesRef.current ? generate : listClaims),
+  useServerFn: (fn: unknown) => fn,
 }));
-
-import { generateMemberCodes } from "@/lib/member.functions";
-const generateMemberCodesRef = { current: generateMemberCodes as unknown };
 
 const EVENT = "00000000-0000-4000-8000-0000000000ff";
 const ALICE = "00000000-0000-4000-8000-0000000000a1";

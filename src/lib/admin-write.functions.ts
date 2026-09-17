@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { OUT_OF_FIELD_MESSAGE } from "./current-athlete";
 import { requireAdmin } from "./require-auth.server";
 import { OUT_OF_CONTENTION_STATUSES } from "./standings";
 import { uuid as zuuid } from "./zod-uuid";
@@ -303,7 +304,7 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
     // column has no CHECK constraint behind it. Putting somebody back in the field
     // is its own deliberate action, and it writes a status of its own first.
     if (data.status === "running" && OUT_OF_CONTENTION_STATUSES.has(current.participation_status)) {
-      throw new Error("That athlete is out of the field.");
+      throw new Error(OUT_OF_FIELD_MESSAGE);
     }
     const alreadyOnClock = current.participation_status === "running";
 
