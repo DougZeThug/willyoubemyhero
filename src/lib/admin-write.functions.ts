@@ -875,6 +875,13 @@ export const createManualRun = createServerFn({ method: "POST" })
  *
  * `official_time_ms` is a generated column (raw + penalty), so it is never
  * written here — fixing the parts fixes the total.
+ *
+ * The replace itself is one RPC, because a wholesale replace has to delete
+ * before it inserts and those were six separate requests: a failure partway
+ * left the run with a new time and no splits or penalties at all, and the audit
+ * row ran last so nothing recorded what the time had been. See
+ * supabase/migrations/20260917130000_replace_a_run_result_in_one_transaction.sql.
+ * The arithmetic below stays here; only the writing moved.
  */
 export const updateRunResult = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -924,62 +931,34 @@ export const updateRunResult = createServerFn({ method: "POST" })
 
     const penaltyTotal = data.penalties.reduce((sum, p) => sum + p.penalty_ms, 0);
 
-    const { error: updateError } = await supabaseAdmin
-      .from("runs")
-      .update({ raw_time_ms: data.raw_time_ms, penalty_ms: penaltyTotal })
-      .eq("id", run.id);
-    if (updateError) throw updateError;
-
-    const { error: delSplits } = await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
-    if (delSplits) throw delSplits;
-    const { error: delPenalties } = await supabaseAdmin
-      .from("penalties")
-      .delete()
-      .eq("run_id", run.id);
-    if (delPenalties) throw delPenalties;
-
     // Segment times are derived, not typed: sorting by cumulative time and
     // differencing keeps them consistent with whatever the commissioner entered.
     const ordered = [...data.splits].sort((a, b) => a.cumulative_time_ms - b.cumulative_time_ms);
     const startMs = run.started_at ? Date.parse(run.started_at) : Date.now();
-    if (ordered.length) {
-      const { error } = await supabaseAdmin.from("splits").insert(
-        ordered.map((s, i) => ({
-          run_id: run.id,
-          station_id: s.stationId,
-          cumulative_time_ms: s.cumulative_time_ms,
-          segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
-          recorded_at: new Date(startMs + s.cumulative_time_ms).toISOString(),
-          entry_method: "admin_edit",
-          client_key: `edit:${run.id}:${s.stationId}`,
-          corrected: true,
-        })),
-      );
-      if (error) throw error;
-    }
-    if (data.penalties.length) {
-      const { error } = await supabaseAdmin.from("penalties").insert(
-        data.penalties.map((p, i) => ({
-          run_id: run.id,
-          station_id: p.stationId ?? null,
-          penalty_ms: p.penalty_ms,
-          reason: p.reason ?? null,
-          created_by: "admin",
-          client_key: `edit:${run.id}:${i}`,
-        })),
-      );
-      if (error) throw error;
-    }
 
-    await supabaseAdmin.from("audit_logs").insert({
-      event_id: data.eventId,
-      entity_type: "runs",
-      entity_id: run.id,
-      action: "update_run_result",
-      previous_value: { raw_time_ms: run.raw_time_ms, penalty_ms: run.penalty_ms },
-      new_value: { raw_time_ms: data.raw_time_ms, penalty_ms: penaltyTotal },
-      performed_by: "admin",
+    const { runResultDb } = await import("./run-result-db.server");
+    const { error } = await runResultDb().rpc("update_run_result", {
+      _run_id: run.id,
+      _event_id: data.eventId,
+      _raw_time_ms: data.raw_time_ms,
+      _penalty_ms: penaltyTotal,
+      _splits: ordered.map((s, i) => ({
+        station_id: s.stationId,
+        cumulative_time_ms: s.cumulative_time_ms,
+        segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
+        recorded_at: new Date(startMs + s.cumulative_time_ms).toISOString(),
+        // Derived rather than random, so a retry of a half-written save
+        // overwrites its own rows instead of doubling them.
+        client_key: `edit:${run.id}:${s.stationId}`,
+      })),
+      _penalties: data.penalties.map((p, i) => ({
+        station_id: p.stationId ?? null,
+        penalty_ms: p.penalty_ms,
+        reason: p.reason ?? null,
+        client_key: `edit:${run.id}:${i}`,
+      })),
     });
+    if (error) throw error;
 
     return { ok: true, official_time_ms: data.raw_time_ms + penaltyTotal };
   });

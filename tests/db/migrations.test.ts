@@ -88,6 +88,18 @@ describe("migrations", () => {
     ]);
   });
 
+  it("creates the run-result RPC the edit sheet calls", async () => {
+    // A wholesale replace deletes before it inserts, so from the server
+    // function a failed insert left the run with no splits and no penalties.
+    // Its existence here is what makes that one transaction.
+    const rows = await sql<{ proname: string }>(`
+      SELECT proname FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND proname = 'update_run_result'
+    `);
+    expect(rows.map((r) => r.proname)).toEqual(["update_run_result"]);
+  });
+
   it("creates the pack RPCs the app calls", async () => {
     const rows = await sql<{ proname: string }>(`
       SELECT proname FROM pg_proc p
