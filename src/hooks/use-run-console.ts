@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { resetParticipantRuns, setParticipantStatus } from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
+import { awaitingRun } from "@/lib/current-athlete";
 import { newClientKey } from "@/lib/format";
 import {
   ACTIVE_RUN_CLEARED_EVENT,
@@ -108,6 +109,16 @@ export function useRunConsole() {
       // Starting a timer for a ghost row would leave an orphaned local run that
       // can never sync, so stop before we write anything.
       toast.error("That athlete is no longer on the roster.");
+      setSelected("");
+      return;
+    }
+    if (!awaitingRun(ep)) {
+      // On the roster but out of the field — scratched between this screen
+      // rendering and the tap, which is one tap with no confirm on the roster
+      // panel. Starting them writes "running", which un-scratches them and puts
+      // them back on the crowd clock. The effect above only clears a selection
+      // whose athlete has LEFT the roster, and a scratch does not.
+      toast.error("That athlete is out of the field.");
       setSelected("");
       return;
     }

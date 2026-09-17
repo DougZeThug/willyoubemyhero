@@ -182,6 +182,53 @@ describe("useRunConsole", () => {
     await waitFor(() => expect(result.current.selectedParticipantId).toBe(""));
   });
 
+  it("refuses to start an athlete who was scratched out from under the selection", async () => {
+    // A scratch keeps the roster row, so the effect above never fires and the
+    // selection stays pointing at them. Starting writes "running", which
+    // un-scratches them and puts them back on the crowd clock — from a button
+    // whose own card had already stopped listing them.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });
+
+    const { result, rerender } = await mount([alice, bob]);
+    act(() => result.current.setSelected(alice.participant_id));
+
+    useEventBundle.mockReturnValue(
+      setupBundle([{ ...alice, participation_status: "scratched" }, bob]),
+    );
+    rerender();
+
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(toastError).toHaveBeenCalledWith("That athlete is out of the field.");
+    expect(result.current.selectedParticipantId).toBe("");
+    expect(result.current.run).toBeNull();
+    expect(saveActiveRun).not.toHaveBeenCalled();
+    expect(setParticipantStatus).not.toHaveBeenCalled();
+  });
+
+  it.each(["finished", "dq", "dnp", "absent"])(
+    "refuses to start a %s athlete named outright",
+    async (status) => {
+      // Live's bar passes the athlete explicitly rather than through the
+      // selection, so the guard has to sit in startRun itself.
+      const alice = makeParticipant({
+        participant: { id: uuid(), name: "Alice", nickname: null },
+        participation_status: status,
+      });
+      const { result } = await mount([alice]);
+
+      await act(async () => {
+        await result.current.startRun(alice.participant_id);
+      });
+
+      expect(setParticipantStatus).not.toHaveBeenCalled();
+      expect(result.current.run).toBeNull();
+    },
+  );
+
   it("pauses and resumes the active run", async () => {
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
     const { result } = await mount([alice]);

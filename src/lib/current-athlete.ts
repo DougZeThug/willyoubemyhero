@@ -22,6 +22,20 @@ export type AthleteSlot<T> = { athlete: T | null; onClock: boolean };
  */
 const DONE = new Set(["finished", ...OUT_OF_CONTENTION_STATUSES]);
 
+/**
+ * Still waiting for a turn — the other half of the same rule `currentAthlete`
+ * places somebody by.
+ *
+ * Exported because the timing controls had their own copy of it, and a narrower
+ * one: "not finished and not scratched" left a dq, dnp or absent athlete at the
+ * head of the queue the Start card was pointing at, while this file had already
+ * skipped them for the slot beside it. One predicate, so the athlete a screen
+ * shows and the athlete its button starts cannot be two different people.
+ */
+export function awaitingRun(entry: Pick<QueueEntry, "participation_status">): boolean {
+  return !DONE.has(entry.participation_status ?? "queued");
+}
+
 export function currentAthlete<T extends QueueEntry>(entries: readonly T[]): AthleteSlot<T> {
   const onClock = entries.find((e) => e.participation_status === "running");
   if (onClock) return { athlete: onClock, onClock: true };
