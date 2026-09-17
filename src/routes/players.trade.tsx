@@ -41,6 +41,7 @@ import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { takeTradeIntent, type TradeIntent } from "@/lib/trade-intent";
 import type { Staged } from "@/lib/trade-staging";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import { arrivalRarity } from "@/lib/trades";
 import { burst } from "@/lib/card-confetti";
 import type { RosterCardLookup } from "@/components/trade-offer-card";
 import { TradeBuilder } from "@/components/trade-builder";
@@ -314,7 +315,21 @@ function TradePage() {
           toast.success("Trade done");
           // The same flourish a pack pull gets, at half strength: a swap is a
           // smaller moment than a hit, but it is still a card arriving.
-          void burst(rarityStyle("podium"), 0.7);
+          //
+          // In the arriving card's OWN palette, which this screen used to be the
+          // one place not to do — it fired a literal "podium" whatever landed, so
+          // a dnf card came in gold and a base one read as a podium finish. The
+          // map it needs has been sitting in scope for the tiles all along.
+          void burst(
+            arrivalRarity(
+              [...(offers.data?.inbox ?? []), ...(offers.data?.outbox ?? [])].find(
+                (o) => o.id === offerId,
+              ),
+              myId,
+              rarities,
+            ),
+            0.7,
+          );
         }
       } else if (res.reason === "voided") {
         toast.error("One of those cards has already moved on");

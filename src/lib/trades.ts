@@ -2,6 +2,8 @@
 // them. No imports from anything *.server.ts, so this is safe in the bundle.
 import { editionStyle, toEdition, type Edition } from "./card-edition";
 import { secretTierStyle, type SecretTier } from "./secret-rarity";
+import { rarityRank, rarityStyle, type Rarity } from "./card-rarity";
+import { SECRET_RARITY } from "./secret-cards";
 
 /**
  * How a completed trade is described in the public feed.
@@ -358,4 +360,42 @@ export function leagueDay(at: Date = new Date()): string {
     month: "2-digit",
     day: "2-digit",
   }).format(at);
+}
+
+/**
+ * The palette a completed swap is celebrated in: the rarity of the best thing
+ * that just arrived on the reader's side of it.
+ *
+ * Here rather than in the route because the route has no test of its own and
+ * this is the part worth pinning. The screen used to hand `burst` a literal
+ * "podium" for every accept, so a dnf card traded in threw a gold celebration
+ * and a base one read as a podium finish — the exact cross-screen mismatch the
+ * header of card-confetti.ts says that module exists to end. Every other screen
+ * where a card arrives passes the card's own tier.
+ *
+ * A secret outranks every roster tier, and not only because it is the rarer
+ * thing in this app: it has no `RarityTier` at all, so there is nothing for
+ * `rarityRank` to compare it with. It gets the shared secret palette rather than
+ * its own foil, because a foil needs the card's id and border effect and
+ * `TradeItemView` carries neither — the set green is the closest honest answer
+ * from what an offer actually knows.
+ */
+export function arrivalRarity(
+  offer: TradeOfferView | undefined,
+  me: string | null | undefined,
+  rarities: ReadonlyMap<string, Rarity>,
+): Rarity {
+  // Which side arrived is derived rather than assumed: accept is an inbox
+  // gesture today, but reading it off the offer costs nothing and cannot drift.
+  const got = !offer ? [] : offer.proposerId === me ? offer.recipientGives : offer.proposerGives;
+  if (got.some((i) => i.kind === "secret")) return SECRET_RARITY;
+  const tiers = got.flatMap((i) =>
+    i.kind === "roster" ? [rarities.get(i.eventParticipantId) ?? rarityStyle("base")] : [],
+  );
+  // Rarest wins, because one accept can move several cards and there is one
+  // burst. `rarityRank` is 0 for a champion, so the smallest is the best.
+  return tiers.reduce(
+    (best, r) => (rarityRank(r.tier) < rarityRank(best.tier) ? r : best),
+    rarityStyle("base"),
+  );
 }
