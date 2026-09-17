@@ -175,10 +175,10 @@ describe("account_identities", () => {
     // redeemed by one account could promote the other to that player.
     await sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [GUEST_A, GUEST_B]); // prettier-ignore
 
-    const twice = sql(
-      "INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)",
-      [IDS.event, GUEST_B],
-    );
+    const twice = sql("INSERT INTO public.account_identities (user_id, guest_id) VALUES ($1, $2)", [
+      IDS.event,
+      GUEST_B,
+    ]);
     await expect(twice).rejects.toThrow();
   });
 

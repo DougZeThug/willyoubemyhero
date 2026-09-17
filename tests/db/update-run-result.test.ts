@@ -152,7 +152,9 @@ describe("update_run_result", () => {
     expect(await readPenalties()).toEqual([
       { penalty_ms: 5000, reason: "Missed cone", created_by: null },
     ]);
-    expect(await sql("SELECT 1 FROM public.audit_logs WHERE entity_id = $1", [RUN])).toHaveLength(0);
+    expect(await sql("SELECT 1 FROM public.audit_logs WHERE entity_id = $1", [RUN])).toHaveLength(
+      0,
+    );
   });
 
   it("rolls the penalties back too when only they are bad", async () => {
