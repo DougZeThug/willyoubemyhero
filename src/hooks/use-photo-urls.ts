@@ -117,8 +117,10 @@ const CARD_BACK_REFRESH_MS = 45 * 60_000;
  * deletes a back; the snapshot would outlive the invalidation and keep serving
  * the old URL for the rest of the afternoon.
  *
- * The key matches the one the admin panel has always used, so an upload there
- * still refreshes a pack sitting open on somebody else's phone.
+ * The key matches the one the admin panel has always used. That only covers the
+ * admin's own tab, though — a pack sitting open on somebody else's phone is
+ * refreshed by useEventBundle's channel handler, which invalidates this key when
+ * the events row the upload wrote arrives.
  *
  * Use this, never `useEventCardUrls`, anywhere the back is shown *before* the
  * card it belongs to. That one resolves `ownBack ?? universalUrl` per player, so

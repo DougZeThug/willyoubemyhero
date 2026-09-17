@@ -122,6 +122,38 @@ describe("useEventBundle", () => {
     await waitFor(() => expect(getEventBundle.mock.calls.length).toBeGreaterThan(before));
   });
 
+  it("refreshes the card back other phones are still showing", async () => {
+    // The universal back lives on the events row, so the upload that replaces it
+    // rides this channel like the dust switch does. It was the one change the
+    // handler dropped — and the costly one: the upload hard-deletes the objects
+    // the old signed URLs point at, and neither query refetches on focus.
+    const { result, client } = await mount();
+    await waitFor(() => expect(result.current.bundle).toEqual(BUNDLE));
+    client.setQueryData(["event-card-back", EVENT.id], { url: "old-back" });
+    client.setQueryData(["card-urls", EVENT.id], { "ep-1": { front: "old-front" } });
+
+    await act(async () => {
+      for (const s of subscribers) s.sub.change();
+    });
+
+    expect(client.getQueryState(["event-card-back", EVENT.id])?.isInvalidated).toBe(true);
+    expect(client.getQueryState(["card-urls", EVENT.id])?.isInvalidated).toBe(true);
+  });
+
+  it("leaves another event's card back alone", async () => {
+    // The keys carry an event id for a reason: a league rolling over to next
+    // year's combine must not have this year's channel wiping its urls.
+    const { result, client } = await mount();
+    await waitFor(() => expect(result.current.bundle).toEqual(BUNDLE));
+    client.setQueryData(["event-card-back", "other-event"], { url: "old-back" });
+
+    await act(async () => {
+      for (const s of subscribers) s.sub.change();
+    });
+
+    expect(client.getQueryState(["event-card-back", "other-event"])?.isInvalidated).toBe(false);
+  });
+
   it("refetches both queries on demand", async () => {
     const { result } = await mount();
     await waitFor(() => expect(result.current.bundle).toEqual(BUNDLE));

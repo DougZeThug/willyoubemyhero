@@ -43,6 +43,16 @@ export function useEventBundle() {
         // so those two screens still wait for a focus refetch — neither shows
         // the bar or the shop, so there is nothing there to go stale.
         qc.invalidateQueries({ queryKey: ["active-event"] });
+        // The universal card back is three more columns on that same row, and
+        // these two are the queries that render it. They need the nudge more
+        // than the rest: uploadEventCardBack writes the new art to a fresh
+        // Date.now() path and then HARD-DELETES the old objects, so a phone
+        // holding the previous signed URL is pointed at storage that is gone.
+        // Neither query refetches on focus, so without this the only way back
+        // is their own timer — 45 minutes for the back, three hours for the
+        // card urls.
+        qc.invalidateQueries({ queryKey: ["event-card-back", eventId] });
+        qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       },
       health: setHealth,
     });
