@@ -19,6 +19,7 @@ const USER = "10000000-0000-4000-8000-000000000001";
 const NEW_ID = "00000000-0000-4000-8000-0000000000c1";
 const PLAYER = "00000000-0000-4000-8000-0000000000aa";
 const GUEST = "00000000-0000-4000-8000-0000000000e1";
+const PRIOR_GUEST = "00000000-0000-4000-8000-0000000000e2";
 
 function withDb(responses: SupabaseResponses = {}) {
   mock = createSupabaseMock({
@@ -59,14 +60,34 @@ describe("createCollector", () => {
 
   it("brings the guest pulls made before naming themselves", async () => {
     await create("Jane Doe", GUEST);
-    const rpc = mock.client.rpc as unknown as { mock: { calls: [string, unknown][] } };
-    expect(rpc.mock.calls.map(([name]) => name)).toEqual(
-      expect.arrayContaining(["merge_guest_into_collector"]),
-    );
-    expect(rpc.mock.calls[0]?.[1]).toMatchObject({
-      _participant_id: NEW_ID,
-      _guest_id: GUEST,
+    expect(mock.rpcCalls("merge_guests_into_collector")).toEqual([
+      { _participant_id: NEW_ID, _guest_ids: [GUEST] },
+    ]);
+  });
+
+  it("folds the account's own guest and the handset's in ONE call", async () => {
+    // Two transactions is the bug: the first commits, the second raises, and the
+    // catch block retires the participant the first one's rows are now sitting
+    // on — with guest_id nulled, so nothing can ever name them again.
+    withDb({
+      "account_identities.select": {
+        data: { user_id: USER, participant_id: null, guest_id: PRIOR_GUEST },
+      },
+      "account_identities.update": { data: [{ user_id: USER }], error: null },
     });
+    await create("Jane Doe", GUEST);
+
+    const [args] = mock.rpcCalls("merge_guests_into_collector") as {
+      _guest_ids: string[];
+    }[];
+    expect(mock.rpcCalls("merge_guests_into_collector")).toHaveLength(1);
+    expect(args._guest_ids).toEqual(expect.arrayContaining([PRIOR_GUEST, GUEST]));
+    expect(args._guest_ids).toHaveLength(2);
+  });
+
+  it("asks for nothing when there is no guest to fold", async () => {
+    await create("Jane Doe");
+    expect(mock.rpcCalls("merge_guests_into_collector")).toHaveLength(0);
   });
 
   it("restores the account's guest identity when the merge fails", async () => {
@@ -75,7 +96,7 @@ describe("createCollector", () => {
         data: { user_id: USER, participant_id: null, guest_id: GUEST },
       },
       "account_identities.update": { data: [{ user_id: USER }], error: null },
-      "rpc.merge_guest_into_collector": {
+      "rpc.merge_guests_into_collector": {
         data: null,
         error: { message: "db down", code: "XX000" },
       },
@@ -98,7 +119,7 @@ describe("createCollector", () => {
   it("deletes the fresh identity row when the merge fails with no guest to restore", async () => {
     withDb({
       "account_identities.insert": { data: null, error: null },
-      "rpc.merge_guest_into_collector": {
+      "rpc.merge_guests_into_collector": {
         data: null,
         error: { message: "db down", code: "XX000" },
       },

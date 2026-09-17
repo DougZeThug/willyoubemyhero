@@ -5,8 +5,25 @@
 // non-player trade is to give them a participant row of their own and mark it.
 // `is_collector` is what keeps them off the roster, the claim list and the
 // draft while leaving every trading rule untouched.
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { signMemberToken } from "./session.server";
+
+/**
+ * The same client, widened, for the one RPC `types.ts` has not been regenerated
+ * against yet.
+ *
+ * The escape hatch account.server.ts opens for `bind_account_to_player`, for the
+ * same reason: src/integrations/supabase/types.ts is `supabase gen types` output,
+ * must not be hand-edited, and is .prettierignore'd — so
+ * `merge_guests_into_collector`
+ * (supabase/migrations/20260916120000_merge_every_guest_in_one_transaction.sql)
+ * is a compile error against the generated `Database` type. Regenerating types.ts
+ * makes this a one-call-site removal.
+ */
+function untypedDb(): SupabaseClient {
+  return supabaseAdmin as unknown as SupabaseClient;
+}
 
 export type CollectorIdentity = {
   participantId: string;
@@ -159,16 +176,17 @@ export async function createCollector(
 }
 
 async function mergeGuests(participantId: string, guestIds: string[]) {
-  for (const guestId of new Set(guestIds.filter(Boolean))) {
-    // One RPC, one transaction. Done as three separate claim_guest_* calls, a
-    // failure between two of them committed part of the device onto a
-    // participant the catch block above then retires — and since those
-    // functions null guest_id as they move rows, the retry's
-    // WHERE guest_id = _guest_id could never find them again.
-    const { error } = await supabaseAdmin.rpc("merge_guest_into_collector", {
-      _participant_id: participantId,
-      _guest_id: guestId,
-    });
-    if (error) throw error;
-  }
+  const ids = [...new Set(guestIds.filter(Boolean))];
+  if (!ids.length) return;
+  // One RPC, one transaction, EVERY guest. A signup folds the account's own
+  // guest and the one this handset is holding, and looping the single-guest RPC
+  // put each of them in its own transaction: the first committed and stood, so a
+  // failure on the second left its rows on a participant the catch block above
+  // then retires — with guest_id already nulled, which is the one state no retry
+  // can name again.
+  const { error } = await untypedDb().rpc("merge_guests_into_collector", {
+    _participant_id: participantId,
+    _guest_ids: ids,
+  });
+  if (error) throw error;
 }
