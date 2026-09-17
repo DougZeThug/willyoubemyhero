@@ -125,11 +125,11 @@ describe("two weight saves at once", () => {
     // BOTH rows: the still-pending row was re-enabled and its box snapped back
     // to the stored weight, throwing away the number the commissioner had just
     // typed into it.
-    const a = deferred();
-    const b = deferred();
+    const alpha = deferred();
+    const beta = deferred();
     updateSecretCard
-      .mockImplementationOnce(() => a.promise)
-      .mockImplementationOnce(() => b.promise);
+      .mockImplementationOnce(() => alpha.promise)
+      .mockImplementationOnce(() => beta.promise);
 
     await openPanel();
 
@@ -146,21 +146,21 @@ describe("two weight saves at once", () => {
     expect(box("Beta")).toBeDisabled();
 
     // Alpha's round trip lands. Beta's has not.
-    a.resolve({ ok: true });
+    alpha.resolve({ ok: true });
     await waitFor(() => expect(box("Alpha")).toBeEnabled());
 
     expect(box("Beta")).toBeDisabled();
     expect(box("Beta").value).toBe("250");
 
-    b.resolve({ ok: true });
+    beta.resolve({ ok: true });
     await waitFor(() => expect(box("Beta")).toBeEnabled());
   });
 
   it("still lets go of a single row once its save lands", async () => {
     // The other direction: the per-row flag must still clear, or a row would
     // stay disabled for the rest of the session.
-    const a = deferred();
-    updateSecretCard.mockImplementationOnce(() => a.promise);
+    const alpha = deferred();
+    updateSecretCard.mockImplementationOnce(() => alpha.promise);
 
     await openPanel();
     await userEvent.clear(box("Alpha"));
@@ -168,7 +168,7 @@ describe("two weight saves at once", () => {
     await userEvent.tab();
 
     await waitFor(() => expect(box("Alpha")).toBeDisabled());
-    a.resolve({ ok: true });
+    alpha.resolve({ ok: true });
     await waitFor(() => expect(box("Alpha")).toBeEnabled());
   });
 });
