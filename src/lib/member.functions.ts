@@ -210,7 +210,20 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
         const claimed = new Set(
           (codes ?? []).filter((c) => c.claimed_at).map((c) => c.participant_id),
         );
-        targets = targets.filter((t) => !claimed.has(t.id));
+        // And only this combine's roster. `participants` and `member_codes` are
+        // both league-wide, but the panel that calls this is one event, and the
+        // number in its confirm dialog is that event's roster — so minting
+        // league-wide rotated codes for players the commissioner was never shown
+        // and never agreed to, killing paper slips already in their pockets. The
+        // whole-league re-issue is still available; its confirm promises no
+        // number. Per-player re-issues come through `participantIds` above and
+        // are unaffected.
+        const { data: roster } = await supabaseAdmin
+          .from("event_participants")
+          .select("participant_id")
+          .eq("event_id", data.eventId);
+        const onRoster = new Set((roster ?? []).map((r) => r.participant_id));
+        targets = targets.filter((t) => onRoster.has(t.id) && !claimed.has(t.id));
       }
     }
 
