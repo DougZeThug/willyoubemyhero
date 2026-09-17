@@ -278,6 +278,21 @@ function PackPage() {
    */
   const pendingCompletionsRef = useRef<number[]>([]);
   const [pendingCompletions, setPendingCompletions] = useState<number[]>([]);
+  /**
+   * Owed completions whose card is ALREADY face-up, found by a resume.
+   *
+   * The debt above is written to the row the moment the card turns and only
+   * dropped once the ceremony has actually played, which is what carries it
+   * across a reload. A reload inside that beat comes back with both facts — the
+   * index in `revealed` and the index still owed — and nothing that can pay it:
+   * `revealAt` turns away an index already revealed at its first line, and
+   * `setCompletion` lives inside the block that line guards. The trophy is no
+   * safety net either, marked celebrated at deal time so the global host stays
+   * out of the way of this screen's own ceremony.
+   *
+   * So the resume hands them here instead, and the effect below plays them.
+   */
+  const [strandedCompletions, setStrandedCompletions] = useState<number[]>([]);
   const [completion, setCompletion] = useState<CompletedCollection | null>(null);
   /**
    * A ceremony is running.
@@ -407,6 +422,7 @@ function PackPage() {
     setLocalBefore({});
     pendingCompletionsRef.current = [];
     setPendingCompletions([]);
+    setStrandedCompletions([]);
     carriedFromRef.current = null;
     carriedAdoptedRef.current = [];
     dealtForRef.current = null;
@@ -633,6 +649,7 @@ function PackPage() {
     dealtOnRef.current = dayKey;
     pendingCompletionsRef.current = [];
     setPendingCompletions([]);
+    setStrandedCompletions([]);
     setOpenState("pending");
     openFiredRef.current = null;
     setOpenRequest({ kind: "tear", nonce: 0 });
@@ -716,7 +733,7 @@ function PackPage() {
       setOpenState("failed");
     }, OPEN_TIMEOUT_MS);
 
-    void (async () => {
+    (async () => {
       try {
         const res = await open();
         settled = true;
@@ -769,6 +786,11 @@ function PackPage() {
                 );
         pendingCompletionsRef.current = owed;
         setPendingCompletions(owed);
+        // Anything owed over a card that is already face-up is a ceremony a
+        // reload caught mid-beat — see `strandedCompletions`. Empty on a tear,
+        // where nothing has been turned yet, and empty on a resume the mismatch
+        // branch above started over.
+        setStrandedCompletions(owed.filter((i) => revealedRef.current.includes(i)));
         if (kind === "tear") {
           // Claimed HERE rather than when the ceremony fires, because the fire
           // is a beat behind the card and the refetch below is not. Left until
@@ -1040,6 +1062,34 @@ function PackPage() {
       pendingCompletions: pendingCompletions.length > 0 ? pendingCompletions : undefined,
     });
   }, [slots, dayKey, revealed, stateLoaded, identity, cursor, pendingCompletions, localBefore]);
+
+  /**
+   * Pay a ceremony a reload caught mid-beat.
+   *
+   * Keyed on `strandedCompletions` and NOT on `pendingCompletions ∩ revealed`,
+   * which is the same set and the wrong trigger: during a normal reveal that
+   * intersection holds for the whole of COMPLETION_BEAT_MS, so an effect
+   * watching it would fire the set closing on the render the card turns — over
+   * the top of the card, which is the one thing the beat exists to prevent. Only
+   * a resume puts anything in here.
+   *
+   * No beat on the way out either. The card was turned last session; the pause
+   * that belonged to it has already been and gone.
+   *
+   * One at a time, waiting on an empty screen, because a pack really can close
+   * two sets and `completion` renders one. The debt is dropped as each is
+   * played, so the row stops owing it.
+   */
+  useEffect(() => {
+    if (completion || strandedCompletions.length === 0 || !slots) return;
+    const [i, ...rest] = strandedCompletions;
+    setStrandedCompletions(rest);
+    pendingCompletionsRef.current = pendingCompletionsRef.current.filter((n) => n !== i);
+    setPendingCompletions(pendingCompletionsRef.current);
+    const slot = i === undefined ? undefined : slots[i];
+    if (slot?.kind === "secret" && slot.completedCollection)
+      setCompletion(slot.completedCollection);
+  }, [completion, strandedCompletions, slots]);
 
   const stage = packStage({
     torn,

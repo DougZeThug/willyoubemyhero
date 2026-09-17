@@ -227,6 +227,69 @@ test.describe("a secret in the pack", () => {
     await expect.poll(async () => (await packRow(page))?.pendingCompletions).toBeUndefined();
   });
 
+  test("plays a set-complete ceremony a reload caught after the card was turned", async ({
+    page,
+    server,
+  }) => {
+    // The far side of the boundary the test above stops at. A reload BEFORE the
+    // card is turned comes back to a `revealAt` that still has it to turn, so
+    // the ceremony rides along. A reload in the beat AFTER — between the card
+    // landing and the set closing behind it — comes back with the index already
+    // in `revealed`, which is the very first thing `revealAt` refuses. Nothing
+    // else would ever play it: the trophy is marked celebrated at deal time, on
+    // purpose, so the global host stays out of this screen's way.
+    test.slow();
+    await asMember(page);
+    const completedCollection = {
+      collection: "pets",
+      label: "Pets Of The League",
+      size: 9,
+      completedOn: LEAGUE_DAY,
+    };
+    withSecret(server, { slot: { completedCollection } });
+    // The secret FIRST, so the card that owes the ceremony is the one the first
+    // tap turns and the beat runs with nothing else in flight behind it.
+    server.set(
+      "openPack",
+      packResponse([
+        secretSlot({ completedCollection }),
+        rosterSlot("ep-alice"),
+        rosterSlot("ep-bob"),
+      ]),
+    );
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await expect.poll(async () => (await packRow(page))?.pendingCompletions).toEqual([0]);
+
+    await turnCard(page);
+    // The exact state the reload used to strand: the card face-up and persisted,
+    // the ceremony it owes still owed. The window is the secret's burst plus
+    // COMPLETION_BEAT_MS, so a tight poll lands inside it with room to spare.
+    await expect
+      .poll(
+        async () => {
+          const row = await packRow(page);
+          return Boolean(row?.revealed.includes(0) && row?.pendingCompletions?.includes(0));
+        },
+        { intervals: Array.from({ length: 60 }, () => 100), timeout: 20_000 },
+      )
+      .toBe(true);
+
+    const beforeReload = deals(server);
+    await page.reload();
+    await expect(sealedPack(page)).toBeHidden();
+    await expect.poll(() => deals(server)).toBeGreaterThan(beforeReload);
+
+    // No tap left to give: the card came back face-up.
+    const ceremony = page.getByTestId("collection-complete");
+    await expect(ceremony).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Pets Of The League/i).first()).toBeVisible();
+    await expect(ceremony).toHaveCount(1);
+    // And the row lets go, so the next reload does not replay it.
+    await expect.poll(async () => (await packRow(page))?.pendingCompletions).toBeUndefined();
+  });
+
   test("a duplicate reads as a wink, not a failure", async ({ page, server }) => {
     await asMember(page);
     withSecret(server, {

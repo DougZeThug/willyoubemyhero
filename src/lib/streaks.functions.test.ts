@@ -10,7 +10,7 @@ import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock
 import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/server-fn";
 import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
 import type { StreakStatus } from "./streaks.functions";
-import { STREAK_MILESTONES } from "./streaks";
+import { previousDay, STREAK_MILESTONES } from "./streaks";
 import { leagueDay } from "./trades";
 
 let mock = createSupabaseMock();
@@ -43,6 +43,13 @@ const asGuest = () => guestHeaders(signGuestToken(GUEST).token);
  * New York is still on yesterday, so a UTC-built ladder ended a day in the future
  * and the streak read as broken — a real failure every night, only in CI.
  */
+/** The first day of a fixture run, without asserting the array is non-empty. */
+function firstDay(days: { opened_on: string }[]): string {
+  const first = days[0];
+  if (!first) throw new Error("the fixture built no days");
+  return first.opened_on;
+}
+
 function daysEndingToday(n: number) {
   const out: { opened_on: string }[] = [];
   const [y, m, d] = leagueDay().split("-").map(Number);
@@ -171,6 +178,50 @@ describe("getStreakStatus", () => {
     const { getStreakStatus } = await import("./streaks.functions");
     const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
     expect(res.milestones.find((m) => m.days === 3)?.claimed).toBe(true);
+  });
+
+  it("keeps the run alive on the day the capstone was cashed at risk", async () => {
+    // claim_streak_milestone takes a run that ended YESTERDAY and stamps the
+    // claim today, so on a phone whose pack is still sealed the reset cut leaves
+    // nothing behind it. Read as a dead streak, that took the whole strip off
+    // the screen — flame, day line, ladder — and with it the one line asking
+    // them to open today's pack.
+    const today = leagueDay();
+    // Sixty days ending yesterday: the run that bought the capstone.
+    const days = daysEndingToday(61).slice(0, 60);
+    withDb({
+      "pack_opens.select": { data: days },
+      "streak_milestone_claims.select": {
+        data: [{ milestone: 60, streak_started_on: firstDay(days), claimed_on: today }],
+      },
+      "account_identities.select": { data: [{ user_id: "u" }] },
+    });
+    const { getStreakStatus } = await import("./streaks.functions");
+    const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
+    expect(res.current).toBe(1);
+    expect(res.startedOn).toBe(today);
+    expect(res.openedToday).toBe(false);
+    // A one-day run owes nothing, so the screen and the payout still agree.
+    expect(res.milestones.every((m) => !m.earned)).toBe(true);
+  });
+
+  it("is dead the day after a capstone claim nobody followed with a pack", async () => {
+    // The anchor above is today's nudge, not a day nobody opened. Once it is
+    // yesterday, the gap is a gap like any other.
+    // The walk's own step-back, rather than hand-rolled Date maths beside it.
+    const yesterday = previousDay(leagueDay());
+    const days = daysEndingToday(61).slice(0, 59);
+    withDb({
+      "pack_opens.select": { data: days },
+      "streak_milestone_claims.select": {
+        data: [{ milestone: 60, streak_started_on: firstDay(days), claimed_on: yesterday }],
+      },
+      "account_identities.select": { data: [{ user_id: "u" }] },
+    });
+    const { getStreakStatus } = await import("./streaks.functions");
+    const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
+    expect(res.current).toBe(0);
+    expect(res.startedOn).toBeNull();
   });
 
   it("ignores a claim from a run that has since died", async () => {

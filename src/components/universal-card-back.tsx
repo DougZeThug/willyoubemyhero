@@ -28,8 +28,10 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  // Shared with the sealed pack on /players/pack, which wears this same image —
-  // so an upload here refreshes a pack already open on somebody else's phone.
+  // Shared with the sealed pack on /players/pack, which wears this same image.
+  // The invalidations below only reach this tab; a pack already open on somebody
+  // else's phone is refreshed by useEventBundle, which invalidates the same two
+  // keys when the events row this upload writes comes back down the channel.
   const back = useEventCardBack(eventId);
 
   async function onPick(file: File) {

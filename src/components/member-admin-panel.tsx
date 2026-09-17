@@ -111,9 +111,10 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
       // buttons vanish until this panel is remounted, any single code pinned
       // beside a row is hidden with them (plaintext that exists nowhere else),
       // and the unsaved-work guard switches off — all behind an amber list with
-      // no codes in it. The count guard above cannot catch every case: it counts
-      // this event's roster while the server mints league-wide for active,
-      // non-collector players only.
+      // no codes in it. The count guard above still cannot catch every case:
+      // the unclaimed re-issue is scoped to this event's roster on both sides
+      // now, but the server also drops anyone inactive or flagged a collector,
+      // and "Re-issue ALL" is league-wide by design.
       if (!res.issued.length) {
         toast.info("Everyone eligible has claimed — nothing to issue");
         return;

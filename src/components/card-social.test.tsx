@@ -3,7 +3,7 @@
 // and the reaction count is optimistic on top of that. Both are easy to get
 // subtly wrong.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
 import { setMemberToken } from "@/lib/member-token";
@@ -65,6 +65,20 @@ function comment(over: Partial<CommentRow> = {}): CommentRow {
 
 function signIn() {
   setMemberToken(`m.${ME}.${Date.now() + 60_000}.signature`, "Doug");
+}
+
+/**
+ * Let the oldest request still in flight answer, and let the state it settles
+ * land. Throws rather than quietly doing nothing, so a test that has miscounted
+ * its own requests fails where the mistake is instead of two assertions later.
+ */
+async function releaseOldest(queue: (() => void)[]) {
+  const next = queue.shift();
+  if (!next) throw new Error("nothing in flight to release");
+  await act(async () => {
+    next();
+    await Promise.resolve();
+  });
 }
 
 async function renderSocial(
@@ -356,6 +370,169 @@ describe("trash talk", () => {
     await userEvent.click(screen.getByRole("button", { name: "Delete your comment" }));
     await waitFor(() =>
       expect(deleteComment).toHaveBeenCalledWith({ data: { commentId: "mine" } }),
+    );
+  });
+});
+
+// The chevrons, the arrow keys and the filmstrip all move between cards without
+// unmounting /players/$id — which is why `go` resets `flipped` by hand over
+// there. Everything this component holds is about the one card it is showing, so
+// it has to let go of all of it when the card underneath changes.
+describe("when the card changes underneath it", () => {
+  const OTHER_CARD = "ep-2";
+
+  /** Render on one card, then hand the same instance the next one along. */
+  async function renderThenGoTo(
+    next: string,
+    props: Partial<{ reactions: ReactionRow[]; comments: CommentRow[] }> = {},
+    after: Partial<{ reactions: ReactionRow[]; comments: CommentRow[] }> = {},
+  ) {
+    const { CardSocial } = await import("./card-social");
+    const { wrapper } = createQueryWrapper();
+    const view = render(
+      <CardSocial
+        eventId={EVENT_ID}
+        eventParticipantId={CARD_ID}
+        reactions={props.reactions ?? []}
+        comments={props.comments ?? []}
+        nameOf={nameOf}
+      />,
+      { wrapper },
+    );
+    return {
+      ...view,
+      go: () =>
+        view.rerender(
+          <CardSocial
+            eventId={EVENT_ID}
+            eventParticipantId={next}
+            reactions={after.reactions ?? []}
+            comments={after.comments ?? []}
+            nameOf={nameOf}
+          />,
+        ),
+    };
+  }
+
+  it("does not carry trash talk typed about one player onto the next", async () => {
+    // The sharp one: `submitPost` reads the CURRENT prop, so a draft that
+    // survived the move was posted against whoever you happened to be looking
+    // at — permanently, under your name.
+    signIn();
+    const { go } = await renderThenGoTo(OTHER_CARD);
+    await userEvent.type(screen.getByRole("textbox"), "all mouth");
+
+    go();
+
+    expect(screen.getByRole("textbox")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
+  });
+
+  it("does not spend a guest's stashed tap on the card they have left", async () => {
+    // A guest taps 🔥, the name prompt opens, they move to the next card and
+    // then type their name. The stashed closure carries the OLD card's id.
+    const { go } = await renderThenGoTo(OTHER_CARD);
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+    expect(screen.getByPlaceholderText("Your name")).toBeInTheDocument();
+
+    go();
+
+    expect(screen.queryByPlaceholderText("Your name")).toBeNull();
+    expect(toggleReaction).not.toHaveBeenCalled();
+  });
+
+  it("does not lend the next card an optimistic count it did not earn", async () => {
+    signIn();
+    let release!: () => void;
+    toggleReaction.mockImplementation(
+      () => new Promise((resolve) => (release = () => resolve({ ok: true }))),
+    );
+    const { go } = await renderThenGoTo(
+      OTHER_CARD,
+      {},
+      { reactions: [reaction({ id: "r2", event_participant_id: OTHER_CARD })] },
+    );
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+    expect(screen.getByRole("button", { name: "React with 🔥" })).toHaveTextContent("1");
+
+    go();
+
+    // One real reaction on the new card, and none of the old card's +1.
+    const fire = screen.getByRole("button", { name: "React with 🔥" });
+    expect(fire).toHaveTextContent("1");
+    expect(fire).toBeEnabled();
+    release();
+  });
+
+  it("does not let a reaction finishing on the last card unlatch this one", async () => {
+    // Moving on does not cancel the request that was already in the air, and its
+    // `finally` used to clear whatever was in state by then. With a reaction of
+    // its own still running, the new card lost its optimistic count and got its
+    // button back mid-flight — and a second tap there sends a toggle that undoes
+    // the first.
+    signIn();
+    const releases: (() => void)[] = [];
+    toggleReaction.mockImplementation(
+      () => new Promise((resolve) => releases.push(() => resolve({ ok: true }))),
+    );
+    const { go } = await renderThenGoTo(OTHER_CARD);
+
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+    go();
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+    expect(screen.getByRole("button", { name: "React with 🔥" })).toHaveTextContent("1");
+    expect(screen.getByRole("button", { name: "React with 🔥" })).toBeDisabled();
+
+    // The card they LEFT answers first.
+    await releaseOldest(releases);
+
+    const fire = screen.getByRole("button", { name: "React with 🔥" });
+    expect(fire).toHaveTextContent("1");
+    expect(fire).toBeDisabled();
+    await releaseOldest(releases);
+  });
+
+  it("does not let a post finishing on the last card re-arm this one", async () => {
+    signIn();
+    const releases: (() => void)[] = [];
+    postComment.mockImplementation(
+      () => new Promise((resolve) => releases.push(() => resolve({ ok: true }))),
+    );
+    const { go } = await renderThenGoTo(OTHER_CARD);
+
+    await userEvent.type(screen.getByRole("textbox"), "first card");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+    go();
+    await userEvent.type(screen.getByRole("textbox"), "second card");
+    await userEvent.click(screen.getByRole("button", { name: "Post" }));
+    expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
+
+    await releaseOldest(releases);
+
+    // Still sending this card's comment, so the button stays down. Re-armed, it
+    // takes a second Post and the comment goes up twice.
+    expect(screen.getByRole("button", { name: "Post" })).toBeDisabled();
+    await releaseOldest(releases);
+  });
+
+  it("leaves the name this device already gave alone", async () => {
+    // Card state, not identity: a guest who has named themselves must not be
+    // asked again just because they looked at somebody else's card.
+    const { go } = await renderThenGoTo(OTHER_CARD);
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+    await userEvent.type(screen.getByPlaceholderText("Your name"), "Gary");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(toggleReaction).toHaveBeenCalledTimes(1));
+    toggleReaction.mockClear();
+
+    go();
+    await userEvent.click(screen.getByRole("button", { name: "React with 🔥" }));
+
+    expect(screen.queryByPlaceholderText("Your name")).toBeNull();
+    await waitFor(() =>
+      expect(toggleReaction).toHaveBeenCalledWith({
+        data: { eventParticipantId: OTHER_CARD, emoji: "🔥", guest: { name: "Gary" } },
+      }),
     );
   });
 });

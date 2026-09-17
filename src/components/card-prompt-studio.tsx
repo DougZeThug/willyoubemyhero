@@ -217,7 +217,15 @@ export function CardPromptStudio({ eventId, eventName, bundle, photoUrls }: Card
       try {
         const parentId = await saveInitialAfterCopy();
         if (!parentId) throw new Error("Original prompt history unavailable");
-        setGenerated((current) => (current ? { ...current, historyId: parentId } : current));
+        // Same guard as the one inside saveInitialAfterCopy, and for the same
+        // reason: that await is a round trip, and nothing stops the admin
+        // generating for the next player while it runs. Stamped unconditionally,
+        // this id lands on THEIR prompt — which then never saves an initial of
+        // its own (the copy path short-circuits on a historyId that is already
+        // set) and sends every later revision to a parent the server refuses.
+        setGenerated((current) =>
+          current?.prompt === generated.prompt ? { ...current, historyId: parentId } : current,
+        );
         await saveRunFn({
           data: {
             eventId,

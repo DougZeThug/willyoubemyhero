@@ -32,7 +32,9 @@ export function useEventBundle() {
   useEffect(() => {
     if (!eventId) {
       setHealth("connecting");
-      return;
+      // Explicit, so both arms of this effect return the same shape: there is
+      // no channel to leave, so there is no cleanup to give back.
+      return undefined;
     }
     return subscribeToEventChannel(eventId, {
       change: () => {
@@ -43,6 +45,31 @@ export function useEventBundle() {
         // so those two screens still wait for a focus refetch — neither shows
         // the bar or the shop, so there is nothing there to go stale.
         qc.invalidateQueries({ queryKey: ["active-event"] });
+      },
+      eventRow: () => {
+        // The universal card back is three more columns on that same row, and
+        // these two are the queries that render it. They need the nudge more
+        // than the rest: uploadEventCardBack writes the new art to a fresh
+        // Date.now() path and then HARD-DELETES the old objects, so a phone
+        // holding the previous signed URL is pointed at storage that is gone.
+        // Neither query refetches on focus, so without this the only way back
+        // is their own timer — 45 minutes for the back, three hours for the
+        // card urls.
+        //
+        // Here rather than in `change` above, which fires for every table on
+        // the channel AND on the 15s backstop poll, on a timer. Invalidating
+        // there re-signed every participant's image set every fifteen seconds
+        // on every phone — getEventCardUrls walks the whole roster — which is
+        // both a lot of signing and a nonsense of the three-hour refresh those
+        // queries are tuned for.
+        //
+        // An events-row write is rare and always a commissioner doing
+        // something, so an extra re-sign after a dust switch is the price of
+        // the upload reaching other phones at all. With realtime down there is
+        // no write to ride and they wait for their own timer — which is what
+        // they did before this existed, so nothing is lost.
+        qc.invalidateQueries({ queryKey: ["event-card-back", eventId] });
+        qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       },
       health: setHealth,
     });

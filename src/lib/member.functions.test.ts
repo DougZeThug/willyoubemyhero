@@ -406,12 +406,12 @@ describe("generateMemberCodes", () => {
   });
 
   it("mints nothing, writes nothing and still succeeds when nobody is eligible", async () => {
-    // The client's count and this target set are two different sets — the button
-    // counts one event's roster, this mints league-wide for active,
-    // non-collector players — so a tap can legitimately arrive with nothing to
-    // do. That is a soft, successful nothing, and it must stay one: the panel is
-    // what has to notice, and rotating a code nobody asked for would kill a
-    // paper slip that is already in somebody's pocket.
+    // The client's count and this target set still are not quite the same set —
+    // the button counts one event's roster, this drops anyone inactive or
+    // flagged a collector on top of that — so a tap can legitimately arrive with
+    // nothing to do. That is a soft, successful nothing, and it must stay one:
+    // the panel is what has to notice, and rotating a code nobody asked for
+    // would kill a paper slip that is already in somebody's pocket.
     withDb({ "participants.select": { data: [] } });
     const res = (await generate({ eventId: EVENT_ID }, adminOk())) as {
       ok: boolean;
@@ -432,11 +432,75 @@ describe("generateMemberCodes", () => {
       "member_codes.select": {
         data: [{ participant_id: PARTICIPANT_ID, claimed_at: "2026-09-01T00:00:00.000Z" }],
       },
+      "event_participants.select": {
+        data: [{ participant_id: PARTICIPANT_ID }, { participant_id: OTHER_ID }],
+      },
     });
     const res = (await generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())) as {
       issued: { name: string }[];
     };
     expect(res.issued.map((i) => i.name)).toEqual(["Alice"]);
+  });
+
+  it("leaves a league player who is not on this combine's roster out of it too", async () => {
+    // `participants` and `member_codes` are both league-wide; the panel that
+    // calls this is one event, and the number in its confirm dialog is that
+    // event's roster. Minting wider than the number the commissioner agreed to
+    // rotates codes for players they were never shown — and their paper slips
+    // are dead the moment it lands.
+    withDb({
+      "participants.select": {
+        data: [
+          { id: PARTICIPANT_ID, name: "Doug" },
+          { id: OTHER_ID, name: "Alice" },
+        ],
+      },
+      "member_codes.select": { data: [] },
+      "event_participants.select": { data: [{ participant_id: OTHER_ID }] },
+    });
+    const res = (await generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())) as {
+      issued: { name: string }[];
+    };
+    expect(res.issued.map((i) => i.name)).toEqual(["Alice"]);
+    const [written] = mock.callsFor("member_codes", "upsert")[0].payload as Record<
+      string,
+      string
+    >[];
+    expect(written.participant_id).toBe(OTHER_ID);
+  });
+
+  it("surfaces a failed roster read instead of reporting nobody needs a code", async () => {
+    // The read filters the targets, so a failure and an empty combine look the
+    // same from here: no targets, no writes, `{ ok: true, issued: [] }` — and a
+    // panel that says everyone has already claimed. That is the one answer the
+    // commissioner cannot act on, and it hides a broken read behind good news.
+    withDb({
+      "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] },
+      "member_codes.select": { data: [] },
+      "event_participants.select": { data: null, error: { message: "connection lost" } },
+    });
+    await expect(generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())).rejects.toThrow(
+      "connection lost",
+    );
+    expect(mock.callsFor("member_codes", "upsert")).toHaveLength(0);
+  });
+
+  it("still re-issues for every player when the whole league is asked for", async () => {
+    // "Re-issue ALL" promises no number, so it stays league-wide — and must not
+    // pick up the roster filter the unclaimed branch just grew.
+    withDb({
+      "participants.select": {
+        data: [
+          { id: PARTICIPANT_ID, name: "Doug" },
+          { id: OTHER_ID, name: "Alice" },
+        ],
+      },
+      "event_participants.select": { data: [{ participant_id: OTHER_ID }] },
+    });
+    const res = (await generate({ eventId: EVENT_ID, scope: "all" }, adminOk())) as {
+      issued: { name: string }[];
+    };
+    expect(res.issued.map((i) => i.name)).toEqual(["Doug", "Alice"]);
   });
 
   it("issues a code per active participant", async () => {

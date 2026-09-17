@@ -98,6 +98,42 @@ export function CardSocial({
   const [bursting, setBursting] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<Record<string, number>>({});
 
+  /**
+   * Everything above belongs to ONE card, and /players/$id swaps the card under
+   * this component without unmounting it — the same reason the route has to
+   * reset `flipped` by hand. Left standing, trash talk typed about Alice posts
+   * to Bob when you hit Post on his page, a guest's stashed tap replays against
+   * the card they have already left, and Bob's chip wears Alice's optimistic +1
+   * over a button his own reaction cannot use.
+   *
+   * Reset during render rather than from an effect, so the next card never
+   * paints a count that belongs to the last one. `guestName` is deliberately not
+   * in here: that is who this device is, not which card it is looking at.
+   */
+  const [shownCard, setShownCard] = useState(eventParticipantId);
+  /**
+   * The same card, readable from a handler that started on a different one.
+   *
+   * The reset below lets go of this card's state, but it cannot cancel a request
+   * already in the air — so the `finally` blocks that tidy up after one have to
+   * check whether the card they were tidying is still the card on screen.
+   */
+  const shownCardRef = useRef(eventParticipantId);
+  useEffect(() => {
+    shownCardRef.current = eventParticipantId;
+  });
+  if (shownCard !== eventParticipantId) {
+    setShownCard(eventParticipantId);
+    setNamePrompt(false);
+    setNameDraft("");
+    setPendingAction(null);
+    setDraft("");
+    setBusy(false);
+    setPending(null);
+    setBursting(null);
+    setOptimistic({});
+  }
+
   type Actor = { kind: "member" } | { kind: "guest"; guest: { name: string } };
 
   /**
@@ -156,6 +192,7 @@ export function CardSocial({
   async function onReact(emoji: string) {
     const who = ensureIdentity(() => void onReact(emoji));
     if (!who) return;
+    const card = eventParticipantId;
     const adding = !mine.has(emoji);
     setPending(emoji);
     setOptimistic((prev) => ({ ...prev, [emoji]: (prev[emoji] ?? 0) + (adding ? 1 : -1) }));
@@ -166,7 +203,7 @@ export function CardSocial({
     try {
       await toggleFn({
         data: {
-          eventParticipantId,
+          eventParticipantId: card,
           emoji,
           guest: who.kind === "guest" ? who.guest : undefined,
         },
@@ -175,12 +212,18 @@ export function CardSocial({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not react");
     } finally {
-      setOptimistic((prev) => {
-        const next = { ...prev };
-        delete next[emoji];
-        return next;
-      });
-      setPending(null);
+      // Only if this is still the card that sent it. Moving on does not cancel
+      // a request in the air, and the reset above has already cleared this
+      // state for the new card — so an old completion landing here would delete
+      // the NEW card's optimistic delta and drop its pending latch while its
+      // own request is still running, freeing a second tap whose toggle undoes
+      // the first. Left alone, the new card's own `finally` tidies up after it.
+      if (shownCardRef.current === card) {
+        setOptimistic((prev) =>
+          Object.fromEntries(Object.entries(prev).filter(([key]) => key !== emoji)),
+        );
+        setPending(null);
+      }
     }
   }
 
@@ -189,21 +232,29 @@ export function CardSocial({
     if (!body || busy) return;
     const who = ensureIdentity(() => void submitPost());
     if (!who) return;
+    const card = eventParticipantId;
+    const typed = draft;
     setBusy(true);
     try {
       await postFn({
         data: {
-          eventParticipantId,
+          eventParticipantId: card,
           body,
           guest: who.kind === "guest" ? who.guest : undefined,
         },
       });
-      setDraft("");
+      // Only while the box still holds what went out. A post is a round trip,
+      // and by the time it lands the visitor may have moved to the next card —
+      // where the reset above has already emptied the box — or started a second
+      // thought on this one. Clearing either of those is somebody's typing gone.
+      if (shownCardRef.current === card) setDraft((d) => (d === typed ? "" : d));
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not post");
     } finally {
-      setBusy(false);
+      // As above: card A's post finishing must not unlatch a post card B has in
+      // flight, or the Post button comes back mid-submit and takes a second one.
+      if (shownCardRef.current === card) setBusy(false);
     }
   }
 

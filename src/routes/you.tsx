@@ -95,16 +95,23 @@ function YouPage() {
 
   const myTrophies = trophiesFor(allTrophies.data?.trophies ?? [], member?.participantId ?? null);
   const ownedSecrets = secrets.data?.cards ?? [];
-  // The vault's second gate, which this screen was written without. A phone that
-  // has just signed in has no member token yet, so `useMyCollection` settles off
-  // the local store alone — and that store is per-device, not per-person. On a
-  // handset the league passes around, the number under it is the LAST person's
-  // roster count, stated as this one's for as long as the link takes. One flag
-  // the way the vault folds it, so the line below and the counters under it can
-  // never disagree about whether the answer is known — "Counting your cards…"
-  // over "No packs opened yet." is the section contradicting itself.
+  // The vault's second gate, which this screen was written without. A phone with
+  // no member token has nothing to adjudicate the local card store against, so
+  // `useMyCollection` settles off that store alone — and it is per-device, not
+  // per-person, and nothing clears it on the way out. On a handset the league
+  // passes around, the number under it is then the LAST person's roster count,
+  // stated as this one's. One flag the way the vault folds it, so the line below
+  // and the counters under it can never disagree about whether the answer is
+  // known — "Counting your cards…" over "No packs opened yet." is the section
+  // contradicting itself.
+  //
+  // Two windows, not one. `syncing` is the account still linking. The other is
+  // the longer one: signed out with the breadcrumb still on the phone, which is
+  // every moment between one player handing the handset over and the next one
+  // claiming. A device that was NEVER a member is not in here on purpose — a
+  // guest's store is a guest's own cards, and counting them is the right answer.
   const sync = useAccountSyncState();
-  const ready = mine.ready && sync.status !== "syncing";
+  const ready = mine.ready && sync.status !== "syncing" && !(wasMember && !member);
   const summary = ready
     ? vaultSummaryLine({
         rosterHeld: mine.collectedCount,

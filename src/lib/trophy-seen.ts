@@ -104,6 +104,25 @@ export function markTrophiesCelebrated(keys: readonly string[]) {
 }
 
 /**
+ * Has this device already thrown a ceremony for that trophy?
+ *
+ * The other half of the handshake above, for the screens that fire their own.
+ * Marking stops the global host playing a second ceremony when the realtime row
+ * arrives a beat later — but only when the response gets here first. It does not
+ * always: the INSERT, the invalidation and the refetch can all land while the
+ * accept is still in the air, and then the host has already queued one and the
+ * screen stacks an identical overlay underneath it. Asking first is what closes
+ * the other direction.
+ *
+ * Reads the module value rather than storage, for the same reason
+ * markTrophiesCelebrated writes it: a private-mode browser that refused the
+ * write still has to stop the repeat for this page load.
+ */
+export function alreadyCelebrated(key: string): boolean {
+  return current.ids.includes(key);
+}
+
+/**
  * Re-file a guest's ceremonies under the player they have just claimed.
  *
  * The pack screen marks a guest's finished set under their PACK identity

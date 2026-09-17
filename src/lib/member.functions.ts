@@ -210,7 +210,27 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
         const claimed = new Set(
           (codes ?? []).filter((c) => c.claimed_at).map((c) => c.participant_id),
         );
-        targets = targets.filter((t) => !claimed.has(t.id));
+        // And only this combine's roster. `participants` and `member_codes` are
+        // both league-wide, but the panel that calls this is one event, and the
+        // number in its confirm dialog is that event's roster — so minting
+        // league-wide rotated codes for players the commissioner was never shown
+        // and never agreed to, killing paper slips already in their pockets. The
+        // whole-league re-issue is still available; its confirm promises no
+        // number. Per-player re-issues come through `participantIds` above and
+        // are unaffected.
+        const { data: roster, error: rosterError } = await supabaseAdmin
+          .from("event_participants")
+          .select("participant_id")
+          .eq("event_id", data.eventId);
+        // Thrown rather than coalesced to an empty roster. PostgREST hands
+        // failures back in the result, and an empty read filters every target
+        // away — which this handler returns as a perfectly successful nothing,
+        // and the panel reports as "Everyone eligible has claimed". Telling the
+        // commissioner nobody needs a code because a read broke is the one
+        // answer they cannot act on; a thrown error is at least retryable.
+        if (rosterError) throw rosterError;
+        const onRoster = new Set((roster ?? []).map((r) => r.participant_id));
+        targets = targets.filter((t) => onRoster.has(t.id) && !claimed.has(t.id));
       }
     }
 
