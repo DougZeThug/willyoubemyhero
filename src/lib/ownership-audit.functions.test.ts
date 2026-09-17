@@ -30,6 +30,7 @@ const GUEST_A = "00000000-0000-4000-8000-00000000de01";
 const GUEST_B = "00000000-0000-4000-8000-00000000de02";
 const GUEST_C = "00000000-0000-4000-8000-00000000de03";
 const CARD = "00000000-0000-4000-8000-00000000ce01";
+const OTHER_CARD = "00000000-0000-4000-8000-00000000ce02";
 
 function withDb(responses: SupabaseResponses = {}) {
   mock = createSupabaseMock({
@@ -78,6 +79,41 @@ describe("the ownership audit's guard", () => {
         headers: memberHeaders(signMemberToken(ALICE).token),
       }),
     ).rejects.toThrow("Admin PIN required");
+  });
+});
+
+describe("what a player can actually put on the table", () => {
+  /** A roster copy row, in the shape the handler selects. */
+  const copy = (eventParticipantId: string) => ({
+    participant_id: ALICE,
+    event_participant_id: eventParticipantId,
+  });
+
+  it("counts the spares of a duplicated card, not every copy of it", async () => {
+    // Holding two of a card makes ONE of them stakeable: the other has to stay
+    // home, which is what trade_leaves_a_copy refuses the offer over. Counting
+    // both told the commissioner a player could put up a card that the trading
+    // post would then turn down.
+    withDb({ "card_copies.select": { data: [copy(CARD), copy(CARD)] } });
+    const res = await audit();
+    expect(res.players[0]).toMatchObject({ rosterCopies: 2, tradeableRoster: 1 });
+  });
+
+  it("counts nothing tradeable in a roster of singles", async () => {
+    withDb({ "card_copies.select": { data: [copy(CARD), copy(OTHER_CARD)] } });
+    const res = await audit();
+    expect(res.players[0]).toMatchObject({ rosterCopies: 2, tradeableRoster: 0 });
+  });
+
+  it("adds up the spares across several duplicated cards", async () => {
+    // Three of one and two of another is two spares plus one, not five.
+    withDb({
+      "card_copies.select": {
+        data: [copy(CARD), copy(CARD), copy(CARD), copy(OTHER_CARD), copy(OTHER_CARD)],
+      },
+    });
+    const res = await audit();
+    expect(res.players[0]).toMatchObject({ rosterCopies: 5, tradeableRoster: 3 });
   });
 });
 

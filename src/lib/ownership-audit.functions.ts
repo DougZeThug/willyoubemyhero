@@ -140,7 +140,9 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
       let tradeableRoster = 0;
       for (const count of perCard.values()) {
         rosterCopies += count;
-        if (count >= 2) tradeableRoster += count;
+        // The spare of a card held N times is N-1: one copy has to stay home,
+        // which is the rule trade_leaves_a_copy enforces on the offer itself.
+        if (count >= 2) tradeableRoster += count - 1;
       }
       const secrets = secretsBy.get(p.id) ?? { total: 0, tradeable: 0 };
       return {
