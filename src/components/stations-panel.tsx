@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, ArrowUpDown, Flag, Pencil, Plus, Trash2 } from "lucide-react";
 import { upsertStation, deleteStation, swapStationOrder } from "@/lib/admin-write.functions";
+import { formatTime, parseTime } from "@/lib/format";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,16 @@ type Draft = {
   description: string;
   station_order: number;
   split_enabled: boolean;
-  penalty_seconds: number;
+  /**
+   * The penalty as the commissioner typed it, parsed with `parseTime` on save.
+   *
+   * Text rather than a number of seconds, because seconds were lossy in both
+   * directions: a stored 2500ms rounded to 3 on the way into the draft, and any
+   * later save — a rename, even — wrote 3000ms back over it. Milliseconds are
+   * what the column holds and `formatTime`/`parseTime` are how every other time
+   * in this app crosses the edge. Same box as the penalty in edit-result-sheet.
+   */
+  penalty: string;
   active: boolean;
 };
 
@@ -49,7 +59,7 @@ function toDraft(s: StationRow): Draft {
     description: s.description ?? "",
     station_order: s.station_order,
     split_enabled: s.split_enabled,
-    penalty_seconds: Math.round(s.penalty_amount_ms / 1000),
+    penalty: s.penalty_amount_ms > 0 ? formatTime(s.penalty_amount_ms) : "",
     active: s.active,
   };
 }
@@ -118,6 +128,14 @@ export function StationsPanel({ eventId }: { eventId: string }) {
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["event-bundle", eventId] });
 
+  /** Blank means no penalty; anything else has been checked by onSaveDraft. */
+  function penaltyMs(raw: string): number {
+    return raw.trim() === "" ? 0 : Math.max(0, parseTime(raw) ?? 0);
+  }
+
+  /** Typed something, and it is not a time. Reddens the box and blocks the save. */
+  const badPenalty = !!draft && draft.penalty.trim() !== "" && parseTime(draft.penalty) == null;
+
   async function save(d: Draft) {
     await saveFn({
       data: {
@@ -128,7 +146,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
         description: d.description.trim() || null,
         station_order: d.station_order,
         split_enabled: d.split_enabled,
-        penalty_amount_ms: Math.max(0, Math.round(d.penalty_seconds * 1000)),
+        penalty_amount_ms: penaltyMs(d.penalty),
         active: d.active,
       },
     });
@@ -138,6 +156,13 @@ export function StationsPanel({ eventId }: { eventId: string }) {
     if (!draft) return;
     if (!draft.name.trim()) {
       toast.error("A station needs a name");
+      return;
+    }
+    // Refuse rather than quietly store 0: a penalty the box could not read is
+    // far more likely to be a typo than a request to drop the penalty, and the
+    // station is the one the console then applies at the push of a button.
+    if (badPenalty) {
+      toast.error("Penalty must be a time like 2.5 or 1:05");
       return;
     }
     setBusy(true);
@@ -245,7 +270,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
       description: "",
       station_order: nextOrder,
       split_enabled: true,
-      penalty_seconds: 0,
+      penalty: "",
       active: true,
     });
   }
@@ -361,7 +386,10 @@ export function StationsPanel({ eventId }: { eventId: string }) {
                 <span className="block truncate text-label uppercase tracking-[0.08em] text-muted-foreground">
                   {s.short_name ?? "—"}
                   {!s.active && " · inactive"}
-                  {s.penalty_amount_ms > 0 && ` · +${Math.round(s.penalty_amount_ms / 1000)}s pen`}
+                  {/* formatTime, as the console's own penalty button does it:
+                    rounding to whole seconds here hid the value that would
+                    actually be applied. */}
+                {s.penalty_amount_ms > 0 && ` · +${formatTime(s.penalty_amount_ms)} pen`}
                 </span>
               </span>
             </button>
@@ -442,16 +470,18 @@ export function StationsPanel({ eventId }: { eventId: string }) {
                 />
               </div>
               <div>
-                <Label htmlFor="station-pen">Penalty (seconds)</Label>
+                <Label htmlFor="station-pen">Penalty</Label>
                 <Input
                   id="station-pen"
-                  type="number"
-                  min={0}
-                  value={draft.penalty_seconds}
-                  onChange={(e) =>
-                    setDraft({ ...draft, penalty_seconds: Number(e.target.value) || 0 })
-                  }
+                  inputMode="decimal"
+                  placeholder="2.5"
+                  value={draft.penalty}
+                  onChange={(e) => setDraft({ ...draft, penalty: e.target.value })}
+                  className={badPenalty ? "border-destructive" : undefined}
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Seconds, or mm:ss.hh. Leave blank for no penalty.
+                </p>
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="station-split">Record a split here</Label>
