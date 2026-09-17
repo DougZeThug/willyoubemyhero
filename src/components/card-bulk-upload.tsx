@@ -172,7 +172,9 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
   // ref and an empty dep list so this fires on unmount only; keyed on `items` it
   // would revoke the previews on the very render that added them.
   const itemsRef = useRef<Candidate[]>(items);
-  itemsRef.current = items;
+  useEffect(() => {
+    itemsRef.current = items;
+  });
   useEffect(() => () => itemsRef.current.forEach((i) => URL.revokeObjectURL(i.previewUrl)), []);
 
   const ready = useMemo(() => items.filter((i) => i.eventParticipantId && !i.oversize), [items]);
