@@ -215,9 +215,9 @@ codes out; the copy control is a labelled button rather than an icon alone.
 - **A person dropped from the event still exists.** They are removed from this
   combine's roster, not from the league, and can be added back — with a fresh
   running-order number at the end.
-- **"Issue codes for unclaimed" reaches past this event.** The count on the button
-  is this event's roster, but the issue itself covers every active player in the
-  league who has not claimed. On a single-combine league these are the same set.
+- **"Issue codes for unclaimed" stays inside this event.** The count on the button
+  is this event's roster, and the issue mints only for that same roster, so a
+  second combine's unclaimed players are left untouched.
 - **Collectors never get a paper code.** A signed-in account who is not a combine
   athlete is skipped by every bulk issue; they reach their cards by signing in.
 - **A rotated code does not sign anybody out.** The claim record resets, but a
@@ -245,9 +245,6 @@ codes out; the copy control is a labelled button rather than an icon alone.
   which control was used; nothing user-facing distinguishes them, and both read
   as "in the queue" everywhere. Whether that duality can ever surface was not
   determined.
-- That a bulk issue reaches active players outside this event's roster was read
-  from the handler. On the league this app is built for there is one event, so it
-  has not been observed.
 - Whether the clipboard control works on the phones this is actually run from was
   not tested; the fallback is to select the list by hand, which is fiddly on a
   small screen.
