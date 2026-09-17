@@ -173,6 +173,50 @@ describe("getStreakStatus", () => {
     expect(res.milestones.find((m) => m.days === 3)?.claimed).toBe(true);
   });
 
+  it("keeps the run alive on the day the capstone was cashed at risk", async () => {
+    // claim_streak_milestone takes a run that ended YESTERDAY and stamps the
+    // claim today, so on a phone whose pack is still sealed the reset cut leaves
+    // nothing behind it. Read as a dead streak, that took the whole strip off
+    // the screen — flame, day line, ladder — and with it the one line asking
+    // them to open today's pack.
+    const today = leagueDay();
+    // Sixty days ending yesterday: the run that bought the capstone.
+    const days = daysEndingToday(61).slice(0, 60);
+    withDb({
+      "pack_opens.select": { data: days },
+      "streak_milestone_claims.select": {
+        data: [{ milestone: 60, streak_started_on: days[0]!.opened_on, claimed_on: today }],
+      },
+      "account_identities.select": { data: [{ user_id: "u" }] },
+    });
+    const { getStreakStatus } = await import("./streaks.functions");
+    const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
+    expect(res.current).toBe(1);
+    expect(res.startedOn).toBe(today);
+    expect(res.openedToday).toBe(false);
+    // A one-day run owes nothing, so the screen and the payout still agree.
+    expect(res.milestones.every((m) => !m.earned)).toBe(true);
+  });
+
+  it("is dead the day after a capstone claim nobody followed with a pack", async () => {
+    // The anchor above is today's nudge, not a day nobody opened. Once it is
+    // yesterday, the gap is a gap like any other.
+    const [y, m, d] = leagueDay().split("-").map(Number);
+    const yesterday = new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
+    const days = daysEndingToday(61).slice(0, 59);
+    withDb({
+      "pack_opens.select": { data: days },
+      "streak_milestone_claims.select": {
+        data: [{ milestone: 60, streak_started_on: days[0]!.opened_on, claimed_on: yesterday }],
+      },
+      "account_identities.select": { data: [{ user_id: "u" }] },
+    });
+    const { getStreakStatus } = await import("./streaks.functions");
+    const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
+    expect(res.current).toBe(0);
+    expect(res.startedOn).toBeNull();
+  });
+
   it("ignores a claim from a run that has since died", async () => {
     withDb({
       "pack_opens.select": { data: daysEndingToday(3) },

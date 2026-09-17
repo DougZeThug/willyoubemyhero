@@ -170,7 +170,26 @@ export function walkStreak(days: readonly string[], today: string, since?: strin
   // streak_runs; a db test pins the two together.
   const seen = new Set(since ? days.filter((d) => d >= since) : days);
 
-  if (seen.size === 0) return DEAD;
+  if (seen.size === 0) {
+    // Nothing left after the cut means the capstone was cashed while the run was
+    // AT RISK: claim_streak_milestone takes a run that ended yesterday, stamps
+    // the claim today, and today's pack is still sealed — so the filter above
+    // just discarded the only opens there were.
+    //
+    // Zero is the honest count and the wrong thing to show. It takes the whole
+    // strip down, and the "open today's pack" line with it, at the one moment in
+    // the day that line is the entire point. Anchor the new run on the claim day
+    // instead: the same day 1 that opening today would give it, still flagged at
+    // risk, so the count does not jump when they do open.
+    //
+    // streak_runs has no row for this day and is deliberately left alone —
+    // nothing is claimable at day 1 (the first rung is day 3), so the screen and
+    // the payout still agree about every button. A rung below day 3 would have
+    // to move the SQL cut too.
+    return since === today
+      ? { current: 1, startedOn: since, lastOpenedOn: null, openedToday: false }
+      : DEAD;
+  }
 
   const yesterday = previousDay(today);
   // Anchor on today when it is there, otherwise yesterday. Anything older means

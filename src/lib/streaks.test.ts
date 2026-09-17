@@ -109,6 +109,43 @@ describe("walkStreak after the capstone", () => {
     const days = ["2026-08-22", "2026-08-23", "2026-08-24"];
     expect(walkStreak(days, TODAY, null)).toEqual(walkStreak(days, TODAY));
   });
+
+  it("starts the new run on the claim day when the capstone was cashed at risk", () => {
+    // The claim the server allows while a run is AT RISK: it ended yesterday,
+    // today's pack is still sealed, and the cut then leaves nothing. Read as a
+    // dead streak this took the whole strip down — flame, day line and the "open
+    // today's pack" nudge — at exactly the moment the nudge is the point.
+    const s = walkStreak(["2026-08-22", "2026-08-23"], TODAY, TODAY);
+    expect(s.current).toBe(1);
+    expect(s.startedOn).toBe(TODAY);
+    expect(s.openedToday).toBe(false);
+    // Nothing was opened today, so nothing may claim to have been.
+    expect(s.lastOpenedOn).toBeNull();
+  });
+
+  it("does not jump the count when they then open today's pack", () => {
+    // Day 1 before the pack and day 1 after it. A number that moved would read
+    // as the claim having cost them a day.
+    const before = walkStreak(["2026-08-22", "2026-08-23"], TODAY, TODAY);
+    const after = walkStreak(["2026-08-22", "2026-08-23", TODAY], TODAY, TODAY);
+    expect(after.current).toBe(before.current);
+    expect(after.startedOn).toBe(before.startedOn);
+    expect(after.openedToday).toBe(true);
+  });
+
+  it("is dead the next day when they never did open", () => {
+    // The anchor is today's nudge, not a day nobody opened a pack on. Skipping
+    // it breaks the run like any other gap.
+    const s = walkStreak(["2026-08-22", "2026-08-23"], "2026-08-25", TODAY);
+    expect(s.current).toBe(0);
+    expect(s.startedOn).toBeNull();
+  });
+
+  it("starts at day one again off the next open after a skipped claim day", () => {
+    const s = walkStreak(["2026-08-22", "2026-08-23", "2026-08-25"], "2026-08-25", TODAY);
+    expect(s.current).toBe(1);
+    expect(s.startedOn).toBe("2026-08-25");
+  });
 });
 
 describe("previousDay", () => {
