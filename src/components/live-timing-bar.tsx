@@ -170,6 +170,10 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                     size="sm"
                     variant="ghost"
                     onClick={undoLastSplit}
+                    // No `finished` here, unlike the console's copy of this
+                    // button: the whole splits strip lives in the not-finished
+                    // arm above, so the guard would read as though this branch
+                    // were reachable after a Finish. The hook refuses either way.
                     disabled={run.splits.length === 0}
                   >
                     <Redo2 className="mr-1 h-3.5 w-3.5" /> Undo

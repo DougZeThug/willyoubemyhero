@@ -602,6 +602,28 @@ describe("generateMemberCodes", () => {
     expect(select.filters.find((f) => f.method === "in")?.args).toEqual(["id", [PARTICIPANT_ID]]);
   });
 
+  it("leaves collectors out of a per-player re-issue, as the whole-roster one does", async () => {
+    // The two branches drifted: the batch one dropped collectors from the day
+    // the flag was added, the per-id one never did — and the admin panel's
+    // per-row button is the only caller of the per-id branch, forwarding
+    // whatever participant id the roster row carries.
+    withDb({ "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] } });
+    await generate({ eventId: EVENT_ID, participantIds: [PARTICIPANT_ID] }, adminOk());
+    const [select] = mock.callsFor("participants", "select");
+    expect(
+      select.filters.find((f) => f.method === "eq" && f.args[0] === "is_collector")?.args,
+    ).toEqual(["is_collector", false]);
+  });
+
+  it("leaves collectors out of the whole-roster issue too", async () => {
+    withDb({ "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] } });
+    await generate({ eventId: EVENT_ID }, adminOk());
+    const [select] = mock.callsFor("participants", "select");
+    expect(
+      select.filters.find((f) => f.method === "eq" && f.args[0] === "is_collector")?.args,
+    ).toEqual(["is_collector", false]);
+  });
+
   it("surfaces a write failure rather than reporting codes it never stored", async () => {
     withDb({
       "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] },

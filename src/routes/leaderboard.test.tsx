@@ -45,6 +45,27 @@ vi.mock("lucide-react", async (importOriginal) => {
   return stubs;
 });
 
+/**
+ * The board as a spectator finds it, with whatever bundle and failure list the
+ * case needs. Same shape as tv.test.tsx's `showBundle`, which covers the sibling
+ * screen — the two hold the same claims and are easier to read side by side.
+ *
+ * `refetch` is a bare spy: nothing here renders the error card, so the Try again
+ * button that would call it never exists, and a stub returning a promise nobody
+ * awaits would only suggest otherwise.
+ */
+function showBoard(over: Parameters<typeof makeBundle>[0], failedTables: string[] = []) {
+  useEventBundle.mockReturnValue({
+    event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+    bundle: makeBundle({ ...over, failed: failedTables }),
+    loading: false,
+    error: null,
+    failedTables,
+    realtimeDegraded: false,
+    refetch: vi.fn(),
+  });
+}
+
 function twoFinishers() {
   const alice = makeParticipant({
     participation_status: "finished",
@@ -54,20 +75,12 @@ function twoFinishers() {
     participation_status: "finished",
     participant: { id: "p-b", name: "Bob Bison", nickname: null },
   });
-  useEventBundle.mockReturnValue({
-    event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-    bundle: makeBundle({
-      participants: [alice, bob],
-      runs: [
-        makeRun({ participant_id: alice.participant_id, official_time_ms: 50_000 }),
-        makeRun({ participant_id: bob.participant_id, official_time_ms: 60_000 }),
-      ],
-    }),
-    loading: false,
-    error: null,
-    failedTables: [],
-    realtimeDegraded: false,
-    refetch: vi.fn(async () => {}),
+  showBoard({
+    participants: [alice, bob],
+    runs: [
+      makeRun({ participant_id: alice.participant_id, official_time_ms: 50_000 }),
+      makeRun({ participant_id: bob.participant_id, official_time_ms: 60_000 }),
+    ],
   });
 }
 
@@ -113,5 +126,69 @@ describe("LeaderboardPage sharing", () => {
       }
     });
     expect(exportCardPng).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The bundle coalesces a failed table read to an empty array, so the only thing
+ * that tells a broken read from an empty combine is `failedTables` — and this
+ * screen used to consult it on exactly one branch, the one it cannot reach when
+ * the read that failed was the roster.
+ */
+describe("LeaderboardPage when a read has failed", () => {
+  /** The board as it comes back when `event_participants` is the table that broke. */
+  const boardWithoutRoster = (failed: string[]) =>
+    showBoard(
+      {
+        participants: [],
+        runs: [
+          makeRun({ participant_id: "p-a", official_time_ms: 50_000 }),
+          makeRun({ participant_id: "p-b", official_time_ms: 60_000 }),
+        ],
+      },
+      failed,
+    );
+
+  const emptyBoard = (failed: string[]) => showBoard({ participants: [], runs: [] }, failed);
+
+  it("says the roster read failed over a board that still has rows on it", () => {
+    // `standings` ranks from the runs and drops its roster filter when the
+    // roster is empty, so this is a full board of correctly-placed em dashes.
+    // It is the case the signal most needed to cover and the only one it could
+    // not reach, because the screen is not empty.
+    boardWithoutRoster(["event_participants"]);
+    render(<LeaderboardPage />);
+
+    expect(screen.getByText("Couldn't read the roster just now — retrying.")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("50.00")).toBeInTheDocument();
+  });
+
+  it("says nothing of the sort when every read worked", () => {
+    twoFinishers();
+    render(<LeaderboardPage />);
+
+    expect(screen.queryByText(/Couldn't read the roster/)).toBeNull();
+    expect(screen.getByText("Alice Ace")).toBeInTheDocument();
+  });
+
+  it("keeps the empty board honest when the failure cannot have emptied it", () => {
+    // Splits, penalties, stations, draft picks and the event row are all in
+    // `failedTables` too, and none of them feeds a row. Claiming the results
+    // were unreadable over a combine nobody has run yet is the same lie in the
+    // other direction.
+    emptyBoard(["splits"]);
+    render(<LeaderboardPage />);
+
+    expect(
+      screen.getByText("No official times yet — check back after the first athlete crosses."),
+    ).toBeInTheDocument();
+  });
+
+  it("still names a failed runs read on an empty board", () => {
+    emptyBoard(["runs"]);
+    render(<LeaderboardPage />);
+
+    expect(screen.getByText("Couldn't read the results just now — retrying.")).toBeInTheDocument();
   });
 });

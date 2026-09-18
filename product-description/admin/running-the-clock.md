@@ -105,7 +105,10 @@ on the screen by a wide margin.
 
 **A split** is one tap on a station tile. The tile fills with the clock reading
 at that moment and then refuses further taps — a station can be split once. Undo
-split removes the most recent one and only the most recent one.
+split removes the most recent one and only the most recent one, and is available
+until the run is finished: a split can be taken back while the clock is paused,
+which is when somebody usually notices they tapped the wrong station, but not
+once the run is stopped and waiting on its save.
 
 **A penalty** is the chip under a station, which appears only for stations that
 carry an amount, and adds that amount with the station's name as the reason. Each

@@ -296,6 +296,46 @@ describe("reactions", () => {
     expect(chip).toHaveAttribute("aria-description", "Reacted by Alice");
     expect(screen.queryByRole("button", { name: "Who reacted with 🔥" })).toBeNull();
   });
+
+  it("holds the count between the save landing and the rows arriving", async () => {
+    // The gap every other optimistic test here stops short of. `refresh()`
+    // resolves on the cache write and these rows arrive a notify tick later, so
+    // letting the delta go in the `finally` painted one commit of
+    // new-list-minus-delta: the chip dropping back to the count it had BEFORE a
+    // tap that worked, then jumping to the one it earned. Driven by hand rather
+    // than by racing the scheduler — release the toggle, let the `finally` run,
+    // and only then deliver the rows.
+    let release!: () => void;
+    toggleReaction.mockImplementation(
+      () => new Promise((resolve) => (release = () => resolve({ ok: true, reacted: true }))),
+    );
+
+    const { CardSocial } = await import("./card-social");
+    const { wrapper } = createQueryWrapper();
+    const props = { eventId: EVENT_ID, eventParticipantId: CARD_ID, comments: [], nameOf };
+    const view = render(<CardSocial {...props} reactions={[]} />, { wrapper });
+
+    const fire = () => screen.getByRole("button", { name: "React with 🔥" });
+    await userEvent.click(fire());
+    expect(fire()).toHaveTextContent("1");
+
+    await act(async () => {
+      release();
+      await Promise.resolve();
+    });
+    expect(fire()).toHaveTextContent("1");
+
+    // The refetch delivers, exactly as the parent hands it down.
+    view.rerender(
+      <CardSocial
+        {...props}
+        reactions={[reaction({ id: "r-mine", participant_id: ME, mine: true })]}
+      />,
+    );
+    // Settled against the server rather than overshooting to 2: the delta and
+    // the row it stood in for swap in one commit.
+    expect(fire()).toHaveTextContent("1");
+  });
 });
 
 describe("trash talk", () => {

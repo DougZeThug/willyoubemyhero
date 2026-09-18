@@ -222,4 +222,22 @@ describe("useEventBundle", () => {
     expect(getEventBundle).not.toHaveBeenCalled();
     expect(subscribers).toHaveLength(0);
   });
+
+  it("does not fetch one on Try again either, out of season", async () => {
+    // `refetch()` ignores `enabled`, so the retry ran the queryFn with a null
+    // event id, the validator rejected it, and every screen swapped its honest
+    // message for the raw Zod issue array — which the next tap reproduced.
+    getActiveEvent.mockResolvedValue(null);
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const events = getActiveEvent.mock.calls.length;
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(getActiveEvent.mock.calls.length).toBeGreaterThan(events);
+    expect(getEventBundle).not.toHaveBeenCalled();
+    expect(result.current.error).toBeNull();
+  });
 });

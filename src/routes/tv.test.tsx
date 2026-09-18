@@ -38,13 +38,13 @@ vi.mock("lucide-react", async (importOriginal) => {
   return stubs;
 });
 
-function showBundle(over: Parameters<typeof makeBundle>[0]) {
+function showBundle(over: Parameters<typeof makeBundle>[0], failedTables: string[] = []) {
   useEventBundle.mockReturnValue({
     event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-    bundle: makeBundle(over),
+    bundle: makeBundle({ ...over, failed: failedTables }),
     loading: false,
     error: null,
-    failedTables: [],
+    failedTables,
     realtimeDegraded: false,
     refetch: vi.fn(async () => {}),
   });
@@ -118,5 +118,28 @@ describe("TvPage standings", () => {
     render(<TvPage />);
     expect(screen.getAllByText("1")).toHaveLength(2);
     expect(screen.queryByText("2")).toBeNull();
+  });
+});
+
+describe("TvPage when a read has failed", () => {
+  it("says the roster read failed rather than showing a wall of em dashes", () => {
+    // The big screen has the same blind spot the board had: `standings` ranks
+    // from the runs, so a failed roster read fills sixteen slots with correct
+    // places, correct times and no names at all.
+    showBundle(
+      { participants: [], runs: [makeRun({ participant_id: "p-a", official_time_ms: 50_000 })] },
+      ["event_participants"],
+    );
+    render(<TvPage />);
+
+    expect(screen.getByText("Couldn't read the roster just now — retrying")).toBeInTheDocument();
+  });
+
+  it("does not claim the results were unreadable when only the splits failed", () => {
+    showBundle({ participants: [], runs: [] }, ["splits"]);
+    render(<TvPage />);
+
+    expect(screen.getByText("No official times yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't read the results/)).toBeNull();
   });
 });

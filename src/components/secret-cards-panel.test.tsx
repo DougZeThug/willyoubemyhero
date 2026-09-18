@@ -172,3 +172,29 @@ describe("two weight saves at once", () => {
     await waitFor(() => expect(box("Alpha")).toBeEnabled());
   });
 });
+
+describe("the exhaustion banner", () => {
+  /**
+   * Weight 0 takes a card out of the daily draw without retiring it, so nobody
+   * can ever have pulled it. The server already excludes it from the `pullable`
+   * set it decides `exhausted` with; the banner recounted the cards itself with
+   * the looser filter, so the one sentence whose whole payload is a number
+   * named a total that included a card no pack could deal.
+   */
+  it("counts only the cards a pack could actually deal", async () => {
+    listSecretCards.mockResolvedValue({
+      cards: [card("a", "Alpha", 100), card("b", "Beta", 0)],
+      participants: [],
+      collections: [{ id: "set-wild", label: "Wildcards", accent: null }],
+      claimedMembers: 13,
+      exhausted: true,
+    });
+
+    const { wrapper } = createQueryWrapper();
+    render(<SecretCardsPanel />, { wrapper });
+
+    expect(await screen.findByText(/Everyone who plays has pulled all/)).toHaveTextContent(
+      "pulled all 1",
+    );
+  });
+});

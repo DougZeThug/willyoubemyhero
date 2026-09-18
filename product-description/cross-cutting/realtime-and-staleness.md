@@ -194,7 +194,11 @@ set's ceremony is the one place in this area that announces itself politely.
   admin console and the TV board being the two where it would matter most.
 - **A partial bundle.** One table failing is reported by name rather than
   coalescing to an empty list, because a failed roster read used to look exactly
-  like a finished field.
+  like a finished field. Reporting it is not the same as saying it, though: a
+  screen has to consult the list on a branch it can actually reach. The board and
+  the TV board read it only in their empty state, which is the one state a failed
+  roster read does not produce — both draw a full board of anonymous rows — so
+  both now carry a line above the rows as well.
 - **Splits and penalties are not filtered by event.** A change to either fires a
   refetch on every event's watchers. With one active combine this is invisible.
 - **Recovery costs an extra read.** Coming back from degraded refetches even if

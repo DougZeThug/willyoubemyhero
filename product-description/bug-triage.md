@@ -8,7 +8,13 @@ intended, or to leave.
 
 **That pass has now been made.** Every entry marked `fix` has been fixed, and two
 of the `product call` entries were decided and acted on. What is left is five
-product calls that still belong to the league, plus one inside B-30.
+product calls that still belong to the league. A sixth, inside B-30, has since
+been closed by a change that was not aiming at it — see that entry.
+
+**A second pass has landed since.** B-44 to B-49 came from a code read rather
+than from a document's open questions, so they are not "what the feature
+documents raised" — they are six defects found by walking the code and confirmed
+against it. All six are fixed here, each with a test that fails without the fix.
 
 Nothing here has been watched on a phone in a garden. Everything claimed as fixed
 is covered by the unit, database or end-to-end suites, and the **Fixed** line on
@@ -18,13 +24,16 @@ each entry says what changed.
 
 Around sixty suspected defects were raised across the fifty-one documents. After
 merging by root cause they came to **43 entries**: 7 high, 32 medium, and 4 low
-(three of which are clusters of small slips).
+(three of which are clusters of small slips). The later code-read pass adds six
+more, all medium, for **49 in total**: 7 high, 38 medium, 4 low.
 
 Four of those turned out to be already fixed in code — the doc was read at
 `b46f330` and seventy-seven commits had landed since. The other thirty-four
 `fix` entries, and the two product calls the league took (B-14, B-27), are fixed
 here. **Five entries remain open**, all product calls: B-07, B-23, B-32, B-33 and
-B-38, plus the deliberately-false "Pack Complete" heading inside B-30.
+B-38. The deliberately-false "Pack Complete" heading inside B-30 was a sixth; it
+is closed, not decided — the reveal stand was rebuilt for an unrelated reason and
+the heading went with it.
 
 Two clusters accounted for most of the high entries, and both are closed. The
 first was **writes that report a success they did not have** — the running
@@ -86,7 +95,13 @@ in the screen rather than in the handler that cascades.
 | B-41 | "Record a split here" saves, reads back, and does nothing                   | medium   | admin         | fixed               |
 | B-42 | A retired secret card cannot be brought back                                | medium   | admin         | fixed               |
 | B-43 | The board and the tier rules disagree about who is ranked                   | medium   | combine       | fixed               |
-| B-30 | Accessibility gaps across the app                                           | low      | cross-cutting | fixed (one open)    |
+| B-44 | The board can only say the roster read failed when it is also empty         | medium   | combine       | fixed               |
+| B-45 | A reaction's count dips to the pre-tap number on its way to the new one     | medium   | cards         | fixed               |
+| B-46 | The exhausted-set line names a total no pack could deal                     | medium   | admin         | fixed               |
+| B-47 | Undo split and add penalty stay live on a finished run                      | medium   | admin         | fixed               |
+| B-48 | A per-player code re-issue does not skip collectors                         | medium   | admin         | fixed               |
+| B-49 | "Try again" with no active combine answers with a raw validator error       | medium   | cross-cutting | fixed               |
+| B-30 | Accessibility gaps across the app                                           | low      | cross-cutting | fixed               |
 | B-31 | Small rendering and copy slips                                              | low      | —             | fixed               |
 | B-32 | The compare picker dresses an unpacked card in its real tier                | low      | cards         | product call — open |
 | B-33 | Out of season, trading closes silently — including for secrets              | low      | trading       | product call — open |
@@ -866,6 +881,145 @@ in the screen rather than in the handler that cascades.
   card shows "Remove from the set".
 - **Raised by:** [secret card sets](admin/secret-card-sets.md#open-questions-and-verification).
 
+### B-44: The board can only say the roster read failed when it is also empty
+
+- **Where the user meets it:** Any spectator on `/leaderboard` or `/tv` while the
+  roster read is failing and the runs read is not.
+- **What happens / what was expected:** A full board of anonymous rows. The
+  places and the times are right; every name is an em dash, every avatar a
+  question mark, and no row links anywhere. Nothing on the screen says why.
+  Expected: the screen that carries a failure list says so.
+- **Reproduce:** Block the `event_participants` read and open `/leaderboard` on a
+  combine that has official times.
+- **Why (from the code):** `src/routes/leaderboard.tsx` and `src/routes/tv.tsx`
+  read `failedTables` only inside `rows.length === 0`, and a failed roster read
+  is the one case that does not empty `rows`: `standings` in
+  `src/lib/standings.ts` ranks from `bundle.runs` and drops its roster filter
+  entirely when `participants` is empty. `/order` has the same gate and is fine,
+  because its rows come from the roster — which is why the two screens looked
+  alike and were not. The same check was over-broad the other way: any of the
+  seven tables tripped it, including five that cannot take a row off the board.
+- **Severity:** `medium`. Wrong on the screen a card's claim to a tier rests on,
+  and the failure the whole `failedTables` mechanism was added for.
+- **Fixed:** A `FeedPartialBanner` above the rows on both screens, reading
+  "Couldn't read the roster just now — retrying" — the sentence `/live` and
+  `/order` already use. The board stays up, because the places and the times
+  under it are correct. The empty state is narrowed to `runs` and
+  `event_participants`, as `/analytics` already had it. `leaderboard.test.tsx`
+  and `tv.test.tsx` pin both halves, including a splits failure no longer
+  claiming the results were unreadable.
+- **Raised by:** a code read, not a document.
+
+### B-45: A reaction's count dips to the pre-tap number on its way to the new one
+
+- **Where the user meets it:** Tapping a reaction on a player's card.
+- **What happens / what was expected:** The count goes 0 → 1 → 0 → 1 on a tap
+  that worked, and the mirror on a tap that removed one. Expected: the optimistic
+  number is replaced by the server's, not by the number that was there before.
+- **Why (from the code):** `onReact` in `src/components/card-social.tsx` dropped
+  its optimistic delta in the `finally`, straight after `await refresh()`. That
+  promise resolves when react-query writes the cache; the rows reach the
+  component on the notify tick after it. So one commit rendered the new list
+  without the delta — which is the old count.
+- **Severity:** `medium`. A visible flicker on the most-tapped control in the
+  app, produced by the layer that exists to hide latency.
+- **Fixed:** The delta is held until `mine` — the same signal the chip's lit
+  state reads — agrees with what the tap asked for, and dropped during the render
+  that brings it, so the two swap in one commit. Not from an effect: that runs
+  after the commit which has already painted the stale pairing, trading the dip
+  for an overshoot. A failed tap rolls back in the `catch` instead, since nothing
+  is coming to settle it against. `card-social.test.tsx` drives the save and the
+  rows in separate steps and asserts the count across the gap.
+- **Raised by:** a code read, not a document.
+
+### B-46: The exhausted-set line names a total no pack could deal
+
+- **Where the user meets it:** The commissioner reading the Secret Cards panel
+  once the league has found everything.
+- **What happens / what was expected:** "Everyone who plays has pulled all N"
+  with N too high whenever a card sits at weight zero. Expected: the number
+  matches the set the sentence is about.
+- **Why (from the code):** the banner in
+  `src/components/secret-cards-panel.tsx` counted `active && hasArt`, while
+  `listSecretCards` in `src/lib/secret-cards.functions.ts` decides `exhausted`
+  over `active && hasArt && weight > 0` — its own comment says a weight-zero card
+  "can never be 'found' and must not hold the set back". The boolean and the
+  number were computed over different sets.
+- **Severity:** `medium`. Commissioner-only and informational, but the number is
+  the entire payload of the sentence.
+- **Fixed:** The banner uses the server's filter. `secret-cards-panel.test.tsx`
+  seeds an exhausted set holding one weight-zero card and pins the count.
+- **Raised by:** a code read, not a document.
+
+### B-47: Undo split and add penalty stay live on a finished run
+
+- **Where the user meets it:** The commissioner in the failed-save window — the
+  run is stopped, the header reads "Finished — not saved", and Retry save is on
+  screen.
+- **What happens / what was expected:** Undo split is still enabled there, and
+  the record it edits is the one Retry re-sends. Expected: what
+  [running the clock](admin/running-the-clock.md) already says — "Retry save
+  re-sends the identical record".
+- **Reproduce:** Record splits, let a Finish fail, tap Undo split, tap Retry.
+- **Why (from the code):** `undoLastSplit` and `addPenalty` in
+  `src/hooks/use-run-console.ts` had no status guard, while `recordSplit` beside
+  them did. `saveCompletedRun` writes splits with
+  `upsert(..., { onConflict: "client_key" })`, which can add and update but
+  cannot delete a row by absence — so if the first attempt committed the splits
+  and failed later, the shortened retry leaves the undone split on the server and
+  reports "Run saved".
+- **Severity:** `medium`. Leaves a split nobody ran in the league's record, and
+  station averages and crowns are computed from splits.
+- **Fixed:** Both stop at `finished`, and deliberately not at `paused` — taking a
+  mis-tapped split back while the clock is held is an ordinary thing to want, and
+  unlike recording one it reads no clock. The console's Undo button carries the
+  guard too; the Live bar's copy does not need it, because its whole splits strip
+  lives in the not-finished arm, and a test pins that rather than a condition
+  that would read as though the branch were reachable.
+- **Raised by:** a code read, not a document.
+
+### B-48: A per-player code re-issue does not skip collectors
+
+- **Where the user meets it:** The commissioner issuing a fresh code beside one
+  roster row.
+- **What happens / what was expected:** A collector handed a paper code that
+  nothing can redeem, and their claim record reset. Expected: the same refusal
+  the whole-roster issue has always made.
+- **Why (from the code):** `generateMemberCodes` in
+  `src/lib/member.functions.ts` filtered `is_collector` on its batch branch and
+  not on the `participantIds` branch, which is the one the panel's per-row button
+  is the only caller of. The two branches were symmetric before collectors
+  existed and drifted in the commit that introduced them.
+- **Severity:** `medium`, and low impact: the code is bound to the collector's
+  own id, `/claim` filters collectors out of its picker, and collectors do not
+  normally hold an `event_participants` row at all. It is the invariant the
+  schema states being enforced in one of two places.
+- **Fixed:** The per-id branch carries the same filter. `member.functions.test.ts`
+  now asserts it on both branches — neither was covered before. Deliberately not
+  also `active`: the batch branch filters that too, and matching it would break a
+  re-issue for somebody deliberately deactivated.
+- **Raised by:** a code read, not a document.
+
+### B-49: "Try again" with no active combine answers with a raw validator error
+
+- **Where the user meets it:** Any of the seven spectator screens out of season,
+  or between combines, pressing Try again.
+- **What happens / what was expected:** The error card swaps its message for a
+  JSON array — `[{"expected":"string","code":"invalid_type", ...}]` — and every
+  further tap reproduces it. Expected: a retry either clears the error or says
+  there is nothing to show.
+- **Why (from the code):** `refetch` in `src/hooks/use-event-bundle.ts` called
+  the bundle query's `refetch()` unconditionally, and react-query's `refetch()`
+  does not honour `enabled`. So the handler ran with `eventId: null`, the Zod
+  validator rejected, and the rejection arrived as an `Error` whose message is
+  the serialized issue list, which `FeedError` prints verbatim.
+- **Severity:** `medium`. Replaces an honest message with a developer's one, on
+  the one control offered for getting out of the state.
+- **Fixed:** The retry carries the same gate the query does.
+  `use-event-bundle.test.tsx` covers the retry path, where it previously covered
+  only the mount.
+- **Raised by:** a code read, not a document.
+
 ## Low
 
 ### B-30: Accessibility gaps across the app
@@ -911,10 +1065,16 @@ in the screen rather than in the handler that cascades.
     so a screen reader user got no feedback at all. **Fixed** — the pack summary
     keeps its deliberate quiet about interrupting a ceremony, but says so in a
     polite live region; the leaderboard, which had no `catch` at all, reports it.
-  - The pack's "Pack Complete" heading is deliberately false for about
-    six-tenths of a second, and a screen reader announces it as fact. **Still
-    open — `product call`.** The lie is the effect; making it honest costs the
-    surprise, and whether that trade is worth it is not a defect question.
+  - The pack's "Pack Complete" heading was deliberately false for about
+    six-tenths of a second, and a screen reader announced it as fact. It was
+    left open as a `product call`, because the lie was the effect and making it
+    honest cost the surprise. **Closed since, by a change that was not about
+    this.** That heading belonged to the theatre introducing the secret, which
+    only worked while the secret was always last; once it could land in any
+    slot the whole production went, and the false heading with it. The stand
+    now counts "2 / 3" through a secret like any other card
+    (`src/components/pack-stand.tsx`). Nothing was traded away — the question
+    stopped existing.
 - **Severity:** `low` individually, and worth treating as one piece of work —
   which is how it was done.
 - **Raised by:** [accessibility](cross-cutting/accessibility.md),
@@ -1022,3 +1182,9 @@ All fixed.
 
 Fixes verified at commit `4d19995`, against `bun run lint`, `bun run typecheck`,
 `bun run test`, `bun run test:db` and `bun run test:e2e`.
+
+B-44 to B-49 verified against `bun run format`, `bun run lint`,
+`bun run typecheck` and `bun run test` — 164 files, 2,816 tests. Not `test:db`:
+nothing in that pass touches a migration or an RPC. Not `test:e2e` either, which
+is CI's job on this branch; none of the six changes a screen's happy path, and
+each one is pinned by a unit test that fails without it.

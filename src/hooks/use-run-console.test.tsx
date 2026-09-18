@@ -7,6 +7,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/query";
 import { makeBundle, makeParticipant, resetFixtureIds, uuid } from "@/test/fixtures";
 import { OUT_OF_FIELD_MESSAGE } from "@/lib/current-athlete";
+import { ACTIVE_RUN_VERSION } from "@/lib/active-run";
 
 const setParticipantStatus = vi.hoisted(() => vi.fn());
 const resetParticipantRuns = vi.hoisted(() => vi.fn());
@@ -374,6 +375,104 @@ describe("useRunConsole", () => {
 
     act(() => result.current.undoLastSplit());
     expect(result.current.run?.splits).toHaveLength(0);
+  });
+
+  /**
+   * A run stopped but not yet saved — the failed-save window, where the console
+   * shows Retry save and Discard and the Stations & Splits list stays on screen
+   * underneath them.
+   */
+  function storeFinishedRun(participantId: string) {
+    loadActiveRun.mockResolvedValue({
+      v: ACTIVE_RUN_VERSION,
+      clientKey: "ck-run",
+      eventId: EVENT_ID,
+      participantId,
+      startedAtIso: "2026-07-28T12:00:00.000Z",
+      startedAt: Date.now() - 40_000,
+      status: "finished",
+      pauses: [],
+      splits: [
+        {
+          clientKey: "ck-split",
+          stationId: uuid(),
+          cumulative_time_ms: 12_000,
+          segment_time_ms: 12_000,
+          recorded_at: "2026-07-28T12:00:12.000Z",
+        },
+      ],
+      penalties: [],
+      finishedAtIso: "2026-07-28T12:00:40.000Z",
+      finishedAt: Date.now(),
+    });
+  }
+
+  it("will not undo a split on a run that has already finished", async () => {
+    // Retry save re-sends the record as it stands, and the splits go up with
+    // `onConflict: "client_key"` — an upsert can add and update but cannot
+    // delete a row by absence. So an undo here, after a save that committed the
+    // splits and then failed, is dropped on the server while the retry reports
+    // "Run saved". The console's Undo button stayed live through that whole
+    // window.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    storeFinishedRun(alice.participant_id);
+    const { result } = await mount([alice]);
+    await waitFor(() => expect(result.current.run?.status).toBe("finished"));
+
+    act(() => result.current.undoLastSplit());
+
+    expect(result.current.run?.splits).toHaveLength(1);
+    expect(result.current.finished).toBe(true);
+  });
+
+  it("will not add a penalty to a run that has already finished", async () => {
+    // Same window, same reason. The chip was disabled on the console and the
+    // hook trusted it, which left the guard living in one of the two callers.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    storeFinishedRun(alice.participant_id);
+    const { result } = await mount([alice]);
+    await waitFor(() => expect(result.current.run?.status).toBe("finished"));
+
+    act(() => result.current.addPenalty(null, 5_000, "Course cut"));
+
+    expect(result.current.run?.penalties).toHaveLength(0);
+  });
+
+  it("still takes a split back while the run is merely paused", async () => {
+    // The guard is `finished`, not "not running": pausing to argue about a
+    // split is exactly when somebody wants to take it back.
+    const station = {
+      id: uuid(),
+      event_id: EVENT_ID,
+      name: "Sled",
+      short_name: null,
+      station_order: 1,
+      active: true,
+      split_enabled: true,
+      penalty_amount_ms: 2_000,
+    };
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+
+    useEventBundle.mockReturnValue({
+      ...setupBundle([alice]),
+      bundle: makeBundle({ participants: [alice], stations: [station] }),
+    });
+    const { useRunConsole } = await import("./use-run-console");
+    const { wrapper } = createQueryWrapper();
+    const { result } = renderHook(() => useRunConsole(), { wrapper });
+
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+    act(() => result.current.recordSplit(station.id));
+    act(() => result.current.togglePause());
+
+    act(() => result.current.undoLastSplit());
+    act(() => result.current.addPenalty(station.id, 2_000, "Sled penalty"));
+
+    expect(result.current.run?.splits).toHaveLength(0);
+    expect(result.current.run?.penalties).toHaveLength(1);
   });
 
   it("finishes the active run and clears local storage on save", async () => {

@@ -461,7 +461,9 @@ function TimingConsole() {
                   size="sm"
                   variant="ghost"
                   onClick={undoLastSplit}
-                  disabled={run.splits.length === 0}
+                  // `finished` for the same reason the penalty chip below
+                  // carries it: the finished record is what Retry save re-sends.
+                  disabled={run.splits.length === 0 || finished}
                 >
                   <Redo2 className="mr-1 h-3.5 w-3.5" /> Undo split
                 </Button>
