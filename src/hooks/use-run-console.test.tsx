@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/query";
 import { makeBundle, makeParticipant, resetFixtureIds, uuid } from "@/test/fixtures";
+import { OUT_OF_FIELD_MESSAGE } from "@/lib/current-athlete";
 
 const setParticipantStatus = vi.hoisted(() => vi.fn());
 const resetParticipantRuns = vi.hoisted(() => vi.fn());
@@ -464,9 +465,10 @@ describe("useRunConsole", () => {
       participant: { id: uuid(), name: "Bob", nickname: null },
       running_order: 2,
     });
+    // The promote lands, the demote after it does not.
     setParticipantStatus
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue({ ok: true });
+      .mockResolvedValueOnce({ ok: true })
+      .mockRejectedValue(new Error("offline"));
     const { result } = await mount([alice, bob]);
 
     act(() => result.current.setSelected(bob.participant_id));
@@ -479,6 +481,37 @@ describe("useRunConsole", () => {
     });
     expect(result.current.run?.participantId).toBe(bob.participant_id);
     expect(toastError).not.toHaveBeenCalled();
+  });
+
+  // The order is the point, not just that both writes happen. Demoting first
+  // meant a refused start -- another phone scratching this athlete in the gap --
+  // left the crowd's clock with NOBODY on it: the previous athlete already put
+  // back to waiting and no replacement to show. Before this PR that refusal at
+  // least left them standing.
+  it("leaves the previous athlete on the clock when the start is refused", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      running_order: 1,
+      participation_status: "running",
+    });
+    const bob = makeParticipant({
+      participant: { id: uuid(), name: "Bob", nickname: null },
+      running_order: 2,
+    });
+    setParticipantStatus.mockRejectedValue(new Error(OUT_OF_FIELD_MESSAGE));
+    const { result } = await mount([alice, bob]);
+
+    act(() => result.current.setSelected(bob.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    // One write attempted -- the start -- and nothing said about Alice.
+    expect(setParticipantStatus).toHaveBeenCalledTimes(1);
+    expect(setParticipantStatus).not.toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "waiting" },
+    });
+    expect(result.current.run).toBeNull();
   });
 });
 

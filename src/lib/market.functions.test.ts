@@ -366,6 +366,59 @@ describe("getMyStall", () => {
     expect(res.recent.map((l) => l.id)).toEqual([LISTING]);
     expect(res.recent[0]).toMatchObject({ status: "sold", buyerId: THEM });
   });
+
+  it("orders two listings that settled mid-read by when they settled", async () => {
+    // `recent` answers "what settled lately", so it is ordered by resolved_at --
+    // and the live half is ordered by created_at. A row de-duplicated in place at
+    // its live position would carry the wrong one of those two into the list.
+    // Here the OLDER listing settles LAST, so the two orders disagree and only
+    // resolved_at is right.
+    const row = (id: string, status: string, created: string, resolved: string | null) => ({
+      id,
+      event_id: EVENT,
+      seller_id: ME,
+      kind: "roster",
+      card_copy_id: `copy-${id}`,
+      secret_pull_id: null,
+      price: 40,
+      status,
+      buyer_id: status === "sold" ? THEM : null,
+      created_at: created,
+      resolved_at: resolved,
+    });
+    withDb({
+      "market_listings.select": [
+        // Live read, created_at desc: the NEWER listing first.
+        {
+          data: [
+            row("new", "active", "2026-08-30T02:00:00Z", null),
+            row("old", "active", "2026-08-30T01:00:00Z", null),
+          ],
+        },
+        // Settled read, resolved_at desc: the older one settled last, so it leads.
+        {
+          data: [
+            row("old", "sold", "2026-08-30T01:00:00Z", "2026-08-30T04:00:00Z"),
+            row("new", "sold", "2026-08-30T02:00:00Z", "2026-08-30T03:00:00Z"),
+          ],
+        },
+      ],
+      "card_copies.select": {
+        data: [
+          { id: "copy-old", event_participant_id: "ep", edition: "standard", edition_asserted_by: "server" }, // prettier-ignore
+          { id: "copy-new", event_participant_id: "ep", edition: "standard", edition_asserted_by: "server" }, // prettier-ignore
+        ],
+      },
+      "secret_card_pulls.select": { data: [] },
+    });
+    const { getMyStall } = await import("./market.functions");
+    const res = await callServerFn<{
+      active: { id: string }[];
+      recent: { id: string }[];
+    }>(getMyStall, { headers: asMe() });
+    expect(res.active).toEqual([]);
+    expect(res.recent.map((l) => l.id)).toEqual(["old", "new"]);
+  });
 });
 
 describe("listCardForDust", () => {

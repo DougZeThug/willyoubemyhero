@@ -71,7 +71,7 @@ const adoptLocalCollection = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/adopt-collection")>()),
   adoptLocalCollection: (...args: unknown[]) => adoptLocalCollection(...args),
-  snapshotLocalCollection: async () => ({}),
+  snapshotLocalCollection: () => Promise.resolve({}),
 }));
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
@@ -108,7 +108,8 @@ beforeEach(() => {
   useQuery.mockReturnValue(rosterState({ data: [ATHLETE] }));
   claimPlayer.mockResolvedValue({ ok: true, token: "m.tok", name: "Doug" });
   adoptLocalCollection.mockResolvedValue(1);
-  carryPackToIdentity.mockResolvedValue(undefined);
+  // carryPackToIdentity needs no stubbed answer: the route only awaits it, and a
+  // bare vi.fn() already returns undefined, which awaits fine.
 });
 
 describe("the name picker", () => {

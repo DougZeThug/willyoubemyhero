@@ -325,13 +325,17 @@ export const getMyStall = createServerFn({ method: "GET" }).handler(async (): Pr
   // Settled wins because it is the later snapshot of the two answers, and
   // because the failure it avoids is the worse one: a listing shown as live when
   // it is gone invites a tap, where one shown as settled a beat early is only
-  // early. Overwriting rather than skipping, so a key already present keeps its
-  // insertion position — Map.set leaves that alone — and the row order the two
-  // ORDER BYs above produced survives the de-duplication untouched.
-  const byId = new Map<string, MarketListingRow>();
-  for (const r of live ?? []) byId.set(r.id, r);
-  for (const r of settled ?? []) byId.set(r.id, r);
-  const rows = [...byId.values()];
+  // early.
+  //
+  // Dropped from the live half rather than overwritten in place, so the row
+  // keeps the SETTLED half's position too. Each block below is still in the
+  // order its own ORDER BY produced it, which is what `recent` is read in — and
+  // a row overwritten at its live-read position would have carried `created_at`
+  // ordering into a list sorted by `resolved_at`. One such row lands first
+  // either way and looks right; two invert whenever the older-created one
+  // settles last.
+  const settledIds = new Set((settled ?? []).map((r) => r.id));
+  const rows = [...(live ?? []).filter((r) => !settledIds.has(r.id)), ...(settled ?? [])];
   // Everything on this list is the caller's own, so nothing is concealed from
   // them — but a secret they LISTED and no longer own (it sold) is no longer in
   // their holdings, and the tile would go face-down on the one screen that has to
