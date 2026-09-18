@@ -56,15 +56,15 @@ function DraftPage() {
     // queued anybody re-timed twice and held a turn for somebody the board had
     // already dropped -- the one thing the draft board is not allowed to do is
     // disagree with the leaderboard about who was faster.
-    const ranking = standings(bundle)
-      .map((s) => ({ run: s.run, ep: parts.find((p) => p.participant_id === s.participantId) }))
-      // standings() builds its rows from runs, so a run whose athlete is missing
-      // from the roster still ranks -- and currentPicker.ep is dereferenced
-      // unguarded below.
-      .filter(
-        (row): row is { run: (typeof row)["run"]; ep: NonNullable<(typeof row)["ep"]> } =>
-          row.ep != null,
-      );
+    // `ep` is non-null because standings() drops runs whose athlete is off the
+    // roster, which is what currentPicker.ep being dereferenced unguarded below
+    // rests on. The filter that used to live here belongs there: places are
+    // counted before a route sees them, so an orphan filtered out this late had
+    // already pushed everyone down a number.
+    const ranking = standings(bundle).map((s) => ({
+      run: s.run,
+      ep: parts.find((p) => p.participant_id === s.participantId)!,
+    }));
     const takenSet = new Set(
       parts.filter((p) => p.selected_draft_position != null).map((p) => p.selected_draft_position!),
     );

@@ -250,6 +250,29 @@ describe("useRunConsole", () => {
     expect(toastError).toHaveBeenCalledWith("That athlete is out of the field.");
   });
 
+  it("takes it back for the other refusal too, a roster row that is gone", async () => {
+    // setParticipantStatus has two ways to refuse a start, and only one of them
+    // says "out of the field". Deleting the athlete off the roster makes its
+    // membership read come back empty, and that sentence used to fall through to
+    // the network branch below — leaving a timer running for somebody who no
+    // longer exists. Finishing it writes an official run with no roster row
+    // behind it, which standings() ranks anyway.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    setParticipantStatus.mockRejectedValue(new Error("That athlete is not part of this event."));
+
+    const { result } = await mount([alice]);
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(result.current.run).toBeNull();
+    expect(clearActiveRun).toHaveBeenCalled();
+    // The sentence startRun's own pre-flight uses for the same condition, rather
+    // than the server's wording about events, which means nothing on this screen.
+    expect(toastError).toHaveBeenCalledWith("That athlete is no longer on the roster.");
+  });
+
   it("keeps the local run when the start write only failed on the network", async () => {
     // The other half of the same branch, and the reason it is a branch at all: a
     // commissioner is standing in a garden with somebody already running, and a

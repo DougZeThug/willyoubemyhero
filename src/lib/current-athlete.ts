@@ -41,6 +41,39 @@ const DONE = new Set(["finished", ...OUT_OF_CONTENTION_STATUSES]);
  */
 export const OUT_OF_FIELD_MESSAGE = "That athlete is out of the field.";
 
+/**
+ * The other sentence a refused start can carry: the roster row it aimed at is
+ * gone, so the server never found an athlete to put on the clock.
+ *
+ * It lives here rather than beside `assertInEvent`, which builds it for every
+ * table it guards, so the server's wording and the client's test of it cannot
+ * drift. admin-write.functions.ts already imports this file; the reverse would
+ * be a cycle.
+ */
+export function notInEventMessage(what: string): string {
+  return `That ${what} is not part of this event.`;
+}
+
+/** What the console says for that one, matching startRun's own pre-flight. */
+export const OFF_ROSTER_MESSAGE = "That athlete is no longer on the roster.";
+
+/**
+ * A start the server REFUSED, as opposed to one the network dropped. Returns the
+ * sentence to show, or null when it was the network.
+ *
+ * Both refusals are permanent, and that is why they share a branch: the athlete
+ * is out of the field, or their roster row has been deleted. Either way the
+ * local timer has to come down, because finishing a run the server would not
+ * start goes through saveCompletedRun -- which either writes the athlete back to
+ * "finished" and undoes a scratch by another door, or writes an official run
+ * with no roster row behind it for standings() to rank.
+ */
+export function refusedStart(message: string): string | null {
+  if (message.includes(OUT_OF_FIELD_MESSAGE)) return OUT_OF_FIELD_MESSAGE;
+  if (message.includes(notInEventMessage("athlete"))) return OFF_ROSTER_MESSAGE;
+  return null;
+}
+
 export function awaitingRun(entry: Pick<QueueEntry, "participation_status">): boolean {
   return !DONE.has(entry.participation_status ?? "queued");
 }

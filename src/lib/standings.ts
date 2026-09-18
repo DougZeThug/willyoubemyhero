@@ -103,10 +103,28 @@ export function standings<P extends StandingsParticipant, R extends StandingsRun
   if (!bundle) return [];
   const excluded = outOfContention(bundle);
 
+  /**
+   * Runs are the only thing placed here, so a run whose athlete is not on the
+   * roster at all would rank -- and not merely as a ghost row the screens could
+   * each filter out. `place` below counts strictly faster runs, so a fast orphan
+   * pushes every real athlete down a number; by the time a route sees the rows
+   * the damage is already in them. It has to be resolved before `rows` is built.
+   *
+   * Empty is not "nobody is on the roster", for the same reason absent statuses
+   * are not "everybody is disqualified" -- an archived snapshot /recap reads may
+   * carry runs and no participants at all, and blanking its board would be a
+   * worse answer than placing what it does have. Degrade, like outOfContention.
+   */
+  const roster =
+    bundle.participants.length > 0
+      ? new Set(bundle.participants.map((p) => p.participant_id))
+      : null;
+
   const best = new Map<string, R>();
   for (const run of bundle.runs) {
     if (!run.is_official || run.official_time_ms == null) continue;
     if (excluded.has(run.participant_id)) continue;
+    if (roster && !roster.has(run.participant_id)) continue;
     const prev = best.get(run.participant_id);
     if (!prev || run.official_time_ms < (prev.official_time_ms ?? Infinity)) {
       best.set(run.participant_id, run);

@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { OUT_OF_FIELD_MESSAGE } from "./current-athlete";
+import { notInEventMessage, OUT_OF_FIELD_MESSAGE } from "./current-athlete";
 import { requireAdmin } from "./require-auth.server";
 import { OUT_OF_CONTENTION_STATUSES } from "./standings";
 import { uuid as zuuid } from "./zod-uuid";
@@ -46,7 +46,7 @@ function likeLiteral(value: string): string {
  * and a foreign id gets an answer rather than a shrug.
  */
 function assertInEvent(rows: unknown[] | null | undefined, what: string): void {
-  if (!rows || rows.length === 0) throw new Error(`That ${what} is not part of this event.`);
+  if (!rows || rows.length === 0) throw new Error(notInEventMessage(what));
 }
 
 // ---------- Participants (global) ----------
@@ -293,7 +293,7 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
       .eq("id", data.eventParticipantId)
       .eq("event_id", data.eventId)
       .maybeSingle();
-    if (!current) throw new Error("That athlete is not part of this event.");
+    if (!current) throw new Error(notInEventMessage("athlete"));
     // Nobody out of the field goes back on the clock by being started.
     //
     // Defence in depth for the stale-selection path: the Start card seeds a
