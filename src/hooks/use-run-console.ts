@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { resetParticipantRuns, setParticipantStatus } from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
-import { awaitingRun, OUT_OF_FIELD_MESSAGE } from "@/lib/current-athlete";
+import { awaitingRun, OUT_OF_FIELD_MESSAGE, refusedStart } from "@/lib/current-athlete";
 import { newClientKey } from "@/lib/format";
 import {
   ACTIVE_RUN_CLEARED_EVENT,
@@ -184,21 +184,26 @@ export function useRunConsole() {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "";
-      if (message.includes(OUT_OF_FIELD_MESSAGE)) {
-        // Refused, not dropped. The check above reads this device's last bundle,
-        // so another phone scratching this athlete in the meantime gets past it
-        // and the server is the first to know — by which point the timer is
-        // already running locally and saved to IndexedDB.
-        //
-        // Left standing, that run is worse than no run: finishing it goes
-        // through saveCompletedRun, which writes the athlete to "finished" and
-        // undoes the scratch by another door — exactly what the server guard
-        // exists to stop. So it goes, and the roster read catches this screen up.
+      // Both of the server's refusals, not just the scratch. The check above
+      // reads this device's last bundle, so another phone scratching this
+      // athlete — or deleting them off the roster outright — gets past it and
+      // the server is the first to know, by which point the timer is already
+      // running locally and saved to IndexedDB.
+      //
+      // Left standing, that run is worse than no run. Finishing it goes through
+      // saveCompletedRun, and both refusals have a way for that to hurt: a
+      // scratched athlete gets written back to "finished", undoing the scratch
+      // by another door — exactly what the server guard exists to stop — and a
+      // deleted one gets an official run with no roster row behind it, which
+      // standings() ranks anyway. So it goes, and the roster read catches this
+      // screen up.
+      const refusal = refusedStart(message);
+      if (refusal) {
         await clearActiveRun();
         setRun(null);
         setSelected("");
         await qc.invalidateQueries();
-        toast.error(OUT_OF_FIELD_MESSAGE);
+        toast.error(refusal);
         return;
       }
       // Anything else is the network, and the run stays: a commissioner is

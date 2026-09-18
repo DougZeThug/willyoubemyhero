@@ -198,12 +198,30 @@ describe("subscribeToEventChannel", () => {
 
   it("refetches on recovery, because it missed everything while it was down", async () => {
     const { subscribeToEventChannel } = await freshModule();
-    const sub = { change: vi.fn(), health: vi.fn() };
+    // With eventRow mocked, because this test could not see the half it was
+    // missing without it: recovery replayed `change` and not the events-row
+    // signal, so a card-back upload that landed during the outage stayed
+    // un-refetched. "Everything" in the name of this test has to mean both.
+    const sub = { change: vi.fn(), eventRow: vi.fn(), health: vi.fn() };
     subscribeToEventChannel(EVENT_ID, sub);
     statusCallbacks[0]("SUBSCRIBED");
     expect(sub.change).not.toHaveBeenCalled();
+    expect(sub.eventRow).not.toHaveBeenCalled();
     statusCallbacks[0]("CHANNEL_ERROR");
     statusCallbacks[0]("SUBSCRIBED");
+    expect(sub.change).toHaveBeenCalledTimes(1);
+    expect(sub.eventRow).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers a subscriber that never asked for the events-row signal", async () => {
+    // eventRow is optional, and recovery now fires it. A subscriber without one
+    // must not take the channel down with it — useEventSocial has two of these.
+    const { subscribeToEventChannel } = await freshModule();
+    const sub = { change: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, sub);
+    statusCallbacks[0]("SUBSCRIBED");
+    statusCallbacks[0]("CHANNEL_ERROR");
+    expect(() => statusCallbacks[0]("SUBSCRIBED")).not.toThrow();
     expect(sub.change).toHaveBeenCalledTimes(1);
   });
 

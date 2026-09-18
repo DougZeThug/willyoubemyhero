@@ -48,16 +48,24 @@ function AnalyticsPage() {
       if (s.segment_time_ms == null) continue;
       const st = bundle.stations.find((x) => x.id === s.station_id);
       if (!st) continue;
-      const arr = byStation.get(st.name) ?? [];
+      // Keyed by id, not by name. Nothing stops two stations in one event
+      // sharing a name -- no unique index on stations.name, and neither
+      // upsertStation nor the admin panel checks for one -- and by name their
+      // splits pooled into a single bucket. The map below still emits a row per
+      // station, so both rows then read the SAME merged average and the same
+      // global minimum: two identical bars, an average that is no station's, and
+      // a slow station credited with a best it never produced. `bests` below
+      // learned this about athletes called Dave.
+      const arr = byStation.get(st.id) ?? [];
       arr.push(s.segment_time_ms);
-      byStation.set(st.name, arr);
+      byStation.set(st.id, arr);
     }
     // Splits that were all unmeasured, or that name stations this event does
     // not have, leave nothing to plot — the same nothing as no splits at all,
     // so say so rather than drawing a row of zero bars.
     if (byStation.size === 0) return [];
     return bundle.stations.map((st) => {
-      const arr = byStation.get(st.name) ?? [];
+      const arr = byStation.get(st.id) ?? [];
       const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
       const best = arr.length ? Math.min(...arr) : 0;
       return {

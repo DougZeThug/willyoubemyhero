@@ -825,6 +825,13 @@ test.describe("phone sweeps", () => {
       // press landed on the nav and the control looked like four dead corners
       // while being perfectly fine.
       await control.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      // And then prove it landed somewhere clickable, because the failure when it
+      // has not is maximally unhelpful: presses at coordinates outside the
+      // viewport hit nothing, Radix reads that as a press outside an open dialog
+      // and unmounts it, and the next getAttribute waits 60s for a control that
+      // no longer exists. A control that is not in the viewport cannot be
+      // measured, so say that instead.
+      await expect(control).toBeInViewport();
       const box = await control.boundingBox();
       if (!box) throw new Error(`${label}: no box to measure`);
       const cx = box.x + box.width / 2;
@@ -846,8 +853,8 @@ test.describe("phone sweeps", () => {
       return dead;
     };
 
-    // The nav-rows panel is the app's only Switch, one per row. Toggling is
-    // local draft state until Save, so pressing it four times writes nothing.
+    // The nav-rows panel, one switch per row. Toggling is local draft state until
+    // Save, so pressing it four times writes nothing.
     //
     // NOT `.first()`, which is the Vault row: it is pinned, so its switch is
     // disabled, and a disabled control correctly does nothing when pressed. That
@@ -861,6 +868,52 @@ test.describe("phone sweeps", () => {
       "Part of the switch's 44px square is a dead zone. The ::before in " +
         "ui/switch.tsx is what provides it; check `relative` is still on the root.",
     ).toEqual([]);
+
+    // The app's other Switches, and the reason this test grew: there are two of
+    // them stacked 12px apart in the stations edit sheet, and that sheet is
+    // closed by default. This is the same gap that let a 32px menu row survive
+    // three passes — "the controls that happen to be mounted are 44px" is not a
+    // floor — so the sweep opens the sheet rather than trusting the panel it can
+    // already see.
+    //
+    // "Add station" rather than an existing row: it opens the same sheet with a
+    // blank draft, so this does not depend on the stub carrying a station, and
+    // nothing is written until Save, which nothing here presses.
+    //
+    // BOTH switches, in DOM order. Only the second one was ever reachable when
+    // the rows were 20px tall — the lower switch's ::before covered the gap and
+    // the bottom of its neighbour's square — so checking one of them would have
+    // checked the one that was already fine.
+    await page
+      .getByRole("button", { name: /^Stations/i })
+      .first()
+      .click();
+    await page.getByRole("button", { name: /^Add station$/i }).click();
+    // Settled, not merely mounted. The sheet slides up, and `toBeVisible` passes
+    // the moment it is in the DOM — mid-slide, with the switch's box still below
+    // the fold. Measured there, all four corners were outside a 390x664 viewport,
+    // so every press landed on nothing, Radix took it for a press outside the
+    // dialog, and the sheet closed under the test. Waiting for the animations
+    // rather than a timeout: the settled box is the only one worth measuring.
+    const sheet = page.locator('[role="dialog"]');
+    await expect(sheet).toBeVisible();
+    await sheet.evaluate((el) =>
+      Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+    );
+    for (const id of ["station-split", "station-active"]) {
+      expect(
+        await cornersRespond(page.locator(`#${id}[role="switch"]`), id),
+        `Part of ${id}'s 44px square is a dead zone. These two rows are 12px ` +
+          "apart, so each needs min-h-11 to keep its own hit box — see " +
+          "ui/switch.tsx and nav-rows-panel.tsx.",
+      ).toEqual([]);
+    }
+
+    // Put the sheet away before the checkbox half of this test. An open Radix
+    // dialog aria-hides the rest of the page, so the panel below is not merely
+    // covered by it — it cannot be found by role at all.
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
 
     // And the app's only Checkbox, two disclosures deep: the Card Prompt Studio
     // panel, then Batch Production inside it. Reaching it is the point — EXEMPT

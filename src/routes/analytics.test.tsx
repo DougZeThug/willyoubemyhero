@@ -255,6 +255,47 @@ describe("AnalyticsPage personal bests", () => {
   });
 });
 
+describe("two stations called the same thing", () => {
+  it("gives each its own average and its own best", () => {
+    // Nothing stops one event having two stations with the same name: no unique
+    // index on stations.name, and neither upsertStation nor the admin panel
+    // checks. Bucketed by name their splits pooled, and since a row is still
+    // emitted per station both rows read the merged average (10.5s) and the
+    // global minimum (5s) -- so the slow station was credited with a best it
+    // never produced, and neither average was anybody's.
+    const fast = makeStation({ name: "Sled Push", short_name: "SLED", station_order: 1 });
+    const slow = makeStation({ name: "Sled Push", short_name: "SLED", station_order: 2 });
+    const athlete = makeParticipant({ participation_status: "finished" });
+    const run = makeRun({ participant_id: athlete.participant_id });
+    useEventBundle.mockReturnValue({
+      event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+      bundle: makeBundle({
+        participants: [athlete],
+        stations: [fast, slow],
+        runs: [run],
+        splits: [
+          makeSplit({ run_id: run.id, station_id: fast.id, segment_time_ms: 5_000 }),
+          makeSplit({ run_id: run.id, station_id: fast.id, segment_time_ms: 7_000 }),
+          makeSplit({ run_id: run.id, station_id: slow.id, segment_time_ms: 12_000 }),
+          makeSplit({ run_id: run.id, station_id: slow.id, segment_time_ms: 18_000 }),
+        ],
+      }),
+      loading: false,
+      error: null,
+      failedTables: [],
+      realtimeDegraded: false,
+      refetch: vi.fn(() => Promise.resolve()),
+    });
+
+    render(<AnalyticsPage />);
+
+    expect(plotted()).toEqual([
+      { name: "Sled Push", avgSec: 6, bestSec: 5 },
+      { name: "Sled Push", avgSec: 15, bestSec: 12 },
+    ]);
+  });
+});
+
 describe("a split nobody measured", () => {
   /** One station, one run, and whatever segment times the case calls for. */
   function withSegments(segments: (number | null)[]) {

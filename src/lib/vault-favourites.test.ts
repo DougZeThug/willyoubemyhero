@@ -4,7 +4,7 @@
 // shelf reads in the order you built it, that a browser refusing to store still
 // lets you pin for the page load, and that the id space can never confuse a
 // roster card with a secret.
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
   rosterFavouriteId,
@@ -20,6 +20,14 @@ const ALICE = rosterFavouriteId("alice");
 const GARY = secretFavouriteId("gary");
 
 const stored = () => JSON.parse(window.localStorage.getItem(KEY)!).ids;
+
+// Two tests here block setItem to stand in for private mode, and a trailing
+// restore inside the test body does not run when an assertion throws before it —
+// which leaks a throwing Storage into every test after it and reads as three
+// failures for one bug. Here instead, so a failure stays one failure.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("favourite ids", () => {
   it("keeps a roster card and a secret apart even when they share a uuid", () => {
@@ -101,16 +109,51 @@ describe("useVaultFavourites", () => {
     const { result } = renderHook(() => useVaultFavourites());
     act(() => result.current.toggle(ALICE));
     expect(result.current.isFavourite(ALICE)).toBe(true);
-    vi.restoreAllMocks();
   });
 
   it("follows a pin made in another tab", () => {
     const { result } = renderHook(() => useVaultFavourites());
     act(() => {
       window.localStorage.setItem(KEY, JSON.stringify({ ids: [GARY] }));
-      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     });
     expect(result.current.ids).toEqual([GARY]);
+  });
+
+  it("ignores a storage event for a key that is not this one", () => {
+    // `storage` fires for every key the OTHER tab writes, and this listener used
+    // to re-read its own regardless. Combined with the refused write above that
+    // is a real regression, not just wasted work: the in-memory hold is the only
+    // place the pin exists, and `current = read()` replaces it with the stale
+    // list storage kept -- so an unrelated write in another tab, a sign-out
+    // dropping a token or a photo snapshot, un-filled the star under the thumb.
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+    const { result } = renderHook(() => useVaultFavourites());
+    act(() => result.current.toggle(ALICE));
+    expect(result.current.isFavourite(ALICE)).toBe(true);
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "wwbh:member-token" }));
+    });
+
+    expect(result.current.isFavourite(ALICE)).toBe(true);
+  });
+
+  it("still follows a localStorage.clear() in another tab", () => {
+    // The null key, which the guard has to let through: clear() reports no key at
+    // all, and it did empty the shelf.
+    window.localStorage.setItem(KEY, JSON.stringify({ ids: [GARY] }));
+    const { result } = renderHook(() => useVaultFavourites());
+    expect(result.current.ids).toEqual([GARY]);
+
+    act(() => {
+      window.localStorage.clear();
+      window.dispatchEvent(new StorageEvent("storage", { key: null }));
+    });
+
+    expect(result.current.ids).toEqual([]);
   });
 
   it("shares one shelf between the grid and the detail page", () => {

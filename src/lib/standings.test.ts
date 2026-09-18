@@ -103,6 +103,40 @@ describe("standings", () => {
     expect(rows).toEqual([]);
   });
 
+  it("does not place a run whose athlete is not on the roster", () => {
+    // A run can outlive its roster row -- there is no foreign key from runs to
+    // event_participants, and a start refused after the timer was already running
+    // used to commit one. Left in, it does not just render as a ghost row the
+    // screens could each drop: `place` counts strictly faster runs, so the orphan
+    // takes first and every real athlete reads one lower than they finished.
+    const rows = standings({
+      participants: [{ participant_id: "p1" }, { participant_id: "p2" }],
+      runs: [
+        { participant_id: "ghost", official_time_ms: 10_000, is_official: true },
+        { participant_id: "p1", official_time_ms: 40_000, is_official: true },
+        { participant_id: "p2", official_time_ms: 90_000, is_official: true },
+      ],
+    });
+    expect(rows.map((r) => r.participantId)).toEqual(["p1", "p2"]);
+    expect(rows.map((r) => r.place)).toEqual([1, 2]);
+  });
+
+  it("places an archived snapshot that carries runs and no roster at all", () => {
+    // The escape hatch for the guard above, and the same argument outOfContention
+    // makes about absent statuses: a snapshot /recap reads may have no
+    // participants array worth the name, and reading empty as "nobody is on the
+    // roster" would blank its board rather than degrade it.
+    const rows = standings({
+      participants: [],
+      runs: [
+        { participant_id: "p1", official_time_ms: 90_000, is_official: true },
+        { participant_id: "p2", official_time_ms: 40_000, is_official: true },
+      ],
+    });
+    expect(rows.map((r) => r.participantId)).toEqual(["p2", "p1"]);
+    expect(rows.map((r) => r.place)).toEqual([1, 2]);
+  });
+
   it("returns nothing for a bundle that has not landed", () => {
     expect(standings(null)).toEqual([]);
   });

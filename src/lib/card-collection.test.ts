@@ -48,6 +48,56 @@ describe("collection", () => {
     expect(collection[CARD_A].pulledAt).toBeGreaterThan(0);
   });
 
+  it("reads its keys and its values as one snapshot", async () => {
+    /**
+     * The keys and the values are zipped by index, so they have to come from the
+     * same transaction. Each `idb` shorthand call opens one of its own -- so
+     * `getAllKeys()` then `getAll()` was two snapshots, and a collectCard from
+     * another tab landing between them inserted a key the value list did not
+     * have. Every entry from there on took its neighbour's card and the last was
+     * dropped, which in adoptableIds -- reading ids back out of the VALUES -- is
+     * a card that never reaches the server, or an undefined that throws.
+     *
+     * Counted rather than raced: fake-indexeddb will not reliably schedule a
+     * write into that gap, and a test that only sometimes interleaves is a test
+     * that passes for the wrong reason. The property is "one transaction", so
+     * that is what this measures.
+     */
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "champion");
+    await mod.collectCard(CARD_B, "base");
+
+    const opened = vi.spyOn(IDBDatabase.prototype, "transaction");
+    const collection = await mod.loadCollection();
+    const calls = opened.mock.calls.length;
+    opened.mockRestore();
+
+    expect(calls).toBe(1);
+    // And the zip landed: every key carries the card that says it is that card.
+    for (const [id, card] of Object.entries(collection)) {
+      expect(card.eventParticipantId).toBe(id);
+    }
+  });
+
+  it("counts a duplicate pull against the row as it is at write time", async () => {
+    // collectCard is a read-modify-write, and it used to `get` and `put` in two
+    // transactions. A second pull of the same card between them wrote back the
+    // count it had read before the first one landed -- the lost update
+    // addUnrecorded already documents for its own row.
+    const mod = await freshModule();
+    // Warm the database first: getDb's own upgrade opens a version-change
+    // transaction, and counting that would measure the open rather than the write.
+    await mod.loadCollection();
+
+    const opened = vi.spyOn(IDBDatabase.prototype, "transaction");
+    await mod.collectCard(CARD_A, "base");
+    const calls = opened.mock.calls.length;
+    opened.mockRestore();
+
+    expect(calls).toBe(1);
+    expect((await mod.loadCollection())[CARD_A].count).toBe(1);
+  });
+
   it("increments the count on a duplicate pull", async () => {
     const mod = await freshModule();
     await mod.collectCard(CARD_A, "base");

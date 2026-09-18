@@ -59,10 +59,17 @@ vi.mock("lucide-react", async (importOriginal) => {
   return stubs;
 });
 
-/** The tally query, shaped as React Query hands it over. */
+/**
+ * The tally, shaped as useEventAwards hands it over.
+ *
+ * `lockedAtRead` is the load-bearing field: getAwards reads awards_locked before
+ * the rows, so it says whether THIS list was read with voting already closed.
+ * Defaulting it false is the pre-first-read state.
+ */
 function awardsQuery(over: Record<string, unknown>) {
   return {
-    data: [],
+    winners: [],
+    lockedAtRead: false,
     isPending: false,
     isFetching: false,
     isLoading: false,
@@ -96,31 +103,64 @@ beforeEach(() => {
 });
 
 describe("AwardsPage locked reveal", () => {
-  it("does not claim nobody voted while the tally is still being refetched", () => {
-    // close_award_voting writes the winners and flips awards_locked together, and
-    // the realtime handler invalidates both queries at once — so `locked` flips on
-    // whichever answers first, over the empty array cached while voting was open.
+  it("does not claim nobody voted over a tally read before the lock", () => {
+    // The flip race: `locked` comes off the event row and the winners off a query
+    // of their own, both invalidated at once, so `locked` flips on whichever
+    // answers first. A list read while voting was open cannot say who won, and
+    // lockedAtRead false is exactly that list.
     lockedEvent();
-    useEventAwards.mockReturnValue(awardsQuery({ data: [], isFetching: true }));
+    useEventAwards.mockReturnValue(awardsQuery({ winners: [], lockedAtRead: false }));
 
     render(<AwardsPage />);
     expect(screen.queryByText("No votes cast.")).toBeNull();
     expect(screen.getAllByText("Counting the votes…").length).toBeGreaterThan(0);
   });
 
-  it("still says nobody voted once the tally has settled empty", () => {
-    // The sentence is a settled fact, and has to keep being sayable.
+  it("says nobody voted for an empty tally that WAS read under the lock", () => {
+    // Read with awards_locked already set, and close_award_voting publishes the
+    // winners before it sets that flag — so empty here is the settled answer.
     lockedEvent();
-    useEventAwards.mockReturnValue(awardsQuery({ data: [] }));
+    useEventAwards.mockReturnValue(awardsQuery({ winners: [], lockedAtRead: true }));
 
     render(<AwardsPage />);
     expect(screen.getAllByText("No votes cast.").length).toBeGreaterThan(0);
     expect(screen.queryByText("Counting the votes…")).toBeNull();
   });
 
+  it("keeps saying nobody voted through the backstop poll's refetches", () => {
+    // The shared channel nudges this key every fifteen seconds while the tab is
+    // visible. Deciding from isFetching and an empty array meant a closed combine
+    // where nobody voted flipped to "Counting the votes…" on every tick, forever,
+    // about a count that had finished hours earlier. A refetch in flight says
+    // nothing now; what the list was read under does.
+    lockedEvent();
+    useEventAwards.mockReturnValue(awardsQuery({ winners: [], lockedAtRead: true }));
+    const { rerender } = render(<AwardsPage />);
+    expect(screen.getAllByText("No votes cast.").length).toBeGreaterThan(0);
+
+    useEventAwards.mockReturnValue(
+      awardsQuery({ winners: [], lockedAtRead: true, isFetching: true }),
+    );
+    rerender(<AwardsPage />);
+
+    expect(screen.getAllByText("No votes cast.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Counting the votes…")).toBeNull();
+  });
+
+  it("counts, rather than settling, while the very first read is still out", () => {
+    // isPending with nothing read yet: lockedAtRead defaults false, which is the
+    // honest answer -- a tally cannot speak for a result it has not seen.
+    lockedEvent();
+    useEventAwards.mockReturnValue(awardsQuery({ isPending: true, isFetching: true }));
+
+    render(<AwardsPage />);
+    expect(screen.queryByText("No votes cast.")).toBeNull();
+    expect(screen.getAllByText("Counting the votes…").length).toBeGreaterThan(0);
+  });
+
   it("keeps the failed read distinct from both of them", () => {
     lockedEvent();
-    useEventAwards.mockReturnValue(awardsQuery({ data: undefined, isError: true }));
+    useEventAwards.mockReturnValue(awardsQuery({ isError: true }));
 
     render(<AwardsPage />);
     expect(screen.getAllByText("Couldn't read the votes just now — retrying.").length).toBe(6);
@@ -133,7 +173,8 @@ describe("AwardsPage locked reveal", () => {
     const ep = lockedEvent();
     useEventAwards.mockReturnValue(
       awardsQuery({
-        data: [{ award_type: "mvp", participant_id: ep.participant_id }],
+        winners: [{ award_type: "mvp", participant_id: ep.participant_id }],
+        lockedAtRead: true,
         isFetching: true,
       }),
     );

@@ -56,11 +56,19 @@ function DraftPage() {
     // queued anybody re-timed twice and held a turn for somebody the board had
     // already dropped -- the one thing the draft board is not allowed to do is
     // disagree with the leaderboard about who was faster.
+    // Two different holes, and standings() only closes one of them. It drops a
+    // run whose athlete is missing from a roster it HAS -- which is the orphan
+    // case, and has to be done there because `place` counts faster runs, so
+    // filtering this late leaves everyone's number already shifted.
+    //
+    // This filter is for the other one: a failed event_participants read
+    // coalesces to [], and standings() treats an empty roster as an archived
+    // snapshot rather than blanking an old recap's board, so it keeps every row.
+    // `parts` is empty too, so every `ep` here is undefined and the unguarded
+    // dereference in `ranking.find` below took the whole screen down with a
+    // TypeError -- on the one code path that has a degraded state to show.
     const ranking = standings(bundle)
       .map((s) => ({ run: s.run, ep: parts.find((p) => p.participant_id === s.participantId) }))
-      // standings() builds its rows from runs, so a run whose athlete is missing
-      // from the roster still ranks -- and currentPicker.ep is dereferenced
-      // unguarded below.
       .filter(
         (row): row is { run: (typeof row)["run"]; ep: NonNullable<(typeof row)["ep"]> } =>
           row.ep != null,

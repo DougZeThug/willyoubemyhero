@@ -66,22 +66,42 @@ function OrderPage() {
         id: r.id,
         running_order: i + 1,
       }));
-      await setOrderFn({ data: { eventId: event.id, order: orderPayload } });
-      await recordFn({
-        data: {
-          eventId: event.id,
-          scope: "all",
-          previous: rows.map((r) => ({ id: r.id, running_order: r.running_order })),
-          resulting: orderPayload,
-          seed,
-        },
-      });
+      // Two writes, and only the first one decides whether the order changed.
+      // Sharing one catch made a failure in the second say "Failed to shuffle"
+      // about an order that was already committed -- and, worse than the wording,
+      // it skipped the invalidate below, so the screen went on showing the old
+      // order while the database held the new one. The two are split so the
+      // primary write's outcome is the one being reported.
+      try {
+        await setOrderFn({ data: { eventId: event.id, order: orderPayload } });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to shuffle");
+        return;
+      }
+
+      // Past here the order HAS changed, so this runs whatever happens next.
       // Not left to the realtime subscription: a reshuffle nobody can see is
       // worse than no reshuffle, and this is the screen everyone is looking at.
       await qc.invalidateQueries({ queryKey: ["event-bundle", event.id] });
+
+      try {
+        await recordFn({
+          data: {
+            eventId: event.id,
+            scope: "all",
+            previous: rows.map((r) => ({ id: r.id, running_order: r.running_order })),
+            resulting: orderPayload,
+            seed,
+          },
+        });
+      } catch {
+        // The audit row is what Undo reads `previous_order` back out of, so
+        // losing it costs the undo rather than the shuffle. Said plainly, and not
+        // as an error: the thing the commissioner asked for did happen.
+        toast.warning("Running order re-randomized, but not recorded — no undo for this one");
+        return;
+      }
       toast.success("Running order re-randomized");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to shuffle");
     } finally {
       setBusy(false);
     }

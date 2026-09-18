@@ -52,13 +52,13 @@ vi.mock("lucide-react", async (importOriginal) => {
   return stubs;
 });
 
-function showBundle(over: Parameters<typeof makeBundle>[0]) {
+function showBundle(over: Parameters<typeof makeBundle>[0], failedTables: string[] = []) {
   useEventBundle.mockReturnValue({
     event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-    bundle: makeBundle(over),
+    bundle: makeBundle({ ...over, failed: failedTables }),
     loading: false,
     error: null,
-    failedTables: [],
+    failedTables,
     realtimeDegraded: false,
     refetch: vi.fn(async () => {}),
   });
@@ -93,6 +93,21 @@ describe("DraftPage picking order", () => {
     expect(screen.getByText("On the clock")).toBeInTheDocument();
     expect(screen.getByText("Alice Ace")).toBeInTheDocument();
     expect(screen.queryByText("Dave Dropout")).toBeNull();
+  });
+
+  it("degrades rather than crashing when the roster read is the half that failed", () => {
+    // getEventBundle coalesces a failed event_participants read to [], and keeps
+    // the runs it DID read. standings() cannot filter against a roster it does not
+    // have -- it treats an empty one as an archived snapshot on purpose, rather
+    // than blanking an old recap's board -- so every row here has no `ep` behind
+    // it. Dereferencing one unguarded took /draft down with a TypeError instead of
+    // showing the degraded state this screen already has.
+    showBundle({ participants: [], runs: [makeRun({ official_time_ms: 40_000 })] }, [
+      "event_participants",
+    ]);
+
+    expect(() => render(<DraftPage />)).not.toThrow();
+    expect(screen.getByText("Couldn't read the combine just now — retrying.")).toBeInTheDocument();
   });
 
   it("quotes an athlete's best run when they were re-timed", () => {

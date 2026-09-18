@@ -43,16 +43,21 @@ function AwardsPage() {
   const locked = !!event?.awards_locked;
 
   // The reveal's third state, and the lock itself is what creates it.
-  // `awards_locked` rides the event row while the winners ride a query of their
-  // own, and the realtime handler invalidates both together -- so `locked` flips
-  // on whichever answers first, regularly with the tally still in flight.
   //
-  // isFetching, not isLoading: React Query keeps the previous `data` through a
-  // background refetch, so once the first read lands isLoading is false forever
-  // and the empty array cached while voting was open asserted "No votes cast."
-  // over real winners. Narrowed on an empty tally so one that HAS landed does not
-  // flicker back to counting -- every comment and reaction nudges this key too.
-  const countingVotes = awards.isPending || (awards.isFetching && !awards.data?.length);
+  // `locked` comes off the event row, which /awards reads from the bundle on a
+  // timer of its own, while the winners ride a query of their own -- so `locked`
+  // flips on whichever answers first, regularly with the tally still in flight.
+  // An empty tally at that moment says nothing about the result, and asserting
+  // "No votes cast." over it announced the wrong answer to the whole garden.
+  //
+  // So the tally says whether it was read under the lock, rather than this screen
+  // guessing from isFetching and an empty array -- which cannot tell the flip race
+  // apart from its own aftermath, and had a closed combine where nobody voted
+  // flashing "Counting the votes…" on every 15s poll, forever, about a count that
+  // finished hours ago. getAwards reads awards_locked before the rows and
+  // close_award_voting publishes them before it sets the flag, so lockedAtRead
+  // true means this list is the final one.
+  const countingVotes = !awards.lockedAtRead;
 
   const myVotes = useQuery({
     queryKey: ["my-award-votes", event?.id, me?.participantId],
@@ -77,14 +82,14 @@ function AwardsPage() {
 
   const winnersByCategory = useMemo(() => {
     const map = new Map<string, string[]>();
-    for (const a of awards.data ?? []) {
+    for (const a of awards.winners) {
       if (!a.award_type || !a.participant_id) continue;
       const list = map.get(a.award_type) ?? [];
       list.push(a.participant_id);
       map.set(a.award_type, list);
     }
     return map;
-  }, [awards.data]);
+  }, [awards.winners]);
 
   async function vote(category: string, targetParticipantId: string) {
     if (!event?.id || !me || locked) return;

@@ -68,7 +68,11 @@ function openChannel(eventId: string): Entry {
     for (const s of [...entry.subscribers]) s.change();
   };
 
-  /** Only ever from the `events` binding below — never from the poll. */
+  /**
+   * From the `events` binding below, and from a degraded→live recovery — never
+   * from the poll, which is on a timer and would re-sign every card in the event
+   * every fifteen seconds. See setHealth.
+   */
   const fanOutEventRow = () => {
     for (const s of [...entry.subscribers]) s.eventRow?.();
   };
@@ -93,11 +97,22 @@ function openChannel(eventId: string): Entry {
     if (entries.get(eventId) !== entry || entry.health === next) return;
     // Changes that happened while the socket was down were never delivered, so
     // recovery needs a refetch rather than just a resumed stream.
+    //
+    // BOTH signals, for that same reason. The `events` binding below fires the
+    // pair because an events-row write matters to more than the bundle, and a
+    // write that landed during the outage is exactly the one nobody got -- a
+    // card-back upload, whose old storage objects it hard-deleted. Replaying
+    // only `change` left those phones pointing at art that is gone until their
+    // own 45-minute and 3-hour timers came round, neither of which refetches on
+    // focus either. A reconnect is rare, so unlike the poll it can afford this.
     const recovered = entry.health === "degraded" && next === "live";
     entry.health = next;
     for (const s of [...entry.subscribers]) s.health(next);
     restartPoll();
-    if (recovered) fanOut();
+    if (recovered) {
+      fanOut();
+      fanOutEventRow();
+    }
   };
 
   entry.channel = supabase

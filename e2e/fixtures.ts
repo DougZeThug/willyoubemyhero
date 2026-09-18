@@ -210,7 +210,7 @@ export const DEFAULT_RESPONSES: Responses = {
   getActiveEvent: BUNDLE.event,
   getEventBundle: BUNDLE,
   getEventSocial: { reactions: [], comments: [] },
-  getAwards: [],
+  getAwards: { awards: [], lockedAtRead: false },
   getEventCardUrls: {},
   // No universal back by default, so the sealed pack renders its wax-foil
   // fallback. Does not collide with getEventCardUrls above: the stub matcher is

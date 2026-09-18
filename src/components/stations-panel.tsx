@@ -484,7 +484,17 @@ export function StationsPanel({ eventId }: { eventId: string }) {
                   Seconds, or mm:ss.hh. Leave blank for no penalty.
                 </p>
               </div>
-              <div className="flex items-center justify-between">
+              {/*
+                min-h-11 on the ROW, not the switch: ui/switch.tsx takes its 44px
+                floor as a `::before` that overhangs the 20px track by 12px on
+                every side, and these two rows sit 12px apart under space-y-3. A
+                20px row left the two hit boxes covering the whole gap between
+                them, and the later sibling won it -- so a tap in the empty space,
+                or just under "Record a split here", flipped Active instead.
+                A 44px row makes each box exactly its own row. Same fix as
+                nav-rows-panel.tsx, which is where the pattern comes from.
+              */}
+              <div className="flex min-h-11 items-center justify-between">
                 <Label htmlFor="station-split">Record a split here</Label>
                 <Switch
                   id="station-split"
@@ -492,7 +502,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
                   onCheckedChange={(v) => setDraft({ ...draft, split_enabled: v })}
                 />
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex min-h-11 items-center justify-between">
                 <Label htmlFor="station-active">Active</Label>
                 <Switch
                   id="station-active"
