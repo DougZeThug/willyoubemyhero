@@ -846,8 +846,8 @@ test.describe("phone sweeps", () => {
       return dead;
     };
 
-    // The nav-rows panel is the app's only Switch, one per row. Toggling is
-    // local draft state until Save, so pressing it four times writes nothing.
+    // The nav-rows panel, one switch per row. Toggling is local draft state until
+    // Save, so pressing it four times writes nothing.
     //
     // NOT `.first()`, which is the Vault row: it is pinned, so its switch is
     // disabled, and a disabled control correctly does nothing when pressed. That
@@ -861,6 +861,35 @@ test.describe("phone sweeps", () => {
       "Part of the switch's 44px square is a dead zone. The ::before in " +
         "ui/switch.tsx is what provides it; check `relative` is still on the root.",
     ).toEqual([]);
+
+    // The app's other Switches, and the reason this test grew: there are two of
+    // them stacked 12px apart in the stations edit sheet, and that sheet is
+    // closed by default. This is the same gap that let a 32px menu row survive
+    // three passes — "the controls that happen to be mounted are 44px" is not a
+    // floor — so the sweep opens the sheet rather than trusting the panel it can
+    // already see.
+    //
+    // "Add station" rather than an existing row: it opens the same sheet with a
+    // blank draft, so this does not depend on the stub carrying a station, and
+    // nothing is written until Save, which nothing here presses.
+    //
+    // BOTH switches, in DOM order. Only the second one was ever reachable when
+    // the rows were 20px tall — the lower switch's ::before covered the gap and
+    // the bottom of its neighbour's square — so checking one of them would have
+    // checked the one that was already fine.
+    await page
+      .getByRole("button", { name: /^Stations/i })
+      .first()
+      .click();
+    await page.getByRole("button", { name: /^Add station$/i }).click();
+    for (const id of ["station-split", "station-active"]) {
+      expect(
+        await cornersRespond(page.locator(`#${id}[role="switch"]`), id),
+        `Part of ${id}'s 44px square is a dead zone. These two rows are 12px ` +
+          "apart, so each needs min-h-11 to keep its own hit box — see " +
+          "ui/switch.tsx and nav-rows-panel.tsx.",
+      ).toEqual([]);
+    }
 
     // And the app's only Checkbox, two disclosures deep: the Card Prompt Studio
     // panel, then Batch Production inside it. Reaching it is the point — EXEMPT
