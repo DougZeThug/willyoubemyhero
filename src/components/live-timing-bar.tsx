@@ -170,7 +170,9 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                     size="sm"
                     variant="ghost"
                     onClick={undoLastSplit}
-                    disabled={run.splits.length === 0}
+                    // The console's copy of this button carries the same guard:
+                    // a finished run's record is what Retry save re-sends.
+                    disabled={run.splits.length === 0 || finished}
                   >
                     <Redo2 className="mr-1 h-3.5 w-3.5" /> Undo
                   </Button>

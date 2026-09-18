@@ -250,13 +250,25 @@ export function useRunConsole() {
     });
   }
 
+  // Both of these stop at `finished`, and deliberately not at `paused`: a
+  // commissioner who pauses to argue about a split should still be able to take
+  // it back, and recording one is blocked while paused only because the clock
+  // reading would be meaningless.
+  //
+  // `finished` is the state that matters, because the record Retry save sends is
+  // derived live from `run` rather than snapshotted at Finish. saveCompletedRun
+  // writes splits with `onConflict: "client_key"`, which can add and update but
+  // cannot delete a row by absence — so an undo after a save that committed the
+  // splits and then failed later is silently lost on the retry, which goes on to
+  // report "Run saved". Retry save re-sends the identical record; it can only do
+  // that if the record cannot move underneath it.
   function undoLastSplit() {
-    if (!run || run.splits.length === 0) return;
+    if (!run || run.status === "finished" || run.splits.length === 0) return;
     setRun({ ...run, splits: run.splits.slice(0, -1) });
   }
 
   function addPenalty(stationId: string | null, ms: number, reason: string) {
-    if (!run) return;
+    if (!run || run.status === "finished") return;
     setRun({
       ...run,
       penalties: [
