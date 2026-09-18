@@ -66,8 +66,11 @@ export function useEventBundle() {
         // An events-row write is rare and always a commissioner doing
         // something, so an extra re-sign after a dust switch is the price of
         // the upload reaching other phones at all. With realtime down there is
-        // no write to ride and they wait for their own timer — which is what
-        // they did before this existed, so nothing is lost.
+        // no write to ride, so they do wait — but only until the socket is
+        // back: event-channel replays this signal on recovery alongside
+        // `change`, which is the whole point of having a recovery branch. It is
+        // their own 45-minute and 3-hour timers that used to be the only way
+        // back from an upload missed during an outage.
         qc.invalidateQueries({ queryKey: ["event-card-back", eventId] });
         qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       },
