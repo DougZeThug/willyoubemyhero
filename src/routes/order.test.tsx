@@ -34,11 +34,26 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
   return { ...actual, useServerFn: (fn: unknown) => fn };
 });
 
+// Hoisted rather than fresh per call: a shuffle that committed has to refresh
+// this screen even when the audit write behind it failed, and that is only
+// assertable if every useQueryClient() hands back the same spy.
+const invalidateQueries = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn(() => Promise.resolve()) }),
+  useQueryClient: () => ({ invalidateQueries }),
 }));
 
-vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
+// Named, for the same reason as invalidateQueries above: these are asserted on
+// and have to be cleared between tests, and nothing here clears mocks globally.
+const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
+const toastWarning = vi.hoisted(() => vi.fn());
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), {
+    success: toastSuccess,
+    error: toastError,
+    warning: toastWarning,
+  }),
+}));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -89,6 +104,11 @@ beforeEach(() => {
   useAdminSession.mockReset();
   setRunningOrder.mockClear();
   recordRandomization.mockClear();
+  invalidateQueries.mockClear();
+  toastSuccess.mockClear();
+  toastError.mockClear();
+  toastWarning.mockClear();
+  recordRandomization.mockImplementation(() => Promise.resolve({ ok: true }));
 });
 
 describe("re-randomizing an empty field", () => {
@@ -110,6 +130,33 @@ describe("re-randomizing an empty field", () => {
     await userEvent.click(reRandomize(), { pointerEventsCheck: 0 });
     expect(setRunningOrder).not.toHaveBeenCalled();
     expect(recordRandomization).not.toHaveBeenCalled();
+  });
+
+  it("reports a committed shuffle as committed when only the audit write fails", async () => {
+    // Two client RPCs, and the second one cannot un-commit the first. Sharing one
+    // try/catch meant a dropped `recordRandomization` printed "Failed to shuffle"
+    // over an order that had already been rewritten -- and skipped the
+    // invalidate, so the list on screen kept the old order while the database
+    // held the new one. The audit row is what Undo reads previous_order out of,
+    // so what is actually lost is the undo.
+    asAdminWith([
+      makeParticipant({ participant: { id: "p-a", name: "Alice Ace", nickname: null } }),
+      makeParticipant({
+        running_order: 2,
+        participant: { id: "p-b", name: "Bob Bison", nickname: null },
+      }),
+    ]);
+    recordRandomization.mockImplementation(() => Promise.reject(new Error("Failed to fetch")));
+
+    render(<OrderPage />);
+    await userEvent.click(reRandomize());
+
+    expect(setRunningOrder).toHaveBeenCalledOnce();
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["event-bundle", EVENT_ID] });
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastWarning).toHaveBeenCalledWith(
+      "Running order re-randomized, but not recorded — no undo for this one",
+    );
   });
 
   it("still shuffles a field that has someone in it", async () => {
