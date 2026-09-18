@@ -45,6 +45,27 @@ vi.mock("lucide-react", async (importOriginal) => {
   return stubs;
 });
 
+/**
+ * The board as a spectator finds it, with whatever bundle and failure list the
+ * case needs. Same shape as tv.test.tsx's `showBundle`, which covers the sibling
+ * screen — the two hold the same claims and are easier to read side by side.
+ *
+ * `refetch` is a bare spy: nothing here renders the error card, so the Try again
+ * button that would call it never exists, and a stub returning a promise nobody
+ * awaits would only suggest otherwise.
+ */
+function showBoard(over: Parameters<typeof makeBundle>[0], failedTables: string[] = []) {
+  useEventBundle.mockReturnValue({
+    event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+    bundle: makeBundle({ ...over, failed: failedTables }),
+    loading: false,
+    error: null,
+    failedTables,
+    realtimeDegraded: false,
+    refetch: vi.fn(),
+  });
+}
+
 function twoFinishers() {
   const alice = makeParticipant({
     participation_status: "finished",
@@ -54,20 +75,12 @@ function twoFinishers() {
     participation_status: "finished",
     participant: { id: "p-b", name: "Bob Bison", nickname: null },
   });
-  useEventBundle.mockReturnValue({
-    event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-    bundle: makeBundle({
-      participants: [alice, bob],
-      runs: [
-        makeRun({ participant_id: alice.participant_id, official_time_ms: 50_000 }),
-        makeRun({ participant_id: bob.participant_id, official_time_ms: 60_000 }),
-      ],
-    }),
-    loading: false,
-    error: null,
-    failedTables: [],
-    realtimeDegraded: false,
-    refetch: vi.fn(async () => {}),
+  showBoard({
+    participants: [alice, bob],
+    runs: [
+      makeRun({ participant_id: alice.participant_id, official_time_ms: 50_000 }),
+      makeRun({ participant_id: bob.participant_id, official_time_ms: 60_000 }),
+    ],
   });
 }
 
@@ -124,38 +137,21 @@ describe("LeaderboardPage sharing", () => {
  */
 describe("LeaderboardPage when a read has failed", () => {
   /** The board as it comes back when `event_participants` is the table that broke. */
-  function boardWithoutRoster(failed: string[]) {
-    useEventBundle.mockReturnValue({
-      event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-      bundle: makeBundle({
+  const boardWithoutRoster = (failed: string[]) =>
+    showBoard(
+      {
         participants: [],
         runs: [
           makeRun({ participant_id: "p-a", official_time_ms: 50_000 }),
           makeRun({ participant_id: "p-b", official_time_ms: 60_000 }),
         ],
-        failed,
-      }),
-      loading: false,
-      error: null,
-      failedTables: failed,
-      realtimeDegraded: false,
-      refetch: vi.fn(async () => {}),
-    });
-  }
+      },
+      failed,
+    );
 
-  function emptyBoard(failed: string[]) {
-    useEventBundle.mockReturnValue({
-      event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-      bundle: makeBundle({ participants: [], runs: [], failed }),
-      loading: false,
-      error: null,
-      failedTables: failed,
-      realtimeDegraded: false,
-      refetch: vi.fn(async () => {}),
-    });
-  }
+  const emptyBoard = (failed: string[]) => showBoard({ participants: [], runs: [] }, failed);
 
-  it("says the roster read failed over a board that still has rows on it", async () => {
+  it("says the roster read failed over a board that still has rows on it", () => {
     // `standings` ranks from the runs and drops its roster filter when the
     // roster is empty, so this is a full board of correctly-placed em dashes.
     // It is the case the signal most needed to cover and the only one it could
