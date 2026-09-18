@@ -45,13 +45,20 @@ export function useAdminSession(): Parsed | null {
     function refresh() {
       setSession(parse(window.localStorage.getItem(KEY)));
     }
+    // `storage` fires for every key the other tab writes, so the listener needs
+    // its own; the custom event beside it is this tab's write. A null key is
+    // localStorage.clear(), which does concern us -- that is a sign-out.
+    function theirs(e: StorageEvent) {
+      if (e.key !== null && e.key !== KEY) return;
+      refresh();
+    }
     refresh();
-    window.addEventListener("storage", refresh);
+    window.addEventListener("storage", theirs);
     window.addEventListener("wwbh:admin-token-changed", refresh);
     // Also expire naturally.
     const iv = window.setInterval(refresh, 60_000);
     return () => {
-      window.removeEventListener("storage", refresh);
+      window.removeEventListener("storage", theirs);
       window.removeEventListener("wwbh:admin-token-changed", refresh);
       window.clearInterval(iv);
     };

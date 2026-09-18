@@ -107,7 +107,7 @@ describe("useAdminSession", () => {
     const { result } = renderHook(() => useAdminSession());
     window.localStorage.setItem(KEY, VALID());
     act(() => {
-      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     });
     expect(result.current?.eventId).toBe(EVENT_ID);
   });

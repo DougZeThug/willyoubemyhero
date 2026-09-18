@@ -224,7 +224,7 @@ describe("useTrophySeen", () => {
       JSON.stringify({ primed: true, ids: [trophyKey(ME, "pets")] }),
     );
     act(() => {
-      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     });
     expect(result.current).toEqual({ primed: true, ids: [trophyKey(ME, "pets")] });
   });
@@ -238,7 +238,7 @@ describe("useTrophySeen", () => {
     for (const junk of ["not json", JSON.stringify({ primed: "yes", ids: 4 })]) {
       window.localStorage.setItem(KEY, junk);
       act(() => {
-        window.dispatchEvent(new Event("storage"));
+        window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
       });
       expect(result.current).toEqual({ primed: false, ids: [] });
     }
