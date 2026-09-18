@@ -112,9 +112,11 @@ export function useEventAwards(eventId: string | null | undefined) {
     });
   }, [eventId, qc]);
 
+  const winners = query.data?.awards ?? [];
+
   const byParticipant = useMemo(() => {
     const map = new Map<string, { award_name: string; award_type: string | null }[]>();
-    for (const a of query.data ?? []) {
+    for (const a of query.data?.awards ?? []) {
       if (!a.participant_id) continue;
       const list = map.get(a.participant_id) ?? [];
       list.push({ award_name: a.award_name, award_type: a.award_type });
@@ -123,5 +125,9 @@ export function useEventAwards(eventId: string | null | undefined) {
     return map;
   }, [query.data]);
 
-  return { ...query, byParticipant };
+  // `lockedAtRead` says whether THIS list was read with awards_locked already
+  // set, which is the only thing that makes an empty one mean "nobody voted".
+  // Defaulting to false keeps the honest answer before the first read lands: the
+  // tally cannot speak for a result it has not seen.
+  return { ...query, winners, lockedAtRead: query.data?.lockedAtRead ?? false, byParticipant };
 }

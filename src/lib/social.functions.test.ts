@@ -491,16 +491,54 @@ describe("award voting", () => {
 
   describe("getAwards", () => {
     it("is public — this is what renders on cards and the recap", async () => {
-      withDb({ "awards.select": { data: [{ id: "a1", award_name: "MVP" }] } });
+      withDb({
+        "events.select": { data: { awards_locked: true }, error: null },
+        "awards.select": { data: [{ id: "a1", award_name: "MVP" }] },
+      });
       const { getAwards } = await import("./social.functions");
-      await expect(callServerFn(getAwards, { data: { eventId: EVENT_ID } })).resolves.toEqual([
-        { id: "a1", award_name: "MVP" },
-      ]);
+      await expect(callServerFn(getAwards, { data: { eventId: EVENT_ID } })).resolves.toEqual({
+        awards: [{ id: "a1", award_name: "MVP" }],
+        lockedAtRead: true,
+      });
     });
 
     it("returns an empty list before anything is published", async () => {
       const { getAwards } = await import("./social.functions");
-      await expect(callServerFn(getAwards, { data: { eventId: EVENT_ID } })).resolves.toEqual([]);
+      await expect(callServerFn(getAwards, { data: { eventId: EVENT_ID } })).resolves.toEqual({
+        awards: [],
+        lockedAtRead: false,
+      });
+    });
+
+    it("reads the lock before the rows, so a locked answer cannot predate them", async () => {
+      // close_award_voting inserts the awards and only then sets awards_locked,
+      // inside one transaction. Reading the flag first is what makes
+      // `lockedAtRead: true` mean "the rows below are already committed" -- the
+      // other order returns an empty list stamped locked if a close lands between
+      // the two, which is the reveal saying nobody voted over real winners.
+      withDb({
+        "events.select": { data: { awards_locked: false }, error: null },
+        "awards.select": { data: [] },
+      });
+      const { getAwards } = await import("./social.functions");
+      await callServerFn(getAwards, { data: { eventId: EVENT_ID } });
+
+      const tables = mock.calls.map((c) => c.table);
+      expect(tables.indexOf("events")).toBeLessThan(tables.indexOf("awards"));
+    });
+
+    it("reports an unlocked event as not yet counted, whatever the rows say", async () => {
+      // The flip race, from the tally's side: voting is still open, so an empty
+      // list is not an answer and must not be read as one.
+      withDb({
+        "events.select": { data: { awards_locked: false }, error: null },
+        "awards.select": { data: [] },
+      });
+      const { getAwards } = await import("./social.functions");
+      await expect(callServerFn(getAwards, { data: { eventId: EVENT_ID } })).resolves.toEqual({
+        awards: [],
+        lockedAtRead: false,
+      });
     });
   });
 });

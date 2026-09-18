@@ -67,7 +67,7 @@ beforeEach(() => {
   subscribers.length = 0;
   unsubscribe.mockReset();
   getEventSocial.mockReset().mockResolvedValue({ reactions: [], comments: [] });
-  getAwards.mockReset().mockResolvedValue([AWARD]);
+  getAwards.mockReset().mockResolvedValue({ awards: [AWARD], lockedAtRead: true });
 });
 
 describe("useEventAwards", () => {
@@ -99,6 +99,22 @@ describe("useEventAwards", () => {
   it("groups the winners it did read by the player who won them", async () => {
     const { result } = await mount();
     await waitFor(() => expect(result.current.byParticipant.get("p-1")).toHaveLength(1));
+    expect(result.current.winners).toHaveLength(1);
+  });
+
+  it("passes on whether the list it read was read under the lock", async () => {
+    // The whole reason getAwards returns more than an array: an empty list means
+    // "nobody voted" only if the vote was already closed when it was read, and
+    // /awards cannot tell from the event row it reads on a separate timer.
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.lockedAtRead).toBe(true));
+  });
+
+  it("does not claim a lock before the first read has landed", async () => {
+    getAwards.mockReset().mockResolvedValue({ awards: [], lockedAtRead: false });
+    const { result } = await mount();
+    expect(result.current.lockedAtRead).toBe(false);
+    expect(result.current.winners).toEqual([]);
   });
 
   it("neither subscribes nor asks without an event", async () => {

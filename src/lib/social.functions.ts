@@ -269,16 +269,37 @@ export const castAwardVote = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Published winners. Public — this is what renders on cards and the recap. */
+/**
+ * Published winners. Public — this is what renders on cards and the recap.
+ *
+ * `lockedAtRead` rides along because an empty list means two different things and
+ * the reveal has to tell them apart: nobody voted, or the winners have not been
+ * published yet. The event row carries `awards_locked`, but a *separately* fetched
+ * flag cannot answer it — /awards reads that one from the bundle, on its own
+ * timer, so the lock can flip while the tally in hand still predates it. Read
+ * here, the answer is about THIS list.
+ *
+ * The lock is read BEFORE the rows, and that order is the whole guarantee.
+ * close_award_voting inserts every award and only then sets awards_locked, in one
+ * transaction — so a lock that reads true means the rows below are already
+ * committed and this read will see them. Reversed, a close landing between the two
+ * would return an empty list stamped `lockedAtRead: true`, which is precisely the
+ * reveal announcing that nobody voted over a vote that had winners.
+ */
 export const getAwards = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
+    const { data: ev } = await sb
+      .from("events")
+      .select("awards_locked")
+      .eq("id", data.eventId)
+      .maybeSingle();
     const { data: rows } = await sb
       .from("awards")
       .select("id, event_id, participant_id, award_name, award_type, description")
       .eq("event_id", data.eventId);
-    return rows ?? [];
+    return { awards: rows ?? [], lockedAtRead: !!ev?.awards_locked };
   });
 
 /** Live tally. Commissioner only, so the room can't see it before the reveal. */
