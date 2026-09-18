@@ -190,6 +190,26 @@ describe("public reads", () => {
     expect(Array.isArray(rows)).toBe(true);
     expect(await isDenied("anon", "SELECT client_key FROM public.runs")).toBe(true);
   });
+
+  it("hides the private columns on penalties while keeping the public ones readable", async () => {
+    // 20260811224354 re-granted the whole table and undid the column scoping;
+    // it was re-narrowed alongside runs. Assert both directions so a future
+    // table-wide grant fails here rather than silently leaking.
+    const rows = await asRole("anon", "SELECT penalty_ms, reason FROM public.penalties");
+    expect(Array.isArray(rows)).toBe(true);
+    expect(await isDenied("anon", "SELECT notes FROM public.penalties")).toBe(true);
+    expect(await isDenied("anon", "SELECT created_by FROM public.penalties")).toBe(true);
+    expect(await isDenied("anon", "SELECT client_key FROM public.penalties")).toBe(true);
+  });
+
+  it("hides created_by on draft_selections while keeping the picks readable", async () => {
+    const rows = await asRole(
+      "anon",
+      "SELECT participant_id, draft_position FROM public.draft_selections",
+    );
+    expect(Array.isArray(rows)).toBe(true);
+    expect(await isDenied("anon", "SELECT created_by FROM public.draft_selections")).toBe(true);
+  });
 });
 
 describe("server-only tables", () => {
