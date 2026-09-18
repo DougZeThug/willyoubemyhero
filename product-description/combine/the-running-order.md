@@ -72,8 +72,8 @@ stateDiagram-v2
     unreachable --> reading : tap Try again
     order --> order : a status changes, the list redraws
     order --> shuffling : tap Re-randomize (nothing written yet)
-    shuffling --> redrawn : every row renumbered (commit), the draw recorded
-    shuffling --> order : the write failed, the old order stands
+    shuffling --> redrawn : every row renumbered (commit), the list refetches
+    shuffling --> order : the commit failed, the old order stands
     redrawn --> order
 ```
 
@@ -127,9 +127,10 @@ looking at.
 Every other device gets the new order over the live feed a beat later, including
 the crowd screen, which immediately puts the new number one in its ring.
 
-On failure a red toast carries the reason and the list is unchanged — unless the
-failure was in the second write, in which case the order really did change and
-the toast still says it failed. See [edge cases](#edge-cases).
+On a failed renumbering a red toast carries the reason and the list is unchanged.
+A failed audit write is different: the order really did change, the list
+redraws immediately, and a warning toast — not an error one — says so. See
+[edge cases](#edge-cases).
 
 ## Modifiers
 
@@ -197,11 +198,11 @@ sits in its own chip and is read out before the name.
 
 ## Edge cases
 
-- **A failed audit write reports a failure that did not happen.** The
-  renumbering and the record of it are two separate writes. If the first
-  succeeds and the second fails, the order really has changed and the toast
-  still says "Failed to shuffle". The list redraws anyway a beat later over the
-  live feed, which is the confusing part.
+- **A failed audit write is reported as a warning, not an error.** The
+  renumbering and the record of it are two separate writes, and the second
+  cannot un-commit the first. If only the audit write fails the order really has
+  changed, the list redraws immediately, and the warning toast says as much —
+  the order shuffled, but was not recorded.
 - **A partly applied draw.** Each athlete's number is written individually and
   none of the results is checked, so a draw that half-lands leaves duplicate
   numbers in the list, with two athletes sharing a place and one number missing.
@@ -227,8 +228,6 @@ sits in its own chip and is read out before the name.
   parallel and the handler reports success regardless. A partial failure would
   be silent and would leave the field with duplicate numbers. This looks like a
   defect.
-- **The failure toast can lie.** A failure in the second write reports the whole
-  shuffle as failed when it succeeded. Also likely a defect.
 - **The order lock is unreachable.** `running_order_locked` is read by this
   screen and set by nothing in the app, so the button cannot be hidden by any
   action a commissioner can take today. Either the control is missing or the
