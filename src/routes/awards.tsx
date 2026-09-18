@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -50,9 +50,31 @@ function AwardsPage() {
   // isFetching, not isLoading: React Query keeps the previous `data` through a
   // background refetch, so once the first read lands isLoading is false forever
   // and the empty array cached while voting was open asserted "No votes cast."
-  // over real winners. Narrowed on an empty tally so one that HAS landed does not
-  // flicker back to counting -- every comment and reaction nudges this key too.
-  const countingVotes = awards.isPending || (awards.isFetching && !awards.data?.length);
+  // over real winners.
+  //
+  // What that used to be narrowed on -- an empty `data` -- cannot tell the race
+  // apart from its own aftermath. A closed combine where nobody voted has an
+  // empty tally that IS the answer, and the shared channel nudges this key every
+  // fifteen seconds while the tab is visible, so all six rows flipped back to
+  // "Counting the votes…" on every tick, forever, about a count that finished
+  // hours ago. So the question is not whether the tally is empty but whether a
+  // read has CONCLUDED since the lock arrived; once one has, an empty tally is
+  // settled, because the awards table cannot change while awards_locked is true.
+  //
+  // A ref, not state: nothing re-renders on this, and the render that starts a
+  // refetch should read what the previous one settled.
+  //
+  // One window stays open, and it is the narrow end of the race above: a read
+  // already in flight when the lock flips can land empty and mark the tally read
+  // one cycle early. Closing that needs the tally to carry the lock state it was
+  // read under, which is a server-fn shape change and an e2e fixture with it.
+  // One refetch of over-eager silence, against a flash every fifteen seconds.
+  const tallyReadSinceLock = useRef(false);
+  useEffect(() => {
+    if (!locked) tallyReadSinceLock.current = false;
+    else if (!awards.isFetching && !awards.isError) tallyReadSinceLock.current = true;
+  }, [locked, awards.isFetching, awards.isError]);
+  const countingVotes = !tallyReadSinceLock.current && (awards.isPending || awards.isFetching);
 
   const myVotes = useQuery({
     queryKey: ["my-award-votes", event?.id, me?.participantId],

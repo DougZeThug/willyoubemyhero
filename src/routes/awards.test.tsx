@@ -118,6 +118,25 @@ describe("AwardsPage locked reveal", () => {
     expect(screen.queryByText("Counting the votes…")).toBeNull();
   });
 
+  it("keeps saying nobody voted through the backstop poll's refetches", () => {
+    // The sentence above is settled, and the thing that kept unsettling it was
+    // the shared channel: it nudges this key every fifteen seconds while the tab
+    // is visible, and an empty `data` under isFetching used to read as the tally
+    // still being counted. On a closed combine where nobody voted that is a
+    // reveal that flips to "Counting the votes…" every fifteen seconds about a
+    // count that already finished.
+    lockedEvent();
+    useEventAwards.mockReturnValue(awardsQuery({ data: [] }));
+    const { rerender } = render(<AwardsPage />);
+    expect(screen.getAllByText("No votes cast.").length).toBeGreaterThan(0);
+
+    useEventAwards.mockReturnValue(awardsQuery({ data: [], isFetching: true }));
+    rerender(<AwardsPage />);
+
+    expect(screen.getAllByText("No votes cast.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Counting the votes…")).toBeNull();
+  });
+
   it("keeps the failed read distinct from both of them", () => {
     lockedEvent();
     useEventAwards.mockReturnValue(awardsQuery({ data: undefined, isError: true }));
