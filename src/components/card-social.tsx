@@ -96,7 +96,16 @@ export function CardSocial({
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [bursting, setBursting] = useState<string | null>(null);
-  const [optimistic, setOptimistic] = useState<Record<string, number>>({});
+  /**
+   * The delta this device's tap put on a chip, and the answer it is waiting for.
+   * `want` is what `mine` should say once the server has been asked — true after
+   * an add, false after a remove. It is the only reliable signal that THIS tap
+   * landed: the rows carry no client key, so a count on its own cannot tell my
+   * +1 apart from somebody else's arriving beside it.
+   */
+  const [optimistic, setOptimistic] = useState<Record<string, { delta: number; want: boolean }>>(
+    {},
+  );
 
   /**
    * Everything above belongs to ONE card, and /players/$id swaps the card under
@@ -177,6 +186,37 @@ export function CardSocial({
     return set;
   }, [reactions]);
 
+  /**
+   * Let a delta go in the SAME commit that brings the answer it was waiting for.
+   *
+   * `refresh()` resolves when react-query writes the cache; these rows reach
+   * this component on the notify tick AFTER that. Dropping the delta in
+   * `onReact`'s `finally` therefore painted one commit of new-list-minus-delta,
+   * and the chip showed the count it had BEFORE the tap on the way to the one it
+   * had earned. An effect is no better — it runs after the commit that already
+   * painted the overshoot, and /players/$id rebuilds `reactions` with a filter
+   * on every render, so an effect keyed on it would never stop running.
+   * Adjusted during render, like `shownCard` above.
+   *
+   * Functional, and only when something has actually settled: the card-change
+   * reset above can queue `setOptimistic({})` in this same pass, and a plain
+   * value computed from the stale state would land after it and undo it.
+   * Returning `prev` is what ends the render-phase loop.
+   *
+   * A tap whose refetch never arrives with an agreeing `mine` leaves its delta
+   * standing — that is the chip showing what you did, which is the better half
+   * of the trade, and it clears on a failure, on a card change and on unmount.
+   */
+  if (Object.entries(optimistic).some(([emoji, o]) => mine.has(emoji) === o.want)) {
+    setOptimistic((prev) => {
+      const next: typeof prev = {};
+      for (const [emoji, o] of Object.entries(prev)) {
+        if (mine.has(emoji) !== o.want) next[emoji] = o;
+      }
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+  }
+
   const counts = useMemo(() => {
     const map = new Map<string, ReactionRow[]>();
     for (const r of reactions) {
@@ -195,7 +235,10 @@ export function CardSocial({
     const card = eventParticipantId;
     const adding = !mine.has(emoji);
     setPending(emoji);
-    setOptimistic((prev) => ({ ...prev, [emoji]: (prev[emoji] ?? 0) + (adding ? 1 : -1) }));
+    setOptimistic((prev) => ({
+      ...prev,
+      [emoji]: { delta: (prev[emoji]?.delta ?? 0) + (adding ? 1 : -1), want: adding },
+    }));
     if (adding && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       setBursting(emoji);
       buzz([8]);
@@ -210,20 +253,27 @@ export function CardSocial({
       });
       await refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not react");
-    } finally {
-      // Only if this is still the card that sent it. Moving on does not cancel
-      // a request in the air, and the reset above has already cleared this
-      // state for the new card — so an old completion landing here would delete
-      // the NEW card's optimistic delta and drop its pending latch while its
-      // own request is still running, freeing a second tap whose toggle undoes
-      // the first. Left alone, the new card's own `finally` tidies up after it.
+      // Rolled back here rather than in the `finally`, which is where it used to
+      // live for both outcomes: a tap that failed has nothing coming to settle
+      // it against, so its delta would stand until the card changed.
       if (shownCardRef.current === card) {
         setOptimistic((prev) =>
           Object.fromEntries(Object.entries(prev).filter(([key]) => key !== emoji)),
         );
-        setPending(null);
       }
+      toast.error(e instanceof Error ? e.message : "Could not react");
+    } finally {
+      // Only if this is still the card that sent it. Moving on does not cancel
+      // a request in the air, and the reset above has already cleared this
+      // state for the new card — so an old completion landing here would drop
+      // the NEW card's pending latch while its own request is still running,
+      // freeing a second tap whose toggle undoes the first. Left alone, the new
+      // card's own `finally` tidies up after it.
+      //
+      // The delta is no longer let go here: on the success path it belongs to
+      // the render that brings the rows agreeing with it, which is one tick
+      // further on than this.
+      if (shownCardRef.current === card) setPending(null);
     }
   }
 
@@ -284,7 +334,7 @@ export function CardSocial({
           {REACTIONS.map((emoji) => {
             const list = counts.get(emoji) ?? [];
             const active = mine.has(emoji);
-            const count = Math.max(0, list.length + (optimistic[emoji] ?? 0));
+            const count = Math.max(0, list.length + (optimistic[emoji]?.delta ?? 0));
             return (
               <div key={emoji} className="relative">
                 <button
