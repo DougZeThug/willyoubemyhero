@@ -8,7 +8,12 @@ import { formatTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import {
+  FeedDegradedBanner,
+  FeedError,
+  FeedLoading,
+  FeedPartialBanner,
+} from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
 import { ResultCard } from "@/components/result-card";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
@@ -49,6 +54,18 @@ function LeaderboardPage() {
       ep: parts.find((p) => p.participant_id === s.participantId),
     }));
   }, [bundle]);
+
+  /**
+   * The roster read failed while the runs read did not.
+   *
+   * Worth its own signal because it does NOT empty the board: `standings` ranks
+   * from the runs alone, and drops its roster filter entirely when the roster is
+   * empty — so a failed roster read draws every finisher in the right place at
+   * the right time with an em dash where the name goes. The empty-state copy
+   * below is the only other place this screen reads `failedTables`, and it can
+   * never fire on that board, which is the one it most needed to.
+   */
+  const rosterFailed = failedTables.includes("event_participants");
 
   const shareRow = rows.find((r) => r.run.id === sharingRunId);
   const shareData = shareRow
@@ -118,6 +135,14 @@ function LeaderboardPage() {
     <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-4xl px-page-x py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+        {rosterFailed && (
+          // The same sentence /live and /order use for this exact read, rather
+          // than a fourth phrasing of it.
+          <FeedPartialBanner
+            className="mb-4"
+            message="Couldn't read the roster just now — retrying."
+          />
+        )}
         <PageHeader
           eyebrow="Standings"
           title="Leaderboard"
@@ -137,7 +162,12 @@ function LeaderboardPage() {
           <CardContent className="p-0">
             {rows.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                {failedTables.length > 0
+                {/* The two tables the board is built from, not any of the
+                    seven: a failed splits or stations read cannot empty it, and
+                    saying the results were unreadable over a combine that
+                    simply has not started is the same lie in the other
+                    direction. Same narrowing analytics already makes. */}
+                {rosterFailed || failedTables.includes("runs")
                   ? "Couldn't read the results just now — retrying."
                   : "No official times yet — check back after the first athlete crosses."}
               </div>

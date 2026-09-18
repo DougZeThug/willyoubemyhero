@@ -58,6 +58,38 @@ export function FeedError({
 }
 
 /**
+ * One table of the bundle came back unreadable while the rest landed.
+ *
+ * Deliberately not `FeedDegradedBanner`: that one promises the numbers are real
+ * and merely a few seconds behind, which is the opposite of what a failed read
+ * means. And deliberately not `FeedError`, because the screen underneath is
+ * still worth looking at — the leaderboard's places and times are correct when
+ * it is only the roster that failed, so replacing the board with an error card
+ * would throw away more than it explained.
+ *
+ * This exists because a partial failure is invisible by construction: the bundle
+ * coalesces a failed read to an empty array, so a missing roster renders as a
+ * board of em dashes rather than as an error. The empty-state copy each screen
+ * already carries cannot reach that case, because the screen is not empty.
+ */
+export function FeedPartialBanner({ message, className }: { message: string; className?: string }) {
+  return (
+    <div
+      // Polite rather than assertive: the screen is readable and the read is
+      // already being retried, so this is a caveat, not an interruption.
+      role="status"
+      className={cn(
+        "flex items-center justify-center gap-2 rounded-md border border-warn/30 bg-warn/10 px-3 py-1.5 text-meta font-semibold text-warn",
+        className,
+      )}
+    >
+      <WifiOff className="h-3.5 w-3.5 shrink-0" />
+      {message}
+    </div>
+  );
+}
+
+/**
  * Live updates are down but polling is still running, so this is a caveat
  * rather than an error: the numbers are real, just a few seconds behind.
  */

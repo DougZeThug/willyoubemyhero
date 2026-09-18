@@ -48,6 +48,11 @@ function TvPage() {
     }));
   }, [bundle]);
 
+  // Same shape as /leaderboard, and the same blind spot it had: `standings`
+  // ranks from the runs alone, so a failed roster read leaves the big screen
+  // full of correctly-placed em dashes with nothing saying why.
+  const rosterFailed = failedTables.includes("event_participants");
+
   const { athlete: current, onClock } = currentAthlete(bundle?.participants ?? []);
 
   if ((loading || error) && !bundle) {
@@ -75,6 +80,16 @@ function TvPage() {
       {(realtimeDegraded || !!error) && (
         <div className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-4 py-2 text-center font-display text-lg font-black uppercase tracking-[0.2em] text-warn">
           Live feed down — refreshing every few seconds
+        </div>
+      )}
+      {rosterFailed && (
+        // Its own banner rather than FeedPartialBanner, for the same reason the
+        // one above is hand-rolled: this screen is read from across a garden.
+        <div
+          role="status"
+          className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-4 py-2 text-center font-display text-lg font-black uppercase tracking-[0.2em] text-warn"
+        >
+          Couldn&apos;t read the roster just now — retrying
         </div>
       )}
       <header className="mb-6 flex items-end justify-between">
@@ -159,7 +174,9 @@ function TvPage() {
         ))}
         {rows.length === 0 && (
           <div className="col-span-2 rounded-2xl border border-primary/20 bg-[oklch(0.16_0.02_240)] p-10 text-center text-muted-foreground">
-            {failedTables.length > 0
+            {/* The two tables the board is built from, not any of the seven —
+                a failed splits or stations read cannot empty it. */}
+            {rosterFailed || failedTables.includes("runs")
               ? "Couldn't read the results just now — retrying."
               : "No official times yet."}
           </div>

@@ -148,3 +148,24 @@ describe("LiveTimingBar", () => {
     expect(screen.getByRole("button", { name: /reset timer/i })).toBeEnabled();
   });
 });
+
+describe("LiveTimingBar on a run that finished but did not save", () => {
+  it("puts the whole splits strip away rather than guarding its Undo", () => {
+    // The hook refuses an undo on a finished run, because the record Retry
+    // re-sends is derived from it and splits go up with an upsert that cannot
+    // delete a row by absence. This bar never gets that far: Undo lives in the
+    // not-finished arm, so there is nothing here to disable. Pinned because the
+    // console's copy of the button DOES need the guard, and a reader comparing
+    // the two deserves to know why only one has it.
+    const rc = console_({
+      run: { ...RUN, status: "finished", splits: [{ clientKey: "s", stationId: "s1" }] } as never,
+      finished: true,
+      currentEp: ep("a", "Ryan", 1, "running") as never,
+      finishedRun: { ...RUN, status: "finished" } as never,
+    });
+    render(<LiveTimingBar console={rc} />);
+
+    expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /retry save/i })).toBeInTheDocument();
+  });
+});
