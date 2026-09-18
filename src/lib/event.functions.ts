@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { RUNS_PUBLIC_COLUMNS } from "./runs-columns";
+import { DRAFT_SELECTIONS_PUBLIC_COLUMNS, PENALTIES_PUBLIC_COLUMNS } from "./penalties-columns";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
 
