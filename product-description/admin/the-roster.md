@@ -219,7 +219,8 @@ codes out; the copy control is a labelled button rather than an icon alone.
   is this event's roster, but the issue itself covers every active player in the
   league who has not claimed. On a single-combine league these are the same set.
 - **Collectors never get a paper code.** A signed-in account who is not a combine
-  athlete is skipped by every bulk issue; they reach their cards by signing in.
+  athlete is skipped by every issue, whole-roster or one player at a time; they
+  reach their cards by signing in.
 - **A rotated code does not sign anybody out.** The claim record resets, but a
   member token already issued keeps working for its ninety days. Rotating is
   about the next claim, not this session — see

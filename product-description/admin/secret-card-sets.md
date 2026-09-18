@@ -74,7 +74,9 @@ Two numbers are computed on arrival, both admin-only:
 - **Whether the set is exhausted.** When everyone who could pull has pulled
   everything pullable, an amber line says so and names the total — otherwise the
   commissioner has no way to know the daily drop has gone quiet and turned into
-  nothing but duplicates.
+  nothing but duplicates. The total counts what a pack could actually deal, so a
+  card set to weight zero is left out of it exactly as it is left out of the
+  judgement that the set is exhausted.
 
 > Technical note: that total is the one place in the app a secret-set size is
 > printed, and it is behind the admin guard on a response marked `no-store`. No

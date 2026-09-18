@@ -191,10 +191,16 @@ link, which is fine on a laptop and pointless on a television.
   leading.
 - **A run whose player is not on the roster** draws a row with a dash for a name
   and no link.
-- **No official times yet** shows a single full-width panel saying so. If a table
-  in the bundle actually failed, the same panel says "Couldn't read the results
-  just now — retrying." instead, which is the distinction most of the spectator
-  screens exist to make.
+- **A failed roster read** does that to every slot at once, because the places
+  and the times are ranked from the runs rather than from the roster. A banner
+  across the top, in the same amber and at the same size as the live-feed one,
+  says "Couldn't read the roster just now — retrying". The grid stays up: the
+  numbers on it are real.
+- **No official times yet** shows a single full-width panel saying so. If the
+  runs or the roster read actually failed, the same panel says "Couldn't read the
+  results just now — retrying." instead, which is the distinction most of the
+  spectator screens exist to make. A failed splits or stations read says neither,
+  because neither can empty this board.
 - **More than sixteen finishers** are cut off with no indication. The combine has
   thirteen, so this is headroom rather than a limit anybody meets.
 - **Nobody on the clock and nobody queued** leaves the top-right corner empty

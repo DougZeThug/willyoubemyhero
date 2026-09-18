@@ -83,8 +83,13 @@ screens shares, and one that was bought after the fact.
 
 > Technical note: a failed table read comes back as an empty list, which is
 > indistinguishable from "there is nothing here". The bundle therefore carries
-> the names of the tables it could not read, and this screen uses that to choose
-> between "couldn't read the results just now" and "no official times yet". See
+> the names of the tables it could not read, and this screen uses that two ways:
+> to choose between "couldn't read the results just now" and "no official times
+> yet" on an empty board, and to draw a line above a board that is _not_ empty
+> when it is the roster that failed. Only the runs and the roster are consulted —
+> a failed splits or stations read cannot take a row off this screen, so saying
+> the results were unreadable over a combine nobody has started is the same lie
+> in the other direction. See
 > [what the bundle holds](../foundations/the-event.md#what-the-bundle-holds).
 
 The rows are built once the bundle is in hand: every official run, matched to
@@ -223,12 +228,17 @@ around them.
 - **An official run with no time.** Renders as an em dash and sorts to the
   bottom of the board.
 - **A run whose athlete is not on the roster.** The row still appears with an em
-  dash for the name and a question-mark avatar — what a roster read failing
-  while the runs read succeeds looks like.
+  dash for the name and a question-mark avatar.
+- **A failed roster read.** The same em dash, on every row at once — the places
+  and the times are ranked from the runs and are correct, and only the names are
+  missing. An amber line above the board says "Couldn't read the roster just now
+  — retrying" rather than leaving thirteen anonymous rows to explain themselves.
+  The board stays up: there is more right about it than wrong.
 - **No official times yet.** The board names which it is: "No official times yet"
-  when the read worked, "Couldn't read the results just now — retrying" when it
-  did not. With no active combine at all it draws the first of those, because
-  there is nothing to fetch.
+  when the read worked, "Couldn't read the results just now — retrying" when the
+  runs or the roster did not. A failed splits, penalties, stations or draft read
+  says neither, because none of them can empty this board. With no active combine
+  at all it draws the first of those, because there is nothing to fetch.
 - **A photo that has not loaded when share is tapped.** The exported card falls
   back to initials. The tenth of a second the export waits is for the card to
   draw, not for its picture to arrive.
