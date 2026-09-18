@@ -140,10 +140,48 @@ export function useRunConsole() {
     setRun(nextRun);
     await saveActiveRun(nextRun);
     setSelected("");
+    // Only ONE athlete is ever on the crowd's clock, and nothing below this hook
+    // enforces it: the column has no CHECK, the handler writes the one row it is
+    // given, and currentAthlete takes the first "running" row it finds in an
+    // unsorted list. setOnClock has always demoted before promoting; this did
+    // not, so staging B and then starting C left both rows "running" and the
+    // spectator screens naming B for the whole of C's run — and still naming B
+    // after it, until somebody tapped Clear.
+    //
+    // Scoped to a DIFFERENT athlete on purpose. Starting the person already on
+    // the clock is the ordinary path, and demoting them would clear
+    // on_clock_since and re-stamp it at the Start tap, losing the moment they
+    // actually stepped up — which setParticipantStatus goes out of its way to
+    // keep.
+    const onClockNow = participants.find(
+      (p) => p.participation_status === "running" && p.participant_id !== target,
+    );
     try {
       await setStatusFn({
         data: { eventId: event.id, eventParticipantId: ep.id, status: "running" },
       });
+      // AFTER the promote, not before it, which is the opposite of setOnClock's
+      // order and deliberate. The write above can be refused — another phone
+      // scratching this athlete gets past the check above, and the branch below
+      // then tears the local run down. Demoting first, that refusal left the
+      // crowd's clock EMPTY: the previous athlete already written to "waiting"
+      // and nobody put in their place. Taking the clock before giving it up
+      // means a refused start leaves them exactly where they were.
+      //
+      // The cost is one round trip in which both rows read "running", against a
+      // bug that lasted until somebody noticed. And for that round trip the
+      // screens go on showing the athlete they were already showing.
+      if (onClockNow) {
+        try {
+          await setStatusFn({
+            data: { eventId: event.id, eventParticipantId: onClockNow.id, status: "waiting" },
+          });
+        } catch {
+          // A cleanup that fails must not undo a start that worked. The timer is
+          // running and the crowd has the right name; a stale row costs the
+          // previous athlete showing as on-deck until the next write moves them.
+        }
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : "";
       if (message.includes(OUT_OF_FIELD_MESSAGE)) {
