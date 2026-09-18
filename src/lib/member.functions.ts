@@ -192,7 +192,12 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
       const { data: rows } = await supabaseAdmin
         .from("participants")
         .select("id, name")
-        .in("id", data.participantIds);
+        .in("id", data.participantIds)
+        // Same reason as the batch branch below, which had this from the start:
+        // a collector is an account with a collection and no place on the
+        // roster, so a paper code for one is a credential nothing can redeem.
+        // The panel hands this branch whatever participant id the row carries.
+        .eq("is_collector", false);
       targets = rows ?? [];
     } else {
       const { data: rows } = await supabaseAdmin

@@ -81,8 +81,13 @@ export function useEventBundle() {
   const refetchEvent = event.refetch;
   const refetchBundle = bundle.refetch;
   const refetch = useCallback(async () => {
-    await Promise.all([refetchEvent(), refetchBundle()]);
-  }, [refetchEvent, refetchBundle]);
+    // The same gate the query above carries, because `refetch()` does not honour
+    // `enabled` — it runs the queryFn whatever the flag says. Out of season the
+    // Try again button therefore sent `eventId: null` into the validator, and
+    // the Zod rejection came back as the FeedError's message: a raw JSON issue
+    // array on seven spectator screens, re-thrown by every subsequent tap.
+    await Promise.all([refetchEvent(), eventId ? refetchBundle() : Promise.resolve()]);
+  }, [refetchEvent, refetchBundle, eventId]);
 
   return {
     event: event.data,

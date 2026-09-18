@@ -577,8 +577,12 @@ export function SecretCardsPanel() {
       </p>
       {list.data?.exhausted && (
         <p className="mt-1 text-[11px] leading-snug text-warn">
-          Everyone who plays has pulled all {cards.filter((c) => c.active && c.hasArt).length}. New
-          cards show up in tomorrow&apos;s packs.
+          {/* The same filter the server decides `exhausted` with — weight 0 takes a
+              card out of the draw without retiring it, so counting it here made
+              the sentence name a total nobody could ever have pulled. */}
+          Everyone who plays has pulled all{" "}
+          {cards.filter((c) => c.active && c.hasArt && c.weight > 0).length}. New cards show up in
+          tomorrow&apos;s packs.
         </p>
       )}
 
