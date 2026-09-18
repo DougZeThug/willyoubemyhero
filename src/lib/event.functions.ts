@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { RUNS_PUBLIC_COLUMNS } from "./runs-columns";
+import { DRAFT_SELECTIONS_PUBLIC_COLUMNS, PENALTIES_PUBLIC_COLUMNS } from "./penalties-columns";
 import { uuid as zuuid } from "./zod-uuid";
 import { publicClient } from "./public-client.server";
 
@@ -91,13 +92,20 @@ export const getEventBundle = createServerFn({ method: "GET" })
       ),
       safe(
         "penalties",
-        sb.from("penalties").select("*, run:runs!inner(event_id)").eq("run.event_id", data.eventId),
+        sb
+          .from("penalties")
+          // Named columns for the same reason as runs above: anon's SELECT on
+          // penalties is column-scoped (no notes/created_by/client_key), so a
+          // star expansion is refused outright.
+          .select(`${PENALTIES_PUBLIC_COLUMNS}, run:runs!inner(event_id)`)
+          .eq("run.event_id", data.eventId),
       ),
       safe(
         "draft_selections",
         sb
           .from("draft_selections")
-          .select("*")
+          // Column-scoped grant again: created_by is withheld from anon.
+          .select(DRAFT_SELECTIONS_PUBLIC_COLUMNS)
           .eq("event_id", data.eventId)
           .order("selection_order", { ascending: true }),
       ),
