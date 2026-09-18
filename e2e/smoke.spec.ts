@@ -825,6 +825,13 @@ test.describe("phone sweeps", () => {
       // press landed on the nav and the control looked like four dead corners
       // while being perfectly fine.
       await control.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      // And then prove it landed somewhere clickable, because the failure when it
+      // has not is maximally unhelpful: presses at coordinates outside the
+      // viewport hit nothing, Radix reads that as a press outside an open dialog
+      // and unmounts it, and the next getAttribute waits 60s for a control that
+      // no longer exists. A control that is not in the viewport cannot be
+      // measured, so say that instead.
+      await expect(control).toBeInViewport();
       const box = await control.boundingBox();
       if (!box) throw new Error(`${label}: no box to measure`);
       const cx = box.x + box.width / 2;
@@ -882,6 +889,17 @@ test.describe("phone sweeps", () => {
       .first()
       .click();
     await page.getByRole("button", { name: /^Add station$/i }).click();
+    // Settled, not merely mounted. The sheet slides up, and `toBeVisible` passes
+    // the moment it is in the DOM — mid-slide, with the switch's box still below
+    // the fold. Measured there, all four corners were outside a 390x664 viewport,
+    // so every press landed on nothing, Radix took it for a press outside the
+    // dialog, and the sheet closed under the test. Waiting for the animations
+    // rather than a timeout: the settled box is the only one worth measuring.
+    const sheet = page.locator('[role="dialog"]');
+    await expect(sheet).toBeVisible();
+    await sheet.evaluate((el) =>
+      Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+    );
     for (const id of ["station-split", "station-active"]) {
       expect(
         await cornersRespond(page.locator(`#${id}[role="switch"]`), id),
@@ -890,6 +908,12 @@ test.describe("phone sweeps", () => {
           "ui/switch.tsx and nav-rows-panel.tsx.",
       ).toEqual([]);
     }
+
+    // Put the sheet away before the checkbox half of this test. An open Radix
+    // dialog aria-hides the rest of the page, so the panel below is not merely
+    // covered by it — it cannot be found by role at all.
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
 
     // And the app's only Checkbox, two disclosures deep: the Card Prompt Studio
     // panel, then Batch Production inside it. Reaching it is the point — EXEMPT
