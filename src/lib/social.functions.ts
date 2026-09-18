@@ -299,7 +299,7 @@ export const getAwards = createServerFn({ method: "GET" })
       .from("awards")
       .select("id, event_id, participant_id, award_name, award_type, description")
       .eq("event_id", data.eventId);
-    return { awards: rows ?? [], lockedAtRead: !!ev?.awards_locked };
+    return { awards: rows ?? [], lockedAtRead: Boolean(ev?.awards_locked) };
   });
 
 /** Live tally. Commissioner only, so the room can't see it before the reveal. */
