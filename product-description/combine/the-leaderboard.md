@@ -225,8 +225,11 @@ around them.
 
 ## Edge cases
 
-- **An official run with no time.** Renders as an em dash and sorts to the
-  bottom of the board.
+- **An official run with no time.** Not on the board at all — it is dropped
+  before anything is placed, rather than ranked last with an em dash where the
+  time goes. The comparator that puts a missing time last is still there and is
+  still what every screen sorts by, but nothing without a time gets as far as
+  it.
 - **A run whose athlete is not on the roster.** The row still appears with an em
   dash for the name and a question-mark avatar.
 - **A failed roster read.** The same em dash, on every row at once — the places

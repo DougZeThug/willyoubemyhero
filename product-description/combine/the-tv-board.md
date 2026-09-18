@@ -186,9 +186,9 @@ link, which is fine on a laptop and pointless on a television.
 
 ## Edge cases
 
-- **An official run with no time recorded** sorts to the _top_ of the board and
-  prints a dash where the time should be, so an incomplete run can appear to be
-  leading.
+- **An official run with no time recorded** is not on the board at all. It is
+  dropped before anything is placed, so it cannot hold a slot or appear to be
+  leading — which is what it used to do, at the top, in front of the party.
 - **A run whose player is not on the roster** draws a row with a dash for a name
   and no link.
 - **A failed roster read** does that to every slot at once, because the places

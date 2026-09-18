@@ -8,7 +8,8 @@ intended, or to leave.
 
 **That pass has now been made.** Every entry marked `fix` has been fixed, and two
 of the `product call` entries were decided and acted on. What is left is five
-product calls that still belong to the league, plus one inside B-30.
+product calls that still belong to the league. A sixth, inside B-30, has since
+been closed by a change that was not aiming at it — see that entry.
 
 **A second pass has landed since.** B-44 to B-49 came from a code read rather
 than from a document's open questions, so they are not "what the feature
@@ -30,7 +31,9 @@ Four of those turned out to be already fixed in code — the doc was read at
 `b46f330` and seventy-seven commits had landed since. The other thirty-four
 `fix` entries, and the two product calls the league took (B-14, B-27), are fixed
 here. **Five entries remain open**, all product calls: B-07, B-23, B-32, B-33 and
-B-38, plus the deliberately-false "Pack Complete" heading inside B-30.
+B-38. The deliberately-false "Pack Complete" heading inside B-30 was a sixth; it
+is closed, not decided — the reveal stand was rebuilt for an unrelated reason and
+the heading went with it.
 
 Two clusters accounted for most of the high entries, and both are closed. The
 first was **writes that report a success they did not have** — the running
@@ -98,7 +101,7 @@ in the screen rather than in the handler that cascades.
 | B-47 | Undo split and add penalty stay live on a finished run                      | medium   | admin         | fixed               |
 | B-48 | A per-player code re-issue does not skip collectors                         | medium   | admin         | fixed               |
 | B-49 | "Try again" with no active combine answers with a raw validator error       | medium   | cross-cutting | fixed               |
-| B-30 | Accessibility gaps across the app                                           | low      | cross-cutting | fixed (one open)    |
+| B-30 | Accessibility gaps across the app                                           | low      | cross-cutting | fixed               |
 | B-31 | Small rendering and copy slips                                              | low      | —             | fixed               |
 | B-32 | The compare picker dresses an unpacked card in its real tier                | low      | cards         | product call — open |
 | B-33 | Out of season, trading closes silently — including for secrets              | low      | trading       | product call — open |
@@ -1062,10 +1065,16 @@ in the screen rather than in the handler that cascades.
     so a screen reader user got no feedback at all. **Fixed** — the pack summary
     keeps its deliberate quiet about interrupting a ceremony, but says so in a
     polite live region; the leaderboard, which had no `catch` at all, reports it.
-  - The pack's "Pack Complete" heading is deliberately false for about
-    six-tenths of a second, and a screen reader announces it as fact. **Still
-    open — `product call`.** The lie is the effect; making it honest costs the
-    surprise, and whether that trade is worth it is not a defect question.
+  - The pack's "Pack Complete" heading was deliberately false for about
+    six-tenths of a second, and a screen reader announced it as fact. It was
+    left open as a `product call`, because the lie was the effect and making it
+    honest cost the surprise. **Closed since, by a change that was not about
+    this.** That heading belonged to the theatre introducing the secret, which
+    only worked while the secret was always last; once it could land in any
+    slot the whole production went, and the false heading with it. The stand
+    now counts "2 / 3" through a secret like any other card
+    (`src/components/pack-stand.tsx`). Nothing was traded away — the question
+    stopped existing.
 - **Severity:** `low` individually, and worth treating as one piece of work —
   which is how it was done.
 - **Raised by:** [accessibility](cross-cutting/accessibility.md),
