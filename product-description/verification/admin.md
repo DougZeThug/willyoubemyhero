@@ -178,10 +178,6 @@ Not checkable by hand:
 
 Not checkable by hand:
 
-- **That a bulk issue reaches active players outside this event's roster**
-  ([Edge cases](../admin/the-roster.md#edge-cases)). It needs a second event with
-  its own unclaimed players, and confirming it means rotating their codes — the
-  exact destruction B-01 and B-02 describe.
 - **`queued` versus `waiting`** ([Open questions](../admin/the-roster.md#open-questions-and-verification)).
   Nothing user-facing distinguishes them; the document says both read as "in the
   queue" everywhere, so there is no observable difference to check.
