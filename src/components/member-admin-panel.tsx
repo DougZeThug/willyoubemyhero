@@ -140,7 +140,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     if (
       !confirm(
         `Issue a new code for the ${unclaimedCount} player${unclaimedCount === 1 ? "" : "s"} who ` +
-          `haven't claimed yet? Players who already claimed keep their current code.`,
+          "haven't claimed yet? Players who already claimed keep their current code.",
       )
     ) {
       return;
