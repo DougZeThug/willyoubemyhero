@@ -49,6 +49,16 @@ export default tseslint.config(
           ],
         },
       ],
+      // className composition in this app is cn(), and `"base " + (cond ? …)` is
+      // not the same thing: cn() resolves a conditional colour against a base
+      // size through tailwind-merge rather than gluing them. Eighteen sites had
+      // drifted to the `+` form before DeepSource counted them (JS-R1004); this
+      // is what stops the nineteenth.
+      //
+      // A template literal counts as a string literal to this rule, so a message
+      // wrapped across lines stays legal — it only fires when some operand is
+      // neither: a call, a ternary, an identifier.
+      "prefer-template": "error",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
     },
