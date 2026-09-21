@@ -185,14 +185,14 @@ function LeaderboardPage() {
                     )}
                   >
                     <span
-                      className={
-                        "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black tabular " +
-                        (row.place === 1
+                      className={cn(
+                        "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black tabular",
+                        row.place === 1
                           ? "hud-bezel text-primary ring-1 ring-primary/60"
                           : row.place <= 3
                             ? "hud-bezel text-primary/90"
-                            : "bg-white/10 text-foreground")
-                      }
+                            : "bg-white/10 text-foreground",
+                      )}
                     >
                       {row.place}
                     </span>

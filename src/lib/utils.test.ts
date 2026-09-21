@@ -14,6 +14,34 @@ describe("cn", () => {
     expect(cn("text-card-name text-primary")).toContain("text-card-name");
   });
 
+  it("keeps an arbitrary font size beside a colour class", () => {
+    // The card back sizes its delta column in cqw against the card itself, so
+    // that size is an arbitrary value rather than a token — outside what
+    // FONT_SIZE_TOKENS can answer for. tailwind-merge reads it as a length,
+    // because clamp() and cq* are both in its length regex, and a length is a
+    // different group from the colour the branch adds. If a release ever stops
+    // reading it that way the column drops to its inherited size, on a face no
+    // unit test renders.
+    expect(cn("text-[clamp(8px,3.75cqw,12px)]", "text-primary")).toBe(
+      "text-[clamp(8px,3.75cqw,12px)] text-primary",
+    );
+    expect(cn("text-[clamp(10px,4cqw,13px)] font-bold", "text-warn")).toContain(
+      "text-[clamp(10px,4cqw,13px)]",
+    );
+    // The other half: an arbitrary size is still a size, so a token beats it.
+    expect(cn("text-[clamp(8px,3.75cqw,12px)]", "text-label")).toBe("text-label");
+  });
+
+  it("keeps a border width beside a border colour", () => {
+    // Every station button is a bare `border` with its colour supplied by the
+    // branch. Width and colour are separate groups, so both survive — but the
+    // whole button is one cn() call now, and a merge that collapsed them would
+    // leave an unbordered control rather than an error.
+    expect(cn("rounded-md border p-3 text-left", "border-primary/40 bg-primary/10")).toBe(
+      "rounded-md border p-3 text-left border-primary/40 bg-primary/10",
+    );
+  });
+
   it("still lets one size win over another", () => {
     expect(cn("text-label", "text-badge")).toBe("text-badge");
     expect(cn("text-xs", "text-meta")).toBe("text-meta");

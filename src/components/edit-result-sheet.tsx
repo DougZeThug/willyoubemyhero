@@ -25,6 +25,7 @@ import {
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { createManualRun, deleteRunResult, updateRunResult } from "@/lib/admin-write.functions";
 import { formatTime, parseTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type PenaltyDraft = { stationId: string; ms: string; reason: string };
 
@@ -245,7 +246,7 @@ export function EditResultSheet({
                 setCourseTouched(true);
                 setRawTime(e.target.value);
               }}
-              className={"tabular " + (rawMs == null ? "border-destructive" : "")}
+              className={cn("tabular", rawMs == null && "border-destructive")}
               placeholder="1:23.45"
             />
             {splitDerivedMs != null && rawMs != null && rawMs !== splitDerivedMs && (
@@ -285,7 +286,7 @@ export function EditResultSheet({
                         setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }));
                       }}
                       placeholder="—"
-                      className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
+                      className={cn("h-9 w-28 tabular", bad && "border-destructive")}
                     />
                   </div>
                 );
@@ -349,9 +350,10 @@ export function EditResultSheet({
                         prev.map((row, j) => (j === i ? { ...row, ms: e.target.value } : row)),
                       )
                     }
-                    className={
-                      "h-9 w-24 tabular " + (parseTime(p.ms) == null ? "border-destructive" : "")
-                    }
+                    className={cn(
+                      "h-9 w-24 tabular",
+                      parseTime(p.ms) == null && "border-destructive",
+                    )}
                   />
                   <Button
                     size="sm"

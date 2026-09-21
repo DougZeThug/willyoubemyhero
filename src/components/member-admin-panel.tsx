@@ -9,6 +9,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AWARD_CATEGORIES } from "@/lib/awards";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Issued = { participantId: string; name: string; code: string };
 
@@ -27,6 +28,9 @@ function printCodes(rows: Issued[], eventLabel: string): boolean {
       /[&<>"']/g,
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
     );
+  const items = rows
+    .map((r) => `<li><span>${esc(r.name)}</span><code>${esc(r.code)}</code></li>`)
+    .join("");
   win.document.write(
     `<!doctype html><meta charset="utf-8"><title>Member codes</title>` +
       `<style>body{font:14px system-ui,sans-serif;margin:32px}` +
@@ -34,9 +38,7 @@ function printCodes(rows: Issued[], eventLabel: string): boolean {
       `li{display:flex;justify-content:space-between;gap:24px;padding:6px 0;` +
       `border-bottom:1px dashed #bbb;list-style:none}` +
       `code{font:700 16px ui-monospace,monospace;letter-spacing:.2em}</style>` +
-      `<h1>${esc(eventLabel)} — member codes</h1><ul>` +
-      rows.map((r) => `<li><span>${esc(r.name)}</span><code>${esc(r.code)}</code></li>`).join("") +
-      `</ul>`,
+      `<h1>${esc(eventLabel)} — member codes</h1><ul>${items}</ul>`,
   );
   win.document.close();
   win.focus();
@@ -138,7 +140,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     if (
       !confirm(
         `Issue a new code for the ${unclaimedCount} player${unclaimedCount === 1 ? "" : "s"} who ` +
-          "haven't claimed yet? Players who already claimed keep their current code.",
+          `haven't claimed yet? Players who already claimed keep their current code.`,
       )
     ) {
       return;
@@ -248,10 +250,10 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
         <div className="mt-3">
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <span
-              className={
-                "text-label font-bold uppercase tracking-[0.08em] " +
-                (saved ? "text-primary" : "text-warn")
-              }
+              className={cn(
+                "text-label font-bold uppercase tracking-[0.08em]",
+                saved ? "text-primary" : "text-warn",
+              )}
             >
               {saved ? (
                 <>
