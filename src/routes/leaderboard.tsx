@@ -134,7 +134,7 @@ function LeaderboardPage() {
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-4xl px-page-x py-6">
-        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+        {(realtimeDegraded || Boolean(error)) && <FeedDegradedBanner className="mb-4" />}
         {rosterFailed && (
           // The same sentence /live and /order use for this exact read, rather
           // than a fourth phrasing of it.

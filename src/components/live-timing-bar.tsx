@@ -183,7 +183,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                   {stations.map((st) => {
                     const split = run.splits.find((s) => s.stationId === st.id);
-                    const disabled = !!split || run.status !== "running";
+                    const disabled = Boolean(split) || run.status !== "running";
                     return (
                       <button
                         key={st.id}
@@ -287,7 +287,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
           participantName={
             done.find((p) => p.participant_id === editing)?.participant?.name ?? "Athlete"
           }
-          open={!!editing}
+          open={Boolean(editing)}
           onOpenChange={(o) => !o && setEditing(null)}
         />
       )}
