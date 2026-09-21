@@ -89,6 +89,7 @@ import {
 import { awaitingRun, currentAthlete, fieldSize } from "@/lib/current-athlete";
 import { useRunConsole } from "@/hooks/use-run-console";
 import { FeedDegradedBanner } from "@/components/feed-state";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -104,6 +105,9 @@ export const Route = createFileRoute("/admin")({
 function AdminPage() {
   const { event } = useEventBundle();
   const admin = useAdminSession();
+  // `!!` rather than Boolean() on purpose: it narrows `event` for the right
+  // half of the &&, which Boolean() does not, and without it `event.id` there
+  // is a type error.
   const isAdmin = !!event?.id && admin?.eventId === event.id;
   // Accounts on the admin list skip the PIN entirely; the PIN stays as the
   // fallback for anyone signed out or not on the list.
@@ -293,7 +297,7 @@ function TimingConsole() {
       {/* The one that matters most: this is where a run is timed, and a
           console frozen behind a dead socket with nothing on screen saying
           so is the failure the health states were added for. */}
-      {(realtimeDegraded || !!bundleError) && <FeedDegradedBanner />}
+      {(realtimeDegraded || Boolean(bundleError)) && <FeedDegradedBanner />}
       <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-3">
         <div>
           <div className="flex items-center gap-2 text-primary">
@@ -342,7 +346,7 @@ function TimingConsole() {
           onSetOnClock={setOnClock}
         />
       ) : (
-        <Card className={"hud-bezel " + (paused ? "border-warn/60" : "border-primary/50 hud-glow")}>
+        <Card className={cn("hud-bezel", paused ? "border-warn/60" : "border-primary/50 hud-glow")}>
           <CardContent className="p-4 sm:p-5">
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-3">
@@ -353,10 +357,10 @@ function TimingConsole() {
                 />
                 <div>
                   <div
-                    className={
-                      "text-xs font-bold uppercase tracking-[0.08em] " +
-                      (finished ? "text-warn" : "text-muted-foreground")
-                    }
+                    className={cn(
+                      "text-xs font-bold uppercase tracking-[0.08em]",
+                      finished ? "text-warn" : "text-muted-foreground",
+                    )}
                   >
                     {statusLabel}
                   </div>
@@ -471,20 +475,20 @@ function TimingConsole() {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {stations.map((st) => {
                   const split = run.splits.find((s) => s.stationId === st.id);
-                  const disabled = !!split || paused || finished || run.status !== "running";
+                  const disabled = Boolean(split) || paused || finished || run.status !== "running";
                   return (
                     <div key={st.id} className="flex flex-col gap-1">
                       <button
                         disabled={disabled}
                         onClick={() => recordSplit(st.id)}
-                        className={
-                          "rounded-md border p-3 text-left transition " +
-                          (split
+                        className={cn(
+                          "rounded-md border p-3 text-left transition",
+                          split
                             ? "border-primary/40 bg-primary/10"
                             : disabled
                               ? "border-white/5 bg-white/5 opacity-60"
-                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10")
-                        }
+                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10",
+                        )}
                       >
                         <div className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                           {st.short_name ?? `#${st.station_order}`}
@@ -573,10 +577,10 @@ function StartCard({
         <h2 className="mb-3 font-display text-xl font-black uppercase">Send next athlete</h2>
         <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-2">
           <Radio
-            className={
-              "h-4 w-4 shrink-0 " +
-              (slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground")
-            }
+            className={cn(
+              "h-4 w-4 shrink-0",
+              slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground",
+            )}
           />
           <div className="min-w-0 flex-1">
             <div className="text-label uppercase tracking-[0.08em] text-muted-foreground">
@@ -608,10 +612,10 @@ function StartCard({
               <button
                 key={p.id}
                 onClick={() => onSelect(p.participant_id)}
-                className={
-                  "flex w-full items-center gap-3 px-3 py-2 text-left transition " +
-                  (sel ? "bg-primary/15" : "hover:bg-white/5")
-                }
+                className={cn(
+                  "flex w-full items-center gap-3 px-3 py-2 text-left transition",
+                  sel ? "bg-primary/15" : "hover:bg-white/5",
+                )}
               >
                 <span className="grid h-7 w-7 place-items-center rounded-md bg-white/5 font-display text-sm font-black tabular">
                   {p.running_order}
@@ -834,7 +838,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       </div>
 
       <MemberCodesPanel eventId={eventId} />
-      <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
+      <AwardsAdminPanel eventId={eventId} locked={Boolean(awardsLocked)} />
       <CardGrantPanel eventId={eventId} />
       <DustAdminPanel eventId={eventId} enabled={dustOn} />
       {/* Beside the dust switch on purpose: the shop row's reason line points
@@ -946,14 +950,14 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                     accept="image/png,image/jpeg,image/webp"
                     className="hidden"
                     onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) onPickPhoto(p.id, f);
+                      const file = e.target.files?.[0];
+                      if (file) onPickPhoto(p.id, file);
                       e.target.value = "";
                     }}
                   />
                 </label>
                 {(["front", "back"] as const).map((side) => {
-                  const has = !!cards.data?.[p.id]?.[side];
+                  const has = Boolean(cards.data?.[p.id]?.[side]);
                   const busy = uploadingCardId === `${p.id}:${side}`;
                   return (
                     <span key={side} className="flex flex-1 items-center sm:flex-none">
@@ -965,8 +969,8 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                           accept="image/png,image/jpeg,image/webp"
                           className="hidden"
                           onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) onPickCard(p.id, side, f);
+                            const file = e.target.files?.[0];
+                            if (file) onPickCard(p.id, side, file);
                             e.target.value = "";
                           }}
                         />
@@ -1148,9 +1152,10 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
                   className="flex items-center justify-between gap-2 rounded px-1 py-1 text-xs"
                 >
                   <span
-                    className={
-                      "truncate uppercase " + (isIn ? "" : "text-muted-foreground line-through")
-                    }
+                    className={cn(
+                      "truncate uppercase",
+                      !isIn && "text-muted-foreground line-through",
+                    )}
                   >
                     {playerName}
                   </span>

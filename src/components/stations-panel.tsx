@@ -18,6 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 
 type StationRow = {
   id: string;
@@ -365,7 +366,7 @@ export function StationsPanel({ eventId }: { eventId: string }) {
         </div>
       )}
 
-      <ul className={"space-y-2 " + (renames ? "hidden" : "")}>
+      <ul className={cn("space-y-2", renames && "hidden")}>
         {stations.map((s, i) => (
           <li
             key={s.id}

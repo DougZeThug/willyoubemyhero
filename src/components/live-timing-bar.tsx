@@ -16,6 +16,7 @@ import { EditResultSheet } from "@/components/edit-result-sheet";
 import { formatTime } from "@/lib/format";
 import { awaitingRun, currentAthlete } from "@/lib/current-athlete";
 import type { RunConsole } from "@/hooks/use-run-console";
+import { cn } from "@/lib/utils";
 
 export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
   const {
@@ -182,20 +183,20 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                   {stations.map((st) => {
                     const split = run.splits.find((s) => s.stationId === st.id);
-                    const disabled = !!split || run.status !== "running";
+                    const disabled = Boolean(split) || run.status !== "running";
                     return (
                       <button
                         key={st.id}
                         disabled={disabled}
                         onClick={() => recordSplit(st.id)}
-                        className={
-                          "min-w-28 shrink-0 rounded-md border p-2 text-left transition " +
-                          (split
+                        className={cn(
+                          "min-w-28 shrink-0 rounded-md border p-2 text-left transition",
+                          split
                             ? "border-primary/40 bg-primary/10"
                             : disabled
                               ? "border-white/5 bg-white/5 opacity-60"
-                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10")
-                        }
+                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10",
+                        )}
                       >
                         <div className="truncate font-display text-sm font-black uppercase leading-tight">
                           {st.short_name ?? st.name}
@@ -286,7 +287,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
           participantName={
             done.find((p) => p.participant_id === editing)?.participant?.name ?? "Athlete"
           }
-          open={!!editing}
+          open={Boolean(editing)}
           onOpenChange={(o) => !o && setEditing(null)}
         />
       )}

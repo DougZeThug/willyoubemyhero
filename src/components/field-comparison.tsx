@@ -1,5 +1,6 @@
 import { formatTime } from "@/lib/format";
 import type { LadderRow } from "@/lib/card-stats";
+import { cn } from "@/lib/utils";
 
 /**
  * Station-by-station breakdown against the rest of the field.
@@ -93,10 +94,10 @@ export function FieldComparison({
               </span>
               {row.place != null && row.fieldCount > 0 && (
                 <span
-                  className={
-                    "text-label font-bold uppercase tracking-wider tabular " +
-                    (row.place === 1 ? "" : "text-muted-foreground")
-                  }
+                  className={cn(
+                    "text-label font-bold uppercase tracking-wider tabular",
+                    row.place !== 1 && "text-muted-foreground",
+                  )}
                   style={row.place === 1 ? { color: "var(--tier)" } : undefined}
                 >
                   {ordinal(row.place)}/{row.fieldCount}
@@ -104,14 +105,14 @@ export function FieldComparison({
               )}
             </span>
             <span
-              className={
-                "w-[4.75rem] shrink-0 text-right text-label font-bold tabular leading-tight " +
-                (row.deltaMs == null
+              className={cn(
+                "w-[4.75rem] shrink-0 text-right text-label font-bold tabular leading-tight",
+                row.deltaMs == null
                   ? "text-muted-foreground"
                   : row.deltaMs <= 0
                     ? "text-primary"
-                    : "text-warn")
-              }
+                    : "text-warn",
+              )}
             >
               {row.deltaMs == null ? (
                 ""

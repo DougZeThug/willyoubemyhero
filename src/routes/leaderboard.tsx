@@ -134,7 +134,7 @@ function LeaderboardPage() {
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
       <div className="mx-auto max-w-4xl px-page-x py-6">
-        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+        {(realtimeDegraded || Boolean(error)) && <FeedDegradedBanner className="mb-4" />}
         {rosterFailed && (
           // The same sentence /live and /order use for this exact read, rather
           // than a fourth phrasing of it.
@@ -185,14 +185,14 @@ function LeaderboardPage() {
                     )}
                   >
                     <span
-                      className={
-                        "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black tabular " +
-                        (row.place === 1
+                      className={cn(
+                        "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black tabular",
+                        row.place === 1
                           ? "hud-bezel text-primary ring-1 ring-primary/60"
                           : row.place <= 3
                             ? "hud-bezel text-primary/90"
-                            : "bg-white/10 text-foreground")
-                      }
+                            : "bg-white/10 text-foreground",
+                      )}
                     >
                       {row.place}
                     </span>

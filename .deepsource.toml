@@ -10,6 +10,12 @@ test_patterns = [
 exclude_patterns = [
   "src/routeTree.gen.ts",
   "src/integrations/supabase/types.ts",
+  # Generated beside types.ts and headed "Do not edit it directly", so the string
+  # concatenations flagged in it cannot be fixed here — they come back on the next
+  # regeneration. Narrower than .prettierignore and eslint.config.js, which skip
+  # the whole directory: client.server.ts holds the service_role key and is worth
+  # more to the secrets analyzer than it costs in style checks.
+  "src/integrations/supabase/previewAuthStorage.ts",
   "src/components/ui/**",
   "public/progressier.js",
   "product-description/**"

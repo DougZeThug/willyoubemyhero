@@ -224,14 +224,14 @@ function DraftPage() {
                   key={pos}
                   onClick={() => isAdmin && !isTaken && currentPicker && pick(pos)}
                   disabled={isTaken || !isAdmin || !currentPicker || busy}
-                  className={
-                    "aspect-square rounded-lg border p-2 text-left transition " +
-                    (isTaken
+                  className={cn(
+                    "aspect-square rounded-lg border p-2 text-left transition",
+                    isTaken
                       ? "border-primary/60 bg-primary/15 hud-glow"
                       : isAdmin && currentPicker
                         ? "border-primary/40 bg-white/5 hover:border-primary hover:bg-primary/10 hover:hud-glow"
-                        : "border-white/5 bg-white/5 opacity-70")
-                  }
+                        : "border-white/5 bg-white/5 opacity-70",
+                  )}
                 >
                   <div
                     className={cn(
