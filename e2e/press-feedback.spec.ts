@@ -177,10 +177,8 @@ async function pressAndRelease(target: Locator, label: string, out: string[]) {
       // press that never reached the control, so say which. Re-checked here
       // rather than reused from above because the press itself can move things.
       const onIt = await pressPointIsOn(el, box);
-      out.push(
-        `${label}: nothing changed while it was held — ${rest}` +
-          (onIt ? "" : " (and the press point was not on it)"),
-      );
+      const miss = onIt ? "" : " (and the press point was not on it)";
+      out.push(`${label}: nothing changed while it was held — ${rest}${miss}`);
     } else if (after !== rest) out.push(`${label}: kept ${after} after release (rest is ${rest})`);
   } finally {
     await el.evaluate((node, attr) => node.removeAttribute(attr), UNDER_TEST);

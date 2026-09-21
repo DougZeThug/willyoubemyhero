@@ -904,8 +904,8 @@ test.describe("phone sweeps", () => {
       expect(
         await cornersRespond(page.locator(`#${id}[role="switch"]`), id),
         `Part of ${id}'s 44px square is a dead zone. These two rows are 12px ` +
-          "apart, so each needs min-h-11 to keep its own hit box — see " +
-          "ui/switch.tsx and nav-rows-panel.tsx.",
+          `apart, so each needs min-h-11 to keep its own hit box — see ` +
+          `ui/switch.tsx and nav-rows-panel.tsx.`,
       ).toEqual([]);
     }
 
