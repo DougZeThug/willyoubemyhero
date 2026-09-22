@@ -187,7 +187,7 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    let targets: { id: string; name: string }[] = [];
+    let targets: { id: string; name: string }[];
     if (data.participantIds?.length) {
       const { data: rows } = await supabaseAdmin
         .from("participants")
