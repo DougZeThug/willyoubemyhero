@@ -96,7 +96,7 @@ const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   // recharts v3 hands the content renderer TooltipContentProps; the Tooltip
   // component's own props no longer carry payload/label.
-  Partial<RechartsPrimitive.TooltipContentProps<number | string, string>> &
+  Partial<RechartsPrimitive.TooltipContentProps<RechartsPrimitive.TooltipValueType, RechartsPrimitive.TooltipNameType>> &
     Omit<React.ComponentProps<"div">, "content"> & {
       hideLabel?: boolean;
       hideIndicator?: boolean;
