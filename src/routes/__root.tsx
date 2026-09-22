@@ -7,6 +7,9 @@ import {
   useRouterState,
   HeadContent,
   Scripts,
+  // Router 1.170.38+ widened ErrorRouteComponent's props; `error` is now
+  // `unknown` rather than `Error`, so the boundary must accept the type itself.
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
 import { MotionConfig } from "motion/react";
@@ -44,7 +47,10 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+// The router hands this `unknown` now — it normalises thrown values that are
+// not Error instances, so it no longer promises an Error. Both consumers below
+// take `unknown`, so the value passes straight through unnormalised.
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
