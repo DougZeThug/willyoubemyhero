@@ -49,6 +49,31 @@ describe("formatKnownPerformanceData", () => {
   });
 });
 
+/**
+ * Open a Radix Select and choose an option.
+ *
+ * Retried rather than a single click: the studio's history query settles while
+ * the dropdown is opening, and under full-suite load that re-render can land
+ * between pointerdown and the content mounting, leaving the select closed. A
+ * person just taps again; so does this.
+ */
+async function pick(
+  user: ReturnType<typeof userEvent.setup>,
+  combobox: string,
+  option: string | RegExp,
+) {
+  const target = await waitFor(
+    async () => {
+      const trigger = screen.getByRole("combobox", { name: combobox });
+      if (trigger.getAttribute("data-state") !== "open") await user.click(trigger);
+      return screen.getByRole("option", { name: option });
+      // The default second is shorter than one retry takes under full-suite load.
+    },
+    { timeout: 5000 },
+  );
+  await user.click(target);
+}
+
 describe("CardPromptStudio", () => {
   beforeEach(() => {
     serverFnMock.mockResolvedValue({ templates: [], runs: [], id: "history-id" });
@@ -77,8 +102,7 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     expect(screen.getByRole("button", { name: "Generate prompt" })).toBeDisabled();
   });
 
@@ -94,8 +118,7 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     const generate = screen.getByRole("button", { name: "Generate prompt" });
     await waitFor(() => expect(generate).toBeEnabled());
     await user.click(generate);
@@ -118,8 +141,7 @@ describe("CardPromptStudio", () => {
       />,
     );
 
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     await user.click(screen.getByRole("button", { name: "Generate prompt" }));
     const preview = screen.getByLabelText("Generated prompt preview") as HTMLTextAreaElement;
     expect(preview.value).toContain("Rank: 1 of 1");
@@ -145,8 +167,7 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Series" }));
-    await user.click(screen.getByRole("option", { name: "Secret Pet" }));
+    await pick(user, "Series", "Secret Pet");
     expect(screen.queryByRole("combobox", { name: "Participant" })).not.toBeInTheDocument();
     const generate = screen.getByRole("button", { name: "Generate prompt" });
     expect(generate).toBeDisabled();
@@ -170,10 +191,8 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
-    await user.click(screen.getByRole("combobox", { name: "Series" }));
-    await user.click(screen.getByRole("option", { name: "Secret Pet" }));
+    await pick(user, "Participant", /Alex/);
+    await pick(user, "Series", "Secret Pet");
     await user.type(screen.getByLabelText("Name"), "Pickles");
     await user.type(screen.getByLabelText("Owner / association"), "Maya");
     await user.click(screen.getByRole("button", { name: "Generate prompt" }));
@@ -207,8 +226,7 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     expect(screen.getByRole("img", { name: "Alex reference" })).toHaveAttribute(
       "src",
       "https://example.test/profile.jpg",
@@ -237,11 +255,9 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     await user.click(screen.getByRole("button", { name: "Generate prompt" }));
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: "Blake" }));
+    await pick(user, "Participant", "Blake");
     await user.type(screen.getByLabelText("Revision instructions"), "Change one detail.");
     await user.click(screen.getByRole("button", { name: "Copy revision prompt" }));
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("card for Alex"));
@@ -333,8 +349,7 @@ describe("CardPromptStudio", () => {
         />,
       );
 
-      await user.click(screen.getByRole("combobox", { name: "Participant" }));
-      await user.click(screen.getByRole("option", { name: /Alex/ }));
+      await pick(user, "Participant", /Alex/);
       await user.click(screen.getByRole("button", { name: "Generate prompt" }));
       fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
 
@@ -342,8 +357,7 @@ describe("CardPromptStudio", () => {
       fireEvent.click(screen.getByRole("button", { name: "Copy revision prompt" }));
 
       // Alex's initial is still in the air. Move on to Blake.
-      await user.click(screen.getByRole("combobox", { name: "Participant" }));
-      await user.click(screen.getByRole("option", { name: "Blake" }));
+      await pick(user, "Participant", "Blake");
       await user.click(screen.getByRole("button", { name: "Generate prompt" }));
 
       resolveInitial({ id: "alex-initial" });
