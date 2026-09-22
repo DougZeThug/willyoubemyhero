@@ -94,8 +94,10 @@ const ChartTooltip = RechartsPrimitive.Tooltip;
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-    React.ComponentProps<"div"> & {
+  // recharts v3 hands the content renderer TooltipContentProps; the Tooltip
+  // component's own props no longer carry payload/label.
+  Partial<RechartsPrimitive.TooltipContentProps<number | string, string>> &
+    Omit<React.ComponentProps<"div">, "content"> & {
       hideLabel?: boolean;
       hideIndicator?: boolean;
       indicator?: "line" | "dot" | "dashed";
@@ -243,7 +245,9 @@ const ChartLegend = RechartsPrimitive.Legend;
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
+    Pick<RechartsPrimitive.LegendProps, "verticalAlign"> & {
+      // v3 no longer exposes payload on LegendProps.
+      payload?: ReadonlyArray<RechartsPrimitive.LegendPayload>;
       hideIcon?: boolean;
       nameKey?: string;
     }

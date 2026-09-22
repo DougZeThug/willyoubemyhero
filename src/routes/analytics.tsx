@@ -160,7 +160,7 @@ function AnalyticsPage() {
                         borderRadius: 8,
                       }}
                       labelStyle={{ color: "#67e8f9" }}
-                      formatter={(v: number) => `${v}s`}
+                      formatter={(v) => `${v}s`}
                     />
                     <Bar dataKey="avgSec" fill="#38bdf8" radius={[6, 6, 0, 0]} name="Average" />
                     <Bar dataKey="bestSec" fill="#22d3ee" radius={[6, 6, 0, 0]} name="Best" />
