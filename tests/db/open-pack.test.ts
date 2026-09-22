@@ -84,17 +84,18 @@ const rosterIds = async () =>
   ).map((r) => r.id);
 
 const packRows = async () =>
-  sql<{ participant_id: string | null; guest_id: string | null; opened_on: string; cards: Slot[] | null }>( // prettier-ignore
-    "SELECT participant_id, guest_id, opened_on, cards FROM public.pack_opens ORDER BY opened_on",
-  );
+  sql<{ participant_id: string | null; guest_id: string | null; opened_on: string; cards: Slot[] | null }> // prettier-ignore
+  ("SELECT participant_id, guest_id, opened_on, cards FROM public.pack_opens ORDER BY opened_on");
 
 const secretRows = async () =>
-  sql<{ participant_id: string | null; guest_id: string | null; secret_card_id: string; is_duplicate: boolean; granted: boolean; tier: string }>( // prettier-ignore
+  sql<{ participant_id: string | null; guest_id: string | null; secret_card_id: string; is_duplicate: boolean; granted: boolean; tier: string }> // prettier-ignore
+  (
     "SELECT participant_id, guest_id, secret_card_id, is_duplicate, granted, tier FROM public.secret_card_pulls ORDER BY created_at",
   );
 
 const copyRows = async () =>
-  sql<{ participant_id: string; event_participant_id: string; edition: string; source: string; edition_asserted_by: string | null }>( // prettier-ignore
+  sql<{ participant_id: string; event_participant_id: string; edition: string; source: string; edition_asserted_by: string | null }> // prettier-ignore
+  (
     "SELECT participant_id, event_participant_id, edition, source, edition_asserted_by FROM public.card_copies ORDER BY created_at",
   );
 

@@ -548,7 +548,8 @@ describe("buy_market_listing", () => {
     await buy(IDS.bob, res.listingId!);
 
     const [row] =
-      await sql<{ edition: string; edition_asserted_by: string; source: string; acquired_on: string | null }>( // prettier-ignore
+      await sql<{ edition: string; edition_asserted_by: string; source: string; acquired_on: string | null }> // prettier-ignore
+      (
         "SELECT edition, edition_asserted_by, source, acquired_on FROM public.card_copies WHERE id = $1",
         [copies[0]],
       );
@@ -678,7 +679,8 @@ describe("buying a secret", () => {
     expect(bought.duplicate).toBe(false);
 
     const [row] =
-      await sql<{ participant_id: string; granted: boolean; is_duplicate: boolean; tier: string }>( // prettier-ignore
+      await sql<{ participant_id: string; granted: boolean; is_duplicate: boolean; tier: string }> // prettier-ignore
+      (
         "SELECT participant_id, granted, is_duplicate, tier FROM public.secret_card_pulls WHERE id = $1",
         [pullId],
       );
