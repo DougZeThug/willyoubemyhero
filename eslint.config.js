@@ -37,6 +37,14 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // react-hooks 7 (forced by ESLint 10) added React Compiler rules that flag
+      // ~77 existing sites. Rewriting timing and card code inside a dependency
+      // bump is too risky, so they warn for gradual cleanup instead of failing CI.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
       "no-restricted-imports": [
         "error",
         {
