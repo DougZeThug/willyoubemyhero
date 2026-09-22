@@ -228,7 +228,9 @@ export function StationsPanel({ eventId }: { eventId: string }) {
         try {
           await save({ ...toDraft(s), name: d.name.trim(), short_name: d.short_name.trim() });
         } catch (e) {
-          throw new Error(`${s.name} did not save${e instanceof Error ? `: ${e.message}` : ""}`);
+          throw new Error(`${s.name} did not save${e instanceof Error ? `: ${e.message}` : ""}`, {
+            cause: e,
+          });
         }
       }
       await refresh();
