@@ -35,8 +35,13 @@ async function admin() {
  * somebody else and replayed. The guest id comes from the signed
  * `x-guest-token` header instead, the same way the daily secret pull works.
  *
- * A member session always wins over a guest identity in the same request, so
- * signing in later can't silently double up your reactions.
+ * A member session always wins over a guest identity in the same request. That
+ * alone does not stop signing in later from doubling up your reactions: the
+ * lookup in toggleReaction only searches the request's own identity, so a 🔥
+ * left as a guest is invisible to the member tapping it again. What stops it is
+ * the claim — attach_device_to_player, bind_account_to_player and
+ * merge_guest_into_collector all move the guest's reactions and comments onto
+ * the player (claim_guest_social, 20260924130000).
  */
 const guestSchema = z
   .object({
