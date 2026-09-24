@@ -71,7 +71,10 @@ describe("encodeUploadImageVariants", () => {
     );
   }
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
   it("labels every variant with a type the server accepts, from an empty-type file", async () => {
     // A dragged PNG. Every passthrough forwards the original bytes, and the
@@ -105,6 +108,24 @@ describe("encodeUploadImageVariants", () => {
     const file = new File([new Uint8Array([1, 2, 3])], "card.png", { type: "image/gif" });
     const sizes = await encodeUploadImageVariants(file);
     expect(sizes.large).not.toMatch(SERVER_ACCEPTS);
+  });
+
+  it("re-encodes a file that is small in pixels but not in bytes", async () => {
+    // 1200px fits under the 1600px edge, so nothing needed shrinking — but at
+    // 400 KB+ it is over the passthrough budget. It used to store the original
+    // as `large` anyway, and signSet serves `large` untransformed whenever a
+    // medium variant exists, so the phone downloaded the full PNG.
+    decodesAs(1200, 900);
+    const ENCODED = "data:image/webp;base64,RU5DT0RFRA==";
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockImplementation((type?: string) =>
+      type === "image/webp" ? ENCODED : "data:,",
+    );
+    const file = new File([new Uint8Array(400_001)], "card.png", { type: "image/png" });
+    const sizes = await encodeUploadImageVariants(file);
+    expect(sizes.large).toBe(ENCODED);
   });
 
   it("still refuses a file it can identify no other way", async () => {

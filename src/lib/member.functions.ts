@@ -110,7 +110,7 @@ export const claimPlayer = createServerFn({ method: "POST" })
     await authAttemptsDb().rpc("clear_auth_attempts", { _kind: "claim", _key: data.participantId });
 
     const now = new Date().toISOString();
-    await supabaseAdmin
+    const { error: stampError } = await supabaseAdmin
       .from("member_codes")
       .update({
         claimed_at: row.claimed_at ?? now,
@@ -118,6 +118,20 @@ export const claimPlayer = createServerFn({ method: "POST" })
         claim_count: (row.claim_count ?? 0) + 1,
       })
       .eq("participant_id", data.participantId);
+    // claimed_at is what makes a player reachable: getClaimRoster's `reachable`
+    // and create_trade_offer's recipient check both read it. Swallowing a failed
+    // stamp handed out a working token for a player nobody could send an offer
+    // to. Re-read before throwing, because a write that committed and then lost
+    // its response already did its job. Thrown here, ahead of the guest attach
+    // and the token, nothing has moved and the code still works for a retry.
+    if (stampError) {
+      const { data: stamped } = await supabaseAdmin
+        .from("member_codes")
+        .select("claimed_at")
+        .eq("participant_id", data.participantId)
+        .maybeSingle();
+      if (!stamped?.claimed_at) throw new Error(stampError.message);
+    }
 
     const { data: participant } = await supabaseAdmin
       .from("participants")

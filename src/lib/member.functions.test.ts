@@ -122,6 +122,41 @@ describe("claimPlayer", () => {
     ).rejects.toThrow(/boom/);
   });
 
+  it("reports a claim stamp that did not land rather than a success", async () => {
+    // claimed_at is what makes a player reachable for trade offers. Swallowed,
+    // a failed first stamp handed out a working token for a player nobody could
+    // send an offer to — and nothing on screen said why.
+    withDb({
+      "member_codes.select": codeRow(),
+      "member_codes.update": { error: { message: "connection lost" } },
+      "participants.select": { data: { name: "Doug" }, error: null },
+    });
+    await expect(
+      claim(
+        { participantId: PARTICIPANT_ID, code: CODE },
+        guestHeaders(signGuestToken(GUEST_ID).token),
+      ),
+    ).rejects.toThrow(/connection lost/);
+    // Thrown before anything moves, so a retry starts from where this one did.
+    const names = mock.client.rpc.mock.calls.map((c) => c[0] as string);
+    expect(names).not.toContain("attach_device_to_player");
+  });
+
+  it("goes ahead when the stamp landed but its answer was lost", async () => {
+    // The re-read is what tells the two apart: a write that committed and then
+    // lost its response already made the player reachable.
+    withDb({
+      "member_codes.select": [
+        codeRow(),
+        { data: { claimed_at: "2026-09-24T10:00:00Z" }, error: null },
+      ],
+      "member_codes.update": { error: { message: "connection lost" } },
+      "participants.select": { data: { name: "Doug" }, error: null },
+    });
+    const res = (await claim({ participantId: PARTICIPANT_ID, code: CODE })) as { ok: boolean };
+    expect(res.ok).toBe(true);
+  });
+
   it("issues a member token for the right code", async () => {
     withDb({
       "member_codes.select": codeRow(),

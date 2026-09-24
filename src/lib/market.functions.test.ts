@@ -419,6 +419,86 @@ describe("getMyStall", () => {
     expect(res.active).toEqual([]);
     expect(res.recent.map((l) => l.id)).toEqual(["old", "new"]);
   });
+
+  describe("a sale whose card the buyer has since destroyed", () => {
+    // The listing row survives now (20260924120000_keep_market_receipts.sql), but
+    // with its copy or pull reference nulled. What it listed is on the row itself,
+    // and this list is the only receipt the seller will ever get.
+    const sold = (over: Record<string, unknown>) => ({
+      id: LISTING,
+      event_id: EVENT,
+      seller_id: ME,
+      card_copy_id: null,
+      secret_pull_id: null,
+      price: 300,
+      status: "sold",
+      buyer_id: THEM,
+      created_at: "2026-08-30T00:00:00Z",
+      resolved_at: "2026-08-30T01:00:00Z",
+      listed_event_participant_id: null,
+      listed_edition: null,
+      listed_edition_asserted_by: null,
+      listed_secret_card_id: null,
+      listed_tier: null,
+      ...over,
+    });
+
+    it("still shows a secret sold to the house, by name", async () => {
+      withDb({
+        "market_listings.select": [
+          { data: [] },
+          { data: [sold({ kind: "secret", listed_secret_card_id: SECRET_CARD, listed_tier: "rare" })] }, // prettier-ignore
+        ],
+        // Neither the seller's holdings nor the pull itself: both are gone.
+        "secret_card_pulls.select": { data: [] },
+        "secret_cards.select": { data: [{ id: SECRET_CARD, name: "Gary", art_path: "g/a.webp" }] },
+      });
+      const { getMyStall } = await import("./market.functions");
+      const res = await callServerFn<{ recent: { id: string; item: Record<string, unknown> }[] }>(
+        getMyStall,
+        { headers: asMe() },
+      );
+      expect(res.recent.map((l) => l.id)).toEqual([LISTING]);
+      expect(res.recent[0].item).toMatchObject({
+        kind: "secret",
+        name: "Gary",
+        tier: "rare",
+        concealed: false,
+      });
+      // Named from the snapshot, and the snapshot's id stays on the server.
+      expect(JSON.stringify(res)).not.toContain(SECRET_CARD);
+    });
+
+    it("still shows a roster copy the buyer milled, in the finish it sold in", async () => {
+      withDb({
+        "market_listings.select": [
+          { data: [] },
+          {
+            data: [
+              sold({
+                kind: "roster",
+                listed_event_participant_id: "ep",
+                listed_edition: "gold",
+                listed_edition_asserted_by: "server",
+              }),
+            ],
+          },
+        ],
+        "card_copies.select": { data: [] },
+        "secret_card_pulls.select": { data: [] },
+      });
+      const { getMyStall } = await import("./market.functions");
+      const res = await callServerFn<{ recent: { item: Record<string, unknown> }[] }>(getMyStall, {
+        headers: asMe(),
+      });
+      expect(res.recent[0].item).toEqual({
+        kind: "roster",
+        eventParticipantId: "ep",
+        edition: "gold",
+        assertedBy: "server",
+      });
+    });
+  });
 });
 
 describe("listCardForDust", () => {

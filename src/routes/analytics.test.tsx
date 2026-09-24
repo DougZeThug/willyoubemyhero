@@ -344,3 +344,34 @@ describe("a split nobody measured", () => {
     expect(screen.getByText("No split data yet.")).toBeInTheDocument();
   });
 });
+
+describe("a station nobody reached", () => {
+  it("is left off the chart rather than drawn as a 0.00s best", () => {
+    // Everybody DNF'd before the second station, so it has no split rows at all.
+    // The unmeasured-split fix above skips null rows; a station with no rows
+    // still fell back to 0, and on the archive a 0.00s "Best" reads as the
+    // fastest time anybody ran anywhere.
+    const reached = makeStation({ name: "Sled Push", short_name: "SLED", station_order: 1 });
+    const unreached = makeStation({ name: "Beer Mile", short_name: "BEER", station_order: 2 });
+    const athlete = makeParticipant({ participation_status: "finished" });
+    const run = makeRun({ participant_id: athlete.participant_id });
+    useEventBundle.mockReturnValue({
+      event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+      bundle: makeBundle({
+        participants: [athlete],
+        stations: [reached, unreached],
+        runs: [run],
+        splits: [makeSplit({ run_id: run.id, station_id: reached.id, segment_time_ms: 10_000 })],
+      }),
+      loading: false,
+      error: null,
+      failedTables: [],
+      realtimeDegraded: false,
+      refetch: vi.fn(() => Promise.resolve()),
+    });
+
+    render(<AnalyticsPage />);
+
+    expect(plotted()).toEqual([{ name: "Sled Push", avgSec: 10, bestSec: 10 }]);
+  });
+});

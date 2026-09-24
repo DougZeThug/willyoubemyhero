@@ -62,14 +62,17 @@ describe("signOutAccount", () => {
     vi.mocked(supabase.auth.signOut).mockResolvedValue({ error: null });
   });
 
-  it("clears the admin token alongside the member token", async () => {
+  it("clears the member token but leaves the admin token in place (ADM-16)", async () => {
+    // The console is a separate door with its own twelve hours and its own Lock
+    // button. Taking the token off here sent a commissioner who signed out of
+    // their account mid-combine back to the PIN gate.
     window.localStorage.setItem("wwbh:admin-token", "event.9999999999999.signature");
     window.localStorage.setItem("wwbh:member-token", "m.participant.9999999999999.signature");
 
     await signOutAccount();
 
     expect(supabase.auth.signOut).toHaveBeenCalled();
-    expect(window.localStorage.getItem("wwbh:admin-token")).toBeNull();
+    expect(window.localStorage.getItem("wwbh:admin-token")).toBe("event.9999999999999.signature");
     expect(window.localStorage.getItem("wwbh:member-token")).toBeNull();
   });
 

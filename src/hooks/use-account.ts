@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
 import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
-import { clearAdminToken } from "@/lib/admin-token";
 import {
   adoptableIds,
   adoptLocalCollection,
@@ -275,11 +274,16 @@ export function useAccountSync(user: User | null) {
  * unnamed visitor had pulled on this handset: the next visit minted a fresh
  * guest id and the vault looked empty. Signing back in re-adopts (and merges)
  * whatever this device holds, so leaving it in place is strictly safer.
+ *
+ * The ADMIN token survives too (ADM-16). It is not the account's: it came from
+ * the PIN or the admin list, it has its own twelve hours, and requireAdmin never
+ * asks who is signed in. The console has its own Lock button for ending it.
+ * Clearing it here sent a commissioner who signed out mid-combine back to the
+ * PIN gate while their console session still had hours to run.
  */
 export async function signOutAccount() {
   await supabase.auth.signOut();
   clearMemberToken();
-  clearAdminToken();
   // Both of these were held for an auth round trip that never finished, and
   // handsets change hands in this league, so neither may be waiting for whoever
   // signs in next on this phone. The destination would bounce them somewhere

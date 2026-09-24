@@ -334,10 +334,14 @@ export const resetCombine = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: runs } = await supabaseAdmin
+    const { data: runs, error: runsError } = await supabaseAdmin
       .from("runs")
       .select("id")
       .eq("event_id", data.eventId);
+    // Before anything else. A failed read coalesced to "no runs" skipped every
+    // delete below and still sent the field back to waiting, leaving the old
+    // times on the board for athletes about to be re-timed against them.
+    if (runsError) throw runsError;
     const runIds = (runs ?? []).map((r) => r.id);
     if (runIds.length) {
       await supabaseAdmin.from("penalties").delete().in("run_id", runIds);
@@ -364,11 +368,13 @@ export const resetParticipantRuns = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: runs } = await supabaseAdmin
+    const { data: runs, error: runsError } = await supabaseAdmin
       .from("runs")
       .select("id")
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
+    // See resetCombine: an unread failure here is a half reset.
+    if (runsError) throw runsError;
     const runIds = (runs ?? []).map((r) => r.id);
     if (runIds.length) {
       await supabaseAdmin.from("penalties").delete().in("run_id", runIds);

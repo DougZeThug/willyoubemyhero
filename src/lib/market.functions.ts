@@ -104,7 +104,8 @@ async function activeEventId(): Promise<string | null> {
 const RECENT_LIMIT = 10;
 
 const LISTING_COLS =
-  "id, event_id, seller_id, kind, card_copy_id, secret_pull_id, price, status, buyer_id, created_at, resolved_at";
+  "id, event_id, seller_id, kind, card_copy_id, secret_pull_id, price, status, buyer_id, created_at, resolved_at, " +
+  "listed_event_participant_id, listed_edition, listed_edition_asserted_by, listed_secret_card_id, listed_tier";
 
 /**
  * Turn listing rows into something renderable, withholding what the viewer is not
@@ -114,6 +115,13 @@ const LISTING_COLS =
  * already owns — built from their OWN rows, so this adds no exposure of anybody
  * else's collection. A card in that set shows its name and art; one outside it
  * shows neither, and `concealed` says so on the tile.
+ *
+ * WHAT A LISTING IS OF comes off the listing's own `listed_*` columns, which were
+ * copied from the card when it went on the shelf. They are what sold, even after a
+ * buyer re-rolls the copy, and they are all there is once a buyer has milled it or
+ * sold it to the house: the settled row survives that now, with its reference
+ * nulled, as the seller's only receipt. The card_copies / secret_card_pulls reads
+ * are for a row with no snapshot, and there should be none left.
  */
 async function hydrate(
   rows: MarketListingRow[],
@@ -123,8 +131,12 @@ async function hydrate(
   if (rows.length === 0) return out;
   const sb = await db();
 
-  const copyIds = rows.flatMap((r) => (r.card_copy_id ? [r.card_copy_id] : []));
-  const pullIds = rows.flatMap((r) => (r.secret_pull_id ? [r.secret_pull_id] : []));
+  const copyIds = rows.flatMap((r) =>
+    r.card_copy_id && !r.listed_event_participant_id ? [r.card_copy_id] : [],
+  );
+  const pullIds = rows.flatMap((r) =>
+    r.secret_pull_id && !r.listed_secret_card_id ? [r.secret_pull_id] : [],
+  );
 
   const [{ data: copies }, { data: pulls }] = await Promise.all([
     copyIds.length
@@ -148,14 +160,32 @@ async function hydrate(
   const copyById = new Map((copies ?? []).map((c) => [c.id, c]));
   const pullById = new Map((pulls ?? []).map((p) => [p.id, p]));
 
+  const rosterOf = (row: MarketListingRow) =>
+    row.listed_event_participant_id
+      ? {
+          event_participant_id: row.listed_event_participant_id,
+          edition: row.listed_edition,
+          edition_asserted_by: row.listed_edition_asserted_by,
+        }
+      : row.card_copy_id
+        ? copyById.get(row.card_copy_id)
+        : undefined;
+  const secretOf = (row: MarketListingRow) =>
+    row.listed_secret_card_id
+      ? { secret_card_id: row.listed_secret_card_id, tier: row.listed_tier }
+      : row.secret_pull_id
+        ? pullById.get(row.secret_pull_id)
+        : undefined;
+
   // Only for cards the viewer actually holds. Fetching the rest would be harmless
   // server-side, but not fetching them is the clearer statement of the rule and
   // saves signing art nobody may see.
   const visibleCardIds = [
     ...new Set(
-      (pulls ?? []).flatMap((p) =>
-        viewerSecretIds.has(p.secret_card_id) ? [p.secret_card_id] : [],
-      ),
+      rows.flatMap((r) => {
+        const id = r.kind === "secret" ? secretOf(r)?.secret_card_id : undefined;
+        return id && viewerSecretIds.has(id) ? [id] : [];
+      }),
     ),
   ];
   const { data: cards } = visibleCardIds.length
@@ -170,9 +200,10 @@ async function hydrate(
   await Promise.all(
     rows.map(async (row) => {
       if (row.kind === "roster") {
-        const copy = row.card_copy_id ? copyById.get(row.card_copy_id) : undefined;
-        // A listing whose copy has vanished is dropped rather than rendered as a
-        // blank tile — the same thing getTradeFeed does with a deleted card.
+        const copy = rosterOf(row);
+        // A listing with neither a snapshot nor a copy is dropped rather than
+        // rendered as a blank tile — the same thing getTradeFeed does with a
+        // deleted card.
         if (!copy) return;
         out.set(row.id, {
           kind: "roster",
@@ -183,7 +214,7 @@ async function hydrate(
         });
         return;
       }
-      const pull = row.secret_pull_id ? pullById.get(row.secret_pull_id) : undefined;
+      const pull = secretOf(row);
       if (!pull) return;
       const owns = viewerSecretIds.has(pull.secret_card_id);
       const card = owns ? cardById.get(pull.secret_card_id) : undefined;
@@ -340,11 +371,8 @@ export const getMyStall = createServerFn({ method: "GET" }).handler(async (): Pr
   // them — but a secret they LISTED and no longer own (it sold) is no longer in
   // their holdings, and the tile would go face-down on the one screen that has to
   // tell them what left. Their own listings name their own cards.
-  const owned = new Set(
-    rows.flatMap((r) => (r.kind === "secret" && r.secret_pull_id ? [r.secret_pull_id] : [])),
-  );
   const mine = await viewerSecrets(me);
-  const items = await hydrate(rows, await withListedSecrets(mine, owned));
+  const items = await hydrate(rows, await withListedSecrets(mine, rows));
 
   const hydrated = rows.flatMap((r): MyMarketListing[] => {
     const item = items.get(r.id);
@@ -374,21 +402,31 @@ export const getMyStall = createServerFn({ method: "GET" }).handler(async (): Pr
  *
  * A card you sold is no longer in your holdings, so without this your own stall
  * would render the thing you just sold face-down as "Secret card" — which is the
- * opposite of what that list is for. Scoped to pull ids that are on YOUR listings,
- * so it can never de-conceal anything that was not already yours to see.
+ * opposite of what that list is for. Scoped to YOUR listings, so it can never
+ * de-conceal anything that was not already yours to see.
+ *
+ * Read off each listing's own snapshot, because the pull may be gone: a buyer who
+ * sold it to the house deleted it, and a lookup by pull id would then find
+ * nothing and put your own sale face-down. Only a listing with no snapshot falls
+ * back to the pull.
  */
 async function withListedSecrets(
   held: ReadonlySet<string>,
-  myPullIds: ReadonlySet<string>,
+  mine: readonly MarketListingRow[],
 ): Promise<ReadonlySet<string>> {
-  if (myPullIds.size === 0) return held;
+  const secrets = mine.filter((r) => r.kind === "secret");
+  const listed = secrets.flatMap((r) => (r.listed_secret_card_id ? [r.listed_secret_card_id] : []));
+  const pullIds = secrets.flatMap((r) =>
+    !r.listed_secret_card_id && r.secret_pull_id ? [r.secret_pull_id] : [],
+  );
+  if (pullIds.length === 0) return listed.length ? new Set([...held, ...listed]) : held;
   const sb = await db();
   const { data } = await sb
     .from("secret_card_pulls")
     .select("secret_card_id")
-    .in("id", [...myPullIds])
+    .in("id", pullIds)
     .returns<Pick<SecretPullRow, "secret_card_id">[]>();
-  return new Set([...held, ...(data ?? []).map((r) => r.secret_card_id)]);
+  return new Set([...held, ...listed, ...(data ?? []).map((r) => r.secret_card_id)]);
 }
 
 /**

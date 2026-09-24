@@ -228,6 +228,34 @@ describe("the crowd clock", () => {
   });
 });
 
+describe("a reset whose runs read fails", () => {
+  // Read as "no runs", a failed SELECT skipped every delete and still flipped
+  // the field back to waiting — old times left on the board, athletes ready to
+  // be re-timed against them, and { ok: true } for the commissioner.
+  const readFails = { "runs.select": { data: null, error: { message: "boom" } } };
+
+  it("throws for the whole combine, and nobody goes back to waiting", async () => {
+    const { resetCombine } = await import("./admin-write.functions");
+    withDb(readFails);
+    await expect(
+      callServerFn(resetCombine, { data: { eventId: EVENT_ID }, headers: asAdmin() }),
+    ).rejects.toMatchObject({ message: "boom" });
+    expect(mock.callsFor("event_participants", "update")).toEqual([]);
+  });
+
+  it("throws for one athlete, and they stay where they were", async () => {
+    const { resetParticipantRuns } = await import("./admin-write.functions");
+    withDb(readFails);
+    await expect(
+      callServerFn(resetParticipantRuns, {
+        data: { eventId: EVENT_ID, participantId: PARTICIPANT_ID },
+        headers: asAdmin(),
+      }),
+    ).rejects.toMatchObject({ message: "boom" });
+    expect(mock.callsFor("event_participants", "update")).toEqual([]);
+  });
+});
+
 describe("saveCompletedRun", () => {
   const base = VALID_PAYLOADS.saveCompletedRun;
 

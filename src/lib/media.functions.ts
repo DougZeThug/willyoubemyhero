@@ -93,7 +93,11 @@ async function signSet(paths: {
   const [thumb, medium, large] = await Promise.all([
     paths.thumb ? signPath(paths.thumb) : signPath(paths.large, VARIANT_WIDTHS.thumb),
     paths.medium ? signPath(paths.medium) : signPath(paths.large, VARIANT_WIDTHS.medium),
-    // Never hand back the untouched original: it is the multi-megabyte PNG.
+    // With no variants the stored file is the untouched original — the
+    // multi-megabyte PNG — so it is never handed back as is. With them, it is the
+    // encoder's own output: at most 1600px, and re-encoded unless it was already
+    // under the passthrough budget (image-encode.ts), so a second transform here
+    // would only cost a generation of quality.
     paths.medium ? signPath(paths.large) : signPath(paths.large, VARIANT_WIDTHS.large),
   ]);
   return { thumb, medium, large };
