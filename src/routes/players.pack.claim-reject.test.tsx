@@ -64,7 +64,7 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: undefined }),
   useQueryClient: () => ({
     setQueryData: vi.fn(),
-    invalidateQueries: vi.fn(async () => {}),
+    invalidateQueries: vi.fn(() => Promise.resolve()),
     getQueryData: vi.fn(),
   }),
 }));
@@ -103,7 +103,7 @@ vi.mock("@/lib/device-id", async (importOriginal) => {
 
 vi.mock("@/lib/card-collection", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
-  return { ...actual, loadPackState, savePackState: vi.fn(async () => {}) };
+  return { ...actual, loadPackState, savePackState: vi.fn(() => Promise.resolve()) };
 });
 
 vi.mock("@/hooks/use-event-bundle", () => ({
@@ -114,7 +114,7 @@ vi.mock("@/hooks/use-event-bundle", () => ({
     error: null,
     failedTables: [] as string[],
     realtimeDegraded: false,
-    refetch: vi.fn(async () => {}),
+    refetch: vi.fn(() => Promise.resolve()),
   }),
 }));
 vi.mock("@/hooks/use-my-collection", async (importOriginal) => {
@@ -137,7 +137,7 @@ vi.mock("@/hooks/use-photo-urls", () => ({
   useEventCardUrls: () => ({ data: undefined }),
   useEventCardBack: () => ({ data: undefined }),
 }));
-vi.mock("@/hooks/use-guest-session", () => ({ useEnsureGuestSession: () => {} }));
+vi.mock("@/hooks/use-guest-session", () => ({ useEnsureGuestSession: vi.fn() }));
 vi.mock("@/hooks/use-pack-status", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return { ...actual, usePackStatus: () => ({ data: undefined }) };
