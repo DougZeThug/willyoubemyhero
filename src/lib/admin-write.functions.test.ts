@@ -75,6 +75,7 @@ const VALID_PAYLOADS: Record<string, Record<string, unknown>> = {
     eventParticipantId: EVENT_PARTICIPANT_ID,
     status: "finished",
   },
+  takeOffClock: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID },
   setRunningOrder: {
     eventId: EVENT_ID,
     order: [{ id: EVENT_PARTICIPANT_ID, running_order: 1 }],
@@ -225,6 +226,55 @@ describe("the crowd clock", () => {
     await callServerFn(resetCombine, { data: { eventId: EVENT_ID }, headers: asAdmin() });
     const [update] = mock.callsFor("event_participants", "update");
     expect(update.payload).toEqual({ participation_status: "waiting", on_clock_since: null });
+  });
+});
+
+describe("taking somebody off the clock", () => {
+  // The console's cleanup writes — Cancel, Discard, Reset timer, and the demote
+  // before a new start. They went through setParticipantStatus, whose "waiting"
+  // is also the roster's un-scratch, so a cancel after a scratch put the athlete
+  // back in the field.
+  function withStatus(participation_status: string | null) {
+    withDb({
+      "event_participants.select": (call) =>
+        call.terminal === "maybeSingle"
+          ? { data: participation_status == null ? null : { participation_status } }
+          : { data: [] },
+    });
+  }
+
+  async function takeOff() {
+    const { takeOffClock } = await import("./admin-write.functions");
+    return callServerFn(takeOffClock, {
+      data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID },
+      headers: asAdmin(),
+    });
+  }
+
+  it("puts the athlete on the clock back to waiting", async () => {
+    withStatus("running");
+    await expect(takeOff()).resolves.toEqual({ ok: true, cleared: true });
+    const [update] = mock.callsFor("event_participants", "update");
+    expect(update?.payload).toEqual({ participation_status: "waiting", on_clock_since: null });
+    expect(mock.eqValue(update, "event_id")).toBe(EVENT_ID);
+    // The filter, not just the read before it: a scratch landing between the
+    // two has to win.
+    expect(mock.eqValue(update, "participation_status")).toBe("running");
+  });
+
+  it.each(["scratched", "dq", "dnp", "absent", "finished", "waiting"])(
+    "leaves a %s athlete exactly where they are",
+    async (participation_status) => {
+      withStatus(participation_status);
+      await expect(takeOff()).resolves.toEqual({ ok: true, cleared: false });
+      expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+    },
+  );
+
+  it("refuses somebody outside the event", async () => {
+    withStatus(null);
+    await expect(takeOff()).rejects.toThrow("not part of this event");
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
   });
 });
 

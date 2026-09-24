@@ -23,7 +23,14 @@ export function useLiveHud(eventId: string | null) {
   // A finished run is not being timed any more -- it is waiting for its result
   // to be saved -- so the ring goes back to the crowd's clock rather than
   // freezing on the last athlete's time.
-  const adminRun = isAdmin && rc.run && rc.run.status !== "finished" ? rc.run : null;
+  //
+  // Nor is a run from another event. The console hydrates whatever IndexedDB
+  // holds, deliberately unfiltered so the timing bar can still offer a leftover
+  // run from last year's combine for Discard -- but the token matching THIS
+  // event says nothing about that run, and the ring put it in front of the crowd
+  // as if it were being timed now.
+  const adminRun =
+    isAdmin && rc.run && rc.run.eventId === eventId && rc.run.status !== "finished" ? rc.run : null;
 
   // While an admin is timing, the big ring shows the run they are actually
   // timing rather than the unofficial on-clock counter. Anchored on the run's

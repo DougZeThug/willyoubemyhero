@@ -11,9 +11,11 @@ import { ACTIVE_RUN_VERSION } from "@/lib/active-run";
 
 const setParticipantStatus = vi.hoisted(() => vi.fn());
 const resetParticipantRuns = vi.hoisted(() => vi.fn());
+const takeOffClock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/admin-write.functions", () => ({
   setParticipantStatus: (...args: unknown[]) => setParticipantStatus(...args),
   resetParticipantRuns: (...args: unknown[]) => resetParticipantRuns(...args),
+  takeOffClock: (...args: unknown[]) => takeOffClock(...args),
 }));
 
 const useServerFn = vi.hoisted(() => vi.fn((fn: unknown) => fn));
@@ -74,6 +76,7 @@ beforeEach(() => {
   resetFixtureIds();
   setParticipantStatus.mockReset().mockResolvedValue({ ok: true });
   resetParticipantRuns.mockReset().mockResolvedValue({ clearedRuns: 1 });
+  takeOffClock.mockReset().mockResolvedValue({ ok: true, cleared: true });
   loadActiveRun.mockReset().mockResolvedValue(null);
   saveActiveRun.mockReset().mockResolvedValue(undefined);
   clearActiveRun.mockReset().mockResolvedValue(undefined);
@@ -512,12 +515,54 @@ describe("useRunConsole", () => {
 
     expect(result.current.run).toBeNull();
     expect(clearActiveRun).toHaveBeenCalled();
-    // "waiting", the schema default and the word players see. This was the only
-    // reset in the app that wrote "queued"; both behave identically, and one
-    // vocabulary is worth more than the coin-flip.
-    expect(setParticipantStatus).toHaveBeenCalledWith({
-      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "waiting" },
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
     });
+  });
+
+  // Cancel, Discard and Reset timer all land here, and used to write "waiting"
+  // through setParticipantStatus — the roster's un-scratch. An athlete scratched
+  // while their timer ran was put back in the field by the cancel, ready to be
+  // timed again. The only status this console may write is the start's.
+  it("never writes a status through the roster's un-scratch when cancelling", async () => {
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const { result, rerender } = await mount([alice]);
+
+    await act(async () => {
+      await result.current.startRun(alice.participant_id);
+    });
+    // Scratched from the roster panel while the clock was running.
+    useEventBundle.mockReturnValue(setupBundle([{ ...alice, participation_status: "scratched" }]));
+    rerender();
+
+    await act(async () => {
+      await result.current.cancelRun();
+    });
+
+    const statuses = setParticipantStatus.mock.calls.map(
+      (c: unknown[]) => (c[0] as { data: { status: string } }).data.status,
+    );
+    expect(statuses).toEqual(["running"]);
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
+    });
+    expect(result.current.run).toBeNull();
+  });
+
+  it("clears the local run even when the server will not take them off the clock", async () => {
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    takeOffClock.mockRejectedValue(new Error("Failed to fetch"));
+    const { result } = await mount([alice]);
+
+    await act(async () => {
+      await result.current.startRun(alice.participant_id);
+    });
+    await act(async () => {
+      await result.current.cancelRun();
+    });
+
+    expect(result.current.run).toBeNull();
+    expect(clearActiveRun).toHaveBeenCalled();
   });
 
   // Only one athlete is ever on the crowd's clock, and nothing below this hook
@@ -543,12 +588,14 @@ describe("useRunConsole", () => {
       await result.current.startRun();
     });
 
-    expect(setParticipantStatus).toHaveBeenCalledWith({
-      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "waiting" },
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
     });
     expect(setParticipantStatus).toHaveBeenCalledWith({
       data: { eventId: EVENT_ID, eventParticipantId: bob.id, status: "running" },
     });
+    // The demote is not a status write: it cannot un-scratch anybody.
+    expect(setParticipantStatus).toHaveBeenCalledTimes(1);
   });
 
   // The ordinary path: stage somebody, then start them. Demoting first would
@@ -572,6 +619,7 @@ describe("useRunConsole", () => {
       (c: unknown[]) => (c[0] as { data: { status: string } }).data.status,
     );
     expect(statuses).toEqual(["running"]);
+    expect(takeOffClock).not.toHaveBeenCalled();
   });
 
   // The start is what the crowd is waiting on. A cleanup write that fails is a
@@ -588,9 +636,7 @@ describe("useRunConsole", () => {
       running_order: 2,
     });
     // The promote lands, the demote after it does not.
-    setParticipantStatus
-      .mockResolvedValueOnce({ ok: true })
-      .mockRejectedValue(new Error("offline"));
+    takeOffClock.mockRejectedValue(new Error("offline"));
     const { result } = await mount([alice, bob]);
 
     act(() => result.current.setSelected(bob.participant_id));
@@ -601,6 +647,7 @@ describe("useRunConsole", () => {
     expect(setParticipantStatus).toHaveBeenCalledWith({
       data: { eventId: EVENT_ID, eventParticipantId: bob.id, status: "running" },
     });
+    expect(takeOffClock).toHaveBeenCalledTimes(1);
     expect(result.current.run?.participantId).toBe(bob.participant_id);
     expect(toastError).not.toHaveBeenCalled();
   });
@@ -630,10 +677,53 @@ describe("useRunConsole", () => {
 
     // One write attempted -- the start -- and nothing said about Alice.
     expect(setParticipantStatus).toHaveBeenCalledTimes(1);
-    expect(setParticipantStatus).not.toHaveBeenCalledWith({
-      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "waiting" },
-    });
+    expect(takeOffClock).not.toHaveBeenCalled();
     expect(result.current.run).toBeNull();
+  });
+
+  // Put on the clock for the crowd without starting the timer. The demote is the
+  // same cleanup as startRun's and goes through the same door; the promote is a
+  // real status write, which the server refuses for anybody out of the field.
+  it("swaps who is on the clock without a status write for the one going off it", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      running_order: 1,
+      participation_status: "running",
+    });
+    const bob = makeParticipant({
+      participant: { id: uuid(), name: "Bob", nickname: null },
+      running_order: 2,
+    });
+    const { result } = await mount([alice, bob]);
+
+    await act(async () => {
+      await result.current.setOnClock(bob.participant_id);
+    });
+
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
+    });
+    expect(setParticipantStatus).toHaveBeenCalledTimes(1);
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: bob.id, status: "running" },
+    });
+  });
+
+  it("clears the clock through the same door", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      participation_status: "running",
+    });
+    const { result } = await mount([alice]);
+
+    await act(async () => {
+      await result.current.setOnClock(null);
+    });
+
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
+    });
+    expect(setParticipantStatus).not.toHaveBeenCalled();
   });
 });
 

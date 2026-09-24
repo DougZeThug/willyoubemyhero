@@ -138,8 +138,16 @@ export function EditResultSheet({
     let total = 0;
     return stations.map((st) => {
       const value = legTimes[st.id] ?? "";
-      const leg = value.trim() === "" ? null : parseTime(value);
-      if (leg == null) return { id: st.id, leg: null as number | null, at: null as number | null };
+      const parsed = value.trim() === "" ? null : parseTime(value);
+      if (parsed == null) {
+        return { id: st.id, leg: null as number | null, at: null as number | null };
+      }
+      // Onto the hundredth grid here, where a typed leg becomes a split.
+      // parseTime keeps up to three decimals and the course box does not, so a
+      // leg typed as 15.005 saved a 15005 split under a 15010 course time — and
+      // the server differences these cumulatives into the segment times that
+      // stationKing is awarded on, so the stray 5ms could take a crown.
+      const leg = Math.round(parsed / 10) * 10;
       total += leg;
       return { id: st.id, leg, at: total };
     });

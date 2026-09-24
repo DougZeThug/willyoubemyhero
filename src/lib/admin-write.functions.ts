@@ -325,6 +325,51 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
   });
 
 /**
+ * Take somebody off the crowd's clock, and nobody else.
+ *
+ * The timing console's cleanup writes — Cancel, Discard, Reset timer, and the
+ * demote of whoever was on the clock before a new start — used to go through
+ * setParticipantStatus with "waiting". That handler's "waiting" is also the
+ * roster's deliberate un-scratch, so it writes over anything, and a cancel
+ * landing after a scratch put the athlete back in the field to be timed again.
+ * The same door put a finished athlete back in the queue when Discard followed
+ * a save that had landed but not answered.
+ *
+ * So this takes no status: it moves a row from "running" to "waiting" and
+ * leaves every other row where it is. A row that is not on the clock is not an
+ * error — for every caller, leaving it alone is exactly the outcome they want.
+ */
+export const takeOffClock = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: current } = await supabaseAdmin
+      .from("event_participants")
+      .select("participation_status")
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .maybeSingle();
+    if (!current) throw new Error(notInEventMessage("athlete"));
+    if (current.participation_status !== "running") return { ok: true, cleared: false };
+
+    // The status filter as well as the read above: another phone can scratch
+    // them between the two, and the write must lose that race, not win it.
+    const { data: cleared, error } = await supabaseAdmin
+      .from("event_participants")
+      .update(withOnClock({ participation_status: "waiting" }, null))
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .eq("participation_status", "running")
+      .select("id");
+    if (error) throw error;
+    return { ok: true, cleared: (cleared ?? []).length > 0 };
+  });
+
+/**
  * Clear the combine back to "not started yet": every run for the event goes,
  * and everybody on the roster returns to `waiting`. Scratched athletes stay
  * scratched — being out of the field is a roster decision, not a result.
