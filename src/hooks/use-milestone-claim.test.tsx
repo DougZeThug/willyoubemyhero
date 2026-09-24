@@ -224,6 +224,30 @@ describe("claiming", () => {
     expect(result.current.claimError).toMatch(/already collected/i);
   });
 
+  it("does not carry a refused rung's error onto the next rung the refetch offers", async () => {
+    // "Already collected" refetches the ladder, and on a long streak that moves
+    // the button down a rung. The error belonged to the rung that was refused;
+    // left standing it sat under "Claim" for a rung nobody had collected, telling
+    // somebody to skip a card they had actually earned.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({ ok: false, reason: "claimed" });
+    const { result, rerender } = mount("m:alice", streak({ current: 14 }));
+    expect(result.current.claimable?.days).toBe(14);
+    await act(async () => {
+      await result.current.claim(14);
+    });
+    expect(result.current.claimError).toMatch(/already collected/i);
+
+    // The refetch lands: 14 is banked, so 7 is what is on offer now.
+    const refetched = streak({ current: 14 });
+    refetched.milestones = refetched.milestones.map((m) =>
+      m.days === 14 ? { ...m, claimed: true } : m,
+    );
+    rerender({ a: "m:alice", s: refetched });
+    expect(result.current.claimable?.days).toBe(7);
+    expect(result.current.claimError).toBeNull();
+  });
+
   it("says every refusal on the button and never as a toast", async () => {
     // A toast announces the reward to whoever is glancing at the phone over
     // your shoulder.

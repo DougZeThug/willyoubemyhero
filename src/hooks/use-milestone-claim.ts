@@ -57,7 +57,8 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
     days: new Set(),
   });
   const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
+  // The refusal, and the rung it was said about. See `claimError` below.
+  const [claimFailure, setClaimFailure] = useState<{ days: number; message: string } | null>(null);
   const [milestoneReveal, setMilestoneReveal] = useState<MilestoneRevealState | null>(null);
 
   /** Everything a claim can have moved, for whichever actor spent it. */
@@ -95,7 +96,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
     claimedRef.current = { run: null, days: new Set() };
     claimingRef.current = false;
     setClaiming(false);
-    setClaimError(null);
+    setClaimFailure(null);
     setMilestoneReveal(null);
   }, [actor]);
 
@@ -110,12 +111,21 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
   const claimable: StreakMilestoneStatus | null =
     streak?.milestones.filter((m) => m.earned && !m.claimed && !shown.has(m.days)).at(-1) ?? null;
 
+  // Only while the button still offers the rung the refusal was about. A
+  // "claimed" refusal refetches the ladder, and on a long streak that moves the
+  // button down a rung — so an error held on its own sat under "Claim" for the
+  // NEXT rung, telling somebody a card they had not collected was already in
+  // their vault. Compared during render rather than cleared from an effect, for
+  // the reason `shown` is: an effect leaves the stale line up for a frame.
+  const claimError =
+    claimFailure && claimFailure.days === claimable?.days ? claimFailure.message : null;
+
   const claim = useCallback(
     async (days: number) => {
       if (claimingRef.current) return;
       claimingRef.current = true;
       setClaiming(true);
-      setClaimError(null);
+      setClaimFailure(null);
       // The actor this request is being sent AS. Every write below is guarded on
       // it still being the one holding the phone when the answer lands.
       const mine = actor;
@@ -126,15 +136,17 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
           // Every one of these is something to say on the button. `claimed` is
           // the one a person can actually hit by tapping twice on a flaky
           // connection, and it means the card is already theirs.
-          setClaimError(
-            res.reason === "claimed"
-              ? "Already collected — it's in your vault."
-              : res.reason === "account_required"
-                ? "Sign in first to keep it."
-                : res.reason === "not_earned"
-                  ? "That streak isn't there yet."
-                  : "Nothing to give out right now. Try again in a bit.",
-          );
+          setClaimFailure({
+            days,
+            message:
+              res.reason === "claimed"
+                ? "Already collected — it's in your vault."
+                : res.reason === "account_required"
+                  ? "Sign in first to keep it."
+                  : res.reason === "not_earned"
+                    ? "That streak isn't there yet."
+                    : "Nothing to give out right now. Try again in a bit.",
+          });
           // "Already collected" means somebody — another device, or a first
           // attempt whose response was lost — has banked the card. Everything
           // this screen believes about the ladder and the collection is a
@@ -177,7 +189,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
         await invalidateActor(mine);
       } catch {
         if (actorRef.current !== mine) return;
-        setClaimError("No signal. Tap to try again.");
+        setClaimFailure({ days, message: "No signal. Tap to try again." });
       } finally {
         // Only the sender's own latch. Clearing it after the phone changed hands
         // would hand the next person a control the reset effect had just armed.
