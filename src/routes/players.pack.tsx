@@ -831,7 +831,15 @@ function PackPage() {
         // the messages in require-auth.server.ts are explicitly contractual. A
         // token the server rejects is a token worth dropping, so the gate shows
         // instead of a retry that can never work.
+        //
+        // The request goes first. Dropping the token flips `actor`, which this
+        // effect depends on, and the latch key carries the actor — so a request
+        // still standing re-ran the effect straight past the latch and asked
+        // again as the guest, unasked, able to spend the day's pack on a guest
+        // deal. With no request the pack re-seals, which is what shows the gate.
         if (e instanceof Error && e.message.includes("Claim your player first")) {
+          setOpenRequest(null);
+          openFiredRef.current = null;
           clearMemberToken();
         }
         setOpenState("failed");
