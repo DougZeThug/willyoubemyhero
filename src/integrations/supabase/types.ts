@@ -1047,6 +1047,11 @@ export type Database = {
           event_id: string | null
           id: string
           kind: string
+          listed_edition: string | null
+          listed_edition_asserted_by: string | null
+          listed_event_participant_id: string | null
+          listed_secret_card_id: string | null
+          listed_tier: string | null
           price: number
           resolved_at: string | null
           secret_pull_id: string | null
@@ -1060,6 +1065,11 @@ export type Database = {
           event_id?: string | null
           id?: string
           kind: string
+          listed_edition?: string | null
+          listed_edition_asserted_by?: string | null
+          listed_event_participant_id?: string | null
+          listed_secret_card_id?: string | null
+          listed_tier?: string | null
           price: number
           resolved_at?: string | null
           secret_pull_id?: string | null
@@ -1073,6 +1083,11 @@ export type Database = {
           event_id?: string | null
           id?: string
           kind?: string
+          listed_edition?: string | null
+          listed_edition_asserted_by?: string | null
+          listed_event_participant_id?: string | null
+          listed_secret_card_id?: string | null
+          listed_tier?: string | null
           price?: number
           resolved_at?: string | null
           secret_pull_id?: string | null
