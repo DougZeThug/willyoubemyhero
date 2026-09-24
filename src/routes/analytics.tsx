@@ -68,18 +68,19 @@ function AnalyticsPage() {
     // field DNF'd before it, or it was set up and never run — has no bucket, and
     // falling back to 0 drew a 0.00s "Best" beside real ones: on the archive,
     // the fastest time anybody ran anywhere.
-    return bundle.stations
-      .filter((st) => byStation.has(st.id))
-      .map((st) => {
-        const arr = byStation.get(st.id)!;
-        const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const best = Math.min(...arr);
-        return {
+    return bundle.stations.flatMap((st) => {
+      const arr = byStation.get(st.id);
+      if (!arr) return [];
+      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const best = Math.min(...arr);
+      return [
+        {
           name: st.name,
-          avgSec: +(avg / 1000).toFixed(2),
-          bestSec: +(best / 1000).toFixed(2),
-        };
-      });
+          avgSec: Number((avg / 1000).toFixed(2)),
+          bestSec: Number((best / 1000).toFixed(2)),
+        },
+      ];
+    });
   }, [bundle]);
 
   // The board's own rows, so these ten names are ten off the leaderboard. Reducing

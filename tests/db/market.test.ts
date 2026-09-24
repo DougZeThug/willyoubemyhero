@@ -148,6 +148,13 @@ async function list(
   return row.list_card_for_dust;
 }
 
+/** A listing that has to succeed for the test to mean anything, by its id. */
+async function listedId(participantId: string, opts: Parameters<typeof list>[1]): Promise<string> {
+  const res = await list(participantId, opts);
+  if (!res.listingId) throw new Error(`Listing refused: ${res.reason ?? "no reason given"}`);
+  return res.listingId;
+}
+
 type BuyResult = {
   ok: boolean;
   reason?: string;
@@ -830,8 +837,8 @@ describe("a sale's receipt", () => {
 
   it("remembers the secret it listed", async () => {
     const { pullId, cardId } = await heldSecret(IDS.alice, "gary", "epic");
-    const res = await list(IDS.alice, { pullId, price: 30 });
-    expect(await listingRow(res.listingId!)).toMatchObject({
+    const listingId = await listedId(IDS.alice, { pullId, price: 30 });
+    expect(await listingRow(listingId)).toMatchObject({
       listed_secret_card_id: cardId,
       listed_tier: "epic",
     });
@@ -859,15 +866,15 @@ describe("a sale's receipt", () => {
   it("survives the buyer selling the secret they bought to the house", async () => {
     const { pullId, cardId } = await heldSecret(IDS.alice, "gary", "rare");
     await credit(500, IDS.bob);
-    const res = await list(IDS.alice, { pullId, price: 30 });
-    expect((await buy(IDS.bob, res.listingId!)).ok).toBe(true);
+    const listingId = await listedId(IDS.alice, { pullId, price: 30 });
+    expect((await buy(IDS.bob, listingId)).ok).toBe(true);
     const [sold] = await sql<{ sell_secret_card: { ok: boolean } }>(
       "SELECT public.sell_secret_card($1, $2)",
       [IDS.bob, pullId],
     );
     expect(sold.sell_secret_card.ok).toBe(true);
 
-    expect(await listingRow(res.listingId!)).toMatchObject({
+    expect(await listingRow(listingId)).toMatchObject({
       status: "sold",
       secret_pull_id: null,
       listed_secret_card_id: cardId,
