@@ -64,16 +64,22 @@ function AnalyticsPage() {
     // not have, leave nothing to plot — the same nothing as no splits at all,
     // so say so rather than drawing a row of zero bars.
     if (byStation.size === 0) return [];
-    return bundle.stations.map((st) => {
-      const arr = byStation.get(st.id) ?? [];
-      const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-      const best = arr.length ? Math.min(...arr) : 0;
-      return {
-        name: st.name,
-        avgSec: +(avg / 1000).toFixed(2),
-        bestSec: +(best / 1000).toFixed(2),
-      };
-    });
+    // And the same holds one station at a time. A station nobody reached — the
+    // field DNF'd before it, or it was set up and never run — has no bucket, and
+    // falling back to 0 drew a 0.00s "Best" beside real ones: on the archive,
+    // the fastest time anybody ran anywhere.
+    return bundle.stations
+      .filter((st) => byStation.has(st.id))
+      .map((st) => {
+        const arr = byStation.get(st.id)!;
+        const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+        const best = Math.min(...arr);
+        return {
+          name: st.name,
+          avgSec: +(avg / 1000).toFixed(2),
+          bestSec: +(best / 1000).toFixed(2),
+        };
+      });
   }, [bundle]);
 
   // The board's own rows, so these ten names are ten off the leaderboard. Reducing
