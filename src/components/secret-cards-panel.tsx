@@ -126,15 +126,15 @@ export function SecretCardsPanel() {
   const [editing, setEditing] = useState<string | null>(null);
   // Per-card grant target: the participant id currently chosen in that row's picker.
   const [grantTarget, setGrantTarget] = useState<Record<string, string>>({});
-  // Per-row pending flags so each row shows its own spinner and neighbour rows
-  // stay interactive while one card is saving.
-  const [grantingId, setGrantingId] = useState<string | null>(null);
-  // Sets rather than single ids: a weight saves on blur and a look on every
-  // pick, so two rows can genuinely be in flight at once and one row's finally
-  // must not clear the other's spinner. Weight was a single id until the tile
-  // started reading that flag to decide when to let go of what the admin typed
-  // — at which point B's save clearing on A's finish put a stale number back in
-  // B's box and re-enabled it mid-flight.
+  // Per-row pending flags, as Sets rather than single ids: a weight saves on
+  // blur, a look on every pick and a grant on every tap, so two rows can
+  // genuinely be in flight at once and one row's finally must not clear the
+  // other's spinner. Weight was a single id until the tile started reading that
+  // flag to decide when to let go of what the admin typed — at which point B's
+  // save clearing on A's finish put a stale number back in B's box and
+  // re-enabled it mid-flight. Grants kept the single id for longer, so starting
+  // B took A's spinner down while A was still in the air.
+  const [grantingIds, setGrantingIds] = useState<ReadonlySet<string>>(new Set());
   const [savingWeightIds, setSavingWeightIds] = useState<ReadonlySet<string>>(new Set());
   const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
   // Sets currently having a whole-collection look applied ("" for unsorted).
@@ -485,7 +485,7 @@ export function SecretCardsPanel() {
       return;
     }
     const who = roster.find((p) => p.id === participantId)?.name ?? "participant";
-    setGrantingId(card.id);
+    setGrantingIds((prev) => new Set(prev).add(card.id));
     // One key per grant the commissioner meant to make, kept across a failure so
     // a retry replays it rather than dealing a second copy. Keyed by card and
     // recipient, so changing either starts a new grant.
@@ -520,7 +520,11 @@ export function SecretCardsPanel() {
     } catch {
       // toast.promise already surfaced the error
     } finally {
-      setGrantingId(null);
+      setGrantingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(card.id);
+        return next;
+      });
     }
   }
 
@@ -1027,7 +1031,7 @@ export function SecretCardsPanel() {
                       onGrantTargetChange={(participantId) =>
                         setGrantTarget((prev) => ({ ...prev, [card.id]: participantId }))
                       }
-                      granting={grantingId === card.id}
+                      granting={grantingIds.has(card.id)}
                       savingWeight={savingWeightIds.has(card.id)}
                       savingLook={savingLookIds.has(card.id)}
                       lookRow={lookRow === card.id}

@@ -110,6 +110,50 @@ describe("DraftPage picking order", () => {
     expect(screen.getByText("Couldn't read the combine just now — retrying.")).toBeInTheDocument();
   });
 
+  it("still congratulates a finished draft when a table the board never reads failed", () => {
+    // Splits, penalties, stations, draft_selections and the event row all land
+    // in `failedTables` too, and none of them feeds this board. Reading any one
+    // of them as "couldn't read the combine" put a retry alarm over a grid that
+    // was visibly full.
+    const first = makeParticipant({
+      participation_status: "finished",
+      selected_draft_position: 1,
+      participant: { id: "p-1", name: "Alice Ace", nickname: null },
+    });
+    const second = makeParticipant({
+      participation_status: "finished",
+      selected_draft_position: 2,
+      participant: { id: "p-2", name: "Bob Bison", nickname: null },
+    });
+    showBundle(
+      {
+        participants: [first, second],
+        runs: [
+          makeRun({ participant_id: first.participant_id, official_time_ms: 50_000 }),
+          makeRun({ participant_id: second.participant_id, official_time_ms: 60_000 }),
+        ],
+      },
+      ["splits"],
+    );
+
+    render(<DraftPage />);
+    expect(screen.getByText("All picks are in. Congrats on a clean draft.")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't read the combine just now — retrying.")).toBeNull();
+  });
+
+  it("still says so when the runs read is the half that failed", () => {
+    // The other direction: runs IS one of the two tables the board is built
+    // from, and with it missing nobody can be on the clock.
+    const ep = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-1", name: "Alice Ace", nickname: null },
+    });
+    showBundle({ participants: [ep], runs: [] }, ["runs"]);
+
+    render(<DraftPage />);
+    expect(screen.getByText("Couldn't read the combine just now — retrying.")).toBeInTheDocument();
+  });
+
   it("quotes an athlete's best run when they were re-timed", () => {
     // Held before this change too -- sorting runs by time surfaced the fast one
     // either way. Here to pin it, because the order is now built from a helper

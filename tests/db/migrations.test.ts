@@ -24,6 +24,7 @@ const EXPECTED_TABLES = [
   "card_prompt_templates",
   "card_pulls",
   "card_reactions",
+  "claimed_guests",
   "collection_trophies",
   "draft_selections",
   "dust_ledger",

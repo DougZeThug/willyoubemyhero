@@ -202,7 +202,11 @@ function DraftPage() {
         ) : (
           <Card className="hud-bezel border-white/10">
             <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              {failedTables.length > 0
+              {/* The two tables the board is built from, not any of the seven:
+                  a failed splits or stations read cannot empty the clock, and
+                  counting it put a retry alarm over a draft that was visibly
+                  finished. Same narrowing the leaderboard and /tv make. */}
+              {failedTables.includes("event_participants") || failedTables.includes("runs")
                 ? "Couldn't read the combine just now — retrying."
                 : rankings.length === 0
                   ? "No combine results yet. Draft board opens once athletes finish."

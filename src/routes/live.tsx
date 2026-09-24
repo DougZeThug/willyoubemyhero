@@ -241,10 +241,18 @@ function LiveHero({
   // types (supabase/migrations/20260821120000_on_clock_since.sql), the same way
   // card-rarity.ts declares card_rarity for itself.
   const onClockSince = onClock ? ((current as OnClockEntry | null)?.on_clock_since ?? null) : null;
-  const onClockBaseMs = useMemo(
-    () => onClockElapsedMs({ on_clock_since: onClockSince }, Date.now()) ?? 0,
+  const onClockElapsed = useMemo(
+    () => onClockElapsedMs({ on_clock_since: onClockSince }, Date.now()),
     [onClockSince],
   );
+  // Somebody is on the clock but there is nothing real to count from: a row put
+  // on the clock before on_clock_since existed, or a stamp that will not parse.
+  // The lib answers null for exactly this, and reading that as 0 on a running
+  // ring counted up from whenever this page loaded — undercounting, restarting
+  // on every reload, and back to the very clock on_clock_since was added to
+  // retire. A ring held at zero is honest about knowing nothing; a moving one
+  // is not.
+  const onClockUnanchored = onClock && onClockElapsed === null;
 
   const shown = timedEp ?? current;
   const art = avatarFor(shown, cards, photos);
@@ -252,8 +260,8 @@ function LiveHero({
   return (
     <div className="flex flex-col items-center">
       <HudTimer
-        runningSinceMs={runBaseMs ?? onClockBaseMs}
-        paused={adminRun ? adminRun.status !== "running" : !onClock}
+        runningSinceMs={runBaseMs ?? onClockElapsed ?? 0}
+        paused={adminRun ? adminRun.status !== "running" : !onClock || onClockUnanchored}
         status={
           HUD_STATUS_LABEL[
             hudStatus({
@@ -278,7 +286,9 @@ function LiveHero({
           <User2 className="h-40 w-40 text-primary/60" strokeWidth={1.25} />
         )}
       </HudTimer>
-      {!adminRun && onClock && onClockSince && (
+      {/* On onClock alone: an unstamped ring is still the crowd's clock rather
+          than the official one, and is the case that most needs saying so. */}
+      {!adminRun && onClock && (
         <div className="mt-1 text-label uppercase tracking-[0.08em] text-muted-foreground">
           Unofficial
         </div>
