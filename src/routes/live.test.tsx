@@ -20,7 +20,11 @@ vi.mock("@/hooks/use-photo-urls", () => ({
 vi.mock("@/hooks/use-finish-watcher", () => ({ useFinishWatcher: () => {} }));
 vi.mock("@/hooks/use-run-console", () => ({ useRunConsole: () => ({ run: null }) }));
 vi.mock("@/lib/admin-token", () => ({ useAdminSession: () => null }));
-vi.mock("@/components/hud-timer", () => ({ HudTimer: () => <div data-stub="hud-timer" /> }));
+vi.mock("@/components/hud-timer", () => ({
+  HudTimer: (props: { paused: boolean; status: string }) => (
+    <div data-stub="hud-timer" data-paused={String(props.paused)} data-status={props.status} />
+  ),
+}));
 vi.mock("@/components/finish-celebration", () => ({
   FinishCelebration: () => <div data-stub="finish-celebration" />,
 }));
@@ -138,5 +142,52 @@ describe("LivePage standings", () => {
     expect(screen.queryByText("Every athlete is done. Nice work.")).toBeNull();
     expect(screen.getByText("0/1 done")).toBeInTheDocument();
     expect(screen.queryByText("Dave Dropout")).toBeNull();
+  });
+});
+
+describe("LivePage crowd clock", () => {
+  const ring = () => document.querySelector('[data-stub="hud-timer"]') as HTMLElement;
+
+  it("holds the ring still when the athlete on the clock has no stamp to count from", () => {
+    // participation_status says running but on_clock_since is null — a row put
+    // on the clock before the column existed. The null used to become 0 and the
+    // ring counted up from whenever this page loaded, restarting on every
+    // reload, with the "Unofficial" caption hidden because it keyed on the stamp.
+    const running = makeParticipant({
+      participation_status: "running",
+      on_clock_since: null,
+      participant: { id: "p-r", name: "Alice Ace", nickname: null },
+    });
+    showBundle({ participants: [running], runs: [] });
+
+    render(<LivePage />);
+    expect(ring().dataset.status).toBe("On the Clock");
+    expect(ring().dataset.paused).toBe("true");
+    expect(screen.getByText("Unofficial")).toBeInTheDocument();
+  });
+
+  it("holds it still on a stamp it cannot parse, too", () => {
+    const running = makeParticipant({
+      participation_status: "running",
+      on_clock_since: "not a time",
+      participant: { id: "p-r", name: "Alice Ace", nickname: null },
+    });
+    showBundle({ participants: [running], runs: [] });
+
+    render(<LivePage />);
+    expect(ring().dataset.paused).toBe("true");
+  });
+
+  it("counts from the stamp when there is one", () => {
+    const running = makeParticipant({
+      participation_status: "running",
+      on_clock_since: new Date(Date.now() - 5_000).toISOString(),
+      participant: { id: "p-r", name: "Alice Ace", nickname: null },
+    });
+    showBundle({ participants: [running], runs: [] });
+
+    render(<LivePage />);
+    expect(ring().dataset.paused).toBe("false");
+    expect(screen.getByText("Unofficial")).toBeInTheDocument();
   });
 });
