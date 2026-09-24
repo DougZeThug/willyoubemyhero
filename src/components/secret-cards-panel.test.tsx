@@ -14,6 +14,7 @@ import { SecretCardsPanel } from "./secret-cards-panel";
 
 const listSecretCards = vi.fn();
 const updateSecretCard = vi.fn();
+const grantSecretCard = vi.fn();
 
 vi.mock("@/lib/secret-cards.functions", () => ({
   listSecretCards: (...a: unknown[]) => listSecretCards(...a),
@@ -22,7 +23,7 @@ vi.mock("@/lib/secret-cards.functions", () => ({
   createSecretCollection: vi.fn(),
   deleteSecretCard: vi.fn(),
   deleteSecretCollection: vi.fn(),
-  grantSecretCard: vi.fn(),
+  grantSecretCard: (...a: unknown[]) => grantSecretCard(...a),
   updateSecretCollection: vi.fn(),
   updateSecretCollectionLook: vi.fn(),
   uploadSecretCardArt: vi.fn(),
@@ -117,6 +118,7 @@ beforeEach(() => {
     exhausted: false,
   });
   updateSecretCard.mockReset();
+  grantSecretCard.mockReset();
 });
 
 describe("two weight saves at once", () => {
@@ -170,6 +172,49 @@ describe("two weight saves at once", () => {
     await waitFor(() => expect(box("Alpha")).toBeDisabled());
     alpha.resolve({ ok: true });
     await waitFor(() => expect(box("Alpha")).toBeEnabled());
+  });
+});
+
+describe("two grants at once", () => {
+  it("leaves the second row's spinner on until its own request comes back", async () => {
+    // The same shape as the weight saves above, one feature over: a single
+    // in-flight id meant starting Beta's grant took Alpha's spinner down while
+    // Alpha was still in the air, and Alpha landing then cleared Beta's.
+    listSecretCards.mockResolvedValue({
+      cards: [card("a", "Alpha", 100), card("b", "Beta", 200)],
+      participants: [
+        { id: "p-alice", name: "Alice" },
+        { id: "p-bob", name: "Bob" },
+      ],
+      collections: [{ id: "set-wild", label: "Wildcards", accent: null }],
+      claimedMembers: 13,
+      exhausted: false,
+    });
+    const alpha = deferred();
+    const beta = deferred();
+    grantSecretCard
+      .mockImplementationOnce(() => alpha.promise)
+      .mockImplementationOnce(() => beta.promise);
+    const granted = { ok: true, duplicate: false, completedCollection: null, repeat: false };
+
+    await openPanel();
+    await userEvent.selectOptions(screen.getByLabelText("Grant Alpha to"), "Alice");
+    await userEvent.selectOptions(screen.getByLabelText("Grant Beta to"), "Bob");
+
+    const buttons = screen.getAllByRole("button", { name: /^Grant$/ });
+    expect(buttons).toHaveLength(2);
+    await userEvent.click(buttons[0]);
+    await userEvent.click(buttons[1]);
+
+    await waitFor(() => expect(grantSecretCard).toHaveBeenCalledTimes(2));
+    expect(screen.getAllByText("Granting…")).toHaveLength(2);
+
+    // Alpha's round trip lands. Beta's has not.
+    alpha.resolve(granted);
+    await waitFor(() => expect(screen.getAllByText("Granting…")).toHaveLength(1));
+
+    beta.resolve(granted);
+    await waitFor(() => expect(screen.queryByText("Granting…")).toBeNull());
   });
 });
 
