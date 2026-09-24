@@ -251,7 +251,7 @@ has changed.
 - **A device with a clock behind the server's** floors at zero rather than going
   negative, so the ring sits at `00:00` for a second before moving. That is
   clock skew on the phone, not a stalled run.
-- **An unreadable stamp** — corrupt or missing — holds the ring at zero and drops
+- **An unreadable stamp** — corrupt or missing — holds the ring at zero and keeps
   the "Unofficial" label, while the athlete's name is still shown.
 - **An official run with no time** sorts to the _top_ of the top five with an em
   dash where its time should be. The leaderboard sorts the same run to the
