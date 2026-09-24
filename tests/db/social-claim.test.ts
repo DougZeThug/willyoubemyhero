@@ -6,7 +6,7 @@
 // looks under the identity of the request, and a member session always wins, so
 // the guest one could never be taken back off. These pin the claim moving them.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, IDS, seedEvent, sql } from "./helpers";
+import { closeDb, IDS, newClient, seedEvent, sql } from "./helpers";
 
 const GUEST = "00000000-0000-4000-8000-00000000de05";
 const OTHER_GUEST = "00000000-0000-4000-8000-00000000de06";
@@ -14,6 +14,15 @@ const USER = "00000000-0000-4000-8000-00000000ac05";
 
 afterAll(closeDb);
 beforeEach(seedEvent);
+
+const REFUSED = /belongs to a player now/;
+
+/**
+ * Long enough for the other connection's statement to reach its lock and
+ * block. Without the lock it has finished by then, which is what makes the
+ * unfixed race fail every time rather than now and again.
+ */
+const settle = () => new Promise((r) => setTimeout(r, 300));
 
 /** Bob's card: the one everybody below is reacting to. */
 async function card(): Promise<string> {
@@ -194,6 +203,132 @@ describe("every way a guest becomes a player", () => {
     ]);
     expect(await comments()).toEqual([
       { participant_id: IDS.alice, guest_key: null, guest_name: null, body: "slow" },
+    ]);
+  });
+});
+
+describe("after the claim", () => {
+  it("refuses a guest reaction or comment from a guest id that has been claimed", async () => {
+    // Refused rather than refiled: a rescued phone can still be acting as a
+    // guest, and filing its writes under the player would let a guest token
+    // post in the player's name.
+    const ep = await card();
+    await sql("SELECT public.claim_guest_social($1, $2)", [IDS.alice, GUEST]);
+
+    await expect(guestReacts(ep, "🔥")).rejects.toThrow(REFUSED);
+    await expect(guestComments(ep, "slow")).rejects.toThrow(REFUSED);
+    expect(await reactions()).toEqual([]);
+    expect(await comments()).toEqual([]);
+  });
+
+  it("still lets a guest nobody has claimed join in", async () => {
+    const ep = await card();
+    await sql("SELECT public.claim_guest_social($1, $2)", [IDS.alice, GUEST]);
+
+    await guestReacts(ep, "🔥", OTHER_GUEST);
+    await guestComments(ep, "fresh", OTHER_GUEST);
+    expect(await reactions()).toHaveLength(1);
+    expect(await comments()).toHaveLength(1);
+  });
+
+  it("files a guest claimed twice under whoever claimed it last", async () => {
+    await sql("SELECT public.claim_guest_social($1, $2)", [IDS.alice, GUEST]);
+    await sql("SELECT public.claim_guest_social($1, $2)", [IDS.carol, GUEST]);
+
+    expect(
+      await sql("SELECT guest_id::text, participant_id::text FROM public.claimed_guests"),
+    ).toEqual([{ guest_id: GUEST, participant_id: IDS.carol }]);
+  });
+});
+
+describe("racing the claim", () => {
+  it("moves a guest write that was still in flight when the claim began", async () => {
+    // Its insert had not committed when the claim's UPDATE took its snapshot,
+    // so the claim missed it and it committed under the guest key — orphaned.
+    const ep = await card();
+    const guest = await newClient();
+    const claimer = await newClient();
+    try {
+      await guest.query("BEGIN");
+      await guest.query(
+        `INSERT INTO public.card_reactions (event_participant_id, guest_key, guest_name, emoji)
+         VALUES ($1, $2, 'Guest', '🔥')`,
+        [ep, GUEST],
+      );
+      const claim = claimer.query("SELECT public.claim_guest_social($1, $2)", [IDS.alice, GUEST]);
+      await settle();
+      await guest.query("COMMIT");
+      await claim;
+    } finally {
+      await guest.end();
+      await claimer.end();
+    }
+
+    expect(await reactions()).toEqual([
+      { participant_id: IDS.alice, guest_key: null, guest_name: null, emoji: "🔥" },
+    ]);
+  });
+
+  it("refuses a guest write that queued behind the claim", async () => {
+    // The other ordering. Waiting on the lock alone would let it commit under
+    // the guest key the moment the claim let go.
+    const ep = await card();
+    const claimer = await newClient();
+    const guest = await newClient();
+    try {
+      await claimer.query("BEGIN");
+      await claimer.query("SELECT public.claim_guest_social($1, $2)", [IDS.alice, GUEST]);
+      const write = guest.query(
+        `INSERT INTO public.card_reactions (event_participant_id, guest_key, guest_name, emoji)
+         VALUES ($1, $2, 'Guest', '🔥')`,
+        [ep, GUEST],
+      );
+      // Attached now so the rejection is never briefly unhandled.
+      const outcome = write.then(
+        () => null,
+        (e: Error) => e,
+      );
+      await settle();
+      await claimer.query("COMMIT");
+      expect(await outcome).toBeInstanceOf(Error);
+      expect((await outcome)?.message).toMatch(REFUSED);
+    } finally {
+      await claimer.end();
+      await guest.end();
+    }
+
+    expect(await reactions()).toEqual([]);
+  });
+
+  it("does not fail the claim when the player makes the same reaction at that moment", async () => {
+    // The player's other phone inserted between the claim's duplicate check and
+    // its move, and the member unique rolled the whole claim back.
+    const ep = await card();
+    await guestReacts(ep, "🔥");
+    const phone = await newClient();
+    const claimer = await newClient();
+    try {
+      await phone.query("BEGIN");
+      await phone.query(
+        `INSERT INTO public.card_reactions (event_participant_id, participant_id, emoji)
+         VALUES ($1, $2, '🔥')`,
+        [ep, IDS.alice],
+      );
+      const claim = claimer.query("SELECT public.claim_guest_social($1, $2)", [IDS.alice, GUEST]);
+      const outcome = claim.then(
+        () => null,
+        (e: Error) => e,
+      );
+      await settle();
+      await phone.query("COMMIT");
+      expect(await outcome).toBeNull();
+    } finally {
+      await phone.end();
+      await claimer.end();
+    }
+
+    expect(await reactions()).toEqual([
+      { participant_id: IDS.alice, guest_key: null, guest_name: null, emoji: "🔥" },
     ]);
   });
 });

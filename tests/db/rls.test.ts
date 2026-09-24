@@ -97,6 +97,9 @@ const SERVER_ONLY = [
   // ref points at a secret_card_pulls or card_copies id — so this leaks the
   // secret ledger sideways as well as saying what everybody is spending.
   "public.dust_ledger",
+  // Which phone became which player. A guest id is a device identity, so this
+  // is a map from devices to names — the same thing account_identities holds.
+  "public.claimed_guests",
 ];
 
 describe("public reads", () => {

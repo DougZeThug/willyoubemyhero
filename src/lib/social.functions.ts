@@ -41,7 +41,9 @@ async function admin() {
  * left as a guest is invisible to the member tapping it again. What stops it is
  * the claim — attach_device_to_player, bind_account_to_player and
  * merge_guest_into_collector all move the guest's reactions and comments onto
- * the player (claim_guest_social, 20260924130000).
+ * the player (claim_guest_social, 20260924130000), and from then on the
+ * database refuses a reaction or comment from that guest id — including one
+ * that was already in flight when the claim ran (20260924140000).
  */
 const guestSchema = z
   .object({
