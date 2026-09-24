@@ -270,10 +270,11 @@ describe("market_listings", () => {
     ).rejects.toThrow();
   });
 
-  it("takes the listing with the copy when the copy is deleted", async () => {
-    // CASCADE rather than SET NULL plus a status: a listing whose target is gone
-    // would fail market_listings_identity_ck, and dropping that CHECK to keep the
-    // row is strictly worse than letting the row go.
+  it("takes an ACTIVE listing with the copy when the copy is deleted", async () => {
+    // CASCADE rather than SET NULL plus a status: a live listing whose target is
+    // gone is a Buy button on nothing, and market_listings_identity_ck still
+    // refuses one. A SETTLED listing is the other case — it is the seller's only
+    // receipt — and "a sale's receipt" below keeps it.
     const { listingId, copyId } = await shelf();
     await sql("DELETE FROM public.card_copies WHERE id = $1", [copyId]);
     const [row] = await sql<{ n: number }>(
@@ -791,6 +792,101 @@ describe("a listed card is spoken for", () => {
       [IDS.alice, copyId],
     );
     expect(row.mill_card_copy.ok).toBe(true);
+  });
+});
+
+describe("a sale's receipt", () => {
+  // The seller's stall is the only place a sale is ever visible. These rows used
+  // to cascade away with the card, so a buyer milling what they bought erased
+  // the seller's only record that it sold.
+  type Snapshot = {
+    status: string;
+    card_copy_id: string | null;
+    secret_pull_id: string | null;
+    listed_event_participant_id: string | null;
+    listed_edition: string | null;
+    listed_edition_asserted_by: string | null;
+    listed_secret_card_id: string | null;
+    listed_tier: string | null;
+  };
+  async function listingRow(listingId: string): Promise<Snapshot | undefined> {
+    const [row] = await sql<Snapshot>(
+      `SELECT status, card_copy_id, secret_pull_id, listed_event_participant_id,
+              listed_edition, listed_edition_asserted_by, listed_secret_card_id, listed_tier
+         FROM public.market_listings WHERE id = $1`,
+      [listingId],
+    );
+    return row;
+  }
+
+  it("remembers the roster copy it listed", async () => {
+    const { listingId, cardId } = await shelf();
+    expect(await listingRow(listingId)).toMatchObject({
+      listed_event_participant_id: cardId,
+      listed_edition: "gold",
+      listed_edition_asserted_by: "server",
+    });
+  });
+
+  it("remembers the secret it listed", async () => {
+    const { pullId, cardId } = await heldSecret(IDS.alice, "gary", "epic");
+    const res = await list(IDS.alice, { pullId, price: 30 });
+    expect(await listingRow(res.listingId!)).toMatchObject({
+      listed_secret_card_id: cardId,
+      listed_tier: "epic",
+    });
+  });
+
+  it("survives the buyer milling the copy they bought", async () => {
+    const { listingId, copyId, cardId } = await shelf();
+    // A copy of their own first, so the bought one is a spare they may burn.
+    await holdCopies(IDS.bob, cardId, 1);
+    expect((await buy(IDS.bob, listingId)).ok).toBe(true);
+    const [milled] = await sql<{ mill_card_copy: { ok: boolean } }>(
+      "SELECT public.mill_card_copy($1, $2)",
+      [IDS.bob, copyId],
+    );
+    expect(milled.mill_card_copy.ok).toBe(true);
+
+    expect(await listingRow(listingId)).toMatchObject({
+      status: "sold",
+      card_copy_id: null,
+      listed_event_participant_id: cardId,
+      listed_edition: "gold",
+    });
+  });
+
+  it("survives the buyer selling the secret they bought to the house", async () => {
+    const { pullId, cardId } = await heldSecret(IDS.alice, "gary", "rare");
+    await credit(500, IDS.bob);
+    const res = await list(IDS.alice, { pullId, price: 30 });
+    expect((await buy(IDS.bob, res.listingId!)).ok).toBe(true);
+    const [sold] = await sql<{ sell_secret_card: { ok: boolean } }>(
+      "SELECT public.sell_secret_card($1, $2)",
+      [IDS.bob, pullId],
+    );
+    expect(sold.sell_secret_card.ok).toBe(true);
+
+    expect(await listingRow(res.listingId!)).toMatchObject({
+      status: "sold",
+      secret_pull_id: null,
+      listed_secret_card_id: cardId,
+      listed_tier: "rare",
+    });
+  });
+
+  it("keeps a cancelled listing when the seller later burns the copy", async () => {
+    const { listingId, copyId } = await shelf();
+    await cancel(IDS.alice, listingId);
+    await sql("SELECT public.mill_card_copy($1, $2)", [IDS.alice, copyId]);
+    expect(await listingRow(listingId)).toMatchObject({ status: "cancelled", card_copy_id: null });
+  });
+
+  it("still refuses an active listing that names no card", async () => {
+    const { listingId } = await shelf();
+    await expect(
+      sql("UPDATE public.market_listings SET card_copy_id = NULL WHERE id = $1", [listingId]),
+    ).rejects.toThrow(/market_listings_identity_ck/);
   });
 });
 
