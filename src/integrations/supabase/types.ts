@@ -2070,6 +2070,10 @@ export type Database = {
         Returns: Json
       }
       backfill_collection_trophies: { Args: never; Returns: number }
+      bind_account_to_player: {
+        Args: { _guest_id?: string; _participant_id: string; _user_id: string }
+        Returns: Json
+      }
       buy_bonus_secret_pull: {
         Args: {
           _event_id: string
@@ -2105,6 +2109,10 @@ export type Database = {
         Returns: number
       }
       claim_guest_secrets: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: number
+      }
+      claim_guest_social: {
         Args: { _guest_id: string; _participant_id: string }
         Returns: number
       }
