@@ -102,6 +102,19 @@ describe("useLiveHud", () => {
     expect(result.current.timedEp).toBeNull();
   });
 
+  it("does not time a run left over from another event", () => {
+    // The console hydrates whatever IndexedDB holds, from any event, so the
+    // commissioner can still Discard it from the bar. The token for THIS event
+    // is no authority over that run, and the crowd's ring must not show it.
+    adminSession.mockReturnValue({ eventId: EVENT_ID });
+    runConsole.mockReturnValue(withRun(makeRun({ eventId: "last-years-event" })));
+    const { result } = renderHook(() => useLiveHud(EVENT_ID));
+    expect(result.current.isAdmin).toBe(true);
+    expect(result.current.adminRun).toBeNull();
+    expect(result.current.runBaseMs).toBeNull();
+    expect(result.current.timedEp).toBeNull();
+  });
+
   it("still reports a paused run as the one being timed", () => {
     adminSession.mockReturnValue({ eventId: EVENT_ID });
     const run = makeRun({
