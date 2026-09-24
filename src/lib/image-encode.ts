@@ -8,8 +8,9 @@
  * sent. A card is drawn at ~380 CSS px at its largest, so 1600px on the long
  * edge is still comfortably retina.
  *
- * Anything already small enough is passed through untouched rather than being
- * re-encoded, so an already-optimised file never takes a second generation loss.
+ * Anything already small enough — in pixels AND in bytes — is passed through
+ * untouched rather than being re-encoded, so an already-optimised file never
+ * takes a second generation loss.
  */
 
 const MAX_EDGE_LARGE = 1600;
@@ -140,7 +141,9 @@ function resizeCanvas(source: CanvasImageSource, width: number, height: number):
  *
  * The original file is passed through unchanged (for all three slots) when it
  * is already small, so a designer-optimised asset does not take a second generation
- * hit.
+ * hit. Anything else never comes back as the original in any slot: signSet serves
+ * `large` untransformed whenever a medium variant is stored, on the strength of
+ * exactly that.
  */
 export async function encodeUploadImageVariants(input: File): Promise<EncodedImageSizes> {
   // Every passthrough below forwards the original bytes, and the server reads the
@@ -167,10 +170,14 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
       return { thumb: passthrough, medium: passthrough, large: passthrough };
     }
 
-    const large =
-      scaleLarge < 1
-        ? encodeCanvas(resizeCanvas(source as CanvasImageSource, w * scaleLarge, h * scaleLarge))
-        : await readAsDataUrl(file);
+    // Always re-encoded from here. Past the passthrough above, a file that needs
+    // no shrinking is by definition over the byte budget — an 1100px PNG at
+    // 2 MB — and storing it untouched shipped those bytes to every phone that
+    // drew the large slot. The fallback at the bottom still covers a canvas that
+    // cannot encode.
+    const large = encodeCanvas(
+      resizeCanvas(source as CanvasImageSource, w * scaleLarge, h * scaleLarge),
+    );
 
     const medium =
       scaleMedium < 1
