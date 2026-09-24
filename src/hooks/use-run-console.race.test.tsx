@@ -14,10 +14,12 @@ import { makeBundle, makeParticipant, resetFixtureIds, uuid } from "@/test/fixtu
 const saveCompletedRun = vi.hoisted(() => vi.fn());
 const setParticipantStatus = vi.hoisted(() => vi.fn());
 const resetParticipantRuns = vi.hoisted(() => vi.fn());
+const takeOffClock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/admin-write.functions", () => ({
   saveCompletedRun: (...args: unknown[]) => saveCompletedRun(...args),
   setParticipantStatus: (...args: unknown[]) => setParticipantStatus(...args),
   resetParticipantRuns: (...args: unknown[]) => resetParticipantRuns(...args),
+  takeOffClock: (...args: unknown[]) => takeOffClock(...args),
 }));
 
 vi.mock("@tanstack/react-start", async (importOriginal) => ({
@@ -84,6 +86,7 @@ describe("cancelling a run while its save is still out", () => {
     saveCompletedRun.mockReset().mockResolvedValue({ runId: "run-1" });
     setParticipantStatus.mockReset().mockResolvedValue({ ok: true });
     resetParticipantRuns.mockReset().mockResolvedValue({ clearedRuns: 1 });
+    takeOffClock.mockReset().mockResolvedValue({ ok: true, cleared: true });
     toastError.mockReset();
     toastSuccess.mockReset();
   });

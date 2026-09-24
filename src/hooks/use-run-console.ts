@@ -11,7 +11,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { resetParticipantRuns, setParticipantStatus } from "@/lib/admin-write.functions";
+import {
+  resetParticipantRuns,
+  setParticipantStatus,
+  takeOffClock,
+} from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
 import { awaitingRun, OUT_OF_FIELD_MESSAGE, refusedStart } from "@/lib/current-athlete";
@@ -30,6 +34,9 @@ export function useRunConsole() {
   const { event, bundle } = useEventBundle();
   const qc = useQueryClient();
   const setStatusFn = useServerFn(setParticipantStatus);
+  // Every write that only means "off the clock" goes through this rather than
+  // setParticipantStatus, whose "waiting" is the roster's deliberate un-scratch.
+  const takeOffClockFn = useServerFn(takeOffClock);
   const resetAthleteFn = useServerFn(resetParticipantRuns);
 
   const [run, setRun] = useState<ActiveRun | null>(null);
@@ -173,8 +180,8 @@ export function useRunConsole() {
       // screens go on showing the athlete they were already showing.
       if (onClockNow) {
         try {
-          await setStatusFn({
-            data: { eventId: event.id, eventParticipantId: onClockNow.id, status: "waiting" },
+          await takeOffClockFn({
+            data: { eventId: event.id, eventParticipantId: onClockNow.id },
           });
         } catch {
           // A cleanup that fails must not undo a start that worked. The timer is
@@ -313,14 +320,13 @@ export function useRunConsole() {
     const ep = participants.find((p) => p.participant_id === run.participantId);
     if (ep && event?.id) {
       try {
-        await setStatusFn({
-          // "waiting", like every other reset in the app: it is the schema
-          // default and the word players actually see. "queued" behaves
-          // identically and was the only place that wrote it.
-          data: { eventId: event.id, eventParticipantId: ep.id, status: "waiting" },
-        });
+        // Off the clock and back to "waiting" — but only if they are still on
+        // it. Scratched while this timer ran, or finished by a save that landed
+        // without answering, they stay exactly where they are.
+        await takeOffClockFn({ data: { eventId: event.id, eventParticipantId: ep.id } });
       } catch {
-        /* ignore */
+        // Ignored: the server moves nobody who is not on the clock, so the worst
+        // a failure here leaves is a name on the crowd screens until the next write.
       }
     }
     await clearActiveRun();
@@ -358,8 +364,8 @@ export function useRunConsole() {
     const onClockNow = participants.find((p) => p.participation_status === "running");
     try {
       if (onClockNow && onClockNow.participant_id !== participantId) {
-        await setStatusFn({
-          data: { eventId: event.id, eventParticipantId: onClockNow.id, status: "waiting" },
+        await takeOffClockFn({
+          data: { eventId: event.id, eventParticipantId: onClockNow.id },
         });
       }
       if (participantId) {
