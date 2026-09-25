@@ -113,6 +113,67 @@ describe("subscribeToEventChannel", () => {
     expect(sub.change).toHaveBeenCalledTimes(1);
   });
 
+  // `participantRow` is the roster's narrow signal: photo and card uploads
+  // hard-delete the objects other phones' signed URLs still point at.
+  it("tells a roster write apart, and gathers a burst of them into one", async () => {
+    const { subscribeToEventChannel, PARTICIPANT_ROW_COALESCE_MS } = await freshModule();
+    const sub = { change: vi.fn(), participantRow: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, sub);
+
+    fire("runs");
+    fire("events");
+    vi.advanceTimersByTime(PARTICIPANT_ROW_COALESCE_MS);
+    expect(sub.participantRow).not.toHaveBeenCalled();
+
+    // A finish rewrites several rows at once, a row at a time over the socket.
+    for (let i = 0; i < 5; i++) fire("event_participants");
+    // Every one of them is still a change, so the bundle keeps up as before.
+    expect(sub.change).toHaveBeenCalledTimes(7);
+    expect(sub.participantRow).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(PARTICIPANT_ROW_COALESCE_MS);
+    expect(sub.participantRow).toHaveBeenCalledTimes(1);
+
+    // And the next write after the burst gets its own.
+    fire("event_participants");
+    vi.advanceTimersByTime(PARTICIPANT_ROW_COALESCE_MS);
+    expect(sub.participantRow).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not call participantRow on the backstop poll", async () => {
+    // The poll would re-sign every image on every phone four times a minute.
+    const { subscribeToEventChannel, HEALTHY_POLL_MS } = await freshModule();
+    const sub = { change: vi.fn(), participantRow: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, sub);
+
+    vi.advanceTimersByTime(HEALTHY_POLL_MS * 3);
+
+    expect(sub.change).toHaveBeenCalled();
+    expect(sub.participantRow).not.toHaveBeenCalled();
+  });
+
+  it("shrugs at a subscriber that does not want participantRow", async () => {
+    const { subscribeToEventChannel, PARTICIPANT_ROW_COALESCE_MS } = await freshModule();
+    const sub = { change: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, sub);
+
+    fire("event_participants");
+    expect(() => vi.advanceTimersByTime(PARTICIPANT_ROW_COALESCE_MS)).not.toThrow();
+    expect(sub.change).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a gathered roster signal once the channel is gone", async () => {
+    const { subscribeToEventChannel, PARTICIPANT_ROW_COALESCE_MS, TEARDOWN_GRACE_MS } =
+      await freshModule();
+    const sub = { change: vi.fn(), participantRow: vi.fn(), health: vi.fn() };
+    const leave = subscribeToEventChannel(EVENT_ID, sub);
+
+    fire("event_participants");
+    leave();
+    vi.advanceTimersByTime(TEARDOWN_GRACE_MS + PARTICIPANT_ROW_COALESCE_MS);
+
+    expect(sub.participantRow).not.toHaveBeenCalled();
+  });
+
   it("opens a separate channel per event", async () => {
     const { subscribeToEventChannel } = await freshModule();
     subscribeToEventChannel(EVENT_ID, { change: vi.fn(), health: vi.fn() });
@@ -202,15 +263,18 @@ describe("subscribeToEventChannel", () => {
     // missing without it: recovery replayed `change` and not the events-row
     // signal, so a card-back upload that landed during the outage stayed
     // un-refetched. "Everything" in the name of this test has to mean both.
-    const sub = { change: vi.fn(), eventRow: vi.fn(), health: vi.fn() };
+    const sub = { change: vi.fn(), eventRow: vi.fn(), participantRow: vi.fn(), health: vi.fn() };
     subscribeToEventChannel(EVENT_ID, sub);
     statusCallbacks[0]("SUBSCRIBED");
     expect(sub.change).not.toHaveBeenCalled();
     expect(sub.eventRow).not.toHaveBeenCalled();
+    expect(sub.participantRow).not.toHaveBeenCalled();
     statusCallbacks[0]("CHANNEL_ERROR");
     statusCallbacks[0]("SUBSCRIBED");
     expect(sub.change).toHaveBeenCalledTimes(1);
     expect(sub.eventRow).toHaveBeenCalledTimes(1);
+    // A photo replaced during the outage deleted files too.
+    expect(sub.participantRow).toHaveBeenCalledTimes(1);
   });
 
   it("recovers a subscriber that never asked for the events-row signal", async () => {

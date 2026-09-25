@@ -21,6 +21,17 @@ export type EventChannelSubscriber = {
    * signed URLs in useEventBundle.
    */
   eventRow?: () => void;
+  /**
+   * A roster row changed — which is where every player's photo and card art
+   * paths live.
+   *
+   * The same narrow kind of signal as `eventRow`, for the same reason: a photo
+   * or card upload writes the new art to a fresh path and hard-deletes the old
+   * objects, so a phone holding the previous signed URL is pointed at storage
+   * that is gone. Never from the poll, and coalesced, because a finish rewrites
+   * several rows at once and each would otherwise re-sign every image.
+   */
+  participantRow?: () => void;
   health: (health: ChannelHealth) => void;
 };
 
@@ -32,6 +43,7 @@ type Entry = {
   subscribers: Set<EventChannelSubscriber>;
   teardown: ReturnType<typeof setTimeout> | null;
   poll: ReturnType<typeof setInterval> | null;
+  participantRow: ReturnType<typeof setTimeout> | null;
 };
 
 /**
@@ -46,6 +58,13 @@ export const HEALTHY_POLL_MS = 15_000;
 /** Realtime is down, so polling is the only thing keeping the screens honest. */
 export const DEGRADED_POLL_MS = 4_000;
 
+/**
+ * How long a burst of roster writes is gathered into one `participantRow`. A
+ * finish recomputes rarity across the roster and moves the clock on, which is
+ * a row at a time over the socket; one re-sign for the lot is plenty.
+ */
+export const PARTICIPANT_ROW_COALESCE_MS = 1_000;
+
 const entries = new Map<string, Entry>();
 
 // Never reused, so a channel opened while its predecessor is still closing
@@ -59,6 +78,7 @@ function openChannel(eventId: string): Entry {
     subscribers: new Set(),
     teardown: null,
     poll: null,
+    participantRow: null,
   };
   entries.set(eventId, entry);
 
@@ -75,6 +95,17 @@ function openChannel(eventId: string): Entry {
    */
   const fanOutEventRow = () => {
     for (const s of [...entry.subscribers]) s.eventRow?.();
+  };
+
+  /** From the roster binding below and from recovery, never from the poll. */
+  const fanOutParticipantRow = () => {
+    if (entry.participantRow) clearTimeout(entry.participantRow);
+    entry.participantRow = null;
+    for (const s of [...entry.subscribers]) s.participantRow?.();
+  };
+  const queueParticipantRow = () => {
+    if (entry.participantRow) return;
+    entry.participantRow = setTimeout(fanOutParticipantRow, PARTICIPANT_ROW_COALESCE_MS);
   };
 
   // One timer for the whole event, not one per mounted hook. refetchInterval
@@ -112,6 +143,7 @@ function openChannel(eventId: string): Entry {
     if (recovered) {
       fanOut();
       fanOutEventRow();
+      fanOutParticipantRow();
     }
   };
 
@@ -130,7 +162,10 @@ function openChannel(eventId: string): Entry {
         table: "event_participants",
         filter: `event_id=eq.${eventId}`,
       },
-      fanOut,
+      () => {
+        fanOut();
+        queueParticipantRow();
+      },
     )
     .on(
       "postgres_changes",
@@ -210,6 +245,8 @@ export function subscribeToEventChannel(
       entries.delete(eventId);
       if (joined.poll) clearInterval(joined.poll);
       joined.poll = null;
+      if (joined.participantRow) clearTimeout(joined.participantRow);
+      joined.participantRow = null;
       supabase.removeChannel(joined.channel);
     }, TEARDOWN_GRACE_MS);
   };

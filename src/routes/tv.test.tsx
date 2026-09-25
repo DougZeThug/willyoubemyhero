@@ -142,4 +142,15 @@ describe("TvPage when a read has failed", () => {
     expect(screen.getByText("No official times yet.")).toBeInTheDocument();
     expect(screen.queryByText(/Couldn't read the results/)).toBeNull();
   });
+
+  it("does not blame the results when only the roster failed before anyone finished", () => {
+    // The roster banner is the true sentence here; the empty board is a combine
+    // with no official times, which a failed roster read cannot cause.
+    showBundle({ participants: [], runs: [] }, ["event_participants"]);
+    render(<TvPage />);
+
+    expect(screen.getByText("No official times yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't read the results/)).toBeNull();
+    expect(screen.getByText("Couldn't read the roster just now — retrying")).toBeInTheDocument();
+  });
 });

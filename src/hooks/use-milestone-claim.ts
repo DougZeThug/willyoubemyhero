@@ -57,8 +57,13 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
     days: new Set(),
   });
   const [claiming, setClaiming] = useState(false);
-  // The refusal, and the rung it was said about. See `claimError` below.
-  const [claimFailure, setClaimFailure] = useState<{ days: number; message: string } | null>(null);
+  // The refusal, and the rung it was said about — run and days, the same key
+  // `claimedRef` uses. See `claimError` below.
+  const [claimFailure, setClaimFailure] = useState<{
+    run: string | null;
+    days: number;
+    message: string;
+  } | null>(null);
   const [milestoneReveal, setMilestoneReveal] = useState<MilestoneRevealState | null>(null);
 
   /** Everything a claim can have moved, for whichever actor spent it. */
@@ -117,8 +122,14 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
   // NEXT rung, telling somebody a card they had not collected was already in
   // their vault. Compared during render rather than cleared from an effect, for
   // the reason `shown` is: an effect leaves the stale line up for a frame.
+  //
+  // The run is half the key, as it is for `claimedRef`. A broken-and-rebuilt run
+  // offers the same numbers again, and keyed on `days` alone the old run's
+  // refusal came back under a rung on the new run that was genuinely claimable.
   const claimError =
-    claimFailure && claimFailure.days === claimable?.days ? claimFailure.message : null;
+    claimFailure && claimFailure.run === run && claimFailure.days === claimable?.days
+      ? claimFailure.message
+      : null;
 
   const claim = useCallback(
     async (days: number) => {
@@ -137,6 +148,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
           // the one a person can actually hit by tapping twice on a flaky
           // connection, and it means the card is already theirs.
           setClaimFailure({
+            run,
             days,
             message:
               res.reason === "claimed"
@@ -189,7 +201,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
         await invalidateActor(mine);
       } catch {
         if (actorRef.current !== mine) return;
-        setClaimFailure({ days, message: "No signal. Tap to try again." });
+        setClaimFailure({ run, days, message: "No signal. Tap to try again." });
       } finally {
         // Only the sender's own latch. Clearing it after the phone changed hands
         // would hand the next person a control the reset effect had just armed.

@@ -191,4 +191,18 @@ describe("LeaderboardPage when a read has failed", () => {
 
     expect(screen.getByText("Couldn't read the results just now — retrying.")).toBeInTheDocument();
   });
+
+  it("does not blame the results when only the roster failed on a board nobody has finished", () => {
+    // A failed roster read cannot empty the board — `standings` drops its filter
+    // — so an empty board here is a combine with no official times yet. The
+    // banner above already says the roster is the read that broke.
+    emptyBoard(["event_participants"]);
+    render(<LeaderboardPage />);
+
+    expect(
+      screen.getByText("No official times yet — check back after the first athlete crosses."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't read the results/)).toBeNull();
+    expect(screen.getByText("Couldn't read the roster just now — retrying.")).toBeInTheDocument();
+  });
 });

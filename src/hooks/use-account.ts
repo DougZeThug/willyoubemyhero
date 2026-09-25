@@ -13,6 +13,7 @@ import { carryPackToIdentity } from "@/lib/card-collection";
 import { carryTrophySeen } from "@/lib/trophy-seen";
 import { deviceId } from "@/lib/device-id";
 import { clearAccountHandoff } from "@/lib/account-handoff";
+import { bindAdminTokenTo } from "@/lib/admin-token";
 import { stashAuthNext } from "@/lib/auth-next";
 import { setAccountSyncState } from "@/lib/account-sync-state";
 
@@ -93,6 +94,13 @@ export function useAccountSync(user: User | null) {
     }
     // Narrowed once here: the closures below cannot see the guard above.
     const userId: string = authUserId;
+    // The admin token survives a sign-out (ADM-16) and names no user, so the
+    // next account to sign in here would hold the last one's console. Not left
+    // to the `lastStarted` check below: that lives in memory, and a Google
+    // sign-in can leave the page and come back through a redirect, after which
+    // there is no previous account to compare against. The owner is stored with
+    // the token instead. Before the latch, and before this run's first request.
+    bindAdminTokenTo(userId);
     if (syncedFor.current === userId) return;
     // A different account from the one whose run last started here. Whatever
     // member token is on the device is that account's, and syncAccount binds a
@@ -275,11 +283,13 @@ export function useAccountSync(user: User | null) {
  * guest id and the vault looked empty. Signing back in re-adopts (and merges)
  * whatever this device holds, so leaving it in place is strictly safer.
  *
- * The ADMIN token survives too (ADM-16). It is not the account's: it came from
- * the PIN or the admin list, it has its own twelve hours, and requireAdmin never
- * asks who is signed in. The console has its own Lock button for ending it.
- * Clearing it here sent a commissioner who signed out mid-combine back to the
- * PIN gate while their console session still had hours to run.
+ * The ADMIN token survives too (ADM-16). It came from the PIN or the admin list,
+ * it has its own twelve hours, and the console has its own Lock button for
+ * ending it. Clearing it here sent a commissioner who signed out mid-combine
+ * back to the PIN gate while their console session still had hours to run.
+ * It survives for the account that earned it and nobody else: requireAdmin
+ * never asks who is signed in, so `bindAdminTokenTo` in useAccountSync takes it
+ * off the moment a different account signs in on this handset.
  */
 export async function signOutAccount() {
   await supabase.auth.signOut();

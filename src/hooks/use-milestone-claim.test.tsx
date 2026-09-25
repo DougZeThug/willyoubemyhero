@@ -248,6 +248,24 @@ describe("claiming", () => {
     expect(result.current.claimError).toBeNull();
   });
 
+  it("does not carry a refusal onto the same rung of a rebuilt run", async () => {
+    // A broken-and-rebuilt run offers every rung again, and the button showing
+    // "3 days" on the new run is a different rung from the one refused on the
+    // old run — the same number, a different claim. Keyed on the number alone,
+    // the old refusal came back under a Claim button that would now succeed.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({ ok: false, reason: "not_earned" });
+    const { result, rerender } = mount("m:alice", streak({ current: 3 }));
+    await act(async () => {
+      await result.current.claim(3);
+    });
+    expect(result.current.claimError).toMatch(/isn't there yet/i);
+
+    rerender({ a: "m:alice", s: streak({ current: 3, startedOn: "2026-09-20" }) });
+    expect(result.current.claimable?.days).toBe(3);
+    expect(result.current.claimError).toBeNull();
+  });
+
   it("says every refusal on the button and never as a toast", async () => {
     // A toast announces the reward to whoever is glancing at the phone over
     // your shoulder.

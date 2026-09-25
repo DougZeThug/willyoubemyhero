@@ -852,9 +852,15 @@ describe("a photo or a backfill aimed at another event", () => {
     dataUrls: threeSizes(PNG),
   };
 
-  const variantArgs = (kind: "photo" | "card_front" | "card_back", id = CARD_ID) => ({
+  // The source matches IN_EVENT's card_path, which is the row the scoped tests
+  // below write to; the foreign-row ones are refused before it is compared.
+  const variantArgs = (
+    kind: "photo" | "card_front" | "card_back",
+    id = CARD_ID,
+    source = "cards/old-front",
+  ) => ({
     eventId: EVENT_ID,
-    updates: [{ id, kind, dataUrls: threeSizes(PNG) }],
+    updates: [{ id, kind, source, dataUrls: threeSizes(PNG) }],
   });
 
   it("refuses a photo for a foreign roster row before uploading anything", async () => {
@@ -902,8 +908,11 @@ describe("a photo or a backfill aimed at another event", () => {
     withDb({ "event_participants.update": { data: [] }, ...okStorage });
     const mod = await freshModule();
     await expect(
-      callServerFn(mod.writeImageVariants, { data: variantArgs("photo"), headers: asAdmin() }),
-    ).rejects.toThrow("not part of this event");
+      callServerFn(mod.writeImageVariants, {
+        data: variantArgs("card_front"),
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("changed while the backfill ran");
   });
 
   it("scopes a backfill's lookup and write to the event", async () => {
@@ -928,7 +937,14 @@ describe("a photo or a backfill aimed at another event", () => {
       callServerFn(mod.writeImageVariants, {
         data: {
           eventId: EVENT_ID,
-          updates: [{ id: OTHER_EVENT_ID, kind: "universal_back", dataUrls: threeSizes(PNG) }],
+          updates: [
+            {
+              id: OTHER_EVENT_ID,
+              kind: "universal_back",
+              source: "cards/universal",
+              dataUrls: threeSizes(PNG),
+            },
+          ],
         },
         headers: asAdmin(),
       }),
@@ -936,12 +952,23 @@ describe("a photo or a backfill aimed at another event", () => {
     expect(mock.storageBucket.upload).not.toHaveBeenCalled();
     expect(mock.callsFor("events", "update")).toHaveLength(0);
 
-    withDb(okStorage);
+    withDb({
+      "events.select": { data: { card_back_path: "cards/universal" } },
+      "events.update": { data: [{ id: EVENT_ID }] },
+      ...okStorage,
+    });
     const again = await freshModule();
     await callServerFn(again.writeImageVariants, {
       data: {
         eventId: EVENT_ID,
-        updates: [{ id: EVENT_ID, kind: "universal_back", dataUrls: threeSizes(PNG) }],
+        updates: [
+          {
+            id: EVENT_ID,
+            kind: "universal_back",
+            source: "cards/universal",
+            dataUrls: threeSizes(PNG),
+          },
+        ],
       },
       headers: asAdmin(),
     });
@@ -964,6 +991,232 @@ describe("a photo or a backfill aimed at another event", () => {
         headers: asAdmin(OTHER_EVENT_ID),
       }),
     ).rejects.toThrow(/admin pin/i);
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+  });
+});
+
+describe("replacing art reclaims the files it replaced", () => {
+  // storeCard, the card-back upload and both deletes take the previous files off
+  // once the row points at the new ones. The photo upload and the variant
+  // backfill write timestamped paths — nothing is ever overwritten — and used
+  // to leave every file they replaced in the bucket with nothing pointing at it.
+  const okStorage: SupabaseResponses = {
+    "storage.upload": { data: { path: "ok" }, error: null },
+    "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+    "storage.remove": { data: null, error: null },
+  };
+
+  /** Every kind of art on one row, so picking the wrong columns removes the wrong files. */
+  const FULL_ROW = {
+    id: CARD_ID,
+    photo_path: "photos/old.jpg",
+    photo_path_thumb: "photos/old-thumb.jpg",
+    photo_path_medium: "photos/old-medium.jpg",
+    card_path: "cards/old-front.jpg",
+    card_path_thumb: "cards/old-front-thumb.jpg",
+    card_path_medium: "cards/old-front-medium.jpg",
+    card_back_path: "cards/old-back.jpg",
+    card_back_path_thumb: "cards/old-back-thumb.jpg",
+    card_back_path_medium: "cards/old-back-medium.jpg",
+  };
+
+  const REPLACED = {
+    photo: ["photos/old.jpg", "photos/old-thumb.jpg", "photos/old-medium.jpg"],
+    card_front: ["cards/old-front.jpg", "cards/old-front-thumb.jpg", "cards/old-front-medium.jpg"],
+    card_back: ["cards/old-back.jpg", "cards/old-back-thumb.jpg", "cards/old-back-medium.jpg"],
+  };
+
+  const photoArgs = {
+    eventId: EVENT_ID,
+    eventParticipantId: CARD_ID,
+    dataUrls: threeSizes(PNG),
+  };
+
+  const UNIVERSAL = "cards/old-universal.jpg";
+
+  /** A backfill entry encoded from what the row holds now, unless told otherwise. */
+  const variantArgs = (
+    kind: "photo" | "card_front" | "card_back" | "universal_back",
+    id = CARD_ID,
+    source = kind === "universal_back" ? UNIVERSAL : REPLACED[kind][0],
+  ) => ({
+    eventId: EVENT_ID,
+    updates: [{ id, kind, source, dataUrls: threeSizes(PNG) }],
+  });
+
+  const EVENT_BACK = {
+    card_back_path: UNIVERSAL,
+    card_back_path_thumb: null,
+    card_back_path_medium: null,
+  };
+
+  /** Everything this call itself uploaded — the only files it may take back on a lost race. */
+  const uploaded = () => mock.storageBucket.upload.mock.calls.map((c) => c[0] as string).sort();
+  const removed = () => (mock.storageBucket.remove.mock.calls[0]?.[0] as string[]).slice().sort();
+
+  it("removes the photo a re-upload replaced", async () => {
+    withDb({ "event_participants.select": { data: FULL_ROW }, ...okStorage });
+    const mod = await freshModule();
+    await callServerFn(mod.uploadParticipantPhoto, { data: photoArgs, headers: asAdmin() });
+    expect(mock.storageBucket.remove).toHaveBeenCalledTimes(1);
+    expect(mock.storageBucket.remove).toHaveBeenCalledWith(REPLACED.photo);
+  });
+
+  it("removes nothing when the photo's scoped update matches no row", async () => {
+    // The row never moved, so the old files are still the ones it points at.
+    withDb({
+      "event_participants.select": { data: FULL_ROW },
+      "event_participants.update": { data: [] },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantPhoto, { data: photoArgs, headers: asAdmin() }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it.each(["photo", "card_front", "card_back"] as const)(
+    "removes the %s a backfill replaced, and nothing else on the row",
+    async (kind) => {
+      withDb({ "event_participants.select": { data: FULL_ROW }, ...okStorage });
+      const mod = await freshModule();
+      await callServerFn(mod.writeImageVariants, { data: variantArgs(kind), headers: asAdmin() });
+      expect(mock.storageBucket.remove).toHaveBeenCalledTimes(1);
+      expect(mock.storageBucket.remove).toHaveBeenCalledWith(REPLACED[kind]);
+    },
+  );
+
+  it("removes a legacy original that never had variants", async () => {
+    // The case the backfill exists for: an original with no thumb or medium,
+    // which the backfill replaces with three fresh files.
+    withDb({
+      "event_participants.select": {
+        data: {
+          id: CARD_ID,
+          photo_path: "photos/legacy.jpg",
+          photo_path_thumb: null,
+          photo_path_medium: null,
+        },
+      },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.writeImageVariants, {
+      data: variantArgs("photo", CARD_ID, "photos/legacy.jpg"),
+      headers: asAdmin(),
+    });
+    expect(mock.storageBucket.remove).toHaveBeenCalledWith(["photos/legacy.jpg"]);
+  });
+
+  it.each(["photo", "card_front", "card_back"] as const)(
+    "leaves %s that changed since the scan alone",
+    async (kind) => {
+      // The admin uploaded new art between the scan and this entry. Carrying on
+      // would put the scanned original back over it and delete the new files.
+      withDb({ "event_participants.select": { data: FULL_ROW }, ...okStorage });
+      const mod = await freshModule();
+      await expect(
+        callServerFn(mod.writeImageVariants, {
+          data: variantArgs(kind, CARD_ID, "photos/what-the-scan-saw.jpg"),
+          headers: asAdmin(),
+        }),
+      ).resolves.toEqual({ ok: true });
+      expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+      expect(mock.callsFor("event_participants", "update")).toHaveLength(0);
+      expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["photo", "photo_path"],
+    ["card_front", "card_path"],
+    ["card_back", "card_back_path"],
+  ] as const)(
+    "writes %s only while the row still holds the scanned source",
+    async (kind, column) => {
+      // The same race, landing between the check and the write.
+      withDb({ "event_participants.select": { data: FULL_ROW }, ...okStorage });
+      const mod = await freshModule();
+      await callServerFn(mod.writeImageVariants, { data: variantArgs(kind), headers: asAdmin() });
+      const [update] = mock.callsFor("event_participants", "update");
+      expect(mock.eqValue(update, column)).toBe(REPLACED[kind][0]);
+    },
+  );
+
+  it("takes back only its own upload when the art changes under the write", async () => {
+    // Nothing moved, so the row still points at whatever it held — those files
+    // stay. The three just uploaded are the ones nothing points at.
+    withDb({
+      "event_participants.select": { data: FULL_ROW },
+      "event_participants.update": { data: [] },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.writeImageVariants, { data: variantArgs("photo"), headers: asAdmin() }),
+    ).rejects.toThrow("changed while the backfill ran");
+    expect(mock.storageBucket.remove).toHaveBeenCalledTimes(1);
+    expect(uploaded()).toHaveLength(3);
+    expect(removed()).toEqual(uploaded());
+  });
+
+  it("removes the universal back a backfill replaced", async () => {
+    withDb({
+      "events.select": { data: EVENT_BACK },
+      "events.update": { data: [{ id: EVENT_ID }] },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.writeImageVariants, {
+      data: variantArgs("universal_back", EVENT_ID),
+      headers: asAdmin(),
+    });
+    expect(mock.storageBucket.remove).toHaveBeenCalledWith([UNIVERSAL]);
+    const [update] = mock.callsFor("events", "update");
+    expect(mock.eqValue(update, "card_back_path")).toBe(UNIVERSAL);
+  });
+
+  it("leaves a universal back that changed since the scan alone", async () => {
+    withDb({ "events.select": { data: EVENT_BACK }, ...okStorage });
+    const mod = await freshModule();
+    await callServerFn(mod.writeImageVariants, {
+      data: variantArgs("universal_back", EVENT_ID, "cards/what-the-scan-saw.jpg"),
+      headers: asAdmin(),
+    });
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+    expect(mock.callsFor("events", "update")).toHaveLength(0);
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it("refuses a universal back whose event row did not move, and keeps its card back", async () => {
+    // The filter alone would affect nothing and still return ok, and the remove
+    // would then take the only card back the event has.
+    withDb({
+      "events.select": { data: EVENT_BACK },
+      "events.update": { data: [] },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.writeImageVariants, {
+        data: variantArgs("universal_back", EVENT_ID),
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("changed while the backfill ran");
+    expect(removed()).toEqual(uploaded());
+    expect(removed()).not.toContain(UNIVERSAL);
+  });
+
+  it("refuses a universal back for an event row that is not there before uploading anything", async () => {
+    withDb({ "events.select": { data: null }, ...okStorage });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.writeImageVariants, {
+        data: variantArgs("universal_back", EVENT_ID),
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("Event not found");
     expect(mock.storageBucket.upload).not.toHaveBeenCalled();
   });
 });
