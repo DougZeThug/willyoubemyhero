@@ -794,6 +794,9 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                 {
                   id: need.id,
                   kind: need.kind as "photo" | "card_front" | "card_back" | "universal_back",
+                  // What these variants were encoded from, so the write can
+                  // tell whether newer art has landed on the row since.
+                  source: need.path,
                   dataUrls,
                 },
               ],
