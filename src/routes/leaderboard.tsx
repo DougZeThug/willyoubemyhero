@@ -162,12 +162,13 @@ function LeaderboardPage() {
           <CardContent className="p-0">
             {rows.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                {/* The two tables the board is built from, not any of the
-                    seven: a failed splits or stations read cannot empty it, and
-                    saying the results were unreadable over a combine that
-                    simply has not started is the same lie in the other
-                    direction. Same narrowing analytics already makes. */}
-                {rosterFailed || failedTables.includes("runs")
+                {/* The one read that can empty the board, not any of the
+                    seven: a failed splits or stations read cannot, and nor can
+                    the roster — `standings` drops its filter, and the banner
+                    above already names that read. Saying the results were
+                    unreadable over a combine that simply has not started is the
+                    same lie in the other direction. */}
+                {failedTables.includes("runs")
                   ? "Couldn't read the results just now — retrying."
                   : "No official times yet — check back after the first athlete crosses."}
               </div>

@@ -174,9 +174,10 @@ function TvPage() {
         ))}
         {rows.length === 0 && (
           <div className="col-span-2 rounded-2xl border border-primary/20 bg-[oklch(0.16_0.02_240)] p-10 text-center text-muted-foreground">
-            {/* The two tables the board is built from, not any of the seven —
-                a failed splits or stations read cannot empty it. */}
-            {rosterFailed || failedTables.includes("runs")
+            {/* The one read that can empty the board, not any of the seven — a
+                failed splits or stations read cannot, and nor can the roster,
+                which has its own banner above. */}
+            {failedTables.includes("runs")
               ? "Couldn't read the results just now — retrying."
               : "No official times yet."}
           </div>
