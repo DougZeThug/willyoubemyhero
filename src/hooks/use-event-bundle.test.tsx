@@ -133,11 +133,12 @@ describe("useEventBundle", () => {
   }
 
   /** Fire one channel signal, and let the invalidations it queues settle. */
-  async function fireSignal(signal: "change" | "eventRow") {
+  async function fireSignal(signal: "change" | "eventRow" | "participantRow") {
     await act(async () => {
       for (const s of subscribers) {
         if (signal === "change") s.sub.change();
-        else s.sub.eventRow?.();
+        else if (signal === "eventRow") s.sub.eventRow?.();
+        else s.sub.participantRow?.();
       }
       await Promise.resolve();
     });
@@ -171,6 +172,30 @@ describe("useEventBundle", () => {
     await fireSignal("change");
 
     expect(cardUrlsInvalidated(client)).toEqual([false, false]);
+  });
+
+  it("refreshes the player photos and cards other phones are still showing", async () => {
+    // A photo or card upload, and the variant backfill, hard-delete the objects
+    // the old signed URLs point at, and those rows live on the roster — so the
+    // board and /tv showed broken images for up to three hours.
+    const { client } = await withCardUrls();
+    client.setQueryData(["photo-urls", EVENT.id], { "ep-1": { large: "old-photo" } });
+
+    await fireSignal("participantRow");
+
+    expect(client.getQueryState(["photo-urls", EVENT.id])?.isInvalidated).toBe(true);
+    expect(client.getQueryState(["card-urls", EVENT.id])?.isInvalidated).toBe(true);
+    // The universal back is not on the roster.
+    expect(client.getQueryState(["event-card-back", EVENT.id])?.isInvalidated).toBe(false);
+  });
+
+  it("does not re-sign the player photos on the backstop poll either", async () => {
+    const { client } = await withCardUrls();
+    client.setQueryData(["photo-urls", EVENT.id], { "ep-1": { large: "old-photo" } });
+
+    await fireSignal("change");
+
+    expect(client.getQueryState(["photo-urls", EVENT.id])?.isInvalidated).toBe(false);
   });
 
   it("still refetches the bundle on that same poll", async () => {

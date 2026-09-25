@@ -74,6 +74,15 @@ export function useEventBundle() {
         qc.invalidateQueries({ queryKey: ["event-card-back", eventId] });
         qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
       },
+      participantRow: () => {
+        // The roster's half of the same problem. A photo or card upload, and the
+        // variant backfill, write the new art to fresh paths and hard-delete the
+        // old objects — so /tv and the board, sitting on three-hour signed URLs
+        // that never refetch on focus, would show broken images until their own
+        // timer came round. Coalesced by the channel, and never on the poll.
+        qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
+        qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      },
       health: setHealth,
     });
   }, [eventId, qc]);
