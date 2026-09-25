@@ -345,6 +345,57 @@ describe("useAccountSync", () => {
     expect(seenAtSync).toBe(CLAIM_TOKEN);
   });
 
+  const ADMIN_TOKEN = "00000000-0000-4000-8000-0000000000ff.9999999999999.signature";
+
+  it("takes off an admin token another account earned, even on a fresh page", async () => {
+    // ADM-16 leaves the console on the handset after sign-out, for the
+    // commissioner who earned it. The token names no user, so requireAdmin
+    // would wave through whoever signs in next. A fresh hook stands in for the
+    // reload or OAuth redirect between the two sign-ins, which leaves the
+    // in-memory switch check above with nothing to compare against.
+    window.localStorage.setItem("wwbh:admin-token", ADMIN_TOKEN);
+    window.localStorage.setItem("wwbh:admin-token-owner", "user-0");
+    let seenAtSync: string | null = "unread";
+    vi.mocked(syncAccountSession).mockImplementation(async () => {
+      seenAtSync = window.localStorage.getItem("wwbh:admin-token");
+      return { kind: "member", token: MEMBER_TOKEN, name: "Alice" } as never;
+    });
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(seenAtSync).toBeNull();
+    expect(window.localStorage.getItem("wwbh:admin-token")).toBeNull();
+    expect(window.localStorage.getItem("wwbh:admin-token-owner")).toBeNull();
+  });
+
+  it("keeps the admin token for the account that earned it", async () => {
+    // ADM-16 itself: the commissioner signing back in keeps the console.
+    window.localStorage.setItem("wwbh:admin-token", ADMIN_TOKEN);
+    window.localStorage.setItem("wwbh:admin-token-owner", user.id);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(window.localStorage.getItem("wwbh:admin-token")).toBe(ADMIN_TOKEN);
+  });
+
+  it("binds an admin token nobody owned to the account that signs in", async () => {
+    // A PIN unlock while signed out, then a sign-in — the admin twin of the
+    // paper-code path. Left unowned, the commissioner's next sign-out would
+    // hand the console to whoever signed in after them.
+    window.localStorage.setItem("wwbh:admin-token", ADMIN_TOKEN);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(window.localStorage.getItem("wwbh:admin-token")).toBe(ADMIN_TOKEN);
+    expect(window.localStorage.getItem("wwbh:admin-token-owner")).toBe(user.id);
+  });
+
   it("tries again a minute after giving up, without the user changing", async () => {
     // Keyed on the id, a token refresh no longer re-runs the effect, so the
     // retry has to be the hook's own.

@@ -105,13 +105,18 @@ export const Route = createFileRoute("/admin")({
 function AdminPage() {
   const { event } = useEventBundle();
   const admin = useAdminSession();
-  // `!!` rather than Boolean() on purpose: it narrows `event` for the right
-  // half of the &&, which Boolean() does not, and without it `event.id` there
-  // is a type error.
-  const isAdmin = !!event?.id && admin?.eventId === event.id;
   // Accounts on the admin list skip the PIN entirely; the PIN stays as the
   // fallback for anyone signed out or not on the list.
   const { user, loading: authLoading } = useAuthUser();
+  // A token another account earned on this handset is not this account's
+  // console. useAccountSync takes it off, but from the root and in its own
+  // effect — without this the console paints for a commit first, and the
+  // account check below is skipped for the person actually signed in.
+  const heldByAnother = !!user && !!admin?.owner && admin.owner !== user.id;
+  // `!!` rather than Boolean() on purpose: it narrows `event` for the right
+  // half of the &&, which Boolean() does not, and without it `event.id` there
+  // is a type error.
+  const isAdmin = !!event?.id && admin?.eventId === event.id && !heldByAnother;
   const [accountChecked, setAccountChecked] = useState(false);
   const triedFor = useRef<string | null>(null);
 
@@ -127,7 +132,7 @@ function AdminPage() {
       try {
         const res = await startAdminSessionFromAccount({ data: undefined });
         if (res.ok) {
-          setAdminToken(res.token);
+          setAdminToken(res.token, user.id);
           toast.success("Admin unlocked via your account");
         }
       } catch {
@@ -151,12 +156,21 @@ function AdminPage() {
   return isAdmin ? (
     <TimingConsole />
   ) : (
-    <PinGate eventId={event.id} eventName={event.name ?? "Combine"} />
+    <PinGate eventId={event.id} eventName={event.name ?? "Combine"} userId={user?.id ?? null} />
   );
 }
 
 // ---------------- PIN GATE ----------------
-function PinGate({ eventId, eventName }: { eventId: string; eventName: string }) {
+function PinGate({
+  eventId,
+  eventName,
+  userId,
+}: {
+  eventId: string;
+  eventName: string;
+  /** Whoever is signed in as the PIN is typed: the account this console is bound to. */
+  userId: string | null;
+}) {
   const verifyFn = useServerFn(verifyEventPin);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -177,7 +191,7 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
         setPin("");
         return;
       }
-      setAdminToken(res.token);
+      setAdminToken(res.token, userId);
       toast.success("Admin unlocked");
     } catch {
       toast.error("Could not verify PIN");
