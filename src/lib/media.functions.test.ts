@@ -936,7 +936,11 @@ describe("a photo or a backfill aimed at another event", () => {
     expect(mock.storageBucket.upload).not.toHaveBeenCalled();
     expect(mock.callsFor("events", "update")).toHaveLength(0);
 
-    withDb(okStorage);
+    withDb({
+      "events.select": { data: { card_back_path: null } },
+      "events.update": { data: [{ id: EVENT_ID }] },
+      ...okStorage,
+    });
     const again = await freshModule();
     await callServerFn(again.writeImageVariants, {
       data: {
@@ -964,6 +968,173 @@ describe("a photo or a backfill aimed at another event", () => {
         headers: asAdmin(OTHER_EVENT_ID),
       }),
     ).rejects.toThrow(/admin pin/i);
+    expect(mock.storageBucket.upload).not.toHaveBeenCalled();
+  });
+});
+
+describe("replacing art reclaims the files it replaced", () => {
+  // storeCard, the card-back upload and both deletes take the previous files off
+  // once the row points at the new ones. The photo upload and the variant
+  // backfill write timestamped paths — nothing is ever overwritten — and used
+  // to leave every file they replaced in the bucket with nothing pointing at it.
+  const okStorage: SupabaseResponses = {
+    "storage.upload": { data: { path: "ok" }, error: null },
+    "storage.createSignedUrl": { data: { signedUrl: "https://cdn/new" }, error: null },
+    "storage.remove": { data: null, error: null },
+  };
+
+  /** Every kind of art on one row, so picking the wrong columns removes the wrong files. */
+  const FULL_ROW = {
+    id: CARD_ID,
+    photo_path: "photos/old.jpg",
+    photo_path_thumb: "photos/old-thumb.jpg",
+    photo_path_medium: "photos/old-medium.jpg",
+    card_path: "cards/old-front.jpg",
+    card_path_thumb: "cards/old-front-thumb.jpg",
+    card_path_medium: "cards/old-front-medium.jpg",
+    card_back_path: "cards/old-back.jpg",
+    card_back_path_thumb: "cards/old-back-thumb.jpg",
+    card_back_path_medium: "cards/old-back-medium.jpg",
+  };
+
+  const REPLACED = {
+    photo: ["photos/old.jpg", "photos/old-thumb.jpg", "photos/old-medium.jpg"],
+    card_front: ["cards/old-front.jpg", "cards/old-front-thumb.jpg", "cards/old-front-medium.jpg"],
+    card_back: ["cards/old-back.jpg", "cards/old-back-thumb.jpg", "cards/old-back-medium.jpg"],
+  };
+
+  const photoArgs = {
+    eventId: EVENT_ID,
+    eventParticipantId: CARD_ID,
+    dataUrls: threeSizes(PNG),
+  };
+
+  const variantArgs = (
+    kind: "photo" | "card_front" | "card_back" | "universal_back",
+    id = CARD_ID,
+  ) => ({
+    eventId: EVENT_ID,
+    updates: [{ id, kind, dataUrls: threeSizes(PNG) }],
+  });
+
+  it("removes the photo a re-upload replaced", async () => {
+    withDb({ "event_participants.select": { data: FULL_ROW }, ...okStorage });
+    const mod = await freshModule();
+    await callServerFn(mod.uploadParticipantPhoto, { data: photoArgs, headers: asAdmin() });
+    expect(mock.storageBucket.remove).toHaveBeenCalledTimes(1);
+    expect(mock.storageBucket.remove).toHaveBeenCalledWith(REPLACED.photo);
+  });
+
+  it("removes nothing when the photo's scoped update matches no row", async () => {
+    // The row never moved, so the old files are still the ones it points at.
+    withDb({
+      "event_participants.select": { data: FULL_ROW },
+      "event_participants.update": { data: [] },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.uploadParticipantPhoto, { data: photoArgs, headers: asAdmin() }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it.each(["photo", "card_front", "card_back"] as const)(
+    "removes the %s a backfill replaced, and nothing else on the row",
+    async (kind) => {
+      withDb({ "event_participants.select": { data: FULL_ROW }, ...okStorage });
+      const mod = await freshModule();
+      await callServerFn(mod.writeImageVariants, { data: variantArgs(kind), headers: asAdmin() });
+      expect(mock.storageBucket.remove).toHaveBeenCalledTimes(1);
+      expect(mock.storageBucket.remove).toHaveBeenCalledWith(REPLACED[kind]);
+    },
+  );
+
+  it("removes a legacy original that never had variants", async () => {
+    // The case the backfill exists for: an original with no thumb or medium,
+    // which the backfill replaces with three fresh files.
+    withDb({
+      "event_participants.select": {
+        data: {
+          id: CARD_ID,
+          photo_path: "photos/legacy.jpg",
+          photo_path_thumb: null,
+          photo_path_medium: null,
+        },
+      },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.writeImageVariants, { data: variantArgs("photo"), headers: asAdmin() });
+    expect(mock.storageBucket.remove).toHaveBeenCalledWith(["photos/legacy.jpg"]);
+  });
+
+  it("removes nothing when a backfill's scoped update matches no row", async () => {
+    withDb({
+      "event_participants.select": { data: FULL_ROW },
+      "event_participants.update": { data: [] },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.writeImageVariants, { data: variantArgs("photo"), headers: asAdmin() }),
+    ).rejects.toThrow("not part of this event");
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it("removes the universal back a backfill replaced", async () => {
+    withDb({
+      "events.select": {
+        data: {
+          card_back_path: "cards/old-universal.jpg",
+          card_back_path_thumb: null,
+          card_back_path_medium: null,
+        },
+      },
+      "events.update": { data: [{ id: EVENT_ID }] },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.writeImageVariants, {
+      data: variantArgs("universal_back", EVENT_ID),
+      headers: asAdmin(),
+    });
+    expect(mock.storageBucket.remove).toHaveBeenCalledWith(["cards/old-universal.jpg"]);
+  });
+
+  it("refuses a universal back whose event row did not move, and removes nothing", async () => {
+    // The filter alone would affect nothing and still return ok, and the remove
+    // would then take the only card back the event has.
+    withDb({
+      "events.select": {
+        data: {
+          card_back_path: "cards/old-universal.jpg",
+          card_back_path_thumb: null,
+          card_back_path_medium: null,
+        },
+      },
+      "events.update": { data: [] },
+      ...okStorage,
+    });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.writeImageVariants, {
+        data: variantArgs("universal_back", EVENT_ID),
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("Event not found");
+    expect(mock.storageBucket.remove).not.toHaveBeenCalled();
+  });
+
+  it("refuses a universal back for an event row that is not there before uploading anything", async () => {
+    withDb({ "events.select": { data: null }, ...okStorage });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.writeImageVariants, {
+        data: variantArgs("universal_back", EVENT_ID),
+        headers: asAdmin(),
+      }),
+    ).rejects.toThrow("Event not found");
     expect(mock.storageBucket.upload).not.toHaveBeenCalled();
   });
 });

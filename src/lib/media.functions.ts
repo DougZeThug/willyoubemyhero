@@ -573,9 +573,14 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
     // event_participants ids are publicly enumerable through getEventBundle. An
     // unscoped update repoints another combine's photo columns at files written
     // under this caller's own prefix.
+    //
+    // The photo columns come back with it, because the path below carries a
+    // timestamp: a re-upload never overwrites anything, so the files it replaces
+    // are only reclaimed if this handler deletes them — the other half of
+    // storeCard's pattern.
     const { data: prev, error: lookupError } = await supabaseAdmin
       .from("event_participants")
-      .select("id")
+      .select("photo_path, photo_path_thumb, photo_path_medium")
       .eq("id", data.eventParticipantId)
       .eq("event_id", data.eventId)
       .maybeSingle();
@@ -601,6 +606,14 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
     if (!updated || updated.length === 0) {
       throw new Error("That athlete is not part of this event.");
     }
+
+    // Only after the row points at the new files, as storeCard does.
+    await removePaths(supabaseAdmin, [
+      prev.photo_path,
+      prev.photo_path_thumb,
+      prev.photo_path_medium,
+    ]);
+
     return { ok: true, urls: await signSet(paths), paths };
   });
 
@@ -687,17 +700,39 @@ export const writeImageVariants = createServerFn({ method: "POST" })
       // belonging to the event means BEING it. Unguarded it was the sharpest of
       // the three: it repointed another combine's card back at a file sitting in
       // this caller's own storage prefix.
+      //
+      // The lookup also reads the paths this entry is about to replace. The new
+      // ones carry a timestamp, so nothing is overwritten, and a backfill that
+      // does not delete what it replaced leaves every legacy original in the
+      // bucket with no row pointing at it.
+      let replaced: (string | null)[];
       if (u.kind === "universal_back") {
         if (u.id !== data.eventId) throw new Error("That card back is not part of this event.");
+        const { data: event, error: lookupError } = await supabaseAdmin
+          .from("events")
+          .select("card_back_path, card_back_path_thumb, card_back_path_medium")
+          .eq("id", data.eventId)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        if (!event) throw new Error("Event not found");
+        replaced = [event.card_back_path, event.card_back_path_thumb, event.card_back_path_medium];
       } else {
         const { data: row, error: lookupError } = await supabaseAdmin
           .from("event_participants")
-          .select("id")
+          .select(
+            "photo_path, photo_path_thumb, photo_path_medium, card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium",
+          )
           .eq("id", u.id)
           .eq("event_id", data.eventId)
           .maybeSingle();
         if (lookupError) throw lookupError;
         if (!row) throw new Error("That athlete is not part of this event.");
+        replaced =
+          u.kind === "photo"
+            ? [row.photo_path, row.photo_path_thumb, row.photo_path_medium]
+            : u.kind === "card_front"
+              ? [row.card_path, row.card_path_thumb, row.card_path_medium]
+              : [row.card_back_path, row.card_back_path_thumb, row.card_back_path_medium];
       }
 
       const basePath =
@@ -713,15 +748,19 @@ export const writeImageVariants = createServerFn({ method: "POST" })
         thumb: paths.thumb ?? "",
       };
       if (u.kind === "universal_back") {
-        const { error } = await supabaseAdmin
+        const { data: updated, error } = await supabaseAdmin
           .from("events")
           .update({
             card_back_path: patchPaths.large,
             card_back_path_thumb: patchPaths.thumb,
             card_back_path_medium: patchPaths.medium,
           })
-          .eq("id", data.eventId);
+          .eq("id", data.eventId)
+          .select("id");
         if (error) throw error;
+        // Confirmed before the remove below, which would otherwise take the
+        // event's only card back with nothing pointing at the new one.
+        if (!updated || updated.length === 0) throw new Error("Event not found");
       } else {
         const patch: Partial<Record<CardPathColumn, string | null>> = {};
         if (u.kind === "photo") {
@@ -748,6 +787,9 @@ export const writeImageVariants = createServerFn({ method: "POST" })
           throw new Error("That athlete is not part of this event.");
         }
       }
+
+      // Only after the row points at the new files, as storeCard does.
+      await removePaths(supabaseAdmin, replaced);
     }
     return { ok: true };
   });
