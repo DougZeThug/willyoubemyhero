@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -34,7 +34,6 @@ import { dustLive } from "@/lib/dust";
 import { navHidden } from "@/lib/nav";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -53,15 +52,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { BigTimer } from "@/components/big-timer";
-import { formatTime, newClientKey } from "@/lib/format";
-import {
-  ACTIVE_RUN_VERSION,
-  clearActiveRun,
-  computeElapsedMs,
-  loadActiveRun,
-  saveActiveRun,
-  type ActiveRun,
-} from "@/lib/active-run";
+import { formatTime } from "@/lib/format";
+import { clearActiveRun } from "@/lib/active-run";
 import {
   Flag,
   LockKeyhole,
