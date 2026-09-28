@@ -233,6 +233,10 @@ disabled rather than silently inert.
   somebody is picked, and the queue preselects whoever is next.
 - **A run for an athlete who is then scratched** continues and saves, and the
   save marks them finished. The last write wins.
+- **Cancel, Discard and Reset timer take only an athlete still on the clock back
+  to the queue.** A scratch that landed while the run was in progress, or a save
+  that landed without an answer, is left where it is — these cleanups do not go
+  through the roster's un-scratch.
 - **Splits out of order.** Stations can be tapped in any order; a segment is
   measured from the largest cumulative time recorded so far rather than from the
   station above it, so tapping three before two cannot produce a negative leg.
