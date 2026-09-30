@@ -729,6 +729,7 @@ test.describe("the vault's Today card", () => {
   });
 
   test("counts down to the next one once today's is spent", async ({ page, server }) => {
+    await asMember(page);
     // A day that resets far enough ahead that the countdown is stable however
     // long the run takes.
     // asMember is required so that usePackStatus is enabled (gated on actor) and
