@@ -38,7 +38,7 @@ RPCs, and the append-only award categories.
 
 ---
 
-## R1 — "Show up every day" — 1a SHIPPED
+## R1 — "Show up every day" — 1a, 1c SHIPPED
 
 ### 1a. Pack streaks + milestone rewards (M)
 
@@ -88,9 +88,7 @@ streak_started_on, milestone))` — keying by streak start lets a rebuilt streak
   channels are unavailable); events carry **zero payload**, so the worst leak is
   "someone has trade activity".
 - `trades.functions.ts`: after create/accept/decline/cancel, send a payload-free
-  broadcast to the counterparty's topic. Verify the server-side REST broadcast
-  from the Cloudflare worker in dev before committing; if flaky, ship the badge
-  alone.
+  broadcast to the counterparty's topic.
 - New hooks `use-trade-nudge.ts` (subscribe → invalidate `useTradeOffers` keys;
   never merge payloads) and `use-trade-badge.ts` (unread = open incoming offers
   minus a localStorage seen-set). Badge dot on the nav trade item; the existing
@@ -263,7 +261,7 @@ e2e is advisory.
   `memberHeaders()` (wrong actor rejected, double-claim idempotent). DB — new
   `tests/db/streaks.test.ts` (recompute from seeded `pack_opens`, claim
   idempotence, payout row, guest→member carry); extend `rls.test.ts`. Manually
-  verify Cloudflare→Realtime broadcast in dev before committing 1c.
+  verified Cloudflare→Realtime broadcast in dev.
 - **R2:** DB — `wishlist_items` posture both directions; assert `flexes` has no
   secret-id column and `flex_secrets` is anon-invisible. Server-fn —
   `flexTodaysSecret`'s validator structurally has no card-id field (pin with a
