@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "./require-auth.server";
 import { uuid as zuuid } from "./zod-uuid";
-import { leagueDay } from "./trades";
 
 /**
  * The commissioner's answer to "why can't I see my card in trades?".
@@ -33,7 +32,7 @@ export type OwnershipRow = {
   /** Claimed a paper code or signed into an account — otherwise no offer can reach them. */
   reachable: boolean;
   secrets: number;
-  /** Secrets they could stake right now: everything except today's un-granted pull. */
+  /** Secrets they could stake right now: all of them, today's pull included. */
   tradeableSecrets: number;
   rosterCopies: number;
   /** Copies of cards they hold two or more of — the spares-only rule. */
@@ -74,13 +73,12 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
         sb.from("account_identities").select("participant_id, guest_id"),
         sb
           .from("secret_card_pulls")
-          .select("participant_id, guest_id, secret_card_id, granted, pulled_on")
+          .select("participant_id, guest_id, secret_card_id, pulled_on")
           .returns<
             {
               participant_id: string | null;
               guest_id: string | null;
               secret_card_id: string;
-              granted: boolean;
               pulled_on: string;
             }[]
           >(),
@@ -104,7 +102,6 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
       .select("participant_id, guest_id")
       .returns<{ participant_id: string | null; guest_id: string | null }[]>();
 
-    const today = leagueDay();
     const claimed = new Map((codes ?? []).map((c) => [c.participant_id, c.claimed_at]));
     const linked = new Set(
       (accounts ?? []).map((a) => a.participant_id).filter((id): id is string => !!id),
@@ -122,7 +119,9 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
       if (!row.participant_id && !row.guest_id) continue;
       const cur = secretsBy.get(key) ?? { total: 0, tradeable: 0 };
       cur.total += 1;
-      if (row.granted || row.pulled_on !== today) cur.tradeable += 1;
+      // Every secret is stakeable, today's pull included: the daily deal is
+      // gated on pack_opens, which a trade never touches (20260930120000).
+      cur.tradeable += 1;
       secretsBy.set(key, cur);
     }
 

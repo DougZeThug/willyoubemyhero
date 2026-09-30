@@ -60,6 +60,7 @@ import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
+import { usePackSell } from "@/hooks/use-pack-sell";
 import { streakLine } from "@/lib/streaks";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { urlFromSet } from "@/lib/media";
@@ -84,6 +85,10 @@ export const Route = createFileRoute("/players/pack")({
 
 /** How many cards the wrapper shows flying out. The server deals exactly this many. */
 const PACK_SIZE = 3;
+/** A slot sold from the summary: what it fetched, and the count it left behind. */
+type SoldSlot = { awarded: number; copies: number | null };
+/** Nothing sold from this pack. Shared so the stand memo does not rebuild every render. */
+const EMPTY_SOLD: Record<number, SoldSlot> = {};
 
 /**
  * The gap between a secret's own burst and the set closing behind it.
@@ -874,6 +879,29 @@ function PackPage() {
     dismiss: dismissMilestone,
   } = useMilestoneClaim(actor, streak);
 
+  const sellSlot = usePackSell(actor, me?.participantId, event?.id);
+  /**
+   * What each slot has been sold for from the summary, by index. Local to this
+   * visit, and that is enough: the pack replays the same slots all day, and a
+   * copy that has gone answers "already gone" if it is offered again.
+   */
+  const [soldFor, setSoldFor] = useState<{ pack: string; by: Record<number, SoldSlot> }>({
+    pack: "",
+    by: {},
+  });
+  // Keyed on the pack it was said about, and read through that key during render
+  // rather than cleared from an effect: tomorrow's pack in a tab nobody closed
+  // must not inherit today's receipts, and a resume that hands back the same
+  // slots in a fresh array must keep them.
+  const packKey = (slots ?? [])
+    .map((s) => (s.kind === "secret" ? (s.pullId ?? s.id) : s.id))
+    .join();
+  const sold = soldFor.pack === packKey ? soldFor.by : EMPTY_SOLD;
+  const soldAwards = useMemo(
+    () => Object.fromEntries(Object.entries(sold).map(([i, s]) => [i, s.awarded])),
+    [sold],
+  );
+
   /**
    * Every slot, resolved for the stand and the summary.
    *
@@ -886,35 +914,44 @@ function PackPage() {
   const standSlots = useMemo<StandSlot[]>(() => {
     const all = bundle?.participants ?? [];
     const pricing = !!me?.participantId && dustLive(event);
-    return (slots ?? []).map((slot) => {
+    return (slots ?? []).map((slot, i) => {
       if (slot.kind === "secret") {
         const outcome = slotOutcome(slot);
         // The secret's count lives on the server. `getMySecrets` is invalidated
         // by the deal itself, so it answers with this copy already counted —
         // and two is the floor while that refetch is still in the air, because
         // a duplicate is by definition never your first.
-        const copies = !slot.duplicate
-          ? 1
-          : Math.max(2, mySecrets.data?.cards.find((c) => c.id === slot.id)?.count ?? 0);
+        // Sold from this screen: the count as it stood the moment the sale
+        // landed. Not "the server's count minus one" — the sale invalidates
+        // getMySecrets, so the refetch already has the copy gone and the
+        // subtraction would count it twice.
+        const copies = sold[i]
+          ? sold[i].copies
+          : !slot.duplicate
+            ? 1
+            : Math.max(2, mySecrets.data?.cards.find((c) => c.id === slot.id)?.count ?? 0);
         return {
           slot,
           rarity: secretFoil(slot.card.foil, slot.card.borderFx, slot.card.tier),
           edition: null,
           outcome,
           copies,
-          sellValue: pricing && slot.duplicate ? secretSellValue(slot.card.tier) : null,
+          sellValue:
+            pricing && slot.duplicate && !(i in sold) ? secretSellValue(slot.card.tier) : null,
           ep: null,
         };
       }
       const local = localBefore[slot.id];
       const outcome = slotOutcome(slot, local);
-      const copies = copiesAfter(slot, local);
+      // A roster slot's count comes from the collection as it stood at the deal,
+      // which no sale moves, so the recorded count is the one to show.
+      const copies = sold[i] ? sold[i].copies : copiesAfter(slot, local);
       // `MILL_BY_EDITION` rather than `millValue`, and that is safe rather than
       // optimistic: the finish is the one Postgres minted. A finish it did not
       // decide is null, and null prices nothing — no number is better than a
       // number that moves.
       const sellValue =
-        pricing && (copies ?? 1) > 1 && slot.edition != null
+        pricing && !(i in sold) && (copies ?? 1) > 1 && slot.edition != null
           ? MILL_BY_EDITION[toEdition(slot.edition)]
           : null;
       return {
@@ -927,7 +964,7 @@ function PackPage() {
         ep: all.find((p) => p.id === slot.id) ?? null,
       };
     });
-  }, [slots, bundle, rarities, localBefore, mySecrets.data, me?.participantId, event]);
+  }, [slots, bundle, rarities, localBefore, mySecrets.data, me?.participantId, event, sold]);
 
   async function revealAt(i: number) {
     // Both guards read refs, not state. A tap during a hold, and a second tap in
@@ -1444,6 +1481,26 @@ function PackPage() {
             onClaim={() => {
               if (claimable) void claimMilestone(claimable.days);
             }}
+            onSell={
+              me?.participantId && dustLive(event)
+                ? async (i) => {
+                    const stand = standSlots[i];
+                    if (!stand) return "Couldn't sell it — try again";
+                    const res = await sellSlot(stand.slot, stand.edition);
+                    if (!res.ok) return res.message;
+                    const left = stand.copies == null ? null : Math.max(0, stand.copies - 1);
+                    setSoldFor((prev) => ({
+                      pack: packKey,
+                      by: {
+                        ...(prev.pack === packKey ? prev.by : {}),
+                        [i]: { awarded: res.awarded, copies: left },
+                      },
+                    }));
+                    return null;
+                  }
+                : undefined
+            }
+            sold={soldAwards}
           />
         )}
       </div>

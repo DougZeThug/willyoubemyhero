@@ -124,6 +124,14 @@ export type RosterSpare = {
    * arrived at, not anything further about the card or its owner.
    */
   assertedBy: "client" | "server";
+  /**
+   * The copy today's pack minted for you: `source = 'pull'` on the current league
+   * day. Present only on your own list and only when true. record_card_pulls
+   * mints at most one copy per card per day, so this names exactly one copy — the
+   * one the pack screen's "Sell for" sells. Traded, bought or burnt, it is gone
+   * from the list, and the pack screen says so rather than burning another.
+   */
+  pulledToday?: true;
 };
 
 /**
@@ -174,11 +182,10 @@ export type SecretSpare = {
  * instead, and only ever for your OWN collection: listing what a counterparty
  * cannot trade would widen what an offer screen tells you about their vault.
  */
-export type BlockedReason = "only-copy" | "todays-pull";
+export type BlockedReason = "only-copy";
 
 export const BLOCKED_LABEL: Record<BlockedReason, string> = {
   "only-copy": "only copy",
-  "todays-pull": "today's pull",
 };
 
 export type BlockedSpare = { item: TradeItemView; reason: BlockedReason };
@@ -342,12 +349,11 @@ export function tradeSwapPrompt(args: {
  * The league's timezone, which decides where a day ends.
  *
  * Duplicated from SQL rather than derived: every daily thing in this app — the
- * pack drop, the secret drop, and `trade_item_is_spare`'s "today's pull is not a
- * spare yet" rule — bakes `America/New_York` into the function body, precisely so
- * a caller cannot shift the boundary. `leagueDay()` exists so the spares listing
- * agrees with the RPC about which copies are stakeable instead of offering cards
- * the RPC will then refuse. A db test pins the two together, the way
- * card-edition.ts and secret-rarity.ts are pinned to their SQL ladders.
+ * pack drop and the streak among them — bakes `America/New_York` into the
+ * function body, precisely so a caller cannot shift the boundary. `leagueDay()`
+ * exists so client code agrees with those RPCs about which day it is. A db test
+ * pins the two together, the way card-edition.ts and secret-rarity.ts are pinned
+ * to their SQL ladders.
  */
 export const LEAGUE_TIME_ZONE = "America/New_York";
 

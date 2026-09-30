@@ -8,6 +8,7 @@
 import {
   test,
   expect,
+  BUNDLE,
   DEFAULT_PACK_IDS,
   LEAGUE_DAY,
   leagueDayAt,
@@ -368,6 +369,44 @@ test.describe("a secret in the pack", () => {
     await expect(page.getByRole("img", { name: /^Upgraded to Rare/ }).filter({ visible: true })).toHaveCount(1); // prettier-ignore
     // The upgraded secret keeps its level line rather than the wink.
     await expect(page.getByText(/already yours/i)).toHaveCount(0);
+  });
+
+  test("sells a duplicate straight off the summary, once it has asked", async ({
+    page,
+    server,
+  }) => {
+    // Today's pull, sold the day it landed: the whole point of the button. The
+    // dialog is the only thing between a thumb and a card leaving the vault, so
+    // it has to appear first and the sale must not go out until it is answered.
+    await asMember(page);
+    server.set("getActiveEvent", { ...BUNDLE.event, dust_enabled: true });
+    server.set("getDustBalance", { balance: 0 });
+    withSecret(server, { slot: { duplicate: true, tierBefore: "common" } });
+    server.set("getMySecrets", {
+      pulled: 1,
+      cards: [{ ...SECRET_CARD, firstPulledOn: LEAGUE_DAY, count: 2, ownerCount: 1 }],
+    });
+    server.set("sellSecretCard", {
+      ok: true,
+      awarded: 15,
+      tier: "common",
+      secretCardId: SECRET_CARD.id,
+      balance: 15,
+    });
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await revealAll(page);
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("button", { name: "Sell for 15" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText(`Sell ${SECRET_CARD.name}?`);
+    expect(server.calls.filter((c) => c.includes("sellSecretCard"))).toHaveLength(0);
+
+    await dialog.getByRole("button", { name: "Sell for 15" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Sold · +15")).toBeVisible();
+    expect(server.calls.filter((c) => c.includes("sellSecretCard"))).toHaveLength(1);
   });
 
   test("the fan gives nothing away, whatever the pack holds", async ({ page, server }) => {

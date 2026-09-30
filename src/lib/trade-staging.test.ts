@@ -120,7 +120,7 @@ describe("blockedKey", () => {
     // a silently dropped tile.
     const item = stagedRoster(roster({ copyId: "c1" })).item;
     expect(blockedKey({ item, reason: "only-copy" })).toBe("bc:c1");
-    expect(blockedKey({ item: stagedSecret(secret({ pullId: "p1" })).item, reason: "todays-pull" })).toBe("bs:p1"); // prettier-ignore
+    expect(blockedKey({ item: stagedSecret(secret({ pullId: "p1" })).item, reason: "only-copy" })).toBe("bs:p1"); // prettier-ignore
   });
 });
 

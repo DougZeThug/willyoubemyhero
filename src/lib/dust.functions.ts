@@ -92,9 +92,9 @@ export const millCardCopy = createServerFn({ method: "POST" })
  *
  * Any copy, including your only one — the rule trading already keeps, since no
  * public count rides on a member holding one of a secret. Which is why this
- * takes a `secret_card_pulls` id and has no spare rule to speak of: the one
- * refusal a caller is likely to meet is `too_fresh`, and that is today's own
- * un-granted pull, whose deletion would hand back the daily slot.
+ * takes a `secret_card_pulls` id and has no spare rule to speak of. Today's own
+ * pull sells too: the daily deal is gated on `pack_opens`, which a sale does not
+ * touch, so deleting the row hands nothing back.
  *
  * Same division of labour as the mill above: every rule lives in SQL under the
  * participant row lock, and this handler's whole job is to prove who is asking.

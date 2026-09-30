@@ -393,7 +393,7 @@ describe("selling a secret", () => {
 
   it("refreshes nothing when the sale was refused", async () => {
     withSecret();
-    sellFn.mockResolvedValue({ ok: false, reason: "too_fresh" });
+    sellFn.mockResolvedValue({ ok: false, reason: "staked" });
     const { invalidate, client } = renderShop();
 
     await userEvent.click(await screen.findByRole("button", { name: /sell \+/i }));

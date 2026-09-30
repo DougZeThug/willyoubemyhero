@@ -443,11 +443,10 @@ describe("list_card_for_dust", () => {
     expect((await list(IDS.alice, { pullId, price: 300 })).ok).toBe(true);
   });
 
-  it("refuses today's un-granted pull, which is the seller's spent daily slot", async () => {
-    // THE ONE SEQUENCE THAT WOULD PRINT. buy_market_listing sets granted = true on
-    // the row it moves — a bought card is not the buyer's own pull, and the
-    // sale — so listing today's un-granted pull would hand the SELLER a second
-    // daily slot the moment somebody bought it.
+  it("lists today's un-granted pull the day it lands", async () => {
+    // Refused until 20260930120000, when the day stopped being read off this
+    // row. The sequence that refusal guarded is pinned below: "cannot hand the
+    // seller a second daily pull".
     const cardId = await seedSecret("fresh");
     const [row] = await sql<{ id: string }>(
       `INSERT INTO public.secret_card_pulls
@@ -455,15 +454,6 @@ describe("list_card_for_dust", () => {
        VALUES ($1, $2, ${NY}, $3, false, false, 'rare') RETURNING id`,
       [IDS.alice, cardId, IDS.event],
     );
-    expect(await list(IDS.alice, { pullId: row.id })).toMatchObject({
-      ok: false,
-      reason: "too_fresh",
-    });
-
-    // Yesterday's identical row lists freely.
-    await sql("UPDATE public.secret_card_pulls SET pulled_on = pulled_on - 1 WHERE id = $1", [
-      row.id,
-    ]);
     expect((await list(IDS.alice, { pullId: row.id })).ok).toBe(true);
   });
 });
@@ -728,22 +718,34 @@ describe("buying a secret", () => {
 
   it("cannot hand the seller a second daily pull", async () => {
     // pull -> list -> sell -> pull. The buy sets granted = true on the row it
-    // moves, so if today's un-granted pull were listable the seller's own
-    // "have I pulled today" search would find nothing afterwards.
+    // moves and hands it to the buyer, so nothing un-granted of the seller's is
+    // left for today. That used to matter; open_pack now keys the day on
+    // pack_opens, so the second open replays the first pack and mints nothing.
     await seedSecret("a");
     await seedSecret("b");
     type Pack = { cards: { kind: string; pullId?: string }[] };
-    const first = await sql<{ open_pack: Pack }>("SELECT public.open_pack($1, NULL, NULL)", [
-      IDS.alice,
-    ]);
-    const pullId = first[0].open_pack.cards.find((c) => c.kind === "secret")!.pullId!;
-    expect(await list(IDS.alice, { pullId })).toMatchObject({ ok: false, reason: "too_fresh" });
+    const open = async () =>
+      (await sql<{ open_pack: Pack }>("SELECT public.open_pack($1, NULL, NULL)", [IDS.alice]))[0]
+        .open_pack;
+    const held = async () =>
+      (
+        await sql<{ n: number }>(
+          "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1",
+          [IDS.alice],
+        )
+      )[0].n;
 
-    // And the pack is still spent: a second open today deals nothing new.
-    const second = await sql<{ open_pack: Pack }>("SELECT public.open_pack($1, NULL, NULL)", [
-      IDS.alice,
-    ]);
-    expect(second[0].open_pack.cards.map((c) => c.pullId)).toContain(pullId);
+    const first = await open();
+    const pulls = first.cards.filter((c) => c.kind === "secret").map((c) => c.pullId!);
+    const listed = await list(IDS.alice, { pullId: pulls[0], price: 60 });
+    expect(listed.ok).toBe(true);
+    await credit(500, IDS.bob);
+    expect((await buy(IDS.bob, listed.listingId!)).ok).toBe(true);
+    expect(await held()).toBe(pulls.length - 1);
+
+    const second = await open();
+    expect(second.cards.filter((c) => c.kind === "secret").map((c) => c.pullId)).toEqual(pulls);
+    expect(await held()).toBe(pulls.length - 1);
   });
 
   it("mints a trophy for a set the buyer just completed", async () => {

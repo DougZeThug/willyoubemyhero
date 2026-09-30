@@ -22,7 +22,7 @@ import { leagueDay, LEAGUE_TIME_ZONE } from "@/lib/trades";
 afterAll(closeDb);
 beforeEach(seedEvent);
 
-/** A past league day. Anything seeded on `current_date` is somebody's spent daily slot. */
+/** A past league day, for rows whose day should not matter. */
 const PAST_DAY = "2026-01-01";
 const OTHER_DAY = "2026-01-02";
 
@@ -226,10 +226,11 @@ async function twoSpares() {
 describe("the league day, in two languages", () => {
   it("pins leagueDay() to the zone trade_item_is_spare decides today with", async () => {
     // `America/New_York` is written into the function body in SQL and into
-    // LEAGUE_TIME_ZONE in TS, and the spares LISTING uses the TS one to hide a
-    // copy the RPC would refuse. Drift between them shows up as a card you can
-    // see, tap, and not trade. Same shape as the tests pinning card-edition.ts
-    // and secret-rarity.ts to their SQL ladders.
+    // LEAGUE_TIME_ZONE in TS. The spare rule no longer reads the date, but the
+    // function keeps the zone every daily RPC carries, and client code that asks
+    // "which day is it" through leagueDay() has to agree with all of them. Same
+    // shape as the tests pinning card-edition.ts and secret-rarity.ts to their
+    // SQL ladders.
     const [row] = await sql<{ zone: string; today: string }>(`
       SELECT (SELECT cfg FROM unnest(p.proconfig) AS cfg
                WHERE cfg LIKE 'TimeZone=%' OR cfg LIKE 'timezone=%') AS zone,
@@ -365,11 +366,11 @@ describe("create_trade_offer", () => {
     ).rejects.toThrow(/spare/i);
   });
 
-  it("refuses today's own pull, which is the giver's spent daily slot", async () => {
-    // Not tidiness — a daily-limit bypass. A row the pack dealt today is
-    // `pulled_on = today AND NOT granted`, and the accept sets granted = true on
-    // the row it moves. Trading today's duplicate away would erase the evidence
-    // that the pack was opened at all.
+  it("offers today's own pull the day it lands", async () => {
+    // This used to be refused as a daily-limit bypass: the old pull_secret_card
+    // read today's un-granted row as the spent slot, and the accept sets
+    // granted = true on the row it moves. open_pack keys the day on pack_opens
+    // instead — see "cannot deal a second pack" below.
     const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
@@ -381,14 +382,46 @@ describe("create_trade_offer", () => {
       granted: false,
       day: today,
     });
-    await expect(
-      createOffer(IDS.alice, IDS.bob, [secret(todays)], [copy(bobCopies[0])]),
-    ).rejects.toThrow(/spare/i);
+    const res = await createOffer(IDS.alice, IDS.bob, [secret(todays)], [copy(bobCopies[0])]);
+    expect(res.ok).toBe(true);
   });
 
-  it("lets the same secret copy trade once the day has passed", async () => {
-    // The other half of the rule above: yesterday's duplicate is an ordinary
-    // spare, so the restriction costs a day rather than the feature.
+  it("cannot deal a second pack by trading today's pull away", async () => {
+    // THE BYPASS the old rule closed, as a test against the thing that closes it
+    // now: open, trade the dealt secret away, open again. The second open must
+    // replay the first pack rather than deal a new one.
+    const { bobCopies } = await twoSpares();
+    await sql(
+      `INSERT INTO public.secret_cards (name, art_path, active)
+       VALUES ('Pack Secret', 'secrets/pack/art-1.webp', true)`,
+    );
+    const open = async () => {
+      const [row] = await sql<{ open_pack: { cards: { kind: string; pullId: string }[] } }>(
+        "SELECT public.open_pack($1, null, null)",
+        [IDS.alice],
+      );
+      return row.open_pack.cards.find((c) => c.kind === "secret")!;
+    };
+    const first = await open();
+    const { offerId } = await createOffer(
+      IDS.alice,
+      IDS.bob,
+      [secret(first.pullId)],
+      [copy(bobCopies[0])],
+    );
+    expect((await accept(offerId, IDS.bob)).ok).toBe(true);
+
+    const again = await open();
+    expect(again.pullId).toBe(first.pullId);
+    const [held] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(held.n).toBe(0);
+  });
+
+  it("lets a secret copy from an earlier day trade too", async () => {
+    // No day rule either way: yesterday's duplicate is an ordinary spare.
     const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
@@ -862,9 +895,9 @@ describe("accept_trade_offer — secret cards", () => {
     expect(rows).toEqual([{ tier: "common", is_duplicate: false }]);
   });
 
-  it("still refuses today's own pull, even as somebody's only copy", async () => {
-    // The relaxation must not reopen the daily-pull bypass: trading away today's
-    // row would clear the evidence that the slot was spent.
+  it("offers today's own pull even as somebody's only copy", async () => {
+    // Any copy of a secret trades, and today's is no exception: the daily deal is
+    // gated on pack_opens, which a trade does not touch.
     const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     const [{ today }] = await sql<{ today: string }>(
@@ -875,16 +908,14 @@ describe("accept_trade_offer — secret cards", () => {
       granted: false,
       day: today,
     });
-    await expect(
-      createOffer(IDS.alice, IDS.bob, [secret(todays)], [copy(bobCopies[0])]),
-    ).rejects.toThrow(/spare/i);
+    const res = await createOffer(IDS.alice, IDS.bob, [secret(todays)], [copy(bobCopies[0])]);
+    expect(res.ok).toBe(true);
   });
 
   it("does not give the giver their daily pull back", async () => {
-    // The other side of the granted = true decision. Because the moved row is now
-    // granted, it no longer counts as Alice's spent slot for that day — which is
-    // exactly why trade_item_is_spare refuses TODAY's copy. Yesterday's is fine:
-    // she cannot retroactively pull again for a day that has passed.
+    // The other side of the granted = true decision: the moved row leaves no
+    // un-granted row of Alice's behind. Nothing reads that as a free slot any
+    // more — open_pack asks pack_opens — but the row is still Bob's, granted.
     const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
     await giveSecret(IDS.alice, card, { duplicate: false });
