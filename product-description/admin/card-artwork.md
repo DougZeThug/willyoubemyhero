@@ -122,9 +122,10 @@ partial one says how many failed and **keeps only the failures on screen**, so
 the retry is the same button with a shorter list. A single upload says which face
 it was — "Card front uploaded" — and the tile's label changes from `front` to
 `front ✓`. The universal back reports that it is set for every player and
-refreshes its own preview and every player's card URLs on this device; other
-phones pick the new wrapper up on their own refresh, which for the wrapper is
-deliberately more frequent than for the cards.
+refreshes its own preview and every player's card URLs on this device. Other
+phones pick the new wrapper up over the event's realtime channel — the upload
+writes the events row, and the channel carries that to every watcher — within a
+beat, or after their own 45-minute timer if the feed is down.
 
 A copied prompt says "Prompt copied" and quietly files a row in the prompt
 history. If that filing fails you get a warning rather than an error — "Prompt
@@ -170,9 +171,12 @@ admin token because they belong to the league rather than to one combine.
 Reading art needs no identity at all — the URLs are signed on the server and
 handed to anyone the screen is drawn for.
 
-**Realtime.** None. No image change is broadcast, and the card URLs do not
-refetch on focus, so other phones pick up new art on their own three-hourly
-refresh or on a reload.
+**Realtime.** None for player art and photos — no per-card image change is
+broadcast, and the card URLs do not refetch on focus, so other phones pick up
+new player art on their own three-hourly refresh or on a reload. The universal
+back is the exception: the events row its upload writes rides the event's
+channel, so a fresh back reaches a pack already open on somebody else's phone
+within a beat rather than waiting on its own 45-minute timer.
 
 **Offline and reconnection.** Cards already painted stay painted from the browser
 cache. Nothing uploads, and — worth knowing before a long batch — the encode runs
@@ -196,10 +200,12 @@ under a dragged file.
 the recap — uses the same sizes made here, so a card exported at hero size draws
 on the 1200px variant rather than the original.
 
-**The second device.** Two consoles can stage different files for the same player.
-The bigger surprise is the caching: a phone can confidently show art you replaced
-hours ago, because these URLs refresh on a long timer and never when the window
-regains focus.
+**The second device.** Two consoles can stage different files for the same
+player. The bigger surprise is the caching: a phone can confidently show a
+player's own art you replaced hours ago, because these URLs refresh on a long
+timer and never when the window regains focus. The universal back does not
+stay stale this long — it rides the same channel the dust switch does, so a
+fresh back reaches the other phones within a beat.
 
 **Accessibility.** Every drop box is a button that responds to Enter and Space,
 not just a drag target. Each staged row's player dropdown is labelled with its
