@@ -187,6 +187,32 @@ describe("getTradeSpares", () => {
     expect(res.roster[0].edition).toBe("standard");
   });
 
+  it("marks the copy today's pack minted, on your own list only", async () => {
+    // The pack screen's "Sell for" burns exactly this copy, and nothing else, so a
+    // replayed slot cannot sell an older copy at the same finish. A traded copy
+    // (source 'trade') and yesterday's pull are not it.
+    const copies = {
+      data: [
+        { id: COPY_1, event_participant_id: CARD_A, edition: "gold", edition_asserted_by: "server", source: "pull", acquired_on: leagueDay() }, // prettier-ignore
+        { id: COPY_2, event_participant_id: CARD_A, edition: "gold", edition_asserted_by: "server", source: "pull", acquired_on: "2026-01-02" }, // prettier-ignore
+        { id: COPY_3, event_participant_id: CARD_A, edition: "gold", edition_asserted_by: "server", source: "trade", acquired_on: null }, // prettier-ignore
+      ],
+    };
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "card_copies.select": copies,
+    });
+    const mine = await spares(ME, asMe());
+    expect(mine.roster.filter((r) => r.pulledToday).map((r) => r.copyId)).toEqual([COPY_1]);
+
+    withDb({
+      "event_participants.select": { data: [{ id: CARD_A }] },
+      "card_copies.select": copies,
+    });
+    const theirs = await spares(THEM, asMe());
+    expect(theirs.roster.some((r) => "pulledToday" in r)).toBe(false);
+  });
+
   it("asks about the participant in the payload, not the one holding the token", async () => {
     // The one id these handlers legitimately take from a request: you cannot
     // compose an offer without seeing what the other person has spare.

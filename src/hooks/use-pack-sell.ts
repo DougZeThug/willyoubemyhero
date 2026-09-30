@@ -29,6 +29,7 @@ const REFUSALS: Partial<Record<DustFailure, string>> = {
   disabled: "Dust is switched off",
 };
 const FALLBACK = "Couldn't sell it — try again";
+const REROLLED = "Its finish has changed — sell it from the Shop";
 
 /**
  * Selling a card straight off the pack screen.
@@ -42,10 +43,12 @@ const FALLBACK = "Couldn't sell it — try again";
  *   card and the number the button quoted.
  * - A roster slot carries no copy id (open_pack mints through record_card_pulls
  *   and keeps only the finish), so this asks for the spares at the moment of
- *   the tap and burns a copy with the SAME finish the slot shows, decided by the
- *   server. Copies of one card at one finish pay the same, so that is the copy
- *   the button priced. None left means it already went elsewhere, and the sale
- *   is refused rather than quietly burning a copy the person never saw.
+ *   the tap and burns the copy marked `pulledToday` — the one this pack minted,
+ *   and there is only ever one per card per day. Not "any copy at this finish":
+ *   the sold-receipts live in the route's state and a reload loses them, so a
+ *   replayed slot would otherwise burn an older copy for every reload and
+ *   confirm. Gone, it answers "already gone"; re-rolled since, it refuses too,
+ *   because the button is quoting a finish that copy no longer has.
  *
  * A plain async call rather than useMutation, the useMilestoneClaim pattern: the
  * summary owns its pending state per dialog, and one hook serves three slots.
@@ -93,11 +96,11 @@ export function usePackSell(
 
         if (edition == null) return { ok: false, message: FALLBACK };
         const spares = await sparesFn({ data: { participantId } });
-        const copy = spares.roster.find(
-          (c) =>
-            c.eventParticipantId === slot.id && c.edition === edition && c.assertedBy === "server",
-        );
+        const copy = spares.roster.find((c) => c.eventParticipantId === slot.id && c.pulledToday);
         if (!copy) return { ok: false, message: REFUSALS.not_yours! };
+        if (copy.edition !== edition || copy.assertedBy !== "server") {
+          return { ok: false, message: REROLLED };
+        }
         const res = await millFn({ data: { cardCopyId: copy.copyId } });
         if (!res.ok) return { ok: false, message: REFUSALS[res.reason] ?? FALLBACK };
         settle(res.balance);

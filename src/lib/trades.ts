@@ -124,6 +124,14 @@ export type RosterSpare = {
    * arrived at, not anything further about the card or its owner.
    */
   assertedBy: "client" | "server";
+  /**
+   * The copy today's pack minted for you: `source = 'pull'` on the current league
+   * day. Present only on your own list and only when true. record_card_pulls
+   * mints at most one copy per card per day, so this names exactly one copy — the
+   * one the pack screen's "Sell for" sells. Traded, bought or burnt, it is gone
+   * from the list, and the pack screen says so rather than burning another.
+   */
+  pulledToday?: true;
 };
 
 /**

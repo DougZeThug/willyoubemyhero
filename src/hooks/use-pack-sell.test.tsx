@@ -53,12 +53,13 @@ const secretSlot = (over: Partial<PackSecretSlot> = {}): PackSecretSlot => ({
   ...over,
 });
 
-const spare = (copyId: string, edition: string, assertedBy = "server") => ({
+const spare = (copyId: string, edition: string, over: Record<string, unknown> = {}) => ({
   copyId,
   eventParticipantId: "ep-1",
   edition,
-  assertedBy,
+  assertedBy: "server",
   viewerOwns: true,
+  ...over,
 });
 
 function mount(participantId: string | null = ME) {
@@ -111,12 +112,12 @@ describe("a secret", () => {
 });
 
 describe("a roster card", () => {
-  it("burns a server-finished copy at the finish the button priced", async () => {
+  it("burns the copy today's pack minted, and no other", async () => {
     fns.spares.mockResolvedValue({
       roster: [
+        spare("c-old-gold", "gold"),
+        spare("c-gold", "gold", { pulledToday: true }),
         spare("c-standard", "standard"),
-        spare("c-hand-gold", "gold", "client"),
-        spare("c-gold", "gold"),
       ],
     });
     fns.mill.mockResolvedValue({ ok: true, awarded: 40, balance: 90 });
@@ -128,13 +129,25 @@ describe("a roster card", () => {
     expect(client.getQueryData(dustBalanceKey(ME))).toEqual({ balance: 90 });
   });
 
-  it("refuses rather than burn a copy the person never saw", async () => {
-    // Today's gold already went to a trade; the standard is not what was priced.
-    fns.spares.mockResolvedValue({ roster: [spare("c-standard", "standard")] });
+  it("says today's copy is gone rather than burn an older one at the same finish", async () => {
+    // The replayed pack after a reload: the receipt is lost with the page, and
+    // today's gold already went. Another gold is not what this slot dealt, and
+    // burning it would let every reload-and-confirm sell one more copy.
+    fns.spares.mockResolvedValue({ roster: [spare("c-old-gold", "gold"), spare("c-std", "standard")] }); // prettier-ignore
     const { sell } = mount();
 
     const res = await sell(rosterSlot, "gold");
     expect(res).toEqual({ ok: false, message: "Already gone — it left your vault" });
+    expect(fns.mill).not.toHaveBeenCalled();
+  });
+
+  it("refuses today's copy once its finish has been re-rolled", async () => {
+    // The button still quotes gold; the copy is a silver now.
+    fns.spares.mockResolvedValue({ roster: [spare("c-today", "silver", { pulledToday: true })] });
+    const { sell } = mount();
+
+    const res = await sell(rosterSlot, "gold");
+    expect(res.ok).toBe(false);
     expect(fns.mill).not.toHaveBeenCalled();
   });
 

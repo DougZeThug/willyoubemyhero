@@ -6,7 +6,7 @@ import { signPath } from "./media.functions";
 import { VARIANT_WIDTHS } from "./media";
 import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
-import { TRADE_UNDO_WINDOW_SECONDS } from "./trades";
+import { leagueDay, TRADE_UNDO_WINDOW_SECONDS } from "./trades";
 import type {
   BlockedSpare,
   SecretSpare,
@@ -236,6 +236,12 @@ async function viewerHoldings(
   };
 }
 
+/** The columns of a copy the spares listing reads. */
+type SpareCopyRow = Pick<
+  CardCopyRow,
+  "id" | "event_participant_id" | "edition" | "edition_asserted_by" | "source" | "acquired_on"
+>;
+
 /**
  * What one member has spare, for composing an offer against.
  *
@@ -294,12 +300,10 @@ export const getTradeSpares = createServerFn({ method: "GET" })
             //
             // It stays out of the PUBLIC record either way: see the summary
             // builder in accept_trade_offer.
-            .select("id, event_participant_id, edition, edition_asserted_by")
+            .select("id, event_participant_id, edition, edition_asserted_by, source, acquired_on")
             .eq("participant_id", data.participantId)
             .in("event_participant_id", ids)
-            .returns<
-              Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">[]
-            >()
+            .returns<SpareCopyRow[]>()
         : { data: [], error: null },
       // EVERY copy, duplicate or not. A secret you own one of is still yours to
       // give — unlike a roster card there is no public count riding on you keeping
@@ -342,10 +346,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     // beyond the first": the giver picks which copy to keep, so listing only the
     // worst would quietly take that choice away. The rule that they keep ONE is
     // enforced across the whole offer by trade_leaves_a_copy, not by this list.
-    const byCard = new Map<
-      string,
-      Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">[]
-    >();
+    const byCard = new Map<string, SpareCopyRow[]>();
     for (const row of allCopies ?? []) {
       const list = byCard.get(row.event_participant_id) ?? [];
       list.push(row);
@@ -372,10 +373,9 @@ export const getTradeSpares = createServerFn({ method: "GET" })
           }))
       : [];
 
+    const today = leagueDay();
     /** One RosterSpare per copy, whatever the size of the holding it came from. */
-    const asSpare = (
-      r: Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">,
-    ) => ({
+    const asSpare = (r: SpareCopyRow) => ({
       copyId: r.id,
       eventParticipantId: r.event_participant_id,
       edition: toEdition(r.edition),
@@ -384,6 +384,11 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       // about should under-promise rather than over-promise a payout.
       assertedBy: r.edition_asserted_by === "server" ? ("server" as const) : ("client" as const),
       viewerOwns: mine || viewer.roster.has(r.event_participant_id),
+      // Yours only, and only when true: see RosterSpare.pulledToday. A
+      // counterparty's list does not say which of their copies landed today.
+      ...(mine && r.source === "pull" && r.acquired_on === today
+        ? { pulledToday: true as const }
+        : {}),
     });
 
     return {
