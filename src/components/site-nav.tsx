@@ -177,7 +177,15 @@ export function SiteNav() {
                     // at 320px leave each tile ~53px, and a label that wrapped
                     // to a second line grew the bar past the room `main`
                     // reserves for it and pushed every page under it.
-                    "relative flex flex-col items-center gap-1 whitespace-nowrap py-2.5 text-nav font-bold uppercase tracking-[0.08em] transition-colors",
+                    //
+                    // The press is spelled out rather than promoted: this tile
+                    // is the most-pressed control in the app and has never
+                    // carried a hover: for styles.css's variant to promote. A
+                    // fill, not a bloom (§15), and not cyan — cyan plus the bar
+                    // below is how this row says "you are here", and a press is
+                    // not that. It is the same white/5 the desktop row's hover
+                    // wears, which is what that row's press now resolves to.
+                    "relative flex flex-col items-center gap-1 whitespace-nowrap rounded-md py-2.5 text-nav font-bold uppercase tracking-[0.08em] transition-colors active:bg-white/5",
                     active === l.to ? "text-primary" : "text-muted-foreground",
                   )}
                 >

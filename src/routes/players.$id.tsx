@@ -164,6 +164,7 @@ function PlayerCardPage() {
   // Seeded from the search parameter, which is the whole reason it exists:
   // `?vs=` is a link you drop in the group chat, and the recipient used to
   // land on the left card with the chip lit and have to tap it themselves.
+  // The seed alone is not enough — see the lock effect below.
   const [comparing, setComparing] = useState(!!vs);
   const shareRef = useRef<HTMLDivElement>(null);
 
@@ -253,9 +254,17 @@ function PlayerCardPage() {
   // opened on a card you hold stayed open when the next card along was one you
   // have not packed, over a Compare chip greyed out underneath it. The surface
   // and the affordance have to agree, so the sheet goes with the chip.
+  //
+  // Re-opened from `vs` rather than left to the seed above, because `locked` is
+  // true on the first frame of EVERY load — useMyCollection reports nothing
+  // ready until its IndexedDB reads settle — so this effect always ran once
+  // with the card locked and threw the seed away before it could reach a
+  // usable frame. The share link then landed the recipient on an unlit chip,
+  // the one thing `?vs=` exists to prevent.
   useEffect(() => {
     if (locked) setComparing(false);
-  }, [locked]);
+    else if (vs) setComparing(true);
+  }, [locked, vs]);
 
   /**
    * When this copy arrived, if anybody knows.
@@ -649,7 +658,7 @@ function PlayerCardPage() {
               "radial-gradient(ellipse 65% 55% at 50% 20%, color-mix(in oklab, var(--tier) 24%, transparent) 0%, transparent 70%)",
           }}
         />
-        <div className="relative mx-auto max-w-3xl px-4 py-6">
+        <div className="relative mx-auto max-w-3xl px-page-x py-6">
           <div className="mb-2 flex items-center justify-between gap-3 sm:mb-4 sm:items-start">
             <Link
               to="/players"
@@ -706,6 +715,9 @@ function PlayerCardPage() {
                       setFlipped((f) => !f);
                     }}
                     canNavigate={roster.length > 1}
+                    // This card is on a page with a stat block under it, not in
+                    // a viewer, so the page has to stay scrollable through it.
+                    allowPageScroll
                     prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
                     nextLabel={`Next: ${next?.participant?.name ?? ""}`}
                     position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
@@ -722,6 +734,7 @@ function PlayerCardPage() {
                         onFlippedChange={setFlipped}
                         gyro={gyro}
                         tilt="hero"
+                        pageScroll
                         // While magnified the frame owns the pointer; a card leaning
                         // under a pan would make the thing you are reading move.
                         interactive={!zoomed}
@@ -1063,7 +1076,7 @@ function NavButton({
       // it showed them at 38px, which is the width-breakpoint mistake this
       // file's own inputs were just fixed for (§18).
       className={cn(
-        "surface-panel absolute top-1/2 hidden min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 pointer-fine:min-h-0 pointer-fine:min-w-0 md:flex",
+        "surface-panel absolute top-1/2 hidden min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border-strong p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 pointer-fine:min-h-0 pointer-fine:min-w-0 md:flex",
         className,
       )}
     >

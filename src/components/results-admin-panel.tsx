@@ -55,7 +55,7 @@ export function ResultsAdminPanel({ eventId }: { eventId: string }) {
             <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase">
               {r.name}
               {r.attempts > 1 && (
-                <span className="ml-1 text-[10px] text-muted-foreground">
+                <span className="ml-1 text-meta text-muted-foreground">
                   ({r.attempts} attempts)
                 </span>
               )}
@@ -66,7 +66,7 @@ export function ResultsAdminPanel({ eventId }: { eventId: string }) {
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 shrink-0 px-2 text-[10px] uppercase tracking-widest"
+              className="h-8 shrink-0 px-2 text-label uppercase tracking-[0.08em]"
               onClick={() => setEditing(r.participantId)}
             >
               {r.officialMs == null ? (

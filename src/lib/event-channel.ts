@@ -11,6 +11,27 @@ export type ChannelHealth = "connecting" | "live" | "degraded";
 export type EventChannelSubscriber = {
   /** Something in this event changed — refetch. */
   change: () => void;
+  /**
+   * The `events` row itself changed.
+   *
+   * Separate from `change`, which is deliberately noisy: every table below fans
+   * out to it, and so does the backstop poll, on a timer, whether or not
+   * anything changed at all. Work too expensive to do on a timer, and only
+   * warranted by a write to this one row, belongs here — see the card back's
+   * signed URLs in useEventBundle.
+   */
+  eventRow?: () => void;
+  /**
+   * A roster row changed — which is where every player's photo and card art
+   * paths live.
+   *
+   * The same narrow kind of signal as `eventRow`, for the same reason: a photo
+   * or card upload writes the new art to a fresh path and hard-deletes the old
+   * objects, so a phone holding the previous signed URL is pointed at storage
+   * that is gone. Never from the poll, and coalesced, because a finish rewrites
+   * several rows at once and each would otherwise re-sign every image.
+   */
+  participantRow?: () => void;
   health: (health: ChannelHealth) => void;
 };
 
@@ -22,6 +43,7 @@ type Entry = {
   subscribers: Set<EventChannelSubscriber>;
   teardown: ReturnType<typeof setTimeout> | null;
   poll: ReturnType<typeof setInterval> | null;
+  participantRow: ReturnType<typeof setTimeout> | null;
 };
 
 /**
@@ -36,6 +58,13 @@ export const HEALTHY_POLL_MS = 15_000;
 /** Realtime is down, so polling is the only thing keeping the screens honest. */
 export const DEGRADED_POLL_MS = 4_000;
 
+/**
+ * How long a burst of roster writes is gathered into one `participantRow`. A
+ * finish recomputes rarity across the roster and moves the clock on, which is
+ * a row at a time over the socket; one re-sign for the lot is plenty.
+ */
+export const PARTICIPANT_ROW_COALESCE_MS = 1_000;
+
 const entries = new Map<string, Entry>();
 
 // Never reused, so a channel opened while its predecessor is still closing
@@ -49,6 +78,7 @@ function openChannel(eventId: string): Entry {
     subscribers: new Set(),
     teardown: null,
     poll: null,
+    participantRow: null,
   };
   entries.set(eventId, entry);
 
@@ -56,6 +86,26 @@ function openChannel(eventId: string): Entry {
   // callback would otherwise mutate the set mid-loop.
   const fanOut = () => {
     for (const s of [...entry.subscribers]) s.change();
+  };
+
+  /**
+   * From the `events` binding below, and from a degraded→live recovery — never
+   * from the poll, which is on a timer and would re-sign every card in the event
+   * every fifteen seconds. See setHealth.
+   */
+  const fanOutEventRow = () => {
+    for (const s of [...entry.subscribers]) s.eventRow?.();
+  };
+
+  /** From the roster binding below and from recovery, never from the poll. */
+  const fanOutParticipantRow = () => {
+    if (entry.participantRow) clearTimeout(entry.participantRow);
+    entry.participantRow = null;
+    for (const s of [...entry.subscribers]) s.participantRow?.();
+  };
+  const queueParticipantRow = () => {
+    if (entry.participantRow) return;
+    entry.participantRow = setTimeout(fanOutParticipantRow, PARTICIPANT_ROW_COALESCE_MS);
   };
 
   // One timer for the whole event, not one per mounted hook. refetchInterval
@@ -78,11 +128,23 @@ function openChannel(eventId: string): Entry {
     if (entries.get(eventId) !== entry || entry.health === next) return;
     // Changes that happened while the socket was down were never delivered, so
     // recovery needs a refetch rather than just a resumed stream.
+    //
+    // BOTH signals, for that same reason. The `events` binding below fires the
+    // pair because an events-row write matters to more than the bundle, and a
+    // write that landed during the outage is exactly the one nobody got -- a
+    // card-back upload, whose old storage objects it hard-deleted. Replaying
+    // only `change` left those phones pointing at art that is gone until their
+    // own 45-minute and 3-hour timers came round, neither of which refetches on
+    // focus either. A reconnect is rare, so unlike the poll it can afford this.
     const recovered = entry.health === "degraded" && next === "live";
     entry.health = next;
     for (const s of [...entry.subscribers]) s.health(next);
     restartPoll();
-    if (recovered) fanOut();
+    if (recovered) {
+      fanOut();
+      fanOutEventRow();
+      fanOutParticipantRow();
+    }
   };
 
   entry.channel = supabase
@@ -100,7 +162,10 @@ function openChannel(eventId: string): Entry {
         table: "event_participants",
         filter: `event_id=eq.${eventId}`,
       },
-      fanOut,
+      () => {
+        fanOut();
+        queueParticipantRow();
+      },
     )
     .on(
       "postgres_changes",
@@ -112,13 +177,16 @@ function openChannel(eventId: string): Entry {
       },
       fanOut,
     )
-    // Unlike the three above, these two carry no event_id of their own — they
-    // hang off a run — so there is nothing to filter on and every event's
-    // splits fan out to every watcher. Invisible while one combine is active,
+    // Unlike the three above, these four carry no event_id of their own — splits
+    // and penalties hang off a run, reactions and comments off an
+    // event_participant — so there is nothing to filter on and every event's
+    // rows fan out to every watcher. Invisible while one combine is active,
     // and a refetch of this event's bundle either way; the note is here so
     // the asymmetry reads as known rather than as an oversight.
     .on("postgres_changes", { event: "*", schema: "public", table: "splits" }, fanOut)
     .on("postgres_changes", { event: "*", schema: "public", table: "penalties" }, fanOut)
+    .on("postgres_changes", { event: "*", schema: "public", table: "card_reactions" }, fanOut)
+    .on("postgres_changes", { event: "*", schema: "public", table: "card_comments" }, fanOut)
     // The event row itself, so a commissioner flipping dust or saving the nav
     // rows reaches every other phone rather than only their own. Filtered on the
     // primary key: this is the one table where an unfiltered listener would wake
@@ -126,6 +194,20 @@ function openChannel(eventId: string): Entry {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "events", filter: `id=eq.${eventId}` },
+      () => {
+        fanOut();
+        fanOutEventRow();
+      },
+    )
+    // Published winners. Here rather than on a channel of their own because
+    // `close_award_voting` writes these rows and flips `awards_locked` on the
+    // event above in ONE transaction: read them off two channels and a socket
+    // that drops either half leaves /awards locked over an empty winners list,
+    // stating "No votes cast." about a vote that had them. The poll below is the
+    // backstop that makes the two halves land together.
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "awards", filter: `event_id=eq.${eventId}` },
       fanOut,
     )
     .subscribe((status) => {
@@ -163,6 +245,8 @@ export function subscribeToEventChannel(
       entries.delete(eventId);
       if (joined.poll) clearInterval(joined.poll);
       joined.poll = null;
+      if (joined.participantRow) clearTimeout(joined.participantRow);
+      joined.participantRow = null;
       supabase.removeChannel(joined.channel);
     }, TEARDOWN_GRACE_MS);
   };

@@ -109,14 +109,15 @@ export function secretTierLabel(tier: string | null | undefined): string {
 }
 
 /**
- * "0.5% pull". Derived from the odds table rather than written out, so the copy
- * printed under a card cannot drift from the rate that produced it.
+ * "0.5%". Derived from the odds table rather than written out, so the copy
+ * printed under a card cannot drift from the rate that produced it. No "pull"
+ * suffix — the tier word beside it already says what the number is about.
  */
 export function secretTierOddsLabel(tier: string | null | undefined): string {
-  return `${WEIGHT_BP[toSecretTier(tier)] / 100}% pull`;
+  return `${WEIGHT_BP[toSecretTier(tier)] / 100}%`;
 }
 
-/** "MYTHIC · 0.5% pull" — the one line printed under a secret. */
+/** "MYTHIC · 0.5%" — the one line printed under a secret. */
 export function secretTierCaption(tier: string | null | undefined): string {
   return `${secretTierLabel(tier)} · ${secretTierOddsLabel(tier)}`;
 }
@@ -125,7 +126,7 @@ export function secretTierCaption(tier: string | null | undefined): string {
  * "Legendary or better" — what a streak milestone PROMISED, not what a copy is.
  *
  * Its own phrasing rather than reusing secretTierCaption, which prints the base
- * pull rate: under a card that was guaranteed, "3.5% pull" is the odds of the
+ * pull rate: under a card that was guaranteed, "3.5%" is the odds of the
  * thing that did not happen. The caption stays right in the vault, where a copy
  * carries no memory of how it was earned; this line belongs only on the screen
  * making the promise.

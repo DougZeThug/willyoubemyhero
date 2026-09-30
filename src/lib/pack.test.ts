@@ -21,6 +21,7 @@ describe("packWaiting", () => {
     claimed: true,
     day: "2026-09-08",
     openedToday: false,
+    dealable: true,
     secretsOwned: 0,
     resetsAt: "2026-09-09T04:00:00Z",
     ...over,
@@ -38,6 +39,21 @@ describe("packWaiting", () => {
     expect(packWaiting(status({ claimed: false }))).toBe(false);
     expect(packWaiting(undefined)).toBe(false);
     expect(packWaiting(null)).toBe(false);
+  });
+
+  it("says no on a day with nothing to deal", () => {
+    // open_pack writes no row when its pool is empty, on purpose — the day is
+    // not spent. So openedToday stays false, and without this term the cue read
+    // that as a pack waiting and sent people to a screen saying "Nothing to deal
+    // today".
+    expect(packWaiting(status({ dealable: false }))).toBe(false);
+  });
+
+  it("says no to a server too old to answer the question", () => {
+    // A missing key is the safe way to be wrong: no cue, rather than one
+    // pointing at nothing.
+    const { dealable: _drop, ...older } = status();
+    expect(packWaiting(older as PackStatus)).toBe(false);
   });
 });
 

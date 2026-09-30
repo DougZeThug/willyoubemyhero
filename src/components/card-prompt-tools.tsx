@@ -69,7 +69,7 @@ export function CardPromptTemplateManager({ templates }: { templates: PromptTemp
           Manage Series Prompts
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-auto">
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-auto">
         <DialogHeader>
           <DialogTitle>Manage Series Prompts</DialogTitle>
         </DialogHeader>
@@ -135,7 +135,7 @@ export function CardPromptHistory({
   const rows = (history.data?.runs ?? []) as PromptHistoryRow[];
   return (
     <details className="mt-5 rounded-md border border-white/10 p-3">
-      <summary className="min-h-11 cursor-pointer font-display text-xs font-bold uppercase tracking-widest">
+      <summary className="min-h-11 cursor-pointer font-display text-xs font-bold uppercase tracking-[0.08em]">
         Recent Prompts ({rows.length})
       </summary>
       <div className="mt-2 max-h-80 space-y-2 overflow-auto">
@@ -221,6 +221,17 @@ export function CardPromptBatch({
   const [index, setIndex] = useState(0);
   const [copied, setCopied] = useState<Set<string>>(new Set());
   const saved = useMemo(() => new Map<string, string>(), []);
+  // Which batch the bookkeeping below belongs to.
+  //
+  // `saved` and `savingKeysRef` outlive any one batch, and build() clears both.
+  // A copy still waiting on its history write holds neither — it holds the
+  // Map and the Set themselves — so when it came back it wrote its row id into
+  // the REBUILT batch's `saved`. Keys are stable across builds (a player item
+  // is keyed by its event_participants row, a subject by the key minted when it
+  // was added), so the next copy of that same item read "already saved" and
+  // skipped the write for a prompt the rebuild may well have changed. Nothing
+  // renders off `saved`, so the copy still said it worked.
+  const buildEpoch = useRef(0);
   const savingKeysRef = useRef(new Set<string>());
   const [savingKeys, setSavingKeys] = useState<ReadonlySet<string>>(new Set());
   const players = useMemo(
@@ -279,6 +290,7 @@ export function CardPromptBatch({
             },
           }));
     const next = buildBatchPrompts(inputs);
+    buildEpoch.current += 1;
     setQueue(next);
     setIndex(0);
     setCopied(new Set());
@@ -289,6 +301,7 @@ export function CardPromptBatch({
   async function copyCurrent(advance: boolean) {
     const item = queue[index];
     if (!item) return;
+    const epoch = buildEpoch.current;
     const needsHistorySave = !saved.has(item.key);
     // State alone is not enough here: two clicks can enter before React commits
     // the disabled button. The ref claims the item synchronously.
@@ -321,7 +334,12 @@ export function CardPromptBatch({
               kind: "initial",
             },
           });
-          saved.set(item.key, row.id);
+          // Only into the batch this copy came from. A rebuild while the write
+          // was out has already cleared the Map, and marking the new batch's
+          // item saved would suppress its own history row.
+          if (buildEpoch.current === epoch) {
+            saved.set(item.key, row.id);
+          }
           void qc.invalidateQueries({ queryKey: ["card-prompt-runs", eventId] });
         } catch {
           toast.warning("Prompt copied, but history could not be saved");
@@ -331,7 +349,9 @@ export function CardPromptBatch({
     } catch {
       toast.error("Could not copy to clipboard");
     } finally {
-      if (needsHistorySave) {
+      // Same rule for the claim: build() already emptied the Set, so releasing
+      // a key here after a rebuild would release one the new batch has taken.
+      if (needsHistorySave && buildEpoch.current === epoch) {
         savingKeysRef.current.delete(item.key);
         setSavingKeys(new Set(savingKeysRef.current));
       }
@@ -344,7 +364,7 @@ export function CardPromptBatch({
       onToggle={(e) => setOpen(e.currentTarget.open)}
       className="mt-5 rounded-md border border-primary/20 p-3"
     >
-      <summary className="min-h-11 cursor-pointer font-display text-xs font-bold uppercase tracking-widest">
+      <summary className="min-h-11 cursor-pointer font-display text-xs font-bold uppercase tracking-[0.08em]">
         Batch Production
       </summary>
       <div className="mt-3 space-y-4">
@@ -538,7 +558,11 @@ export function CardPromptBatch({
               {index + 1} of {queue.length} — {current.subjectName}{" "}
               {copied.has(current.key) ? "✓ copied" : ""}
             </p>
-            <Textarea readOnly className="min-h-64 font-mono text-xs" value={current.prompt} />
+            <Textarea
+              readOnly
+              className="min-h-64 font-mono text-base pointer-fine:text-xs"
+              value={current.prompt}
+            />
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Button
                 type="button"

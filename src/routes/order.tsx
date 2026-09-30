@@ -47,7 +47,12 @@ function OrderPage() {
   );
 
   async function reshuffle() {
-    if (!event?.id) return;
+    // An empty `rows` is either a roster nobody has filled in yet or a roster
+    // read that failed — and the second is the dangerous one, because shuffling
+    // then writes an empty order over a field that actually exists. Either way
+    // there is nothing to draw, and the success toast below was announcing a
+    // randomization of nothing.
+    if (!event?.id || rows.length === 0) return;
     setBusy(true);
     try {
       const seed = newSeed();
@@ -61,22 +66,42 @@ function OrderPage() {
         id: r.id,
         running_order: i + 1,
       }));
-      await setOrderFn({ data: { eventId: event.id, order: orderPayload } });
-      await recordFn({
-        data: {
-          eventId: event.id,
-          scope: "all",
-          previous: rows.map((r) => ({ id: r.id, running_order: r.running_order })),
-          resulting: orderPayload,
-          seed,
-        },
-      });
+      // Two writes, and only the first one decides whether the order changed.
+      // Sharing one catch made a failure in the second say "Failed to shuffle"
+      // about an order that was already committed -- and, worse than the wording,
+      // it skipped the invalidate below, so the screen went on showing the old
+      // order while the database held the new one. The two are split so the
+      // primary write's outcome is the one being reported.
+      try {
+        await setOrderFn({ data: { eventId: event.id, order: orderPayload } });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to shuffle");
+        return;
+      }
+
+      // Past here the order HAS changed, so this runs whatever happens next.
       // Not left to the realtime subscription: a reshuffle nobody can see is
       // worse than no reshuffle, and this is the screen everyone is looking at.
       await qc.invalidateQueries({ queryKey: ["event-bundle", event.id] });
+
+      try {
+        await recordFn({
+          data: {
+            eventId: event.id,
+            scope: "all",
+            previous: rows.map((r) => ({ id: r.id, running_order: r.running_order })),
+            resulting: orderPayload,
+            seed,
+          },
+        });
+      } catch {
+        // The audit row is what Undo reads `previous_order` back out of, so
+        // losing it costs the undo rather than the shuffle. Said plainly, and not
+        // as an error: the thing the commissioner asked for did happen.
+        toast.warning("Running order re-randomized, but not recorded — no undo for this one");
+        return;
+      }
       toast.success("Running order re-randomized");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to shuffle");
     } finally {
       setBusy(false);
     }
@@ -123,7 +148,7 @@ function OrderPage() {
               decoration. See B-27 in the triage: the lock was dropped rather
               than built. */}
           {isAdmin && (
-            <Button onClick={reshuffle} disabled={busy} size="sm">
+            <Button onClick={reshuffle} disabled={busy || rows.length === 0} size="sm">
               <Shuffle className="mr-1.5 h-4 w-4" />
               {busy ? "Shuffling…" : "Re-randomize"}
             </Button>
@@ -166,12 +191,12 @@ function OrderPage() {
                         params={{ id: r.id }}
                         className="flex min-h-11 items-center hover:text-primary"
                       >
-                        <span className="truncate font-display text-lg font-bold uppercase leading-tight">
+                        <span className="line-clamp-2 font-display text-lg font-bold uppercase leading-tight">
                           {r.participant?.name ?? "—"}
                         </span>
                       </Link>
                       {r.participant?.fantasy_team_name && (
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="line-clamp-2 text-xs text-muted-foreground">
                           {r.participant.fantasy_team_name}
                         </div>
                       )}
@@ -198,8 +223,10 @@ function StatusBadge({ status }: { status: string }) {
           ? "bg-destructive/20 text-destructive"
           : "bg-white/10 text-muted-foreground";
   return (
-    <span className={`rounded px-2 py-0.5 text-label font-bold uppercase tracking-widest ${cls}`}>
+    <span className={`rounded px-2 py-0.5 text-label font-bold uppercase tracking-[0.08em] ${cls}`}>
       {status.replace(/_/g, " ")}
     </span>
   );
 }
+
+export default OrderPage;

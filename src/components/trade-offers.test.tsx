@@ -77,7 +77,6 @@ function renderPanel(over: Partial<React.ComponentProps<typeof TradeOffersPanel>
     onDecline: vi.fn(),
     onCancel: vi.fn(),
     highlightId: null,
-    onMakeOffer: vi.fn(),
     reachableCount: 3,
     ...over,
   };
@@ -157,19 +156,20 @@ describe("the other two answers", () => {
 });
 
 describe("an empty inbox", () => {
-  it("keeps the line and gains a way forward", async () => {
-    const { props } = renderPanel({ inbox: [] });
+  it("keeps the line and says who could answer it", () => {
+    renderPanel({ inbox: [] });
     expect(screen.getByText("Nobody wants your cards. Yet.")).toBeInTheDocument();
     expect(screen.getByText("3 players are on their phones.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /start the first offer/i }));
-    expect(props.onMakeOffer).toHaveBeenCalledOnce();
   });
 
-  it("names its control differently from the sticky one, so the two can be told apart", () => {
+  it("offers no control of its own, because the route's sticky one is the way forward", () => {
+    // It used to carry "Start the first offer", named apart from the sticky
+    // "Make an offer" so a screen reader could tell them apart — but they are one
+    // action about 600px apart on a screen that is nothing but this panel (§23
+    // F13). The survivor is the fixed one, which is up without a scroll.
     renderPanel({ inbox: [] });
-    // Two controls 200px apart with one accessible name is a thing a screen
-    // reader cannot resolve, and the sticky "Make an offer" is always up.
-    expect(screen.queryByRole("button", { name: /^make an offer$/i })).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });
 

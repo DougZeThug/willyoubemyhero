@@ -13,6 +13,9 @@ import {
   serverFnName,
   stubServerFns,
   tearPack,
+  standCard,
+  swipeNext,
+  turnCard,
 } from "./fixtures";
 import { editionLabel } from "../src/lib/card-edition";
 import { CEREMONY_MS } from "../src/lib/pack-ceremony";
@@ -348,10 +351,6 @@ test.describe("opening a pack", () => {
     );
   }
 
-  /** The card currently on the reveal stand. */
-  const standCard = (page: import("@playwright/test").Page) =>
-    page.locator('[role="button"][aria-pressed]').first();
-
   /**
    * Which step the stand is on, and therefore that the stand has the screen.
    *
@@ -364,21 +363,6 @@ test.describe("opening a pack", () => {
   /** The line that says the card on the stand is revealed and swiping steps on. */
   const swipeHint = (page: import("@playwright/test").Page) =>
     page.getByText(/swipe for the next card/i);
-
-  /**
-   * Step to the next card the way a thumb does: a fast leftward throw across
-   * the revealed card. There is no Next button — the stand reads the gesture
-   * with swipeDirection() from src/lib/zoom.ts, which wants ≥48px of mostly
-   * horizontal travel inside 700ms.
-   */
-  async function swipeNext(page: import("@playwright/test").Page) {
-    const box = (await standCard(page).boundingBox())!;
-    const y = box.y + box.height / 2;
-    await page.mouse.move(box.x + box.width * 0.85, y);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.15, y, { steps: 4 });
-    await page.mouse.up();
-  }
 
   /** Where the perforation runs, as a fraction of the pack's height. */
   const TEAR_LINE = 0.15;
@@ -528,7 +512,10 @@ test.describe("opening a pack", () => {
     // before it turns; the last is simply the one with nothing to swipe on to.
     for (const n of [1, 2]) {
       await expect(standStep(page)).toHaveText(`${n} / 3`);
-      await standCard(page).click();
+      // Waits for the stand to say it will take a tap before spending one. The
+      // card before this has just celebrated, and until `revealing` was mirrored
+      // out of its ref the next card answered a tap it was going to discard.
+      await turnCard(page);
       await expect(swipeHint(page)).toBeVisible();
       await swipeNext(page);
     }
@@ -585,16 +572,17 @@ test.describe("opening a pack", () => {
 
     // A MutationObserver sees every intermediate render, which is what makes
     // this deterministic — the face-down beat is only ~300ms and polling would
-    // race it. The stand's helper line is the tell: it reads "tap the card to
-    // turn it" only while the card on it has not been turned.
+    // race it. `data-face-down` on the stand's card is the tell. It used to be
+    // the "tap the card to turn it" helper line, which is prose and stopped
+    // saying that the moment the line started telling the truth: it is blank
+    // whenever the tap would be refused, and under "Reveal all" it always is.
     await page.evaluate(() => {
       const seen = new Set<string>();
       (window as unknown as { __faceDown: Set<string> }).__faceDown = seen;
       const sample = () => {
         const step = document.querySelector('[data-testid="stand-step"]')?.textContent ?? "";
         const at = step.match(/(\d)\s*\/\s*3/);
-        const text = document.body.textContent ?? "";
-        if (at && /tap the card to turn it/i.test(text)) seen.add(at[1]);
+        if (at && document.querySelector('[data-face-down="true"]')) seen.add(at[1]);
       };
       sample();
       new MutationObserver(sample).observe(document.body, {
@@ -650,7 +638,7 @@ test.describe("opening a pack", () => {
     expect((await readPackState(page))?.cards?.map((c) => c.id)).toEqual(DEFAULT_PACK_IDS);
   });
 
-  test("keeps the summary's cards big enough to read", async ({ page }) => {
+  test("keeps the summary's cards big enough to read", async ({ page }, testInfo) => {
     // The pack used to get SMALLER at the payoff: a three-column grid put the
     // roster cards at ~100px on a phone, a second after the stand had shown the
     // same card at 315. They are a snap row now, so they keep a readable size
@@ -670,6 +658,22 @@ test.describe("opening a pack", () => {
     for (let i = 0; i < PACK_SIZE; i += 1) {
       const box = (await columns.nth(i).boundingBox())!;
       expect(box.width).toBeGreaterThanOrEqual(140);
+    }
+
+    // The names under them are the columns' only links — the cards themselves are
+    // flip buttons — and they measured 140x18 (§23 F6). The floor is on the link
+    // rather than over the card, so a tap on the art still turns it.
+    //
+    // Mobile only, on the same rule as the tap-target sweep: the floor is
+    // released on `pointer-fine:`, so the desktop project is measuring a mouse
+    // and 44px is not its bar.
+    if (testInfo.project.name === "mobile") {
+      const links = await page.getByTestId("summary-card").locator("a[href]").all();
+      expect(links.length).toBeGreaterThan(0);
+      for (const link of links) {
+        const box = (await link.boundingBox())!;
+        expect(box.height, `"${(await link.textContent())?.trim()}"`).toBeGreaterThanOrEqual(44);
+      }
     }
   });
 
@@ -829,6 +833,7 @@ test.describe("opening a pack", () => {
           claimed: true,
           day: LEAGUE_DAY,
           openedToday: true,
+          dealable: true,
           secretsOwned: 0,
           resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
         });
@@ -939,6 +944,7 @@ test.describe("opening a pack", () => {
       claimed: true,
       day: nextDay,
       openedToday: false,
+      dealable: true,
       secretsOwned: 0,
       resetsAt: `${nextDay}T04:00:00Z`,
     });
@@ -1055,7 +1061,10 @@ test.describe("opening a pack", () => {
     // reveal is the only thing that will ever file them, one at a time.
     await swipeNext(page);
     await expect(standStep(page)).toHaveText("2 / 3");
-    await standCard(page).click();
+    // Pressed until it takes: the card ahead of this one has just celebrated,
+    // and a tap into the tail of that is swallowed by revealAt's latch, leaving
+    // nothing to file and the poll below to time out on a reveal that never ran.
+    await turnCard(page);
     await expect.poll(() => filedWith(guestIds[1]), { timeout: 15_000 }).toBe(1);
     // But never again the one they had turned: adoption filed that at the claim.
     expect(filedWith(guestIds[0])).toBe(1);

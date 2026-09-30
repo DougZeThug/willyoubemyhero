@@ -341,4 +341,41 @@ describe("groupBySecretCollection", () => {
       UNSORTED_COLLECTION_LABEL,
     ]);
   });
+
+  it("names a shipped set an admin has hidden, rather than printing its id", () => {
+    // The vault passes the LIVE list, and getSecretCollections returns active
+    // sets only — so hiding a set while cards are still filed under it dropped
+    // its id out of `sets` and the shelf heading fell through to `legacyPets`,
+    // over cards whose own chip still read "Legacy Pets". SetChip already
+    // downgrades to the shipped list for this; the shelf now does too.
+    const live = [
+      { id: "cornhole", label: "Cornhole Collection" },
+      { id: "wags", label: "WAGs" },
+    ];
+    const groups = groupBySecretCollection(
+      [card("legacyPets", "Rufus"), card("cornhole", "The Board")],
+      live,
+    );
+    expect(groups.map((g) => g.label)).toEqual(["Cornhole Collection", "Legacy Pets"]);
+  });
+
+  it("still renders an id no list has ever named as itself", () => {
+    // The downgrade must not become a silence. A genuinely retired id is not in
+    // the live list OR the shipped one, and those cards keep showing something.
+    const groups = groupBySecretCollection(
+      [card("gazebos", "The Gazebo")],
+      [{ id: "cornhole", label: "Cornhole Collection" }],
+    );
+    expect(groups.map((g) => g.label)).toEqual(["gazebos"]);
+  });
+
+  it("prefers a live rename over the shipped label for a set still on the list", () => {
+    // The whole reason the vault passes the live list: an admin renaming a set
+    // has to reach the shelf. The downgrade above must not cost that.
+    const groups = groupBySecretCollection(
+      [card("pets", "Bandit")],
+      [{ id: "pets", label: "Companions" }],
+    );
+    expect(groups.map((g) => g.label)).toEqual(["Companions"]);
+  });
 });

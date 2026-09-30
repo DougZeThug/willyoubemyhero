@@ -39,6 +39,7 @@ import {
   secretCollectionLabel,
   setAccentColor,
 } from "@/lib/secret-cards";
+import { setEditRefusal } from "@/lib/secret-set-edit";
 
 import {
   SecretArtThumb,
@@ -125,13 +126,16 @@ export function SecretCardsPanel() {
   const [editing, setEditing] = useState<string | null>(null);
   // Per-card grant target: the participant id currently chosen in that row's picker.
   const [grantTarget, setGrantTarget] = useState<Record<string, string>>({});
-  // Per-row pending flags so each row shows its own spinner and neighbour rows
-  // stay interactive while one card is saving.
-  const [grantingId, setGrantingId] = useState<string | null>(null);
-  const [savingWeightId, setSavingWeightId] = useState<string | null>(null);
-  // A set rather than a single id like the two above: look saves fire on every
-  // pick, so two rows can genuinely be in flight at once and one row's finally
-  // must not clear the other's spinner.
+  // Per-row pending flags, as Sets rather than single ids: a weight saves on
+  // blur, a look on every pick and a grant on every tap, so two rows can
+  // genuinely be in flight at once and one row's finally must not clear the
+  // other's spinner. Weight was a single id until the tile started reading that
+  // flag to decide when to let go of what the admin typed — at which point B's
+  // save clearing on A's finish put a stale number back in B's box and
+  // re-enabled it mid-flight. Grants kept the single id for longer, so starting
+  // B took A's spinner down while A was still in the air.
+  const [grantingIds, setGrantingIds] = useState<ReadonlySet<string>>(new Set());
+  const [savingWeightIds, setSavingWeightIds] = useState<ReadonlySet<string>>(new Set());
   const [savingLookIds, setSavingLookIds] = useState<ReadonlySet<string>>(new Set());
   // Sets currently having a whole-collection look applied ("" for unsorted).
   const [savingSetIds, setSavingSetIds] = useState<ReadonlySet<string>>(new Set());
@@ -197,14 +201,7 @@ export function SecretCardsPanel() {
     toast.promise(done, {
       id: `set-${id}`,
       loading: `Saving ${label}…`,
-      success: (r) =>
-        r.ok
-          ? success
-          : "reason" in r && r.reason === "in_use"
-            ? "That set still has cards in it — hide it instead"
-            : "reason" in r && r.reason === "exists"
-              ? "There's already a set with that name"
-              : "That name doesn't work — try letters and numbers",
+      success: (r) => (r.ok ? success : setEditRefusal(r.reason)),
       error: (e) => (e instanceof Error ? e.message : "Save failed"),
     });
     void done.catch(() => {}).finally(() => setSetBusyId(null));
@@ -367,7 +364,7 @@ export function SecretCardsPanel() {
       toast.error("Weight must be a whole number between 0 and 10,000");
       return;
     }
-    setSavingWeightId(id);
+    setSavingWeightIds((prev) => new Set(prev).add(id));
     const p = updateFn({ data: { id, weight: parsed } }).then(async (r) => {
       await qc.invalidateQueries({ queryKey: ["secret-cards"] });
       return r;
@@ -383,7 +380,11 @@ export function SecretCardsPanel() {
     } catch {
       // toast.promise already surfaced the error
     } finally {
-      setSavingWeightId(null);
+      setSavingWeightIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -484,7 +485,7 @@ export function SecretCardsPanel() {
       return;
     }
     const who = roster.find((p) => p.id === participantId)?.name ?? "participant";
-    setGrantingId(card.id);
+    setGrantingIds((prev) => new Set(prev).add(card.id));
     // One key per grant the commissioner meant to make, kept across a failure so
     // a retry replays it rather than dealing a second copy. Keyed by card and
     // recipient, so changing either starts a new grant.
@@ -519,7 +520,11 @@ export function SecretCardsPanel() {
     } catch {
       // toast.promise already surfaced the error
     } finally {
-      setGrantingId(null);
+      setGrantingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(card.id);
+        return next;
+      });
     }
   }
 
@@ -576,8 +581,12 @@ export function SecretCardsPanel() {
       </p>
       {list.data?.exhausted && (
         <p className="mt-1 text-[11px] leading-snug text-warn">
-          Everyone who plays has pulled all {cards.filter((c) => c.active && c.hasArt).length}. New
-          cards show up in tomorrow&apos;s packs.
+          {/* The same filter the server decides `exhausted` with — weight 0 takes a
+              card out of the draw without retiring it, so counting it here made
+              the sentence name a total nobody could ever have pulled. */}
+          Everyone who plays has pulled all{" "}
+          {cards.filter((c) => c.active && c.hasArt && c.weight > 0).length}. New cards show up in
+          tomorrow&apos;s packs.
         </p>
       )}
 
@@ -605,12 +614,12 @@ export function SecretCardsPanel() {
           "mt-3 cursor-pointer rounded-lg border border-dashed p-5 text-center transition-colors",
           dragging
             ? "border-primary bg-primary/10"
-            : "border-white/15 hover:border-primary/50 hover:bg-white/[0.02]",
+            : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
           busy && "pointer-events-none opacity-60",
         )}
       >
         <UploadCloud className="mx-auto h-8 w-8 text-primary/70" aria-hidden />
-        <p className="mt-2 font-display text-sm font-bold uppercase tracking-widest text-foreground">
+        <p className="mt-2 font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
           {busy ? "Uploading…" : <span className="max-sm:hidden">Drop card art here</span>}
           {!busy && <span className="sm:hidden">Add card art</span>}
         </p>
@@ -650,7 +659,7 @@ export function SecretCardsPanel() {
           <select
             value={uploadCollection ?? ""}
             onChange={(e) => setUploadCollection(e.target.value || null)}
-            className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+            className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
             aria-label="Set for new uploads"
           >
             <option value="">Unsorted</option>
@@ -724,7 +733,7 @@ export function SecretCardsPanel() {
                           ),
                         )
                       }
-                      className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:min-h-0 sm:text-xs"
+                      className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
                     >
                       <option value="">Unsorted</option>
                       {pickerSets.map((c) => (
@@ -738,7 +747,7 @@ export function SecretCardsPanel() {
                 <button
                   onClick={() => removeDraft(d.key)}
                   aria-label={`Remove ${d.file.name}`}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -872,7 +881,7 @@ export function SecretCardsPanel() {
                     onClick={() => moveSet(i, -1)}
                     disabled={i === 0 || setBusyId !== null}
                     aria-label={`Move ${s.label} up`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground disabled:opacity-30"
                   >
                     <ChevronUp className="h-4 w-4" />
                   </button>
@@ -881,7 +890,7 @@ export function SecretCardsPanel() {
                     onClick={() => moveSet(i, 1)}
                     disabled={i === allSets.length - 1 || setBusyId !== null}
                     aria-label={`Move ${s.label} down`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground disabled:opacity-30"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground disabled:opacity-30"
                   >
                     <ChevronDown className="h-4 w-4" />
                   </button>
@@ -897,7 +906,7 @@ export function SecretCardsPanel() {
                     }
                     disabled={setBusyId !== null}
                     aria-label={s.active ? `Hide ${s.label}` : `Show ${s.label}`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground"
                   >
                     {s.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -929,7 +938,7 @@ export function SecretCardsPanel() {
                     }}
                     disabled={setBusyId !== null}
                     aria-label={`Delete ${s.label}`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground hover:border-destructive/50 hover:text-destructive"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground hover:border-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -1022,8 +1031,8 @@ export function SecretCardsPanel() {
                       onGrantTargetChange={(participantId) =>
                         setGrantTarget((prev) => ({ ...prev, [card.id]: participantId }))
                       }
-                      granting={grantingId === card.id}
-                      savingWeight={savingWeightId === card.id}
+                      granting={grantingIds.has(card.id)}
+                      savingWeight={savingWeightIds.has(card.id)}
                       savingLook={savingLookIds.has(card.id)}
                       lookRow={lookRow === card.id}
                       onLookRowChange={(active) =>
@@ -1051,7 +1060,7 @@ export function SecretCardsPanel() {
           icon taps in a scrolling row — this is the editing that needs a keyboard
           and room, and on a phone the row never had either. */}
       <Sheet open={!!editingCard} onOpenChange={(open) => !open && setEditing(null)}>
-        <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+        <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto">
           {editingCard && (
             <>
               <SheetHeader className="text-left">
@@ -1070,7 +1079,7 @@ export function SecretCardsPanel() {
                     <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                       Card art
                     </span>
-                    <span className="mt-1 flex min-h-11 cursor-pointer items-center justify-center rounded border border-white/15 px-3 text-xs font-bold uppercase tracking-widest text-primary transition-colors hover:border-primary/50">
+                    <span className="mt-1 flex min-h-11 cursor-pointer items-center justify-center rounded border border-border-strong px-3 text-xs font-bold uppercase tracking-[0.08em] text-primary transition-colors hover:border-primary/50">
                       Replace art
                       <input
                         type="file"
@@ -1122,7 +1131,7 @@ export function SecretCardsPanel() {
                     onChange={(e) =>
                       saveLook(editingCard.id, { collection: e.target.value || null })
                     }
-                    className="mt-1 min-h-11 w-full rounded border border-white/15 bg-background px-2 text-base text-foreground"
+                    className="mt-1 min-h-11 w-full rounded border border-border-strong bg-background px-2 text-base text-foreground"
                   >
                     <option value="">Unsorted</option>
                     {pickerSets.map((c) => (

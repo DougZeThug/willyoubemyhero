@@ -122,11 +122,10 @@ Refusals are sentences on both sides:
 | Buying                         | Listing                                          |
 | ------------------------------ | ------------------------------------------------ |
 | "Somebody got there first"     | "You would have none left"                       |
-| "That card had already moved"  | "Today's pull is not a spare yet"                |
-| "Not enough dust for that one" | "Take it off the market first"                   |
-| "That one's yours"             | "That one is already up"                         |
-| "Dust is switched off"         | "Your stall is full — take something down first" |
-|                                | "That price is out of range"                     |
+| "That card had already moved"  | "Take it off the market first"                   |
+| "Not enough dust for that one" | "That one is already up"                         |
+| "That one's yours"             | "Your stall is full — take something down first" |
+| "Dust is switched off"         | "That price is out of range"                     |
 
 ## Why the floor of 1 is load-bearing
 
@@ -241,8 +240,8 @@ sentences. See [accessibility](../cross-cutting/accessibility.md).
   offers count as commitments too, so staking your second copy and then shelving
   the first is refused for the same reason.
 - **A secret may be your only one**, listed with a confirm exactly as it is sold
-  to the house. Today's pull is the exception: refused, because that row is your
-  spent daily slot and a sale would hand it back.
+  to the house. Today's pull lists the day it lands; selling it does not hand
+  the day back, because the pack replays the same cards all day.
 - **A card staked on a pending offer may still be listed.** Deliberate. One copy
   can already sit on several offers at once, and a listing promises rather than
   destroys. Whichever settles first wins and the other fails its own check.

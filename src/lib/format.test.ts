@@ -231,17 +231,6 @@ describe("newClientKey", () => {
     const keys = new Set(Array.from({ length: 100 }, () => newClientKey()));
     expect(keys.size).toBe(100);
   });
-
-  it("still produces a well-formed key without crypto.getRandomValues", () => {
-    const original = globalThis.crypto;
-    // @ts-expect-error — deliberately removing a global to exercise the fallback.
-    delete globalThis.crypto;
-    try {
-      expect(newClientKey()).toMatch(/^[0-9a-f]{32}$/);
-    } finally {
-      globalThis.crypto = original;
-    }
-  });
 });
 
 describe("formatDay", () => {

@@ -16,6 +16,17 @@ TanStack Query · nitro, building for Cloudflare.
 and `package-lock.json` are tracked — **update both** when dependencies change
 (`bun install`, then `npm install --package-lock-only`), or the two drift apart.
 
+**Two TypeScripts, on purpose.** `typescript` is pinned to 6.0.x and
+`@typescript/native` (`npm:typescript@7.0.2`) is the compiler `bun run typecheck`
+runs. TS 7 is the native compiler and no longer ships the classic JS API, so
+typescript-eslint throws on load if `typescript` resolves to 7.x. Both packages
+expose a `tsc` bin and which one wins `.bin/tsc` depends on install order, so the
+script calls `node_modules/@typescript/native/bin/tsc` by path. Don't use
+Microsoft's `typescript: npm:@typescript/typescript6` alias — Bun 1.3.11 installs
+it as an empty self-referencing shim. When typescript-eslint supports TS 7.x
+(typescript-eslint#10940), collapse to a single `typescript@7`, restore
+`"typecheck": "tsc --noEmit"` and drop the Dependabot ignores.
+
 `bunfig.toml` enforces a 24-hour `minimumReleaseAge` as a supply-chain guard.
 Confirm with the user before adding anything to `minimumReleaseAgeExcludes`.
 
@@ -30,10 +41,16 @@ Confirm with the user before adding anything to `minimumReleaseAgeExcludes`.
 | `bun run format`    | Prettier write; run this before `lint` if it complains    |
 | `bun run test`      | Unit, hook and component tests (Vitest)                   |
 | `bun run test:db`   | Database integration tests (starts its own Postgres)      |
-| `bun run test:e2e`  | Playwright, phone and desktop                             |
+| `bun run test:e2e`  | Playwright, phone and desktop — **CI only, see below**    |
 
 Prettier runs through `eslint-plugin-prettier`, so a formatting slip fails
 `bun run lint`, not just `format`. Run `format` then `lint`.
+
+**Do not run `test:e2e` locally or in an agent session.** It is CI's job, and
+the `e2e` workflow gates the sync just as hard either way. Running it here buys
+nothing and costs a browser download, a production-shaped build and twenty
+minutes. Before pushing, run `format`, `lint`, `typecheck`, `test` and — when a
+migration or an RPC changed — `test:db`; leave the browser to GitHub.
 
 `test:db` finds `initdb` on PATH-style layouts (`/bin`, `/usr/bin`) and the
 usual Debian ones (`/usr/lib/postgresql/<v>/bin`). If yours lives somewhere
@@ -162,6 +179,9 @@ This is a faithful stand-in for the _database_ — grants, policies, RPCs. It is
 not PostgREST or GoTrue, and does not pretend to be.
 
 ### E2E
+
+Run in CI, not here — see Commands. What follows is for reading and editing the
+specs, which is the part that happens locally.
 
 Server-function responses are stubbed in the browser, so the suite never touches
 Supabase. Two things about that are non-obvious and cost real time to work out:

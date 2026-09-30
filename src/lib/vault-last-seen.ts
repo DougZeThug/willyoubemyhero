@@ -124,12 +124,21 @@ export function useVaultLastSeen(): string | null {
     // private-mode browser back the value it just refused to save, and the strip
     // would reappear under the thumb that dismissed it.
     const mine = () => setLastSeen(current);
-    // Another tab. That one did save, so storage is the truth.
-    const theirs = () => {
+    const reread = () => {
       current = read();
       setLastSeen(current);
     };
-    theirs();
+    // Another tab, and only if it touched OUR key. `storage` fires for every key
+    // the other tab writes, so this used to spend a getItem and a JSON.parse on
+    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
+    // in-memory hold above with whatever storage happens to hold, putting a
+    // refused write back under the thumb that made it. A null key is
+    // localStorage.clear(), which does concern us.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== KEY) return;
+      reread();
+    };
+    reread();
     // First visit on this device: seed the instant so the NEXT visit has
     // something to measure from, while this one stays quiet. The listeners go on
     // AFTER, which is what keeps it quiet — our own seed has nothing to repaint

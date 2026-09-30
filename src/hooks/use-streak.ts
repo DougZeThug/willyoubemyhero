@@ -14,6 +14,15 @@ export const streakStatusKey = (actorId: string | null | undefined) =>
   ["pack-streak", actorId] as const;
 
 /**
+ * The same actor-scoped shape, for the list of rungs already cashed.
+ *
+ * The query lives on /you — the only screen that asks — but the key lives here,
+ * because a milestone claim has to invalidate it from wherever it was tapped.
+ */
+export const streakHistoryKey = (actorId: string | null | undefined) =>
+  ["streak-history", actorId] as const;
+
+/**
  * How long the run is, and what it has already paid.
  *
  * No realtime subscription. Both tables behind this — `pack_opens` and

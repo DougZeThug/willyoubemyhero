@@ -60,10 +60,22 @@ const RUN = {
 
 describe("LiveTimingBar", () => {
   it("starts the athlete the running order says is next", async () => {
+    // WITH the athlete, not just at all. The picker defaults to whoever is next
+    // without writing that to the console's selection, so a Start that passed
+    // nothing left the hook reading an empty string and returning — an enabled
+    // button that started no timer and said nothing. Asserting only that the
+    // click landed is what let that ship.
     const rc = console_();
     render(<LiveTimingBar console={rc} />);
     await userEvent.click(screen.getByRole("button", { name: /start timer/i }));
-    expect(rc.startRun).toHaveBeenCalled();
+    expect(rc.startRun).toHaveBeenCalledWith("p-a");
+  });
+
+  it("starts the athlete the commissioner picked once they have picked one", async () => {
+    const rc = console_({ selectedParticipantId: "p-b" });
+    render(<LiveTimingBar console={rc} />);
+    await userEvent.click(screen.getByRole("button", { name: /start timer/i }));
+    expect(rc.startRun).toHaveBeenCalledWith("p-b");
   });
 
   it("records a split per station while running", async () => {
@@ -101,5 +113,59 @@ describe("LiveTimingBar", () => {
     render(<LiveTimingBar console={rc} />);
     expect(screen.getByRole("button", { name: /retry save/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /finish/i })).toBeNull();
+  });
+
+  it("will not throw the timer away while the save is still going", () => {
+    // Admin's Discard already refuses while a save is in flight; this bar was
+    // the one door left open on it, and "nothing is written to the league" —
+    // what the confirm promises — is not true of a row still being written.
+    const rc = console_({
+      run: { ...RUN, status: "finished" } as never,
+      finished: true,
+      finishing: true,
+      finishedRun: { ...RUN, status: "finished", finishedAt: 1, finishedAtIso: "x" } as never,
+      finishSave: {
+        state: "saving",
+        error: null,
+        finish: vi.fn(),
+        retry: vi.fn(),
+        reset: vi.fn(),
+      } as never,
+      currentEp: ep("a", "Ryan", 1) as never,
+    });
+    render(<LiveTimingBar console={rc} />);
+    expect(screen.getByRole("button", { name: /reset timer/i })).toBeDisabled();
+  });
+
+  it("offers it again once the save has settled", () => {
+    const rc = console_({
+      run: { ...RUN, status: "finished" } as never,
+      finished: true,
+      finishedRun: { ...RUN, status: "finished", finishedAt: 1, finishedAtIso: "x" } as never,
+      currentEp: ep("a", "Ryan", 1) as never,
+    });
+    render(<LiveTimingBar console={rc} />);
+    expect(screen.getByRole("button", { name: /reset timer/i })).toBeEnabled();
+  });
+});
+
+describe("LiveTimingBar on a run that finished but did not save", () => {
+  it("puts the whole splits strip away rather than guarding its Undo", () => {
+    // The hook refuses an undo on a finished run, because the record Retry
+    // re-sends is derived from it and splits go up with an upsert that cannot
+    // delete a row by absence. This bar never gets that far: Undo lives in the
+    // not-finished arm, so there is nothing here to disable. Pinned because the
+    // console's copy of the button DOES need the guard, and a reader comparing
+    // the two deserves to know why only one has it.
+    const rc = console_({
+      run: { ...RUN, status: "finished", splits: [{ clientKey: "s", stationId: "s1" }] } as never,
+      finished: true,
+      currentEp: ep("a", "Ryan", 1, "running") as never,
+      finishedRun: { ...RUN, status: "finished" } as never,
+    });
+    render(<LiveTimingBar console={rc} />);
+
+    expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /retry save/i })).toBeInTheDocument();
   });
 });

@@ -37,6 +37,7 @@ const NOTHING_WAITING = {
   claimed: true,
   day: "2026-07-28",
   openedToday: true,
+  dealable: true,
   secretsOwned: 1,
   resetsAt: "2026-07-29T04:00:00Z",
 };
@@ -46,6 +47,23 @@ const PACK_WAITING = {
   claimed: true,
   day: "2026-07-28",
   openedToday: false,
+  dealable: true,
+  secretsOwned: 1,
+  resetsAt: "2026-07-29T04:00:00Z",
+};
+
+/**
+ * Sealed, but with nothing behind the wrapper: no combine running and no secret
+ * with art in the catalogue. open_pack deals nothing on such a day and writes no
+ * row, so `openedToday` stays false — which the cue used to read as a pack
+ * waiting, ring, dot and all, pointing at a screen that says "Nothing to deal
+ * today".
+ */
+const NOTHING_DEALABLE = {
+  claimed: true,
+  day: "2026-07-28",
+  openedToday: false,
+  dealable: false,
   secretsOwned: 1,
   resetsAt: "2026-07-29T04:00:00Z",
 };
@@ -65,17 +83,27 @@ const CLAIMABLE = {
 };
 
 /**
+ * One box-shadow's layers, split on the commas OUTSIDE a colour function.
+ *
+ * `oklch(0.85 0.14 205 / 0.4)` carries its own commas in some browsers, so a
+ * bare `split(",")` cuts a layer in half.
+ */
+function shadowLayers(shadow: string): string[] {
+  return shadow.split(/,(?![^(]*\))/u);
+}
+
+/**
  * How much light a control throws, as the number of shadow layers with a real
  * blur radius.
  *
- * Split on commas OUTSIDE the colour function, then read each layer's third
+ * Read each layer's third
  * length — x, y, blur, spread. Counting blurs with one regex over the whole
  * string does not work: `0px 0px 0px 1px` contains `0px 0px 1px` starting one
  * token in, so every hairline reads as a glow and a hero comes back as four
  * layers rather than two.
  */
 function glowLayers(shadow: string) {
-  return shadow.split(/,(?![^(]*\))/).filter((layer) => {
+  return shadowLayers(shadow).filter((layer) => {
     const lengths = layer.replace(/\b[a-z]+\([^)]*\)/gi, "").match(/-?[\d.]+px/g) ?? [];
     return lengths.length >= 3 && parseFloat(lengths[2]) > 0;
   }).length;
@@ -145,9 +173,29 @@ test.describe("one scale of button glow", () => {
     // And the ring is genuinely there, in the dot's own colour. Matching the
     // 2px spread alone would pass on a ring painted the wrong colour, which is
     // most of what this test is for.
-    const ring = shadow.split(/,(?![^(]*\))/).find((l) => /0px 0px 0px 2px/.test(l));
+    const ring = shadowLayers(shadow).find((l) => /0px 0px 0px 2px/u.test(l));
     expect(ring, "no 2px ring layer in the shadow").toBeDefined();
     expect(ring!.trim().startsWith(dot), `ring "${ring}" is not the dot's ${dot}`).toBe(true);
+  });
+
+  test("wears no ring and no dot on a day with nothing to deal", async ({ page, server }) => {
+    await asMember(page);
+    server.set("getPackStatus", NOTHING_DEALABLE);
+    await page.goto("/players");
+
+    const hero = page.getByRole("main").getByRole("link", { name: /^open today's pack$/i });
+    await expect(hero).toBeVisible();
+    await expect(hero.getByTestId("pack-waiting-dot")).toHaveCount(0);
+    // The bloom stays — it is the screen's one action either way. What goes is
+    // the 2px ring that claims there is something waiting.
+    const shadow = await hero.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(glowLayers(shadow)).toBe(2);
+    expect(shadowLayers(shadow).find((l) => /0px 0px 0px 2px/u.test(l))).toBeUndefined();
+
+    // And the nav tab it shares the cue with is quiet too.
+    await expect(page.getByRole("link", { name: /pack — today's pack is unopened/iu })).toHaveCount(
+      0,
+    );
   });
 
   test("gives a refused control no glow at all", async ({ page, server }) => {

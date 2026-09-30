@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { notInEventMessage, OUT_OF_FIELD_MESSAGE } from "./current-athlete";
 import { requireAdmin } from "./require-auth.server";
+import { OUT_OF_CONTENTION_STATUSES } from "./standings";
 import { uuid as zuuid } from "./zod-uuid";
 
 /**
@@ -44,7 +46,7 @@ function likeLiteral(value: string): string {
  * and a foreign id gets an answer rather than a shrug.
  */
 function assertInEvent(rows: unknown[] | null | undefined, what: string): void {
-  if (!rows || rows.length === 0) throw new Error(`That ${what} is not part of this event.`);
+  if (!rows || rows.length === 0) throw new Error(notInEventMessage(what));
 }
 
 // ---------- Participants (global) ----------
@@ -291,7 +293,19 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
       .eq("id", data.eventParticipantId)
       .eq("event_id", data.eventId)
       .maybeSingle();
-    if (!current) throw new Error("That athlete is not part of this event.");
+    if (!current) throw new Error(notInEventMessage("athlete"));
+    // Nobody out of the field goes back on the clock by being started.
+    //
+    // Defence in depth for the stale-selection path: the Start card seeds a
+    // selection from the head of the queue and only re-read it when it was empty,
+    // so scratching that athlete — one tap, no confirm — left the button pointing
+    // at them and a tap wrote "running", erasing the scratch. The screens are
+    // fixed; this is the backstop, because `status` is a bare string here and the
+    // column has no CHECK constraint behind it. Putting somebody back in the field
+    // is its own deliberate action, and it writes a status of its own first.
+    if (data.status === "running" && OUT_OF_CONTENTION_STATUSES.has(current.participation_status)) {
+      throw new Error(OUT_OF_FIELD_MESSAGE);
+    }
     const alreadyOnClock = current.participation_status === "running";
 
     const patch =
@@ -311,6 +325,51 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
   });
 
 /**
+ * Take somebody off the crowd's clock, and nobody else.
+ *
+ * The timing console's cleanup writes — Cancel, Discard, Reset timer, and the
+ * demote of whoever was on the clock before a new start — used to go through
+ * setParticipantStatus with "waiting". That handler's "waiting" is also the
+ * roster's deliberate un-scratch, so it writes over anything, and a cancel
+ * landing after a scratch put the athlete back in the field to be timed again.
+ * The same door put a finished athlete back in the queue when Discard followed
+ * a save that had landed but not answered.
+ *
+ * So this takes no status: it moves a row from "running" to "waiting" and
+ * leaves every other row where it is. A row that is not on the clock is not an
+ * error — for every caller, leaving it alone is exactly the outcome they want.
+ */
+export const takeOffClock = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.eventId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: current } = await supabaseAdmin
+      .from("event_participants")
+      .select("participation_status")
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .maybeSingle();
+    if (!current) throw new Error(notInEventMessage("athlete"));
+    if (current.participation_status !== "running") return { ok: true, cleared: false };
+
+    // The status filter as well as the read above: another phone can scratch
+    // them between the two, and the write must lose that race, not win it.
+    const { data: cleared, error } = await supabaseAdmin
+      .from("event_participants")
+      .update(withOnClock({ participation_status: "waiting" }, null))
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .eq("participation_status", "running")
+      .select("id");
+    if (error) throw error;
+    return { ok: true, cleared: (cleared ?? []).length > 0 };
+  });
+
+/**
  * Clear the combine back to "not started yet": every run for the event goes,
  * and everybody on the roster returns to `waiting`. Scratched athletes stay
  * scratched — being out of the field is a roster decision, not a result.
@@ -320,10 +379,14 @@ export const resetCombine = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: runs } = await supabaseAdmin
+    const { data: runs, error: runsError } = await supabaseAdmin
       .from("runs")
       .select("id")
       .eq("event_id", data.eventId);
+    // Before anything else. A failed read coalesced to "no runs" skipped every
+    // delete below and still sent the field back to waiting, leaving the old
+    // times on the board for athletes about to be re-timed against them.
+    if (runsError) throw runsError;
     const runIds = (runs ?? []).map((r) => r.id);
     if (runIds.length) {
       await supabaseAdmin.from("penalties").delete().in("run_id", runIds);
@@ -350,11 +413,13 @@ export const resetParticipantRuns = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: runs } = await supabaseAdmin
+    const { data: runs, error: runsError } = await supabaseAdmin
       .from("runs")
       .select("id")
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
+    // See resetCombine: an unread failure here is a half reset.
+    if (runsError) throw runsError;
     const runIds = (runs ?? []).map((r) => r.id);
     if (runIds.length) {
       await supabaseAdmin.from("penalties").delete().in("run_id", runIds);
@@ -861,6 +926,13 @@ export const createManualRun = createServerFn({ method: "POST" })
  *
  * `official_time_ms` is a generated column (raw + penalty), so it is never
  * written here — fixing the parts fixes the total.
+ *
+ * The replace itself is one RPC, because a wholesale replace has to delete
+ * before it inserts and those were six separate requests: a failure partway
+ * left the run with a new time and no splits or penalties at all, and the audit
+ * row ran last so nothing recorded what the time had been. See
+ * supabase/migrations/20260917130000_replace_a_run_result_in_one_transaction.sql.
+ * The arithmetic below stays here; only the writing moved.
  */
 export const updateRunResult = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -910,62 +982,34 @@ export const updateRunResult = createServerFn({ method: "POST" })
 
     const penaltyTotal = data.penalties.reduce((sum, p) => sum + p.penalty_ms, 0);
 
-    const { error: updateError } = await supabaseAdmin
-      .from("runs")
-      .update({ raw_time_ms: data.raw_time_ms, penalty_ms: penaltyTotal })
-      .eq("id", run.id);
-    if (updateError) throw updateError;
-
-    const { error: delSplits } = await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
-    if (delSplits) throw delSplits;
-    const { error: delPenalties } = await supabaseAdmin
-      .from("penalties")
-      .delete()
-      .eq("run_id", run.id);
-    if (delPenalties) throw delPenalties;
-
     // Segment times are derived, not typed: sorting by cumulative time and
     // differencing keeps them consistent with whatever the commissioner entered.
     const ordered = [...data.splits].sort((a, b) => a.cumulative_time_ms - b.cumulative_time_ms);
     const startMs = run.started_at ? Date.parse(run.started_at) : Date.now();
-    if (ordered.length) {
-      const { error } = await supabaseAdmin.from("splits").insert(
-        ordered.map((s, i) => ({
-          run_id: run.id,
-          station_id: s.stationId,
-          cumulative_time_ms: s.cumulative_time_ms,
-          segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
-          recorded_at: new Date(startMs + s.cumulative_time_ms).toISOString(),
-          entry_method: "admin_edit",
-          client_key: `edit:${run.id}:${s.stationId}`,
-          corrected: true,
-        })),
-      );
-      if (error) throw error;
-    }
-    if (data.penalties.length) {
-      const { error } = await supabaseAdmin.from("penalties").insert(
-        data.penalties.map((p, i) => ({
-          run_id: run.id,
-          station_id: p.stationId ?? null,
-          penalty_ms: p.penalty_ms,
-          reason: p.reason ?? null,
-          created_by: "admin",
-          client_key: `edit:${run.id}:${i}`,
-        })),
-      );
-      if (error) throw error;
-    }
 
-    await supabaseAdmin.from("audit_logs").insert({
-      event_id: data.eventId,
-      entity_type: "runs",
-      entity_id: run.id,
-      action: "update_run_result",
-      previous_value: { raw_time_ms: run.raw_time_ms, penalty_ms: run.penalty_ms },
-      new_value: { raw_time_ms: data.raw_time_ms, penalty_ms: penaltyTotal },
-      performed_by: "admin",
+    const { runResultDb } = await import("./run-result-db.server");
+    const { error } = await runResultDb().rpc("update_run_result", {
+      _run_id: run.id,
+      _event_id: data.eventId,
+      _raw_time_ms: data.raw_time_ms,
+      _penalty_ms: penaltyTotal,
+      _splits: ordered.map((s, i) => ({
+        station_id: s.stationId,
+        cumulative_time_ms: s.cumulative_time_ms,
+        segment_time_ms: s.cumulative_time_ms - (ordered[i - 1]?.cumulative_time_ms ?? 0),
+        recorded_at: new Date(startMs + s.cumulative_time_ms).toISOString(),
+        // Derived rather than random, so a retry of a half-written save
+        // overwrites its own rows instead of doubling them.
+        client_key: `edit:${run.id}:${s.stationId}`,
+      })),
+      _penalties: data.penalties.map((p, i) => ({
+        station_id: p.stationId ?? null,
+        penalty_ms: p.penalty_ms,
+        reason: p.reason ?? null,
+        client_key: `edit:${run.id}:${i}`,
+      })),
     });
+    if (error) throw error;
 
     return { ok: true, official_time_ms: data.raw_time_ms + penaltyTotal };
   });

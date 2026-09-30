@@ -415,7 +415,7 @@ describe("the admin catalogue", () => {
           { secret_card_id: CARD_ID, participant_id: THEM },
         ],
       },
-      "member_codes.select": { data: null, count: 2 },
+      "member_codes.select": { data: [{ participant_id: ME }, { participant_id: THEM }] },
     });
     const { listSecretCards } = await import("./secret-cards.functions");
     const res = await callServerFn<{
@@ -443,7 +443,7 @@ describe("the admin catalogue", () => {
           { secret_card_id: CARD_ID, participant_id: THEM },
         ],
       },
-      "member_codes.select": { data: null, count: 2 },
+      "member_codes.select": { data: [{ participant_id: ME }, { participant_id: THEM }] },
     });
     const { listSecretCards } = await import("./secret-cards.functions");
     const res = await callServerFn<{ exhausted: boolean }>(listSecretCards, { headers: asAdmin() });
@@ -462,7 +462,7 @@ describe("the admin catalogue", () => {
           { secret_card_id: OTHER_CARD, participant_id: ME },
         ],
       },
-      "member_codes.select": { data: null, count: 2 },
+      "member_codes.select": { data: [{ participant_id: ME }, { participant_id: THEM }] },
     });
     const { listSecretCards } = await import("./secret-cards.functions");
     const res = await callServerFn<{ exhausted: boolean }>(listSecretCards, { headers: asAdmin() });
@@ -483,7 +483,7 @@ describe("the admin catalogue", () => {
           { secret_card_id: CARD_ID, participant_id: null },
         ],
       },
-      "member_codes.select": { data: null, count: 2 },
+      "member_codes.select": { data: [{ participant_id: ME }, { participant_id: THEM }] },
     });
     const { listSecretCards } = await import("./secret-cards.functions");
     const res = await callServerFn<{
@@ -493,6 +493,33 @@ describe("the admin catalogue", () => {
     // Three people hold it, and the admin sees that…
     expect(res.cards[0].ownerCount).toBe(3);
     // …but only one of the two members does.
+    expect(res.exhausted).toBe(false);
+  });
+
+  it("does not let a rotated player's old pulls declare the set exhausted", async () => {
+    // Re-issuing codes nulls `member_codes.claimed_at` and leaves every
+    // `secret_card_pulls` row standing, so the two halves of this comparison
+    // were drawn from different populations: "anyone who ever played" against
+    // "who is claimed right now". Between a rotation and everybody re-claiming
+    // their paper slip, the player who had NOT come back cleared the bar for the
+    // one who had — and the panel told the admin the drop had gone quiet while a
+    // member who is playing today still had a card to find.
+    withDb({
+      "secret_cards.select": { data: [card(CARD_ID)] },
+      "secret_card_pulls.select": { data: [{ secret_card_id: CARD_ID, participant_id: THEM }] },
+      // THEM was rotated out and has not re-claimed; only ME holds a live code.
+      "member_codes.select": { data: [{ participant_id: ME }] },
+    });
+    const { listSecretCards } = await import("./secret-cards.functions");
+    const res = await callServerFn<{
+      cards: { ownerCount: number }[];
+      claimedMembers: number;
+      exhausted: boolean;
+    }>(listSecretCards, { headers: asAdmin() });
+    // The historical pull still counts toward what the admin sees on the tile…
+    expect(res.cards[0].ownerCount).toBe(1);
+    expect(res.claimedMembers).toBe(1);
+    // …but not toward whether the people actually playing are done.
     expect(res.exhausted).toBe(false);
   });
 

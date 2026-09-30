@@ -20,7 +20,18 @@ import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
 import { urlFromSet } from "@/lib/media";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
+import { SellSpareDialog } from "@/components/sell-spare-dialog";
 import { cn } from "@/lib/utils";
+
+/**
+ * The box a pulled card's name sits in, link or not.
+ *
+ * `min-h-11 pointer-fine:min-h-0` for the reason ui/button.tsx:28 already
+ * argues: 44px is a touch guideline and a width breakpoint releases it on a
+ * landscape phone, where the thumb is still the pointer.
+ */
+const NAME_BOX =
+  "flex min-h-11 items-center justify-center font-display text-sm font-black uppercase leading-tight tracking-wide pointer-fine:min-h-0";
 
 /**
  * Where the pack ends up.
@@ -52,6 +63,8 @@ export function PackSummary({
   claiming,
   claimError,
   onClaim,
+  onSell,
+  sold,
 }: {
   /**
    * The pack as the stand showed it, slot by slot. Every number on a slot —
@@ -77,6 +90,14 @@ export function PackSummary({
   /** Inline, never a toast — see the note on the failed secret slot below. */
   claimError: string | null;
   onClaim: () => void;
+  /**
+   * Sell slot `i` for dust. Resolves to null on success or the line to show on a
+   * refusal. Absent — a guest, dust switched off — and "Sell for N" stays a
+   * price rather than a button.
+   */
+  onSell?: (index: number) => Promise<string | null>;
+  /** Dust each slot has already been sold for this visit, by slot index. */
+  sold?: Record<number, number>;
 }) {
   // The claim mints a card on the server, so it cannot be taken in a dead spot.
   // Read here rather than passed in: the button is the only thing on this screen
@@ -91,6 +112,8 @@ export function PackSummary({
   const [sharing, setSharing] = useState(false);
   const [shared, setShared] = useState(false);
   const [shareFailed, setShareFailed] = useState(false);
+  // The slot whose "Sell for" was tapped, while its question is open.
+  const [selling, setSelling] = useState<number | null>(null);
 
   // The rung above wherever they are standing. Null once all five are behind
   // them, which is the one case with nothing left to promise. The copy lives in
@@ -251,18 +274,28 @@ export function PackSummary({
                   className="text-center"
                 >
                   {/* Two lines at most. The column is 140px now rather than 80,
-                      which is what lets these read at 12px instead of 8. */}
+                      which is what lets these read at 12px instead of 8.
+
+                      The roster name is the column's only link — the card above
+                      it is a flip button, not a second route to the same place —
+                      so the touch floor goes on the link itself rather than over
+                      the card, which would stack a link on a button that does
+                      something else. It measured 140x18 (§23 F6). The secret's
+                      name is not a link and takes the same box anyway, so the
+                      captions under the three columns stay level. The clamp
+                      moves to the span: line-clamp is display:-webkit-box and
+                      cannot share an element with the flex that centres it. */}
                   {isSecret ? (
-                    <div className="line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide">
-                      {name}
+                    <div className={NAME_BOX}>
+                      <span className="line-clamp-2">{name}</span>
                     </div>
                   ) : (
                     <Link
                       to="/players/$id"
                       params={{ id: slot.id }}
-                      className="block line-clamp-2 font-display text-sm font-black uppercase leading-tight tracking-wide hover:text-primary"
+                      className={cn(NAME_BOX, "hover:text-primary")}
                     >
-                      {name}
+                      <span className="line-clamp-2">{name}</span>
                     </Link>
                   )}
                   {isSecret ? (
@@ -318,7 +351,24 @@ export function PackSummary({
                   {/* The same offer the stand makes on a spare, in the same
                       words, for either kind of card. It used to end with the
                       sequence. */}
-                  {sellValue ? (
+                  {sold?.[i] != null ? (
+                    <div className="text-label font-black uppercase tracking-[0.08em] text-muted-foreground">
+                      Sold · +{sold[i]}
+                    </div>
+                  ) : sellValue && onSell && (slot.kind !== "secret" || slot.pullId) ? (
+                    // The same words, now something to press. min-h-11 for the
+                    // thumb: this was a caption and is now the only way to act
+                    // on the card from here.
+                    <button
+                      type="button"
+                      onClick={() => setSelling(i)}
+                      disabled={offline}
+                      {...offlineReason(offline)}
+                      className="inline-flex min-h-11 items-center justify-center self-center rounded-full px-3 text-label font-black uppercase tracking-[0.08em] text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary disabled:opacity-55 pointer-fine:min-h-0"
+                    >
+                      Sell for {sellValue}
+                    </button>
+                  ) : sellValue ? (
                     <div className="text-label font-black uppercase tracking-[0.08em] text-primary">
                       Sell for {sellValue}
                     </div>
@@ -329,6 +379,31 @@ export function PackSummary({
           );
         })}
       </div>
+
+      {(() => {
+        // One dialog for the row, pointed at whichever slot was tapped, and
+        // keyed on it so a refusal said about one card is not shown on the next.
+        const target = selling == null ? null : slots[selling];
+        if (!onSell || !target?.sellValue) return null;
+        const index = selling as number;
+        return (
+          <SellSpareDialog
+            key={index}
+            open
+            onOpenChange={(next) => {
+              if (!next) setSelling(null);
+            }}
+            name={
+              target.slot.kind === "secret"
+                ? target.slot.card.name
+                : (target.ep?.participant?.name ?? "this card")
+            }
+            value={target.sellValue}
+            copiesLeft={target.copies == null ? null : Math.max(0, target.copies - 1)}
+            onConfirm={() => onSell(index)}
+          />
+        );
+      })()}
 
       {/* Above the running total, because a reward you just earned outranks a
           number that only went up by one. Absent entirely at streak zero: a first
@@ -464,7 +539,7 @@ export function PackSummary({
       </div>
 
       {/* Polite, so it does not interrupt the reveal it sits under. */}
-      <p role="status" aria-live="polite" className="mt-2 text-center text-xs text-warn">
+      <p role="status" aria-live="polite" className="mt-2 text-center text-meta text-warn">
         {shareFailed ? "Couldn't build that image — try again in a moment." : ""}
       </p>
 

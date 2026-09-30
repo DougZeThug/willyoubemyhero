@@ -12,12 +12,15 @@ import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds } from "@/test/f
 import { STREAK_MILESTONES } from "@/lib/streaks";
 import { isHapticsOff, setCardSfxMuted, setHapticsOff } from "@/lib/card-sfx";
 import { isTiltWanted, setTiltWanted } from "@/lib/gyro";
+import { setAccountSyncState } from "@/lib/account-sync-state";
+import { WAS_MEMBER_KEY } from "@/lib/member-token";
 
 const useMemberSession = vi.fn();
 const useActiveEvent = vi.fn();
 const useStreakStatus = vi.fn();
 const useQuery = vi.fn();
 const requestGyroAccess = vi.fn();
+const useMyCollection = vi.fn();
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -60,20 +63,15 @@ vi.mock("@/hooks/use-secret-collections", () => ({ useSecretCollections: () => u
 vi.mock("@/hooks/use-collection-trophies", () => ({
   useCollectionTrophies: () => ({ data: { trophies: [] } }),
 }));
-vi.mock("@/hooks/use-streak", () => ({ useStreakStatus: () => useStreakStatus() }));
-vi.mock("@/hooks/use-dust", () => ({ useDustBalance: () => ({ data: { balance: 140 } }) }));
-vi.mock("@/hooks/use-my-collection", () => ({
-  useMyCollection: () => ({
-    collection: {},
-    collectedCount: 3,
-    packsOpened: 7,
-    dupes: 2,
-    firstPackOn: null,
-    ready: true,
-    isMember: true,
-    markCollected: vi.fn(),
-  }),
+// Only the hook is stubbed. streakHistoryKey is a pure key factory, and a mock
+// that replaced it would hand this screen a different cache key than the claim
+// invalidates — which is the drift the shared factory exists to stop.
+vi.mock("@/hooks/use-streak", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/use-streak")>()),
+  useStreakStatus: () => useStreakStatus(),
 }));
+vi.mock("@/hooks/use-dust", () => ({ useDustBalance: () => ({ data: { balance: 140 } }) }));
+vi.mock("@/hooks/use-my-collection", () => ({ useMyCollection: () => useMyCollection() }));
 vi.mock("@/hooks/use-account", () => ({
   useAuthUser: () => ({ user: null, loading: false }),
   signOutAccount: vi.fn(),
@@ -122,8 +120,24 @@ const streak = {
   })),
 };
 
+/** What the hook hands back once it trusts its own answer. */
+const COLLECTION = {
+  collection: {},
+  collectedCount: 3,
+  packsOpened: 7,
+  dupes: 2,
+  firstPackOn: null,
+  ready: true,
+  isMember: true,
+  markCollected: vi.fn(),
+};
+
 beforeEach(() => {
   resetFixtureIds();
+  // The breadcrumb outlives its token by design, so it also outlives a test.
+  localStorage.removeItem(WAS_MEMBER_KEY);
+  setAccountSyncState({ status: "idle", userId: null, message: null });
+  useMyCollection.mockReturnValue(COLLECTION);
   useMemberSession.mockReturnValue({ participantId: "p-me", name: "Bob Blitz", expiresAt: 0, token: "t" }); // prettier-ignore
   useActiveEvent.mockReturnValue({ data: { id: EVENT_ID, dust_enabled: false } });
   useStreakStatus.mockReturnValue({ data: streak, isPending: false });
@@ -156,6 +170,55 @@ describe("/you", () => {
     expect(screen.getByText(/roster 3 \/ 5/i)).toBeInTheDocument();
     expect(screen.getByText(/7 packs opened/i)).toBeInTheDocument();
     expect(screen.getByText(/2 spares to trade/i)).toBeInTheDocument();
+  });
+
+  // The vault's gate, which this screen was written without. `useMyCollection`
+  // settles off the local store while an account is still being linked, and that
+  // store belongs to the HANDSET — so on a phone the league passes around, the
+  // held count printed here is the last person's, stated as this one's.
+  it("states no collection number while the account is still being linked", () => {
+    setAccountSyncState({ status: "syncing", userId: "auth-2", message: null });
+    render(<YouPage />);
+    expect(screen.getByText(/counting your cards/i)).toBeInTheDocument();
+    expect(screen.queryByText(/roster 3 \/ 5/i)).not.toBeInTheDocument();
+    // Nor the quieter version of the same mistake underneath it.
+    expect(screen.queryByText(/packs opened/i)).not.toBeInTheDocument();
+  });
+
+  it("prints them again the moment the link lands", () => {
+    setAccountSyncState({ status: "ready", userId: "auth-2", message: null });
+    render(<YouPage />);
+    expect(screen.getByText(/roster 3 \/ 5/i)).toBeInTheDocument();
+  });
+
+  // The same handset, one window later. `syncing` covers the minute an account
+  // takes to link; this covers every minute between one player signing out and
+  // the next one claiming, which at a party is most of the evening.
+  it("states no collection number on a signed-out phone that has been signed in", () => {
+    useMemberSession.mockReturnValue(null);
+    localStorage.setItem(WAS_MEMBER_KEY, "1");
+    // No member token means no stats query, so the local store is all the hook
+    // has — and nothing clears it on sign-out. This is the last person's 3.
+    useMyCollection.mockReturnValue({ ...COLLECTION, isMember: false });
+    render(<YouPage />);
+    expect(screen.getByText(/counting your cards/i)).toBeInTheDocument();
+    expect(screen.queryByText(/roster 3 \/ 5/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/packs opened/i)).not.toBeInTheDocument();
+  });
+
+  it("still counts a guest's own cards on a phone nobody has claimed on", () => {
+    // No breadcrumb, so there is no earlier person for the store to belong to.
+    // A guest's cards are a guest's cards.
+    useMemberSession.mockReturnValue(null);
+    useMyCollection.mockReturnValue({ ...COLLECTION, isMember: false });
+    render(<YouPage />);
+    expect(screen.getByText(/roster 3 \/ 5/i)).toBeInTheDocument();
+  });
+
+  it("keeps counting while the collection itself is unsettled", () => {
+    useMyCollection.mockReturnValue({ ...COLLECTION, ready: false });
+    render(<YouPage />);
+    expect(screen.getByText(/counting your cards/i)).toBeInTheDocument();
   });
 
   it("never prints how many secrets exist", () => {

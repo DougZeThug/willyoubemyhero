@@ -106,6 +106,26 @@ describe("StreakLadder", () => {
     );
   });
 
+  it("says on the rung what a claimable one is waiting for", () => {
+    // §23 F12. "Waiting" with the reason two sections up under ACCOUNT is not a
+    // reason anybody reading a rung can see.
+    render(<StreakLadder streak={streak({ current: 8, canClaim: false })} history={[]} />);
+    const three = screen.getByText("Three Days").closest("li")!;
+    expect(within(three).getByText(/an account is what claims it/i)).toBeInTheDocument();
+  });
+
+  it("says it once, on the rung that is actually next", () => {
+    render(<StreakLadder streak={streak({ current: 8, canClaim: false })} history={[]} />);
+    const week = screen.getByText("One Week").closest("li")!;
+    expect(within(week).queryByText(/an account/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/an account is what claims it/i)).toHaveLength(1);
+  });
+
+  it("keeps the reason off a rung somebody can already claim", () => {
+    render(<StreakLadder streak={streak({ current: 8 })} history={[]} />);
+    expect(screen.queryByText(/an account/i)).not.toBeInTheDocument();
+  });
+
   it("promises the next rung when nothing is waiting", () => {
     const s = streak({ current: 8 });
     s.milestones = s.milestones.map((m) => (m.earned ? { ...m, claimed: true } : m));

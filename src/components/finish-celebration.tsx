@@ -4,11 +4,14 @@ import { motion, AnimatePresence } from "motion/react";
 import { formatTime } from "@/lib/format";
 
 export function FinishCelebration({
+  runId,
   name,
   timeMs,
   deltaMs,
   onDone,
 }: {
+  /** Which run this celebration is for. See the effect deps below. */
+  runId: string | null;
   name: string | null;
   timeMs: number | null;
   deltaMs: number | null;
@@ -62,8 +65,14 @@ export function FinishCelebration({
       cancelled = true;
       clearTimeout(t);
     };
-    // timeMs distinguishes back-to-back finishes by the same athlete.
-  }, [name, timeMs]);
+    // The run id, because it is the only thing here that is unique per
+    // celebration. /live advances its queue with slice(1), which promotes the
+    // next finisher in the same commit — there is no null render in between —
+    // so these deps are the only thing that re-arms the confetti and the
+    // dismiss timer. name+timeMs looked unique enough and is not: two official
+    // runs for one athlete can carry the same time, and then the second
+    // finisher got a static overlay that sat there until somebody tapped it.
+  }, [runId, name, timeMs]);
 
   return (
     <AnimatePresence>
@@ -103,7 +112,7 @@ export function FinishCelebration({
               {formatTime(timeMs ?? 0)}
             </div>
             {deltaMs != null && (
-              <div className="mt-2 text-sm font-bold uppercase tracking-widest">
+              <div className="mt-2 text-sm font-bold uppercase tracking-[0.08em]">
                 {deltaMs === 0 ? (
                   <span className="text-primary">New leader</span>
                 ) : (

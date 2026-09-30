@@ -149,6 +149,17 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
                         {d.secrets} secret{d.secrets === 1 ? "" : "s"}
                         <span className="block text-[11px] font-semibold text-muted-foreground">
                           {d.packOpens} pack{d.packOpens === 1 ? "" : "s"}
+                          {/* Only when there are any. A device is listed the
+                              moment it holds packs or rungs as well as secrets,
+                              so a row reading "0 secrets, 0 packs" with nothing
+                              else on it would be the panel pointing at a device
+                              and declining to say why. */}
+                          {d.milestoneClaims > 0 && (
+                            <>
+                              {" "}
+                              · {d.milestoneClaims} rung{d.milestoneClaims === 1 ? "" : "s"}
+                            </>
+                          )}
                         </span>
                       </span>
                       <ChevronDown
@@ -172,7 +183,12 @@ export function OwnershipAuditPanel({ eventId }: { eventId: string }) {
                             // Every neighbouring dropdown carries one; this
                             // was the only one announcing itself as "combo box".
                             aria-label="Which player this device belongs to"
-                            className="min-h-10 w-full min-w-0 rounded-md border border-primary/30 bg-background px-2 text-xs uppercase tracking-wider text-foreground"
+                            // 40px and 12px unconditionally, where its neighbours are
+                            // touch-first with a `pointer-fine:` release. Under
+                            // 16px iOS zooms the page on focus, and this is the
+                            // one control that ends a "why can't I see my card"
+                            // conversation.
+                            className="min-h-11 w-full min-w-0 rounded-md border border-primary/30 bg-background px-2 text-base uppercase tracking-wider text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
                             value={targets[d.guestId] ?? ""}
                             onChange={(e) =>
                               setTargets((t) => ({ ...t, [d.guestId]: e.target.value }))
@@ -299,7 +315,7 @@ function Stat({ label, value, muted }: { label: string; value: number | string; 
       )}
     >
       <span className="block text-xs font-bold tabular-nums leading-tight">{value}</span>
-      <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+      <span className="block text-label uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
     </span>

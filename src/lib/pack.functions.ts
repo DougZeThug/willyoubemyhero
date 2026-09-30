@@ -119,6 +119,9 @@ export const openPack = createServerFn({ method: "POST" }).handler(
       cards.push({
         kind: "secret",
         id: slot.id,
+        // The row the sale on the pack screen deletes. It is the caller's own —
+        // sell_secret_card re-checks that under lock — so nothing is revealed.
+        pullId: slot.pullId,
         card: await signSecretCard(row, slot.tier),
         duplicate: slot.duplicate,
         tierBefore: slot.tierBefore ?? null,
@@ -148,7 +151,14 @@ export const getPackStatus = createServerFn({ method: "GET" }).handler(
     noStore();
     const actor = optionalActor();
     if (!actor) {
-      return { claimed: false, day: null, openedToday: false, secretsOwned: 0, resetsAt: null };
+      return {
+        claimed: false,
+        day: null,
+        openedToday: false,
+        dealable: false,
+        secretsOwned: 0,
+        resetsAt: null,
+      };
     }
     const { data, error } = await (
       await rpc()

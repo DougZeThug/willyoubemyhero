@@ -151,6 +151,27 @@ describe("EditResultSheet", () => {
     ]);
   });
 
+  it("puts a leg typed past the hundredths on the same grid as the course time", async () => {
+    // parseTime keeps three decimals; the course box keeps two. The leg used to
+    // be saved as typed under a rounded course time, and the server's segment
+    // times — what stationKing is awarded on — came out 5ms short.
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.type(screen.getByLabelText("FLIP time"), "15.005");
+
+    const course = screen.getByLabelText(/course time/i) as HTMLInputElement;
+    await waitFor(() => expect(course.value).toBe("15.01"));
+    expect(screen.getByText("at 15.01")).toBeInTheDocument();
+    expect(screen.queryByText(/from splits/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /add result/i }));
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    const sent = serverFnMock.mock.calls[0]?.[0].data;
+    expect(sent.raw_time_ms).toBe(15_010);
+    expect(sent.splits).toEqual([{ stationId: "a", cumulative_time_ms: 15_010 }]);
+  });
+
   it("re-saves an existing result without shaving time off it", async () => {
     // Opening a result and saving it untouched used to drift down a hundredth
     // per leg, because the boxes were seeded from a truncating formatter.

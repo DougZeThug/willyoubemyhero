@@ -214,6 +214,12 @@ export type HoloCardProps = {
    * the gesture would trap the scroll across half the screen.
    */
   tilt?: TiltVariant;
+  /**
+   * This card sits on a page that scrolls, so the vertical axis stays the
+   * browser's. Only matters for `tilt="hero"`, which otherwise claims both axes
+   * and traps the scroll across most of a phone screen.
+   */
+  pageScroll?: boolean;
   /** Device-orientation tilt, enabled by the caller after a permission grant. */
   gyro?: boolean;
   /** Start face-down (shows the back) regardless of art availability. */
@@ -238,6 +244,16 @@ export type HoloCardProps = {
   backContent?: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  /**
+   * On screen, but not taking a tap right now.
+   *
+   * Not the same as handing it no `onClick`: a card without one falls through to
+   * its own flip in `handleClick`, so "no handler" turns the tap into a flip
+   * rather than refusing it. This refuses it, and says so — `aria-disabled` and
+   * no pointer cursor — because a control that looks pressable and does nothing
+   * is worse than one that looks unavailable.
+   */
+  tapDisabled?: boolean;
 };
 
 function HoloCardImpl({
@@ -253,6 +269,7 @@ function HoloCardImpl({
   flickToFlip = true,
   intensity = "full",
   tilt = "calm",
+  pageScroll = false,
   gyro = false,
   faceDown = false,
   flipMs = DEFAULT_FLIP_MS,
@@ -260,6 +277,7 @@ function HoloCardImpl({
   backContent,
   className,
   onClick,
+  tapDisabled = false,
 }: HoloCardProps) {
   const sceneRef = useRef<HTMLDivElement>(null);
   const tiltRef = useRef<HTMLDivElement>(null);
@@ -598,6 +616,7 @@ function HoloCardImpl({
   }
 
   function handleClick() {
+    if (tapDisabled) return;
     // A flick already turned the card; the click the browser synthesises after
     // that same pointerup would turn it straight back.
     if (flickedRef.current) {
@@ -660,7 +679,13 @@ function HoloCardImpl({
     // mid-gesture does nothing to the in-flight gesture, and re-capturing after a
     // pointercancel cannot reclaim a pan. The only alternative is "none" plus a JS
     // scroll proxy, which costs momentum and rubber-banding.
-    touchAction: dragTilt && interactive && !reduced ? t.touchAct : undefined,
+    // ...except where the card sits on a page that still has to scroll under a
+    // thumb. A hero card is most of a phone screen, so "none" there means the
+    // page cannot be scrolled from anywhere the card covers. `pageScroll` gives
+    // the vertical axis back to the browser and keeps the rest — the lean on
+    // touch is then horizontal only, which is the trade those callers want.
+    touchAction:
+      dragTilt && interactive && !reduced ? (pageScroll ? "pan-y" : t.touchAct) : undefined,
   } as React.CSSProperties;
 
   // A resting card only crawls if the tier earned it, and only at hero size —
@@ -768,6 +793,7 @@ function HoloCardImpl({
           tabIndex={canFlip || onClick ? 0 : undefined}
           aria-labelledby={titleId}
           aria-pressed={canFlip ? isFlipped : undefined}
+          aria-disabled={tapDisabled || undefined}
           onClick={handleClick}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -779,7 +805,7 @@ function HoloCardImpl({
             "relative h-full w-full rounded-xl border shadow-2xl outline-none",
             "transition-transform [transform-style:preserve-3d]",
             "focus-visible:ring-2 focus-visible:ring-primary",
-            (canFlip || onClick) && "cursor-pointer",
+            (canFlip || onClick) && !tapDisabled && "cursor-pointer",
             turning && "holo-turning",
             // The shine only fires on the way to the *front*. Turning a card back
             // over to read its stats is navigation, and a specular pass on it
@@ -818,7 +844,7 @@ function HoloCardImpl({
           <span id={titleId} className="sr-only">
             {name} — {rarity.label} card
             {editionLabel(edition) ? `, ${editionLabel(edition)}` : ""}
-            {canFlip ? ", press to flip" : ""}
+            {canFlip && !tapDisabled ? ", press to flip" : ""}
           </span>
 
           {/* Front. `invisible` rather than backface-visibility alone — see the

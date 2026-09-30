@@ -216,7 +216,7 @@ export function TodayCard({
       {/* The done state's second line, and the only place the old streak sentence
           survives — it is the reason to come back tomorrow, said on the day you
           have already been. */}
-      <div className="mt-1 min-h-4 text-xs font-bold" style={{ color: AMBER }}>
+      <div className="mt-1 min-h-4 text-meta font-bold" style={{ color: AMBER }}>
         {pack.state === "done" && streak ? streakLine(streak) : null}
       </div>
 

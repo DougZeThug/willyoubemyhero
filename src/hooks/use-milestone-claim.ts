@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { packStatusKey } from "@/hooks/use-pack-status";
-import { streakStatusKey } from "@/hooks/use-streak";
+import { streakHistoryKey, streakStatusKey } from "@/hooks/use-streak";
 import { claimStreakMilestone, type StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { StreakStatus } from "@/lib/streaks.functions";
 import { streakMilestone } from "@/lib/streaks";
@@ -57,7 +57,13 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
     days: new Set(),
   });
   const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
+  // The refusal, and the rung it was said about — run and days, the same key
+  // `claimedRef` uses. See `claimError` below.
+  const [claimFailure, setClaimFailure] = useState<{
+    run: string | null;
+    days: number;
+    message: string;
+  } | null>(null);
   const [milestoneReveal, setMilestoneReveal] = useState<MilestoneRevealState | null>(null);
 
   /** Everything a claim can have moved, for whichever actor spent it. */
@@ -69,6 +75,13 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
         // A bonus pull is a non-duplicate row like any other, so the "pulled"
         // count behind the secret slot moves with it.
         qc.invalidateQueries({ queryKey: packStatusKey(who) }),
+        // The row this claim just wrote is the newest one /you's history selects,
+        // and nothing else ever refreshes that list: streak_milestone_claims is
+        // deliberately off the realtime publication, so there is no catch-up to
+        // wait for. Without this the ladder contradicts itself for five minutes —
+        // the rung reads "Claimed" off the status above while "What you claimed"
+        // omits the card it paid.
+        qc.invalidateQueries({ queryKey: streakHistoryKey(who) }),
       ]);
     },
     [qc],
@@ -88,7 +101,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
     claimedRef.current = { run: null, days: new Set() };
     claimingRef.current = false;
     setClaiming(false);
-    setClaimError(null);
+    setClaimFailure(null);
     setMilestoneReveal(null);
   }, [actor]);
 
@@ -103,12 +116,27 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
   const claimable: StreakMilestoneStatus | null =
     streak?.milestones.filter((m) => m.earned && !m.claimed && !shown.has(m.days)).at(-1) ?? null;
 
+  // Only while the button still offers the rung the refusal was about. A
+  // "claimed" refusal refetches the ladder, and on a long streak that moves the
+  // button down a rung — so an error held on its own sat under "Claim" for the
+  // NEXT rung, telling somebody a card they had not collected was already in
+  // their vault. Compared during render rather than cleared from an effect, for
+  // the reason `shown` is: an effect leaves the stale line up for a frame.
+  //
+  // The run is half the key, as it is for `claimedRef`. A broken-and-rebuilt run
+  // offers the same numbers again, and keyed on `days` alone the old run's
+  // refusal came back under a rung on the new run that was genuinely claimable.
+  const claimError =
+    claimFailure && claimFailure.run === run && claimFailure.days === claimable?.days
+      ? claimFailure.message
+      : null;
+
   const claim = useCallback(
     async (days: number) => {
       if (claimingRef.current) return;
       claimingRef.current = true;
       setClaiming(true);
-      setClaimError(null);
+      setClaimFailure(null);
       // The actor this request is being sent AS. Every write below is guarded on
       // it still being the one holding the phone when the answer lands.
       const mine = actor;
@@ -119,21 +147,28 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
           // Every one of these is something to say on the button. `claimed` is
           // the one a person can actually hit by tapping twice on a flaky
           // connection, and it means the card is already theirs.
-          setClaimError(
-            res.reason === "claimed"
-              ? "Already collected — it's in your vault."
-              : res.reason === "account_required"
-                ? "Sign in first to keep it."
-                : res.reason === "not_earned"
-                  ? "That streak isn't there yet."
-                  : "Nothing to give out right now. Try again in a bit.",
-          );
+          setClaimFailure({
+            run,
+            days,
+            message:
+              res.reason === "claimed"
+                ? "Already collected — it's in your vault."
+                : res.reason === "account_required"
+                  ? "Sign in first to keep it."
+                  : res.reason === "not_earned"
+                    ? "That streak isn't there yet."
+                    : "Nothing to give out right now. Try again in a bit.",
+          });
           // "Already collected" means somebody — another device, or a first
           // attempt whose response was lost — has banked the card. Everything
           // this screen believes about the ladder and the collection is a
           // response behind, so ask again rather than leaving the button
           // offering a rung that is already spent.
-          if (res.reason === "claimed") await invalidateActor(mine);
+          //
+          // `unavailable` too, which is also the fallback for an answer that
+          // carried no reason at all: from here there is no telling whether that
+          // one spent the rung, and a refetch is the cheap half of the guess.
+          if (res.reason === "claimed" || res.reason === "unavailable") await invalidateActor(mine);
           return;
         }
         // Keyed on the run the SERVER recorded this claim against, falling back
@@ -166,7 +201,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
         await invalidateActor(mine);
       } catch {
         if (actorRef.current !== mine) return;
-        setClaimError("No signal. Tap to try again.");
+        setClaimFailure({ run, days, message: "No signal. Tap to try again." });
       } finally {
         // Only the sender's own latch. Clearing it after the phone changed hands
         // would hand the next person a control the reset effect had just armed.

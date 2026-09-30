@@ -192,6 +192,21 @@ describe("openPack", () => {
     });
   });
 
+  it("carries the pull id, so the pack screen can sell the copy it just dealt", async () => {
+    withDb({
+      "rpc.open_pack": dealt([secret(CARD_ID), secret(OTHER_CARD, { pullId: "p2" })]),
+      "secret_cards.select": { data: [card(CARD_ID), card(OTHER_CARD)] },
+    });
+    const { openPack } = await import("./pack.functions");
+    const res = await callServerFn<OpenPackResponse>(openPack, { headers: asMe() });
+    expect(res).toMatchObject({
+      cards: [
+        { id: CARD_ID, pullId: "p1" },
+        { id: OTHER_CARD, pullId: "p2" },
+      ],
+    });
+  });
+
   it("carries a secret's duplicate flag, the level it beat, and the set it finished", async () => {
     // The set size is the designed exception to the silence rule and the only
     // number in this response that ever describes the catalogue. It arrives
@@ -259,6 +274,7 @@ describe("getPackStatus", () => {
       claimed: false,
       day: null,
       openedToday: false,
+      dealable: false,
       secretsOwned: 0,
       resetsAt: null,
     });
@@ -269,7 +285,7 @@ describe("getPackStatus", () => {
   it("asks about the token holder", async () => {
     withDb({
       "rpc.pack_status": {
-        data: { day: "2026-09-08", openedToday: true, secretsOwned: 2, resetsAt: "2026-09-09T04:00:00Z" }, // prettier-ignore
+        data: { day: "2026-09-08", openedToday: true, dealable: true, secretsOwned: 2, resetsAt: "2026-09-09T04:00:00Z" }, // prettier-ignore
       },
     });
     const { getPackStatus } = await import("./pack.functions");
@@ -282,13 +298,14 @@ describe("getPackStatus", () => {
       claimed: true,
       day: "2026-09-08",
       openedToday: true,
+      dealable: true,
       secretsOwned: 2,
       resetsAt: "2026-09-09T04:00:00Z",
     });
   });
 
   it("asks about a guest by their guest id", async () => {
-    withDb({ "rpc.pack_status": { data: { day: "2026-09-08", openedToday: false, secretsOwned: 0, resetsAt: "x" } } }); // prettier-ignore
+    withDb({ "rpc.pack_status": { data: { day: "2026-09-08", openedToday: false, dealable: true, secretsOwned: 0, resetsAt: "x" } } }); // prettier-ignore
     const { getPackStatus } = await import("./pack.functions");
     await callServerFn(getPackStatus, { headers: asGuest() });
     expect(mock.client.rpc).toHaveBeenCalledWith("pack_status", {

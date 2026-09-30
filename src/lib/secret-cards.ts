@@ -504,11 +504,23 @@ export function groupBySecretCollection<T extends { collection?: string | null }
       groups.delete(c.id);
     }
   }
-  // Anything stored but not in the list (a retired id), then the unsorted pile.
+  // Anything stored but not in the list, then the unsorted pile.
   const unsorted = groups.get(null);
   groups.delete(null);
+  // WITHOUT `sets`, and that is the fix rather than an oversight. The loop above
+  // consumed every id `sets` names, so nothing reaching here is in it — passing
+  // it on could only ever miss, and the label fell through to the raw slug.
+  //
+  // Two different things end up here and only one of them wants that. A retired
+  // id has no label anywhere and renders as itself, which is the documented
+  // intent. But an admin can also HIDE a shipped set while cards are still filed
+  // under it in somebody's vault, and getSecretCollections only returns active
+  // ones — so the vault's shelf printed `legacyPets` over cards whose own chip
+  // read "Legacy Pets", because SetChip already downgrades to SECRET_COLLECTIONS
+  // for exactly this case and the shelf did not. Defaulting does the same thing
+  // here, so the two surfaces agree about the same cards.
   for (const [id, items] of groups)
-    ordered.push({ id, label: secretCollectionLabel(id, sets), accent: null, items });
+    ordered.push({ id, label: secretCollectionLabel(id), accent: null, items });
   if (unsorted)
     ordered.push({ id: null, label: UNSORTED_COLLECTION_LABEL, accent: null, items: unsorted });
 

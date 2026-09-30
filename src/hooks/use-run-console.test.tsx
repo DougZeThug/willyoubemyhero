@@ -6,12 +6,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/query";
 import { makeBundle, makeParticipant, resetFixtureIds, uuid } from "@/test/fixtures";
+import { OUT_OF_FIELD_MESSAGE } from "@/lib/current-athlete";
+import { ACTIVE_RUN_VERSION } from "@/lib/active-run";
 
 const setParticipantStatus = vi.hoisted(() => vi.fn());
 const resetParticipantRuns = vi.hoisted(() => vi.fn());
+const takeOffClock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/admin-write.functions", () => ({
   setParticipantStatus: (...args: unknown[]) => setParticipantStatus(...args),
   resetParticipantRuns: (...args: unknown[]) => resetParticipantRuns(...args),
+  takeOffClock: (...args: unknown[]) => takeOffClock(...args),
 }));
 
 const useServerFn = vi.hoisted(() => vi.fn((fn: unknown) => fn));
@@ -72,6 +76,7 @@ beforeEach(() => {
   resetFixtureIds();
   setParticipantStatus.mockReset().mockResolvedValue({ ok: true });
   resetParticipantRuns.mockReset().mockResolvedValue({ clearedRuns: 1 });
+  takeOffClock.mockReset().mockResolvedValue({ ok: true, cleared: true });
   loadActiveRun.mockReset().mockResolvedValue(null);
   saveActiveRun.mockReset().mockResolvedValue(undefined);
   clearActiveRun.mockReset().mockResolvedValue(undefined);
@@ -110,6 +115,40 @@ describe("useRunConsole", () => {
     });
   });
 
+  it("starts the athlete it is handed, with nothing picked", async () => {
+    // Live's bar never writes its default to the selection — it shows whoever is
+    // next and hands that athlete over on the tap. Reading the selection alone
+    // meant the common case, one tap on Start, wrote no run at all.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const { result } = await mount([alice]);
+
+    expect(result.current.selectedParticipantId).toBe("");
+    await act(async () => {
+      await result.current.startRun(alice.participant_id);
+    });
+
+    expect(result.current.run?.participantId).toBe(alice.participant_id);
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "running" },
+    });
+  });
+
+  it("prefers the athlete it is handed over the one already picked", async () => {
+    // The bar passes whatever its picker is showing, which IS the selection once
+    // the commissioner has touched it — but if the two ever disagree, the one the
+    // person is looking at wins.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });
+    const { result } = await mount([alice, bob]);
+
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun(bob.participant_id);
+    });
+
+    expect(result.current.run?.participantId).toBe(bob.participant_id);
+  });
+
   it("does not crash or call the server when the selected athlete is removed from the roster", async () => {
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
     const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });
@@ -146,6 +185,114 @@ describe("useRunConsole", () => {
     rerender();
 
     await waitFor(() => expect(result.current.selectedParticipantId).toBe(""));
+  });
+
+  it("refuses to start an athlete who was scratched out from under the selection", async () => {
+    // A scratch keeps the roster row, so the effect above never fires and the
+    // selection stays pointing at them. Starting writes "running", which
+    // un-scratches them and puts them back on the crowd clock — from a button
+    // whose own card had already stopped listing them.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const bob = makeParticipant({ participant: { id: uuid(), name: "Bob", nickname: null } });
+
+    const { result, rerender } = await mount([alice, bob]);
+    act(() => result.current.setSelected(alice.participant_id));
+
+    useEventBundle.mockReturnValue(
+      setupBundle([{ ...alice, participation_status: "scratched" }, bob]),
+    );
+    rerender();
+
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(toastError).toHaveBeenCalledWith("That athlete is out of the field.");
+    expect(result.current.selectedParticipantId).toBe("");
+    expect(result.current.run).toBeNull();
+    expect(saveActiveRun).not.toHaveBeenCalled();
+    expect(setParticipantStatus).not.toHaveBeenCalled();
+  });
+
+  it.each(["finished", "dq", "dnp", "absent"])(
+    "refuses to start a %s athlete named outright",
+    async (status) => {
+      // Live's bar passes the athlete explicitly rather than through the
+      // selection, so the guard has to sit in startRun itself.
+      const alice = makeParticipant({
+        participant: { id: uuid(), name: "Alice", nickname: null },
+        participation_status: status,
+      });
+      const { result } = await mount([alice]);
+
+      await act(async () => {
+        await result.current.startRun(alice.participant_id);
+      });
+
+      expect(setParticipantStatus).not.toHaveBeenCalled();
+      expect(result.current.run).toBeNull();
+    },
+  );
+
+  it("takes the local run back when the server refuses the start", async () => {
+    // The client check reads THIS device's last bundle, so another phone
+    // scratching the athlete in between gets past it and the server refuses. The
+    // timer is already running and saved by then — and a run left standing writes
+    // the athlete to "finished" when it is finished, undoing the scratch through
+    // a door the server guard does not cover.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    setParticipantStatus.mockRejectedValue(new Error("That athlete is out of the field."));
+
+    const { result } = await mount([alice]);
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(result.current.run).toBeNull();
+    expect(clearActiveRun).toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith("That athlete is out of the field.");
+  });
+
+  it("takes it back for the other refusal too, a roster row that is gone", async () => {
+    // setParticipantStatus has two ways to refuse a start, and only one of them
+    // says "out of the field". Deleting the athlete off the roster makes its
+    // membership read come back empty, and that sentence used to fall through to
+    // the network branch below — leaving a timer running for somebody who no
+    // longer exists. Finishing it writes an official run with no roster row
+    // behind it, which standings() ranks anyway.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    setParticipantStatus.mockRejectedValue(new Error("That athlete is not part of this event."));
+
+    const { result } = await mount([alice]);
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(result.current.run).toBeNull();
+    expect(clearActiveRun).toHaveBeenCalled();
+    // The sentence startRun's own pre-flight uses for the same condition, rather
+    // than the server's wording about events, which means nothing on this screen.
+    expect(toastError).toHaveBeenCalledWith("That athlete is no longer on the roster.");
+  });
+
+  it("keeps the local run when the start write only failed on the network", async () => {
+    // The other half of the same branch, and the reason it is a branch at all: a
+    // commissioner is standing in a garden with somebody already running, and a
+    // blip must not take the timer away.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    setParticipantStatus.mockRejectedValue(new Error("Failed to fetch"));
+
+    const { result } = await mount([alice]);
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(result.current.run?.participantId).toBe(alice.participant_id);
+    expect(result.current.run?.status).toBe("running");
+    expect(clearActiveRun).not.toHaveBeenCalled();
   });
 
   it("pauses and resumes the active run", async () => {
@@ -233,6 +380,104 @@ describe("useRunConsole", () => {
     expect(result.current.run?.splits).toHaveLength(0);
   });
 
+  /**
+   * A run stopped but not yet saved — the failed-save window, where the console
+   * shows Retry save and Discard and the Stations & Splits list stays on screen
+   * underneath them.
+   */
+  function storeFinishedRun(participantId: string) {
+    loadActiveRun.mockResolvedValue({
+      v: ACTIVE_RUN_VERSION,
+      clientKey: "ck-run",
+      eventId: EVENT_ID,
+      participantId,
+      startedAtIso: "2026-07-28T12:00:00.000Z",
+      startedAt: Date.now() - 40_000,
+      status: "finished",
+      pauses: [],
+      splits: [
+        {
+          clientKey: "ck-split",
+          stationId: uuid(),
+          cumulative_time_ms: 12_000,
+          segment_time_ms: 12_000,
+          recorded_at: "2026-07-28T12:00:12.000Z",
+        },
+      ],
+      penalties: [],
+      finishedAtIso: "2026-07-28T12:00:40.000Z",
+      finishedAt: Date.now(),
+    });
+  }
+
+  it("will not undo a split on a run that has already finished", async () => {
+    // Retry save re-sends the record as it stands, and the splits go up with
+    // `onConflict: "client_key"` — an upsert can add and update but cannot
+    // delete a row by absence. So an undo here, after a save that committed the
+    // splits and then failed, is dropped on the server while the retry reports
+    // "Run saved". The console's Undo button stayed live through that whole
+    // window.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    storeFinishedRun(alice.participant_id);
+    const { result } = await mount([alice]);
+    await waitFor(() => expect(result.current.run?.status).toBe("finished"));
+
+    act(() => result.current.undoLastSplit());
+
+    expect(result.current.run?.splits).toHaveLength(1);
+    expect(result.current.finished).toBe(true);
+  });
+
+  it("will not add a penalty to a run that has already finished", async () => {
+    // Same window, same reason. The chip was disabled on the console and the
+    // hook trusted it, which left the guard living in one of the two callers.
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    storeFinishedRun(alice.participant_id);
+    const { result } = await mount([alice]);
+    await waitFor(() => expect(result.current.run?.status).toBe("finished"));
+
+    act(() => result.current.addPenalty(null, 5_000, "Course cut"));
+
+    expect(result.current.run?.penalties).toHaveLength(0);
+  });
+
+  it("still takes a split back while the run is merely paused", async () => {
+    // The guard is `finished`, not "not running": pausing to argue about a
+    // split is exactly when somebody wants to take it back.
+    const station = {
+      id: uuid(),
+      event_id: EVENT_ID,
+      name: "Sled",
+      short_name: null,
+      station_order: 1,
+      active: true,
+      split_enabled: true,
+      penalty_amount_ms: 2_000,
+    };
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+
+    useEventBundle.mockReturnValue({
+      ...setupBundle([alice]),
+      bundle: makeBundle({ participants: [alice], stations: [station] }),
+    });
+    const { useRunConsole } = await import("./use-run-console");
+    const { wrapper } = createQueryWrapper();
+    const { result } = renderHook(() => useRunConsole(), { wrapper });
+
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+    act(() => result.current.recordSplit(station.id));
+    act(() => result.current.togglePause());
+
+    act(() => result.current.undoLastSplit());
+    act(() => result.current.addPenalty(station.id, 2_000, "Sled penalty"));
+
+    expect(result.current.run?.splits).toHaveLength(0);
+    expect(result.current.run?.penalties).toHaveLength(1);
+  });
+
   it("finishes the active run and clears local storage on save", async () => {
     const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
     const { result } = await mount([alice]);
@@ -270,12 +515,215 @@ describe("useRunConsole", () => {
 
     expect(result.current.run).toBeNull();
     expect(clearActiveRun).toHaveBeenCalled();
-    // "waiting", the schema default and the word players see. This was the only
-    // reset in the app that wrote "queued"; both behave identically, and one
-    // vocabulary is worth more than the coin-flip.
-    expect(setParticipantStatus).toHaveBeenCalledWith({
-      data: { eventId: EVENT_ID, eventParticipantId: alice.id, status: "waiting" },
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
     });
+  });
+
+  // Cancel, Discard and Reset timer all land here, and used to write "waiting"
+  // through setParticipantStatus — the roster's un-scratch. An athlete scratched
+  // while their timer ran was put back in the field by the cancel, ready to be
+  // timed again. The only status this console may write is the start's.
+  it("never writes a status through the roster's un-scratch when cancelling", async () => {
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    const { result, rerender } = await mount([alice]);
+
+    await act(async () => {
+      await result.current.startRun(alice.participant_id);
+    });
+    // Scratched from the roster panel while the clock was running.
+    useEventBundle.mockReturnValue(setupBundle([{ ...alice, participation_status: "scratched" }]));
+    rerender();
+
+    await act(async () => {
+      await result.current.cancelRun();
+    });
+
+    const statuses = setParticipantStatus.mock.calls.map(
+      (c: unknown[]) => (c[0] as { data: { status: string } }).data.status,
+    );
+    expect(statuses).toEqual(["running"]);
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
+    });
+    expect(result.current.run).toBeNull();
+  });
+
+  it("clears the local run even when the server will not take them off the clock", async () => {
+    const alice = makeParticipant({ participant: { id: uuid(), name: "Alice", nickname: null } });
+    takeOffClock.mockRejectedValue(new Error("Failed to fetch"));
+    const { result } = await mount([alice]);
+
+    await act(async () => {
+      await result.current.startRun(alice.participant_id);
+    });
+    await act(async () => {
+      await result.current.cancelRun();
+    });
+
+    expect(result.current.run).toBeNull();
+    expect(clearActiveRun).toHaveBeenCalled();
+  });
+
+  // Only one athlete is ever on the crowd's clock, and nothing below this hook
+  // enforces it: the column has no CHECK and setParticipantStatus writes the one
+  // row it is handed. setOnClock has always demoted before promoting; startRun
+  // did not, so staging one athlete and starting another left two rows "running"
+  // and the spectator screens reading the wrong one.
+  it("takes the athlete already on the clock off it before starting somebody else", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      running_order: 1,
+      participation_status: "running",
+      on_clock_since: "2026-08-22T00:00:00.000Z",
+    });
+    const bob = makeParticipant({
+      participant: { id: uuid(), name: "Bob", nickname: null },
+      running_order: 2,
+    });
+    const { result } = await mount([alice, bob]);
+
+    act(() => result.current.setSelected(bob.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
+    });
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: bob.id, status: "running" },
+    });
+    // The demote is not a status write: it cannot un-scratch anybody.
+    expect(setParticipantStatus).toHaveBeenCalledTimes(1);
+  });
+
+  // The ordinary path: stage somebody, then start them. Demoting first would
+  // clear on_clock_since and re-stamp it at the Start tap, throwing away the
+  // moment they stepped up — which is the one thing setParticipantStatus goes
+  // out of its way to preserve.
+  it("leaves the clock alone when the athlete starting is the one already on it", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      participation_status: "running",
+      on_clock_since: "2026-08-22T00:00:00.000Z",
+    });
+    const { result } = await mount([alice]);
+
+    act(() => result.current.setSelected(alice.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    const statuses = setParticipantStatus.mock.calls.map(
+      (c: unknown[]) => (c[0] as { data: { status: string } }).data.status,
+    );
+    expect(statuses).toEqual(["running"]);
+    expect(takeOffClock).not.toHaveBeenCalled();
+  });
+
+  // The start is what the crowd is waiting on. A cleanup write that fails is a
+  // stale name on the spectator screens; a start that fails with it is a stopped
+  // clock for a run that is genuinely under way.
+  it("still starts the run when taking the previous athlete off the clock fails", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      running_order: 1,
+      participation_status: "running",
+    });
+    const bob = makeParticipant({
+      participant: { id: uuid(), name: "Bob", nickname: null },
+      running_order: 2,
+    });
+    // The promote lands, the demote after it does not.
+    takeOffClock.mockRejectedValue(new Error("offline"));
+    const { result } = await mount([alice, bob]);
+
+    act(() => result.current.setSelected(bob.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: bob.id, status: "running" },
+    });
+    expect(takeOffClock).toHaveBeenCalledTimes(1);
+    expect(result.current.run?.participantId).toBe(bob.participant_id);
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  // The order is the point, not just that both writes happen. Demoting first
+  // meant a refused start -- another phone scratching this athlete in the gap --
+  // left the crowd's clock with NOBODY on it: the previous athlete already put
+  // back to waiting and no replacement to show. Before this PR that refusal at
+  // least left them standing.
+  it("leaves the previous athlete on the clock when the start is refused", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      running_order: 1,
+      participation_status: "running",
+    });
+    const bob = makeParticipant({
+      participant: { id: uuid(), name: "Bob", nickname: null },
+      running_order: 2,
+    });
+    setParticipantStatus.mockRejectedValue(new Error(OUT_OF_FIELD_MESSAGE));
+    const { result } = await mount([alice, bob]);
+
+    act(() => result.current.setSelected(bob.participant_id));
+    await act(async () => {
+      await result.current.startRun();
+    });
+
+    // One write attempted -- the start -- and nothing said about Alice.
+    expect(setParticipantStatus).toHaveBeenCalledTimes(1);
+    expect(takeOffClock).not.toHaveBeenCalled();
+    expect(result.current.run).toBeNull();
+  });
+
+  // Put on the clock for the crowd without starting the timer. The demote is the
+  // same cleanup as startRun's and goes through the same door; the promote is a
+  // real status write, which the server refuses for anybody out of the field.
+  it("swaps who is on the clock without a status write for the one going off it", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      running_order: 1,
+      participation_status: "running",
+    });
+    const bob = makeParticipant({
+      participant: { id: uuid(), name: "Bob", nickname: null },
+      running_order: 2,
+    });
+    const { result } = await mount([alice, bob]);
+
+    await act(async () => {
+      await result.current.setOnClock(bob.participant_id);
+    });
+
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
+    });
+    expect(setParticipantStatus).toHaveBeenCalledTimes(1);
+    expect(setParticipantStatus).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: bob.id, status: "running" },
+    });
+  });
+
+  it("clears the clock through the same door", async () => {
+    const alice = makeParticipant({
+      participant: { id: uuid(), name: "Alice", nickname: null },
+      participation_status: "running",
+    });
+    const { result } = await mount([alice]);
+
+    await act(async () => {
+      await result.current.setOnClock(null);
+    });
+
+    expect(takeOffClock).toHaveBeenCalledWith({
+      data: { eventId: EVENT_ID, eventParticipantId: alice.id },
+    });
+    expect(setParticipantStatus).not.toHaveBeenCalled();
   });
 });
 

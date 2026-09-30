@@ -227,8 +227,17 @@ export async function loadCollection(): Promise<Record<string, CollectedCard>> {
   if (!isBrowser()) return {};
   try {
     const db = await getDb();
-    const keys = await db.getAllKeys(COLLECTED);
-    const values = await db.getAll(COLLECTED);
+    // One transaction, so the keys and the values are one snapshot. They are
+    // zipped by index, and each idb shorthand call opens a transaction of its
+    // own -- so a collectCard from another tab landing between the two reads
+    // inserted a key the value list did not have, shifting every entry from
+    // there on onto its neighbour's card and dropping the last one entirely.
+    // Wrong `count`, `tier` and `edition` on somebody else's slab in the vault,
+    // and in adoptableIds -- which reads ids back out of the VALUES -- a card
+    // that never got filed to the server, or an undefined that threw.
+    const tx = db.transaction(COLLECTED, "readonly");
+    const [keys, values] = await Promise.all([tx.store.getAllKeys(), tx.store.getAll()]);
+    await tx.done;
     const out: Record<string, CollectedCard> = {};
     keys.forEach((k, i) => {
       out[String(k)] = values[i] as CollectedCard;
@@ -254,7 +263,13 @@ export async function collectCard(
   if (!isBrowser()) return;
   try {
     const db = await getDb();
-    const existing = (await db.get(COLLECTED, eventParticipantId)) as CollectedCard | undefined;
+    // Read and write inside one transaction, for the reason given in
+    // addUnrecorded: this is a read-modify-write against a single row, and a
+    // second pull of the same card landing between the get and the put would
+    // write back the count it read before the first one — so two pulls in two
+    // tabs would leave `count` at 2 rather than 3.
+    const tx = db.transaction(COLLECTED, "readwrite");
+    const existing = (await tx.store.get(eventParticipantId)) as CollectedCard | undefined;
     const next: CollectedCard = existing
       ? {
           ...existing,
@@ -264,7 +279,8 @@ export async function collectCard(
           edition: bestEdition(existing.edition, edition),
         }
       : { eventParticipantId, pulledAt: Date.now(), count: 1, tier, edition };
-    await db.put(COLLECTED, next, eventParticipantId);
+    await tx.store.put(next, eventParticipantId);
+    await tx.done;
   } catch {
     /* a device with IndexedDB blocked simply doesn't collect */
   }
@@ -602,7 +618,13 @@ export function primeCardMeta(): Promise<void> {
       if (!isBrowser()) return;
       try {
         const db = await getDb();
-        const [keys, values] = await Promise.all([db.getAllKeys(CARD_META), db.getAll(CARD_META)]);
+        // One transaction, like loadCollection and for the same reason. The
+        // Promise.all is not what makes this safe: each idb shorthand call opens
+        // its own transaction, so it only removed the await between two
+        // snapshots rather than making them one.
+        const tx = db.transaction(CARD_META, "readonly");
+        const [keys, values] = await Promise.all([tx.store.getAllKeys(), tx.store.getAll()]);
+        await tx.done;
         keys.forEach((k, i) => metaCache.set(String(k), values[i] as CardMeta));
       } catch {
         /* a device with IndexedDB blocked just measures from the image */

@@ -15,7 +15,8 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useMyCollection } from "@/hooks/use-my-collection";
 import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { useStreakStatus } from "@/hooks/use-streak";
+import { streakHistoryKey, useStreakStatus } from "@/hooks/use-streak";
+import { useAccountSyncState } from "@/lib/account-sync-state";
 import { packsOpenedLabel } from "@/lib/card-pulls";
 import { useCardSfx, useHaptics } from "@/lib/card-sfx";
 import { trophiesFor } from "@/lib/collection-trophies";
@@ -94,7 +95,24 @@ function YouPage() {
 
   const myTrophies = trophiesFor(allTrophies.data?.trophies ?? [], member?.participantId ?? null);
   const ownedSecrets = secrets.data?.cards ?? [];
-  const summary = mine.ready
+  // The vault's second gate, which this screen was written without. A phone with
+  // no member token has nothing to adjudicate the local card store against, so
+  // `useMyCollection` settles off that store alone — and it is per-device, not
+  // per-person, and nothing clears it on the way out. On a handset the league
+  // passes around, the number under it is then the LAST person's roster count,
+  // stated as this one's. One flag the way the vault folds it, so the line below
+  // and the counters under it can never disagree about whether the answer is
+  // known — "Counting your cards…" over "No packs opened yet." is the section
+  // contradicting itself.
+  //
+  // Two windows, not one. `syncing` is the account still linking. The other is
+  // the longer one: signed out with the breadcrumb still on the phone, which is
+  // every moment between one player handing the handset over and the next one
+  // claiming. A device that was NEVER a member is not in here on purpose — a
+  // guest's store is a guest's own cards, and counting them is the right answer.
+  const sync = useAccountSyncState();
+  const ready = mine.ready && sync.status !== "syncing" && !(wasMember && !member);
+  const summary = ready
     ? vaultSummaryLine({
         rosterHeld: mine.collectedCount,
         rosterSize: rosterIds.length,
@@ -107,10 +125,18 @@ function YouPage() {
     : null;
   const packs = packsOpenedLabel(mine.packsOpened);
   const spares = mine.dupes;
+  // Off the stats query rather than the local store, so these two never carried
+  // the previous person's cards — but "No packs opened yet." is still an answer,
+  // and giving it while the account is mid-link is the same mistake in the
+  // quieter direction.
+  const counters =
+    [packs, spares > 0 ? `${spares} spare${spares === 1 ? "" : "s"} to trade` : null]
+      .filter(Boolean)
+      .join(" · ") || "No packs opened yet.";
 
   return (
     <div className="card-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-3xl px-page-x py-6">
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <UserRound className="h-5 w-5" />
@@ -168,11 +194,7 @@ function YouPage() {
             {/* The two counters PR 5 took off the vault's header. They belong to
                 somebody looking themselves up, not to the screen whose job is
                 "what should I do right now". */}
-            <p className="mt-1 text-meta text-muted-foreground">
-              {[packs, spares > 0 ? `${spares} spare${spares === 1 ? "" : "s"} to trade` : null]
-                .filter(Boolean)
-                .join(" · ") || "No packs opened yet."}
-            </p>
+            {ready && <p className="mt-1 text-meta text-muted-foreground">{counters}</p>}
           </section>
 
           {dustOn && (
@@ -233,7 +255,7 @@ function YouPage() {
 function useStreakHistory(actorId: string | null) {
   const fn = useServerFn(getStreakHistory);
   return useQuery({
-    queryKey: ["streak-history", actorId] as const,
+    queryKey: streakHistoryKey(actorId),
     queryFn: () => fn() as Promise<StreakHistoryEntry[]>,
     enabled: !!actorId,
     staleTime: 5 * 60_000,
@@ -283,7 +305,7 @@ function SettingRow({
       <span
         className={cn(
           "shrink-0 rounded-full border px-3 py-1 text-meta font-bold uppercase tracking-[0.08em]",
-          on ? "border-primary/60 text-primary" : "border-white/15 text-muted-foreground",
+          on ? "border-primary/60 text-primary" : "border-border-strong text-muted-foreground",
         )}
       >
         {on ? onWord : offWord}

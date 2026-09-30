@@ -10,7 +10,7 @@ import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock
 import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/server-fn";
 import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
 import type { StreakStatus } from "./streaks.functions";
-import { STREAK_MILESTONES } from "./streaks";
+import { previousDay, STREAK_MILESTONES } from "./streaks";
 import { leagueDay } from "./trades";
 
 let mock = createSupabaseMock();
@@ -43,6 +43,13 @@ const asGuest = () => guestHeaders(signGuestToken(GUEST).token);
  * New York is still on yesterday, so a UTC-built ladder ended a day in the future
  * and the streak read as broken — a real failure every night, only in CI.
  */
+/** The first day of a fixture run, without asserting the array is non-empty. */
+function firstDay(days: { opened_on: string }[]): string {
+  const first = days[0];
+  if (!first) throw new Error("the fixture built no days");
+  return first.opened_on;
+}
+
 function daysEndingToday(n: number) {
   const out: { opened_on: string }[] = [];
   const [y, m, d] = leagueDay().split("-").map(Number);
@@ -173,6 +180,50 @@ describe("getStreakStatus", () => {
     expect(res.milestones.find((m) => m.days === 3)?.claimed).toBe(true);
   });
 
+  it("keeps the run alive on the day the capstone was cashed at risk", async () => {
+    // claim_streak_milestone takes a run that ended YESTERDAY and stamps the
+    // claim today, so on a phone whose pack is still sealed the reset cut leaves
+    // nothing behind it. Read as a dead streak, that took the whole strip off
+    // the screen — flame, day line, ladder — and with it the one line asking
+    // them to open today's pack.
+    const today = leagueDay();
+    // Sixty days ending yesterday: the run that bought the capstone.
+    const days = daysEndingToday(61).slice(0, 60);
+    withDb({
+      "pack_opens.select": { data: days },
+      "streak_milestone_claims.select": {
+        data: [{ milestone: 60, streak_started_on: firstDay(days), claimed_on: today }],
+      },
+      "account_identities.select": { data: [{ user_id: "u" }] },
+    });
+    const { getStreakStatus } = await import("./streaks.functions");
+    const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
+    expect(res.current).toBe(1);
+    expect(res.startedOn).toBe(today);
+    expect(res.openedToday).toBe(false);
+    // A one-day run owes nothing, so the screen and the payout still agree.
+    expect(res.milestones.every((m) => !m.earned)).toBe(true);
+  });
+
+  it("is dead the day after a capstone claim nobody followed with a pack", async () => {
+    // The anchor above is today's nudge, not a day nobody opened. Once it is
+    // yesterday, the gap is a gap like any other.
+    // The walk's own step-back, rather than hand-rolled Date maths beside it.
+    const yesterday = previousDay(leagueDay());
+    const days = daysEndingToday(61).slice(0, 59);
+    withDb({
+      "pack_opens.select": { data: days },
+      "streak_milestone_claims.select": {
+        data: [{ milestone: 60, streak_started_on: firstDay(days), claimed_on: yesterday }],
+      },
+      "account_identities.select": { data: [{ user_id: "u" }] },
+    });
+    const { getStreakStatus } = await import("./streaks.functions");
+    const res = await callServerFn<StreakStatus>(getStreakStatus, { headers: asMe() });
+    expect(res.current).toBe(0);
+    expect(res.startedOn).toBeNull();
+  });
+
   it("ignores a claim from a run that has since died", async () => {
     withDb({
       "pack_opens.select": { data: daysEndingToday(3) },
@@ -279,7 +330,7 @@ describe("claimStreakMilestone", () => {
     }
   });
 
-  it("says so softly when the card behind a paid claim cannot be read back", async () => {
+  it("reports a paid claim whose card cannot be read back as already collected", async () => {
     withDb({
       "rpc.claim_streak_milestone": {
         data: {
@@ -305,7 +356,13 @@ describe("claimStreakMilestone", () => {
       data: { milestone: 7 },
       headers: asMe(),
     });
-    expect(res).toEqual({ ok: false, reason: "unavailable" });
+    // Not `unavailable`. The claim row and the bonus pull are committed by the
+    // time this read runs, so the rung is spent and the card is in the vault —
+    // only the picture is missing. `unavailable` is the RPC's word for an empty
+    // catalogue, checked BEFORE the insert, where nothing was paid; reusing it
+    // here told the ladder nothing had happened, so it went on offering a rung
+    // the next tap could only refuse.
+    expect(res).toEqual({ ok: false, reason: "claimed" });
   });
 });
 
@@ -421,6 +478,41 @@ describe("getStreakHistory", () => {
     );
     expect(res.map((r) => r.card?.tier)).toEqual(["mythic", "common"]);
     expect(res.every((r) => r.card?.name === "Ghost")).toBe(true);
+  });
+
+  it("says what the rung paid, not what the copy has since been upgraded to", async () => {
+    // reward_ref names a pull, and a pull's `tier` is a live value: both
+    // pull_secret_card and pull_bonus_secret_card raise the owning copy in place
+    // when a later duplicate rolls better. That is the rule the vault wants —
+    // "what do I hold" — and the wrong one for a receipt. On a first acquisition
+    // reward_ref points at that owning row, so a mythic pulled months later
+    // rewrote what this rung was shown to have paid, against a claim toast that
+    // had said "common" on the day.
+    withHistory(
+      [{ milestone: 3, streak_started_on: "2026-08-01", claimed_on: "2026-08-03", reward_ref: PULL, reward_tier: "common" }], // prettier-ignore
+      [{ id: PULL, secret_card_id: CARD, tier: "mythic" }],
+      [{ id: CARD, name: "Ghost", art_path: null, back_path: null }],
+    );
+    const { getStreakHistory } = await import("./streaks.functions");
+    const res = await callServerFn<{ card: { tier: string } | null }[]>(getStreakHistory, {
+      headers: asMe(),
+    });
+    expect(res[0]?.card?.tier).toBe("common");
+  });
+
+  it("falls back to the pull for a claim made before the tier was written down", async () => {
+    // Rows claimed before 20260911120000 have no reward_tier, and the pull is
+    // the only thing that knows — the same value those rows already rendered.
+    withHistory(
+      [{ milestone: 3, streak_started_on: "2026-08-01", claimed_on: "2026-08-03", reward_ref: PULL, reward_tier: null }], // prettier-ignore
+      [{ id: PULL, secret_card_id: CARD, tier: "epic" }],
+      [{ id: CARD, name: "Ghost", art_path: null, back_path: null }],
+    );
+    const { getStreakHistory } = await import("./streaks.functions");
+    const res = await callServerFn<{ card: { tier: string } | null }[]>(getStreakHistory, {
+      headers: asMe(),
+    });
+    expect(res[0]?.card?.tier).toBe("epic");
   });
 
   it("carries no count of anything but this actor's own claims", async () => {

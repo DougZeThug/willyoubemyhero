@@ -14,8 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EditResultSheet } from "@/components/edit-result-sheet";
 import { formatTime } from "@/lib/format";
-import { currentAthlete } from "@/lib/current-athlete";
+import { awaitingRun, currentAthlete } from "@/lib/current-athlete";
 import type { RunConsole } from "@/hooks/use-run-console";
+import { cn } from "@/lib/utils";
 
 export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
   const {
@@ -46,9 +47,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
   const eventId = event?.id ?? null;
   const [editing, setEditing] = useState<string | null>(null);
 
-  const queued = participants.filter(
-    (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
-  );
+  const queued = participants.filter(awaitingRun);
   const slot = currentAthlete(participants);
   // Anyone already timed — the commissioner needs a way to undo one bad result
   // without resetting the whole combine.
@@ -85,7 +84,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
               aria-label="Athlete on deck"
               value={pick}
               onChange={(e) => setSelected(e.target.value)}
-              className="min-h-11 min-w-0 flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-base font-semibold uppercase pointer-fine:min-h-0 pointer-fine:text-sm"
+              className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-white/5 px-2 py-2 text-base font-semibold uppercase pointer-fine:min-h-0 pointer-fine:text-sm"
             >
               {queued.map((p) => (
                 <option key={p.id} value={p.participant_id}>
@@ -103,7 +102,11 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
               {slot.onClock ? "Clear" : "On clock"}
             </Button>
           </div>
-          <Button className="h-12 w-full" disabled={!pick} onClick={startRun}>
+          {/* `pick`, not the hook's selection: the picker below defaults to the
+              next athlete without committing that to state, so the button has to
+              hand the athlete across the same way the On-clock button above it
+              already does. Passing nothing here started nobody. */}
+          <Button className="h-12 w-full" disabled={!pick} onClick={() => startRun(pick)}>
             <Play className="mr-2 h-5 w-5" /> Start Timer
           </Button>
         </div>
@@ -168,6 +171,10 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                     size="sm"
                     variant="ghost"
                     onClick={undoLastSplit}
+                    // No `finished` here, unlike the console's copy of this
+                    // button: the whole splits strip lives in the not-finished
+                    // arm above, so the guard would read as though this branch
+                    // were reachable after a Finish. The hook refuses either way.
                     disabled={run.splits.length === 0}
                   >
                     <Redo2 className="mr-1 h-3.5 w-3.5" /> Undo
@@ -176,20 +183,20 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                   {stations.map((st) => {
                     const split = run.splits.find((s) => s.stationId === st.id);
-                    const disabled = !!split || run.status !== "running";
+                    const disabled = Boolean(split) || run.status !== "running";
                     return (
                       <button
                         key={st.id}
                         disabled={disabled}
                         onClick={() => recordSplit(st.id)}
-                        className={
-                          "min-w-28 shrink-0 rounded-md border p-2 text-left transition " +
-                          (split
+                        className={cn(
+                          "min-w-28 shrink-0 rounded-md border p-2 text-left transition",
+                          split
                             ? "border-primary/40 bg-primary/10"
                             : disabled
                               ? "border-white/5 bg-white/5 opacity-60"
-                              : "border-white/10 bg-white/5 hover:border-primary hover:bg-primary/10")
-                        }
+                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10",
+                        )}
                       >
                         <div className="truncate font-display text-sm font-black uppercase leading-tight">
                           {st.short_name ?? st.name}
@@ -217,6 +224,11 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
             variant="ghost"
             size="sm"
             className="w-full text-destructive hover:bg-destructive/10"
+            // Not while a save is on its way: admin's Discard already refuses
+            // then, and this bar was the one door left open on throwing a run
+            // away mid-flight. The hook survives it now, but the confirm is a
+            // lie while the row is still being written.
+            disabled={finishing}
             onClick={() => {
               if (confirm("Throw this timer away and put the athlete back in the queue?")) {
                 cancelRun();
@@ -243,7 +255,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="shrink-0 px-2 text-label uppercase tracking-widest"
+                      className="shrink-0 px-2 text-label uppercase tracking-[0.08em]"
                       onClick={() => setEditing(p.participant_id)}
                     >
                       <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
@@ -252,7 +264,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="shrink-0 px-2 text-label uppercase tracking-widest text-destructive hover:bg-destructive/10"
+                    className="shrink-0 px-2 text-label uppercase tracking-[0.08em] text-destructive hover:bg-destructive/10"
                     onClick={() => {
                       if (confirm(`Clear ${playerName}'s run and put them back in the queue?`)) {
                         resetAthlete(p.participant_id);
@@ -275,7 +287,7 @@ export function LiveTimingBar({ console: rc }: { console: RunConsole }) {
           participantName={
             done.find((p) => p.participant_id === editing)?.participant?.name ?? "Athlete"
           }
-          open={!!editing}
+          open={Boolean(editing)}
           onOpenChange={(o) => !o && setEditing(null)}
         />
       )}

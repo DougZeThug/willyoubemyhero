@@ -126,11 +126,18 @@ export function useHaptics() {
 
   useEffect(() => {
     const mine = () => setIsOff(isHapticsOff());
-    const theirs = () => {
+    const reread = () => {
       hapticsOff = readHapticsOff();
       setIsOff(hapticsOff);
     };
-    theirs();
+    // Another tab, and only if it touched OUR key. `storage` fires for every key
+    // the other tab writes, so this used to re-read and re-render on every
+    // unrelated wwbh: write. A null key is localStorage.clear(), which does.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== HAPTICS_KEY) return;
+      reread();
+    };
+    reread();
     window.addEventListener("wwbh:haptics-changed", mine);
     window.addEventListener("storage", theirs);
     return () => {
@@ -159,11 +166,18 @@ export function useCardSfx() {
     // Another tab: storage is the only thing that changed, so the module flag —
     // which is what actually gates playback in `audio()` — has to be caught up
     // too, or this tab shows muted while it keeps making noise.
-    const theirs = () => {
+    const reread = () => {
       muted = readMuted();
       setIsMuted(muted);
     };
-    theirs();
+    // Another tab, and only if it touched OUR key. `storage` fires for every key
+    // the other tab writes, so this used to re-read and re-render on every
+    // unrelated wwbh: write. A null key is localStorage.clear(), which does.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== MUTE_KEY) return;
+      reread();
+    };
+    reread();
     window.addEventListener("wwbh:sfx-muted-changed", mine);
     window.addEventListener("storage", theirs);
     return () => {

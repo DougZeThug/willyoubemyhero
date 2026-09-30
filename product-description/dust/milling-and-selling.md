@@ -59,8 +59,8 @@ is every secret copy you hold, including ones you own exactly one of — a secre
 has no last-copy rule, and that is the feature rather than an omission. Nothing
 public rides on you holding a secret, so there is no count to protect.
 
-Today's own pull is filtered out of both lists before they are drawn, which is
-the same rule the server enforces on the call.
+Today's own pull is on both lists the moment it lands. A card you pulled an hour
+ago burns or sells like any other.
 
 Each row prints its own payout on the button before anything is tapped. The
 number the button shows is the number the ledger will file, because the two
@@ -114,8 +114,6 @@ On refusal, nothing at all is touched and the reason is a sentence:
 | What happened                              | What it says                                  |
 | ------------------------------------------ | --------------------------------------------- |
 | It is your only copy of a roster card      | "That is your only copy"                      |
-| It is a roster copy you pulled today       | "Today's card — it can be burned tomorrow"    |
-| It is a secret you pulled today            | "Today's pull — it can be sold tomorrow"      |
 | It is staked on a pending offer, or listed | "That one is on an open offer or up for sale" |
 | Dust is switched off                       | The screen never offers the counter at all    |
 
@@ -220,12 +218,9 @@ from the other's next read.
 - **Milling your best copy.** The card's advertised finish falls to the best of
   what is left. This is one of only two places in the app where that number goes
   down.
-- **Today's card.** Not a spare yet, in either counter. For a roster copy that is
-  a product rule and a good one — a card pulled an hour ago is not a spare.
-  Tomorrow it mills like any other.
-- **Today's secret pull.** A security rule rather than a product one. That row is
-  your spent daily slot, so removing it would hand the slot back and let the day
-  be farmed. See [the daily secret](../cards/the-daily-secret.md).
+- **Today's card.** Burns or sells the day it lands, in either counter. Neither
+  hands the day back: the pack replays the same three cards all day however many
+  of them have gone, and the daily mint cap counts mints rather than copies held.
 - **A copy on an open offer.** Refused. Milling it would silently shrink an offer
   the other side has already read and is about to accept.
 - **A copy up for sale.** Refused for the same reason. Take it off the market
@@ -241,16 +236,14 @@ from the other's next read.
 
 ## Open questions and verification
 
-- The claim that both lists exclude today's pull before they are drawn was read
-  from the list the Trading Post shares; the two rules agree in the source but
-  have not been watched together on a day when a fresh pull was the only spare.
 - Whether a member can tell, from the row alone, that a copy is unsettled: the
   word "unsettled" appears in the reroll list but not in the burn list, so the
   only signal there is a payout of 5 on a badge that says something rarer. Worth
   a design look rather than a fix.
 - The promotion of a duplicate when the owning copy is sold was read from the
   database tests and not observed in the vault.
-- Assumption: nothing outside the Shop screen offers a mill or a sale. Nothing in
-  the source does at this commit.
+- The pack summary offers a sale too: a spare's "Sell for N" is a button there,
+  behind a confirmation. See [what you pulled](../cards/what-you-pulled.md).
+  Otherwise, nothing outside the Shop screen offers a mill or a sale.
 
 Verified against willyoubemyhero commit `b46f330`.

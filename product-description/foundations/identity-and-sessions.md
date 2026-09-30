@@ -118,11 +118,12 @@ redraws at once.
 
 A member claim also does housekeeping that nobody sees: anything the device
 pulled as a guest — secrets, packs, and the streak milestones those packs already
-paid out — is moved onto the participant. The guest identity is taken from the
-verified guest token and never from the request, because otherwise claiming your
-own player would be a way to harvest somebody else's cards. If that move fails,
-the claim still stands; the cards are reconciled later rather than the whole
-claim being thrown away.
+paid out — is moved onto the participant, and so are the reactions and comments
+it left on cards. The guest identity is taken from the verified guest token and
+never from the request, because otherwise claiming your own player would be a
+way to harvest somebody else’s cards. If that move fails, the claim still
+stands; the cards are reconciled later rather than the whole claim being
+thrown away.
 
 Roster cards do not move in that step. They were never stored server-side for a
 guest, so the device uploads them itself once it holds a member token. See

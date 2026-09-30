@@ -75,7 +75,7 @@ export function CardGrantPanel({ eventId }: { eventId: string }) {
   }
 
   const selectClass =
-    "min-h-11 w-full rounded-md border border-primary/30 bg-background px-2 text-xs uppercase tracking-widest text-foreground";
+    "min-h-11 w-full rounded-md border border-primary/30 bg-background px-2 text-base uppercase tracking-[0.08em] text-foreground pointer-fine:min-h-0 pointer-fine:text-xs";
 
   return (
     <AdminSection icon={<Gift className="h-4 w-4 shrink-0" />} title="Give a Card">

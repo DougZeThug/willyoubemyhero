@@ -57,7 +57,12 @@ describe("useFinishWatcher", () => {
     rerender({ bundle: bundleWith([aliceRun, bobRun], [alice, bob]) });
 
     expect(onFinish).toHaveBeenCalledTimes(1);
-    expect(onFinish).toHaveBeenCalledWith({ name: "Bob", timeMs: 62_500, deltaMs: 12_500 });
+    expect(onFinish).toHaveBeenCalledWith({
+      runId: bobRun.id,
+      name: "Bob",
+      timeMs: 62_500,
+      deltaMs: 12_500,
+    });
   });
 
   it("reports a zero gap when the new run takes the lead", () => {
@@ -72,7 +77,12 @@ describe("useFinishWatcher", () => {
     const bobRun = makeRun({ participant_id: bob.participant_id, official_time_ms: 40_000 });
     rerender({ bundle: bundleWith([aliceRun, bobRun], [alice, bob]) });
 
-    expect(onFinish).toHaveBeenCalledWith({ name: "Bob", timeMs: 40_000, deltaMs: 0 });
+    expect(onFinish).toHaveBeenCalledWith({
+      runId: bobRun.id,
+      name: "Bob",
+      timeMs: 40_000,
+      deltaMs: 0,
+    });
   });
 
   it("does not re-fire when the same bundle renders again", () => {
@@ -114,13 +124,14 @@ describe("useFinishWatcher", () => {
     const { rerender } = renderHook(({ bundle }) => useFinishWatcher(bundle, onFinish), {
       initialProps: { bundle: bundleWith([], [alice]) },
     });
-    rerender({
-      bundle: bundleWith(
-        [makeRun({ participant_id: "unknown", official_time_ms: 1_000 })],
-        [alice],
-      ),
+    const orphan = makeRun({ participant_id: "unknown", official_time_ms: 1_000 });
+    rerender({ bundle: bundleWith([orphan], [alice]) });
+    expect(onFinish).toHaveBeenCalledWith({
+      runId: orphan.id,
+      name: "Athlete",
+      timeMs: 1_000,
+      deltaMs: 0,
     });
-    expect(onFinish).toHaveBeenCalledWith({ name: "Athlete", timeMs: 1_000, deltaMs: 0 });
   });
 
   it("fires for each of several new runs at once", () => {

@@ -8,6 +8,7 @@
 import {
   test,
   expect,
+  BUNDLE,
   DEFAULT_PACK_IDS,
   LEAGUE_DAY,
   leagueDayAt,
@@ -19,6 +20,8 @@ import {
   serverFnName,
   tearPack,
   type ServerFnMock,
+  swipeNext,
+  turnCard,
 } from "./fixtures";
 import type { Page } from "@playwright/test";
 
@@ -45,6 +48,7 @@ function withSecret(
     claimed: true,
     day: LEAGUE_DAY,
     openedToday: false,
+    dealable: true,
     secretsOwned: 1,
     resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
     ...(over.status ?? {}),
@@ -224,6 +228,69 @@ test.describe("a secret in the pack", () => {
     await expect.poll(async () => (await packRow(page))?.pendingCompletions).toBeUndefined();
   });
 
+  test("plays a set-complete ceremony a reload caught after the card was turned", async ({
+    page,
+    server,
+  }) => {
+    // The far side of the boundary the test above stops at. A reload BEFORE the
+    // card is turned comes back to a `revealAt` that still has it to turn, so
+    // the ceremony rides along. A reload in the beat AFTER — between the card
+    // landing and the set closing behind it — comes back with the index already
+    // in `revealed`, which is the very first thing `revealAt` refuses. Nothing
+    // else would ever play it: the trophy is marked celebrated at deal time, on
+    // purpose, so the global host stays out of this screen's way.
+    test.slow();
+    await asMember(page);
+    const completedCollection = {
+      collection: "pets",
+      label: "Pets Of The League",
+      size: 9,
+      completedOn: LEAGUE_DAY,
+    };
+    withSecret(server, { slot: { completedCollection } });
+    // The secret FIRST, so the card that owes the ceremony is the one the first
+    // tap turns and the beat runs with nothing else in flight behind it.
+    server.set(
+      "openPack",
+      packResponse([
+        secretSlot({ completedCollection }),
+        rosterSlot("ep-alice"),
+        rosterSlot("ep-bob"),
+      ]),
+    );
+
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await expect.poll(async () => (await packRow(page))?.pendingCompletions).toEqual([0]);
+
+    await turnCard(page);
+    // The exact state the reload used to strand: the card face-up and persisted,
+    // the ceremony it owes still owed. The window is the secret's burst plus
+    // COMPLETION_BEAT_MS, so a tight poll lands inside it with room to spare.
+    await expect
+      .poll(
+        async () => {
+          const row = await packRow(page);
+          return Boolean(row?.revealed.includes(0) && row?.pendingCompletions?.includes(0));
+        },
+        { intervals: Array.from({ length: 60 }, () => 100), timeout: 20_000 },
+      )
+      .toBe(true);
+
+    const beforeReload = deals(server);
+    await page.reload();
+    await expect(sealedPack(page)).toBeHidden();
+    await expect.poll(() => deals(server)).toBeGreaterThan(beforeReload);
+
+    // No tap left to give: the card came back face-up.
+    const ceremony = page.getByTestId("collection-complete");
+    await expect(ceremony).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Pets Of The League/i).first()).toBeVisible();
+    await expect(ceremony).toHaveCount(1);
+    // And the row lets go, so the next reload does not replay it.
+    await expect.poll(async () => (await packRow(page))?.pendingCompletions).toBeUndefined();
+  });
+
   test("a duplicate reads as a wink, not a failure", async ({ page, server }) => {
     await asMember(page);
     withSecret(server, {
@@ -304,6 +371,44 @@ test.describe("a secret in the pack", () => {
     await expect(page.getByText(/already yours/i)).toHaveCount(0);
   });
 
+  test("sells a duplicate straight off the summary, once it has asked", async ({
+    page,
+    server,
+  }) => {
+    // Today's pull, sold the day it landed: the whole point of the button. The
+    // dialog is the only thing between a thumb and a card leaving the vault, so
+    // it has to appear first and the sale must not go out until it is answered.
+    await asMember(page);
+    server.set("getActiveEvent", { ...BUNDLE.event, dust_enabled: true });
+    server.set("getDustBalance", { balance: 0 });
+    withSecret(server, { slot: { duplicate: true, tierBefore: "common" } });
+    server.set("getMySecrets", {
+      pulled: 1,
+      cards: [{ ...SECRET_CARD, firstPulledOn: LEAGUE_DAY, count: 2, ownerCount: 1 }],
+    });
+    server.set("sellSecretCard", {
+      ok: true,
+      awarded: 15,
+      tier: "common",
+      secretCardId: SECRET_CARD.id,
+      balance: 15,
+    });
+    await page.goto("/players/pack");
+    await tearPack(page);
+    await revealAll(page);
+    await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("button", { name: "Sell for 15" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText(`Sell ${SECRET_CARD.name}?`);
+    expect(server.calls.filter((c) => c.includes("sellSecretCard"))).toHaveLength(0);
+
+    await dialog.getByRole("button", { name: "Sell for 15" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Sold · +15")).toBeVisible();
+    expect(server.calls.filter((c) => c.includes("sellSecretCard"))).toHaveLength(1);
+  });
+
   test("the fan gives nothing away, whatever the pack holds", async ({ page, server }) => {
     await asMember(page);
     withSecret(server);
@@ -361,58 +466,23 @@ test.describe("a secret in the pack", () => {
     const step = page.getByTestId("stand-step");
     await expect(step).toHaveText("1 / 3");
 
-    /** Throw the card away leftward, the way the stand's own gesture reads. */
-    async function swipeNext() {
-      const box = (await card.boundingBox())!;
-      const y = box.y + box.height / 2;
-      await page.mouse.move(box.x + box.width * 0.85, y);
-      await page.mouse.down();
-      await page.mouse.move(box.x + box.width * 0.15, y, { steps: 4 });
-      await page.mouse.up();
-    }
-
-    /**
-     * Turn the card on the stand, pressing until it takes.
-     *
-     * One tap is not enough on a loaded runner. `revealAt` holds its re-entrancy
-     * latch for the whole of the previous card's celebration, so a tap that
-     * lands while confetti is still in the air is swallowed on purpose. The hint
-     * is the signal: the stand's own copy is "tap for the back" once a card has
-     * turned, so `aria-pressed` — which tracks that flip — is only good enough
-     * to say "not currently showing its back".
-     */
-    const hint = page.getByText(/swipe/i).first();
-    async function turnCard() {
-      await expect
-        .poll(
-          async () => {
-            if (await hint.count()) return true;
-            if ((await card.getAttribute("aria-pressed")) === "false") await card.click();
-            await page.waitForTimeout(400);
-            return (await hint.count()) > 0;
-          },
-          { timeout: 25_000, intervals: [200] },
-        )
-        .toBe(true);
-    }
-
-    await turnCard();
-    await swipeNext();
+    await turnCard(page);
+    await swipeNext(page);
 
     // The secret's step: an ordinary position in the heading, the ring on the
     // card, and the one line that says what it is — before it is turned.
     await expect(step).toHaveText("2 / 3");
     await expect(page.locator(".secret-seal")).toHaveCount(1);
     await expect(page.getByText(/not on the roster/i).first()).toBeVisible();
-    await turnCard();
+    await turnCard(page);
     await expect(page.getByText(SECRET_CARD.name).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".secret-seal")).toHaveCount(0);
 
     // And on past it, to the last roster card, with nothing owed after that.
-    await swipeNext();
+    await swipeNext(page);
     await expect(step).toHaveText("3 / 3");
-    await turnCard();
-    await swipeNext();
+    await turnCard(page);
+    await swipeNext(page);
     await expect(page.getByText(/pack complete/i)).toBeVisible({ timeout: 15_000 });
     expect((await packRow(page))?.ids).toEqual(["ep-alice", "ep-bob"]);
   });
@@ -567,6 +637,7 @@ test.describe("the vault's secret shelf", () => {
       claimed: true,
       day: LEAGUE_DAY,
       openedToday: false,
+      dealable: true,
       secretsOwned: 1,
       resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
     });
@@ -584,6 +655,7 @@ test.describe("the vault's secret shelf", () => {
       claimed: true,
       day: LEAGUE_DAY,
       openedToday: true,
+      dealable: true,
       secretsOwned: 2,
       resetsAt: `${LEAGUE_DAY}T04:00:00Z`,
     });
@@ -660,6 +732,7 @@ test.describe("the vault's Today card", () => {
       claimed: true,
       day: LEAGUE_DAY,
       openedToday: true,
+      dealable: true,
       secretsOwned: 1,
       resetsAt: new Date(Date.now() + 6 * 3_600_000).toISOString(),
     });

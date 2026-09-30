@@ -101,13 +101,22 @@ export function newSeed(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+/**
+ * The idempotency key behind every `onConflict: "client_key"` upsert — a run,
+ * its splits, its penalties, a card grant — and the device id itself.
+ *
+ * No fallback for a missing `globalThis.crypto`. There used to be one, and it
+ * was worse than nothing: it filled the buffer with
+ * `a.map(() => (Math.random() * 256) | 0)`, and `map` on a typed array returns
+ * a NEW array rather than writing through the one it was handed, so the bytes
+ * stayed zero and every caller on every device got the same key. Colliding
+ * silently on the one value whose whole job is to be unique is the failure this
+ * function cannot be allowed to have, and a browser, workerd or node without
+ * `crypto.getRandomValues` is a misconfiguration worth hearing about.
+ */
 export function newClientKey(): string {
   const bytes = new Uint8Array(16);
-  (
-    globalThis.crypto ?? {
-      getRandomValues: (a: Uint8Array) => a.map(() => (Math.random() * 256) | 0),
-    }
-  ).getRandomValues(bytes);
+  globalThis.crypto.getRandomValues(bytes);
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");

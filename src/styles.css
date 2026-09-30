@@ -5,6 +5,40 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
+ * Every `hover:` utility in the app, promoted to the press on a pointer that
+ * cannot hover.
+ *
+ * Tailwind v4 compiles `hover:` inside `@media (hover: hover)`, so on a phone a
+ * hover utility does not latch — it never fires at all, and roughly a hundred
+ * controls say nothing between touch-down and the screen changing. Redefining
+ * the variant once here is what the `@media (hover: hover) and (pointer: fine)`
+ * gate below does for the neon family, minus
+ * the hundred hand-edits: same treatment, same control, arriving on `:active`
+ * where there is no hover to arrive on.
+ *
+ * The two branches are exactly complementary, which is the point. A hybrid that
+ * reports `hover: hover` with a touchscreen keeps working hover and still cannot
+ * latch, and no control ever gets both rules at once.
+ *
+ * `order` survives a redefinition upstream, so `hover` stays ahead of `active`
+ * in the cascade and an explicit `active:` utility still outranks the promoted
+ * one — which is what keeps players.index.tsx's pressed tile shrinking to 0.99
+ * rather than growing to the 1.02 its hover asks for.
+ */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+  @media (hover: none) {
+    &:active {
+      @slot;
+    }
+  }
+}
+
+/*
  * Will YOU Be My Hero? Draft Combine — dark sports-broadcast design system.
  * Broadcast-grade black ground, electric cyan/teal HUD accents, warning amber/red.
  * Bold condensed display font for scoreboard numerals.
@@ -37,6 +71,7 @@
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
@@ -84,12 +119,16 @@
   --text-button: 0.9375rem;
   --text-button--line-height: 1.25rem;
 
-  /* Spacing scale (§17). 4pt base, 8pt rhythm. */
+  /* Spacing scale (§17). 4pt base, 8pt rhythm.
+     Three, not the five §17 proposed. --spacing-stack-gap and
+     --spacing-control-gap were both 0.5rem, both spelled `gap-2`, and §17's
+     distinction between them — lines inside a block versus chips beside each
+     other — compiles to the same declaration and survives into no artefact a
+     reviewer or a test could read. Two names for one value can only be told
+     apart by whoever typed them, which makes the second one a comment. */
   --spacing-page-x: 1rem;
   --spacing-section-gap: 1.5rem;
-  --spacing-stack-gap: 0.5rem;
   --spacing-grid-gap: 0.75rem;
-  --spacing-control-gap: 0.5rem;
 }
 
 :root {
@@ -123,8 +162,20 @@
   --success-foreground: oklch(0.14 0.03 230);
   --warn: oklch(0.82 0.19 85); /* penalty amber */
   --warn-foreground: oklch(0.15 0.02 85);
+  /* Two edges, on purpose. --border is the decorative hairline: the rule
+     between two things, where faint is correct. --border-strong is the edge
+     drawn around something a thumb aims at, where WCAG 1.4.11 asks for 3:1.
+     35% is not a taste call — it is the first alpha that clears 3:1 against
+     all four grounds (3.10 on --bg, 3.12 --background, 3.18 --surface, 3.21
+     --card). The audit proposed 24%; that measures 2.05 and does not. */
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
+  --border-strong: oklch(1 0 0 / 35%);
+  /* Every control edge shadcn draws, reached without editing a primitive:
+     border-input is the input, textarea, select trigger, toggle, OTP slot and
+     the outline button. Also the Switch's off-state *track fill*, via
+     ui/switch.tsx's data-[state=unchecked]:bg-input — an off switch at 12%
+     white was very nearly invisible. */
+  --input: var(--border-strong);
   /* Focus is deliberately not the cyan accent: a ring in --primary reads as the
      same thing as a selected chip. */
   --focus: oklch(0.98 0.01 240 / 85%);
@@ -204,8 +255,17 @@
      less the sticky header, less the notch above it, less the bar's clearance
      below. dvh and not vh — vh is the LARGE viewport on mobile Safari, so a page
      sized off it grows by the height of the toolbar the moment the toolbar
-     collapses, which is a jump under the thumb on every scroll. */
-  --page-min-h: calc(100dvh - 3rem - env(safe-area-inset-top) - var(--above-tab-bar));
+     collapses, which is a jump under the thumb on every scroll.
+
+     The header term is measured, not rounded: site-nav's row is min-h-11 (4rem
+     once py-2.5 is added) and the sticky wrapper adds a 1px border-b, so it
+     occupies 65px plus the notch — and the notch cancels against the env() below,
+     which is why the pt-safe on the header and the subtraction here have to stay
+     in step. This read 3rem, from §17 of the mobile audit, whose 48px was
+     recorded before the wordmark stopped wrapping; §2 of the same audit had
+     already measured 65px at every width. Seventeen pixels short is exactly how
+     far every short route scrolled on a screen it was meant to fill. */
+  --page-min-h: calc(100dvh - 4rem - 1px - env(safe-area-inset-top) - var(--above-tab-bar));
 }
 
 /* md, where the bottom bar is `md:hidden` and the clearance goes with it. */
@@ -220,10 +280,17 @@
 }
 
 @layer base {
-  html,
-  body {
+  html {
     color-scheme: dark;
-    overflow-x: hidden;
+    max-width: 100%;
+  }
+  body {
+    /* `clip` on the body alone, not `hidden` on both elements. `overflow-x:
+       hidden` on <html> makes the document element a scroll container, and on
+       several Android browsers that is enough to leave the page unscrollable by
+       touch. `clip` cuts the sideways bleed without creating a scroll box at
+       all, which is the only thing that rule was ever for. */
+    overflow-x: clip;
     max-width: 100%;
   }
   * {
@@ -234,6 +301,52 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-feature-settings: "ss01", "tnum";
+    /* Pull-to-refresh is a gesture this app has nowhere to put. Every screen is
+       live over realtime and none of them has a refresh affordance, so the only
+       thing a downward drag at the top of the page can do is throw away a
+       half-torn pack or a staged trade. `contain` keeps the overscroll from
+       leaving the page; it does not stop scrolling. */
+    overscroll-behavior-y: contain;
+  }
+
+  /* The press states PR 14 gave this app are drawn UNDER iOS Safari's own grey
+     tap flash, which lands on every <button> and <a> and is the wrong shape,
+     the wrong colour and on its own schedule. Turning it off is what makes the
+     `:active` treatments the only thing a thumb sees.
+
+     Deliberately not `* { }`: this is a WebKit-only property and the elements
+     that own a press are the ones that should lose the flash. */
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label,
+  summary {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* A drawer, a full-screen reveal and a horizontal snap row all scroll inside a
+     page that also scrolls. Without containment the parent takes over at the
+     end of the child — so a flick through the roster filmstrip scrolls the card
+     page behind it, and a bottom sheet dragged past its end drags the vault.
+
+     Per AXIS, not the shorthand. A horizontal strip is `overflow-x: auto` with
+     a `y` that CSS computes to `auto` alongside it, so the shorthand would
+     contain a vertical gesture that merely STARTED over the filmstrip — the
+     page would refuse to scroll under a thumb that landed on a row of cards.
+     The containment each one needs is the axis it actually scrolls in; a
+     drawer and a modal are whole surfaces and take both. */
+  [data-vaul-drawer],
+  [role="dialog"] {
+    overscroll-behavior: contain;
+  }
+  .overflow-x-auto {
+    overscroll-behavior-x: contain;
+  }
+  .overflow-y-auto {
+    overscroll-behavior-y: contain;
   }
 
   /* Keyboard focus is visible everywhere, including raw <button> elements that
@@ -324,8 +437,9 @@
    A border-color here would be a second utility racing theirs, and Tailwind
    sorts utilities by its own rules rather than by the order they are written in
    a className — so the winner would depend on nothing legible from the caller.
-   A bare `border` already resolves to --border, 10% white, which is the 8% the
-   audit asks for to within a value nobody can see. */
+   A bare `border` still resolves to --border, 10% white — which is now the
+   *decorative* value on purpose. A panel that is itself a target writes
+   `border border-border-strong` and says so. */
 @utility surface-panel {
   background: var(--surface);
 }
@@ -427,7 +541,7 @@
     min-height: 44px;
     padding: 0 1rem;
     border-radius: 9999px;
-    border: 1px solid oklch(1 0 0 / 15%);
+    border: 1px solid var(--border-strong);
     background: oklch(1 0 0 / 4%);
     color: var(--color-muted-foreground);
     font-family: var(--font-display);
@@ -513,7 +627,10 @@
 
     .neon-btn-quiet:hover {
       background: oklch(1 0 0 / 8%);
-      border-color: oklch(1 0 0 / 25%);
+      /* Has to stay clear of --border-strong's 35%, not the 15% this used to
+         sit above: at the old 25% the hover edge would now be *dimmer* than
+         the resting one. 50% keeps roughly the step this always had. */
+      border-color: oklch(1 0 0 / 50%);
       color: var(--color-foreground);
     }
 
@@ -560,6 +677,26 @@
   .neon-btn-lg,
   .neon-btn-quiet {
     transition: none;
+  }
+}
+
+/*
+ * The one treatment the promotion cannot carry on its own. Fifteen links wear
+ * `hover:underline` and nothing else, and a thumb lands on top of the underline
+ * it just drew — the press is real and invisible under the finger that made it.
+ * A brightness step reads at the edges of the contact patch instead.
+ *
+ * The selector is Tailwind's own generated class because the alternative is
+ * fifteen hand-edits, which is the thing this whole change exists not to do.
+ * `filter` rather than a colour, because those fifteen rest at four different
+ * colours (primary, primary/80, inherited, foreground) and a brightness step is
+ * the only one of them that can never come out a no-op.
+ */
+@layer utilities {
+  @media (hover: none) {
+    .hover\:underline:active {
+      filter: brightness(1.25);
+    }
   }
 }
 
@@ -653,9 +790,19 @@
  * context, which on this card means the flip stops being a rotation in space and
  * becomes a squash. box-shadow has no such effect, and an animation beats the
  * inline style the component writes for the resting state.
+ *
+ * No fill mode, and that is the whole point. holo-card arms `.holo-turning` with
+ * a one-way latch, so the class stays on for the rest of the mount and every
+ * later turn is a restartAnimation rather than a re-add — which made `both` mean
+ * "forever", not "until this flip lands". The 100% frame below is a single
+ * layer, the tier glow, while the resting boxShadow the component writes is two:
+ * the tier glow AND the edition accent. Filled forward, the accent bloom on a
+ * lifted hero card disappeared the first time it was turned over and never came
+ * back. There is no animation-delay here, so the backwards half of `both` was
+ * doing nothing to lose.
  */
 .holo-turning {
-  animation: holo-flip-light var(--holo-flip-ms, 500ms) cubic-bezier(0.5, 0, 0.25, 1.18) 1 both;
+  animation: holo-flip-light var(--holo-flip-ms, 500ms) cubic-bezier(0.5, 0, 0.25, 1.18) 1;
 }
 
 @keyframes holo-flip-light {
@@ -1356,11 +1503,31 @@
  * as a Tailwind arbitrary value.
  */
 .tier-chip {
-  border-color: oklch(1 0 0 / 10%);
+  border-color: var(--border-strong);
   color: var(--color-muted-foreground);
-  &:hover:not(:disabled) {
-    border-color: color-mix(in oklab, var(--tier, var(--color-primary)) 50%, transparent);
+  /* Gated for the same reason the neon family is, and this is the rule that made
+     the reason concrete: ungated, it latched on the last chip tapped, and a
+     latched chip wears the tier colour on its edge and its text — which is
+     `.is-active` below, give or take a fill. The one control in the app whose
+     stuck hover claimed to be the selected filter. */
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      /* 75%, not the 50% this was against a 10% rest: dnf's accent is deliberately
+         the dullest thing in the palette, and at 50% it composites *below* the
+         35% white the chip now rests at — a hover that reads as the control going
+         away. At 75% every tier stays above it, dnf at 3.53:1. */
+      border-color: color-mix(in oklab, var(--tier, var(--color-primary)) 75%, transparent);
+      color: var(--tier, var(--color-primary));
+    }
+  }
+  /* What a thumb gets instead: the hover's own edge, plus the neon family's press
+     language from `.neon-btn:active`. The 1px is what keeps a press legible on a
+     chip that is
+     already selected, where the colour has nowhere left to go. */
+  &:active:not(:disabled) {
+    border-color: color-mix(in oklab, var(--tier, var(--color-primary)) 75%, transparent);
     color: var(--tier, var(--color-primary));
+    transform: translateY(1px);
   }
   &.is-active {
     border-color: var(--tier, var(--color-primary));

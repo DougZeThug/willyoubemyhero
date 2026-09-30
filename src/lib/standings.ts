@@ -28,12 +28,17 @@ export type StandingsRun = {
   participant_id: string;
   official_time_ms: number | null;
   is_official: boolean;
-  status: string;
+  /**
+   * Optional because an archived snapshot may predate the column — recap.$slug
+   * reads one. Absent is not "disqualified"; see outOfContention.
+   */
+  status?: string;
 };
 
 export type StandingsParticipant = {
   participant_id: string;
-  participation_status: string;
+  /** Optional for the same reason as StandingsRun.status. */
+  participation_status?: string;
 };
 
 export type StandingsBundle<
@@ -77,7 +82,10 @@ export function compareOfficialTime(
 export function outOfContention(bundle: StandingsBundle): Set<string> {
   const out = new Set(bundle.runs.filter((r) => r.status === "dq").map((r) => r.participant_id));
   for (const p of bundle.participants) {
-    if (OUT_OF_CONTENTION_STATUSES.has(p.participation_status)) out.add(p.participant_id);
+    // A field an archived snapshot may not carry at all, and the default has to be
+    // the forgiving one: reading absent as out-of-contention would empty an old
+    // recap's board entirely rather than degrade it.
+    if (OUT_OF_CONTENTION_STATUSES.has(p.participation_status ?? "")) out.add(p.participant_id);
   }
   return out;
 }
@@ -95,10 +103,28 @@ export function standings<P extends StandingsParticipant, R extends StandingsRun
   if (!bundle) return [];
   const excluded = outOfContention(bundle);
 
+  /**
+   * Runs are the only thing placed here, so a run whose athlete is not on the
+   * roster at all would rank -- and not merely as a ghost row the screens could
+   * each filter out. `place` below counts strictly faster runs, so a fast orphan
+   * pushes every real athlete down a number; by the time a route sees the rows
+   * the damage is already in them. It has to be resolved before `rows` is built.
+   *
+   * Empty is not "nobody is on the roster", for the same reason absent statuses
+   * are not "everybody is disqualified" -- an archived snapshot /recap reads may
+   * carry runs and no participants at all, and blanking its board would be a
+   * worse answer than placing what it does have. Degrade, like outOfContention.
+   */
+  const roster =
+    bundle.participants.length > 0
+      ? new Set(bundle.participants.map((p) => p.participant_id))
+      : null;
+
   const best = new Map<string, R>();
   for (const run of bundle.runs) {
     if (!run.is_official || run.official_time_ms == null) continue;
     if (excluded.has(run.participant_id)) continue;
+    if (roster && !roster.has(run.participant_id)) continue;
     const prev = best.get(run.participant_id);
     if (!prev || run.official_time_ms < (prev.official_time_ms ?? Infinity)) {
       best.set(run.participant_id, run);

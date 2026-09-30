@@ -60,6 +60,7 @@ import type { PackHandoff } from "@/lib/pack-handoff";
 import { preloadCard } from "@/lib/preload";
 import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
+import { usePackSell } from "@/hooks/use-pack-sell";
 import { streakLine } from "@/lib/streaks";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { urlFromSet } from "@/lib/media";
@@ -84,6 +85,10 @@ export const Route = createFileRoute("/players/pack")({
 
 /** How many cards the wrapper shows flying out. The server deals exactly this many. */
 const PACK_SIZE = 3;
+/** A slot sold from the summary: what it fetched, and the count it left behind. */
+type SoldSlot = { awarded: number; copies: number | null };
+/** Nothing sold from this pack. Shared so the stand memo does not rebuild every render. */
+const EMPTY_SOLD: Record<number, SoldSlot> = {};
 
 /**
  * The gap between a secret's own burst and the set closing behind it.
@@ -147,16 +152,30 @@ function slotRef(slot: PackSlot, local: LocalBefore | undefined): PackSlotRef {
 }
 
 function PackPage() {
-  const { event, bundle, error, failedTables, realtimeDegraded, refetch } = useEventBundle();
+  const {
+    event,
+    bundle,
+    error,
+    loading: eventLoading,
+    failedTables,
+    realtimeDegraded,
+    refetch,
+  } = useEventBundle();
   // A read that failed, as opposed to one still on its way — and all three ways
   // it can fail, because every one of them ends with no roster to draw the cards
   // on screen from. The event can be missing, the bundle query can reject, or
   // the bundle can come back fine with the roster table coalesced to `[]` —
   // which is the case `failed` exists to name, and the one an error check alone
-  // cannot see. This is both what unblocks `useMyCollection` below and what the
-  // render bails out on.
+  // cannot see. This is what the render bails out on.
   const eventFailed =
     (!!error && (!event || !bundle)) || failedTables.includes("event_participants");
+  // What unblocks `useMyCollection` below, and deliberately a wider question than
+  // the one above: the hook only needs to know that no event id is coming, and a
+  // combine that simply is not on answers that just as finally as a read that
+  // broke. Passing `eventFailed` here left a member between combines reconciling
+  // for good, because out of season the read SUCCEEDS with no event — so the
+  // stats query never runs, never settles, and the counter stayed dashed.
+  const noEventComing = (!event && !eventLoading) || eventFailed;
   const cards = useEventCardUrls(event?.id ?? null);
   // The event's back, never a player's — see the note on useEventCardBack. The
   // wrapper is shown before anything has been dealt, so a per-player back here
@@ -168,7 +187,7 @@ function PackPage() {
   // For a member the server is the collection; for a guest the local store is,
   // and it is what the ribbon counts a guest's pulls against.
   const rosterIds = useMemo(() => (bundle?.participants ?? []).map((p) => p.id), [bundle]);
-  const mine = useMyCollection(event?.id ?? null, rosterIds, eventFailed);
+  const mine = useMyCollection(event?.id ?? null, rosterIds, noEventComing);
   const collected = mine.collection;
   const collectionLoaded = mine.ready;
 
@@ -264,6 +283,21 @@ function PackPage() {
    */
   const pendingCompletionsRef = useRef<number[]>([]);
   const [pendingCompletions, setPendingCompletions] = useState<number[]>([]);
+  /**
+   * Owed completions whose card is ALREADY face-up, found by a resume.
+   *
+   * The debt above is written to the row the moment the card turns and only
+   * dropped once the ceremony has actually played, which is what carries it
+   * across a reload. A reload inside that beat comes back with both facts — the
+   * index in `revealed` and the index still owed — and nothing that can pay it:
+   * `revealAt` turns away an index already revealed at its first line, and
+   * `setCompletion` lives inside the block that line guards. The trophy is no
+   * safety net either, marked celebrated at deal time so the global host stays
+   * out of the way of this screen's own ceremony.
+   *
+   * So the resume hands them here instead, and the effect below plays them.
+   */
+  const [strandedCompletions, setStrandedCompletions] = useState<number[]>([]);
   const [completion, setCompletion] = useState<CompletedCollection | null>(null);
   /**
    * A ceremony is running.
@@ -275,6 +309,15 @@ function PackPage() {
    * the collection, and the index pushed into `revealed` twice.
    */
   const revealingRef = useRef(false);
+  /**
+   * The same latch, where the UI can see it.
+   *
+   * A ref alone is invisible to render, so the stand went on offering a tap this
+   * would discard. Its two siblings already do this — `autoRef`/`autoRunning`
+   * below, and `claimingRef`/`setClaiming` in use-milestone-claim — and this was
+   * the only one of the three without a mirror.
+   */
+  const [revealing, setRevealing] = useState(false);
   /**
    * The revealed indices, readable synchronously.
    *
@@ -384,6 +427,7 @@ function PackPage() {
     setLocalBefore({});
     pendingCompletionsRef.current = [];
     setPendingCompletions([]);
+    setStrandedCompletions([]);
     carriedFromRef.current = null;
     carriedAdoptedRef.current = [];
     dealtForRef.current = null;
@@ -610,6 +654,7 @@ function PackPage() {
     dealtOnRef.current = dayKey;
     pendingCompletionsRef.current = [];
     setPendingCompletions([]);
+    setStrandedCompletions([]);
     setOpenState("pending");
     openFiredRef.current = null;
     setOpenRequest({ kind: "tear", nonce: 0 });
@@ -693,7 +738,7 @@ function PackPage() {
       setOpenState("failed");
     }, OPEN_TIMEOUT_MS);
 
-    void (async () => {
+    (async () => {
       try {
         const res = await open();
         settled = true;
@@ -746,6 +791,11 @@ function PackPage() {
                 );
         pendingCompletionsRef.current = owed;
         setPendingCompletions(owed);
+        // Anything owed over a card that is already face-up is a ceremony a
+        // reload caught mid-beat — see `strandedCompletions`. Empty on a tear,
+        // where nothing has been turned yet, and empty on a resume the mismatch
+        // branch above started over.
+        setStrandedCompletions(owed.filter((i) => revealedRef.current.includes(i)));
         if (kind === "tear") {
           // Claimed HERE rather than when the ceremony fires, because the fire
           // is a beat behind the card and the refetch below is not. Left until
@@ -786,7 +836,15 @@ function PackPage() {
         // the messages in require-auth.server.ts are explicitly contractual. A
         // token the server rejects is a token worth dropping, so the gate shows
         // instead of a retry that can never work.
+        //
+        // The request goes first. Dropping the token flips `actor`, which this
+        // effect depends on, and the latch key carries the actor — so a request
+        // still standing re-ran the effect straight past the latch and asked
+        // again as the guest, unasked, able to spend the day's pack on a guest
+        // deal. With no request the pack re-seals, which is what shows the gate.
         if (e instanceof Error && e.message.includes("Claim your player first")) {
+          setOpenRequest(null);
+          openFiredRef.current = null;
           clearMemberToken();
         }
         setOpenState("failed");
@@ -821,6 +879,29 @@ function PackPage() {
     dismiss: dismissMilestone,
   } = useMilestoneClaim(actor, streak);
 
+  const sellSlot = usePackSell(actor, me?.participantId, event?.id);
+  /**
+   * What each slot has been sold for from the summary, by index. Local to this
+   * visit, and that is enough: the pack replays the same slots all day, and a
+   * copy that has gone answers "already gone" if it is offered again.
+   */
+  const [soldFor, setSoldFor] = useState<{ pack: string; by: Record<number, SoldSlot> }>({
+    pack: "",
+    by: {},
+  });
+  // Keyed on the pack it was said about, and read through that key during render
+  // rather than cleared from an effect: tomorrow's pack in a tab nobody closed
+  // must not inherit today's receipts, and a resume that hands back the same
+  // slots in a fresh array must keep them.
+  const packKey = (slots ?? [])
+    .map((s) => (s.kind === "secret" ? (s.pullId ?? s.id) : s.id))
+    .join();
+  const sold = soldFor.pack === packKey ? soldFor.by : EMPTY_SOLD;
+  const soldAwards = useMemo(
+    () => Object.fromEntries(Object.entries(sold).map(([i, s]) => [i, s.awarded])),
+    [sold],
+  );
+
   /**
    * Every slot, resolved for the stand and the summary.
    *
@@ -833,35 +914,44 @@ function PackPage() {
   const standSlots = useMemo<StandSlot[]>(() => {
     const all = bundle?.participants ?? [];
     const pricing = !!me?.participantId && dustLive(event);
-    return (slots ?? []).map((slot) => {
+    return (slots ?? []).map((slot, i) => {
       if (slot.kind === "secret") {
         const outcome = slotOutcome(slot);
         // The secret's count lives on the server. `getMySecrets` is invalidated
         // by the deal itself, so it answers with this copy already counted —
         // and two is the floor while that refetch is still in the air, because
         // a duplicate is by definition never your first.
-        const copies = !slot.duplicate
-          ? 1
-          : Math.max(2, mySecrets.data?.cards.find((c) => c.id === slot.id)?.count ?? 0);
+        // Sold from this screen: the count as it stood the moment the sale
+        // landed. Not "the server's count minus one" — the sale invalidates
+        // getMySecrets, so the refetch already has the copy gone and the
+        // subtraction would count it twice.
+        const copies = sold[i]
+          ? sold[i].copies
+          : !slot.duplicate
+            ? 1
+            : Math.max(2, mySecrets.data?.cards.find((c) => c.id === slot.id)?.count ?? 0);
         return {
           slot,
           rarity: secretFoil(slot.card.foil, slot.card.borderFx, slot.card.tier),
           edition: null,
           outcome,
           copies,
-          sellValue: pricing && slot.duplicate ? secretSellValue(slot.card.tier) : null,
+          sellValue:
+            pricing && slot.duplicate && !(i in sold) ? secretSellValue(slot.card.tier) : null,
           ep: null,
         };
       }
       const local = localBefore[slot.id];
       const outcome = slotOutcome(slot, local);
-      const copies = copiesAfter(slot, local);
+      // A roster slot's count comes from the collection as it stood at the deal,
+      // which no sale moves, so the recorded count is the one to show.
+      const copies = sold[i] ? sold[i].copies : copiesAfter(slot, local);
       // `MILL_BY_EDITION` rather than `millValue`, and that is safe rather than
       // optimistic: the finish is the one Postgres minted. A finish it did not
       // decide is null, and null prices nothing — no number is better than a
       // number that moves.
       const sellValue =
-        pricing && (copies ?? 1) > 1 && slot.edition != null
+        pricing && !(i in sold) && (copies ?? 1) > 1 && slot.edition != null
           ? MILL_BY_EDITION[toEdition(slot.edition)]
           : null;
       return {
@@ -874,7 +964,7 @@ function PackPage() {
         ep: all.find((p) => p.id === slot.id) ?? null,
       };
     });
-  }, [slots, bundle, rarities, localBefore, mySecrets.data, me?.participantId, event]);
+  }, [slots, bundle, rarities, localBefore, mySecrets.data, me?.participantId, event, sold]);
 
   async function revealAt(i: number) {
     // Both guards read refs, not state. A tap during a hold, and a second tap in
@@ -887,6 +977,7 @@ function PackPage() {
     const isSecret = slot.kind === "secret";
 
     revealingRef.current = true;
+    setRevealing(true);
     try {
       // Hold on the glowing edge before a card worth waiting for lands. The
       // pause is the whole trick — and a duplicate secret you have seen three
@@ -981,6 +1072,7 @@ function PackPage() {
       }
     } finally {
       revealingRef.current = false;
+      setRevealing(false);
       releaseDeferredResume();
     }
   }
@@ -1015,6 +1107,34 @@ function PackPage() {
       pendingCompletions: pendingCompletions.length > 0 ? pendingCompletions : undefined,
     });
   }, [slots, dayKey, revealed, stateLoaded, identity, cursor, pendingCompletions, localBefore]);
+
+  /**
+   * Pay a ceremony a reload caught mid-beat.
+   *
+   * Keyed on `strandedCompletions` and NOT on `pendingCompletions ∩ revealed`,
+   * which is the same set and the wrong trigger: during a normal reveal that
+   * intersection holds for the whole of COMPLETION_BEAT_MS, so an effect
+   * watching it would fire the set closing on the render the card turns — over
+   * the top of the card, which is the one thing the beat exists to prevent. Only
+   * a resume puts anything in here.
+   *
+   * No beat on the way out either. The card was turned last session; the pause
+   * that belonged to it has already been and gone.
+   *
+   * One at a time, waiting on an empty screen, because a pack really can close
+   * two sets and `completion` renders one. The debt is dropped as each is
+   * played, so the row stops owing it.
+   */
+  useEffect(() => {
+    if (completion || strandedCompletions.length === 0 || !slots) return;
+    const [i, ...rest] = strandedCompletions;
+    setStrandedCompletions(rest);
+    pendingCompletionsRef.current = pendingCompletionsRef.current.filter((n) => n !== i);
+    setPendingCompletions(pendingCompletionsRef.current);
+    const slot = i === undefined ? undefined : slots[i];
+    if (slot?.kind === "secret" && slot.completedCollection)
+      setCompletion(slot.completedCollection);
+  }, [completion, strandedCompletions, slots]);
 
   const stage = packStage({
     torn,
@@ -1085,7 +1205,7 @@ function PackPage() {
   if (eventFailed) {
     return (
       <div className="card-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-4xl px-4 py-10">
+        <div className="mx-auto max-w-4xl px-page-x py-10">
           <FeedError
             message="Your cards are safe on this phone — today's pack needs the roster before it can be dealt."
             onRetry={() => void refetch()}
@@ -1151,8 +1271,8 @@ function PackPage() {
           screen, mid-reveal and on the summary alike — the same corner every
           time. Lifted to clear the mobile tab bar, which is fixed at the bottom
           and only exists below md. */}
-      <SoundToggle className="fixed bottom-[calc(var(--tab-bar-h)+0.25rem)] left-1 z-40 rounded-full border border-white/10 bg-background/70 backdrop-blur-sm md:bottom-4" />
-      <div className="relative z-10 mx-auto max-w-4xl px-4 py-3 sm:py-6">
+      <SoundToggle className="fixed bottom-[calc(var(--tab-bar-h)+0.25rem)] left-1 z-40 rounded-full border border-border-strong bg-background/70 backdrop-blur-sm md:bottom-4" />
+      <div className="relative z-10 mx-auto max-w-4xl px-page-x py-3 sm:py-6">
         {/* Same gate as the vault, and here for the same reason: a pack opened
             before they pick a name lands on the device, not on them. Kept out of
             the ceremony itself — only while the pack is still sealed. */}
@@ -1224,7 +1344,7 @@ function PackPage() {
               </p>
               {streak && streakLine(streak) && (
                 <p
-                  className="mt-1 text-xs font-bold sm:mt-2"
+                  className="mt-1 text-meta font-bold sm:mt-2"
                   style={{ color: "oklch(0.82 0.19 85)" }}
                 >
                   {streakLine(streak)}
@@ -1312,6 +1432,7 @@ function PackPage() {
               pullCounts={pullCounts.data}
               peeking={peeking === cursor}
               busy={autoRunning}
+              revealing={revealing}
               fromPack={ceremonyRanRef.current}
               enteringFrom={entering}
               onEntered={() => setEntering(null)}
@@ -1330,7 +1451,12 @@ function PackPage() {
                 // hundred milliseconds the real card is invisible behind the
                 // flight, and this would turn a card nobody can see.
                 disabled={autoRunning || entering != null}
-                className="inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-primary disabled:opacity-30 disabled:hover:text-muted-foreground/70"
+                // Disabled is not a rare state here — it covers the whole auto-run and
+                // the hand-off after the tear — and stacking the /70 under opacity-30
+                // multiplied to 1.40:1, which is nothing at all in a garden. Full-strength
+                // muted at a single opacity step is what the neon family already does;
+                // 0.55 lands at 3.28:1, just above where their 0.45 puts them.
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground/70 hover:text-primary disabled:text-muted-foreground disabled:opacity-55 disabled:hover:text-muted-foreground"
               >
                 Reveal all
               </button>
@@ -1355,9 +1481,33 @@ function PackPage() {
             onClaim={() => {
               if (claimable) void claimMilestone(claimable.days);
             }}
+            onSell={
+              me?.participantId && dustLive(event)
+                ? async (i) => {
+                    const stand = standSlots[i];
+                    if (!stand) return "Couldn't sell it — try again";
+                    const res = await sellSlot(stand.slot, stand.edition);
+                    if (!res.ok) return res.message;
+                    const left = stand.copies == null ? null : Math.max(0, stand.copies - 1);
+                    setSoldFor((prev) => ({
+                      pack: packKey,
+                      by: {
+                        ...(prev.pack === packKey ? prev.by : {}),
+                        [i]: { awarded: res.awarded, copies: left },
+                      },
+                    }));
+                    return null;
+                  }
+                : undefined
+            }
+            sold={soldAwards}
           />
         )}
       </div>
     </div>
   );
 }
+
+// Same as the other tested pages in this folder: the test imports the component
+// as the module's default, and a route file otherwise exports only `Route`.
+export default PackPage;

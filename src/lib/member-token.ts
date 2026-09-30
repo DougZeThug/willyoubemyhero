@@ -81,13 +81,32 @@ function snapshot(): MemberSession | null {
   return next;
 }
 
+/**
+ * The three keys getSnapshot actually reads, so a `storage` event for anything
+ * else is not a change to this store.
+ *
+ * Set membership rather than one comparison, because this store is unusual in
+ * spanning more than one key -- the name rides beside the token and the
+ * breadcrumb outlives it.
+ */
+const WATCHED = new Set<string>([KEY, NAME_KEY, WAS_MEMBER_KEY]);
+
 function subscribe(onStoreChange: () => void) {
-  window.addEventListener("storage", onStoreChange);
+  // Filtered, unlike the custom event beside it. `storage` fires for every key
+  // the other tab writes, and this is a useSyncExternalStore subscribe -- so an
+  // unrelated wwbh: write re-read and re-notified every component holding a
+  // member session. A null key is localStorage.clear(), which is a sign-out and
+  // very much does concern us.
+  const theirs = (e: StorageEvent) => {
+    if (e.key !== null && !WATCHED.has(e.key)) return;
+    onStoreChange();
+  };
+  window.addEventListener("storage", theirs);
   window.addEventListener("wwbh:member-token-changed", onStoreChange);
   // Tokens last 90 days, so an hourly expiry check is plenty.
   const iv = window.setInterval(onStoreChange, 60 * 60_000);
   return () => {
-    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener("storage", theirs);
     window.removeEventListener("wwbh:member-token-changed", onStoreChange);
     window.clearInterval(iv);
   };

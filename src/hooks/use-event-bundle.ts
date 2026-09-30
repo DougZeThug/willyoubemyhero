@@ -32,7 +32,9 @@ export function useEventBundle() {
   useEffect(() => {
     if (!eventId) {
       setHealth("connecting");
-      return;
+      // Explicit, so both arms of this effect return the same shape: there is
+      // no channel to leave, so there is no cleanup to give back.
+      return undefined;
     }
     return subscribeToEventChannel(eventId, {
       change: () => {
@@ -44,6 +46,43 @@ export function useEventBundle() {
         // the bar or the shop, so there is nothing there to go stale.
         qc.invalidateQueries({ queryKey: ["active-event"] });
       },
+      eventRow: () => {
+        // The universal card back is three more columns on that same row, and
+        // these two are the queries that render it. They need the nudge more
+        // than the rest: uploadEventCardBack writes the new art to a fresh
+        // Date.now() path and then HARD-DELETES the old objects, so a phone
+        // holding the previous signed URL is pointed at storage that is gone.
+        // Neither query refetches on focus, so without this the only way back
+        // is their own timer — 45 minutes for the back, three hours for the
+        // card urls.
+        //
+        // Here rather than in `change` above, which fires for every table on
+        // the channel AND on the 15s backstop poll, on a timer. Invalidating
+        // there re-signed every participant's image set every fifteen seconds
+        // on every phone — getEventCardUrls walks the whole roster — which is
+        // both a lot of signing and a nonsense of the three-hour refresh those
+        // queries are tuned for.
+        //
+        // An events-row write is rare and always a commissioner doing
+        // something, so an extra re-sign after a dust switch is the price of
+        // the upload reaching other phones at all. With realtime down there is
+        // no write to ride, so they do wait — but only until the socket is
+        // back: event-channel replays this signal on recovery alongside
+        // `change`, which is the whole point of having a recovery branch. It is
+        // their own 45-minute and 3-hour timers that used to be the only way
+        // back from an upload missed during an outage.
+        qc.invalidateQueries({ queryKey: ["event-card-back", eventId] });
+        qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      },
+      participantRow: () => {
+        // The roster's half of the same problem. A photo or card upload, and the
+        // variant backfill, write the new art to fresh paths and hard-delete the
+        // old objects — so /tv and the board, sitting on three-hour signed URLs
+        // that never refetch on focus, would show broken images until their own
+        // timer came round. Coalesced by the channel, and never on the poll.
+        qc.invalidateQueries({ queryKey: ["photo-urls", eventId] });
+        qc.invalidateQueries({ queryKey: ["card-urls", eventId] });
+      },
       health: setHealth,
     });
   }, [eventId, qc]);
@@ -51,8 +90,13 @@ export function useEventBundle() {
   const refetchEvent = event.refetch;
   const refetchBundle = bundle.refetch;
   const refetch = useCallback(async () => {
-    await Promise.all([refetchEvent(), refetchBundle()]);
-  }, [refetchEvent, refetchBundle]);
+    // The same gate the query above carries, because `refetch()` does not honour
+    // `enabled` — it runs the queryFn whatever the flag says. Out of season the
+    // Try again button therefore sent `eventId: null` into the validator, and
+    // the Zod rejection came back as the FeedError's message: a raw JSON issue
+    // array on seven spectator screens, re-thrown by every subsequent tap.
+    await Promise.all([refetchEvent(), eventId ? refetchBundle() : Promise.resolve()]);
+  }, [refetchEvent, refetchBundle, eventId]);
 
   return {
     event: event.data,

@@ -301,4 +301,82 @@ describe("useFinishSave", () => {
     expect(result.current.state).toBe("idle");
     expect(result.current.error).toBeNull();
   });
+
+  it("does not report a save the run was thrown away during", async () => {
+    // The console's onSaved clears the ACTIVE run — from IndexedDB and from
+    // React — so an abandoned save calling it destroys whichever run has since
+    // replaced the one it belonged to. reset() is how cancelRun says the run is
+    // gone; the answer must not come back after it.
+    let release!: (v: unknown) => void;
+    saveCompletedRun.mockReturnValue(new Promise((r) => (release = r)));
+    const { result, onSaved } = await setup();
+
+    let inFlight!: Promise<void>;
+    act(() => {
+      inFlight = result.current.finish(makeRunning());
+    });
+    // The request waits on the record being written to this phone, so let it
+    // actually leave before throwing the run away.
+    await waitFor(() => expect(saveCompletedRun).toHaveBeenCalledTimes(1));
+    act(() => result.current.reset());
+    await act(async () => {
+      release({ runId: "run-1" });
+      await inFlight;
+    });
+
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(result.current.state).toBe("idle");
+  });
+
+  it("does not raise a failure against the run that replaced it either", async () => {
+    let reject!: (e: unknown) => void;
+    saveCompletedRun.mockReturnValue(new Promise((_r, rej) => (reject = rej)));
+    const { result } = await setup();
+
+    let inFlight!: Promise<void>;
+    act(() => {
+      inFlight = result.current.finish(makeRunning());
+    });
+    await waitFor(() => expect(saveCompletedRun).toHaveBeenCalledTimes(1));
+    act(() => result.current.reset());
+    await act(async () => {
+      reject(new Error("offline"));
+      await inFlight;
+    });
+
+    // "Finished — not saved" over a timer that is running is a lie about a run
+    // nobody is holding any more.
+    expect(result.current.state).toBe("idle");
+    expect(result.current.error).toBeNull();
+  });
+
+  it("lets the next athlete finish while the abandoned save is still out", async () => {
+    // reset() cleared the visible state but not the in-flight latch, so Finish
+    // on the next run was an enabled button that early-returned and did
+    // nothing until the old request happened to come back.
+    let release!: (v: unknown) => void;
+    saveCompletedRun.mockReturnValueOnce(new Promise((r) => (release = r)));
+    const { result } = await setup();
+
+    let inFlight!: Promise<void>;
+    act(() => {
+      inFlight = result.current.finish(makeRunning());
+    });
+    await waitFor(() => expect(saveCompletedRun).toHaveBeenCalledTimes(1));
+
+    act(() => result.current.reset());
+    saveCompletedRun.mockResolvedValue({ runId: "run-2" });
+    await act(async () => {
+      await result.current.finish(makeRunning({ clientKey: "ck-next" }));
+    });
+
+    expect(saveCompletedRun).toHaveBeenCalledTimes(2);
+    expect(saveCompletedRun.mock.calls[1]?.[0]?.data).toMatchObject({ clientKey: "ck-next" });
+
+    // And the straggler still must not report anything.
+    await act(async () => {
+      release({ runId: "run-1" });
+      await inFlight;
+    });
+  });
 });

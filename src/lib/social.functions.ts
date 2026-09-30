@@ -35,8 +35,15 @@ async function admin() {
  * somebody else and replayed. The guest id comes from the signed
  * `x-guest-token` header instead, the same way the daily secret pull works.
  *
- * A member session always wins over a guest identity in the same request, so
- * signing in later can't silently double up your reactions.
+ * A member session always wins over a guest identity in the same request. That
+ * alone does not stop signing in later from doubling up your reactions: the
+ * lookup in toggleReaction only searches the request's own identity, so a 🔥
+ * left as a guest is invisible to the member tapping it again. What stops it is
+ * the claim — attach_device_to_player, bind_account_to_player and
+ * merge_guest_into_collector all move the guest's reactions and comments onto
+ * the player (claim_guest_social, 20260924130000), and from then on the
+ * database refuses a reaction or comment from that guest id — including one
+ * that was already in flight when the claim ran (20260924140000).
  */
 const guestSchema = z
   .object({
@@ -269,16 +276,37 @@ export const castAwardVote = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Published winners. Public — this is what renders on cards and the recap. */
+/**
+ * Published winners. Public — this is what renders on cards and the recap.
+ *
+ * `lockedAtRead` rides along because an empty list means two different things and
+ * the reveal has to tell them apart: nobody voted, or the winners have not been
+ * published yet. The event row carries `awards_locked`, but a *separately* fetched
+ * flag cannot answer it — /awards reads that one from the bundle, on its own
+ * timer, so the lock can flip while the tally in hand still predates it. Read
+ * here, the answer is about THIS list.
+ *
+ * The lock is read BEFORE the rows, and that order is the whole guarantee.
+ * close_award_voting inserts every award and only then sets awards_locked, in one
+ * transaction — so a lock that reads true means the rows below are already
+ * committed and this read will see them. Reversed, a close landing between the two
+ * would return an empty list stamped `lockedAtRead: true`, which is precisely the
+ * reveal announcing that nobody voted over a vote that had winners.
+ */
 export const getAwards = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
+    const { data: ev } = await sb
+      .from("events")
+      .select("awards_locked")
+      .eq("id", data.eventId)
+      .maybeSingle();
     const { data: rows } = await sb
       .from("awards")
       .select("id, event_id, participant_id, award_name, award_type, description")
       .eq("event_id", data.eventId);
-    return rows ?? [];
+    return { awards: rows ?? [], lockedAtRead: Boolean(ev?.awards_locked) };
   });
 
 /** Live tally. Commissioner only, so the room can't see it before the reveal. */

@@ -12,7 +12,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { User } from "@supabase/supabase-js";
 import { createQueryWrapper } from "@/test/query";
-import { setMemberToken } from "@/lib/member-token";
+import { getMemberToken, setMemberToken } from "@/lib/member-token";
 
 const createCollectorIdentity = vi.fn();
 const toastError = vi.fn();
@@ -30,9 +30,11 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
 
 vi.mock("@/hooks/use-account", () => ({ useAuthUser: () => authUser() }));
 
+const adoptLocalCollection = vi.fn();
+
 vi.mock("@/lib/adopt-collection", () => ({
   snapshotLocalCollection: vi.fn().mockResolvedValue([]),
-  adoptLocalCollection: vi.fn().mockResolvedValue(undefined),
+  adoptLocalCollection: (...a: unknown[]) => adoptLocalCollection(...a),
 }));
 
 vi.mock("sonner", () => ({
@@ -61,9 +63,13 @@ async function renderGate() {
   return render(<CollectorSignupGate />, { wrapper });
 }
 
+/** A signed token this device would actually keep — `getMemberToken` parses it. */
+const TOKEN = `m.${PID}.${Date.now() + 90 * 86_400_000}.signature`;
+
 beforeEach(() => {
   window.localStorage.clear();
-  createCollectorIdentity.mockReset().mockResolvedValue({ token: "t", name: "Jane Doe" });
+  createCollectorIdentity.mockReset().mockResolvedValue({ token: TOKEN, name: "Jane Doe" });
+  adoptLocalCollection.mockReset().mockResolvedValue(undefined);
   toastError.mockReset();
   toastSuccess.mockReset();
   authUser.mockReset().mockReturnValue({ user: user(), loading: false });
@@ -142,5 +148,34 @@ describe("naming yourself", () => {
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith("Name already taken"));
     expect(screen.getByPlaceholderText("Your name")).toHaveValue("Jane Doe");
+  });
+});
+
+// `createCollector` reparents the guest's pack_opens but mints no card_copies:
+// adoption is the only thing that files the cards themselves. So a token left on
+// over a failed upload points the collection hook at a server record that has
+// never heard of them, and an empty answer reads as "you own nothing" rather
+// than "we don't know" — which is a delete. The other two doors onto the roster,
+// /claim and the account sync, both take the token back off. This one did not.
+describe("when the cards can't be uploaded", () => {
+  it("retries once, because the first request off a woken phone is the flaky one", async () => {
+    adoptLocalCollection.mockRejectedValueOnce(new Error("network")).mockResolvedValue(undefined);
+    await renderSignup();
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("You're in, Jane Doe"));
+    expect(adoptLocalCollection).toHaveBeenCalledTimes(2);
+    expect(getMemberToken()).toBe(TOKEN);
+  });
+
+  it("takes the token back off when the retry fails too, so nothing is pruned", async () => {
+    adoptLocalCollection.mockRejectedValue(new Error("network"));
+    await renderSignup();
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/couldn't be transferred/i))); // prettier-ignore
+    expect(getMemberToken()).toBeNull();
+    // Not "You're in" over a handoff that did not happen.
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 });

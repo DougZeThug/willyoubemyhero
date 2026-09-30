@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
 import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
-import { clearAdminToken } from "@/lib/admin-token";
 import {
   adoptableIds,
   adoptLocalCollection,
@@ -14,6 +13,8 @@ import { carryPackToIdentity } from "@/lib/card-collection";
 import { carryTrophySeen } from "@/lib/trophy-seen";
 import { deviceId } from "@/lib/device-id";
 import { clearAccountHandoff } from "@/lib/account-handoff";
+import { bindAdminTokenTo } from "@/lib/admin-token";
+import { stashAuthNext } from "@/lib/auth-next";
 import { setAccountSyncState } from "@/lib/account-sync-state";
 
 /** The Supabase user this browser is signed in as, or null. */
@@ -93,6 +94,13 @@ export function useAccountSync(user: User | null) {
     }
     // Narrowed once here: the closures below cannot see the guard above.
     const userId: string = authUserId;
+    // The admin token survives a sign-out (ADM-16) and names no user, so the
+    // next account to sign in here would hold the last one's console. Not left
+    // to the `lastStarted` check below: that lives in memory, and a Google
+    // sign-in can leave the page and come back through a redirect, after which
+    // there is no previous account to compare against. The owner is stored with
+    // the token instead. Before the latch, and before this run's first request.
+    bindAdminTokenTo(userId);
     if (syncedFor.current === userId) return;
     // A different account from the one whose run last started here. Whatever
     // member token is on the device is that account's, and syncAccount binds a
@@ -103,6 +111,11 @@ export function useAccountSync(user: User | null) {
     // account should adopt.
     if (lastStarted.current && lastStarted.current !== userId) {
       clearMemberToken();
+      // The handoff is the same identity by another door — attachAccountHandoff
+      // puts it on EVERY server-function call, and syncAccount falls back to it
+      // when no member token is there — so clearing one without the other just
+      // moves the hole.
+      clearAccountHandoff();
       wakes.current = 0;
       heldFor.current = null;
     }
@@ -141,6 +154,18 @@ export function useAccountSync(user: User | null) {
       const res = await syncAccountSession({ data: undefined });
       if (cancelled) return;
       if (res.kind === "member") {
+        const carryFrom = deviceId();
+        // BEFORE the token, for the reason claim.tsx spells out at length: the
+        // token is what gives the root ceremony host a participant id, and the
+        // trophy row is already banked by the time this function runs. Left until
+        // after the adoption, the realtime refetch could get there first and
+        // replay a ceremony this device has already thrown as a guest.
+        //
+        // No `getMemberToken() === wrote` gate, unlike the pack carry below. That
+        // gate is about not rewriting a pack row for an account already switched
+        // away from; re-filing seen-keys is idempotent and costs nothing if the
+        // run turns out to be stale.
+        if (carryFrom) carryTrophySeen(`d:${carryFrom}`, res.id);
         setMemberToken(res.token, res.name ?? "Player");
         wrote = res.token;
         // Every await below is a moment the account can change under this sync.
@@ -167,9 +192,8 @@ export function useAccountSync(user: User | null) {
           }
         }
         if (cancelled) return;
-        // The claim screen's move, for the same two reasons — a sign-in is the
-        // other way a guest becomes a member, and B-07 and B-13 do not care which
-        // door was used.
+        // The claim screen's move — a sign-in is the other way a guest becomes a
+        // member, and B-07 does not care which door was used.
         //
         // Gated on the token this run actually wrote still being the one on the
         // device, which is the same compare-and-clear the cleanup below makes and
@@ -180,8 +204,6 @@ export function useAccountSync(user: User | null) {
         const device = deviceId();
         if (device && getMemberToken() === wrote) {
           await carryPackToIdentity(`d:${device}`, `m:${res.id}`, adoptableIds(held));
-          if (cancelled) return;
-          carryTrophySeen(`d:${device}`, res.id);
         }
         // Only now. Clearing it before the upload left a phone whose adoption
         // failed with no identity at all, and its cards filed under neither.
@@ -260,9 +282,26 @@ export function useAccountSync(user: User | null) {
  * unnamed visitor had pulled on this handset: the next visit minted a fresh
  * guest id and the vault looked empty. Signing back in re-adopts (and merges)
  * whatever this device holds, so leaving it in place is strictly safer.
+ *
+ * The ADMIN token survives too (ADM-16). It came from the PIN or the admin list,
+ * it has its own twelve hours, and the console has its own Lock button for
+ * ending it. Clearing it here sent a commissioner who signed out mid-combine
+ * back to the PIN gate while their console session still had hours to run.
+ * It survives for the account that earned it and nobody else: requireAdmin
+ * never asks who is signed in, so `bindAdminTokenTo` in useAccountSync takes it
+ * off the moment a different account signs in on this handset.
  */
 export async function signOutAccount() {
   await supabase.auth.signOut();
   clearMemberToken();
-  clearAdminToken();
+  // Both of these were held for an auth round trip that never finished, and
+  // handsets change hands in this league, so neither may be waiting for whoever
+  // signs in next on this phone. The destination would bounce them somewhere
+  // they never asked for; the handoff token is worse, because syncAccount takes
+  // it as the player to bind a first-time account to — so the next person to
+  // sign in here would be linked to this one's roster player without ever
+  // having redeemed their code. Only a successful sync clears it otherwise, and
+  // a sync that gave up never gets there.
+  stashAuthNext(null);
+  clearAccountHandoff();
 }

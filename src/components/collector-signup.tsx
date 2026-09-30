@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { createCollectorIdentity } from "@/lib/collector.functions";
-import { setMemberToken, useMemberSession } from "@/lib/member-token";
+import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member-token";
 import { useAuthUser } from "@/hooks/use-account";
 import { clearGuestToken } from "@/lib/guest-token";
 import { clearAccountHandoff } from "@/lib/account-handoff";
@@ -38,11 +38,32 @@ export function CollectorSignup({ className }: { className?: string }) {
       const res = await createFn({ data: { displayName } });
       clearGuestToken();
       clearAccountHandoff();
+      // The claim screen's rule, which this door used to be the only one to
+      // skip. `createCollector` reparents the guest's `pack_opens` rows but
+      // mints no `card_copies` — this call is the only thing that files the
+      // cards themselves — so a swallowed failure left the token on over a
+      // server record that has never heard of them, and the next stats read
+      // said "you own nothing" rather than "we don't know". `useMyCollection`
+      // believes it and `forgetCards` deletes them. Today's cards come back on
+      // a re-tear; an earlier league day's do not. So if the upload does not
+      // stick, the token comes straight back off: no member, no reconciliation,
+      // nothing pruned, and the next sign-in replays the whole handoff against
+      // a store the prune has not been through.
       setMemberToken(res.token, res.name);
       try {
         await adoptLocalCollection(held);
       } catch {
-        /* named without the upload: the cards can be granted back */
+        try {
+          // One retry, because the usual failure here is a flaky first request
+          // from a phone that has just woken up on garden wifi.
+          await adoptLocalCollection(held);
+        } catch {
+          clearMemberToken();
+          toast.error(
+            "Named, but your cards couldn't be transferred — sign in again on a better connection.",
+          );
+          return;
+        }
       }
       await qc.invalidateQueries();
       toast.success(`You're in, ${res.name}`);
@@ -61,7 +82,7 @@ export function CollectorSignup({ className }: { className?: string }) {
       <h2 className="text-sm font-bold uppercase tracking-[0.08em] text-primary">
         Pick a trading name
       </h2>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 text-meta text-muted-foreground">
         You&apos;re not in the combine, but you can still collect and trade. This is the name the
         league sees on your offers.
       </p>
@@ -70,7 +91,7 @@ export function CollectorSignup({ className }: { className?: string }) {
         onChange={(e) => setName(e.target.value)}
         maxLength={32}
         placeholder="Your name"
-        className="mt-3 min-h-11 w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-base text-foreground outline-none focus:border-primary/60 pointer-fine:min-h-0 pointer-fine:text-sm"
+        className="mt-3 min-h-11 w-full rounded-md border border-border-strong bg-white/[0.03] px-3 py-2 text-base text-foreground outline-none focus:border-primary/60 pointer-fine:min-h-0 pointer-fine:text-sm"
       />
       <button
         type="submit"

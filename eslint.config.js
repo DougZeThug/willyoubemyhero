@@ -37,6 +37,14 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // react-hooks 7 (forced by ESLint 10) added React Compiler rules that flag
+      // ~77 existing sites. Rewriting timing and card code inside a dependency
+      // bump is too risky, so they warn for gradual cleanup instead of failing CI.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
       "no-restricted-imports": [
         "error",
         {
@@ -49,15 +57,19 @@ export default tseslint.config(
           ],
         },
       ],
+      // className composition in this app is cn(), and `"base " + (cond ? …)` is
+      // not the same thing: cn() resolves a conditional colour against a base
+      // size through tailwind-merge rather than gluing them. Eighteen sites had
+      // drifted to the `+` form before DeepSource counted them (JS-R1004); this
+      // is what stops the nineteenth.
+      //
+      // A template literal counts as a string literal to this rule, so a message
+      // wrapped across lines stays legal — it only fires when some operand is
+      // neither: a call, a ternary, an identifier.
+      "prefer-template": "error",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
     },
-  },
-  {
-    // Playwright fixtures hand control back by calling `use(value)`. The React
-    // hooks plugin sees the name and assumes React's `use`, which it is not.
-    files: ["e2e/**/*.ts"],
-    rules: { "react-hooks/rules-of-hooks": "off" },
   },
   eslintPluginPrettier,
 );

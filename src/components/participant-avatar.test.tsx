@@ -43,6 +43,22 @@ describe("ParticipantAvatar", () => {
     expect(container.querySelector("img")).toHaveAttribute("alt", "");
   });
 
+  it("marks the initials decorative too — they repeat the name as letters", () => {
+    const { container } = render(<ParticipantAvatar name="Doug Weidensaul" />);
+    expect(container.firstElementChild).toHaveAttribute("aria-hidden");
+  });
+
+  it("keeps the initials off §16's floor on the smallest avatar in the app", () => {
+    // The awards ballot asks for 24, where two fifths of the box is 9.6px.
+    const { container } = render(<ParticipantAvatar name="Doug Weidensaul" size={24} />);
+    expect(container.firstElementChild).toHaveStyle({ fontSize: "11px" });
+  });
+
+  it("scales the initials with the box above the floor", () => {
+    const { container } = render(<ParticipantAvatar name="Doug Weidensaul" size={40} />);
+    expect(container.firstElementChild).toHaveStyle({ fontSize: "16px" });
+  });
+
   it("sizes itself from the size prop", () => {
     const { container } = render(<ParticipantAvatar name="Doug" size={220} />);
     expect(container.firstElementChild).toHaveStyle({ width: "220px", height: "220px" });

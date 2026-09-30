@@ -149,11 +149,18 @@ export function useTiltWanted() {
 
   useEffect(() => {
     const mine = () => setWanted(isTiltWanted());
-    const theirs = () => {
+    const reread = () => {
       tiltWanted = readTiltWanted();
       setWanted(tiltWanted);
     };
-    theirs();
+    // Another tab, and only if it touched OUR key. `storage` fires for every key
+    // the other tab writes, so this used to re-read and re-render on every
+    // unrelated wwbh: write. A null key is localStorage.clear(), which does.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== TILT_KEY) return;
+      reread();
+    };
+    reread();
     window.addEventListener("wwbh:tilt-changed", mine);
     window.addEventListener("storage", theirs);
     return () => {

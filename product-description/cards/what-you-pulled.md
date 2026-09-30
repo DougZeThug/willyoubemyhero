@@ -42,6 +42,15 @@ slot it was dealt in, wearing its prism edge, with its level pips and either its
 level line or — on a plain duplicate — the wink and what it would sell for. The
 subtitle admits a secret was in the pack only once it has been turned.
 
+**Selling a spare.** For a member with dust switched on, "Sell for N" under a
+spare is a button. Tapping it asks first — "Sell Pickles?", the dust it pays and
+how many copies you keep — with "Keep it" and "Sell for N". Yes sells the copy
+the pack just dealt: a secret by the very row it minted, a roster card by a copy
+at the finish the line priced. The line then reads "Sold · +N" and the ribbon
+drops by one. A refusal stays in the dialog as one line beside the button —
+"Already gone — it left your vault" when a replayed pack still shows a card that
+was sold or traded earlier today. Offline, the button is disabled.
+
 **The collection counter.** Hidden for the whole reveal and shown here. A running
 total during the reveal would turn each card into an increment.
 

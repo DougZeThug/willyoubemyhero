@@ -587,7 +587,7 @@ describe("adopt_card_copies", () => {
     // from another event is not a card the phone could honestly hold.
     const OLD_EVENT = "00000000-0000-4000-8000-0000000000fd";
     await sql(
-      `INSERT INTO public.events (id, name, year, active) VALUES ($1, 'Last year', 2025, false)`,
+      "INSERT INTO public.events (id, name, year, active) VALUES ($1, 'Last year', 2025, false)",
       [OLD_EVENT],
     );
     const [old] = await sql<{ id: string }>(

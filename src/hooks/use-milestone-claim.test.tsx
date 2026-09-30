@@ -47,11 +47,14 @@ function streak(over: Partial<StreakStatus> = {}): StreakStatus {
 }
 
 function mount(actor: string | null, status: StreakStatus | null) {
-  const { wrapper } = createQueryWrapper();
-  return renderHook(({ a, s }) => useMilestoneClaim(a, s), {
-    wrapper,
-    initialProps: { a: actor, s: status },
-  });
+  const { wrapper, client } = createQueryWrapper();
+  return {
+    ...renderHook(({ a, s }) => useMilestoneClaim(a, s), {
+      wrapper,
+      initialProps: { a: actor, s: status },
+    }),
+    client,
+  };
 }
 
 describe("which rung is offered", () => {
@@ -221,6 +224,48 @@ describe("claiming", () => {
     expect(result.current.claimError).toMatch(/already collected/i);
   });
 
+  it("does not carry a refused rung's error onto the next rung the refetch offers", async () => {
+    // "Already collected" refetches the ladder, and on a long streak that moves
+    // the button down a rung. The error belonged to the rung that was refused;
+    // left standing it sat under "Claim" for a rung nobody had collected, telling
+    // somebody to skip a card they had actually earned.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({ ok: false, reason: "claimed" });
+    const { result, rerender } = mount("m:alice", streak({ current: 14 }));
+    expect(result.current.claimable?.days).toBe(14);
+    await act(async () => {
+      await result.current.claim(14);
+    });
+    expect(result.current.claimError).toMatch(/already collected/i);
+
+    // The refetch lands: 14 is banked, so 7 is what is on offer now.
+    const refetched = streak({ current: 14 });
+    refetched.milestones = refetched.milestones.map((m) =>
+      m.days === 14 ? { ...m, claimed: true } : m,
+    );
+    rerender({ a: "m:alice", s: refetched });
+    expect(result.current.claimable?.days).toBe(7);
+    expect(result.current.claimError).toBeNull();
+  });
+
+  it("does not carry a refusal onto the same rung of a rebuilt run", async () => {
+    // A broken-and-rebuilt run offers every rung again, and the button showing
+    // "3 days" on the new run is a different rung from the one refused on the
+    // old run — the same number, a different claim. Keyed on the number alone,
+    // the old refusal came back under a Claim button that would now succeed.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({ ok: false, reason: "not_earned" });
+    const { result, rerender } = mount("m:alice", streak({ current: 3 }));
+    await act(async () => {
+      await result.current.claim(3);
+    });
+    expect(result.current.claimError).toMatch(/isn't there yet/i);
+
+    rerender({ a: "m:alice", s: streak({ current: 3, startedOn: "2026-09-20" }) });
+    expect(result.current.claimable?.days).toBe(3);
+    expect(result.current.claimError).toBeNull();
+  });
+
   it("says every refusal on the button and never as a toast", async () => {
     // A toast announces the reward to whoever is glancing at the phone over
     // your shoulder.
@@ -251,6 +296,88 @@ describe("claiming", () => {
     });
     expect(result.current.claimError).toMatch(/no signal/i);
   });
+});
+
+describe("what a claim refreshes", () => {
+  it("asks again for every cache the claim moved, the history list included", async () => {
+    // The row this wrote is the newest one /you's history selects, and nothing
+    // else refreshes it — streak_milestone_claims is deliberately off the
+    // realtime publication. Miss it and StreakLadder contradicts itself: the rung
+    // reads "Claimed" while the list of what you claimed omits the card it paid.
+    claimFn.mockReset();
+    claimFn.mockResolvedValue({
+      ok: true,
+      milestone: 7,
+      streak: 7,
+      duplicate: false,
+      card: CARD,
+      startedOn: RUN,
+    });
+    const { result, client } = mount("m:alice", streak({ current: 7 }));
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    await act(async () => {
+      await result.current.claim(7);
+    });
+
+    const keys = invalidate.mock.calls.map((c) => c[0]?.queryKey);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        ["pack-streak", "m:alice"],
+        ["my-secrets", "m:alice"],
+        ["pack-status", "m:alice"],
+        ["streak-history", "m:alice"],
+      ]),
+    );
+  });
+});
+
+describe("a refusal that means the screen is behind", () => {
+  it.each(["claimed", "unavailable"])(
+    "asks the caches again when the server answers %s",
+    async (reason) => {
+      // `claimed` is somebody else having banked it. `unavailable` is overloaded:
+      // the server sends it for a paid claim whose card could not be read back,
+      // and as the fallback for an answer carrying no reason at all. Neither is a
+      // state this screen can trust what it is holding in, and the cost of asking
+      // is one refetch.
+      claimFn.mockReset();
+      claimFn.mockResolvedValue({ ok: false, reason });
+      const { result, client } = mount("m:alice", streak({ current: 3 }));
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+
+      await act(async () => {
+        await result.current.claim(3);
+      });
+
+      const keys = invalidate.mock.calls.map((c) => c[0]?.queryKey);
+      expect(keys).toEqual(
+        expect.arrayContaining([
+          ["pack-streak", "m:alice"],
+          ["my-secrets", "m:alice"],
+          ["pack-status", "m:alice"],
+          ["streak-history", "m:alice"],
+        ]),
+      );
+    },
+  );
+
+  it.each(["account_required", "not_earned"])(
+    "leaves them alone when the server answers %s",
+    async (reason) => {
+      // Nothing moved, so nothing needs re-reading.
+      claimFn.mockReset();
+      claimFn.mockResolvedValue({ ok: false, reason });
+      const { result, client } = mount("m:alice", streak({ current: 3 }));
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+
+      await act(async () => {
+        await result.current.claim(3);
+      });
+
+      expect(invalidate).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("a phone changing hands", () => {

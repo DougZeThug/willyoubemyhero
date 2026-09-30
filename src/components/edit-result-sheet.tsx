@@ -25,6 +25,7 @@ import {
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { createManualRun, deleteRunResult, updateRunResult } from "@/lib/admin-write.functions";
 import { formatTime, parseTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type PenaltyDraft = { stationId: string; ms: string; reason: string };
 
@@ -137,8 +138,16 @@ export function EditResultSheet({
     let total = 0;
     return stations.map((st) => {
       const value = legTimes[st.id] ?? "";
-      const leg = value.trim() === "" ? null : parseTime(value);
-      if (leg == null) return { id: st.id, leg: null as number | null, at: null as number | null };
+      const parsed = value.trim() === "" ? null : parseTime(value);
+      if (parsed == null) {
+        return { id: st.id, leg: null as number | null, at: null as number | null };
+      }
+      // Onto the hundredth grid here, where a typed leg becomes a split.
+      // parseTime keeps up to three decimals and the course box does not, so a
+      // leg typed as 15.005 saved a 15005 split under a 15010 course time — and
+      // the server differences these cumulatives into the segment times that
+      // stationKing is awarded on, so the stray 5ms could take a crown.
+      const leg = Math.round(parsed / 10) * 10;
       total += leg;
       return { id: st.id, leg, at: total };
     });
@@ -218,7 +227,7 @@ export function EditResultSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto">
+      <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="font-display uppercase">
             {creating ? "Add result" : "Edit result"}
@@ -245,7 +254,7 @@ export function EditResultSheet({
                 setCourseTouched(true);
                 setRawTime(e.target.value);
               }}
-              className={"tabular " + (rawMs == null ? "border-destructive" : "")}
+              className={cn("tabular", rawMs == null && "border-destructive")}
               placeholder="1:23.45"
             />
             {splitDerivedMs != null && rawMs != null && rawMs !== splitDerivedMs && (
@@ -285,7 +294,7 @@ export function EditResultSheet({
                         setLegTimes((prev) => ({ ...prev, [st.id]: e.target.value }));
                       }}
                       placeholder="—"
-                      className={"h-9 w-28 tabular " + (bad ? "border-destructive" : "")}
+                      className={cn("h-9 w-28 tabular", bad && "border-destructive")}
                     />
                   </div>
                 );
@@ -328,7 +337,10 @@ export function EditResultSheet({
                         ),
                       )
                     }
-                    className="min-w-0 flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs uppercase"
+                    // Same floor as every other field on a phone: 44px, and
+                    // 16px so focusing it does not zoom the sheet. Fixing a
+                    // result happens at the side of the course, on a phone.
+                    className="min-h-11 min-w-0 flex-1 rounded-md border border-border-strong bg-white/5 px-2 py-2 text-base uppercase pointer-fine:min-h-0 pointer-fine:text-xs"
                   >
                     <option value="">No station</option>
                     {stations.map((st) => (
@@ -346,9 +358,10 @@ export function EditResultSheet({
                         prev.map((row, j) => (j === i ? { ...row, ms: e.target.value } : row)),
                       )
                     }
-                    className={
-                      "h-9 w-24 tabular " + (parseTime(p.ms) == null ? "border-destructive" : "")
-                    }
+                    className={cn(
+                      "h-9 w-24 tabular",
+                      parseTime(p.ms) == null && "border-destructive",
+                    )}
                   />
                   <Button
                     size="sm"

@@ -56,7 +56,7 @@ export type NavTab = { id: NavRowId; to: string; label: string; icon: LucideIcon
  * strength of a shared prefix that stops mid-word.
  */
 export function activeTab(path: string, tos: readonly string[]): string | null {
-  const hit = tos.filter((to) => path === to || path.startsWith(to + "/"));
+  const hit = tos.filter((to) => path === to || path.startsWith(`${to}/`));
   return hit.sort((a, b) => b.length - a.length)[0] ?? null;
 }
 

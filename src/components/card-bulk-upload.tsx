@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -165,6 +165,18 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
     setItems([]);
   }
 
+  // A blob url outlives the component that made it: it is scoped to the
+  // document, and this app routes on the client, so walking off /admin with
+  // files still staged pinned every one of them — and each pins a whole byte
+  // copy, because addFiles snapshots the file before previewing it. Through a
+  // ref and an empty dep list so this fires on unmount only; keyed on `items` it
+  // would revoke the previews on the very render that added them.
+  const itemsRef = useRef<Candidate[]>(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  });
+  useEffect(() => () => itemsRef.current.forEach((i) => URL.revokeObjectURL(i.previewUrl)), []);
+
   const ready = useMemo(() => items.filter((i) => i.eventParticipantId && !i.oversize), [items]);
   const unmatched = items.length - ready.length;
 
@@ -187,16 +199,19 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
         clearAll();
       } else {
         toast.error(`${failed.length} of ${res.results.length} failed: ${failed[0]?.error ?? ""}`);
-        // Keep only the failures on screen so they can be retried.
+        // Keep only the failures on screen so they can be retried. One predicate
+        // for both halves, so the rows dropped and the previews released cannot
+        // drift apart: the ones that uploaded are leaving the list, and every
+        // other path out of it revokes on the way.
         const failedKeys = new Set(failed.map((f) => `${f.eventParticipantId}:${f.side}`));
-        setItems((prev) =>
-          prev.filter(
-            (p) =>
-              !p.eventParticipantId ||
-              p.oversize ||
-              failedKeys.has(`${p.eventParticipantId}:${p.side}`),
-          ),
-        );
+        const keep = (p: Candidate) =>
+          !p.eventParticipantId ||
+          p.oversize ||
+          failedKeys.has(`${p.eventParticipantId}:${p.side}`);
+        setItems((prev) => {
+          prev.filter((p) => !keep(p)).forEach((p) => URL.revokeObjectURL(p.previewUrl));
+          return prev.filter(keep);
+        });
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Bulk upload failed");
@@ -235,10 +250,10 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
           "cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors",
           dragging
             ? "border-primary bg-primary/10"
-            : "border-white/15 hover:border-primary/50 hover:bg-white/[0.02]",
+            : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
         )}
       >
-        <p className="font-display text-sm font-bold uppercase tracking-widest text-foreground">
+        <p className="font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
           <span className="max-sm:hidden">Drop card images here</span>
           <span className="sm:hidden">Tap to choose card images</span>
         </p>
@@ -261,7 +276,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
 
       {items.length > 0 && (
         <>
-          <div className="mt-4 max-h-[60vh] space-y-1.5 overflow-auto pr-1 sm:max-h-80">
+          <div className="mt-4 max-h-[60dvh] space-y-1.5 overflow-auto pr-1 sm:max-h-80">
             {items.map((item) => (
               <div
                 key={item.id}
@@ -304,7 +319,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
                           ),
                         )
                       }
-                      className="min-h-11 w-full rounded border border-white/10 bg-transparent px-1 py-0.5 text-base font-semibold uppercase text-foreground sm:min-h-0 sm:text-xs"
+                      className="min-h-11 w-full rounded border border-border-strong bg-transparent px-1 py-0.5 text-base font-semibold uppercase text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
                     >
                       <option value="">— unmatched —</option>
                       {targets.map((t) => (
@@ -318,7 +333,7 @@ export function CardBulkUpload({ eventId, targets }: { eventId: string; targets:
 
                 {/* Side toggle and remove wrap to their own line on phones. */}
                 <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-                  <div className="flex shrink-0 overflow-hidden rounded border border-white/10">
+                  <div className="flex shrink-0 overflow-hidden rounded border border-border-strong">
                     {(["front", "back"] as const).map((side) => (
                       <button
                         key={side}

@@ -323,6 +323,182 @@ describe("getMyStall", () => {
     expect(res.active.map((l) => l.id)).toEqual([LISTING]);
     expect(res.recent[0]).toMatchObject({ status: "sold", buyerId: THEM });
   });
+
+  it("shows a listing that settled between its two reads once, on the settled side", async () => {
+    // The two reads go out together, so they are two snapshots. A listing that
+    // sells in between satisfies BOTH predicates and comes back twice — once
+    // still carrying "active". Splitting by status cannot tell that stale copy
+    // from a live row, so the card used to appear in `active`, under a Take down
+    // button its own RPC would refuse, and in `recent` as sold at the same time.
+    const row = (status: string, resolved: string | null, buyer: string | null) => ({
+      id: LISTING,
+      event_id: EVENT,
+      seller_id: ME,
+      kind: "roster",
+      card_copy_id: COPY,
+      secret_pull_id: null,
+      price: 40,
+      status,
+      buyer_id: buyer,
+      created_at: "2026-08-30T00:00:00Z",
+      resolved_at: resolved,
+    });
+    withDb({
+      "market_listings.select": [
+        // The live read, off the earlier snapshot.
+        { data: [row("active", null, null)] },
+        // The settled read, off the later one. Same row.
+        { data: [row("sold", "2026-08-30T01:00:00Z", THEM)] },
+      ],
+      "card_copies.select": {
+        data: [
+          { id: COPY, event_participant_id: "ep", edition: "gold", edition_asserted_by: "server" },
+        ],
+      },
+      "secret_card_pulls.select": { data: [] },
+    });
+    const { getMyStall } = await import("./market.functions");
+    const res = await callServerFn<{
+      active: { id: string }[];
+      recent: { id: string; status: string; buyerId: string | null }[];
+    }>(getMyStall, { headers: asMe() });
+    expect(res.active).toEqual([]);
+    expect(res.recent.map((l) => l.id)).toEqual([LISTING]);
+    expect(res.recent[0]).toMatchObject({ status: "sold", buyerId: THEM });
+  });
+
+  it("orders two listings that settled mid-read by when they settled", async () => {
+    // `recent` answers "what settled lately", so it is ordered by resolved_at --
+    // and the live half is ordered by created_at. A row de-duplicated in place at
+    // its live position would carry the wrong one of those two into the list.
+    // Here the OLDER listing settles LAST, so the two orders disagree and only
+    // resolved_at is right.
+    const row = (id: string, status: string, created: string, resolved: string | null) => ({
+      id,
+      event_id: EVENT,
+      seller_id: ME,
+      kind: "roster",
+      card_copy_id: `copy-${id}`,
+      secret_pull_id: null,
+      price: 40,
+      status,
+      buyer_id: status === "sold" ? THEM : null,
+      created_at: created,
+      resolved_at: resolved,
+    });
+    withDb({
+      "market_listings.select": [
+        // Live read, created_at desc: the NEWER listing first.
+        {
+          data: [
+            row("new", "active", "2026-08-30T02:00:00Z", null),
+            row("old", "active", "2026-08-30T01:00:00Z", null),
+          ],
+        },
+        // Settled read, resolved_at desc: the older one settled last, so it leads.
+        {
+          data: [
+            row("old", "sold", "2026-08-30T01:00:00Z", "2026-08-30T04:00:00Z"),
+            row("new", "sold", "2026-08-30T02:00:00Z", "2026-08-30T03:00:00Z"),
+          ],
+        },
+      ],
+      "card_copies.select": {
+        data: [
+          { id: "copy-old", event_participant_id: "ep", edition: "standard", edition_asserted_by: "server" }, // prettier-ignore
+          { id: "copy-new", event_participant_id: "ep", edition: "standard", edition_asserted_by: "server" }, // prettier-ignore
+        ],
+      },
+      "secret_card_pulls.select": { data: [] },
+    });
+    const { getMyStall } = await import("./market.functions");
+    const res = await callServerFn<{
+      active: { id: string }[];
+      recent: { id: string }[];
+    }>(getMyStall, { headers: asMe() });
+    expect(res.active).toEqual([]);
+    expect(res.recent.map((l) => l.id)).toEqual(["old", "new"]);
+  });
+
+  describe("a sale whose card the buyer has since destroyed", () => {
+    // The listing row survives now (20260924120000_keep_market_receipts.sql), but
+    // with its copy or pull reference nulled. What it listed is on the row itself,
+    // and this list is the only receipt the seller will ever get.
+    const sold = (over: Record<string, unknown>) => ({
+      id: LISTING,
+      event_id: EVENT,
+      seller_id: ME,
+      card_copy_id: null,
+      secret_pull_id: null,
+      price: 300,
+      status: "sold",
+      buyer_id: THEM,
+      created_at: "2026-08-30T00:00:00Z",
+      resolved_at: "2026-08-30T01:00:00Z",
+      listed_event_participant_id: null,
+      listed_edition: null,
+      listed_edition_asserted_by: null,
+      listed_secret_card_id: null,
+      listed_tier: null,
+      ...over,
+    });
+
+    it("still shows a secret sold to the house, by name", async () => {
+      withDb({
+        "market_listings.select": [
+          { data: [] },
+          { data: [sold({ kind: "secret", listed_secret_card_id: SECRET_CARD, listed_tier: "rare" })] }, // prettier-ignore
+        ],
+        // Neither the seller's holdings nor the pull itself: both are gone.
+        "secret_card_pulls.select": { data: [] },
+        "secret_cards.select": { data: [{ id: SECRET_CARD, name: "Gary", art_path: "g/a.webp" }] },
+      });
+      const { getMyStall } = await import("./market.functions");
+      const res = await callServerFn<{ recent: { id: string; item: Record<string, unknown> }[] }>(
+        getMyStall,
+        { headers: asMe() },
+      );
+      expect(res.recent.map((l) => l.id)).toEqual([LISTING]);
+      expect(res.recent[0].item).toMatchObject({
+        kind: "secret",
+        name: "Gary",
+        tier: "rare",
+        concealed: false,
+      });
+      // Named from the snapshot, and the snapshot's id stays on the server.
+      expect(JSON.stringify(res)).not.toContain(SECRET_CARD);
+    });
+
+    it("still shows a roster copy the buyer milled, in the finish it sold in", async () => {
+      withDb({
+        "market_listings.select": [
+          { data: [] },
+          {
+            data: [
+              sold({
+                kind: "roster",
+                listed_event_participant_id: "ep",
+                listed_edition: "gold",
+                listed_edition_asserted_by: "server",
+              }),
+            ],
+          },
+        ],
+        "card_copies.select": { data: [] },
+        "secret_card_pulls.select": { data: [] },
+      });
+      const { getMyStall } = await import("./market.functions");
+      const res = await callServerFn<{ recent: { item: Record<string, unknown> }[] }>(getMyStall, {
+        headers: asMe(),
+      });
+      expect(res.recent[0].item).toEqual({
+        kind: "roster",
+        eventParticipantId: "ep",
+        edition: "gold",
+        assertedBy: "server",
+      });
+    });
+  });
 });
 
 describe("listCardForDust", () => {

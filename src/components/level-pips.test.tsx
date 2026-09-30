@@ -35,7 +35,7 @@ describe("LevelPips", () => {
   it("does not name the level by default, because a word is written beside it", () => {
     // Seven of the eight render sites print the level next to the pips. A
     // self-describing label there reads "Mythic, 5 of 5" and then, one node
-    // later, "Mythic · 0.5% pull" — the same word twice. The count is the only
+    // later, "Mythic · 0.5%" — the same word twice. The count is the only
     // thing the pips add, so by default it is the only thing they announce.
     render(<LevelPips tier="mythic" />);
     expect(screen.queryByRole("img", { name: /mythic/i })).toBeNull();

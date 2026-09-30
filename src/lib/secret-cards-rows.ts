@@ -113,6 +113,8 @@ export type OpenPackResult = {
 export type PackStatusResult = {
   day: string;
   openedToday: boolean;
+  /** Only ever "there is something to deal", never how much. */
+  dealable: boolean;
   secretsOwned: number;
   resetsAt: string;
 };

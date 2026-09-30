@@ -794,7 +794,7 @@ function PlayersPage() {
           className="h-9 w-9"
           style={{ color: TROPHY_RARITY.accent, filter: "drop-shadow(0 0 10px currentColor)" }}
         />
-        <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+        <div className="truncate font-display text-label font-black uppercase tracking-wide">
           {t.label}
         </div>
         <div
@@ -869,7 +869,10 @@ function PlayersPage() {
           />
         </div>
         <div className="text-center">
-          <div className="truncate font-display text-card-name font-black uppercase tracking-wide">
+          {/* Clamped like the summary's and the filmstrip's: at 15px in a
+              124px tile "Gary The Grill" was 20px over at 320, and a secret you
+              cannot read the name of is a poor trophy. */}
+          <div className="line-clamp-2 font-display text-card-name font-black uppercase tracking-wide">
             {s.name}
           </div>
           {/* The level of your copy leads, in its own colour — the same
@@ -877,8 +880,12 @@ function PlayersPage() {
               above the word rather than below it because at this size they are
               the thing that is actually read. */}
           <LevelPips tier={s.tier} className="mt-0.5" />
+          {/* Wraps outright rather than clamping like the name above it: this
+              line is one of five fixed captions, so a second line is the worst
+              it can ever cost — and at 320, or at 3-up on any phone, it costs
+              one: "Common · 70%" wants 23px more than a tile has (§23 F8). */}
           <div
-            className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
+            className="text-meta font-semibold uppercase tracking-[0.08em]"
             style={{ color: secretTierStyle(s.tier).accent }}
           >
             {secretTierCaption(s.tier)}
@@ -968,7 +975,10 @@ function PlayersPage() {
             )}
           </div>
           <div className="mt-2 text-center">
-            <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
+            {/* Same rule as the secret tile's name beside it on the same shelf
+                — two kinds of tile, one way of handling a name that is longer
+                than the tile is wide. */}
+            <div className="line-clamp-2 font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
               {name}
             </div>
             {/* A tick, not a word: the label is the line's real content,
@@ -979,8 +989,13 @@ function PlayersPage() {
               {!locked && (
                 <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
               )}
+              {/* Wraps rather than truncates: "Not packed yet" ran 6px over at
+                  320, and it is the line that says the tile is a card you have
+                  not got. The tick and this label never share a line — the tick
+                  means packed and this text only reaches its full length when it
+                  is not. */}
               <span
-                className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
+                className="text-meta font-semibold uppercase tracking-[0.08em]"
                 style={{
                   color: locked
                     ? undefined
@@ -1091,7 +1106,7 @@ function PlayersPage() {
           No participants yet.
         </div>
       ) : rosterRows.length === 0 ? (
-        <p className="p-6 text-center text-xs text-muted-foreground">{emptyRosterLine}</p>
+        <p className="p-6 text-center text-meta text-muted-foreground">{emptyRosterLine}</p>
       ) : (
         cardGrid(rosterRows.map(rosterTile))
       )}
@@ -1157,7 +1172,7 @@ function PlayersPage() {
           }}
         />
       )}
-      <div className="mx-auto max-w-6xl px-4 py-6" inert={openSecretIndex !== null}>
+      <div className="mx-auto max-w-6xl px-page-x py-6" inert={openSecretIndex !== null}>
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing at all when it went down — a frozen
           screen with no signal is the exact failure the health states exist
@@ -1215,7 +1230,7 @@ function PlayersPage() {
 
         {/* Reserved whether or not the collection has reconciled, so the shelves
             below do not step down by a line when it does. */}
-        <p className="mb-4 min-h-4 text-xs text-muted-foreground">{summary}</p>
+        <p className="mb-4 min-h-4 text-meta text-muted-foreground">{summary}</p>
 
         <VaultSortSheet
           open={sortSheetOpen}

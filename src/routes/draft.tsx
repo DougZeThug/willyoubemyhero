@@ -11,6 +11,7 @@ import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatTime } from "@/lib/format";
+import { standings } from "@/lib/standings";
 import { ClipboardList, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
@@ -50,18 +51,28 @@ function DraftPage() {
 
   const { rankings, taken, currentPicker } = useMemo(() => {
     const parts = bundle?.participants ?? [];
-    const runs = bundle?.runs ?? [];
-    const ranking = runs
-      .filter((r) => r.is_official)
-      .map((r) => {
-        const ep = parts.find((p) => p.participant_id === r.participant_id);
-        return { run: r, ep };
-      })
+    // The picking order IS the leaderboard's order, which is why this cannot keep
+    // a comparator of its own. The hand-inlined one ranked official runs, so it
+    // queued anybody re-timed twice and held a turn for somebody the board had
+    // already dropped -- the one thing the draft board is not allowed to do is
+    // disagree with the leaderboard about who was faster.
+    // Two different holes, and standings() only closes one of them. It drops a
+    // run whose athlete is missing from a roster it HAS -- which is the orphan
+    // case, and has to be done there because `place` counts faster runs, so
+    // filtering this late leaves everyone's number already shifted.
+    //
+    // This filter is for the other one: a failed event_participants read
+    // coalesces to [], and standings() treats an empty roster as an archived
+    // snapshot rather than blanking an old recap's board, so it keeps every row.
+    // `parts` is empty too, so every `ep` here is undefined and the unguarded
+    // dereference in `ranking.find` below took the whole screen down with a
+    // TypeError -- on the one code path that has a degraded state to show.
+    const ranking = standings(bundle)
+      .map((s) => ({ run: s.run, ep: parts.find((p) => p.participant_id === s.participantId) }))
       .filter(
         (row): row is { run: (typeof row)["run"]; ep: NonNullable<(typeof row)["ep"]> } =>
           row.ep != null,
-      )
-      .sort((a, b) => (a.run.official_time_ms ?? Infinity) - (b.run.official_time_ms ?? Infinity));
+      );
     const takenSet = new Set(
       parts.filter((p) => p.selected_draft_position != null).map((p) => p.selected_draft_position!),
     );
@@ -172,7 +183,12 @@ function DraftPage() {
                 <Link
                   to="/players/$id"
                   params={{ id: currentPicker.ep.id }}
-                  className="font-display text-3xl font-black uppercase hover:text-primary"
+                  // `inline-flex items-center` and the floor, because a bare
+                  // inline <a> is only as tall as its line box — 36px here,
+                  // under the §18 floor, and the one control in the app still
+                  // below it when the third pass measured. This route was in no
+                  // sweep, which is the only reason it survived.
+                  className="inline-flex min-h-11 items-center font-display text-3xl font-black uppercase hover:text-primary pointer-fine:min-h-0"
                 >
                   {currentPicker.ep.participant?.name}
                 </Link>
@@ -186,7 +202,11 @@ function DraftPage() {
         ) : (
           <Card className="hud-bezel border-white/10">
             <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              {failedTables.length > 0
+              {/* The two tables the board is built from, not any of the seven:
+                  a failed splits or stations read cannot empty the clock, and
+                  counting it put a retry alarm over a draft that was visibly
+                  finished. Same narrowing the leaderboard and /tv make. */}
+              {failedTables.includes("event_participants") || failedTables.includes("runs")
                 ? "Couldn't read the combine just now — retrying."
                 : rankings.length === 0
                   ? "No combine results yet. Draft board opens once athletes finish."
@@ -208,14 +228,14 @@ function DraftPage() {
                   key={pos}
                   onClick={() => isAdmin && !isTaken && currentPicker && pick(pos)}
                   disabled={isTaken || !isAdmin || !currentPicker || busy}
-                  className={
-                    "aspect-square rounded-lg border p-2 text-left transition " +
-                    (isTaken
+                  className={cn(
+                    "aspect-square rounded-lg border p-2 text-left transition",
+                    isTaken
                       ? "border-primary/60 bg-primary/15 hud-glow"
                       : isAdmin && currentPicker
                         ? "border-primary/40 bg-white/5 hover:border-primary hover:bg-primary/10 hover:hud-glow"
-                        : "border-white/5 bg-white/5 opacity-70")
-                  }
+                        : "border-white/5 bg-white/5 opacity-70",
+                  )}
                 >
                   <div
                     className={cn(
@@ -225,7 +245,7 @@ function DraftPage() {
                   >
                     {pos}
                   </div>
-                  <div className="mt-2 text-label font-bold uppercase tracking-widest text-muted-foreground">
+                  <div className="mt-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                     {holder?.participant?.name ?? (isTaken ? "" : "Open")}
                   </div>
                 </button>
@@ -237,3 +257,5 @@ function DraftPage() {
     </div>
   );
 }
+
+export default DraftPage;
