@@ -208,10 +208,10 @@ about the set it belongs to.
 **The second device.** A member's secrets follow their name; a guest's follow
 their token, so clearing site data loses them. The shelf order follows neither.
 
-**Accessibility.** The card sheet is a dialog titled with the card's name and
-described as a secret you pulled from a pack, with labelled previous and next
-controls and a position readout — "3 / 7" — that counts what you hold and not
-what exists. The shelf headings themselves are covered in
+**Accessibility.** The card sheet is a dialog titled with the card's name, with
+a position readout — "3 / 7" — that counts what you hold and not what exists.
+The previous and next secrets are reached by a swipe or the arrow keys rather
+than by buttons. The shelf headings themselves are covered in
 [the vault](the-vault.md).
 
 ## Edge cases
