@@ -658,6 +658,9 @@ Collapse the hero to one row on scroll; move sort/rearrange into a sheet; put th
 ## 18. Buttons and touch targets
 
 **Fixed.** The floor is 44 px on a phone and 48 px for a primary action, and it
+now lives in the primitive rather than at the call sites: `src/components/ui/button.tsx`
+is touch-first with a `pointer-fine:` step back to the stock shadcn heights, which is the
+same distinction `vault-section.tsx`'s move arrows and `e2e/smoke.spec.ts`'s
 now lives in the primitives rather than at the call sites: `src/components/ui/button.tsx`
 and `src/components/ui/input.tsx` are touch-first, with a `pointer-fine:` release
 back to the stock shadcn heights. Deliberately a pointer rule and not a width
