@@ -3,6 +3,7 @@ import { formatTime } from "@/lib/format";
 import { TIER_REASON, type Rarity } from "@/lib/card-rarity";
 import { cardBadge, editionOddsLabel, type Edition } from "@/lib/card-edition";
 import { cardStats, type StatsBundle } from "@/lib/card-stats";
+import { cn } from "@/lib/utils";
 
 /**
  * Generated card back, used when a player has no uploaded back artwork.
@@ -150,10 +151,10 @@ export function CardBackPanel({
                 </span>
                 {row.deltaMs != null && (
                   <span
-                    className={
-                      "w-10 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] font-bold tabular " +
-                      (row.deltaMs <= 0 ? "text-primary" : "text-warn")
-                    }
+                    className={cn(
+                      "w-10 shrink-0 text-right text-[clamp(8px,3.75cqw,12px)] font-bold tabular",
+                      row.deltaMs <= 0 ? "text-primary" : "text-warn",
+                    )}
                   >
                     {row.deltaMs <= 0 ? "▼" : "▲"}
                     {formatTime(Math.abs(row.deltaMs))}

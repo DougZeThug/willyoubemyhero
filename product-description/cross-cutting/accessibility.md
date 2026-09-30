@@ -20,7 +20,7 @@ to go and find.
 You open the vault with a screen reader. Each tile is a card announced as its
 player, its tier and its finish, and beside it a toggle button that says "Pin
 Alice Ace to the top" and reports pressed once you have. You reach the pack tab
-and it says "Pack — a secret is waiting", so you know before you get there.
+and it says "Pack — today's pack is unopened", so you know before you get there.
 
 You open the pack. The wrapper is a button called "Tear the pack open"; Enter
 opens it. The pack disappears from the page and a polite status says "Opening
@@ -38,7 +38,7 @@ Next control. Right arrow steps forward, and nothing says so.
   card and the direction of travel, so it is unambiguous in a grid of thirty
   identical stars. See [favourites](../cards/favourites.md).
 - **Each badge names its own thing.** A dot on a tab changes that tab's spoken
-  label to "Trade — a trade offer is waiting" or "Pack — a secret is waiting",
+  label to "Trade — a trade offer is waiting" or "Pack — today's pack is unopened",
   rather than the two of them sharing a generic "something is waiting". The dot
   itself is hidden, because the wording carries the whole message. See
   [notifications and badges](notifications-and-badges.md).

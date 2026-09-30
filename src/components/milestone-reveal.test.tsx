@@ -114,7 +114,7 @@ describe("MilestoneReveal", () => {
   });
 
   it("prints what the rung promised, above the card it bought", async () => {
-    const { getByText } = renderReveal({ milestone: 100, streak: 100, tierFloor: "mythic" });
+    const { getByText } = renderReveal({ milestone: 60, streak: 60, tierFloor: "mythic" });
     expect(getByText("Mythic, guaranteed")).toBeTruthy();
   });
 

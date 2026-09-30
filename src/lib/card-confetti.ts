@@ -106,9 +106,40 @@ export async function celebrateSecret(rarity: Rarity) {
 }
 
 /**
+ * An upgrade: a copy that beats the one you already hold.
+ *
+ * Neither a win nor a framing, so neither of those shapes. This one goes UP —
+ * two short columns fired straight up from under the card, a beat apart, in the
+ * metal of the NEW rung. A rung climbed reads as lift; a cannon would read as
+ * having won something, and what happened is quieter and more personal than
+ * that. `accent` is the finish's or the level's own colour, in oklch, for the
+ * same reason everything else here goes through palette().
+ */
+export async function celebrateUpgrade(accent: string) {
+  if (reducedMotion()) return;
+  const confetti = await cannon();
+  const colors = [oklchToHex(accent), "#ffffff"];
+  const lift = (spread: number) =>
+    confetti({
+      particleCount: 36,
+      angle: 90,
+      spread,
+      startVelocity: 58,
+      gravity: 0.9,
+      decay: 0.92,
+      ticks: 90,
+      scalar: 0.85,
+      origin: { x: 0.5, y: 0.78 },
+      colors,
+    });
+  lift(22);
+  setTimeout(() => void lift(14), 140);
+}
+
+/**
  * A finished set.
  *
- * The fourth shape, by the same argument celebrateSecret makes for being the
+ * The fifth shape, by the same argument celebrateSecret makes for being the
  * third: a single secret is framed from below, and doing more of that for a set
  * would just read as a louder single card. So this one comes from ABOVE and
  * keeps coming — a wide curtain falling across the whole screen for a second and

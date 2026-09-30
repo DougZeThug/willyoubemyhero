@@ -2,6 +2,8 @@
 // them. No imports from anything *.server.ts, so this is safe in the bundle.
 import { editionStyle, toEdition, type Edition } from "./card-edition";
 import { secretTierStyle, type SecretTier } from "./secret-rarity";
+import { rarityRank, rarityStyle, type Rarity } from "./card-rarity";
+import { SECRET_RARITY } from "./secret-cards";
 
 /**
  * How a completed trade is described in the public feed.
@@ -122,6 +124,14 @@ export type RosterSpare = {
    * arrived at, not anything further about the card or its owner.
    */
   assertedBy: "client" | "server";
+  /**
+   * The copy today's pack minted for you: `source = 'pull'` on the current league
+   * day. Present only on your own list and only when true. record_card_pulls
+   * mints at most one copy per card per day, so this names exactly one copy — the
+   * one the pack screen's "Sell for" sells. Traded, bought or burnt, it is gone
+   * from the list, and the pack screen says so rather than burning another.
+   */
+  pulledToday?: true;
 };
 
 /**
@@ -172,11 +182,10 @@ export type SecretSpare = {
  * instead, and only ever for your OWN collection: listing what a counterparty
  * cannot trade would widen what an offer screen tells you about their vault.
  */
-export type BlockedReason = "only-copy" | "todays-pull";
+export type BlockedReason = "only-copy";
 
 export const BLOCKED_LABEL: Record<BlockedReason, string> = {
   "only-copy": "only copy",
-  "todays-pull": "today's pull",
 };
 
 export type BlockedSpare = { item: TradeItemView; reason: BlockedReason };
@@ -340,12 +349,11 @@ export function tradeSwapPrompt(args: {
  * The league's timezone, which decides where a day ends.
  *
  * Duplicated from SQL rather than derived: every daily thing in this app — the
- * pack drop, the secret drop, and `trade_item_is_spare`'s "today's pull is not a
- * spare yet" rule — bakes `America/New_York` into the function body, precisely so
- * a caller cannot shift the boundary. `leagueDay()` exists so the spares listing
- * agrees with the RPC about which copies are stakeable instead of offering cards
- * the RPC will then refuse. A db test pins the two together, the way
- * card-edition.ts and secret-rarity.ts are pinned to their SQL ladders.
+ * pack drop and the streak among them — bakes `America/New_York` into the
+ * function body, precisely so a caller cannot shift the boundary. `leagueDay()`
+ * exists so client code agrees with those RPCs about which day it is. A db test
+ * pins the two together, the way card-edition.ts and secret-rarity.ts are pinned
+ * to their SQL ladders.
  */
 export const LEAGUE_TIME_ZONE = "America/New_York";
 
@@ -358,4 +366,42 @@ export function leagueDay(at: Date = new Date()): string {
     month: "2-digit",
     day: "2-digit",
   }).format(at);
+}
+
+/**
+ * The palette a completed swap is celebrated in: the rarity of the best thing
+ * that just arrived on the reader's side of it.
+ *
+ * Here rather than in the route because the route has no test of its own and
+ * this is the part worth pinning. The screen used to hand `burst` a literal
+ * "podium" for every accept, so a dnf card traded in threw a gold celebration
+ * and a base one read as a podium finish — the exact cross-screen mismatch the
+ * header of card-confetti.ts says that module exists to end. Every other screen
+ * where a card arrives passes the card's own tier.
+ *
+ * A secret outranks every roster tier, and not only because it is the rarer
+ * thing in this app: it has no `RarityTier` at all, so there is nothing for
+ * `rarityRank` to compare it with. It gets the shared secret palette rather than
+ * its own foil, because a foil needs the card's id and border effect and
+ * `TradeItemView` carries neither — the set green is the closest honest answer
+ * from what an offer actually knows.
+ */
+export function arrivalRarity(
+  offer: TradeOfferView | undefined,
+  me: string | null | undefined,
+  rarities: ReadonlyMap<string, Rarity>,
+): Rarity {
+  // Which side arrived is derived rather than assumed: accept is an inbox
+  // gesture today, but reading it off the offer costs nothing and cannot drift.
+  const got = !offer ? [] : offer.proposerId === me ? offer.recipientGives : offer.proposerGives;
+  if (got.some((i) => i.kind === "secret")) return SECRET_RARITY;
+  const tiers = got.flatMap((i) =>
+    i.kind === "roster" ? [rarities.get(i.eventParticipantId) ?? rarityStyle("base")] : [],
+  );
+  // Rarest wins, because one accept can move several cards and there is one
+  // burst. `rarityRank` is 0 for a champion, so the smallest is the best.
+  return tiers.reduce(
+    (best, r) => (rarityRank(r.tier) < rarityRank(best.tier) ? r : best),
+    rarityStyle("base"),
+  );
 }

@@ -7,8 +7,8 @@ everything up to the moment it comes apart: what the screen decides before it
 draws, why the pack in front of you is yours and not everybody's, what the
 wrapper does under a thumb, and what commits the rip.
 
-The pack is three roster cards, plus a fourth slot for
-[the daily secret](the-daily-secret.md). What happens after the rip commits
+The pack is three cards, dealt by the server from one pool of roster cards and
+[secrets](the-daily-secret.md), owned or not. What happens after the rip commits
 belongs to [opening a pack](opening-a-pack.md).
 
 ## The simple case
@@ -26,28 +26,24 @@ fresh pack.
 
 ## Whose pack it is
 
-The three cards are dealt from a seed built out of three things: the event, the
-league day, and _who you are_. That means two people standing next to each other
-open different packs, and refreshing cannot reroll yours.
+The three cards are dealt by the server, for _you_: the member you claimed, or
+failing that the handset. A guest gets an anonymous identity minted for them the
+moment they land on this screen, so the pack is theirs rather than a locked box.
+Two people standing next to each other open different packs, and refreshing
+cannot reroll yours — the server answers the same pack back all day.
 
-Identity here is the member you claimed, or failing that the handset. A guest
-gets an anonymous identity minted for them the moment they land on this screen,
-so the fourth slot is theirs rather than a locked box.
+Nothing on the phone decides the cards. They are drawn from one hat: every
+roster card of the active event and every secret with its art uploaded, owned or
+not, three distinct cards at a time. There is no guaranteed-new slot any more.
+A duplicate is a duplicate, and a duplicate that beats the copy you hold is an
+[upgrade](opening-a-pack.md#new-better-or-another-one).
 
-> Technical note: packs used to be dealt without an identity, so every phone in
-> the league opened the same two cards. That never made much sense when the whole
-> roster is browsable in the vault anyway, and it made "how many people packed
-> this card" a number that only measured who had opened the app.
-
-The last of the three slots is special. It prefers a card your collection does
-not already hold — which is the only mechanism by which a set ever completes. The
-collection it checks is a _baseline_: a snapshot taken at the moment the pack was
-dealt, never the live one, because a baseline that shifted while you were
-revealing would re-deal a card underneath you.
-
-That baseline is taken per person rather than once. A phone changes hands in this
-league, and a snapshot taken once meant the next person's guaranteed-new card was
-chosen out of the previous person's collection.
+> Technical note: the pack used to be dealt on the phone from a seed, with the
+> last slot swapped for a card the local collection did not hold, and a fourth
+> slot for a secret drawn separately. Two authorities over one pack, two
+> midnights, and a server that had to take the phone's word for which cards it
+> had dealt. One Postgres function deals the whole pack now, keyed on the league
+> day, and the phone only ever asks for it.
 
 ## The interaction, event by event
 
@@ -75,10 +71,14 @@ flash first.
 
 **Has today's pack already been torn.** One pack a day, so a return visit resumes
 rather than deals. A stored pack from yesterday is simply ignored; the next tear
-overwrites it.
+overwrites it. A row written by the old client — three ids and nothing about
+which slot was which — is not today's pack either; the server is asked, and it
+either resumes today's or deals it.
 
-**Has the server reconciled the collection.** Until it has, there is no baseline,
-so there is nothing to deal and the wrapper is not tearable. This lasts a beat.
+**Has the server said what day it is, and has the collection reconciled.** The
+pack is keyed on the league day, and a guest's "held before" is read off the
+reconciled collection at the deal. Until both have answered the wrapper is not
+tearable. This lasts a beat.
 
 The wrapper wears the _event's_ card back, never a player's — the pack is shown
 before anything has been dealt, and a per-player back would be the reveal,
@@ -87,8 +87,8 @@ printed on the outside of the pack.
 ### Leave without acting
 
 Nothing is recorded. Reaching this screen is one mis-tap from the vault, and it
-must not spend anything: the daily secret is not pulled on arrival, no pack is
-dealt, and no streak day is counted. All of that waits for the rip.
+must not spend anything: no pack is dealt and no streak day is counted. All of
+that waits for the rip.
 
 ### The tap that starts something
 
@@ -100,18 +100,12 @@ line opened the pack with no drag at all.
 Full travel is 80% of the pack's width. The rip commits at 60% of that. Short of
 it, the strip springs back.
 
-Two things are decided at the instant it commits:
-
-- **The pack is dealt** — the three cards are fixed, written down, and will not
-  change. This happens at the rip rather than at the end of the ceremony, so the
-  two round trips it unblocks get the ceremony's whole run as a head start.
-- **Whether the fan is holding three cards or four**, latched here rather than
-  read live. The secret's pull is fired _by_ the tear, so its state changes while
-  the ceremony plays, and a card count that changed mid-flight would remount the
-  cards halfway through their arc. A secret only earns the fourth slot on a
-  positive answer from the server; a status query still in flight counts as no,
-  because flying a fourth card that never lands is a worse lie than a fan that
-  simply did not preview one.
+One thing is decided at the instant it commits: **the server is asked for the
+pack.** The request goes out at the rip rather than at the end of the ceremony,
+so the round trip gets the ceremony's whole run as a head start, and the answer
+is usually waiting by the time the deck lands on the stand. The fan itself is
+always three identical backs — it knows nothing about which cards are coming,
+and gives nothing away.
 
 ### While it runs
 
@@ -132,33 +126,30 @@ exactly as it was. Nothing has been dealt and nothing recorded.
 ### It settles
 
 The rip commits and the screen hands over to the ceremony. From that moment the
-pack is torn, the cards are chosen, and there is no way back to a sealed wrapper
-for the rest of the day.
+pack is torn and there is no way back to a sealed wrapper for the rest of the
+day. If the server's answer is slow the stand shows a pulsing back where the
+first card will be; if it fails, an inline retry — never a toast. The pack is
+still yours: asking again returns the same deal.
 
 ## Resuming
 
 A pack you already opened does not replay. Coming back lands you on the card you
 were looking at — not the start, and not the production. A payoff, not a toll.
 
-The stored position is the answer where there is one. Packs written before the
-reveal stand existed carry no position, and are recognised by its absence: those
-put every card down as revealed the moment the wrapper came off, so replaying one
-faithfully lands past the end and renders the finished columns — which is
-indistinguishable from the stand never having shipped. Only the ones that were
-_finished_ under the old ceremony are replayed; one that stopped partway is
-resumed exactly as it stands.
-
-A replayed card gets the flip and the chime and nothing that writes. The pull it
-represents was recorded the first time round, and counting it again would inflate
-the count for good.
+Coming back also asks the server for the pack again. The cards on this device
+are only ids and progress; a secret's art is a signed picture that expires, and
+the server answers the same pack with fresh pictures. The stand waits that beat
+before drawing anything, and holds your progress across it.
 
 ## Midnight
 
-A tab left open past midnight used to sit on yesterday's pack forever, which
-became actively confusing once the secret's day moved to the server: the fourth
-slot re-arms while the three cards do not. The screen now checks, by polling
-rather than by scheduling, because a phone suspends timers the moment its screen
-goes dark.
+The pack's day is the league's — New York's midnight, the same clock everything
+else daily in the app runs on. It used to be the device's, and anybody up between
+the two clocks watched the secret re-arm while the three cards did not. The
+screen checks for the day turning by polling rather than by scheduling, because
+a phone suspends timers the moment its screen goes dark, and it trusts the
+server's own answer about the day over the phone's clock while the wrapper is
+sealed.
 
 It never re-seals a pack under somebody's thumb. Eating a card mid-reveal is a
 far worse bug than a stale tab, and the same goes for pulling the pack out from
@@ -166,30 +157,30 @@ under a ceremony that has three cards in the air.
 
 ## Modifiers
 
-| Modifier                                                          | At arrival                                                                                                                                                                                                         | Changed during                                                                                                                                                  |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Who you are (guest · member · account · commissioner)             | Decides which pack is dealt. A guest is minted an identity on arrival so the fourth slot is theirs. A member's pack follows their name rather than the handset.                                                    | Claiming mid-pack does not re-deal what is already torn. A guest who tears, hits the secret's claim gate, claims, and comes back returns to the same torn pack. |
-| The event's state                                                 | No active event means no roster and nothing to deal.                                                                                                                                                               | No effect on a pack already dealt.                                                                                                                              |
-| Dust switched on or off                                           | No effect on the pack.                                                                                                                                                                                             | No effect.                                                                                                                                                      |
-| The device (phone · desktop · reduced motion · presentation mode) | Reduced motion silences the ceremony, not the pack: the tear still opens it and the cards are still dealt. A narrower phone shrinks the pack and its fan with it rather than letting cards push the page sideways. | No effect on the tear.                                                                                                                                          |
+| Modifier                                                          | At arrival                                                                                                                                                                                                         | Changed during                                                                                                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Who you are (guest · member · account · commissioner)             | Decides whose pack is dealt. A guest is minted an identity on arrival so the pack is theirs. A member's pack follows their name rather than the handset, and their roster copies are minted at the deal.           | Claiming mid-pack does not re-deal what is already torn. The pack is carried across, and the cards still face-down at the claim are filed one by one as they turn. |
+| The event's state                                                 | No active event means no roster and nothing to deal.                                                                                                                                                               | No effect on a pack already dealt.                                                                                                                                 |
+| Dust switched on or off                                           | No effect on the pack.                                                                                                                                                                                             | No effect.                                                                                                                                                         |
+| The device (phone · desktop · reduced motion · presentation mode) | Reduced motion silences the ceremony, not the pack: the tear still opens it and the cards are still dealt. A narrower phone shrinks the pack and its fan with it rather than letting cards push the page sideways. | No effect on the tear.                                                                                                                                             |
 
 Changing identity mid-drag is not possible. Everything the pack is dealt from is
 latched before the rip commits.
 
 ## Cancel and interrupt
 
-| Event                                       | Before the rip commits                                                                                                               | After                                                                                         |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| Back, or closing a sheet                    | Nothing dealt, nothing recorded. The pack is sealed when you return.                                                                 | The pack is torn. You resume where you were.                                                  |
-| Navigating away inside the app              | Same.                                                                                                                                | Same.                                                                                         |
-| Reload                                      | Same — a sealed pack is sealed.                                                                                                      | Resumes on the card you were on.                                                              |
-| Backgrounded                                | The drag ends wherever it was; short of the threshold it springs back.                                                               | The ceremony continues or is past; the position is already written.                           |
-| Network lost mid-request                    | The wrapper is not tearable until the collection reconciles, so a dead connection on arrival means a pack that cannot be opened yet. | The cards are dealt locally. What needs the network is recording them and pulling the secret. |
-| The request fails or times out              | The pack stays untearable and the screen shows nothing has been dealt.                                                               | The cards are yours on the device; the secret slot shows its own failure and a retry.         |
-| The token expires or is cleared             | A member whose token has gone is dealt a device pack instead.                                                                        | No effect on a pack already dealt.                                                            |
-| Changed by someone else                     | Nothing else can change your pack.                                                                                                   | Nothing else can change your pack.                                                            |
-| A second tab or device                      | Two tabs share the device's stored pack. Both show the same sealed wrapper.                                                          | The second tab resumes the same pack, at the position the first one wrote.                    |
-| Reduced motion or presentation mode changes | No effect on the tear.                                                                                                               | Turning reduced motion on mid-ceremony does not restart anything.                             |
+| Event                                       | Before the rip commits                                                                                                             | After                                                                                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Back, or closing a sheet                    | Nothing dealt, nothing recorded. The pack is sealed when you return.                                                               | The pack is torn. You resume where you were.                                                                                           |
+| Navigating away inside the app              | Same.                                                                                                                              | Same.                                                                                                                                  |
+| Reload                                      | Same — a sealed pack is sealed.                                                                                                    | Resumes on the card you were on.                                                                                                       |
+| Backgrounded                                | The drag ends wherever it was; short of the threshold it springs back.                                                             | The ceremony continues or is past; the position is already written.                                                                    |
+| Network lost mid-request                    | The wrapper is not tearable until the server has answered, so a dead connection on arrival means a pack that cannot be opened yet. | The deal is in the air. The stand shows a pulsing back, then an inline retry; the pack is still yours and the retry gets the same one. |
+| The request fails or times out              | The pack stays untearable and the screen shows nothing has been dealt.                                                             | An inline retry where the first card would be. Nothing is lost: the server answers the same pack to the retry.                         |
+| The token expires or is cleared             | A member whose token has gone is dealt a device pack instead.                                                                      | No effect on a pack already dealt.                                                                                                     |
+| Changed by someone else                     | Nothing else can change your pack.                                                                                                 | Nothing else can change your pack.                                                                                                     |
+| A second tab or device                      | Two tabs share the device's stored pack. Both show the same sealed wrapper.                                                        | The second tab resumes the same pack, at the position the first one wrote.                                                             |
+| Reduced motion or presentation mode changes | No effect on the tear.                                                                                                             | Turning reduced motion on mid-ceremony does not restart anything.                                                                      |
 
 After an interrupt before the commit, the pack is exactly as it was. After one
 past the commit, the cards are dealt and the position is written as it goes —
@@ -198,27 +189,24 @@ there is no state in which a card is lost.
 ## Interactions with other systems
 
 **Who you have to be.** Nobody. A guest is given an identity rather than a gate.
-The gate on the fourth slot is [the daily secret's](the-daily-secret.md), not the
-pack's.
 
 **Realtime.** None during the tear. The pack does not change once dealt.
 
-**Offline and reconnection.** A pack cannot be dealt without the server having
-reconciled the collection first. Once dealt, the cards are on the device.
+**Offline and reconnection.** A pack cannot be dealt without the server. Once
+dealt, the cards are on the device; a reload asks again for the art.
 
 **Optimistic updates and rollback.** The cards are written locally as they are
 revealed and reconciled against the server's record separately. See
 [opening a pack](opening-a-pack.md).
 
-**The card economy.** The finish on each card is decided by Postgres, not here.
-The pack knows which cards; it does not know what they are wearing until the
-server answers.
+**The card economy.** The finish on each roster card and the level on each
+secret are decided by Postgres at the deal, and arrive with the pack.
 
 **Motion and sound.** The tear has no sound. The ceremony does; see
 [motion and sound](../cross-cutting/motion-and-sound.md).
 
-**Notifications and badges.** The Pack tab carries a dot when a secret is
-waiting, which is a fact about the fourth slot rather than about the pack.
+**Notifications and badges.** The Pack tab and the vault's button carry a dot
+while today's pack is unopened. It says nothing about what is inside.
 
 **Sharing.** A pack is not shareable. Its summary is; see
 [what you pulled](what-you-pulled.md).
@@ -239,9 +227,8 @@ film.
 - **A tap with no drag** does not open the pack. This was a real bug, fixed by
   measuring travel rather than position. Enter and Space are the deliberate
   exception: a key has no travel to measure, so it commits the rip outright.
-- **A pack dealt against an empty baseline** cannot happen: the wrapper refuses
-  to tear while there is no baseline, so the last slot always has something to
-  guarantee against.
+- **Nothing to deal** — no roster and no secrets with art — is said out loud on
+  the stand rather than shown as an error, and the day is not spent.
 - **A phone that changed hands** is detected — the stored pack records who it was
   dealt to — and the new person is not dropped into the previous one's reveal.
 - **A stored pack with no owner recorded** predates per-person packs and is
@@ -252,7 +239,8 @@ film.
   double mounting.
 - **Midnight during a ceremony.** The pack is not re-sealed until the ceremony
   and the reveal are done.
-- **A roster smaller than the pack size** deals what there is.
+- **A roster smaller than the pack size** is made up from the secrets; with
+  neither there is nothing to deal.
 
 ## Open questions and verification
 
@@ -262,8 +250,9 @@ film.
   open across the boundary has not been observed.
 - Whether a guest who claims mid-pack sees anything change on the three roster
   cards has not been confirmed. The reading says no.
-- Assumption: the wrapper is untearable for only a beat while the collection
-  reconciles. On a slow connection that beat could be long enough to read as a
-  broken pack, and no loading affordance for it was found.
+- Assumption: the wrapper is untearable for only a beat while the server answers
+  the day and the collection reconciles. On a slow connection that beat could be
+  long enough to read as a broken pack, and no loading affordance for it was
+  found.
 
-Verified against willyoubemyhero commit `b46f330`.
+Verified against willyoubemyhero commit `752d4fb`.

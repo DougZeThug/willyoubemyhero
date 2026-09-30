@@ -7,8 +7,12 @@ import {
   useRouterState,
   HeadContent,
   Scripts,
+  // Router 1.170.38+ widened ErrorRouteComponent's props; `error` is now
+  // `unknown` rather than `Error`, so the boundary must accept the type itself.
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode } from "react";
+import { MotionConfig } from "motion/react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -20,11 +24,11 @@ import { AccountBridge } from "@/components/account-bridge";
 import { TrophyCeremonyHost } from "@/components/trophy-ceremony-host";
 import { useIsPresenting } from "@/hooks/use-presentation";
 import { useIsOnline } from "@/hooks/use-online";
-import { hydrateCardSfxMuted } from "@/lib/card-sfx";
+import { hydrateCardSfxMuted, hydrateHapticsOff } from "@/lib/card-sfx";
 
 function NotFoundComponent() {
   return (
-    <div className="card-bg flex min-h-dvh items-center justify-center px-4">
+    <div className="card-bg flex min-h-dvh items-center justify-center px-page-x">
       <div className="surface-panel w-full max-w-md rounded-xl border p-6 text-center">
         <h1 className="font-display text-7xl font-black leading-none text-primary/70">404</h1>
         <h2 className="mt-4 font-display text-section font-black uppercase tracking-wide">
@@ -43,7 +47,10 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+// The router hands this `unknown` now — it normalises thrown values that are
+// not Error instances, so it no longer promises an Error. Both consumers below
+// take `unknown`, so the value passes straight through unnormalised.
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
@@ -51,7 +58,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="card-bg flex min-h-dvh items-center justify-center px-4">
+    <div className="card-bg flex min-h-dvh items-center justify-center px-page-x">
       <div className="surface-panel w-full max-w-md rounded-xl border p-6 text-center">
         <h1 className="font-display text-section font-black uppercase tracking-wide">
           This page didn&apos;t load
@@ -73,7 +80,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
               has already thrown, and a client-side navigation would stay in it. */}
           <a
             href="/"
-            className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-white/15 px-4 text-button font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-border-strong px-4 text-button font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
           >
             Go home
           </a>
@@ -174,7 +181,15 @@ function RootComponent() {
   const firstRoute = useRef(true);
   useEffect(() => {
     // Not on the first render: stealing focus on load is its own problem.
+    //
+    // "/" is not a render, it is a redirect — src/routes/index.tsx sends it
+    // straight to the vault — so arriving there is still that first load, and
+    // spending the guard on it left the real landing to fire the focus call.
+    // The cost was the skip link: on the one URL people actually paste, the
+    // first Tab went into main and the link could never be reached. So the
+    // guard waits for the route that actually draws something.
     if (firstRoute.current) {
+      if (pathname === "/") return;
       firstRoute.current = false;
       return;
     }
@@ -185,53 +200,65 @@ function RootComponent() {
   // is tapped, and card-sfx is imported by components far below this one.
   useEffect(() => {
     hydrateCardSfxMuted();
+    hydrateHapticsOff();
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AccountBridge />
-      <PresentationProvider>
-        {/* Inside the provider, not beside the Toaster: it uses PresentationMode
-            to fade the nav, and that context's default is a no-op. A set can close
-            while you are anywhere in the app — an admin grant runs on the
-            commissioner's phone, and the far side of a trade never sees the accept
-            response — so the ceremony for those has to live above the routes
-            rather than in one of them. */}
-        <TrophyCeremonyHost />
-        <div className="flex min-h-dvh flex-col">
-          {/* The first thing in the tab order, and invisible until it has
-              focus. Without it every screen began with the whole nav. */}
-          <a
-            href="#main"
-            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-primary-foreground"
-          >
-            Skip to content
-          </a>
-          <SiteNav />
-          {/* The bottom nav's reserved space stays reserved while presenting.
-              Releasing it is a reflow of the whole page on the exact frame the
-              ceremony wants to be the only thing moving — the same trade the
-              pack route already makes for its own header row. The nav above it
-              is gone from sight and from the tab order either way, which is the
-              part that matters. */}
-          {/* Focused on every route change, so a screen reader lands on the
-              new page rather than staying wherever the old one left it.
-              tabIndex -1 makes it focusable without adding a tab stop. */}
-          <main
-            id="main"
-            ref={mainRef}
-            tabIndex={-1}
-            // The one number for "how much room the bottom bar wants", shared
-            // with the toaster and the offline banner so a change to the bar
-            // cannot move one of them and forget the others. md:pb-0 stays:
-            // above 768px the bar is gone and the clearance goes with it.
-            className="flex-1 pb-[var(--above-tab-bar)] focus:outline-none md:pb-0"
-          >
-            <Outlet />
-          </main>
-        </div>
-        <ShellFeedback />
-      </PresentationProvider>
+      {/* Motion does not read the OS preference unless it is told to, so five
+          components animated through it while the ten prefers-reduced-motion
+          blocks in styles.css held their CSS counterparts at a still frame. One
+          context above the router covers every motion element, the portalled
+          ones included. It disables transform and layout animations only — an
+          opacity crossfade still runs, which is the right reading of the
+          preference, and why the components that pass
+          `initial={reduced ? false : ...}` are still doing work this cannot do
+          for them. */}
+      <MotionConfig reducedMotion="user">
+        <AccountBridge />
+        <PresentationProvider>
+          {/* Inside the provider, not beside the Toaster: it uses PresentationMode
+              to fade the nav, and that context's default is a no-op. A set can close
+              while you are anywhere in the app — an admin grant runs on the
+              commissioner's phone, and the far side of a trade never sees the accept
+              response — so the ceremony for those has to live above the routes
+              rather than in one of them. */}
+          <TrophyCeremonyHost />
+          <div className="flex min-h-dvh flex-col">
+            {/* The first thing in the tab order, and invisible until it has
+                focus. Without it every screen began with the whole nav. */}
+            <a
+              href="#main"
+              className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-primary-foreground"
+            >
+              Skip to content
+            </a>
+            <SiteNav />
+            {/* The bottom nav's reserved space stays reserved while presenting.
+                Releasing it is a reflow of the whole page on the exact frame the
+                ceremony wants to be the only thing moving — the same trade the
+                pack route already makes for its own header row. The nav above it
+                is gone from sight and from the tab order either way, which is the
+                part that matters. */}
+            {/* Focused on every route change, so a screen reader lands on the
+                new page rather than staying wherever the old one left it.
+                tabIndex -1 makes it focusable without adding a tab stop. */}
+            <main
+              id="main"
+              ref={mainRef}
+              tabIndex={-1}
+              // The one number for "how much room the bottom bar wants", shared
+              // with the toaster and the offline banner so a change to the bar
+              // cannot move one of them and forget the others. md:pb-0 stays:
+              // above 768px the bar is gone and the clearance goes with it.
+              className="flex-1 pb-[var(--above-tab-bar)] focus:outline-none md:pb-0"
+            >
+              <Outlet />
+            </main>
+          </div>
+          <ShellFeedback />
+        </PresentationProvider>
+      </MotionConfig>
     </QueryClientProvider>
   );
 }

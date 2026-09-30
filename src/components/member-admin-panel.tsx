@@ -9,6 +9,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { AWARD_CATEGORIES } from "@/lib/awards";
 import { AdminSection } from "@/components/admin-section";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Issued = { participantId: string; name: string; code: string };
 
@@ -27,6 +28,9 @@ function printCodes(rows: Issued[], eventLabel: string): boolean {
       /[&<>"']/g,
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
     );
+  const items = rows
+    .map((r) => `<li><span>${esc(r.name)}</span><code>${esc(r.code)}</code></li>`)
+    .join("");
   win.document.write(
     `<!doctype html><meta charset="utf-8"><title>Member codes</title>` +
       `<style>body{font:14px system-ui,sans-serif;margin:32px}` +
@@ -34,9 +38,7 @@ function printCodes(rows: Issued[], eventLabel: string): boolean {
       `li{display:flex;justify-content:space-between;gap:24px;padding:6px 0;` +
       `border-bottom:1px dashed #bbb;list-style:none}` +
       `code{font:700 16px ui-monospace,monospace;letter-spacing:.2em}</style>` +
-      `<h1>${esc(eventLabel)} — member codes</h1><ul>` +
-      rows.map((r) => `<li><span>${esc(r.name)}</span><code>${esc(r.code)}</code></li>`).join("") +
-      `</ul>`,
+      `<h1>${esc(eventLabel)} — member codes</h1><ul>${items}</ul>`,
   );
   win.document.close();
   win.focus();
@@ -105,6 +107,20 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
     setBusy(true);
     try {
       const res = await generateFn({ data: { eventId, scope } });
+      // An empty list is the server saying there was nobody to issue for — no
+      // error, no write. Stored anyway it is still truthy, and `issued` is what
+      // three things below read as a flag: the roster list and its per-row Issue
+      // buttons vanish until this panel is remounted, any single code pinned
+      // beside a row is hidden with them (plaintext that exists nowhere else),
+      // and the unsaved-work guard switches off — all behind an amber list with
+      // no codes in it. The count guard above still cannot catch every case:
+      // the unclaimed re-issue is scoped to this event's roster on both sides
+      // now, but the server also drops anyone inactive or flagged a collector,
+      // and "Re-issue ALL" is league-wide by design.
+      if (!res.issued.length) {
+        toast.info("Everyone eligible has claimed — nothing to issue");
+        return;
+      }
       setIssued(res.issued);
       setSaved(false);
       await qc.invalidateQueries({ queryKey: ["member-claims", eventId] });
@@ -234,10 +250,10 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
         <div className="mt-3">
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <span
-              className={
-                "text-[10px] font-bold uppercase tracking-[0.08em] " +
-                (saved ? "text-primary" : "text-warn")
-              }
+              className={cn(
+                "text-label font-bold uppercase tracking-[0.08em]",
+                saved ? "text-primary" : "text-warn",
+              )}
             >
               {saved ? (
                 <>
@@ -251,13 +267,13 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
             <span className="flex items-center gap-3">
               <button
                 onClick={copyAll}
-                className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
+                className="inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
               >
                 <Copy className="h-3 w-3" /> Copy all
               </button>
               <button
                 onClick={printAll}
-                className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
+                className="inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
               >
                 <Printer className="h-3 w-3" /> Print
               </button>
@@ -266,14 +282,14 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
               {!saved && (
                 <button
                   onClick={() => setSaved(true)}
-                  className="inline-flex min-h-11 items-center gap-1 px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
+                  className="inline-flex min-h-11 items-center gap-1 px-2 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-primary hover:underline pointer-fine:min-h-0 pointer-fine:px-0"
                 >
                   <Check className="h-3 w-3" /> Got them
                 </button>
               )}
             </span>
           </div>
-          <ul className="max-h-[50vh] space-y-0.5 overflow-auto rounded-md border border-warn/30 bg-warn/5 p-2 sm:max-h-56">
+          <ul className="max-h-[50dvh] space-y-0.5 overflow-auto rounded-md border border-warn/30 bg-warn/5 p-2 sm:max-h-56">
             {freshCodes.map((i) => (
               <li key={i.participantId} className="flex items-center justify-between gap-2 text-xs">
                 <span className="truncate uppercase">{i.name}</span>
@@ -287,7 +303,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
       )}
 
       {!issued && (claims.data?.length ?? 0) > 0 && (
-        <ul className="mt-3 max-h-[50vh] space-y-0.5 overflow-auto pr-1 sm:max-h-40">
+        <ul className="mt-3 max-h-[50dvh] space-y-0.5 overflow-auto pr-1 sm:max-h-40">
           {(bundle?.participants ?? []).map((p) => {
             const claim = claims.data?.find((c) => c.participant_id === p.participant_id);
             const fresh = singles[p.participant_id];
@@ -304,8 +320,8 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
                     <span
                       className={
                         claim?.claimed_at
-                          ? "text-[10px] uppercase tracking-widest text-primary"
-                          : "text-[10px] uppercase tracking-widest text-muted-foreground"
+                          ? "text-label uppercase tracking-[0.08em] text-primary"
+                          : "text-label uppercase tracking-[0.08em] text-muted-foreground"
                       }
                     >
                       {claim?.claimed_at ? "claimed" : claim ? "code issued" : "no code"}
@@ -315,7 +331,7 @@ export function MemberCodesPanel({ eventId }: { eventId: string }) {
                     type="button"
                     disabled={busy}
                     onClick={() => issueOne(p.participant_id, p.participant?.name ?? "this player")}
-                    className="inline-flex min-h-8 items-center gap-1 px-1.5 text-[10px] font-bold uppercase tracking-widest text-primary hover:underline disabled:opacity-50"
+                    className="inline-flex min-h-11 items-center gap-1 px-1.5 text-label font-bold uppercase tracking-[0.08em] text-primary hover:underline disabled:opacity-50 pointer-fine:min-h-8"
                   >
                     <RefreshCw className="h-3 w-3" />
                     {fresh ? "Again" : "Issue"}
@@ -392,13 +408,13 @@ export function AwardsAdminPanel({ eventId, locked }: { eventId: string; locked:
           : "Only you can see this tally. Members see nothing until you close voting."}
       </p>
 
-      <div className="max-h-[50vh] space-y-2 overflow-auto pr-1 sm:max-h-56">
+      <div className="max-h-[50dvh] space-y-2 overflow-auto pr-1 sm:max-h-56">
         {AWARD_CATEGORIES.map((cat) => {
           const counts = tally.data?.tally?.[cat.id] ?? {};
           const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
           return (
             <div key={cat.id}>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-primary/80">
+              <div className="text-label font-bold uppercase tracking-[0.08em] text-primary/80">
                 {cat.icon} {cat.label}
               </div>
               {ranked.length === 0 ? (

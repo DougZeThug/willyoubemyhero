@@ -34,14 +34,13 @@ export type PackProgress = {
 
 const DAY_TICK_MS = 60_000;
 
-export function usePackProgress(secretOwed: boolean): PackProgress {
+export function usePackProgress(): PackProgress {
   const identity = usePackIdentity();
   const [dayKey, setDayKey] = useState(todayKey);
   const [now, setNow] = useState(() => Date.now());
-  // The ROW, not the derived state. `secretOwed` can flip long after the read —
-  // the pack pulls its secret the moment it is torn — and re-reading IndexedDB
-  // for a question that is pure arithmetic over a row we already hold would
-  // blank the card for a frame every time the secret query settles.
+  // The ROW, not the derived state: the answer is pure arithmetic over a row
+  // we already hold, and re-reading IndexedDB for it would blank the card for a
+  // frame on every re-render.
   //
   // `undefined` is "not read yet" and `null` is "read, and there is no pack",
   // which are different answers and only one of them is `loading`.
@@ -54,8 +53,9 @@ export function usePackProgress(secretOwed: boolean): PackProgress {
    * The day rolls over on a poll, not a timer, for the reason players.pack.tsx
    * gives for the same interval: a phone suspends timers when it sleeps, and the
    * one that mattered was always scheduled for exactly the moment the screen was
-   * off. The poll doubles as the clock behind "Next pack in 6h" — hours, so once
-   * a minute is more than enough.
+   * off. The day is the league's (`todayKey`), so this and the pack screen agree
+   * about when a row stops being today's. The poll doubles as the clock behind
+   * "Next pack in 6h" — hours, so once a minute is more than enough.
    *
    * COMING BACK TO THE TAB RE-READS THE ROW, and that is not belt-and-braces.
    * The two events below cover a tear and nothing after it: `PACK_STATE_CHANGED`
@@ -126,6 +126,6 @@ export function usePackProgress(secretOwed: boolean): PackProgress {
   }, [identity, dayKey, nonce]);
 
   if (row === undefined || identity == null) return { state: "loading", left: 0, now };
-  const pack = todayPackState({ row, dayKey, identity, secretOwed });
+  const pack = todayPackState({ row, dayKey, identity });
   return { state: pack.state, left: pack.state === "torn" ? pack.left : 0, now };
 }

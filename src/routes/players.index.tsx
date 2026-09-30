@@ -11,7 +11,8 @@ import { CardSkeleton } from "@/components/card-skeleton";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
 import { cardBadge, editionRank, toEdition } from "@/lib/card-edition";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
-import { useMySecrets, useSecretActor, useSecretStatus } from "@/hooks/use-daily-secret";
+import { useMySecrets, useSecretActor } from "@/hooks/use-daily-secret";
+import { usePackStatus } from "@/hooks/use-pack-status";
 import { useCardPullCounts } from "@/hooks/use-card-pulls";
 import { useTradeBadge } from "@/hooks/use-trade-badge";
 import { useStreakStatus } from "@/hooks/use-streak";
@@ -35,8 +36,6 @@ import { LevelPips } from "@/components/level-pips";
 import {
   groupBySecretCollection,
   secretFoil,
-  secretOwed,
-  secretWaiting,
   SECRET_RARITY,
   VAULT_UNSORTED_LABEL,
   type OwnedSecret,
@@ -69,7 +68,7 @@ import { useAccountSyncState } from "@/lib/account-sync-state";
 import { usePackProgress } from "@/hooks/use-pack-progress";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { useIsOnline } from "@/hooks/use-online";
-import { nextLocalMidnight } from "@/lib/pack";
+import { nextLocalMidnight, packWaiting as packStillSealed } from "@/lib/pack";
 import { vaultSummaryLine } from "@/lib/vault-summary";
 import {
   acquisitionWindow,
@@ -182,7 +181,7 @@ function PlayersPage() {
     () => completedIds(allTrophies.data?.trophies ?? [], member?.participantId ?? null),
     [allTrophies.data, member?.participantId],
   );
-  const secretStatus = useSecretStatus(actor);
+  const packStatus = usePackStatus(actor);
   // Off the actor rather than the member, same as the secrets above: a guest
   // builds a real streak too, and claim_guest_packs carries it over when they
   // finally put a name to the phone. StreakStatus is a Streak with the milestone
@@ -373,20 +372,15 @@ function PlayersPage() {
   // Trade tab carries the same news permanently, but its dot is easy to miss
   // under a thumb on the screen you are already looking at.
   const tradeUnread = useTradeBadge();
-  const packWaiting = secretWaiting(secretStatus.data);
+  const packWaiting = packStillSealed(packStatus.data);
   // Read, never written: dealing still belongs to the pack screen, which is what
-  // keeps one pack a day one pack a day.
-  //
-  // `secretOwed`, NOT `packWaiting`, and the two are deliberately different
-  // questions. The pack pulls its secret the moment it is torn, so `packWaiting`
-  // — the ring on the button — goes false while the card is still sitting
-  // face-down on the stand. Counting with it called a pack with an unturned
-  // secret finished and took away the link back to it.
-  const packProgress = usePackProgress(secretOwed(secretStatus.data));
-  // The secret's reset is the only one the server vouches for; the device's own
-  // midnight is the one the pack actually re-seals on. See TodayCard's prop doc —
-  // these are two clocks and the fallback is the more accurate of the two.
-  const nextPackAt = secretStatus.data?.resetsAt ?? nextLocalMidnight(packProgress.now);
+  // keeps one pack a day one pack a day. The count of cards left comes off the
+  // stored row alone — a secret is a slot in it like any other now.
+  const packProgress = usePackProgress();
+  // The server's reset is the league's midnight, which is the clock the pack
+  // rolls over on; the device's own midnight is only the fallback for a phone
+  // the server has not answered yet.
+  const nextPackAt = packStatus.data?.resetsAt ?? nextLocalMidnight(packProgress.now);
 
   /**
    * What arrived since this device last looked (§12).
@@ -800,7 +794,7 @@ function PlayersPage() {
           className="h-9 w-9"
           style={{ color: TROPHY_RARITY.accent, filter: "drop-shadow(0 0 10px currentColor)" }}
         />
-        <div className="truncate font-display text-xs font-black uppercase tracking-wide">
+        <div className="truncate font-display text-label font-black uppercase tracking-wide">
           {t.label}
         </div>
         <div
@@ -875,7 +869,10 @@ function PlayersPage() {
           />
         </div>
         <div className="text-center">
-          <div className="truncate font-display text-card-name font-black uppercase tracking-wide">
+          {/* Clamped like the summary's and the filmstrip's: at 15px in a
+              124px tile "Gary The Grill" was 20px over at 320, and a secret you
+              cannot read the name of is a poor trophy. */}
+          <div className="line-clamp-2 font-display text-card-name font-black uppercase tracking-wide">
             {s.name}
           </div>
           {/* The level of your copy leads, in its own colour — the same
@@ -883,8 +880,12 @@ function PlayersPage() {
               above the word rather than below it because at this size they are
               the thing that is actually read. */}
           <LevelPips tier={s.tier} className="mt-0.5" />
+          {/* Wraps outright rather than clamping like the name above it: this
+              line is one of five fixed captions, so a second line is the worst
+              it can ever cost — and at 320, or at 3-up on any phone, it costs
+              one: "Common · 70%" wants 23px more than a tile has (§23 F8). */}
           <div
-            className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
+            className="text-meta font-semibold uppercase tracking-[0.08em]"
             style={{ color: secretTierStyle(s.tier).accent }}
           >
             {secretTierCaption(s.tier)}
@@ -974,7 +975,10 @@ function PlayersPage() {
             )}
           </div>
           <div className="mt-2 text-center">
-            <div className="truncate font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
+            {/* Same rule as the secret tile's name beside it on the same shelf
+                — two kinds of tile, one way of handling a name that is longer
+                than the tile is wide. */}
+            <div className="line-clamp-2 font-display text-sm font-black uppercase tracking-wide text-foreground group-hover:text-primary">
               {name}
             </div>
             {/* A tick, not a word: the label is the line's real content,
@@ -985,8 +989,13 @@ function PlayersPage() {
               {!locked && (
                 <Check className="h-3 w-3 shrink-0 text-primary" aria-label="Collected" />
               )}
+              {/* Wraps rather than truncates: "Not packed yet" ran 6px over at
+                  320, and it is the line that says the tile is a card you have
+                  not got. The tick and this label never share a line — the tick
+                  means packed and this text only reaches its full length when it
+                  is not. */}
               <span
-                className="truncate text-meta font-semibold uppercase tracking-[0.08em]"
+                className="text-meta font-semibold uppercase tracking-[0.08em]"
                 style={{
                   color: locked
                     ? undefined
@@ -1097,7 +1106,7 @@ function PlayersPage() {
           No participants yet.
         </div>
       ) : rosterRows.length === 0 ? (
-        <p className="p-6 text-center text-xs text-muted-foreground">{emptyRosterLine}</p>
+        <p className="p-6 text-center text-meta text-muted-foreground">{emptyRosterLine}</p>
       ) : (
         cardGrid(rosterRows.map(rosterTile))
       )}
@@ -1163,7 +1172,7 @@ function PlayersPage() {
           }}
         />
       )}
-      <div className="mx-auto max-w-6xl px-4 py-6" inert={openSecretIndex !== null}>
+      <div className="mx-auto max-w-6xl px-page-x py-6" inert={openSecretIndex !== null}>
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing at all when it went down — a frozen
           screen with no signal is the exact failure the health states exist
@@ -1221,7 +1230,7 @@ function PlayersPage() {
 
         {/* Reserved whether or not the collection has reconciled, so the shelves
             below do not step down by a line when it does. */}
-        <p className="mb-4 min-h-4 text-xs text-muted-foreground">{summary}</p>
+        <p className="mb-4 min-h-4 text-meta text-muted-foreground">{summary}</p>
 
         <VaultSortSheet
           open={sortSheetOpen}

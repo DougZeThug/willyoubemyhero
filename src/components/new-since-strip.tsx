@@ -141,7 +141,7 @@ export function NewSinceStrip({
                 // level is the whole reason one secret is worth more of a look
                 // than another.
                 // The LABEL, not the caption: the caption appends the base pull
-                // rate, and "8% pull" read aloud is the odds of a thing that
+                // rate, and "8%" read aloud is the odds of a thing that
                 // already happened.
                 aria-label={`${item.name} — ${secretTierLabel(item.tier)} — ${item.label}`}
               >

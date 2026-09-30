@@ -48,6 +48,56 @@ describe("collection", () => {
     expect(collection[CARD_A].pulledAt).toBeGreaterThan(0);
   });
 
+  it("reads its keys and its values as one snapshot", async () => {
+    /**
+     * The keys and the values are zipped by index, so they have to come from the
+     * same transaction. Each `idb` shorthand call opens one of its own -- so
+     * `getAllKeys()` then `getAll()` was two snapshots, and a collectCard from
+     * another tab landing between them inserted a key the value list did not
+     * have. Every entry from there on took its neighbour's card and the last was
+     * dropped, which in adoptableIds -- reading ids back out of the VALUES -- is
+     * a card that never reaches the server, or an undefined that throws.
+     *
+     * Counted rather than raced: fake-indexeddb will not reliably schedule a
+     * write into that gap, and a test that only sometimes interleaves is a test
+     * that passes for the wrong reason. The property is "one transaction", so
+     * that is what this measures.
+     */
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "champion");
+    await mod.collectCard(CARD_B, "base");
+
+    const opened = vi.spyOn(IDBDatabase.prototype, "transaction");
+    const collection = await mod.loadCollection();
+    const calls = opened.mock.calls.length;
+    opened.mockRestore();
+
+    expect(calls).toBe(1);
+    // And the zip landed: every key carries the card that says it is that card.
+    for (const [id, card] of Object.entries(collection)) {
+      expect(card.eventParticipantId).toBe(id);
+    }
+  });
+
+  it("counts a duplicate pull against the row as it is at write time", async () => {
+    // collectCard is a read-modify-write, and it used to `get` and `put` in two
+    // transactions. A second pull of the same card between them wrote back the
+    // count it had read before the first one landed -- the lost update
+    // addUnrecorded already documents for its own row.
+    const mod = await freshModule();
+    // Warm the database first: getDb's own upgrade opens a version-change
+    // transaction, and counting that would measure the open rather than the write.
+    await mod.loadCollection();
+
+    const opened = vi.spyOn(IDBDatabase.prototype, "transaction");
+    await mod.collectCard(CARD_A, "base");
+    const calls = opened.mock.calls.length;
+    opened.mockRestore();
+
+    expect(calls).toBe(1);
+    expect((await mod.loadCollection())[CARD_A].count).toBe(1);
+  });
+
   it("increments the count on a duplicate pull", async () => {
     const mod = await freshModule();
     await mod.collectCard(CARD_A, "base");
@@ -183,78 +233,58 @@ describe("pack state", () => {
     });
   });
 
-  it("round-trips whether today's secret has been turned over", async () => {
+  it("round-trips every slot, secret or roster, in dealt order", async () => {
     const mod = await freshModule();
     const state = {
       dayKey: "2026-07-28",
-      ids: [CARD_A, CARD_B, "card-c"],
-      revealed: [0, 1, 2],
-      secretRevealed: true,
+      ids: [CARD_A, CARD_B],
+      cards: [
+        { kind: "roster" as const, id: CARD_A, heldBefore: 0 },
+        { kind: "secret" as const, id: "secret-1" },
+        { kind: "roster" as const, id: CARD_B, heldBefore: 2, editionBefore: "gold" },
+      ],
+      revealed: [0, 1],
     };
     await mod.savePackState(state);
     expect(await mod.loadPackState()).toEqual(state);
   });
 
-  it("loads a row written before secret cards existed", async () => {
-    // savePackState is a pure passthrough, so an old row simply has no
-    // secretRevealed key — it must not come back defaulted to anything.
+  it("loads a row written before the server dealt packs", async () => {
+    // savePackState is a pure passthrough, so an old row simply has no `cards`
+    // key — it must not come back defaulted to anything, and the pack screen
+    // reads its absence as "not today's pack".
     const mod = await freshModule();
     const legacy = { dayKey: "2026-07-28", ids: [CARD_A], revealed: [0] };
     await mod.savePackState(legacy);
     const loaded = await mod.loadPackState();
     expect(loaded).toEqual(legacy);
-    expect(loaded).not.toHaveProperty("secretRevealed");
+    expect(loaded).not.toHaveProperty("cards");
   });
 
-  it("only stores the flag, never which secret it was", async () => {
-    // The card itself is a Postgres row keyed on the claimed member, so it
-    // follows you to a new phone. An id here would be a second source of truth.
-    const mod = await freshModule();
-    await mod.savePackState({
-      dayKey: "2026-07-28",
-      ids: [CARD_A],
-      revealed: [0],
-      secretRevealed: true,
-    });
-    expect(Object.keys((await mod.loadPackState())!).sort()).toEqual([
-      "dayKey",
-      "ids",
-      "revealed",
-      "secretRevealed",
-    ]);
-  });
-
-  it("round-trips a set the pull finished but the secret has not revealed yet", async () => {
+  it("stores which slots still owe a set-complete ceremony, never the set itself", async () => {
     // The ceremony fires late, after the card has been turned over, so there is a
-    // gap — and a reload in it used to swallow the most earned moment in the game:
-    // the in-memory ref went with the page and the re-pull answers null because
-    // the row already exists.
+    // gap — and a reload in it used to swallow the most earned moment in the game.
+    // Which set it was comes back with the pack from the server; only the debt
+    // lives here.
     const mod = await freshModule();
-    const pendingCompletion = {
-      collection: "pets",
-      label: "Pets",
-      size: 9,
-      completedOn: "2026-07-28",
-    };
     await mod.savePackState({
       dayKey: "2026-07-28",
       ids: [CARD_A],
+      cards: [{ kind: "secret", id: "secret-1" }],
       revealed: [],
-      pendingCompletion,
+      pendingCompletions: [0],
     });
-    expect((await mod.loadPackState())?.pendingCompletion).toEqual(pendingCompletion);
+    expect((await mod.loadPackState())?.pendingCompletions).toEqual([0]);
   });
 
   it("loads a row that has no ceremony owing", async () => {
     const mod = await freshModule();
     await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A], revealed: [] });
-    expect((await mod.loadPackState())?.pendingCompletion).toBeUndefined();
+    expect((await mod.loadPackState())?.pendingCompletions).toBeUndefined();
   });
 
-  it("stores the dealt ids rather than a seed", async () => {
-    // The last slot is swapped for a card the user had not collected at the
-    // moment the pack was dealt, so re-deriving from the seed after revealing
-    // would pick a different card than the one actually pulled.
+  it("stores the dealt ids, which the server chose", async () => {
+    // Nothing on the phone can re-derive them: the deal is Postgres's.
     const mod = await freshModule();
     await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A, CARD_B], revealed: [] });
     expect((await mod.loadPackState())?.ids).toEqual([CARD_A, CARD_B]);

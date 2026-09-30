@@ -14,7 +14,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { CollectionComplete } from "@/components/collection-complete";
 import { PresentationMode } from "@/components/presentation-mode";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
-import { markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
+import { alreadyCelebrated, markTrophiesCelebrated, trophyKey } from "@/lib/trophy-seen";
 import type { CompletedCollection } from "@/lib/collection-trophies";
 import { useEventCardBack, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useMemberSession } from "@/lib/member-token";
@@ -41,6 +41,7 @@ import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { takeTradeIntent, type TradeIntent } from "@/lib/trade-intent";
 import type { Staged } from "@/lib/trade-staging";
 import { rarityMap, rarityStyle } from "@/lib/card-rarity";
+import { arrivalRarity } from "@/lib/trades";
 import { burst } from "@/lib/card-confetti";
 import type { RosterCardLookup } from "@/components/trade-offer-card";
 import { TradeBuilder } from "@/components/trade-builder";
@@ -289,6 +290,18 @@ function TradePage() {
           // Claimed before the refetch, so the global host does not play these a
           // second time. The OTHER party's trophies are deliberately left
           // unclaimed — their phone is where those belong.
+          //
+          // That only settles one direction of the race, though. The realtime
+          // INSERT on collection_trophies can arrive, invalidate and refetch
+          // while this accept is still in the air, and then the host queued its
+          // ceremony first — asked afterwards it says yes, and firing ours too
+          // puts an identical overlay underneath the one already on screen.
+          // Asked BEFORE marking, so the answer is about the host and not about
+          // the line below it — and per set rather than all-or-nothing, because
+          // one trade can close two and the host may have got to only one.
+          const unplayed = myId
+            ? mine.filter((c) => !alreadyCelebrated(trophyKey(myId, c.collection)))
+            : mine;
           if (myId) {
             markTrophiesCelebrated(mine.map((c) => trophyKey(myId, c.collection)));
           }
@@ -297,12 +310,26 @@ function TradePage() {
           // and showing one of them would be a worse bug than showing neither.
           // Append so concurrent accepts for different offers do not overwrite
           // ceremonies that are still waiting to play.
-          setCompletions((q) => [...q, ...mine]);
+          if (unplayed.length) setCompletions((q) => [...q, ...unplayed]);
         } else {
           toast.success("Trade done");
           // The same flourish a pack pull gets, at half strength: a swap is a
           // smaller moment than a hit, but it is still a card arriving.
-          void burst(rarityStyle("podium"), 0.7);
+          //
+          // In the arriving card's OWN palette, which this screen used to be the
+          // one place not to do — it fired a literal "podium" whatever landed, so
+          // a dnf card came in gold and a base one read as a podium finish. The
+          // map it needs has been sitting in scope for the tiles all along.
+          void burst(
+            arrivalRarity(
+              [...(offers.data?.inbox ?? []), ...(offers.data?.outbox ?? [])].find(
+                (o) => o.id === offerId,
+              ),
+              myId,
+              rarities,
+            ),
+            0.7,
+          );
         }
       } else if (res.reason === "voided") {
         toast.error("One of those cards has already moved on");
@@ -440,7 +467,7 @@ function TradePage() {
   if (!me) {
     return (
       <div className="card-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-6">
+        <div className="mx-auto max-w-3xl px-page-x py-6">
           <Header />
           {/* Signed in but nobody yet: they are not on the roster, so a paper
               code will never arrive. Name themselves and they can trade. */}
@@ -506,7 +533,7 @@ function TradePage() {
         />
       )}
 
-      <div className="mx-auto max-w-3xl px-4 pb-32 pt-6">
+      <div className="mx-auto max-w-3xl px-page-x pb-32 pt-6">
         <Header />
         {/* The same banner five other screens show. This one watches the event
           channel too and said nothing when it went down — a frozen screen
@@ -541,7 +568,6 @@ function TradePage() {
             onDecline={(id) => void resolve(id, "decline")}
             onCancel={(id) => void resolve(id, "cancel")}
             highlightId={highlightId}
-            onMakeOffer={openBuilder}
             reachableCount={counterparties.length}
           />
         ) : (
@@ -559,7 +585,7 @@ function TradePage() {
           `z-20` keeps it under the nav's z-30: a CTA that paints over a tab is
           worse than one that scrolls under it. */}
       {!builderOpen && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-4 pb-[calc(var(--tab-bar-h)+0.5rem)] md:pb-4">
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 px-page-x pb-[calc(var(--tab-bar-h)+0.5rem)] md:pb-4">
           <div className="pointer-events-auto mx-auto max-w-3xl">
             <button type="button" onClick={openBuilder} className="neon-btn-lg w-full">
               <ArrowLeftRight className="h-4 w-4" />
@@ -592,7 +618,7 @@ function TabButton({
         "inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg font-display text-badge font-bold uppercase tracking-[0.08em] transition-colors",
         on
           ? "bg-primary/15 text-primary ring-2 ring-primary/50"
-          : "border border-white/10 text-muted-foreground hover:text-foreground",
+          : "border border-border-strong text-muted-foreground hover:text-foreground",
       )}
     >
       {children}
@@ -622,7 +648,7 @@ function Header() {
           on a screen whose point is the offer waiting on you — the eye went to
           the word rather than to Accept. */}
       <h1 className="mt-2 font-display text-4xl font-black uppercase leading-none">Trading Post</h1>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-meta text-muted-foreground">
         Player cards: spares only, you always keep one. Secrets: anything you hold, even your last
         copy. The finish travels with the card.
       </p>

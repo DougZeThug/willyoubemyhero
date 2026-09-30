@@ -9,9 +9,12 @@ import { useCallback, useEffect, useState } from "react";
 import { editionCelebrates } from "./card-edition";
 
 const MUTE_KEY = "wwbh:sfx-muted";
+/** Stored as "off" rather than "on" so an unwritten key means the default: buzzing. */
+const HAPTICS_KEY = "wwbh:haptics-off";
 
 let ctx: AudioContext | null = null;
 let muted = false;
+let hapticsOff = false;
 
 /**
  * Whether the device asks for less MOTION.
@@ -81,6 +84,74 @@ export function hydrateCardSfxMuted() {
 }
 
 /**
+ * The haptics preference, stored exactly like the mute one above and kept
+ * separate from it on purpose — see `buzz`.
+ */
+export function setHapticsOff(next: boolean) {
+  hapticsOff = next;
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(HAPTICS_KEY, next ? "1" : "0");
+  } catch {
+    /* private mode with storage blocked still holds for this page load */
+  }
+  window.dispatchEvent(new Event("wwbh:haptics-changed"));
+}
+
+export function isHapticsOff() {
+  return hapticsOff;
+}
+
+function readHapticsOff(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(HAPTICS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Restore the saved preference into module state. Call once, high in the tree,
+ * beside `hydrateCardSfxMuted` — a phone that buzzes once before the setting
+ * loads has already ignored it.
+ */
+export function hydrateHapticsOff() {
+  hapticsOff = readHapticsOff();
+}
+
+/** Reactive view of the haptics preference. Same hydration dance as `useCardSfx`. */
+export function useHaptics() {
+  const [isOff, setIsOff] = useState(false);
+
+  useEffect(() => {
+    const mine = () => setIsOff(isHapticsOff());
+    const reread = () => {
+      hapticsOff = readHapticsOff();
+      setIsOff(hapticsOff);
+    };
+    // Another tab, and only if it touched OUR key. `storage` fires for every key
+    // the other tab writes, so this used to re-read and re-render on every
+    // unrelated wwbh: write. A null key is localStorage.clear(), which does.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== HAPTICS_KEY) return;
+      reread();
+    };
+    reread();
+    window.addEventListener("wwbh:haptics-changed", mine);
+    window.addEventListener("storage", theirs);
+    return () => {
+      window.removeEventListener("wwbh:haptics-changed", mine);
+      window.removeEventListener("storage", theirs);
+    };
+  }, []);
+
+  const toggle = useCallback(() => setHapticsOff(!isHapticsOff()), []);
+
+  return { off: isOff, toggle };
+}
+
+/**
  * Reactive view of the mute preference for a toggle button.
  *
  * Starts unmuted so the server and the first client render agree, then reads
@@ -95,11 +166,18 @@ export function useCardSfx() {
     // Another tab: storage is the only thing that changed, so the module flag —
     // which is what actually gates playback in `audio()` — has to be caught up
     // too, or this tab shows muted while it keeps making noise.
-    const theirs = () => {
+    const reread = () => {
       muted = readMuted();
       setIsMuted(muted);
     };
-    theirs();
+    // Another tab, and only if it touched OUR key. `storage` fires for every key
+    // the other tab writes, so this used to re-read and re-render on every
+    // unrelated wwbh: write. A null key is localStorage.clear(), which does.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== MUTE_KEY) return;
+      reread();
+    };
+    reread();
     window.addEventListener("wwbh:sfx-muted-changed", mine);
     window.addEventListener("storage", theirs);
     return () => {
@@ -196,10 +274,15 @@ function thud(fromHz: number, toHz: number, durationSec: number, gain: number) {
  * Deliberately *not* gated on `muted`. That toggle is the sound one, and the
  * commonest reason to reach for it here is standing in a garden next to someone
  * else's phone — which is a reason to silence the chimes and no reason at all to
- * stop the handset tapping back.
+ * stop the handset tapping back. Haptics have their own switch, on /you, and it
+ * is the third gate below.
+ *
+ * Exported so the one haptic outside this file — the reaction tap in
+ * card-social.tsx — obeys the same three guards. It used to call
+ * `navigator.vibrate` directly and buzzed through both of them.
  */
-function buzz(pattern: number | number[]) {
-  if (typeof navigator === "undefined" || prefersReducedMotion()) return;
+export function buzz(pattern: number | number[]) {
+  if (typeof navigator === "undefined" || prefersReducedMotion() || hapticsOff) return;
   navigator.vibrate?.(pattern);
 }
 

@@ -42,6 +42,23 @@ function AwardsPage() {
 
   const locked = !!event?.awards_locked;
 
+  // The reveal's third state, and the lock itself is what creates it.
+  //
+  // `locked` comes off the event row, which /awards reads from the bundle on a
+  // timer of its own, while the winners ride a query of their own -- so `locked`
+  // flips on whichever answers first, regularly with the tally still in flight.
+  // An empty tally at that moment says nothing about the result, and asserting
+  // "No votes cast." over it announced the wrong answer to the whole garden.
+  //
+  // So the tally says whether it was read under the lock, rather than this screen
+  // guessing from isFetching and an empty array -- which cannot tell the flip race
+  // apart from its own aftermath, and had a closed combine where nobody voted
+  // flashing "Counting the votes…" on every 15s poll, forever, about a count that
+  // finished hours ago. getAwards reads awards_locked before the rows and
+  // close_award_voting publishes them before it sets the flag, so lockedAtRead
+  // true means this list is the final one.
+  const countingVotes = !awards.lockedAtRead;
+
   const myVotes = useQuery({
     queryKey: ["my-award-votes", event?.id, me?.participantId],
     queryFn: () => myVotesFn({ data: { eventId: event!.id } }),
@@ -65,14 +82,14 @@ function AwardsPage() {
 
   const winnersByCategory = useMemo(() => {
     const map = new Map<string, string[]>();
-    for (const a of awards.data ?? []) {
+    for (const a of awards.winners) {
       if (!a.award_type || !a.participant_id) continue;
       const list = map.get(a.award_type) ?? [];
       list.push(a.participant_id);
       map.set(a.award_type, list);
     }
     return map;
-  }, [awards.data]);
+  }, [awards.winners]);
 
   async function vote(category: string, targetParticipantId: string) {
     if (!event?.id || !me || locked) return;
@@ -94,7 +111,7 @@ function AwardsPage() {
   if (loading && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="mx-auto max-w-3xl px-page-x py-10">
           <FeedLoading label="Reading the awards…" />
         </div>
       </div>
@@ -104,7 +121,7 @@ function AwardsPage() {
   if (error && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="mx-auto max-w-3xl px-page-x py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
       </div>
@@ -113,19 +130,19 @@ function AwardsPage() {
 
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-3xl px-page-x py-6">
         {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
         <div className="mb-5 border-b border-primary/20 pb-4">
           <div className="flex items-center gap-2 text-primary">
             <Award className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               Superlatives
             </span>
           </div>
           <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none">
             League Awards
           </h1>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-meta text-muted-foreground">
             {locked
               ? "Voting is closed. Here's how it landed."
               : "One vote per category. You can change your mind until the commissioner closes voting — nobody sees the tally before then."}
@@ -159,7 +176,7 @@ function AwardsPage() {
                   </h2>
                   {locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                 </div>
-                <p className="mb-3 text-xs text-muted-foreground">{cat.blurb}</p>
+                <p className="mb-3 text-meta text-muted-foreground">{cat.blurb}</p>
 
                 {locked ? (
                   winners.length ? (
@@ -178,7 +195,7 @@ function AwardsPage() {
                         </Link>
                       ))}
                       {winners.length > 1 && (
-                        <span className="self-center text-label uppercase tracking-widest text-muted-foreground">
+                        <span className="self-center text-label uppercase tracking-[0.08em] text-muted-foreground">
                           tied
                         </span>
                       )}
@@ -187,10 +204,12 @@ function AwardsPage() {
                     // The AWARDS query, not the event bundle. Reading the
                     // bundle's failure list here meant a failed splits or
                     // penalties read claimed the votes were unreadable.
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-meta text-muted-foreground">
                       {awards.isError
                         ? "Couldn't read the votes just now — retrying."
-                        : "No votes cast."}
+                        : countingVotes
+                          ? "Counting the votes…"
+                          : "No votes cast."}
                     </p>
                   )
                 ) : (
@@ -208,7 +227,7 @@ function AwardsPage() {
                             "flex min-h-11 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:opacity-50",
                             chosen
                               ? "border-primary bg-primary/15"
-                              : "border-white/10 bg-white/[0.02] hover:border-primary/40",
+                              : "border-border-strong bg-white/[0.02] hover:border-primary",
                           )}
                         >
                           <ParticipantAvatar
@@ -221,7 +240,7 @@ function AwardsPage() {
                           />
                           <span
                             className={cn(
-                              "min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide",
+                              "min-w-0 flex-1 line-clamp-2 text-label font-semibold uppercase tracking-wide",
                               chosen ? "text-primary" : "text-foreground",
                             )}
                           >
@@ -247,3 +266,5 @@ function AwardsPage() {
     </div>
   );
 }
+
+export default AwardsPage;

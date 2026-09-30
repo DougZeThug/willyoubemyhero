@@ -34,7 +34,7 @@ async function record(participantId: string, ids: string[], editions: string[] |
  */
 async function derivedEdition(participantId: string, ep: string) {
   const [row] = await sql<{ e: string }>(
-    `SELECT public.roll_card_edition($1, $2, (now() AT TIME ZONE 'America/New_York')::date) AS e`,
+    "SELECT public.roll_card_edition($1, $2, (now() AT TIME ZONE 'America/New_York')::date) AS e",
     [participantId, ep],
   );
   return row.e;

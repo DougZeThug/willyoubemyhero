@@ -643,6 +643,32 @@ export type Database = {
           },
         ]
       }
+      claimed_guests: {
+        Row: {
+          claimed_at: string
+          guest_id: string
+          participant_id: string
+        }
+        Insert: {
+          claimed_at?: string
+          guest_id: string
+          participant_id: string
+        }
+        Update: {
+          claimed_at?: string
+          guest_id?: string
+          participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claimed_guests_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       collection_trophies: {
         Row: {
           collection_id: string
@@ -1047,6 +1073,11 @@ export type Database = {
           event_id: string | null
           id: string
           kind: string
+          listed_edition: string | null
+          listed_edition_asserted_by: string | null
+          listed_event_participant_id: string | null
+          listed_secret_card_id: string | null
+          listed_tier: string | null
           price: number
           resolved_at: string | null
           secret_pull_id: string | null
@@ -1060,6 +1091,11 @@ export type Database = {
           event_id?: string | null
           id?: string
           kind: string
+          listed_edition?: string | null
+          listed_edition_asserted_by?: string | null
+          listed_event_participant_id?: string | null
+          listed_secret_card_id?: string | null
+          listed_tier?: string | null
           price: number
           resolved_at?: string | null
           secret_pull_id?: string | null
@@ -1073,6 +1109,11 @@ export type Database = {
           event_id?: string | null
           id?: string
           kind?: string
+          listed_edition?: string | null
+          listed_edition_asserted_by?: string | null
+          listed_event_participant_id?: string | null
+          listed_secret_card_id?: string | null
+          listed_tier?: string | null
           price?: number
           resolved_at?: string | null
           secret_pull_id?: string | null
@@ -1168,6 +1209,7 @@ export type Database = {
       pack_opens: {
         Row: {
           card_count: number
+          cards: Json | null
           created_at: string
           event_id: string | null
           guest_id: string | null
@@ -1176,6 +1218,7 @@ export type Database = {
         }
         Insert: {
           card_count?: number
+          cards?: Json | null
           created_at?: string
           event_id?: string | null
           guest_id?: string | null
@@ -1184,6 +1227,7 @@ export type Database = {
         }
         Update: {
           card_count?: number
+          cards?: Json | null
           created_at?: string
           event_id?: string | null
           guest_id?: string | null
@@ -2052,6 +2096,10 @@ export type Database = {
         Returns: Json
       }
       backfill_collection_trophies: { Args: never; Returns: number }
+      bind_account_to_player: {
+        Args: { _guest_id?: string; _participant_id: string; _user_id: string }
+        Returns: Json
+      }
       buy_bonus_secret_pull: {
         Args: {
           _event_id: string
@@ -2087,6 +2135,10 @@ export type Database = {
         Returns: number
       }
       claim_guest_secrets: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: number
+      }
+      claim_guest_social: {
         Args: { _guest_id: string; _participant_id: string }
         Returns: number
       }
@@ -2163,6 +2215,10 @@ export type Database = {
         }
         Returns: Json
       }
+      merge_guest_into_collector: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: undefined
+      }
       merge_guest_packs: {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number
@@ -2175,11 +2231,23 @@ export type Database = {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number
       }
+      merge_guests_into_collector: {
+        Args: { _guest_ids: string[]; _participant_id: string }
+        Returns: undefined
+      }
       mill_card_copy: {
         Args: { _card_copy_id: string; _participant_id: string }
         Returns: Json
       }
       mill_value: { Args: { _edition: string }; Returns: number }
+      open_pack: {
+        Args: { _event_id: string; _guest_id: string; _participant_id: string }
+        Returns: Json
+      }
+      pack_status: {
+        Args: { _guest_id: string; _participant_id: string }
+        Returns: Json
+      }
       pull_bonus_secret_card: {
         Args: {
           _event_id: string
@@ -2187,10 +2255,6 @@ export type Database = {
           _guest_id: string
           _participant_id: string
         }
-        Returns: Json
-      }
-      pull_secret_card: {
-        Args: { _event_id: string; _guest_id: string; _participant_id: string }
         Returns: Json
       }
       record_card_pulls: {
@@ -2245,10 +2309,6 @@ export type Database = {
       }
       roll_secret_tier: { Args: never; Returns: string }
       roll_secret_tier_at_least: { Args: { _floor: string }; Returns: string }
-      secret_pull_status: {
-        Args: { _guest_id: string; _participant_id: string }
-        Returns: Json
-      }
       secret_sell_value: { Args: { _tier: string }; Returns: number }
       secret_tier_rank: { Args: { _tier: string }; Returns: number }
       sell_secret_card: {
@@ -2285,6 +2345,17 @@ export type Database = {
       undo_last_draft_selection: {
         Args: { _event_id: string }
         Returns: string
+      }
+      update_run_result: {
+        Args: {
+          _event_id: string
+          _penalties: Json
+          _penalty_ms: number
+          _raw_time_ms: number
+          _run_id: string
+          _splits: Json
+        }
+        Returns: undefined
       }
     }
     Enums: {

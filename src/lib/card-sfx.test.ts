@@ -6,7 +6,17 @@
 // the three situations where making a noise would be a bug, and that the two
 // preferences mean what they say.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cue, playEditionShine, playFlip, setCardSfxMuted, SFX_CUES } from "./card-sfx";
+import {
+  buzz,
+  cue,
+  hydrateHapticsOff,
+  isHapticsOff,
+  playEditionShine,
+  playFlip,
+  setCardSfxMuted,
+  setHapticsOff,
+  SFX_CUES,
+} from "./card-sfx";
 import { setMatchMedia } from "@/test/setup";
 
 // Read off the registry rather than hand-listed. The hand-listed version stopped
@@ -20,10 +30,12 @@ beforeEach(() => {
   vibrate = vi.fn();
   Object.defineProperty(navigator, "vibrate", { value: vibrate, configurable: true });
   setCardSfxMuted(false);
+  setHapticsOff(false);
 });
 
 afterEach(() => {
   setCardSfxMuted(false);
+  setHapticsOff(false);
 });
 
 describe("every cue", () => {
@@ -108,5 +120,60 @@ describe("the edition shine", () => {
   it("is silent when the user has muted the app", () => {
     setCardSfxMuted(true);
     expect(() => playEditionShine("platinum")).not.toThrow();
+  });
+});
+
+describe("the haptics toggle", () => {
+  /**
+   * The switch the mute toggle above is deliberately not. It exists because the
+   * two are separate wants — a phone silenced in a garden should still tap back,
+   * and a phone in a pocket during a meeting should do neither — and until /you
+   * there was nowhere at all to say the second one.
+   */
+  it("stops every cue buzzing", () => {
+    setHapticsOff(true);
+    for (const name of CUES) cue(name);
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+
+  it("does not take the sound with it", () => {
+    // The mirror of the mute test above, and the reason both exist: neither
+    // switch may quietly become the other.
+    setHapticsOff(true);
+    expect(() => cue("secretImpact")).not.toThrow();
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+
+  it("gates the one haptic that lives outside this file", () => {
+    // card-social's reaction tap used to call navigator.vibrate directly, so it
+    // obeyed neither this switch nor the reduced-motion one. It goes through
+    // `buzz` now, which is what this asserts.
+    buzz([8]);
+    expect(vibrate).toHaveBeenCalledWith([8]);
+    vibrate.mockClear();
+    setHapticsOff(true);
+    buzz([8]);
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+
+  it("survives storage being refused, for this page load at least", () => {
+    // A locked-down private window throws on setItem. The preference still has
+    // to hold in module state, or the toggle looks broken rather than unsaved.
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    setHapticsOff(true);
+    expect(isHapticsOff()).toBe(true);
+    setItem.mockRestore();
+  });
+
+  it("comes back from storage on the next page load", () => {
+    setHapticsOff(true);
+    // What __root does on mount: module state is rebuilt from the key, because
+    // a phone that buzzes once before the setting loads has already ignored it.
+    setHapticsOff(false);
+    localStorage.setItem("wwbh:haptics-off", "1");
+    hydrateHapticsOff();
+    expect(isHapticsOff()).toBe(true);
   });
 });

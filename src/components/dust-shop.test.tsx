@@ -13,9 +13,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
-import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { packStatusKey } from "@/hooks/use-pack-status";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { dustBalanceKey } from "@/hooks/use-dust";
+import { tradeSparesKey } from "@/hooks/use-trades";
 import { DUST_PRICES, SELL_BY_SECRET_TIER } from "@/lib/dust";
 import { DustShopPanel } from "./dust-shop";
 
@@ -107,10 +109,34 @@ describe("buying a pull", () => {
 
     await waitFor(() => expect(buyFn).toHaveBeenCalled());
     const seen = keys(invalidate);
-    expect(seen).toContain(JSON.stringify(secretStatusKey(ACTOR)));
+    expect(seen).toContain(JSON.stringify(packStatusKey(ACTOR)));
     expect(seen).toContain(JSON.stringify(mySecretsKey(ACTOR)));
     // And never the bare id, which is the shape that silently matched nothing.
-    expect(seen).not.toContain(JSON.stringify(secretStatusKey(ME)));
+    expect(seen).not.toContain(JSON.stringify(packStatusKey(ME)));
+  });
+
+  it("refreshes both spares lists, which a granted pull joins on the spot", async () => {
+    // buy_bonus_secret_pull mints the row `granted`, and getTradeSpares stakes a
+    // granted row the day it arrives — so the card is sellable and offerable
+    // immediately, and both lists are cached. Buying was the one mutation here
+    // that moved them without saying so, and neither list has a realtime channel
+    // to notice on its own.
+    buyFn.mockResolvedValue({
+      ok: true,
+      price: DUST_PRICES.bonusPull,
+      balance: 0,
+      pull: { completedCollection: null, duplicate: true, cardId: "sc-new" },
+    });
+    const { invalidate } = renderShop();
+
+    await userEvent.click(screen.getByRole("button", { name: /buy for/i }));
+
+    await waitFor(() => expect(buyFn).toHaveBeenCalled());
+    const seen = keys(invalidate);
+    // The shop's own "Sell a secret" list, and the Trading Post's, which read the
+    // same spares under two different keys.
+    expect(seen).toContain(JSON.stringify(["dust-spares", ME]));
+    expect(seen).toContain(JSON.stringify(tradeSparesKey(ME)));
   });
 
   it("writes the new balance straight in rather than refetching it", async () => {
@@ -166,7 +192,7 @@ describe("buying a pull", () => {
     await userEvent.click(screen.getByRole("button", { name: /buy for/i }));
 
     await waitFor(() => expect(buyFn).toHaveBeenCalled());
-    expect(keys(invalidate)).not.toContain(JSON.stringify(secretStatusKey(ACTOR)));
+    expect(keys(invalidate)).not.toContain(JSON.stringify(packStatusKey(ACTOR)));
     expect(client.getQueryData(dustBalanceKey(ME))).toBeUndefined();
   });
 });
@@ -307,7 +333,7 @@ describe("selling a secret", () => {
     const seen = keys(invalidate);
     expect(seen).toContain(JSON.stringify(["dust-spares", ME]));
     expect(seen).toContain(JSON.stringify(mySecretsKey(ACTOR)));
-    expect(seen).toContain(JSON.stringify(secretStatusKey(ACTOR)));
+    expect(seen).toContain(JSON.stringify(packStatusKey(ACTOR)));
     expect(seen).not.toContain(JSON.stringify(mySecretsKey(ME)));
     // Written straight in, never refetched — same rule as every other mutation.
     expect(client.getQueryData(dustBalanceKey(ME))).toEqual({ balance: 320 });
@@ -367,7 +393,7 @@ describe("selling a secret", () => {
 
   it("refreshes nothing when the sale was refused", async () => {
     withSecret();
-    sellFn.mockResolvedValue({ ok: false, reason: "too_fresh" });
+    sellFn.mockResolvedValue({ ok: false, reason: "staked" });
     const { invalidate, client } = renderShop();
 
     await userEvent.click(await screen.findByRole("button", { name: /sell \+/i }));

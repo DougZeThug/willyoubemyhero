@@ -178,7 +178,7 @@ describe("useVaultLayout", () => {
         KEY,
         JSON.stringify({ order: [secretSectionId("cornhole"), ROSTER_SECTION], collapsed: [] }),
       );
-      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     });
     expect(result.current.order).toEqual([secretSectionId("cornhole"), ROSTER_SECTION]);
   });

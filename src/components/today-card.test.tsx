@@ -80,11 +80,17 @@ describe("the pack, as a state", () => {
     );
   });
 
-  it("says so in the label when a secret is waiting", () => {
+  it("marks an unopened pack with a dot and keeps the label as it was", () => {
+    // The dot says "unopened", and nothing else: whether a secret is in the
+    // pack is the pack's news to break, not this button's.
     renderCard({ packWaiting: true });
-    expect(
-      screen.getByRole("link", { name: "Open today's pack — a secret is waiting" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open today's pack" })).toBeInTheDocument();
+    expect(screen.getByTestId("pack-waiting-dot")).toBeInTheDocument();
+  });
+
+  it("shows no dot once today's pack has been opened", () => {
+    renderCard({ packWaiting: false });
+    expect(screen.queryByTestId("pack-waiting-dot")).toBeNull();
   });
 
   it("asks somebody to finish a pack they left half open", () => {

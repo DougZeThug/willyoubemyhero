@@ -27,7 +27,8 @@ import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import type { OwnedSecret } from "@/lib/secret-cards";
 import { cn } from "@/lib/utils";
 import type { ImageUrlSet } from "@/lib/media";
-import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { packStatusKey } from "@/hooks/use-pack-status";
 import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
 import { tradeSparesKey } from "@/hooks/use-trades";
@@ -121,8 +122,16 @@ export function DustShopPanel({
       // participant id matches nothing at all and the purchase closed on "check
       // your secrets" with the card still missing. useMySecrets holds a
       // five-minute staleTime, so it was the one that stayed wrong longest.
-      void qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+      void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
       void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
+      // The two spares lists, the same pair sell, mill and re-roll refresh. A
+      // bought pull is minted `granted`, and getTradeSpares stakes granted rows
+      // straight away — so the card is sellable and offerable the instant it
+      // lands, while the sheet below and the Trading Post went on showing the
+      // list from before the purchase for a cache lifetime. Buying was the only
+      // mutation in this file that moved the spares and did not say so.
+      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       // A bought pull is a real pull: buy_bonus_secret_pull delegates to
       // pull_bonus_secret_card, which mints the row and awards the trophy. Buying
       // the card that finishes a set is the best moment this feature has, so the
@@ -192,11 +201,9 @@ export function DustShopPanel({
         toast(
           res.reason === "last_copy"
             ? "That is your only copy"
-            : res.reason === "too_fresh"
-              ? "Today's card — it can be burned tomorrow"
-              : res.reason === "staked"
-                ? "That one is on an open offer or up for sale"
-                : "Could not burn that one",
+            : res.reason === "staked"
+              ? "That one is on an open offer or up for sale"
+              : "Could not burn that one",
         );
         return;
       }
@@ -217,9 +224,9 @@ export function DustShopPanel({
   });
 
   // Sorted the way `burnable` is: biggest payout at the top of the thumb, name as
-  // the tiebreak. `secrets` is already exactly the right subset — getTradeSpares
-  // filters out today's un-granted pull, which is precisely what sell_secret_card
-  // refuses — so this needs no query of its own.
+  // the tiebreak. `secrets` is already exactly the right subset — every copy
+  // you hold, today's pull included, which is precisely what sell_secret_card
+  // accepts — so this needs no query of its own.
   const sellable = useMemo(
     () =>
       [...(spares.data?.secrets ?? [])].sort(
@@ -235,11 +242,9 @@ export function DustShopPanel({
     onSuccess: (res) => {
       if (!res.ok) {
         toast(
-          res.reason === "too_fresh"
-            ? "Today's pull — it can be sold tomorrow"
-            : res.reason === "staked"
-              ? "That one is on an open offer or up for sale"
-              : "Could not sell that one",
+          res.reason === "staked"
+            ? "That one is on an open offer or up for sale"
+            : "Could not sell that one",
         );
         return;
       }
@@ -254,7 +259,7 @@ export function DustShopPanel({
       // beside it have both moved, and a bare participant id matches neither. See
       // the comment on the prop.
       void qc.invalidateQueries({ queryKey: mySecretsKey(actor) });
-      void qc.invalidateQueries({ queryKey: secretStatusKey(actor) });
+      void qc.invalidateQueries({ queryKey: packStatusKey(actor) });
       toast(`+${res.awarded} dust`);
     },
     onError: () => toast("Could not sell that one"),
@@ -352,8 +357,7 @@ export function DustShopPanel({
       <section>
         <SectionTitle label="Burn a spare" count={burnable.length || undefined} />
         <p className="text-meta text-muted-foreground">
-          Only cards you hold two or more of, and never the one you pulled today. You always keep
-          one.
+          Only cards you hold two or more of — today&apos;s pull included. You always keep one.
         </p>
         {spares.isLoading ? (
           <p className="mt-3 text-meta text-muted-foreground">Counting spares…</p>
@@ -398,7 +402,7 @@ export function DustShopPanel({
       <section>
         <SectionTitle label="Sell a secret" count={sellable.length || undefined} />
         <p className="text-meta text-muted-foreground">
-          Any secret you hold, priced by the level on your copy — including your only one. Never the
+          Any secret you hold, priced by the level on your copy — including your only one, and the
           one you pulled today.
         </p>
         {spares.isLoading ? (

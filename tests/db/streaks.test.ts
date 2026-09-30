@@ -221,6 +221,52 @@ describe("streak_runs", () => {
     expect(runs[0]?.len).toBe(walked.current);
     expect(walked.current).toBe(4);
   });
+
+  it("restarts the run at the day the capstone was cashed", async () => {
+    // The reset is a cut-off, not a wipe: the pack days are all still there, and
+    // the claim day itself is day 1 of the new run rather than a dead streak the
+    // morning after somebody's best one.
+    await seedSecrets();
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(60);
+    expect((await claim(60)).ok).toBe(true);
+
+    const runs = await sql<{ len: number }>(
+      "SELECT len FROM public.streak_runs($1, NULL) ORDER BY started_on DESC",
+      [IDS.alice],
+    );
+    expect(runs[0]?.len).toBe(1);
+    // And the TypeScript walk cuts on the same day, so the pill and the payout
+    // agree about where the new run begins.
+    const { walkStreak } = await import("../../src/lib/streaks");
+    const days = await sql<{ opened_on: string }>(
+      "SELECT opened_on::text FROM public.pack_opens WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    const [row] = await sql<{ today: string; cut: string }>(
+      `SELECT (now() AT TIME ZONE 'America/New_York')::date::text AS today,
+              (SELECT max(claimed_on)::text FROM public.streak_milestone_claims
+                WHERE participant_id = $1 AND milestone = 60) AS cut`,
+      [IDS.alice],
+    );
+    expect(
+      walkStreak(
+        days.map((d) => d.opened_on),
+        row.today,
+        row.cut,
+      ).current,
+    ).toBe(1);
+  });
+
+  it("lets the whole ladder be climbed again after a reset", async () => {
+    await seedSecrets();
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(60);
+    expect((await claim(60)).ok).toBe(true);
+    // One day of the new run is not three, so the bottom rung is out of reach
+    // again rather than instantly re-payable.
+    expect((await claim(3)).reason).toBe("not_earned");
+  });
 });
 
 describe("claim_streak_milestone", () => {
@@ -423,19 +469,19 @@ describe("claim_streak_milestone", () => {
 });
 
 describe("pull_bonus_secret_card", () => {
-  it("leaves the free daily pull untouched", async () => {
-    // The whole reason the bonus inserts granted = true: the daily unique index
-    // is WHERE NOT granted, so a milestone must not cost somebody their pull.
+  it("leaves the day's pack untouched", async () => {
+    // The whole reason the bonus inserts granted = true: a milestone is not the
+    // pack, and must not cost somebody the one they have not opened yet.
     await seedSecrets();
     await seedAccount({ participantId: IDS.alice });
     await openDays(3);
     expect((await claim(3)).ok).toBe(true);
 
-    const [daily] = await sql<{ pull_secret_card: { fresh: boolean } | null }>(
-      "SELECT public.pull_secret_card($1, NULL, $2)",
+    const [pack] = await sql<{ open_pack: { fresh: boolean } | null }>(
+      "SELECT public.open_pack($1, NULL, $2)",
       [IDS.alice, IDS.event],
     );
-    expect(daily.pull_secret_card?.fresh).toBe(true);
+    expect(pack.open_pack?.fresh).toBe(true);
   });
 
   it("marks a card they already own as a duplicate rather than failing", async () => {
@@ -447,6 +493,71 @@ describe("pull_bonus_secret_card", () => {
     const second = await claim(7);
     expect(second.ok).toBe(true);
     expect(second.reward?.duplicate).toBe(true);
+  });
+});
+
+// reward_ref names a secret_card_pulls row, and that row's `tier` is a live
+// value rather than a record: pull_secret_card and pull_bonus_secret_card both
+// raise the owning copy in place when a later duplicate rolls better. That is
+// the rule the vault wants and the wrong one for a receipt — and on a first
+// acquisition reward_ref points straight at the row that moves.
+describe("what a rung paid", () => {
+  it("writes the tier onto the claim, not just a pointer to a row that moves", async () => {
+    await seedSecrets();
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(60);
+
+    // Day 60's floor is mythic and roll_secret_tier_at_least cannot go above it,
+    // so this is the one rung whose payout is knowable from outside.
+    const res = await claim(60);
+    expect(res.reward?.tier).toBe("mythic");
+    const [row] = await sql<{ reward_tier: string | null }>(
+      "SELECT reward_tier FROM public.streak_milestone_claims WHERE milestone = 60",
+    );
+    expect(row.reward_tier).toBe("mythic");
+  });
+
+  it("keeps an older rung's tier when a later duplicate upgrades the copy it named", async () => {
+    // One card in the catalogue, so day 60's mythic has to come back as a
+    // duplicate — which is exactly when the owning copy is raised underneath it.
+    await seedSecrets(1);
+    await seedAccount({ participantId: IDS.alice });
+    await openDays(60);
+
+    const first = await claim(3);
+    expect(first.ok).toBe(true);
+    const [three] = await sql<{ id: string; reward_ref: string; reward_tier: string | null }>(
+      "SELECT id, reward_ref, reward_tier FROM public.streak_milestone_claims WHERE milestone = 3",
+    );
+    expect(three.reward_tier).toBe(first.reward?.tier);
+
+    // Day 3 has no floor, so what it rolled is chance. Both sides are put on
+    // common — the claim-time state exactly, receipt and copy agreeing — so that
+    // the upgrade below is visible whatever the roll happened to be.
+    await sql("UPDATE public.secret_card_pulls SET tier = 'common' WHERE id = $1", [
+      three.reward_ref,
+    ]);
+    await sql("UPDATE public.streak_milestone_claims SET reward_tier = 'common' WHERE id = $1", [
+      three.id,
+    ]);
+
+    const second = await claim(60);
+    expect(second.reward?.duplicate).toBe(true);
+
+    // The copy rose, which is the vault's rule and is not in question.
+    const [owning] = await sql<{ tier: string }>(
+      "SELECT tier FROM public.secret_card_pulls WHERE id = $1",
+      [three.reward_ref],
+    );
+    expect(owning.tier).toBe("mythic");
+
+    // The receipt did not follow it. Before this column, /you showed the rung as
+    // having paid a mythic, over a claim toast that had said common.
+    const [after] = await sql<{ reward_tier: string | null }>(
+      "SELECT reward_tier FROM public.streak_milestone_claims WHERE id = $1",
+      [three.id],
+    );
+    expect(after.reward_tier).toBe("common");
   });
 });
 
@@ -512,7 +623,7 @@ describe("roll_secret_tier_at_least", () => {
   const roll = async (floor: string | null, n = 300) =>
     (
       await sql<{ tier: string }>(
-        `SELECT public.roll_secret_tier_at_least($1) AS tier FROM generate_series(1, $2::int)`,
+        "SELECT public.roll_secret_tier_at_least($1) AS tier FROM generate_series(1, $2::int)",
         [floor, n],
       )
     ).map((r) => r.tier);
@@ -576,7 +687,7 @@ describe("the TypeScript ladder and the SQL one", () => {
     await openDays(100);
     // Rejected even on a run long enough to have earned them, because the ladder
     // gate is the first check after the identity guard.
-    for (const notARung of [1, 2, 4, 6, 8, 15, 29, 31, 99, 101]) {
+    for (const notARung of [1, 2, 4, 6, 8, 15, 29, 31, 59, 61, 100]) {
       expect((await claim(notARung)).reason).toBe("unknown_milestone");
     }
   });
@@ -591,7 +702,7 @@ describe("the TypeScript ladder and the SQL one", () => {
 
     const first = await claim(3);
     expect(first.ok).toBe(true);
-    const capstone = await claim(100);
+    const capstone = await claim(60);
     expect(capstone.reward!.tier).toBe("mythic");
     expect(capstone.reward!.duplicate).toBe(true);
 

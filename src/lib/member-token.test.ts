@@ -115,9 +115,38 @@ describe("useMemberSession", () => {
     window.localStorage.setItem(KEY, VALID());
     window.localStorage.setItem(NAME_KEY, "Doug");
     act(() => {
-      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     });
     expect(result.current?.participantId).toBe(PARTICIPANT_ID);
+  });
+
+  it("also reacts to the name arriving on its own key", () => {
+    // This store spans three keys, which is why its guard is a set rather than
+    // one comparison: the name rides beside the token and getSnapshot reads both.
+    const { result } = renderHook(() => useMemberSession());
+    window.localStorage.setItem(KEY, VALID());
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
+    });
+    expect(result.current?.name).toBeNull();
+
+    window.localStorage.setItem(NAME_KEY, "Doug");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: NAME_KEY }));
+    });
+    expect(result.current?.name).toBe("Doug");
+  });
+
+  it("ignores a storage event for a key this store does not read", () => {
+    // `storage` fires for every key the other tab writes, and this is a
+    // useSyncExternalStore subscribe — so an unrelated wwbh: write used to
+    // re-read and re-notify every component holding a member session.
+    const { result } = renderHook(() => useMemberSession());
+    window.localStorage.setItem(KEY, VALID());
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "wwbh:vault-favourites" }));
+    });
+    expect(result.current).toBeNull();
   });
 
   it("expires the session on its hourly check", () => {

@@ -83,13 +83,24 @@ export const STREAK_MILESTONES: readonly StreakMilestone[] = [
     blurb: "A month of showing up. Legendary or better.",
   },
   {
-    days: 100,
+    days: 60,
     reward: "secret",
     tierFloor: "mythic",
-    label: "One Hundred Days",
-    blurb: "A hundred days without a gap. The mythic one.",
+    label: "Sixty Days",
+    blurb: "Sixty days without a gap. The mythic one — and the run starts over.",
   },
 ] as const;
+
+/**
+ * The rung that wipes the slate.
+ *
+ * Cashing the capstone restarts the run, so the ladder is something to climb
+ * again rather than a number that only goes up. The reset lives in the walk
+ * below and in `streak_runs`, which cuts on the same claim day — the client and
+ * the payout have to agree about where a run begins or the button and the reward
+ * disagree.
+ */
+export const STREAK_RESET_MILESTONE = 60;
 
 const DAYS = new Set(STREAK_MILESTONES.map((m) => m.days));
 
@@ -151,9 +162,34 @@ const DEAD: Streak = { current: 0, startedOn: null, lastOpenedOn: null, openedTo
  * reading rows, and a query whose ORDER BY is load-bearing is one refactor away
  * from being wrong.
  */
-export function walkStreak(days: readonly string[], today: string): Streak {
-  const seen = new Set(days);
-  if (seen.size === 0) return DEAD;
+export function walkStreak(days: readonly string[], today: string, since?: string | null): Streak {
+  // `since` is the day the capstone was cashed. Days before it belong to the run
+  // that bought it and are not part of anything live — the claim day itself still
+  // counts, so somebody who claims and keeps opening is on day 2 tomorrow rather
+  // than being told their best streak died overnight. Mirrors the `cut` CTE in
+  // streak_runs; a db test pins the two together.
+  const seen = new Set(since ? days.filter((d) => d >= since) : days);
+
+  if (seen.size === 0) {
+    // Nothing left after the cut means the capstone was cashed while the run was
+    // AT RISK: claim_streak_milestone takes a run that ended yesterday, stamps
+    // the claim today, and today's pack is still sealed — so the filter above
+    // just discarded the only opens there were.
+    //
+    // Zero is the honest count and the wrong thing to show. It takes the whole
+    // strip down, and the "open today's pack" line with it, at the one moment in
+    // the day that line is the entire point. Anchor the new run on the claim day
+    // instead: the same day 1 that opening today would give it, still flagged at
+    // risk, so the count does not jump when they do open.
+    //
+    // streak_runs has no row for this day and is deliberately left alone —
+    // nothing is claimable at day 1 (the first rung is day 3), so the screen and
+    // the payout still agree about every button. A rung below day 3 would have
+    // to move the SQL cut too.
+    return since === today
+      ? { current: 1, startedOn: since, lastOpenedOn: null, openedToday: false }
+      : DEAD;
+  }
 
   const yesterday = previousDay(today);
   // Anchor on today when it is there, otherwise yesterday. Anything older means

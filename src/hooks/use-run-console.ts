@@ -11,9 +11,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { resetParticipantRuns, setParticipantStatus } from "@/lib/admin-write.functions";
+import {
+  resetParticipantRuns,
+  setParticipantStatus,
+  takeOffClock,
+} from "@/lib/admin-write.functions";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
+import { awaitingRun, OUT_OF_FIELD_MESSAGE, refusedStart } from "@/lib/current-athlete";
 import { newClientKey } from "@/lib/format";
 import {
   ACTIVE_RUN_CLEARED_EVENT,
@@ -29,6 +34,9 @@ export function useRunConsole() {
   const { event, bundle } = useEventBundle();
   const qc = useQueryClient();
   const setStatusFn = useServerFn(setParticipantStatus);
+  // Every write that only means "off the clock" goes through this rather than
+  // setParticipantStatus, whose "waiting" is the roster's deliberate un-scratch.
+  const takeOffClockFn = useServerFn(takeOffClock);
   const resetAthleteFn = useServerFn(resetParticipantRuns);
 
   const [run, setRun] = useState<ActiveRun | null>(null);
@@ -91,14 +99,33 @@ export function useRunConsole() {
 
   const usedStationIds = new Set(run?.splits.map((s) => s.stationId) ?? []);
 
-  async function startRun() {
-    if (!event?.id || !selectedParticipantId) return;
-    const ep = participants.find((p) => p.participant_id === selectedParticipantId);
+  /**
+   * @param participantId the athlete to start, for a caller whose control shows a
+   * default it never committed to state. Live's bar is the one that does: its
+   * picker falls back to whoever is next in running order, so a bare tap on Start
+   * was reading an empty selection and returning without writing a run — enabled
+   * button, no timer, no error. Admin's card seeds the selection instead and can
+   * still call this with nothing.
+   */
+  async function startRun(participantId?: string) {
+    const target = participantId || selectedParticipantId;
+    if (!event?.id || !target) return;
+    const ep = participants.find((p) => p.participant_id === target);
     if (!ep) {
       // The athlete was removed from the roster while this screen was open.
       // Starting a timer for a ghost row would leave an orphaned local run that
       // can never sync, so stop before we write anything.
       toast.error("That athlete is no longer on the roster.");
+      setSelected("");
+      return;
+    }
+    if (!awaitingRun(ep)) {
+      // On the roster but out of the field — scratched between this screen
+      // rendering and the tap, which is one tap with no confirm on the roster
+      // panel. Starting them writes "running", which un-scratches them and puts
+      // them back on the crowd clock. The effect above only clears a selection
+      // whose athlete has LEFT the roster, and a scratch does not.
+      toast.error(OUT_OF_FIELD_MESSAGE);
       setSelected("");
       return;
     }
@@ -109,7 +136,7 @@ export function useRunConsole() {
       v: ACTIVE_RUN_VERSION,
       clientKey: newClientKey(),
       eventId: event.id,
-      participantId: selectedParticipantId,
+      participantId: target,
       startedAtIso: new Date(startedAt).toISOString(),
       startedAt,
       status: "running",
@@ -120,12 +147,76 @@ export function useRunConsole() {
     setRun(nextRun);
     await saveActiveRun(nextRun);
     setSelected("");
+    // Only ONE athlete is ever on the crowd's clock, and nothing below this hook
+    // enforces it: the column has no CHECK, the handler writes the one row it is
+    // given, and currentAthlete takes the first "running" row it finds in an
+    // unsorted list. setOnClock has always demoted before promoting; this did
+    // not, so staging B and then starting C left both rows "running" and the
+    // spectator screens naming B for the whole of C's run — and still naming B
+    // after it, until somebody tapped Clear.
+    //
+    // Scoped to a DIFFERENT athlete on purpose. Starting the person already on
+    // the clock is the ordinary path, and demoting them would clear
+    // on_clock_since and re-stamp it at the Start tap, losing the moment they
+    // actually stepped up — which setParticipantStatus goes out of its way to
+    // keep.
+    const onClockNow = participants.find(
+      (p) => p.participation_status === "running" && p.participant_id !== target,
+    );
     try {
       await setStatusFn({
         data: { eventId: event.id, eventParticipantId: ep.id, status: "running" },
       });
+      // AFTER the promote, not before it, which is the opposite of setOnClock's
+      // order and deliberate. The write above can be refused — another phone
+      // scratching this athlete gets past the check above, and the branch below
+      // then tears the local run down. Demoting first, that refusal left the
+      // crowd's clock EMPTY: the previous athlete already written to "waiting"
+      // and nobody put in their place. Taking the clock before giving it up
+      // means a refused start leaves them exactly where they were.
+      //
+      // The cost is one round trip in which both rows read "running", against a
+      // bug that lasted until somebody noticed. And for that round trip the
+      // screens go on showing the athlete they were already showing.
+      if (onClockNow) {
+        try {
+          await takeOffClockFn({
+            data: { eventId: event.id, eventParticipantId: onClockNow.id },
+          });
+        } catch {
+          // A cleanup that fails must not undo a start that worked. The timer is
+          // running and the crowd has the right name; a stale row costs the
+          // previous athlete showing as on-deck until the next write moves them.
+        }
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not start the run on the server.");
+      const message = e instanceof Error ? e.message : "";
+      // Both of the server's refusals, not just the scratch. The check above
+      // reads this device's last bundle, so another phone scratching this
+      // athlete — or deleting them off the roster outright — gets past it and
+      // the server is the first to know, by which point the timer is already
+      // running locally and saved to IndexedDB.
+      //
+      // Left standing, that run is worse than no run. Finishing it goes through
+      // saveCompletedRun, and both refusals have a way for that to hurt: a
+      // scratched athlete gets written back to "finished", undoing the scratch
+      // by another door — exactly what the server guard exists to stop — and a
+      // deleted one gets an official run with no roster row behind it, which
+      // standings() ranks anyway. So it goes, and the roster read catches this
+      // screen up.
+      const refusal = refusedStart(message);
+      if (refusal) {
+        await clearActiveRun();
+        setRun(null);
+        setSelected("");
+        await qc.invalidateQueries();
+        toast.error(refusal);
+        return;
+      }
+      // Anything else is the network, and the run stays: a commissioner is
+      // standing in a garden with somebody already running, and losing the timer
+      // to a blip costs more than a status flag that catches up late.
+      toast.error(message || "Could not start the run on the server.");
     }
   }
 
@@ -166,13 +257,25 @@ export function useRunConsole() {
     });
   }
 
+  // Both of these stop at `finished`, and deliberately not at `paused`: a
+  // commissioner who pauses to argue about a split should still be able to take
+  // it back, and recording one is blocked while paused only because the clock
+  // reading would be meaningless.
+  //
+  // `finished` is the state that matters, because the record Retry save sends is
+  // derived live from `run` rather than snapshotted at Finish. saveCompletedRun
+  // writes splits with `onConflict: "client_key"`, which can add and update but
+  // cannot delete a row by absence — so an undo after a save that committed the
+  // splits and then failed later is silently lost on the retry, which goes on to
+  // report "Run saved". Retry save re-sends the identical record; it can only do
+  // that if the record cannot move underneath it.
   function undoLastSplit() {
-    if (!run || run.splits.length === 0) return;
+    if (!run || run.status === "finished" || run.splits.length === 0) return;
     setRun({ ...run, splits: run.splits.slice(0, -1) });
   }
 
   function addPenalty(stationId: string | null, ms: number, reason: string) {
-    if (!run) return;
+    if (!run || run.status === "finished") return;
     setRun({
       ...run,
       penalties: [
@@ -217,14 +320,13 @@ export function useRunConsole() {
     const ep = participants.find((p) => p.participant_id === run.participantId);
     if (ep && event?.id) {
       try {
-        await setStatusFn({
-          // "waiting", like every other reset in the app: it is the schema
-          // default and the word players actually see. "queued" behaves
-          // identically and was the only place that wrote it.
-          data: { eventId: event.id, eventParticipantId: ep.id, status: "waiting" },
-        });
+        // Off the clock and back to "waiting" — but only if they are still on
+        // it. Scratched while this timer ran, or finished by a save that landed
+        // without answering, they stay exactly where they are.
+        await takeOffClockFn({ data: { eventId: event.id, eventParticipantId: ep.id } });
       } catch {
-        /* ignore */
+        // Ignored: the server moves nobody who is not on the clock, so the worst
+        // a failure here leaves is a name on the crowd screens until the next write.
       }
     }
     await clearActiveRun();
@@ -262,8 +364,8 @@ export function useRunConsole() {
     const onClockNow = participants.find((p) => p.participation_status === "running");
     try {
       if (onClockNow && onClockNow.participant_id !== participantId) {
-        await setStatusFn({
-          data: { eventId: event.id, eventParticipantId: onClockNow.id, status: "waiting" },
+        await takeOffClockFn({
+          data: { eventId: event.id, eventParticipantId: onClockNow.id },
         });
       }
       if (participantId) {

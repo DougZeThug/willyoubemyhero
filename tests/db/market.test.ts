@@ -40,7 +40,7 @@ beforeEach(async () => {
  * while this session is UTC, so a bare `current_date` is tomorrow's NY date for
  * five hours every evening.
  */
-const NY = `(now() AT TIME ZONE 'America/New_York')::date`;
+const NY = "(now() AT TIME ZONE 'America/New_York')::date";
 
 const REQ = (n: string) => `aaaaaaaa-0000-4000-8000-00000000000${n}`;
 
@@ -61,7 +61,7 @@ async function credit(amount: number, participantId: string) {
   // doing nothing — which is what a caller asking for no funds means.
   if (amount === 0) return;
   await sql(
-    `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')`,
+    "INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')",
     [participantId, amount],
   );
 }
@@ -146,6 +146,13 @@ async function list(
     [participantId, kind, opts.copyId ?? null, opts.pullId ?? null, opts.price ?? 100],
   );
   return row.list_card_for_dust;
+}
+
+/** A listing that has to succeed for the test to mean anything, by its id. */
+async function listedId(participantId: string, opts: Parameters<typeof list>[1]): Promise<string> {
+  const res = await list(participantId, opts);
+  if (!res.listingId) throw new Error(`Listing refused: ${res.reason ?? "no reason given"}`);
+  return res.listingId;
 }
 
 type BuyResult = {
@@ -270,10 +277,11 @@ describe("market_listings", () => {
     ).rejects.toThrow();
   });
 
-  it("takes the listing with the copy when the copy is deleted", async () => {
-    // CASCADE rather than SET NULL plus a status: a listing whose target is gone
-    // would fail market_listings_identity_ck, and dropping that CHECK to keep the
-    // row is strictly worse than letting the row go.
+  it("takes an ACTIVE listing with the copy when the copy is deleted", async () => {
+    // CASCADE rather than SET NULL plus a status: a live listing whose target is
+    // gone is a Buy button on nothing, and market_listings_identity_ck still
+    // refuses one. A SETTLED listing is the other case — it is the seller's only
+    // receipt — and "a sale's receipt" below keeps it.
     const { listingId, copyId } = await shelf();
     await sql("DELETE FROM public.card_copies WHERE id = $1", [copyId]);
     const [row] = await sql<{ n: number }>(
@@ -435,11 +443,10 @@ describe("list_card_for_dust", () => {
     expect((await list(IDS.alice, { pullId, price: 300 })).ok).toBe(true);
   });
 
-  it("refuses today's un-granted pull, which is the seller's spent daily slot", async () => {
-    // THE ONE SEQUENCE THAT WOULD PRINT. buy_market_listing sets granted = true on
-    // the row it moves — it has to, or secret_card_pulls_one_per_day aborts the
-    // sale — so listing today's un-granted pull would hand the SELLER a second
-    // daily slot the moment somebody bought it.
+  it("lists today's un-granted pull the day it lands", async () => {
+    // Refused until 20260930120000, when the day stopped being read off this
+    // row. The sequence that refusal guarded is pinned below: "cannot hand the
+    // seller a second daily pull".
     const cardId = await seedSecret("fresh");
     const [row] = await sql<{ id: string }>(
       `INSERT INTO public.secret_card_pulls
@@ -447,15 +454,6 @@ describe("list_card_for_dust", () => {
        VALUES ($1, $2, ${NY}, $3, false, false, 'rare') RETURNING id`,
       [IDS.alice, cardId, IDS.event],
     );
-    expect(await list(IDS.alice, { pullId: row.id })).toMatchObject({
-      ok: false,
-      reason: "too_fresh",
-    });
-
-    // Yesterday's identical row lists freely.
-    await sql("UPDATE public.secret_card_pulls SET pulled_on = pulled_on - 1 WHERE id = $1", [
-      row.id,
-    ]);
     expect((await list(IDS.alice, { pullId: row.id })).ok).toBe(true);
   });
 });
@@ -548,7 +546,8 @@ describe("buy_market_listing", () => {
     await buy(IDS.bob, res.listingId!);
 
     const [row] =
-      await sql<{ edition: string; edition_asserted_by: string; source: string; acquired_on: string | null }>( // prettier-ignore
+      await sql<{ edition: string; edition_asserted_by: string; source: string; acquired_on: string | null }> // prettier-ignore
+      (
         "SELECT edition, edition_asserted_by, source, acquired_on FROM public.card_copies WHERE id = $1",
         [copies[0]],
       );
@@ -667,10 +666,9 @@ describe("buy_market_listing", () => {
 
 describe("buying a secret", () => {
   it("arrives granted, so it cannot pass for the buyer's own daily pull", async () => {
-    // secret_card_pulls_one_per_day is UNIQUE (participant_id, pulled_on) WHERE
-    // NOT granted. Leave granted false and re-parenting aborts the sale whenever
-    // the buyer already pulled that day — and a bought card would masquerade as
-    // their unspent slot.
+    // A row the pack dealt today is `pulled_on = today AND NOT granted`, and
+    // that is what sell_secret_card and the shop refuse to move. A bought card
+    // left un-granted would masquerade as one of the buyer's own pulls.
     const { pullId } = await heldSecret(IDS.alice, "mythic-thing", "mythic");
     await credit(500, IDS.bob);
     const res = await list(IDS.alice, { pullId, price: 300 });
@@ -679,7 +677,8 @@ describe("buying a secret", () => {
     expect(bought.duplicate).toBe(false);
 
     const [row] =
-      await sql<{ participant_id: string; granted: boolean; is_duplicate: boolean; tier: string }>( // prettier-ignore
+      await sql<{ participant_id: string; granted: boolean; is_duplicate: boolean; tier: string }> // prettier-ignore
+      (
         "SELECT participant_id, granted, is_duplicate, tier FROM public.secret_card_pulls WHERE id = $1",
         [pullId],
       );
@@ -719,23 +718,34 @@ describe("buying a secret", () => {
 
   it("cannot hand the seller a second daily pull", async () => {
     // pull -> list -> sell -> pull. The buy sets granted = true on the row it
-    // moves, so if today's un-granted pull were listable the seller's own
-    // "have I pulled today" search would find nothing afterwards.
+    // moves and hands it to the buyer, so nothing un-granted of the seller's is
+    // left for today. That used to matter; open_pack now keys the day on
+    // pack_opens, so the second open replays the first pack and mints nothing.
     await seedSecret("a");
     await seedSecret("b");
-    const first = await sql<{ pull_secret_card: { pullId: string } }>(
-      "SELECT public.pull_secret_card($1, NULL, $2)",
-      [IDS.alice, IDS.event],
-    );
-    const pullId = first[0].pull_secret_card.pullId;
-    expect(await list(IDS.alice, { pullId })).toMatchObject({ ok: false, reason: "too_fresh" });
+    type Pack = { cards: { kind: string; pullId?: string }[] };
+    const open = async () =>
+      (await sql<{ open_pack: Pack }>("SELECT public.open_pack($1, NULL, NULL)", [IDS.alice]))[0]
+        .open_pack;
+    const held = async () =>
+      (
+        await sql<{ n: number }>(
+          "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1",
+          [IDS.alice],
+        )
+      )[0].n;
 
-    // And the slot is still spent: a second pull today grants nothing new.
-    const second = await sql<{ pull_secret_card: { ok?: boolean; pullId?: string } }>(
-      "SELECT public.pull_secret_card($1, NULL, $2)",
-      [IDS.alice, IDS.event],
-    );
-    expect(second[0].pull_secret_card.pullId).toBe(pullId);
+    const first = await open();
+    const pulls = first.cards.filter((c) => c.kind === "secret").map((c) => c.pullId!);
+    const listed = await list(IDS.alice, { pullId: pulls[0], price: 60 });
+    expect(listed.ok).toBe(true);
+    await credit(500, IDS.bob);
+    expect((await buy(IDS.bob, listed.listingId!)).ok).toBe(true);
+    expect(await held()).toBe(pulls.length - 1);
+
+    const second = await open();
+    expect(second.cards.filter((c) => c.kind === "secret").map((c) => c.pullId)).toEqual(pulls);
+    expect(await held()).toBe(pulls.length - 1);
   });
 
   it("mints a trophy for a set the buyer just completed", async () => {
@@ -791,6 +801,101 @@ describe("a listed card is spoken for", () => {
       [IDS.alice, copyId],
     );
     expect(row.mill_card_copy.ok).toBe(true);
+  });
+});
+
+describe("a sale's receipt", () => {
+  // The seller's stall is the only place a sale is ever visible. These rows used
+  // to cascade away with the card, so a buyer milling what they bought erased
+  // the seller's only record that it sold.
+  type Snapshot = {
+    status: string;
+    card_copy_id: string | null;
+    secret_pull_id: string | null;
+    listed_event_participant_id: string | null;
+    listed_edition: string | null;
+    listed_edition_asserted_by: string | null;
+    listed_secret_card_id: string | null;
+    listed_tier: string | null;
+  };
+  async function listingRow(listingId: string): Promise<Snapshot | undefined> {
+    const [row] = await sql<Snapshot>(
+      `SELECT status, card_copy_id, secret_pull_id, listed_event_participant_id,
+              listed_edition, listed_edition_asserted_by, listed_secret_card_id, listed_tier
+         FROM public.market_listings WHERE id = $1`,
+      [listingId],
+    );
+    return row;
+  }
+
+  it("remembers the roster copy it listed", async () => {
+    const { listingId, cardId } = await shelf();
+    expect(await listingRow(listingId)).toMatchObject({
+      listed_event_participant_id: cardId,
+      listed_edition: "gold",
+      listed_edition_asserted_by: "server",
+    });
+  });
+
+  it("remembers the secret it listed", async () => {
+    const { pullId, cardId } = await heldSecret(IDS.alice, "gary", "epic");
+    const listingId = await listedId(IDS.alice, { pullId, price: 30 });
+    expect(await listingRow(listingId)).toMatchObject({
+      listed_secret_card_id: cardId,
+      listed_tier: "epic",
+    });
+  });
+
+  it("survives the buyer milling the copy they bought", async () => {
+    const { listingId, copyId, cardId } = await shelf();
+    // A copy of their own first, so the bought one is a spare they may burn.
+    await holdCopies(IDS.bob, cardId, 1);
+    expect((await buy(IDS.bob, listingId)).ok).toBe(true);
+    const [milled] = await sql<{ mill_card_copy: { ok: boolean } }>(
+      "SELECT public.mill_card_copy($1, $2)",
+      [IDS.bob, copyId],
+    );
+    expect(milled.mill_card_copy.ok).toBe(true);
+
+    expect(await listingRow(listingId)).toMatchObject({
+      status: "sold",
+      card_copy_id: null,
+      listed_event_participant_id: cardId,
+      listed_edition: "gold",
+    });
+  });
+
+  it("survives the buyer selling the secret they bought to the house", async () => {
+    const { pullId, cardId } = await heldSecret(IDS.alice, "gary", "rare");
+    await credit(500, IDS.bob);
+    const listingId = await listedId(IDS.alice, { pullId, price: 30 });
+    expect((await buy(IDS.bob, listingId)).ok).toBe(true);
+    const [sold] = await sql<{ sell_secret_card: { ok: boolean } }>(
+      "SELECT public.sell_secret_card($1, $2)",
+      [IDS.bob, pullId],
+    );
+    expect(sold.sell_secret_card.ok).toBe(true);
+
+    expect(await listingRow(listingId)).toMatchObject({
+      status: "sold",
+      secret_pull_id: null,
+      listed_secret_card_id: cardId,
+      listed_tier: "rare",
+    });
+  });
+
+  it("keeps a cancelled listing when the seller later burns the copy", async () => {
+    const { listingId, copyId } = await shelf();
+    await cancel(IDS.alice, listingId);
+    await sql("SELECT public.mill_card_copy($1, $2)", [IDS.alice, copyId]);
+    expect(await listingRow(listingId)).toMatchObject({ status: "cancelled", card_copy_id: null });
+  });
+
+  it("still refuses an active listing that names no card", async () => {
+    const { listingId } = await shelf();
+    await expect(
+      sql("UPDATE public.market_listings SET card_copy_id = NULL WHERE id = $1", [listingId]),
+    ).rejects.toThrow(/market_listings_identity_ck/);
   });
 });
 

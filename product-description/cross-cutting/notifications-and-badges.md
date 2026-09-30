@@ -29,7 +29,7 @@ offer this device has not seen. Members only — a guest has no inbox and no dot
 Cleared by the Trading Post rendering its list, which is as soon as the offers
 arrive rather than on a tap nobody would think to make.
 
-**A secret is waiting.** Shown when today's drop is genuinely available to you
+**Today's pack is unopened.** Shown while today's pack has not been torn by you
 and you have not taken it. It leaks nothing: a guest who has not been given an
 identity yet, and a member who has already pulled, see the tab exactly as it
 always was. See [the daily secret](../cards/the-daily-secret.md).
@@ -174,7 +174,7 @@ lit on one phone and clear on another.
 
 **Accessibility.** Each badge names its own thing rather than sharing a generic
 "something is waiting": the tab's own label becomes "Trade — a trade offer is
-waiting" or "Pack — a secret is waiting", so a screen reader user is told _what_
+waiting" or "Pack — today's pack is unopened", so a screen reader user is told _what_
 without having to go and look. The dot itself is hidden from assistive
 technology, because the wording carries the whole message. Neither dot is a live
 region, so an offer arriving while you are reading elsewhere is not announced —

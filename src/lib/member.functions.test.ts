@@ -122,6 +122,41 @@ describe("claimPlayer", () => {
     ).rejects.toThrow(/boom/);
   });
 
+  it("reports a claim stamp that did not land rather than a success", async () => {
+    // claimed_at is what makes a player reachable for trade offers. Swallowed,
+    // a failed first stamp handed out a working token for a player nobody could
+    // send an offer to — and nothing on screen said why.
+    withDb({
+      "member_codes.select": codeRow(),
+      "member_codes.update": { error: { message: "connection lost" } },
+      "participants.select": { data: { name: "Doug" }, error: null },
+    });
+    await expect(
+      claim(
+        { participantId: PARTICIPANT_ID, code: CODE },
+        guestHeaders(signGuestToken(GUEST_ID).token),
+      ),
+    ).rejects.toThrow(/connection lost/);
+    // Thrown before anything moves, so a retry starts from where this one did.
+    const names = mock.client.rpc.mock.calls.map((c) => c[0] as string);
+    expect(names).not.toContain("attach_device_to_player");
+  });
+
+  it("goes ahead when the stamp landed but its answer was lost", async () => {
+    // The re-read is what tells the two apart: a write that committed and then
+    // lost its response already made the player reachable.
+    withDb({
+      "member_codes.select": [
+        codeRow(),
+        { data: { claimed_at: "2026-09-24T10:00:00Z" }, error: null },
+      ],
+      "member_codes.update": { error: { message: "connection lost" } },
+      "participants.select": { data: { name: "Doug" }, error: null },
+    });
+    const res = (await claim({ participantId: PARTICIPANT_ID, code: CODE })) as { ok: boolean };
+    expect(res.ok).toBe(true);
+  });
+
   it("issues a member token for the right code", async () => {
     withDb({
       "member_codes.select": codeRow(),
@@ -405,6 +440,104 @@ describe("generateMemberCodes", () => {
     await expect(generate({ eventId: EVENT_ID }, other)).rejects.toThrow("Admin PIN required");
   });
 
+  it("mints nothing, writes nothing and still succeeds when nobody is eligible", async () => {
+    // The client's count and this target set still are not quite the same set —
+    // the button counts one event's roster, this drops anyone inactive or
+    // flagged a collector on top of that — so a tap can legitimately arrive with
+    // nothing to do. That is a soft, successful nothing, and it must stay one:
+    // the panel is what has to notice, and rotating a code nobody asked for
+    // would kill a paper slip that is already in somebody's pocket.
+    withDb({ "participants.select": { data: [] } });
+    const res = (await generate({ eventId: EVENT_ID }, adminOk())) as {
+      ok: boolean;
+      issued: unknown[];
+    };
+    expect(res).toEqual({ ok: true, issued: [] });
+    expect(mock.callsFor("member_codes", "upsert")).toHaveLength(0);
+  });
+
+  it("leaves already-claimed players out of an unclaimed re-issue", async () => {
+    withDb({
+      "participants.select": {
+        data: [
+          { id: PARTICIPANT_ID, name: "Doug" },
+          { id: OTHER_ID, name: "Alice" },
+        ],
+      },
+      "member_codes.select": {
+        data: [{ participant_id: PARTICIPANT_ID, claimed_at: "2026-09-01T00:00:00.000Z" }],
+      },
+      "event_participants.select": {
+        data: [{ participant_id: PARTICIPANT_ID }, { participant_id: OTHER_ID }],
+      },
+    });
+    const res = (await generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())) as {
+      issued: { name: string }[];
+    };
+    expect(res.issued.map((i) => i.name)).toEqual(["Alice"]);
+  });
+
+  it("leaves a league player who is not on this combine's roster out of it too", async () => {
+    // `participants` and `member_codes` are both league-wide; the panel that
+    // calls this is one event, and the number in its confirm dialog is that
+    // event's roster. Minting wider than the number the commissioner agreed to
+    // rotates codes for players they were never shown — and their paper slips
+    // are dead the moment it lands.
+    withDb({
+      "participants.select": {
+        data: [
+          { id: PARTICIPANT_ID, name: "Doug" },
+          { id: OTHER_ID, name: "Alice" },
+        ],
+      },
+      "member_codes.select": { data: [] },
+      "event_participants.select": { data: [{ participant_id: OTHER_ID }] },
+    });
+    const res = (await generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())) as {
+      issued: { name: string }[];
+    };
+    expect(res.issued.map((i) => i.name)).toEqual(["Alice"]);
+    const [written] = mock.callsFor("member_codes", "upsert")[0].payload as Record<
+      string,
+      string
+    >[];
+    expect(written.participant_id).toBe(OTHER_ID);
+  });
+
+  it("surfaces a failed roster read instead of reporting nobody needs a code", async () => {
+    // The read filters the targets, so a failure and an empty combine look the
+    // same from here: no targets, no writes, `{ ok: true, issued: [] }` — and a
+    // panel that says everyone has already claimed. That is the one answer the
+    // commissioner cannot act on, and it hides a broken read behind good news.
+    withDb({
+      "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] },
+      "member_codes.select": { data: [] },
+      "event_participants.select": { data: null, error: { message: "connection lost" } },
+    });
+    await expect(generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())).rejects.toThrow(
+      "connection lost",
+    );
+    expect(mock.callsFor("member_codes", "upsert")).toHaveLength(0);
+  });
+
+  it("still re-issues for every player when the whole league is asked for", async () => {
+    // "Re-issue ALL" promises no number, so it stays league-wide — and must not
+    // pick up the roster filter the unclaimed branch just grew.
+    withDb({
+      "participants.select": {
+        data: [
+          { id: PARTICIPANT_ID, name: "Doug" },
+          { id: OTHER_ID, name: "Alice" },
+        ],
+      },
+      "event_participants.select": { data: [{ participant_id: OTHER_ID }] },
+    });
+    const res = (await generate({ eventId: EVENT_ID, scope: "all" }, adminOk())) as {
+      issued: { name: string }[];
+    };
+    expect(res.issued.map((i) => i.name)).toEqual(["Doug", "Alice"]);
+  });
+
   it("issues a code per active participant", async () => {
     withDb({
       "participants.select": {
@@ -502,6 +635,28 @@ describe("generateMemberCodes", () => {
     await generate({ eventId: EVENT_ID, participantIds: [PARTICIPANT_ID] }, adminOk());
     const [select] = mock.callsFor("participants", "select");
     expect(select.filters.find((f) => f.method === "in")?.args).toEqual(["id", [PARTICIPANT_ID]]);
+  });
+
+  it("leaves collectors out of a per-player re-issue, as the whole-roster one does", async () => {
+    // The two branches drifted: the batch one dropped collectors from the day
+    // the flag was added, the per-id one never did — and the admin panel's
+    // per-row button is the only caller of the per-id branch, forwarding
+    // whatever participant id the roster row carries.
+    withDb({ "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] } });
+    await generate({ eventId: EVENT_ID, participantIds: [PARTICIPANT_ID] }, adminOk());
+    const [select] = mock.callsFor("participants", "select");
+    expect(
+      select.filters.find((f) => f.method === "eq" && f.args[0] === "is_collector")?.args,
+    ).toEqual(["is_collector", false]);
+  });
+
+  it("leaves collectors out of the whole-roster issue too", async () => {
+    withDb({ "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] } });
+    await generate({ eventId: EVENT_ID }, adminOk());
+    const [select] = mock.callsFor("participants", "select");
+    expect(
+      select.filters.find((f) => f.method === "eq" && f.args[0] === "is_collector")?.args,
+    ).toEqual(["is_collector", false]);
   });
 
   it("surfaces a write failure rather than reporting codes it never stored", async () => {

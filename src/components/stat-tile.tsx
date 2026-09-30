@@ -6,6 +6,8 @@
  * the card page sets that variable once on its root, so a tile picks up the
  * player's rarity wherever it is dropped.
  */
+import { cn } from "@/lib/utils";
+
 export function StatTile({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div
@@ -16,7 +18,7 @@ export function StatTile({ label, value, mono }: { label: string; value: string;
         {label}
       </div>
       <div
-        className={"font-display text-xl font-black " + (mono ? "timer-digits tabular" : "")}
+        className={cn("font-display text-xl font-black", mono && "timer-digits tabular")}
         style={{ color: "var(--tier)" }}
       >
         {value}

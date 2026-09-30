@@ -73,7 +73,7 @@ see art you have not earned. Your own strip is never concealed.
 
 Underneath your strip, if you have any, is a greyed row headed "Can't be traded",
 with the reason under each card: **only copy** for a roster card you hold just
-one of, and **today's pull** for a secret that arrived in today's pack. They are
+one of. A secret that arrived in today's pack is stakeable straight away. They are
 shown rather than quietly omitted, because a card that simply vanishes from the
 picker reads as the app having lost it, and this is the single most common
 complaint the picker gets. That row is your business only: what a counterparty
@@ -234,10 +234,10 @@ limit is announced before it is hit.
 - The concealment rule was read from the response and the tile; that a
   never-pulled secret really renders face-down with its level still readable has
   not been watched on a phone.
-- The blocked row lists roster cards you hold one of and secrets pulled today. No
-  other reason a card can be untradeable was found at this commit, but the list is
-  built from two explicit cases rather than from the inverse of the rules, so a
-  third rule added later would go unlabelled.
+- The blocked row lists roster cards you hold one of. No other reason a card can
+  be untradeable was found at this commit, but the list is built from an explicit
+  case rather than from the inverse of the rules, so a second rule added later
+  would go unlabelled.
 - Assumption: sending an offer to somebody who has just been removed from the
   roster fails with the "has not claimed" sentence rather than something stranger.
   This was not tested.

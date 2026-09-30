@@ -1,15 +1,19 @@
 // Where the pack ends up, and what it says about what you just pulled.
 //
-// The summary is the curtain call: it is the only screen that lays all four
+// The summary is the curtain call: it is the only screen that lays all three
 // cards out at once, and until the ribbons landed it was also the screen that
 // said the least about them. What is pinned here is the sentence each card gets
-// — new or not, and what a spare is worth — plus the two exits, because a
-// payoff nobody can leave is not a payoff.
+// — new, better than yours, or another one, and what a spare is worth — that a
+// secret sits in the slot it was dealt in, plus the two exits, because a payoff
+// nobody can leave is not a payoff.
 import { createElement, type ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { PackSummary } from "./pack-summary";
+import type { StandSlot } from "./pack-stand";
 import { rarityStyle } from "@/lib/card-rarity";
+import type { PackRosterSlot, PackSecretSlot } from "@/lib/pack";
 
 // PackSummary renders two <Link>s and there is no router under a unit test.
 vi.mock("@tanstack/react-router", () => ({
@@ -42,31 +46,68 @@ const PACK = [
   { id: "ep-3", participant_id: "p-3", running_order: 3, bib_number: 3, selected_draft_position: null, participant: { name: "Carol Crush" } }, // prettier-ignore
 ];
 
-/** The daily secret, once its pull has landed. */
-const SECRET = {
-  id: "sec-1",
-  name: "Pickles",
-  artUrl: null,
-  foil: null,
-  borderFx: null,
-  tier: "rare",
-} as unknown as React.ComponentProps<typeof PackSummary>["secret"];
+/** A roster slot, resolved the way the route resolves one. */
+function roster(
+  i: number,
+  over: Omit<Partial<StandSlot>, "slot"> & { slot?: Partial<PackRosterSlot> } = {},
+): StandSlot {
+  const ep = PACK[i];
+  const { slot, ...rest } = over;
+  return {
+    slot: {
+      kind: "roster",
+      id: ep.id,
+      edition: "standard",
+      heldBefore: 0,
+      editionBefore: null,
+      ...slot,
+    },
+    rarity: rarityStyle("base"),
+    edition: slot?.edition === undefined ? "standard" : slot.edition,
+    outcome: "new",
+    copies: 1,
+    sellValue: null,
+    ep,
+    ...rest,
+  };
+}
+
+/** A secret slot, once the pack has been dealt. */
+function secret(
+  over: Omit<Partial<StandSlot>, "slot"> & { slot?: Partial<PackSecretSlot> } = {},
+): StandSlot {
+  const { slot, ...rest } = over;
+  return {
+    slot: {
+      kind: "secret",
+      id: "sec-1",
+      card: { id: "sec-1", name: "Pickles", flavour: null, foil: "rosette", borderFx: "spin", collection: null, artUrl: null, backUrl: null, tier: "rare" }, // prettier-ignore
+      duplicate: false,
+      tierBefore: null,
+      completedCollection: null,
+      ...slot,
+    },
+    rarity: rarityStyle("base"),
+    edition: null,
+    outcome: "new",
+    copies: 1,
+    sellValue: null,
+    ep: null,
+    ...rest,
+  };
+}
+
+const THREE = [roster(0), roster(1), roster(2)];
 
 function renderSummary(over: Partial<React.ComponentProps<typeof PackSummary>> = {}) {
   return render(
     <PackSummary
-      pack={PACK}
+      slots={THREE}
       bundle={null}
       cards={undefined}
-      rarities={new Map()}
       revealed={[0, 1, 2]}
       pullCounts={undefined}
       universalBack={null}
-      secretSlot="hidden"
-      secret={null}
-      secretRarity={rarityStyle("base")}
-      secretDuplicate={false}
-      secretPulled={0}
       collected={3}
       total={13}
       eventYear={2026}
@@ -76,52 +117,118 @@ function renderSummary(over: Partial<React.ComponentProps<typeof PackSummary>> =
       claiming={false}
       claimError={null}
       onClaim={() => {}}
-      onRetrySecret={() => {}}
       {...over}
     />,
   );
 }
 
-/** The stand parked on an open secret, which is the only slot that shows a card. */
-const withSecret = (over: Partial<React.ComponentProps<typeof PackSummary>> = {}) =>
-  renderSummary({ secretSlot: "open", secret: SECRET, ...over });
-
-describe("the NEW / ×N ribbon", () => {
+describe("the NEW / ×N / ↑ ribbon", () => {
   it("calls a roster card held zero times NEW", () => {
-    renderSummary({ copies: { "ep-1": 1, "ep-2": 1, "ep-3": 1 } });
+    renderSummary();
     expect(screen.getAllByRole("img", { name: "New card" })).toHaveLength(3);
   });
 
   it("counts a roster card already held twice as the third copy", () => {
     // held === 2 at deal time, so the copy on this screen is the third.
-    renderSummary({ copies: { "ep-1": 3, "ep-2": 1, "ep-3": 1 } });
+    renderSummary({
+      slots: [roster(0, { outcome: "duplicate", copies: 3 }), roster(1), roster(2)],
+    });
     expect(screen.getByRole("img", { name: "You now hold 3 of this card" })).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: "New card" })).toHaveLength(2);
+  });
+
+  it("names the rung a better copy climbed to", () => {
+    renderSummary({
+      slots: [roster(0, { outcome: "upgrade", copies: 2, slot: { edition: "gold" } }), roster(1), roster(2)], // prettier-ignore
+    });
+    expect(screen.getByRole("img", { name: /^Upgraded to Gold/ })).toHaveTextContent("↑ Gold");
   });
 
   it("says nothing over a card the sequence has not turned yet", () => {
     // A column still waiting on its reveal is a card mid-ceremony, and its
     // ribbon would answer ahead of the flip.
-    renderSummary({ revealed: [], copies: { "ep-1": 1, "ep-2": 1, "ep-3": 1 } });
+    renderSummary({ revealed: [] });
     expect(screen.queryByRole("img", { name: /new card|you now hold/i })).toBeNull();
   });
 
-  it("shows nothing for a card the caller could not count", () => {
+  it("shows nothing for a card the route could not count", () => {
     // Silence beats a guess: assuming 1 would stamp NEW on a card this component
     // knows nothing about.
-    renderSummary({ copies: {} });
+    renderSummary({ slots: THREE.map((s) => ({ ...s, copies: null })) });
     expect(screen.queryByRole("img", { name: /new card|you now hold/i })).toBeNull();
   });
 
   it("calls a secret that is not a duplicate NEW", () => {
-    withSecret({ secretDuplicate: false, secretCopies: 1 });
-    expect(screen.getByRole("img", { name: "New card" })).toBeInTheDocument();
+    renderSummary({ slots: [roster(0), secret(), roster(2)] });
+    expect(screen.getAllByRole("img", { name: "New card" })).toHaveLength(3);
   });
 
   it("counts a duplicate secret", () => {
-    withSecret({ secretDuplicate: true, secretCopies: 2 });
+    renderSummary({
+      slots: [roster(0), secret({ outcome: "duplicate", copies: 2, slot: { duplicate: true } }), roster(2)], // prettier-ignore
+    });
     expect(screen.getByRole("img", { name: "You now hold 2 of this card" })).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "New card" })).toBeNull();
+    expect(screen.getByText(/already yours/i)).toBeInTheDocument();
+  });
+
+  it("names the level an upgraded secret climbed to", () => {
+    renderSummary({
+      slots: [secret({ outcome: "upgrade", copies: 2, slot: { duplicate: true, tierBefore: "common" } })], // prettier-ignore
+    });
+    expect(screen.getByRole("img", { name: /^Upgraded to Rare/ })).toBeInTheDocument();
+    // The level line stays: the level is the news, not the wink.
+    expect(screen.queryByText(/already yours/i)).toBeNull();
+  });
+});
+
+describe("a secret in its slot", () => {
+  it("sits where it was dealt, not first", () => {
+    renderSummary({ slots: [roster(0), roster(1), secret()] });
+    const columns = screen.getAllByTestId("summary-card");
+    expect(columns).toHaveLength(3);
+    expect(columns[2]).toHaveTextContent("Pickles");
+    expect(columns[0]).toHaveTextContent("Alice Ace");
+  });
+
+  it("says so in the subtitle once it has been turned", () => {
+    renderSummary({ slots: [secret(), roster(1), roster(2)] });
+    expect(screen.getByText(/secret and all/i)).toBeInTheDocument();
+  });
+
+  it("keeps the subtitle quiet while it is still face-down", () => {
+    renderSummary({ slots: [secret(), roster(1), roster(2)], revealed: [1, 2] });
+    expect(screen.getByText(/come back tomorrow/i)).toBeInTheDocument();
+  });
+});
+
+describe("the name under a card", () => {
+  // §23 F6. It measured 140x18: a link a third of the touch floor, sitting under
+  // a card that is a flip button rather than a second route to the same place —
+  // so the floor goes on the link, not over the card.
+  const FLOOR = "min-h-11";
+
+  it("gives the roster name the touch floor, on the link itself", () => {
+    renderSummary({ slots: [roster(0), roster(1), secret()] });
+    const link = screen.getByRole("link", { name: "Alice Ace" });
+    expect(link).toHaveAttribute("href", "/players/$id");
+    expect(link.className).toContain(FLOOR);
+  });
+
+  it("gives the secret's name the same box, so the captions stay level", () => {
+    // Not a link — there is no route for a secret — but the same height, or the
+    // three columns' captions sit a row apart from each other.
+    renderSummary({ slots: [roster(0), roster(1), secret()] });
+    const nameBox = screen.getAllByTestId("summary-card")[2].querySelector(`.${FLOOR}`)!;
+    expect(nameBox).toHaveTextContent("Pickles");
+    expect(nameBox.tagName).toBe("DIV");
+  });
+
+  it("still clamps a long name to two lines", () => {
+    renderSummary({ slots: [roster(0), roster(1), secret()] });
+    const link = screen.getByRole("link", { name: "Alice Ace" });
+    // The clamp moved to an inner span: line-clamp is display:-webkit-box and
+    // cannot share an element with the flex that centres it in the taller box.
+    expect(link.querySelector(".line-clamp-2")).not.toBeNull();
   });
 });
 
@@ -130,13 +237,15 @@ describe("what a spare is worth", () => {
     screen.queryAllByText(/^Sell for \d+$/).filter((el) => !el.closest(".sr-only"));
 
   it("prices a spare roster copy", () => {
-    renderSummary({ copies: { "ep-1": 2 }, sellValues: { "ep-1": 40 } });
+    renderSummary({ slots: [roster(0, { outcome: "duplicate", copies: 2, sellValue: 40 }), roster(1), roster(2)] }); // prettier-ignore
     expect(worth()).toHaveLength(1);
     expect(worth()[0]).toHaveTextContent("Sell for 40");
   });
 
   it("prices a duplicate secret beside the wink", () => {
-    withSecret({ secretDuplicate: true, secretCopies: 2, secretSellValue: 30 });
+    renderSummary({
+      slots: [secret({ outcome: "duplicate", copies: 2, sellValue: 30, slot: { duplicate: true } })], // prettier-ignore
+    });
     expect(worth()[0]).toHaveTextContent("Sell for 30");
     // The line that was already there stays: the price is an addition to the
     // joke, not a replacement for it.
@@ -146,9 +255,76 @@ describe("what a spare is worth", () => {
   it("stays quiet when the route offers no price", () => {
     // Covers all three of the route's gates at once — a first copy, a guest, and
     // dust switched off all reach this component as nothing at all.
-    renderSummary({ copies: { "ep-1": 1 }, sellValues: {} });
-    withSecret({ secretDuplicate: true, secretCopies: 2, secretSellValue: null });
+    renderSummary({ slots: [roster(0), secret({ outcome: "duplicate", copies: 2, slot: { duplicate: true } })] }); // prettier-ignore
     expect(worth()).toHaveLength(0);
+  });
+});
+
+describe("selling from the summary", () => {
+  const spare = () => roster(0, { outcome: "duplicate", copies: 2, sellValue: 40 });
+
+  it("leaves the price as plain text when nothing can sell it", () => {
+    renderSummary({ slots: [spare(), roster(1), roster(2)] });
+    expect(screen.queryByRole("button", { name: "Sell for 40" })).toBeNull();
+  });
+
+  it("asks before it sells, and sells on yes", async () => {
+    const onSell = vi.fn(async () => null);
+    renderSummary({ slots: [spare(), roster(1), roster(2)], onSell });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Sell Alice Ace?");
+    expect(dialog).toHaveTextContent("+40 dust. You'll still have 1.");
+    expect(onSell).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
+    expect(onSell).toHaveBeenCalledWith(0);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
+  it("sells nothing on no", async () => {
+    const onSell = vi.fn(async () => null);
+    renderSummary({ slots: [spare(), roster(1), roster(2)], onSell });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(onSell).not.toHaveBeenCalled();
+  });
+
+  it("keeps the question open with the refusal beside it", async () => {
+    const onSell = vi.fn(async () => "Already gone — it left your vault");
+    renderSummary({ slots: [spare(), roster(1), roster(2)], onSell });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Sell for 40" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Already gone");
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("offers a secret only when the pack carried the row to sell", () => {
+    // A slot stored by an older build has no pullId, and nothing to sell by.
+    const onSell = vi.fn(async () => null);
+    const dupe = { outcome: "duplicate" as const, copies: 2, sellValue: 30 };
+    const { unmount } = renderSummary({
+      slots: [secret({ ...dupe, slot: { duplicate: true } })],
+      onSell,
+    });
+    expect(screen.queryByRole("button", { name: "Sell for 30" })).toBeNull();
+    unmount();
+    renderSummary({ slots: [secret({ ...dupe, slot: { duplicate: true, pullId: "pull-1" } })], onSell }); // prettier-ignore
+    expect(screen.getByRole("button", { name: "Sell for 30" })).toBeInTheDocument();
+  });
+
+  it("says what a sold card fetched instead of offering it again", () => {
+    renderSummary({
+      slots: [roster(0, { outcome: "duplicate", copies: 1 }), roster(1), roster(2)],
+      onSell: vi.fn(),
+      sold: { 0: 40 },
+    });
+    expect(screen.getByText("Sold · +40")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sell for/i })).toBeNull();
   });
 });
 

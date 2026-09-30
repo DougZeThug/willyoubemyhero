@@ -14,9 +14,14 @@ streak for free: the days move onto the name, and the walk simply finds more of
 them.
 
 At certain lengths a streak pays a **milestone**: one bonus secret card, with a
-floor on how good the copy is allowed to be. The rungs are 3, 7, 14, 30 and 100
+floor on how good the copy is allowed to be. The rungs are 3, 7, 14, 30 and 60
 days. They are stored on every claim ever paid, so a rung may be added to the
-ladder but never renumbered.
+ladder but never renumbered once anybody has claimed it.
+
+Taking the day-60 reward **restarts the run**. The day you claim it becomes day
+one of a fresh streak, so the ladder is something to climb again rather than a
+number that only goes up. No pack history is deleted — the walk simply starts
+from the claim day.
 
 ## The simple case
 
@@ -57,13 +62,13 @@ start of a chore.
 
 ## The ladder
 
-| Rung    | What it pays                                             |
-| ------- | -------------------------------------------------------- |
-| Day 3   | A bonus secret, on the house. No floor — the plain rate. |
-| Day 7   | A bonus secret, Rare or better.                          |
-| Day 14  | A bonus secret, Epic or better.                          |
-| Day 30  | A bonus secret, Legendary or better.                     |
-| Day 100 | A bonus secret, Mythic, guaranteed.                      |
+| Rung   | What it pays                                             |
+| ------ | -------------------------------------------------------- |
+| Day 3  | A bonus secret, on the house. No floor — the plain rate. |
+| Day 7  | A bonus secret, Rare or better.                          |
+| Day 14 | A bonus secret, Epic or better.                          |
+| Day 30 | A bonus secret, Legendary or better.                     |
+| Day 60 | A bonus secret, Mythic, guaranteed. Restarts the run.    |
 
 Every rung pays exactly one card, and every rung pays a **secret** rather than a
 roster card. That is not a preference: a roster card has to belong to somebody on
@@ -232,7 +237,7 @@ server rolled.
 filed into a [set](secret-sets.md), countable towards
 [finishing one](collection-trophies.md), sellable as a spare. It never
 pays dust and never costs any. A duplicate upgrades the copy you already hold if
-it rolled better, which is what stops a hundred days being spent on a card you
+it rolled better, which is what stops sixty days being spent on a card you
 own.
 
 **Motion and sound.** A rising tone under the flame, then the secret chime — or
@@ -276,9 +281,8 @@ and its failure text sits next to it rather than arriving as a toast.
   when there is something to pay it with.
 - **A capstone that can only be a duplicate.** It still rolls mythic, and a
   duplicate that rolled better upgrades the copy in the vault.
-- **A run past a hundred days.** The flame keeps counting and the ladder says
-  nothing more. There is no promise left to print, so the line is absent rather
-  than empty.
+- **The day the capstone is cashed.** The flame drops back to 1 that same day,
+  because the claim day is the first day of the new run. Tomorrow's pack makes it 2.
 
 ## Open questions and verification
 

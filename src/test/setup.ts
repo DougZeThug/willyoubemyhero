@@ -7,9 +7,9 @@ import { afterEach, beforeEach, vi } from "vitest";
 // React reports the failing component through console.error("The above error
 // occurred in the <%s> component:"). Vitest flattens extra args, so relay every
 // console.error verbatim with a prefix, keeping the format string intact.
-// eslint-disable-next-line no-console
+
 const realConsoleError = console.error.bind(console);
-// eslint-disable-next-line no-console
+
 console.error = (...args: unknown[]) => {
   realConsoleError(
     "[console.error]",

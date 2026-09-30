@@ -33,7 +33,7 @@ import { HoloCard } from "@/components/holo-card";
 import { LockedCard, LOCKED_RARITY, LOCKED_EDITION } from "@/components/locked-card";
 import { cardBadge, editionRank, editionStyle, toEdition, type Edition } from "@/lib/card-edition";
 import { ZoomPanFrame } from "@/components/zoom-pan-frame";
-import { requestGyroAccess } from "@/lib/gyro";
+import { hasLiveGyro, requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
 import { ShareCard, type ShareCardData } from "@/components/share-card-graphic";
 import { CardBackPanel } from "@/components/card-back-panel";
 import { CardSocial } from "@/components/card-social";
@@ -134,12 +134,37 @@ function PlayerCardPage() {
   const favourites = useVaultFavourites();
 
   const [flipped, setFlipped] = useState(false);
+  // Restored from the device preference set on /you rather than starting flat
+  // every time — but only once a real reading proves the grant is still live.
+  // The preference says what the person wants; it cannot say whether iOS still
+  // allows it, and a grant does not survive a browsing session there. Trusting
+  // the preference alone lit the chip over a card that never moved, which is the
+  // failure gyro.ts was written to end. When the grant has lapsed this leaves
+  // tilt off and the chip below asks properly, from a tap.
+  //
+  // The first frame is flat either way, which is the right order: the other one
+  // is a card that leans and then snaps back.
+  const tiltWanted = useTiltWanted();
   const [gyro, setGyro] = useState(false);
+  useEffect(() => {
+    if (!tiltWanted) {
+      setGyro(false);
+      return;
+    }
+    let watching = true;
+    void hasLiveGyro().then((live) => {
+      if (watching && live) setGyro(true);
+    });
+    return () => {
+      watching = false;
+    };
+  }, [tiltWanted]);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   // Seeded from the search parameter, which is the whole reason it exists:
   // `?vs=` is a link you drop in the group chat, and the recipient used to
   // land on the left card with the chip lit and have to tap it themselves.
+  // The seed alone is not enough — see the lock effect below.
   const [comparing, setComparing] = useState(!!vs);
   const shareRef = useRef<HTMLDivElement>(null);
 
@@ -229,9 +254,17 @@ function PlayerCardPage() {
   // opened on a card you hold stayed open when the next card along was one you
   // have not packed, over a Compare chip greyed out underneath it. The surface
   // and the affordance have to agree, so the sheet goes with the chip.
+  //
+  // Re-opened from `vs` rather than left to the seed above, because `locked` is
+  // true on the first frame of EVERY load — useMyCollection reports nothing
+  // ready until its IndexedDB reads settle — so this effect always ran once
+  // with the card locked and threw the seed away before it could reach a
+  // usable frame. The share link then landed the recipient on an unlit chip,
+  // the one thing `?vs=` exists to prevent.
   useEffect(() => {
     if (locked) setComparing(false);
-  }, [locked]);
+    else if (vs) setComparing(true);
+  }, [locked, vs]);
 
   /**
    * When this copy arrived, if anybody knows.
@@ -513,9 +546,15 @@ function PlayerCardPage() {
     }
   }
 
+  /**
+   * The chip and the /you switch are the same setting, so this writes the
+   * preference through rather than holding a second, page-local opinion of it.
+   * Turning it off needs no permission, so it never asks for one.
+   */
   async function onToggleGyro() {
     if (gyro) {
       setGyro(false);
+      setTiltWanted(false);
       return;
     }
     const access = await requestGyroAccess();
@@ -531,6 +570,7 @@ function PlayerCardPage() {
       return;
     }
     setGyro(true);
+    setTiltWanted(true);
   }
 
   const favouriteId = rosterFavouriteId(ep.id);
@@ -618,7 +658,7 @@ function PlayerCardPage() {
               "radial-gradient(ellipse 65% 55% at 50% 20%, color-mix(in oklab, var(--tier) 24%, transparent) 0%, transparent 70%)",
           }}
         />
-        <div className="relative mx-auto max-w-3xl px-4 py-6">
+        <div className="relative mx-auto max-w-3xl px-page-x py-6">
           <div className="mb-2 flex items-center justify-between gap-3 sm:mb-4 sm:items-start">
             <Link
               to="/players"
@@ -675,6 +715,9 @@ function PlayerCardPage() {
                       setFlipped((f) => !f);
                     }}
                     canNavigate={roster.length > 1}
+                    // This card is on a page with a stat block under it, not in
+                    // a viewer, so the page has to stay scrollable through it.
+                    allowPageScroll
                     prevLabel={`Previous: ${prev?.participant?.name ?? ""}`}
                     nextLabel={`Next: ${next?.participant?.name ?? ""}`}
                     position={index >= 0 ? `${index + 1} / ${roster.length}` : undefined}
@@ -691,6 +734,7 @@ function PlayerCardPage() {
                         onFlippedChange={setFlipped}
                         gyro={gyro}
                         tilt="hero"
+                        pageScroll
                         // While magnified the frame owns the pointer; a card leaning
                         // under a pan would make the thing you are reading move.
                         interactive={!zoomed}
@@ -1025,8 +1069,14 @@ function NavButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
+      // `md:block` decides whether the arrows exist at all — below it a phone
+      // swipes instead. The floor decides how big they are once they do, and
+      // the two are different questions: 844px is past `md:`, so a phone turned
+      // sideways shows these with the thumb still the input. Without the floor
+      // it showed them at 38px, which is the width-breakpoint mistake this
+      // file's own inputs were just fixed for (§18).
       className={cn(
-        "surface-panel absolute top-1/2 hidden -translate-y-1/2 rounded-full border border-white/10 p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 md:block",
+        "surface-panel absolute top-1/2 hidden min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border-strong p-2 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-30 pointer-fine:min-h-0 pointer-fine:min-w-0 md:flex",
         className,
       )}
     >

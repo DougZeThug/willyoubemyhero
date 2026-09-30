@@ -8,15 +8,14 @@ import { HudTimer } from "@/components/hud-timer";
 import { FinishCelebration } from "@/components/finish-celebration";
 import { formatTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
-import { useFinishWatcher } from "@/hooks/use-finish-watcher";
-import { currentAthlete, fieldSize, idleFieldState } from "@/lib/current-athlete";
-import { compareOfficialTime } from "@/lib/standings";
+import { useFinishWatcher, type FinishPayload } from "@/hooks/use-finish-watcher";
+import { currentAthlete, idleFieldState } from "@/lib/current-athlete";
+import { outOfContention, standings } from "@/lib/standings";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
-import { onClockElapsedMs, type OnClockEntry } from "@/lib/live-clock";
-import { computeElapsedMs } from "@/lib/active-run";
-import { useAdminSession } from "@/lib/admin-token";
-import { useRunConsole } from "@/hooks/use-run-console";
+import { hudStatus, onClockElapsedMs, type HudStatus, type OnClockEntry } from "@/lib/live-clock";
+import { useLiveHud } from "@/hooks/use-live-hud";
 import { LiveTimingBar } from "@/components/live-timing-bar";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -40,80 +39,82 @@ export const Route = createFileRoute("/live")({
   component: LivePage,
 });
 
+/**
+ * The six ring states, worded. `hudStatus` decides which one is true; this only
+ * says it, the same split `idleFieldState` and the empty-state copy below use.
+ */
+const HUD_STATUS_LABEL: Record<HudStatus, string> = {
+  running: "Running",
+  paused: "Paused",
+  "on-clock": "On the Clock",
+  "up-next": "Up Next",
+  loading: "Loading",
+  standby: "Standby",
+};
+
+type Bundle = NonNullable<ReturnType<typeof useEventBundle>["bundle"]>;
+type EventParticipant = Bundle["participants"][number];
+type TimedParticipant = NonNullable<ReturnType<typeof useLiveHud>["timedEp"]>;
+type Athlete = EventParticipant | TimedParticipant;
+type CardUrls = ReturnType<typeof useEventCardUrls>;
+type PhotoUrls = ReturnType<typeof useEventPhotoUrls>;
+type Leader = { run: Bundle["runs"][number]; place: number; ep: EventParticipant | undefined };
+
 function LivePage() {
   const { event, bundle, loading, error, failedTables, realtimeDegraded, refetch } =
     useEventBundle();
-  const photos = useEventPhotoUrls(event?.id ?? null);
-  const cards = useEventCardUrls(event?.id ?? null);
+  const eventId = event?.id ?? null;
+  const photos = useEventPhotoUrls(eventId);
+  const cards = useEventCardUrls(eventId);
   /**
    * Queue of finish celebrations. A single bundle update can contain several
    * newly-official runs, and React 19 batches synchronous setState calls, so
    * appending keeps every finisher instead of letting the last one overwrite
    * the rest.
    */
-  const [celebrationQueue, setCelebrationQueue] = useState<
-    { name: string; timeMs: number; deltaMs: number }[]
-  >([]);
+  const [celebrationQueue, setCelebrationQueue] = useState<FinishPayload[]>([]);
   const currentCelebration = celebrationQueue[0] ?? null;
 
   // The commissioner's console, mounted here so timing can happen on the
   // broadcast view. It reads the same single active run as /admin; spectators
   // never see any of its controls.
-  const admin = useAdminSession();
-  const rc = useRunConsole();
-  const isAdmin = !!event?.id && admin?.eventId === event.id;
-  const adminRun = isAdmin && rc.run && rc.run.status !== "finished" ? rc.run : null;
+  const hud = useLiveHud(eventId);
 
   const { current, onClock, leaderboard, done, total } = useMemo(() => {
     const parts = bundle?.participants ?? [];
-    const runs = bundle?.runs ?? [];
     const slot = currentAthlete(parts);
-    const finished = runs
-      .filter((r) => r.is_official)
-      .map((r) => {
-        const ep = parts.find((p) => p.participant_id === r.participant_id);
-        return { run: r, ep };
-      })
-      .sort((a, b) => compareOfficialTime(a.run, b.run));
+    // The board's own rows. Ranking official runs listed anybody re-timed twice
+    // in a Top 5 of five, beside a counter that had already learned to count them
+    // once -- the screen contradicting itself.
+    const excluded = outOfContention(bundle ?? { participants: [], runs: [] });
+    const placed = standings(bundle).map((s) => ({
+      run: s.run,
+      place: s.place,
+      ep: parts.find((p) => p.participant_id === s.participantId),
+    }));
     return {
       current: slot.athlete,
       onClock: slot.onClock,
-      leaderboard: finished.slice(0, 5),
-      // Distinct athletes, not official runs: an athlete re-timed has two, and
-      // enough of those tipped the screen into "everyone is done" while people
-      // were still queueing.
-      done: new Set(finished.map((f) => f.run.participant_id)).size,
-      total: fieldSize(parts),
+      leaderboard: placed.slice(0, 5),
+      // Both halves of this fraction drop exactly the same people, which is the
+      // only way the tally can ever close. Counting distinct athletes across every
+      // official run counted the scratched ones, so one scratched finisher pushed
+      // done past total and printed "Every athlete is done. Nice work." over a
+      // queue that was still moving.
+      //
+      // The denominator is outOfContention rather than fieldSize because being out
+      // has two grounds and fieldSize can only see one: it takes roster rows, which
+      // carry no participant id, so a run marked dq is invisible to it. An athlete
+      // whose roster row says finished but whose run was dq'd left the numerator
+      // and stayed in the denominator, and the field could never reach all-done.
+      done: placed.length,
+      total: parts.filter((p) => !excluded.has(p.participant_id)).length,
     };
   }, [bundle]);
 
   useFinishWatcher(bundle, (finish) => {
     setCelebrationQueue((q) => [...q, finish]);
   });
-
-  // Memoised on the stamp rather than recomputed each render: HudTimer restarts
-  // its interpolation whenever runningSinceMs changes, so a fresh Date.now()
-  // every render would re-anchor the clock on every bundle refetch.
-  // Read structurally: on_clock_since is newer than the checked-in generated
-  // types (supabase/migrations/20260821120000_on_clock_since.sql), the same way
-  // card-rarity.ts declares card_rarity for itself.
-  const onClockSince = onClock ? ((current as OnClockEntry | null)?.on_clock_since ?? null) : null;
-  const onClockBaseMs = useMemo(
-    () => onClockElapsedMs({ on_clock_since: onClockSince }, Date.now()) ?? 0,
-    [onClockSince],
-  );
-
-  // While an admin is timing, the big ring shows the run they are actually
-  // timing rather than the unofficial on-clock counter. Anchored on the run's
-  // own stamps for the same reason as above: HudTimer re-anchors whenever this
-  // number changes, so it must only change when the run really does.
-  const runBaseMs = useMemo(
-    () => (adminRun ? computeElapsedMs(adminRun, Date.now()) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [adminRun?.clientKey, adminRun?.status, adminRun?.startedAt, adminRun?.pauses.length],
-  );
-  const timedEp = adminRun ? (rc.currentEp ?? null) : null;
-  const shown = timedEp ?? current;
 
   // "Everyone is done" is only true when there was somebody to be done. It used
   // to be what the page said before the first fetch had even returned.
@@ -156,130 +157,30 @@ function LivePage() {
 
         {(realtimeDegraded || !!error) && <FeedDegradedBanner />}
 
-        <div className="flex flex-col items-center">
-          <HudTimer
-            runningSinceMs={runBaseMs ?? onClockBaseMs}
-            paused={adminRun ? adminRun.status !== "running" : !onClock}
-            status={
-              adminRun
-                ? adminRun.status === "running"
-                  ? "Running"
-                  : "Paused"
-                : onClock
-                  ? "On the Clock"
-                  : current
-                    ? "Up Next"
-                    : loading
-                      ? "Loading"
-                      : "Standby"
-            }
-            size={340}
-          >
-            {shown ? (
-              <ParticipantAvatar
-                name={shown.participant?.name ?? "?"}
-                cardUrl={cards.data?.[shown.id]?.front ?? null}
-                photoUrl={photos.data?.[shown.id] ?? shown.participant?.profile_image_url ?? null}
-                size={220}
-                className="opacity-80"
-              />
-            ) : (
-              <User2 className="h-40 w-40 text-primary/60" strokeWidth={1.25} />
-            )}
-          </HudTimer>
-          {!adminRun && onClock && onClockSince && (
-            <div className="mt-1 text-label uppercase tracking-[0.08em] text-muted-foreground">
-              Unofficial
-            </div>
-          )}
-          {shown ? (
-            <div className="mt-4 text-center">
-              <Link
-                to="/players/$id"
-                params={{ id: shown.id }}
-                className="font-display text-3xl font-black uppercase tracking-wide hover:text-primary"
-              >
-                {shown.participant?.name}
-              </Link>
-              {shown.participant?.fantasy_team_name && (
-                <div className="text-xs text-muted-foreground">
-                  {shown.participant.fantasy_team_name}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="mt-4 text-center text-xs text-muted-foreground">{emptyReason}</div>
-          )}
-        </div>
+        <LiveHero
+          current={current}
+          timedEp={hud.timedEp}
+          onClock={onClock}
+          adminRun={hud.adminRun}
+          runBaseMs={hud.runBaseMs}
+          loading={loading}
+          cards={cards}
+          photos={photos}
+          emptyReason={emptyReason}
+        />
 
-        {isAdmin && <LiveTimingBar console={rc} />}
+        {hud.isAdmin && <LiveTimingBar console={hud.console} />}
 
-        <Card className="hud-bezel border-primary/20">
-          <CardContent className="p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="font-display text-xs font-black uppercase tracking-[0.08em] text-primary/80">
-                Top 5
-              </h2>
-              <span className="text-label uppercase tracking-widest text-muted-foreground">
-                {done}/{total} done
-              </span>
-              <Trophy className="h-3.5 w-3.5 text-primary/60" />
-            </div>
-            {leaderboard.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No official times yet.</p>
-            ) : (
-              <ol className="space-y-1.5">
-                {leaderboard.map((row, i) => (
-                  <li
-                    key={row.run.id}
-                    className="flex items-center gap-2 rounded-md border border-primary/5 bg-[oklch(0.16_0.02_240)] px-2 py-2"
-                  >
-                    <span
-                      className={
-                        "grid h-7 w-7 place-items-center rounded-full text-[11px] font-black " +
-                        (i === 0
-                          ? "bg-primary text-primary-foreground shadow-[0_0_10px_var(--color-primary)]"
-                          : "bg-primary/10 text-primary")
-                      }
-                    >
-                      {i + 1}
-                    </span>
-                    <ParticipantAvatar
-                      name={row.ep?.participant?.name ?? "?"}
-                      cardUrl={row.ep ? (cards.data?.[row.ep.id]?.front ?? null) : null}
-                      photoUrl={
-                        photos.data?.[row.ep?.id ?? ""] ??
-                        row.ep?.participant?.profile_image_url ??
-                        null
-                      }
-                      size={32}
-                    />
-                    {row.ep ? (
-                      <Link
-                        to="/players/$id"
-                        params={{ id: row.ep.id }}
-                        className="flex min-h-11 min-w-0 flex-1 items-center hover:text-primary"
-                      >
-                        <span className="truncate text-sm font-semibold uppercase tracking-wide">
-                          {row.ep.participant?.name ?? "—"}
-                        </span>
-                      </Link>
-                    ) : (
-                      <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
-                        —
-                      </span>
-                    )}
-                    <span className="timer-digits tabular text-primary text-lg">
-                      {formatTime(row.run.official_time_ms)}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </CardContent>
-        </Card>
+        <LiveTopFive
+          leaderboard={leaderboard}
+          done={done}
+          total={total}
+          cards={cards}
+          photos={photos}
+        />
       </div>
       <FinishCelebration
+        runId={currentCelebration?.runId ?? null}
         name={currentCelebration?.name ?? null}
         timeMs={currentCelebration?.timeMs ?? null}
         deltaMs={currentCelebration?.deltaMs ?? null}
@@ -288,3 +189,211 @@ function LivePage() {
     </div>
   );
 }
+
+/**
+ * The card front and photo a row shows for an athlete, in the order they win.
+ *
+ * Both the ring and the board pick the same three values the same way, and they
+ * used to spell the fallback chain out twice. The `?? ""` is a lookup that
+ * cannot match rather than a branch: there is no athlete, so there is no photo.
+ */
+function avatarFor(ep: Athlete | null | undefined, cards: CardUrls, photos: PhotoUrls) {
+  return {
+    name: ep?.participant?.name ?? "?",
+    cardUrl: ep ? (cards.data?.[ep.id]?.front ?? null) : null,
+    photoUrl: photos.data?.[ep?.id ?? ""] ?? ep?.participant?.profile_image_url ?? null,
+  };
+}
+
+/**
+ * The big ring, and whoever is inside it.
+ *
+ * Its own component rather than a block inside LivePage, because the ring
+ * answers to two clocks -- the run a commissioner is timing on this device and
+ * the crowd's unofficial counter -- and choosing between them, the athlete they
+ * belong to and the word above them was most of what the page was doing.
+ */
+function LiveHero({
+  current,
+  timedEp,
+  onClock,
+  adminRun,
+  runBaseMs,
+  loading,
+  cards,
+  photos,
+  emptyReason,
+}: {
+  current: EventParticipant | null;
+  timedEp: TimedParticipant | null;
+  onClock: boolean;
+  adminRun: ReturnType<typeof useLiveHud>["adminRun"];
+  runBaseMs: number | null;
+  loading: boolean;
+  cards: CardUrls;
+  photos: PhotoUrls;
+  emptyReason: string;
+}) {
+  // Memoised on the stamp rather than recomputed each render: HudTimer restarts
+  // its interpolation whenever runningSinceMs changes, so a fresh Date.now()
+  // every render would re-anchor the clock on every bundle refetch.
+  // Read structurally: on_clock_since is newer than the checked-in generated
+  // types (supabase/migrations/20260821120000_on_clock_since.sql), the same way
+  // card-rarity.ts declares card_rarity for itself.
+  const onClockSince = onClock ? ((current as OnClockEntry | null)?.on_clock_since ?? null) : null;
+  const onClockElapsed = useMemo(
+    () => onClockElapsedMs({ on_clock_since: onClockSince }, Date.now()),
+    [onClockSince],
+  );
+  // Somebody is on the clock but there is nothing real to count from: a row put
+  // on the clock before on_clock_since existed, or a stamp that will not parse.
+  // The lib answers null for exactly this, and reading that as 0 on a running
+  // ring counted up from whenever this page loaded — undercounting, restarting
+  // on every reload, and back to the very clock on_clock_since was added to
+  // retire. A ring held at zero is honest about knowing nothing; a moving one
+  // is not.
+  const onClockUnanchored = onClock && onClockElapsed === null;
+
+  const shown = timedEp ?? current;
+  const art = avatarFor(shown, cards, photos);
+
+  return (
+    <div className="flex flex-col items-center">
+      <HudTimer
+        runningSinceMs={runBaseMs ?? onClockElapsed ?? 0}
+        paused={adminRun ? adminRun.status !== "running" : !onClock || onClockUnanchored}
+        status={
+          HUD_STATUS_LABEL[
+            hudStatus({
+              timingStatus: adminRun?.status ?? null,
+              onClock,
+              hasCurrent: current !== null,
+              loading,
+            })
+          ]
+        }
+        size={340}
+      >
+        {shown ? (
+          <ParticipantAvatar
+            name={art.name}
+            cardUrl={art.cardUrl}
+            photoUrl={art.photoUrl}
+            size={220}
+            className="opacity-80"
+          />
+        ) : (
+          <User2 className="h-40 w-40 text-primary/60" strokeWidth={1.25} />
+        )}
+      </HudTimer>
+      {/* On onClock alone: an unstamped ring is still the crowd's clock rather
+          than the official one, and is the case that most needs saying so. */}
+      {!adminRun && onClock && (
+        <div className="mt-1 text-label uppercase tracking-[0.08em] text-muted-foreground">
+          Unofficial
+        </div>
+      )}
+      {shown ? (
+        <div className="mt-4 text-center">
+          <Link
+            to="/players/$id"
+            params={{ id: shown.id }}
+            className="font-display text-3xl font-black uppercase tracking-wide hover:text-primary"
+          >
+            {shown.participant?.name}
+          </Link>
+          {shown.participant?.fantasy_team_name && (
+            <div className="text-xs text-muted-foreground">
+              {shown.participant.fantasy_team_name}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 text-center text-xs text-muted-foreground">{emptyReason}</div>
+      )}
+    </div>
+  );
+}
+
+/** The board, and the tally that has to agree with it. */
+function LiveTopFive({
+  leaderboard,
+  done,
+  total,
+  cards,
+  photos,
+}: {
+  leaderboard: Leader[];
+  done: number;
+  total: number;
+  cards: CardUrls;
+  photos: PhotoUrls;
+}) {
+  return (
+    <Card className="hud-bezel border-primary/20">
+      <CardContent className="p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-display text-xs font-black uppercase tracking-[0.08em] text-primary/80">
+            Top 5
+          </h2>
+          <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
+            {done}/{total} done
+          </span>
+          <Trophy className="h-3.5 w-3.5 text-primary/60" />
+        </div>
+        {leaderboard.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No official times yet.</p>
+        ) : (
+          <ol className="space-y-1.5">
+            {leaderboard.map((row) => {
+              const art = avatarFor(row.ep, cards, photos);
+              return (
+                <li
+                  key={row.run.id}
+                  className="flex items-center gap-2 rounded-md border border-primary/5 bg-[oklch(0.16_0.02_240)] px-2 py-2"
+                >
+                  <span
+                    className={cn(
+                      "grid h-7 w-7 place-items-center rounded-full text-[11px] font-black",
+                      row.place === 1
+                        ? "bg-primary text-primary-foreground shadow-[0_0_10px_var(--color-primary)]"
+                        : "bg-primary/10 text-primary",
+                    )}
+                  >
+                    {row.place}
+                  </span>
+                  <ParticipantAvatar
+                    name={art.name}
+                    cardUrl={art.cardUrl}
+                    photoUrl={art.photoUrl}
+                    size={32}
+                  />
+                  {row.ep ? (
+                    <Link
+                      to="/players/$id"
+                      params={{ id: row.ep.id }}
+                      className="flex min-h-11 min-w-0 flex-1 items-center hover:text-primary"
+                    >
+                      <span className="line-clamp-2 text-sm font-semibold uppercase tracking-wide">
+                        {row.ep.participant?.name ?? "—"}
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className="flex-1 line-clamp-2 text-sm font-semibold uppercase tracking-wide">
+                      —
+                    </span>
+                  )}
+                  <span className="timer-digits tabular text-primary text-lg">
+                    {formatTime(row.run.official_time_ms)}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default LivePage;

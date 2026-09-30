@@ -478,15 +478,10 @@ function WhoRow({
         // Selection is a 2px ring, not a bloom (§15).
         selected
           ? "border-primary/60 bg-primary/10 ring-2 ring-primary/50"
-          : "border-white/10 bg-white/5 hover:border-primary/40",
+          : "border-border-strong bg-white/5 hover:border-primary",
       )}
     >
-      {/* The initials repeat the name beside them, so they are decoration —
-          and left in the accessibility tree they turn every row's name into
-          "BB Bob Blitz 5 spares". */}
-      <span aria-hidden>
-        <ParticipantAvatar name={person.name} size={40} />
-      </span>
+      <ParticipantAvatar name={person.name} size={40} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-display text-sm font-black uppercase tracking-wide">
           {person.name}
@@ -602,7 +597,7 @@ function Tray({
           <button
             type="button"
             onClick={onRetry}
-            className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-white/10 px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
+            className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-border-strong px-4 text-label font-bold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
           >
             Try again
           </button>
@@ -668,7 +663,7 @@ function SparePickerDrawer({
             {title}
           </DrawerTitle>
           {/* The cap where the choosing happens, not only on the tray behind. */}
-          <DrawerDescription className="text-xs">
+          <DrawerDescription className="text-meta">
             {staged.length} / {MAX_PER_SIDE} chosen
           </DrawerDescription>
         </DrawerHeader>

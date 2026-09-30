@@ -1,17 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { optionalActor, requireActor } from "./require-auth.server";
+import { optionalActor } from "./require-auth.server";
 import { requireLeagueAdmin } from "./league-admin.server";
 import { decodeImageDataUrl, forgetSignedPath, signPath } from "./media.functions";
 import { VARIANT_WIDTHS } from "./media";
-import type {
-  PullSecretCardResult,
-  SecretCardRow,
-  SecretCollectionRow,
-  SecretPullRow,
-  SecretPullStatusResult,
-} from "./secret-cards-rows";
+import type { SecretCardRow, SecretCollectionRow, SecretPullRow } from "./secret-cards-rows";
 import type { CollectionTrophy, CompletedCollection } from "./collection-trophies";
 import type { SecretCardView } from "./secret-cards";
 import {
@@ -35,10 +29,11 @@ import { sqlNull } from "./rpc-null";
  * not. If a future "share this card" feature needs an id, it needs a new threat
  * model first.
  *
- * The daily limit is enforced by a unique index and a row lock inside
- * pull_secret_card, not here. card-collection.ts deliberately lets a device with
- * IndexedDB blocked open a fresh pack every load; secrets must not inherit that,
- * and server-side uniqueness is what closes it.
+ * A secret is dealt as a slot in the pack now — see pack.functions.ts and the
+ * open_pack RPC. One pack per league day is enforced by the pack_opens row and a
+ * row lock inside open_pack, not here. card-collection.ts deliberately lets a
+ * device with IndexedDB blocked ask for a pack every load; the server answers
+ * the same one back, and that is what closes it.
  */
 
 /** Typed client, for tables the generated types already know about. */
@@ -112,8 +107,9 @@ function toView(
 /**
  * A card row plus signed, resized urls for its two faces.
  *
- * Exported for streaks.functions.ts, which pays a milestone out as a bonus secret
- * and has to hand the reveal the same view this file builds — duplicating the
+ * Exported for pack.functions.ts, which signs every secret slot in a pack, and
+ * for streaks.functions.ts, which pays a milestone out as a bonus secret — both
+ * have to hand the reveal the same view this file builds, and duplicating the
  * signing would drift on VARIANT_WIDTHS the first time one of them changed.
  *
  * The INVARIANT at the top of this file still holds: both callers pass a row they
@@ -130,100 +126,6 @@ export async function signSecretCard(row: SecretCardRow, tier: string) {
 }
 
 // ------- Member-facing -------
-
-/**
- * Today's secret card. Takes no input at all: whoever is asking comes from a
- * verified token and the card is chosen by Postgres.
- *
- * Guests get one too, keyed on a server-minted `g.` token rather than a
- * participant. The id is never read from the payload for either kind — that is
- * the entire reason the guest identity is signed rather than just a device id.
- *
- * Calling twice in one league day returns the same card with `fresh: false`
- * rather than failing, so a double-tap or a retried request resumes the reveal.
- */
-export const pullSecretCard = createServerFn({ method: "POST" }).handler(async () => {
-  const actor = requireActor();
-  noStore();
-  const sb = await admin();
-  const db = await secrets();
-
-  // Stamped on the pull for flavour only. A pull out of season is fine, so a
-  // missing active event is not an error.
-  const { data: event } = await sb
-    .from("events")
-    .select("id")
-    .eq("active", true)
-    .order("year", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { data, error } = await db.rpc("pull_secret_card", {
-    _participant_id: sqlNull(actor.kind === "member" ? actor.id : null),
-    _guest_id: sqlNull(actor.kind === "guest" ? actor.id : null),
-    _event_id: sqlNull(event?.id ?? null),
-  });
-  if (error) throw new Error(error.message);
-
-  const pull = data as PullSecretCardResult;
-  // Nothing pullable — no cards yet, or every one of them still missing its art.
-  // Soft, so the pack screen can say "nothing today" instead of showing an error.
-  if (!pull) return { ok: false as const, reason: "unavailable" as const };
-
-  const { data: card } = await db
-    .from("secret_cards")
-    .select("*")
-    .eq("id", pull.cardId)
-    .maybeSingle<SecretCardRow>();
-  if (!card) return { ok: false as const, reason: "unavailable" as const };
-
-  return {
-    ok: true as const,
-    day: pull.day,
-    duplicate: pull.duplicate,
-    fresh: pull.fresh,
-    // The one number this whole file exists to withhold, and the only response
-    // allowed to carry it. Null on every pull that did not just finish a set,
-    // which is all but one of them in a season.
-    completedCollection: pull.completedCollection ?? null,
-    card: await signSecretCard(card, pull.tier),
-  };
-});
-
-/**
- * Whether there is a card waiting today. A pure read — opening the pack screen
- * must never spend the drop.
- *
- * Answers for a device with no identity at all too, with everything false, so the
- * pack screen can render before a guest session exists without this throwing.
- *
- * `claimed` is a misnomer kept on purpose. It has always driven "is there a drop
- * for you", and now that a guest has one too it means "has an identity that can
- * pull" rather than "has claimed a player". Renaming it would ripple through the
- * exact-key assertions that keep a set size out of this response, for no gain.
- */
-export const getSecretStatus = createServerFn({ method: "GET" }).handler(async () => {
-  noStore();
-  const actor = optionalActor();
-  if (!actor) {
-    return {
-      claimed: false as const,
-      day: null,
-      pulledToday: false,
-      pulled: 0,
-      available: false,
-      resetsAt: null,
-    };
-  }
-  const db = await secrets();
-  const { data, error } = await db.rpc("secret_pull_status", {
-    _participant_id: sqlNull(actor.kind === "member" ? actor.id : null),
-    _guest_id: sqlNull(actor.kind === "guest" ? actor.id : null),
-  });
-  if (error) throw new Error(error.message);
-  const status = data as SecretPullStatusResult;
-  return { claimed: true as const, ...status };
-});
 
 /**
  * The secrets whoever is asking has pulled, and only those.
@@ -328,7 +230,7 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
   const sb = await admin();
   const db = await secrets();
 
-  const [{ data: rows }, { data: pulls }, { count: claimedCount }] = await Promise.all([
+  const [{ data: rows }, { data: pulls }, { data: claimedRows }] = await Promise.all([
     db
       .from("secret_cards")
       .select("*")
@@ -341,27 +243,41 @@ export const listSecretCards = createServerFn({ method: "GET" }).handler(async (
       .returns<Pick<SecretPullRow, "secret_card_id" | "participant_id">[]>(),
     // Claimed, not issued. Counting every code printed would include people who
     // never used one, and `exhausted` below is measured against this number.
+    //
+    // The ids rather than a `head: true` count, because `exhausted` needs both
+    // ends of its comparison drawn from the SAME population, and a bare number
+    // cannot say who is in it. See `memberOwners` below.
     sb
       .from("member_codes")
-      .select("participant_id", { count: "exact", head: true })
-      .not("claimed_at", "is", null),
+      .select("participant_id")
+      .not("claimed_at", "is", null)
+      .returns<{ participant_id: string }[]>(),
   ]);
+
+  const claimedIds = new Set((claimedRows ?? []).map((r) => r.participant_id));
 
   // Two counts, because they answer different questions. `owners` is how many
   // people hold a card — guests included, matching the number everyone else sees.
   // `memberOwners` is the one `exhausted` is measured with, because it is
   // compared against the claimed-member count: guests would push it over the line
   // while members still had cards to find, and the panel would go quiet early.
+  //
+  // Counted over the claimed roster rather than over anyone with an identity,
+  // for the same reason and one the guest rule alone does not cover. Re-issuing
+  // codes nulls `member_codes.claimed_at` and leaves the participant's pulls
+  // standing, so between a rotation and everybody re-claiming their slip, a
+  // rotated player's historical pulls were clearing the bar for members who are
+  // genuinely still looking — and the panel went quiet on a drop that had not.
   const owners = new Map<string, number>();
   const memberOwners = new Map<string, number>();
   for (const p of pulls ?? []) {
     owners.set(p.secret_card_id, (owners.get(p.secret_card_id) ?? 0) + 1);
-    if (p.participant_id) {
+    if (p.participant_id && claimedIds.has(p.participant_id)) {
       memberOwners.set(p.secret_card_id, (memberOwners.get(p.secret_card_id) ?? 0) + 1);
     }
   }
 
-  const claimed = claimedCount ?? 0;
+  const claimed = claimedIds.size;
   const cards = await Promise.all(
     (rows ?? []).map(async (row) => ({
       id: row.id,

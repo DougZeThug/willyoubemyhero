@@ -8,6 +8,7 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { listArchives } from "@/lib/media.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
+import { standings } from "@/lib/standings";
 import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
 
 export const Route = createFileRoute("/analytics")({
@@ -39,38 +40,65 @@ function AnalyticsPage() {
     if (!bundle.splits.length) return [];
     const byStation = new Map<string, number[]>();
     for (const s of bundle.splits) {
+      // A missing segment_time_ms is a measurement never taken, not a
+      // zero-second segment. At 0 it drags the mean down AND wins Math.min
+      // outright, so one unmeasured split made the whole station's "Best" bar
+      // read 0.00s. card-rarity.ts and card-stats.ts skip them for the same
+      // reason; this was the one place that did not.
+      if (s.segment_time_ms == null) continue;
       const st = bundle.stations.find((x) => x.id === s.station_id);
       if (!st) continue;
-      const arr = byStation.get(st.name) ?? [];
-      arr.push(s.segment_time_ms ?? 0);
-      byStation.set(st.name, arr);
+      // Keyed by id, not by name. Nothing stops two stations in one event
+      // sharing a name -- no unique index on stations.name, and neither
+      // upsertStation nor the admin panel checks for one -- and by name their
+      // splits pooled into a single bucket. The map below still emits a row per
+      // station, so both rows then read the SAME merged average and the same
+      // global minimum: two identical bars, an average that is no station's, and
+      // a slow station credited with a best it never produced. `bests` below
+      // learned this about athletes called Dave.
+      const arr = byStation.get(st.id) ?? [];
+      arr.push(s.segment_time_ms);
+      byStation.set(st.id, arr);
     }
-    return bundle.stations.map((st) => {
-      const arr = byStation.get(st.name) ?? [];
-      const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-      const best = arr.length ? Math.min(...arr) : 0;
-      return {
-        name: st.name,
-        avgSec: +(avg / 1000).toFixed(2),
-        bestSec: +(best / 1000).toFixed(2),
-      };
+    // Splits that were all unmeasured, or that name stations this event does
+    // not have, leave nothing to plot — the same nothing as no splits at all,
+    // so say so rather than drawing a row of zero bars.
+    if (byStation.size === 0) return [];
+    // And the same holds one station at a time. A station nobody reached — the
+    // field DNF'd before it, or it was set up and never run — has no bucket, and
+    // falling back to 0 drew a 0.00s "Best" beside real ones: on the archive,
+    // the fastest time anybody ran anywhere.
+    return bundle.stations.flatMap((st) => {
+      const arr = byStation.get(st.id);
+      if (!arr) return [];
+      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const best = Math.min(...arr);
+      return [
+        {
+          name: st.name,
+          avgSec: Number((avg / 1000).toFixed(2)),
+          bestSec: Number((best / 1000).toFixed(2)),
+        },
+      ];
     });
   }, [bundle]);
 
+  // The board's own rows, so these ten names are ten off the leaderboard. Reducing
+  // official runs per athlete asked nothing about contention, so a scratched
+  // athlete could hold the #1 personal best on a screen whose sibling had already
+  // dropped them -- two public pages naming a different fastest athlete off one
+  // bundle. It also kept somebody whose only official run has no time yet, parked
+  // at Infinity with an em dash where their time belongs.
   const bests = useMemo(() => {
-    if (!bundle) return [];
-    return bundle.participants
-      .map((ep) => {
-        const runs = bundle.runs.filter(
-          (r) => r.participant_id === ep.participant_id && r.is_official,
-        );
-        if (!runs.length) return null;
-        const best = Math.min(...runs.map((r) => r.official_time_ms ?? Infinity));
-        return { name: ep.participant?.name ?? "?", bestMs: best };
-      })
-      .filter((x): x is { name: string; bestMs: number } => !!x)
-      .sort((a, b) => a.bestMs - b.bestMs)
-      .slice(0, 10);
+    const parts = bundle?.participants ?? [];
+    return standings(bundle)
+      .slice(0, 10)
+      .map((s) => ({
+        participantId: s.participantId,
+        place: s.place,
+        name: parts.find((p) => p.participant_id === s.participantId)?.participant?.name ?? "?",
+        bestMs: s.run.official_time_ms,
+      }));
   }, [bundle]);
 
   // A pending fetch, a failed read and a combine nobody has run all used to
@@ -111,7 +139,7 @@ function AnalyticsPage() {
 
         <Card className="hud-bezel border-primary/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm uppercase tracking-widest text-primary/80">
+            <CardTitle className="text-sm uppercase tracking-[0.08em] text-primary/80">
               Average Split by Station
             </CardTitle>
           </CardHeader>
@@ -139,7 +167,7 @@ function AnalyticsPage() {
                         borderRadius: 8,
                       }}
                       labelStyle={{ color: "#67e8f9" }}
-                      formatter={(v: number) => `${v}s`}
+                      formatter={(v) => `${v}s`}
                     />
                     <Bar dataKey="avgSec" fill="#38bdf8" radius={[6, 6, 0, 0]} name="Average" />
                     <Bar dataKey="bestSec" fill="#22d3ee" radius={[6, 6, 0, 0]} name="Best" />
@@ -152,7 +180,7 @@ function AnalyticsPage() {
 
         <Card className="hud-bezel border-primary/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm uppercase tracking-widest text-primary/80">
+            <CardTitle className="text-sm uppercase tracking-[0.08em] text-primary/80">
               Personal Bests
             </CardTitle>
           </CardHeader>
@@ -165,15 +193,18 @@ function AnalyticsPage() {
               </p>
             ) : (
               <ol className="space-y-1.5">
-                {bests.map((b, i) => (
+                {bests.map((b) => (
                   <li
-                    key={b.name}
+                    // The participant, not the name: two athletes called Dave
+                    // collided, and this list re-renders on every realtime nudge,
+                    // which is where an undefined reconciliation goes wrong.
+                    key={b.participantId}
                     className="flex items-center gap-3 rounded-md bg-[oklch(0.16_0.02_240)] px-3 py-2"
                   >
                     <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 text-label font-black text-primary">
-                      {i + 1}
+                      {b.place}
                     </span>
-                    <span className="flex-1 truncate text-sm font-semibold uppercase tracking-wide">
+                    <span className="flex-1 line-clamp-2 text-sm font-semibold uppercase tracking-wide">
                       {b.name}
                     </span>
                     <span className="timer-digits text-primary">{formatTime(b.bestMs)}</span>
@@ -186,7 +217,7 @@ function AnalyticsPage() {
 
         <Card className="hud-bezel border-primary/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm uppercase tracking-widest text-primary/80">
+            <CardTitle className="text-sm uppercase tracking-[0.08em] text-primary/80">
               Archive
             </CardTitle>
           </CardHeader>
@@ -200,12 +231,12 @@ function AnalyticsPage() {
                     <Link
                       to="/recap/$slug"
                       params={{ slug: a.slug }}
-                      className="flex min-h-11 items-center justify-between rounded-md border border-primary/10 bg-[oklch(0.16_0.02_240)] px-3 py-2 text-sm hover:border-primary/40"
+                      className="flex min-h-11 items-center justify-between rounded-md border border-primary/50 bg-[oklch(0.16_0.02_240)] px-3 py-2 text-sm hover:border-primary"
                     >
                       <span className="font-semibold uppercase tracking-wide">
                         {a.event_name} {a.event_year ?? ""}
                       </span>
-                      <span className="text-label uppercase tracking-widest text-muted-foreground">
+                      <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
                         {new Date(a.created_at).toLocaleDateString()}
                       </span>
                     </Link>

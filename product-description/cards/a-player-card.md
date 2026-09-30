@@ -190,7 +190,9 @@ because the tables behind them are deliberately kept off the wire.
 thing that needs the network and says so when it fails.
 
 **Optimistic updates and rollback.** Only reactions, which show your tap
-immediately and settle against the server's count.
+immediately and settle against the server's count — in the one redraw that
+brings that count, so the number never dips back through what it was before the
+tap on its way there. A tap that fails rolls straight back and says why.
 
 **The card economy.** The slab's plate is the one place on this page that talks
 about _your copy_ — the count and the finish — and it wears the finish's colour

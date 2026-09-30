@@ -20,5 +20,8 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
-  component: () => <Navigate to="/players" />,
+  // `replace`, so the vault overwrites this entry rather than sitting in front
+  // of it: a pushed redirect puts "/" one Back press away, where it redirects
+  // forward again and the Back button on the shared URL does nothing.
+  component: () => <Navigate to="/players" replace />,
 });

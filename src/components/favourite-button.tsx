@@ -47,7 +47,7 @@ export function FavouriteButton({
             ? "border-primary/60 bg-background/80 text-primary"
             : // Dimmed rather than hidden-until-hover: hover does not exist on the
               // phone this is played on, and a control you cannot find is not one.
-              "border-white/15 bg-background/60 text-muted-foreground hover:border-primary/50 hover:text-primary",
+              "border-border-strong bg-background/60 text-muted-foreground hover:border-primary/50 hover:text-primary",
         )}
       >
         <Star className="h-4 w-4" fill={on ? "currentColor" : "none"} aria-hidden />

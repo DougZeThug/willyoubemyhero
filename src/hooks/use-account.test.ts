@@ -28,6 +28,14 @@ vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   snapshotLocalCollection: vi.fn(),
 }));
 
+// Real in the app and spied on here, because the only thing this file has to say
+// about it is WHEN it runs relative to the member token landing.
+const carryTrophySeen = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/trophy-seen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/trophy-seen")>()),
+  carryTrophySeen: (...args: unknown[]) => carryTrophySeen(...args),
+}));
+
 // The state module is a singleton; read it the way the app does.
 let lastState: AccountSyncState | null = null;
 vi.mock("@/lib/account-sync-state", async (importOriginal) => {
@@ -54,15 +62,53 @@ describe("signOutAccount", () => {
     vi.mocked(supabase.auth.signOut).mockResolvedValue({ error: null });
   });
 
-  it("clears the admin token alongside the member token", async () => {
+  it("clears the member token but leaves the admin token in place (ADM-16)", async () => {
+    // The console is a separate door with its own twelve hours and its own Lock
+    // button. Taking the token off here sent a commissioner who signed out of
+    // their account mid-combine back to the PIN gate.
     window.localStorage.setItem("wwbh:admin-token", "event.9999999999999.signature");
     window.localStorage.setItem("wwbh:member-token", "m.participant.9999999999999.signature");
 
     await signOutAccount();
 
     expect(supabase.auth.signOut).toHaveBeenCalled();
-    expect(window.localStorage.getItem("wwbh:admin-token")).toBeNull();
+    expect(window.localStorage.getItem("wwbh:admin-token")).toBe("event.9999999999999.signature");
     expect(window.localStorage.getItem("wwbh:member-token")).toBeNull();
+  });
+
+  it("takes the handoff token off, so the next account cannot inherit this player", async () => {
+    // preserveAccountHandoff writes this before every auth round trip, and only
+    // a SUCCESSFUL sync clears it. A sync that gave up leaves a verified member
+    // token sitting in local storage with 90 days on it — and attachAccountHandoff
+    // puts it on every server-function call, where syncAccount takes it as the
+    // player to bind a first-time account to.
+    window.localStorage.setItem("wwbh:account-handoff-token", MEMBER_TOKEN);
+
+    await signOutAccount();
+
+    expect(window.localStorage.getItem("wwbh:account-handoff-token")).toBeNull();
+  });
+
+  it("drops a destination nobody came back for", async () => {
+    window.localStorage.setItem(
+      "wwbh:auth-next",
+      JSON.stringify({ next: "/players/pack", at: Date.now() }),
+    );
+
+    await signOutAccount();
+
+    expect(window.localStorage.getItem("wwbh:auth-next")).toBeNull();
+  });
+
+  it("leaves the guest token alone", async () => {
+    // Deliberate, and documented on signOutAccount: it points at a collection
+    // rather than authorising anybody, and clearing it orphans the cards an
+    // unnamed visitor pulled on this handset.
+    window.localStorage.setItem("wwbh:guest-token", GUEST_TOKEN);
+
+    await signOutAccount();
+
+    expect(window.localStorage.getItem("wwbh:guest-token")).toBe(GUEST_TOKEN);
   });
 });
 
@@ -83,6 +129,7 @@ describe("useAccountSync", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    carryTrophySeen.mockReset();
     vi.mocked(adoptLocalCollection).mockReset();
     vi.mocked(syncAccountSession).mockReset();
     vi.mocked(snapshotLocalCollection).mockReset();
@@ -104,6 +151,38 @@ describe("useAccountSync", () => {
     expect(window.localStorage.getItem("wwbh:guest-token")).toBeNull();
     expect(adoptLocalCollection).toHaveBeenCalledWith(held);
     expect(lastState).toMatchObject({ status: "ready", userId: "user-1" });
+  });
+
+  it("carries the guest's ceremonies across before the member token lands", async () => {
+    // The token is what gives the root ceremony host a participant id, and the
+    // trophy row is already banked by the time this runs — so a carry that waits
+    // for the adoption leaves a window where the realtime refetch finds the set
+    // unmarked under the member key and replays a ceremony this device already
+    // threw as a guest. It marks it celebrated on the way, so the duplicate is
+    // not retractable.
+    //
+    // Asserted as "what was on the device when the carry ran" rather than as a
+    // call order, because the token landing is the event that opens the window.
+    window.localStorage.setItem("wwbh:device-id", "dev-1");
+    const tokenWhenCarried: (string | null)[] = [];
+    carryTrophySeen.mockImplementation(() => {
+      tokenWhenCarried.push(window.localStorage.getItem("wwbh:member-token"));
+    });
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "p-alice",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(carryTrophySeen).toHaveBeenCalledWith("d:dev-1", "p-alice");
+    expect(tokenWhenCarried).toEqual([null]);
+    // And the sync still finished, so this is an ordering change and nothing else.
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(MEMBER_TOKEN);
   });
 
   it("takes the member token back off when the cards cannot be filed", async () => {
@@ -202,6 +281,27 @@ describe("useAccountSync", () => {
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(SECOND_TOKEN);
   });
 
+  it("takes the previous account's handoff token off too", async () => {
+    // The same identity by another door: attachAccountHandoff sends it on every
+    // call, and syncAccount falls back to it when no member token is there — so
+    // clearing only the member token moves the hole rather than closing it.
+    window.localStorage.setItem("wwbh:account-handoff-token", MEMBER_TOKEN);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), { initialProps: { u: user } });
+    await settle();
+
+    let seenAtSync: string | null = "unread";
+    vi.mocked(syncAccountSession).mockImplementation(() => {
+      seenAtSync = window.localStorage.getItem("wwbh:account-handoff-token");
+      return Promise.resolve({ kind: "guest", token: GUEST_TOKEN } as never);
+    });
+    window.localStorage.setItem("wwbh:account-handoff-token", MEMBER_TOKEN);
+    rerender({ u: { id: "user-2" } as User });
+    await settle();
+
+    expect(seenAtSync).toBeNull();
+  });
+
   it("takes a previous account's token off even when the switch lands mid-sync", async () => {
     // The token on the device came from an earlier visit, so this run never
     // wrote it — and a switch before the first request returns must still not
@@ -243,6 +343,57 @@ describe("useAccountSync", () => {
     renderHook(() => useAccountSync(user));
     await settle();
     expect(seenAtSync).toBe(CLAIM_TOKEN);
+  });
+
+  const ADMIN_TOKEN = "00000000-0000-4000-8000-0000000000ff.9999999999999.signature";
+
+  it("takes off an admin token another account earned, even on a fresh page", async () => {
+    // ADM-16 leaves the console on the handset after sign-out, for the
+    // commissioner who earned it. The token names no user, so requireAdmin
+    // would wave through whoever signs in next. A fresh hook stands in for the
+    // reload or OAuth redirect between the two sign-ins, which leaves the
+    // in-memory switch check above with nothing to compare against.
+    window.localStorage.setItem("wwbh:admin-token", ADMIN_TOKEN);
+    window.localStorage.setItem("wwbh:admin-token-owner", "user-0");
+    let seenAtSync: string | null = "unread";
+    vi.mocked(syncAccountSession).mockImplementation(async () => {
+      seenAtSync = window.localStorage.getItem("wwbh:admin-token");
+      return { kind: "member", token: MEMBER_TOKEN, name: "Alice" } as never;
+    });
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(seenAtSync).toBeNull();
+    expect(window.localStorage.getItem("wwbh:admin-token")).toBeNull();
+    expect(window.localStorage.getItem("wwbh:admin-token-owner")).toBeNull();
+  });
+
+  it("keeps the admin token for the account that earned it", async () => {
+    // ADM-16 itself: the commissioner signing back in keeps the console.
+    window.localStorage.setItem("wwbh:admin-token", ADMIN_TOKEN);
+    window.localStorage.setItem("wwbh:admin-token-owner", user.id);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(window.localStorage.getItem("wwbh:admin-token")).toBe(ADMIN_TOKEN);
+  });
+
+  it("binds an admin token nobody owned to the account that signs in", async () => {
+    // A PIN unlock while signed out, then a sign-in — the admin twin of the
+    // paper-code path. Left unowned, the commissioner's next sign-out would
+    // hand the console to whoever signed in after them.
+    window.localStorage.setItem("wwbh:admin-token", ADMIN_TOKEN);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(window.localStorage.getItem("wwbh:admin-token")).toBe(ADMIN_TOKEN);
+    expect(window.localStorage.getItem("wwbh:admin-token-owner")).toBe(user.id);
   });
 
   it("tries again a minute after giving up, without the user changing", async () => {

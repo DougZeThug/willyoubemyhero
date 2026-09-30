@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -34,7 +34,6 @@ import { dustLive } from "@/lib/dust";
 import { navHidden } from "@/lib/nav";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { useEventBundle } from "@/hooks/use-event-bundle";
-import { asFinishedRun, useFinishSave } from "@/hooks/use-finish-save";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -53,15 +52,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { BigTimer } from "@/components/big-timer";
-import { formatTime, newClientKey } from "@/lib/format";
-import {
-  ACTIVE_RUN_VERSION,
-  clearActiveRun,
-  computeElapsedMs,
-  loadActiveRun,
-  saveActiveRun,
-  type ActiveRun,
-} from "@/lib/active-run";
+import { formatTime } from "@/lib/format";
+import { clearActiveRun } from "@/lib/active-run";
 import {
   Flag,
   LockKeyhole,
@@ -86,9 +78,10 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { currentAthlete, fieldSize } from "@/lib/current-athlete";
+import { awaitingRun, currentAthlete, fieldSize } from "@/lib/current-athlete";
 import { useRunConsole } from "@/hooks/use-run-console";
 import { FeedDegradedBanner } from "@/components/feed-state";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -104,10 +97,18 @@ export const Route = createFileRoute("/admin")({
 function AdminPage() {
   const { event } = useEventBundle();
   const admin = useAdminSession();
-  const isAdmin = !!event?.id && admin?.eventId === event.id;
   // Accounts on the admin list skip the PIN entirely; the PIN stays as the
   // fallback for anyone signed out or not on the list.
   const { user, loading: authLoading } = useAuthUser();
+  // A token another account earned on this handset is not this account's
+  // console. useAccountSync takes it off, but from the root and in its own
+  // effect — without this the console paints for a commit first, and the
+  // account check below is skipped for the person actually signed in.
+  const heldByAnother = !!user && !!admin?.owner && admin.owner !== user.id;
+  // `!!` rather than Boolean() on purpose: it narrows `event` for the right
+  // half of the &&, which Boolean() does not, and without it `event.id` there
+  // is a type error.
+  const isAdmin = !!event?.id && admin?.eventId === event.id && !heldByAnother;
   const [accountChecked, setAccountChecked] = useState(false);
   const triedFor = useRef<string | null>(null);
 
@@ -123,7 +124,7 @@ function AdminPage() {
       try {
         const res = await startAdminSessionFromAccount({ data: undefined });
         if (res.ok) {
-          setAdminToken(res.token);
+          setAdminToken(res.token, user.id);
           toast.success("Admin unlocked via your account");
         }
       } catch {
@@ -147,12 +148,21 @@ function AdminPage() {
   return isAdmin ? (
     <TimingConsole />
   ) : (
-    <PinGate eventId={event.id} eventName={event.name ?? "Combine"} />
+    <PinGate eventId={event.id} eventName={event.name ?? "Combine"} userId={user?.id ?? null} />
   );
 }
 
 // ---------------- PIN GATE ----------------
-function PinGate({ eventId, eventName }: { eventId: string; eventName: string }) {
+function PinGate({
+  eventId,
+  eventName,
+  userId,
+}: {
+  eventId: string;
+  eventName: string;
+  /** Whoever is signed in as the PIN is typed: the account this console is bound to. */
+  userId: string | null;
+}) {
   const verifyFn = useServerFn(verifyEventPin);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -173,7 +183,7 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
         setPin("");
         return;
       }
-      setAdminToken(res.token);
+      setAdminToken(res.token, userId);
       toast.success("Admin unlocked");
     } catch {
       toast.error("Could not verify PIN");
@@ -189,13 +199,13 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
   }
 
   return (
-    <div className="mx-auto grid min-h-[60vh] max-w-md place-items-center px-4 py-10">
+    <div className="mx-auto grid min-h-[60dvh] max-w-md place-items-center px-4 py-10">
       <Card className="hud-bezel w-full border-white/10">
         <CardContent className="p-5 sm:p-6">
           <div className="mb-4">
             <div className="flex items-center gap-2 text-primary">
               <LockKeyhole className="h-4 w-4" />
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
+              <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
                 Console
               </span>
             </div>
@@ -211,7 +221,19 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
             <Label htmlFor="pin">Event PIN</Label>
             <Input
               id="pin"
-              type="password"
+              // `text` and not `password`, which is what this said and what cost
+              // the keypad. iOS ignores `inputMode` on a password field and
+              // opens QWERTY — so a commissioner at a start line, holding a
+              // phone in one hand, hunts for four digits on a letter keyboard.
+              //
+              // The masking comes back as `-webkit-text-security`, which Safari
+              // and Chrome both honour and which leaves `inputMode` alone. The
+              // trade is explicit: Firefox does not implement it, so the PIN is
+              // visible while typing there. That is the right way round for this
+              // field — it is a four-digit event PIN shared across a league,
+              // guarding a console whose real protection is the HMAC'd token
+              // the server issues, and the phone is where it is actually typed.
+              type="text"
               inputMode="numeric"
               autoComplete="off"
               autoFocus
@@ -225,7 +247,10 @@ function PinGate({ eventId, eventName }: { eventId: string; eventName: string })
               // The one place wide tracking survives the §16 cap: a code is read
               // and typed character by character, and the gaps are what let a
               // thumb find its place in it.
-              className="text-center font-display text-2xl tracking-[0.4em]"
+              // Stated twice for the reason the member code box gives: the
+              // primitive's `pointer-fine:` release would otherwise take this to
+              // 14px on the laptop the console is usually run from.
+              className="text-center font-display text-2xl tracking-[0.4em] [-webkit-text-security:disc] pointer-fine:text-2xl"
             />
             <Button type="submit" disabled={busy || !pin} className="w-full">
               {busy ? "Checking…" : "Unlock"}
@@ -278,15 +303,15 @@ function TimingConsole() {
       {/* The one that matters most: this is where a run is timed, and a
           console frozen behind a dead socket with nothing on screen saying
           so is the failure the health states were added for. */}
-      {(realtimeDegraded || !!bundleError) && <FeedDegradedBanner />}
+      {(realtimeDegraded || Boolean(bundleError)) && <FeedDegradedBanner />}
       <div className="flex items-end justify-between gap-2 border-b border-primary/20 pb-3">
         <div>
           <div className="flex items-center gap-2 text-primary">
             <TimerIcon className="h-4 w-4" />
-            <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               Console
             </span>
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[9px] uppercase">
+            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-label uppercase">
               Admin
             </Badge>
           </div>
@@ -305,7 +330,7 @@ function TimingConsole() {
           <div className="mb-2">
             <div className="flex items-center gap-2 text-primary">
               <Camera className="h-4 w-4" />
-              <span className="font-display text-[10px] font-bold uppercase tracking-[0.08em]">
+              <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
                 Event Setup
               </span>
             </div>
@@ -327,7 +352,7 @@ function TimingConsole() {
           onSetOnClock={setOnClock}
         />
       ) : (
-        <Card className={"hud-bezel " + (paused ? "border-warn/60" : "border-primary/50 hud-glow")}>
+        <Card className={cn("hud-bezel", paused ? "border-warn/60" : "border-primary/50 hud-glow")}>
           <CardContent className="p-4 sm:p-5">
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-3">
@@ -338,10 +363,10 @@ function TimingConsole() {
                 />
                 <div>
                   <div
-                    className={
-                      "text-xs font-bold uppercase tracking-[0.08em] " +
-                      (finished ? "text-warn" : "text-muted-foreground")
-                    }
+                    className={cn(
+                      "text-xs font-bold uppercase tracking-[0.08em]",
+                      finished ? "text-warn" : "text-muted-foreground",
+                    )}
                   >
                     {statusLabel}
                   </div>
@@ -439,14 +464,16 @@ function TimingConsole() {
 
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="font-display text-sm font-bold uppercase tracking-widest text-muted-foreground">
+                <h3 className="font-display text-sm font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   Stations & Splits
                 </h3>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={undoLastSplit}
-                  disabled={run.splits.length === 0}
+                  // `finished` for the same reason the penalty chip below
+                  // carries it: the finished record is what Retry save re-sends.
+                  disabled={run.splits.length === 0 || finished}
                 >
                   <Redo2 className="mr-1 h-3.5 w-3.5" /> Undo split
                 </Button>
@@ -454,22 +481,22 @@ function TimingConsole() {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {stations.map((st) => {
                   const split = run.splits.find((s) => s.stationId === st.id);
-                  const disabled = !!split || paused || finished || run.status !== "running";
+                  const disabled = Boolean(split) || paused || finished || run.status !== "running";
                   return (
                     <div key={st.id} className="flex flex-col gap-1">
                       <button
                         disabled={disabled}
                         onClick={() => recordSplit(st.id)}
-                        className={
-                          "rounded-md border p-3 text-left transition " +
-                          (split
+                        className={cn(
+                          "rounded-md border p-3 text-left transition",
+                          split
                             ? "border-primary/40 bg-primary/10"
                             : disabled
                               ? "border-white/5 bg-white/5 opacity-60"
-                              : "border-white/10 bg-white/5 hover:border-primary hover:bg-primary/10")
-                        }
+                              : "border-border-strong bg-white/5 hover:border-primary hover:bg-primary/10",
+                        )}
                       >
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        <div className="text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                           {st.short_name ?? `#${st.station_order}`}
                         </div>
                         <div className="truncate font-display text-lg font-black uppercase leading-tight">
@@ -485,7 +512,7 @@ function TimingConsole() {
                             addPenalty(st.id, st.penalty_amount_ms, `${st.name} penalty`)
                           }
                           disabled={finished}
-                          className="min-h-9 rounded-md border border-warn/30 bg-warn/10 py-1 text-[10px] font-bold uppercase tracking-widest text-warn hover:bg-warn/20 disabled:opacity-50 sm:min-h-0"
+                          className="min-h-9 rounded-md border border-warn/30 bg-warn/10 py-1 text-label font-bold uppercase tracking-[0.08em] text-warn hover:bg-warn/20 disabled:opacity-50 sm:min-h-0"
                         >
                           <Plus className="mr-1 inline h-3 w-3" />+
                           {formatTime(st.penalty_amount_ms)} pen
@@ -499,7 +526,7 @@ function TimingConsole() {
 
             {run.penalties.length > 0 && (
               <div className="mt-4">
-                <h3 className="mb-1 font-display text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                <h3 className="mb-1 font-display text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
                   Penalties
                 </h3>
                 <ul className="space-y-1 text-sm">
@@ -535,15 +562,20 @@ function StartCard({
   onStart: () => void;
   onSetOnClock: (participantId: string | null) => void;
 }) {
-  const queued = participants.filter(
-    (p) => p.participation_status !== "finished" && p.participation_status !== "scratched",
-  );
+  const queued = participants.filter(awaitingRun);
   const slot = currentAthlete(participants);
   const nextUp = queued[0];
+  const stillQueued = queued.some((p) => p.participant_id === selectedParticipantId);
   useEffect(() => {
-    if (!selectedParticipantId && nextUp) onSelect(nextUp.participant_id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nextUp?.participant_id]);
+    // Re-selects on a STALE selection, not just an empty one. Scratching the head
+    // of the queue is one tap and no confirm, and it leaves that athlete ON the
+    // roster — so the old `!selectedParticipantId` guard no-opped, the list below
+    // dropped them, and Start Timer went on pointing at somebody this card had
+    // stopped showing. Tapping it put them back on the clock and erased the
+    // scratch.
+    if (stillQueued) return;
+    onSelect(nextUp?.participant_id ?? "");
+  }, [stillQueued, nextUp?.participant_id, onSelect]);
 
   return (
     <Card>
@@ -551,13 +583,13 @@ function StartCard({
         <h2 className="mb-3 font-display text-xl font-black uppercase">Send next athlete</h2>
         <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-2">
           <Radio
-            className={
-              "h-4 w-4 shrink-0 " +
-              (slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground")
-            }
+            className={cn(
+              "h-4 w-4 shrink-0",
+              slot.onClock ? "animate-pulse text-primary" : "text-muted-foreground",
+            )}
           />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+            <div className="text-label uppercase tracking-[0.08em] text-muted-foreground">
               {slot.onClock ? "On the clock" : "Up next on the crowd screens"}
             </div>
             <div className="truncate text-sm font-semibold uppercase">
@@ -579,17 +611,17 @@ function StartCard({
             </Button>
           )}
         </div>
-        <div className="max-h-[55vh] overflow-auto rounded border border-white/5 divide-y divide-white/5 sm:max-h-72">
+        <div className="max-h-[55dvh] overflow-auto rounded border border-white/5 divide-y divide-white/5 sm:max-h-72">
           {queued.map((p) => {
             const sel = p.participant_id === selectedParticipantId;
             return (
               <button
                 key={p.id}
                 onClick={() => onSelect(p.participant_id)}
-                className={
-                  "flex w-full items-center gap-3 px-3 py-2 text-left transition " +
-                  (sel ? "bg-primary/15" : "hover:bg-white/5")
-                }
+                className={cn(
+                  "flex w-full items-center gap-3 px-3 py-2 text-left transition",
+                  sel ? "bg-primary/15" : "hover:bg-white/5",
+                )}
               >
                 <span className="grid h-7 w-7 place-items-center rounded-md bg-white/5 font-display text-sm font-black tabular">
                   {p.running_order}
@@ -612,11 +644,15 @@ function StartCard({
             </div>
           )}
         </div>
+        {/* Wrapped, not passed by reference: startRun now reads its first
+            argument as the athlete to start, and a bare reference would hand it
+            React's click event. This card seeds the selection above instead, so
+            it has nothing to pass. */}
         <Button
           className="mt-4 w-full"
           size="lg"
           disabled={!selectedParticipantId}
-          onClick={onStart}
+          onClick={() => onStart()}
         >
           <Play className="mr-2 h-5 w-5" />
           Start Timer
@@ -750,6 +786,9 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                 {
                   id: need.id,
                   kind: need.kind as "photo" | "card_front" | "card_back" | "universal_back",
+                  // What these variants were encoded from, so the write can
+                  // tell whether newer art has landed on the row since.
+                  source: need.path,
                   dataUrls,
                 },
               ],
@@ -808,7 +847,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
       </div>
 
       <MemberCodesPanel eventId={eventId} />
-      <AwardsAdminPanel eventId={eventId} locked={!!awardsLocked} />
+      <AwardsAdminPanel eventId={eventId} locked={Boolean(awardsLocked)} />
       <CardGrantPanel eventId={eventId} />
       <DustAdminPanel eventId={eventId} enabled={dustOn} />
       {/* Beside the dust switch on purpose: the shop row's reason line points
@@ -841,7 +880,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
             href={liveUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 break-all text-primary hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 break-all text-primary hover:underline pointer-fine:min-h-0"
           >
             <ExternalLink className="h-3 w-3 shrink-0" /> {liveUrl}
           </a>
@@ -850,7 +889,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
               href={tvUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 break-all text-primary/80 hover:underline"
+              className="inline-flex min-h-11 items-center gap-1 break-all text-primary/80 hover:underline pointer-fine:min-h-0"
             >
               <ExternalLink className="h-3 w-3 shrink-0" /> TV big-screen: /tv
             </a>
@@ -884,7 +923,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                 : "Regenerate image sizes"}
             </Button>
             {!regenState.running && regenState.total > 0 && (
-              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              <span className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
                 {regenState.done}/{regenState.total} done
                 {regenState.failed > 0 ? ` · ${regenState.failed} failed` : ""}
               </span>
@@ -912,7 +951,7 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
 
               {/* Upload controls take a full second line on phones. */}
               <div className="flex w-full items-center gap-1.5 sm:w-auto">
-                <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-white/10 px-3 text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:border-primary/60 hover:text-primary sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
+                <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-border-strong px-3 text-label font-bold uppercase tracking-[0.08em] text-primary/80 hover:border-primary/60 hover:text-primary sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
                   <Camera className="mr-1 inline h-3 w-3 shrink-0" />
                   {uploadingId === p.id ? "…" : "Photo"}
                   <input
@@ -920,18 +959,18 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                     accept="image/png,image/jpeg,image/webp"
                     className="hidden"
                     onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) onPickPhoto(p.id, f);
+                      const file = e.target.files?.[0];
+                      if (file) onPickPhoto(p.id, file);
                       e.target.value = "";
                     }}
                   />
                 </label>
                 {(["front", "back"] as const).map((side) => {
-                  const has = !!cards.data?.[p.id]?.[side];
+                  const has = Boolean(cards.data?.[p.id]?.[side]);
                   const busy = uploadingCardId === `${p.id}:${side}`;
                   return (
                     <span key={side} className="flex flex-1 items-center sm:flex-none">
-                      <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-primary/30 bg-primary/10 px-3 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/20 sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
+                      <label className="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded border border-primary/30 bg-primary/10 px-3 text-label font-bold uppercase tracking-[0.08em] text-primary hover:bg-primary/20 sm:min-h-0 sm:flex-none sm:px-2 sm:py-1">
                         <IdCard className="mr-1 inline h-3 w-3 shrink-0" />
                         {busy ? "…" : has ? `${side} ✓` : side}
                         <input
@@ -939,8 +978,8 @@ function EventOpsPanel({ eventId, eventName }: { eventId: string; eventName: str
                           accept="image/png,image/jpeg,image/webp"
                           className="hidden"
                           onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) onPickCard(p.id, side, f);
+                            const file = e.target.files?.[0];
+                            if (file) onPickCard(p.id, side, file);
                             e.target.value = "";
                           }}
                         />
@@ -1072,7 +1111,7 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
       <form onSubmit={onAdd} className="space-y-2">
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
-            <Label htmlFor="new-player-name" className="text-[10px] uppercase tracking-widest">
+            <Label htmlFor="new-player-name" className="text-label uppercase tracking-[0.08em]">
               Name
             </Label>
             <Input
@@ -1085,7 +1124,7 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
             />
           </div>
           <div>
-            <Label htmlFor="new-player-nick" className="text-[10px] uppercase tracking-widest">
+            <Label htmlFor="new-player-nick" className="text-label uppercase tracking-[0.08em]">
               Nickname (optional)
             </Label>
             <Input
@@ -1122,9 +1161,10 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
                   className="flex items-center justify-between gap-2 rounded px-1 py-1 text-xs"
                 >
                   <span
-                    className={
-                      "truncate uppercase " + (isIn ? "" : "text-muted-foreground line-through")
-                    }
+                    className={cn(
+                      "truncate uppercase",
+                      !isIn && "text-muted-foreground line-through",
+                    )}
                   >
                     {playerName}
                   </span>
@@ -1132,7 +1172,7 @@ function AddPlayerPanel({ eventId }: { eventId: string }) {
                     <Button
                       size="sm"
                       variant={isIn ? "secondary" : "ghost"}
-                      className="h-8 px-2 text-[10px] uppercase tracking-widest"
+                      className="h-8 px-2 text-label uppercase tracking-[0.08em]"
                       onClick={() => toggleIn(p.id, playerName, isIn)}
                     >
                       {isIn ? (

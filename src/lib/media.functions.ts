@@ -93,7 +93,11 @@ async function signSet(paths: {
   const [thumb, medium, large] = await Promise.all([
     paths.thumb ? signPath(paths.thumb) : signPath(paths.large, VARIANT_WIDTHS.thumb),
     paths.medium ? signPath(paths.medium) : signPath(paths.large, VARIANT_WIDTHS.medium),
-    // Never hand back the untouched original: it is the multi-megabyte PNG.
+    // With no variants the stored file is the untouched original — the
+    // multi-megabyte PNG — so it is never handed back as is. With them, it is the
+    // encoder's own output: at most 1600px, and re-encoded unless it was already
+    // under the passthrough budget (image-encode.ts), so a second transform here
+    // would only cost a generation of quality.
     paths.medium ? signPath(paths.large) : signPath(paths.large, VARIANT_WIDTHS.large),
   ]);
   return { thumb, medium, large };
@@ -511,18 +515,25 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const side: CardSide = data.side;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row } = await supabaseAdmin
+    const { data: row, error: lookupError } = await supabaseAdmin
       .from("event_participants")
       .select(
         "card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium",
       )
       .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
       .maybeSingle();
+    if (lookupError) throw lookupError;
+    // requireAdmin only proves the caller holds a session for data.eventId, not
+    // that data.eventParticipantId belongs to it — event_participants ids are
+    // publicly enumerable, so an unscoped delete would destroy another event's
+    // artwork. The storage remove below is permanent, so refuse here.
+    if (!row) throw new Error("That athlete is not part of this event.");
 
     const existing = {
-      large: side === "front" ? row?.card_path : row?.card_back_path,
-      thumb: side === "front" ? row?.card_path_thumb : row?.card_back_path_thumb,
-      medium: side === "front" ? row?.card_path_medium : row?.card_back_path_medium,
+      large: side === "front" ? row.card_path : row.card_back_path,
+      thumb: side === "front" ? row.card_path_thumb : row.card_back_path_thumb,
+      medium: side === "front" ? row.card_path_medium : row.card_back_path_medium,
     };
 
     // Update the database first and confirm it succeeded before removing storage.
@@ -530,7 +541,8 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
     const { error: dbErr } = await supabaseAdmin
       .from("event_participants")
       .update(cardPatch(side, null))
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId);
     if (dbErr) throw dbErr;
 
     await removePaths(supabaseAdmin, [existing.large, existing.thumb, existing.medium]);
@@ -555,18 +567,53 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    // Scoped to the event, and refused before a byte is uploaded — the same
+    // check storeCard makes, for the same reason. requireAdmin vouches for the
+    // event id BESIDE this roster row's, not for the row, and
+    // event_participants ids are publicly enumerable through getEventBundle. An
+    // unscoped update repoints another combine's photo columns at files written
+    // under this caller's own prefix.
+    //
+    // The photo columns come back with it, because the path below carries a
+    // timestamp: a re-upload never overwrites anything, so the files it replaces
+    // are only reclaimed if this handler deletes them — the other half of
+    // storeCard's pattern.
+    const { data: prev, error: lookupError } = await supabaseAdmin
+      .from("event_participants")
+      .select("photo_path, photo_path_thumb, photo_path_medium")
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!prev) throw new Error("That athlete is not part of this event.");
+
     const basePath = `${data.eventId}/${data.eventParticipantId}-${Date.now()}`;
     const paths = await uploadSized(supabaseAdmin, basePath, data.dataUrls);
 
-    const { error: dbErr } = await supabaseAdmin
+    const { data: updated, error: dbErr } = await supabaseAdmin
       .from("event_participants")
       .update({
         photo_path: paths.large,
         photo_path_thumb: paths.thumb,
         photo_path_medium: paths.medium,
       })
-      .eq("id", data.eventParticipantId);
+      .eq("id", data.eventParticipantId)
+      .eq("event_id", data.eventId)
+      .select("id");
     if (dbErr) throw dbErr;
+    // The filter alone would match nothing and still return ok, handing back
+    // signed urls for art no row points at.
+    if (!updated || updated.length === 0) {
+      throw new Error("That athlete is not part of this event.");
+    }
+
+    // Only after the row points at the new files, as storeCard does.
+    await removePaths(supabaseAdmin, [
+      prev.photo_path,
+      prev.photo_path_thumb,
+      prev.photo_path_medium,
+    ]);
+
     return { ok: true, urls: await signSet(paths), paths };
   });
 
@@ -614,22 +661,38 @@ export const getImagePathsNeedingVariants = createServerFn({ method: "GET" })
     return { needs: signed.filter((n): n is (typeof signed)[number] & { url: string } => !!n.url) };
   });
 
+/** The three columns each kind of roster art lives in, large first. */
+const ART_COLUMNS = {
+  photo: ["photo_path", "photo_path_thumb", "photo_path_medium"],
+  card_front: ["card_path", "card_path_thumb", "card_path_medium"],
+  card_back: ["card_back_path", "card_back_path_thumb", "card_back_path_medium"],
+} as const satisfies Record<string, readonly [CardPathColumn, CardPathColumn, CardPathColumn]>;
+
 export const writeImageVariants = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
-        updates: z.array(
-          z.object({
-            id: zuuid(),
-            kind: z.enum(["photo", "card_front", "card_back", "universal_back"]),
-            dataUrls: z.object({
-              thumb: z.string().min(32),
-              medium: z.string().min(32),
-              large: z.string().min(32),
+        updates: z
+          .array(
+            z.object({
+              id: zuuid(),
+              kind: z.enum(["photo", "card_front", "card_back", "universal_back"]),
+              // The original these variants were encoded from — the `path`
+              // getImagePathsNeedingVariants handed out. See the check below.
+              source: z.string().min(1),
+              dataUrls: z.object({
+                thumb: z.string().min(32),
+                medium: z.string().min(32),
+                large: z.string().min(32),
+              }),
             }),
-          }),
-        ),
+          )
+          // Capped like uploadParticipantCardsBulk: three full-size data urls per
+          // entry, uploaded in a loop that holds the request open the whole time.
+          // The one caller sends them one at a time.
+          .min(1)
+          .max(40),
       })
       .parse(d),
   )
@@ -638,6 +701,54 @@ export const writeImageVariants = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     for (const u of data.updates) {
+      const cols = u.kind === "universal_back" ? null : ART_COLUMNS[u.kind];
+
+      // Every id here comes off the payload, and the only thing requireAdmin
+      // proved is that the caller holds a session for data.eventId. Checked
+      // before the upload, the same way storeCard does it.
+      //
+      // `u.id` is polymorphic — an event_participants id for three kinds and an
+      // events id for the fourth — so the universal back is the one case where
+      // belonging to the event means BEING it. Unguarded it was the sharpest of
+      // the three: it repointed another combine's card back at a file sitting in
+      // this caller's own storage prefix.
+      //
+      // The lookup also reads the paths this entry is about to replace. The new
+      // ones carry a timestamp, so nothing is overwritten, and a backfill that
+      // does not delete what it replaced leaves every legacy original in the
+      // bucket with no row pointing at it.
+      let replaced: [string | null, string | null, string | null];
+      if (!cols) {
+        if (u.id !== data.eventId) throw new Error("That card back is not part of this event.");
+        const { data: event, error: lookupError } = await supabaseAdmin
+          .from("events")
+          .select("card_back_path, card_back_path_thumb, card_back_path_medium")
+          .eq("id", data.eventId)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        if (!event) throw new Error("Event not found");
+        replaced = [event.card_back_path, event.card_back_path_thumb, event.card_back_path_medium];
+      } else {
+        const { data: row, error: lookupError } = await supabaseAdmin
+          .from("event_participants")
+          .select(
+            "photo_path, photo_path_thumb, photo_path_medium, card_path, card_path_thumb, card_path_medium, card_back_path, card_back_path_thumb, card_back_path_medium",
+          )
+          .eq("id", u.id)
+          .eq("event_id", data.eventId)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        if (!row) throw new Error("That athlete is not part of this event.");
+        replaced = [row[cols[0]], row[cols[1]], row[cols[2]]];
+      }
+
+      // The scan and this write are minutes apart on a phone re-encoding one
+      // image at a time, and an admin can upload new art in between. That upload
+      // brought its own variants, so there is nothing left to do here — and
+      // carrying on would put the OLD art back over it and then delete the new
+      // files, since they are what the row now points at.
+      if (replaced[0] !== u.source) continue;
+
       const basePath =
         u.kind === "universal_back"
           ? `cards/${data.eventId}/universal-back-backfill-${Date.now()}-${u.id}`
@@ -650,37 +761,47 @@ export const writeImageVariants = createServerFn({ method: "POST" })
         medium: paths.medium ?? "",
         thumb: paths.thumb ?? "",
       };
-      if (u.kind === "universal_back") {
-        const { error } = await supabaseAdmin
+
+      // Conditioned on the source as well, for the same race landing between
+      // the check above and here. Nothing moving then means the art changed
+      // under this write: the files just uploaded are the orphans, not the
+      // ones the row points at.
+      let moved: { id: string }[] | null;
+      if (!cols) {
+        const { data: updated, error } = await supabaseAdmin
           .from("events")
           .update({
             card_back_path: patchPaths.large,
             card_back_path_thumb: patchPaths.thumb,
             card_back_path_medium: patchPaths.medium,
           })
-          .eq("id", u.id);
+          .eq("id", data.eventId)
+          .eq("card_back_path", u.source)
+          .select("id");
         if (error) throw error;
+        moved = updated;
       } else {
         const patch: Partial<Record<CardPathColumn, string | null>> = {};
-        if (u.kind === "photo") {
-          patch.photo_path = patchPaths.large;
-          patch.photo_path_thumb = patchPaths.thumb;
-          patch.photo_path_medium = patchPaths.medium;
-        } else if (u.kind === "card_front") {
-          patch.card_path = patchPaths.large;
-          patch.card_path_thumb = patchPaths.thumb;
-          patch.card_path_medium = patchPaths.medium;
-        } else if (u.kind === "card_back") {
-          patch.card_back_path = patchPaths.large;
-          patch.card_back_path_thumb = patchPaths.thumb;
-          patch.card_back_path_medium = patchPaths.medium;
-        }
-        const { error } = await supabaseAdmin
+        patch[cols[0]] = patchPaths.large;
+        patch[cols[1]] = patchPaths.thumb;
+        patch[cols[2]] = patchPaths.medium;
+        const { data: updated, error } = await supabaseAdmin
           .from("event_participants")
           .update(patch)
-          .eq("id", u.id);
+          .eq("id", u.id)
+          .eq("event_id", data.eventId)
+          .eq(cols[0], u.source)
+          .select("id");
         if (error) throw error;
+        moved = updated;
       }
+      if (!moved || moved.length === 0) {
+        await removePaths(supabaseAdmin, [paths.large, paths.thumb, paths.medium]);
+        throw new Error("That image changed while the backfill ran. Scan again.");
+      }
+
+      // Only after the row points at the new files, as storeCard does.
+      await removePaths(supabaseAdmin, replaced);
     }
     return { ok: true };
   });

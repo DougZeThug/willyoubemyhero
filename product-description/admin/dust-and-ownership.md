@@ -69,8 +69,8 @@ is marked as one, in the Holdings rows and in the "Belongs to…" picker.
 Three numbers per player come back, and the third is the interesting one:
 **Cards** is every roster copy they hold, **Secret** is every secret, and
 **Trade** is what they could actually stake right now — roster copies only count
-where they hold two or more of that card, and today's own pull does not count
-until tomorrow. A player with a full vault and nothing tradeable is a real and
+where they hold two or more of that card, and every secret counts, today's pull
+included. A player with a full vault and nothing tradeable is a real and
 confusing state, and this is the only screen that shows it.
 
 ### Leave without acting
@@ -253,8 +253,6 @@ panel; the fix is a member code, on [the roster](the-roster.md).
   confiscated; it simply stops being spendable or visible.
 - **A player holding one copy of everything** shows a Trade count of 0. Nothing
   is wrong; the spares-only rule means a single copy is not stakeable.
-- **Secrets pulled today** do not count as tradeable until tomorrow, so a big
-  number in Secret with a small one in Trade is normal on the day of a pull.
 
 ## Open questions and verification
 

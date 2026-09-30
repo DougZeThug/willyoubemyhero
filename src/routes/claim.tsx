@@ -16,6 +16,7 @@ import {
 import { carryPackToIdentity } from "@/lib/card-collection";
 import { carryTrophySeen } from "@/lib/trophy-seen";
 import { deviceId } from "@/lib/device-id";
+import { FeedError } from "@/components/feed-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,12 @@ function ClaimPage() {
     staleTime: 60_000,
   });
 
+  // Collectors are signed-in traders, not athletes — there is no paper code to
+  // type here for them. Filtered once rather than inside the grid, because the
+  // empty branch below has to ask about the list this screen actually offers: a
+  // league of nothing but collectors has a roster and still nothing to tap.
+  const pickable = (roster.data ?? []).filter((p) => !p.isCollector);
+
   const [selected, setSelected] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -80,6 +87,25 @@ function ClaimPage() {
         setCode("");
         return;
       }
+      const device = deviceId();
+      // THE CEREMONIES GO ACROSS BEFORE THE TOKEN, and that ordering is the whole
+      // point of this line. `claim_guest_secrets` has already banked the trophy
+      // by now, and `setMemberToken` below is what hands the root ceremony host a
+      // participant id — so between the two, the realtime INSERT can invalidate
+      // and refetch, find `<participantId>:<set>` unmarked, and queue a ceremony
+      // the pack screen already threw during the guest phase. It then marks it
+      // celebrated, so the duplicate cannot be taken back.
+      //
+      // This used to sit below the adoption, two awaited round trips away, where
+      // it narrowed that window rather than closing it. Nothing here needs the
+      // network: it is a localStorage re-file of `d:<deviceId>:<set>` keys onto
+      // `<participantId>:<set>`, so it can simply happen first. It is also
+      // idempotent, which is what makes running it before a claim that might
+      // still roll back harmless — the guest genuinely saw that ceremony, so
+      // suppressing it on a later re-claim is the right answer anyway.
+      //
+      // The pack row does NOT come with it. See below: that carry has to wait.
+      if (device) carryTrophySeen(`d:${device}`, selected);
       // The token has to land first — `adoptCollection` authenticates as the
       // member it is filing cards for. But the moment it lands, the collection
       // hook starts reconciling this device against a server record that has
@@ -103,17 +129,16 @@ function ClaimPage() {
           return;
         }
       }
-      // Their guest pack and their guest ceremonies follow them across, now that
-      // the cards themselves have. Both are keyed on the identity `usePackIdentity`
-      // hands out, and a claim moves that from `d:<deviceId>` to `m:<participantId>`
-      // — which every screen keyed on it reads as the handset changing hands. See
-      // B-07 on the pack row and B-13 on the trophies. After the adoption, because
-      // the adoption is what makes carrying the pack safe: it is the record for
-      // these cards, so the member must not file them a second time.
-      const device = deviceId();
+      // Their guest pack follows them across, now that the cards themselves have.
+      // It is keyed on the identity `usePackIdentity` hands out, and a claim moves
+      // that from `d:<deviceId>` to `m:<participantId>` — which every screen keyed
+      // on it reads as the handset changing hands. See B-07.
+      //
+      // AFTER the adoption, unlike the trophy carry above, because the adoption is
+      // what makes carrying the pack safe: it is the record for these cards, so the
+      // member must not file them a second time.
       if (device) {
         await carryPackToIdentity(`d:${device}`, `m:${selected}`, adoptableIds(held));
-        carryTrophySeen(`d:${device}`, selected);
       }
       // Signed in? Then the player follows the account, not the handset. Awaited
       // so the next screen's reads already see the bound identity. A THROW here
@@ -153,7 +178,7 @@ function ClaimPage() {
   if (session) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto grid max-w-md place-items-center px-4 py-12">
+        <div className="mx-auto grid max-w-md place-items-center px-page-x py-12">
           {/* No hud-bezel. §15 keeps that treatment for the three objects meant
               to feel physical — the slab, the pack wrapper, the trophy plaque —
               and a radial gradient plus a three-layer shadow around an identity
@@ -170,7 +195,7 @@ function ClaimPage() {
                   {session.name ?? "Your player"}
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-meta text-muted-foreground">
                 You can react to cards, post trash talk, and vote on league awards.
               </p>
               <div className="flex flex-col gap-2">
@@ -214,11 +239,11 @@ function ClaimPage() {
 
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-lg px-4 py-8">
+      <div className="mx-auto max-w-lg px-page-x py-8">
         <div className="mb-5 border-b border-primary/20 pb-4 text-center">
           <div className="flex items-center justify-center gap-2 text-primary">
             <UserRoundCheck className="h-5 w-5" />
-            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               League Members
             </span>
           </div>
@@ -228,7 +253,7 @@ function ClaimPage() {
           {/* The old copy said "One time only — it sticks on this device", which
               is the opposite of what claimPlayer does: codes stay valid on
               purpose, because people get new phones and clear browsers. */}
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-meta text-muted-foreground">
             Pick your name and enter the code the commissioner gave you. It keeps working — use the
             same code on a new phone whenever you need to.
           </p>
@@ -240,37 +265,56 @@ function ClaimPage() {
               Who are you?
             </Label>
             {roster.isLoading ? (
-              <p className="text-xs text-muted-foreground">Loading roster…</p>
+              <p className="text-meta text-muted-foreground">Loading roster…</p>
+            ) : roster.isError && !roster.data ? (
+              // The list IS the picker on this screen, which is what makes a
+              // failed read worth its own branch here and not on the two other
+              // screens that share this query — there the roster is a fallback
+              // for a name, and a miss degrades to "Someone". Here it fell
+              // through to an empty grid over a dead Claim button, which reads
+              // as a league with nobody on it rather than a list that never
+              // arrived. On the connection this app is used on that is the
+              // common case, and it is the one with something to do about it.
+              //
+              // `&& !roster.data` is the same shape every spectator screen uses
+              // (`error && !bundle`), and it earns its keep here rather than
+              // being copied: a refetch that fails leaves the names it already
+              // has, and a roster twelve people long does not go stale in a way
+              // that stops a code working. Dropping a usable picker to say the
+              // network wobbled would be this fix causing the bug it is for.
+              <FeedError message={roster.error?.message} onRetry={() => void roster.refetch()} />
+            ) : pickable.length === 0 ? (
+              // Said out loud for the same reason: the branch above only helps
+              // if the silent grid underneath it no longer means two things.
+              <p className="text-meta text-muted-foreground">
+                Nobody on the roster yet — ask the commissioner to add you.
+              </p>
             ) : (
               <div className="grid grid-cols-2 gap-1.5">
-                {/* Collectors are signed-in traders, not athletes — there is no
-                    paper code to type here for them. */}
-                {(roster.data ?? [])
-                  .filter((p) => !p.isCollector)
-                  .map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setSelected(p.id)}
-                      className={cn(
-                        "flex min-h-11 items-center rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
-                        selected === p.id
-                          ? "border-primary bg-primary/15 text-primary"
-                          : "border-white/10 bg-white/[0.02] text-foreground hover:border-primary/40",
-                      )}
-                    >
-                      {/* Its own element, because the button is a flex container
-                          now and `text-overflow: ellipsis` does not reach an
-                          anonymous text child — a long name would be cut, not
-                          truncated. */}
-                      <span className="min-w-0 truncate">{p.name}</span>
-                      {p.claimed && (
-                        <span className="ml-1 shrink-0 text-label font-bold tracking-widest text-muted-foreground">
-                          ✓
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                {pickable.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelected(p.id)}
+                    className={cn(
+                      "flex min-h-11 items-center rounded-md border px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide transition-colors",
+                      selected === p.id
+                        ? "border-primary bg-primary/15 text-primary"
+                        : "border-border-strong bg-white/[0.02] text-foreground hover:border-primary",
+                    )}
+                  >
+                    {/* Its own element, because the button is a flex container
+                        now and `text-overflow: ellipsis` does not reach an
+                        anonymous text child — a long name would be cut, not
+                        truncated. */}
+                    <span className="min-w-0 truncate">{p.name}</span>
+                    {p.claimed && (
+                      <span className="ml-1 shrink-0 text-label font-bold tracking-[0.08em] text-muted-foreground">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -289,11 +333,22 @@ function ClaimPage() {
               autoComplete="off"
               autoCapitalize="characters"
               spellCheck={false}
+              // Alphanumeric, so QWERTY is the right keyboard — but it should
+              // offer the action key rather than make a thumb travel back past
+              // it to the Claim button under the field.
+              inputMode="text"
+              enterKeyHint="go"
               placeholder="XXXXXX"
               // The one place wide tracking survives the §16 cap: a code is read
               // and typed character by character, and the gaps are what let a
               // thumb find its place in it.
-              className="text-center font-display text-2xl tracking-[0.4em]"
+              //
+              // The size is stated twice on purpose. `Input` releases to
+              // `pointer-fine:text-sm`, and a variant-prefixed utility outranks
+              // an unprefixed one whatever the merge order, so a bare `text-2xl`
+              // here would win on a phone and quietly lose to 14px on a mouse —
+              // which is the one size this field cannot be, tracked this wide.
+              className="text-center font-display text-2xl tracking-[0.4em] pointer-fine:text-2xl"
             />
           </div>
 
@@ -332,3 +387,5 @@ function ClaimPage() {
     </div>
   );
 }
+
+export default ClaimPage;

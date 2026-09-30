@@ -1,0 +1,193 @@
+// The picking order is the leaderboard's order, and that is the whole contract.
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import DraftPage from "./draft";
+import { EVENT_ID, makeBundle, makeParticipant, makeRun, resetFixtureIds } from "@/test/fixtures";
+
+const useEventBundle = vi.fn();
+
+vi.mock("@/hooks/use-event-bundle", () => ({
+  useEventBundle: (...args: unknown[]) => useEventBundle(...args),
+}));
+
+vi.mock("@/hooks/use-photo-urls", () => ({
+  useEventPhotoUrls: () => ({ data: {} }),
+  useEventCardUrls: () => ({ data: {} }),
+}));
+
+vi.mock("@/lib/admin-token", () => ({ useAdminSession: () => null }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
+vi.mock("@/lib/admin-write.functions", () => ({
+  recordDraftSelection: vi.fn(),
+  undoLastDraftSelection: vi.fn(),
+}));
+
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
+
+vi.mock("@tanstack/react-start", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, useServerFn: (fn: unknown) => fn };
+});
+
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    Link: (props: { to: string; children: ReactNode }) => <a href={props.to}>{props.children}</a>,
+  };
+});
+
+vi.mock("lucide-react", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const stubs: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(actual)) {
+    stubs[name] =
+      typeof value === "function"
+        ? (props: Record<string, unknown>) => <svg data-lucide-stub={name} {...props} />
+        : value;
+  }
+  return stubs;
+});
+
+function showBundle(over: Parameters<typeof makeBundle>[0], failedTables: string[] = []) {
+  useEventBundle.mockReturnValue({
+    event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+    bundle: makeBundle({ ...over, failed: failedTables }),
+    loading: false,
+    error: null,
+    failedTables,
+    realtimeDegraded: false,
+    refetch: vi.fn(async () => {}),
+  });
+}
+
+beforeEach(() => {
+  resetFixtureIds();
+  useEventBundle.mockReset();
+});
+
+describe("DraftPage picking order", () => {
+  it("puts the fastest athlete in contention on the clock, not a scratched one", () => {
+    // The board dropped them and this screen kept them, so a scratched athlete
+    // holding the fastest clock took the first pick off the honest winner.
+    const clean = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-clean", name: "Alice Ace", nickname: null },
+    });
+    const gone = makeParticipant({
+      participation_status: "scratched",
+      participant: { id: "p-gone", name: "Dave Dropout", nickname: null },
+    });
+    showBundle({
+      participants: [clean, gone],
+      runs: [
+        makeRun({ participant_id: clean.participant_id, official_time_ms: 90_000 }),
+        makeRun({ participant_id: gone.participant_id, official_time_ms: 40_000 }),
+      ],
+    });
+
+    render(<DraftPage />);
+    expect(screen.getByText("On the clock")).toBeInTheDocument();
+    expect(screen.getByText("Alice Ace")).toBeInTheDocument();
+    expect(screen.queryByText("Dave Dropout")).toBeNull();
+  });
+
+  it("degrades rather than crashing when the roster read is the half that failed", () => {
+    // getEventBundle coalesces a failed event_participants read to [], and keeps
+    // the runs it DID read. standings() cannot filter against a roster it does not
+    // have -- it treats an empty one as an archived snapshot on purpose, rather
+    // than blanking an old recap's board -- so every row here has no `ep` behind
+    // it. Dereferencing one unguarded took /draft down with a TypeError instead of
+    // showing the degraded state this screen already has.
+    showBundle({ participants: [], runs: [makeRun({ official_time_ms: 40_000 })] }, [
+      "event_participants",
+    ]);
+
+    expect(() => render(<DraftPage />)).not.toThrow();
+    expect(screen.getByText("Couldn't read the combine just now — retrying.")).toBeInTheDocument();
+  });
+
+  it("still congratulates a finished draft when a table the board never reads failed", () => {
+    // Splits, penalties, stations, draft_selections and the event row all land
+    // in `failedTables` too, and none of them feeds this board. Reading any one
+    // of them as "couldn't read the combine" put a retry alarm over a grid that
+    // was visibly full.
+    const first = makeParticipant({
+      participation_status: "finished",
+      selected_draft_position: 1,
+      participant: { id: "p-1", name: "Alice Ace", nickname: null },
+    });
+    const second = makeParticipant({
+      participation_status: "finished",
+      selected_draft_position: 2,
+      participant: { id: "p-2", name: "Bob Bison", nickname: null },
+    });
+    showBundle(
+      {
+        participants: [first, second],
+        runs: [
+          makeRun({ participant_id: first.participant_id, official_time_ms: 50_000 }),
+          makeRun({ participant_id: second.participant_id, official_time_ms: 60_000 }),
+        ],
+      },
+      ["splits"],
+    );
+
+    render(<DraftPage />);
+    expect(screen.getByText("All picks are in. Congrats on a clean draft.")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't read the combine just now — retrying.")).toBeNull();
+  });
+
+  it("still says so when the runs read is the half that failed", () => {
+    // The other direction: runs IS one of the two tables the board is built
+    // from, and with it missing nobody can be on the clock.
+    const ep = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-1", name: "Alice Ace", nickname: null },
+    });
+    showBundle({ participants: [ep], runs: [] }, ["runs"]);
+
+    render(<DraftPage />);
+    expect(screen.getByText("Couldn't read the combine just now — retrying.")).toBeInTheDocument();
+  });
+
+  it("quotes an athlete's best run when they were re-timed", () => {
+    // Held before this change too -- sorting runs by time surfaced the fast one
+    // either way. Here to pin it, because the order is now built from a helper
+    // that reduces to one row per athlete rather than sorting and taking the
+    // first, and that reduction is the part that could quietly pick the wrong run.
+    const ep = makeParticipant({
+      participation_status: "finished",
+      participant: { id: "p-1", name: "Alice Ace", nickname: null },
+    });
+    showBundle({
+      participants: [ep],
+      runs: [
+        makeRun({ participant_id: ep.participant_id, official_time_ms: 70_000 }),
+        makeRun({ participant_id: ep.participant_id, official_time_ms: 55_000 }),
+      ],
+    });
+
+    render(<DraftPage />);
+    expect(screen.getByText("Combine time 55.00")).toBeInTheDocument();
+  });
+
+  it("opens no board at all when the only official run belongs to a scratched athlete", () => {
+    const gone = makeParticipant({
+      participation_status: "scratched",
+      participant: { id: "p-gone", name: "Dave Dropout", nickname: null },
+    });
+    showBundle({
+      participants: [gone],
+      runs: [makeRun({ participant_id: gone.participant_id, official_time_ms: 40_000 })],
+    });
+
+    render(<DraftPage />);
+    expect(
+      screen.getByText("No combine results yet. Draft board opens once athletes finish."),
+    ).toBeInTheDocument();
+  });
+});

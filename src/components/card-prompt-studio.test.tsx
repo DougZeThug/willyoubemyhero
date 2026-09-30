@@ -49,6 +49,31 @@ describe("formatKnownPerformanceData", () => {
   });
 });
 
+/**
+ * Open a Radix Select and choose an option.
+ *
+ * Retried rather than a single click: the studio's history query settles while
+ * the dropdown is opening, and under full-suite load that re-render can land
+ * between pointerdown and the content mounting, leaving the select closed. A
+ * person just taps again; so does this.
+ */
+async function pick(
+  user: ReturnType<typeof userEvent.setup>,
+  combobox: string,
+  option: string | RegExp,
+) {
+  const target = await waitFor(
+    async () => {
+      const trigger = screen.getByRole("combobox", { name: combobox });
+      if (trigger.getAttribute("data-state") !== "open") await user.click(trigger);
+      return screen.getByRole("option", { name: option });
+      // The default second is shorter than one retry takes under full-suite load.
+    },
+    { timeout: 5000 },
+  );
+  await user.click(target);
+}
+
 describe("CardPromptStudio", () => {
   beforeEach(() => {
     serverFnMock.mockResolvedValue({ templates: [], runs: [], id: "history-id" });
@@ -77,8 +102,7 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     expect(screen.getByRole("button", { name: "Generate prompt" })).toBeDisabled();
   });
 
@@ -94,8 +118,7 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     const generate = screen.getByRole("button", { name: "Generate prompt" });
     await waitFor(() => expect(generate).toBeEnabled());
     await user.click(generate);
@@ -118,8 +141,7 @@ describe("CardPromptStudio", () => {
       />,
     );
 
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     await user.click(screen.getByRole("button", { name: "Generate prompt" }));
     const preview = screen.getByLabelText("Generated prompt preview") as HTMLTextAreaElement;
     expect(preview.value).toContain("Rank: 1 of 1");
@@ -145,8 +167,7 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Series" }));
-    await user.click(screen.getByRole("option", { name: "Secret Pet" }));
+    await pick(user, "Series", "Secret Pet");
     expect(screen.queryByRole("combobox", { name: "Participant" })).not.toBeInTheDocument();
     const generate = screen.getByRole("button", { name: "Generate prompt" });
     expect(generate).toBeDisabled();
@@ -170,10 +191,8 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
-    await user.click(screen.getByRole("combobox", { name: "Series" }));
-    await user.click(screen.getByRole("option", { name: "Secret Pet" }));
+    await pick(user, "Participant", /Alex/);
+    await pick(user, "Series", "Secret Pet");
     await user.type(screen.getByLabelText("Name"), "Pickles");
     await user.type(screen.getByLabelText("Owner / association"), "Maya");
     await user.click(screen.getByRole("button", { name: "Generate prompt" }));
@@ -207,8 +226,7 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     expect(screen.getByRole("img", { name: "Alex reference" })).toHaveAttribute(
       "src",
       "https://example.test/profile.jpg",
@@ -237,11 +255,9 @@ describe("CardPromptStudio", () => {
         photoUrls={undefined}
       />,
     );
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: /Alex/ }));
+    await pick(user, "Participant", /Alex/);
     await user.click(screen.getByRole("button", { name: "Generate prompt" }));
-    await user.click(screen.getByRole("combobox", { name: "Participant" }));
-    await user.click(screen.getByRole("option", { name: "Blake" }));
+    await pick(user, "Participant", "Blake");
     await user.type(screen.getByLabelText("Revision instructions"), "Change one detail.");
     await user.click(screen.getByRole("button", { name: "Copy revision prompt" }));
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("card for Alex"));
@@ -281,5 +297,112 @@ describe("CardPromptStudio", () => {
     );
     resolveSave({ id: "batch-history" });
     await waitFor(() => expect(screen.getByRole("button", { name: "Copy Prompt" })).toBeEnabled());
+  });
+
+  // Saving the original behind a revision is a round trip, and nothing disables
+  // Generate while it runs. The admin who moves on to the next player during it
+  // used to have that player's prompt stamped with the LAST one's history id.
+  describe("generating for the next player while a revision is still saving", () => {
+    /** Two players, so a switch is a real change of subject. */
+    const twoPlayers: PromptStudioBundle = {
+      ...bundle,
+      participants: [
+        ...bundle.participants,
+        {
+          id: "event-participant-2",
+          participant_id: "person-2",
+          participant: { name: "Blake", nickname: null },
+        },
+      ],
+    };
+
+    /**
+     * Hold Alex's initial save open, start a revision behind it, then generate
+     * for Blake. Resolves the save and hands back the settled screen.
+     */
+    async function clobber() {
+      let resolveInitial!: (value: { id: string }) => void;
+      const pendingInitial = new Promise<{ id: string }>((resolve) => {
+        resolveInitial = resolve;
+      });
+      let initials = 0;
+      let revisions = 0;
+      serverFnMock.mockImplementation((value?: { data?: { kind?: string } }) => {
+        if (value?.data?.kind === "initial") {
+          initials += 1;
+          return initials === 1 ? pendingInitial : Promise.resolve({ id: "blake-initial" });
+        }
+        if (value?.data?.kind === "revision") {
+          revisions += 1;
+          return Promise.resolve({ id: `revision-${revisions}` });
+        }
+        return Promise.resolve({ templates: [], runs: [] });
+      });
+      const user = userEvent.setup();
+      vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+      renderStudio(
+        <CardPromptStudio
+          eventId="event"
+          eventName="Combine"
+          bundle={twoPlayers}
+          photoUrls={undefined}
+        />,
+      );
+
+      await pick(user, "Participant", /Alex/);
+      await user.click(screen.getByRole("button", { name: "Generate prompt" }));
+      fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
+
+      await user.type(screen.getByLabelText("Revision instructions"), "Change one detail.");
+      fireEvent.click(screen.getByRole("button", { name: "Copy revision prompt" }));
+
+      // Alex's initial is still in the air. Move on to Blake.
+      await pick(user, "Participant", "Blake");
+      await user.click(screen.getByRole("button", { name: "Generate prompt" }));
+
+      resolveInitial({ id: "alex-initial" });
+      await waitFor(() =>
+        expect(serverFnMock.mock.calls.filter(([v]) => v?.data?.kind === "revision")).toHaveLength(
+          1,
+        ),
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Copy revision prompt" })).toBeEnabled(),
+      );
+      return user;
+    }
+
+    it("still saves the new player's own initial when it is copied", async () => {
+      await clobber();
+
+      fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
+
+      await waitFor(() =>
+        expect(
+          serverFnMock.mock.calls.filter(
+            ([v]) => v?.data?.kind === "initial" && v?.data?.subjectName === "Blake",
+          ),
+        ).toHaveLength(1),
+      );
+    });
+
+    it("parents the new player's revision to their own original", async () => {
+      const user = await clobber();
+
+      await user.clear(screen.getByLabelText("Revision instructions"));
+      await user.type(screen.getByLabelText("Revision instructions"), "Tweak for Blake.");
+      fireEvent.click(screen.getByRole("button", { name: "Copy revision prompt" }));
+
+      await waitFor(() => {
+        const blake = serverFnMock.mock.calls.filter(
+          ([v]) => v?.data?.kind === "revision" && v?.data?.subjectName === "Blake",
+        );
+        expect(blake).toHaveLength(1);
+        // Alex's id here is what the server refuses, behind a warning that says
+        // nothing about which player went wrong.
+        expect(blake[0][0].data.parentPromptId).toBe("blake-initial");
+        expect(blake[0][0].data.eventParticipantId).toBe("event-participant-2");
+      });
+    });
   });
 });

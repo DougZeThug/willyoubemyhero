@@ -12,8 +12,9 @@ import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { formatTime } from "@/lib/format";
-import { compareOfficialTime } from "@/lib/standings";
+import { standings } from "@/lib/standings";
 import { currentAthlete } from "@/lib/current-athlete";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tv")({
   head: () => ({
@@ -34,14 +35,23 @@ function TvPage() {
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
 
+  // The same standings the board and the tier rules read. Ranking official *runs*
+  // put a re-timed athlete on the big screen twice -- pushing a real finisher off
+  // the bottom of sixteen -- kept a scratched one at slot 1 in front of the whole
+  // party, and numbered a dead heat 1 and 2.
   const rows = useMemo(() => {
     const parts = bundle?.participants ?? [];
-    const runs = bundle?.runs ?? [];
-    return runs
-      .filter((r) => r.is_official)
-      .map((r) => ({ run: r, ep: parts.find((p) => p.participant_id === r.participant_id) }))
-      .sort((a, b) => compareOfficialTime(a.run, b.run));
+    return standings(bundle).map((s) => ({
+      run: s.run,
+      place: s.place,
+      ep: parts.find((p) => p.participant_id === s.participantId),
+    }));
   }, [bundle]);
+
+  // Same shape as /leaderboard, and the same blind spot it had: `standings`
+  // ranks from the runs alone, so a failed roster read leaves the big screen
+  // full of correctly-placed em dashes with nothing saying why.
+  const rosterFailed = failedTables.includes("event_participants");
 
   const { athlete: current, onClock } = currentAthlete(bundle?.participants ?? []);
 
@@ -72,6 +82,16 @@ function TvPage() {
           Live feed down — refreshing every few seconds
         </div>
       )}
+      {rosterFailed && (
+        // Its own banner rather than FeedPartialBanner, for the same reason the
+        // one above is hand-rolled: this screen is read from across a garden.
+        <div
+          role="status"
+          className="mb-4 rounded-md border border-warn/30 bg-warn/10 px-4 py-2 text-center font-display text-lg font-black uppercase tracking-[0.2em] text-warn"
+        >
+          Couldn&apos;t read the roster just now — retrying
+        </div>
+      )}
       <header className="mb-6 flex items-end justify-between">
         <div>
           <div className="font-display text-xs font-black uppercase tracking-[0.5em] text-primary">
@@ -94,23 +114,27 @@ function TvPage() {
       </header>
 
       <div className="grid grid-cols-2 gap-4">
-        {rows.slice(0, 16).map((row, i) => (
+        {rows.slice(0, 16).map((row) => (
           <div
             key={row.run.id}
-            className={
-              "flex items-center gap-4 rounded-2xl border p-4 " +
-              (i === 0
+            className={cn(
+              "flex items-center gap-4 rounded-2xl border p-4",
+              row.place === 1
                 ? "hud-bezel border-primary/60 hud-glow"
-                : "border-primary/15 bg-[oklch(0.16_0.02_240)]")
-            }
+                : "border-primary/15 bg-[oklch(0.16_0.02_240)]",
+            )}
           >
+            {/* place, not the row index: a three-way tie for first is three
+                medals and a fourth place, not a medal for whoever sorted third. */}
             <span
-              className={
-                "grid h-14 w-14 place-items-center rounded-full font-display text-2xl font-black " +
-                (i < 3 ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")
-              }
+              className={cn(
+                "grid h-14 w-14 place-items-center rounded-full font-display text-2xl font-black",
+                row.place <= 3
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-primary/10 text-primary",
+              )}
             >
-              {i + 1}
+              {row.place}
             </span>
             <ParticipantAvatar
               name={row.ep?.participant?.name ?? "?"}
@@ -150,7 +174,10 @@ function TvPage() {
         ))}
         {rows.length === 0 && (
           <div className="col-span-2 rounded-2xl border border-primary/20 bg-[oklch(0.16_0.02_240)] p-10 text-center text-muted-foreground">
-            {failedTables.length > 0
+            {/* The one read that can empty the board, not any of the seven — a
+                failed splits or stations read cannot, and nor can the roster,
+                which has its own banner above. */}
+            {failedTables.includes("runs")
               ? "Couldn't read the results just now — retrying."
               : "No official times yet."}
           </div>
@@ -159,3 +186,5 @@ function TvPage() {
     </div>
   );
 }
+
+export default TvPage;

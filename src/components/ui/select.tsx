@@ -18,8 +18,17 @@ const SelectTrigger = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
+    // The floor the buttons and the inputs already have, in the primitive
+    // rather than at the call sites — see ui/input.tsx for why `pointer-fine:`
+    // and not a width breakpoint.
+    //
+    // A trigger is a button, not a field, so iOS will not zoom the page on it
+    // and the font size stays as shadcn wrote it. It is the 36px height that
+    // matters, and card-prompt-studio.tsx was already paying for it by hand at
+    // all twelve of its triggers. A rule held up by twelve call sites
+    // remembering it is a rule the thirteenth will not have.
     className={cn(
-      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background cursor-pointer data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      "flex h-9 min-h-11 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background cursor-pointer data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-0 [&>span]:line-clamp-1",
       className,
     )}
     {...props}

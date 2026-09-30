@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { rarityStyle } from "./card-rarity";
+import { SECRET_RARITY } from "./secret-cards";
 import {
+  arrivalRarity,
   isTradeOfferStatus,
   leagueDay,
   offerStatusLabel,
@@ -8,6 +11,7 @@ import {
   tradeSummaryLabel,
   tradeSwapPrompt,
   type TradeItemView,
+  type TradeOfferView,
   type TradeSummaryItem,
 } from "./trades";
 
@@ -201,5 +205,83 @@ describe("tradeSwapPrompt", () => {
     expect(tradeSwapPrompt({ give: [rosterView()], get: [], ...nameOf })).toBe(
       "Take this offer from Bob Blitz?",
     );
+  });
+});
+
+describe("arrivalRarity", () => {
+  const ME = "p-me";
+  const THEM = "p-them";
+  const roster = (eventParticipantId: string): TradeItemView => ({
+    kind: "roster",
+    copyId: `c-${eventParticipantId}`,
+    eventParticipantId,
+    edition: "standard",
+  });
+  const secret = (): TradeItemView => ({
+    kind: "secret",
+    pullId: "pull-1",
+    name: "Gary The Grill",
+    artUrl: null,
+    tier: "mythic",
+    collection: "pets",
+    lastCopy: false,
+  });
+  const offer = (over: Partial<TradeOfferView> = {}): TradeOfferView => ({
+    id: "offer-1",
+    status: "accepted",
+    proposerId: THEM,
+    recipientId: ME,
+    createdAt: "2026-08-17T10:00:00Z",
+    resolvedAt: "2026-08-17T10:05:00Z",
+    proposerGives: [roster("ep-champ")],
+    recipientGives: [roster("ep-dnf")],
+    ...over,
+  });
+  const rarities = new Map([
+    ["ep-champ", rarityStyle("champion")],
+    ["ep-dnf", rarityStyle("dnf")],
+    ["ep-base", rarityStyle("base")],
+  ]);
+
+  it("paints in the tier of the card that actually arrived", () => {
+    // The whole defect: every accept used to fire "podium", so a dnf card came in
+    // gold. Reading this offer from the recipient's end, what arrives is the dnf.
+    expect(arrivalRarity(offer({ proposerGives: [roster("ep-dnf")] }), ME, rarities).tier).toBe(
+      "dnf",
+    );
+  });
+
+  it("reads the receiving side off the offer rather than assuming the inbox", () => {
+    // Same offer, the other person. They receive what the RECIPIENT gave.
+    expect(arrivalRarity(offer(), THEM, rarities).tier).toBe("dnf");
+    expect(arrivalRarity(offer(), ME, rarities).tier).toBe("champion");
+  });
+
+  it("takes the rarest of several, because one accept fires one burst", () => {
+    expect(
+      arrivalRarity(
+        offer({ proposerGives: [roster("ep-base"), roster("ep-champ"), roster("ep-dnf")] }),
+        ME,
+        rarities,
+      ).tier,
+    ).toBe("champion");
+  });
+
+  it("lets a secret outrank every roster tier", () => {
+    // Not a judgement call about which is rarer so much as arithmetic: a secret
+    // has no RarityTier, so there is nothing for rarityRank to compare.
+    expect(
+      arrivalRarity(offer({ proposerGives: [roster("ep-champ"), secret()] }), ME, rarities),
+    ).toBe(SECRET_RARITY);
+  });
+
+  it("falls back to base for a card the bundle has no tier for", () => {
+    // The bundle can be a render behind the offer, and a burst is not worth a
+    // thrown error on the screen that has just moved somebody's cards.
+    expect(arrivalRarity(offer({ proposerGives: [roster("ep-unknown")] }), ME, rarities).tier).toBe(
+      "base",
+    );
+    expect(arrivalRarity(undefined, ME, rarities).tier).toBe("base");
+    expect(arrivalRarity(offer({ proposerGives: [] }), ME, rarities).tier).toBe("base");
   });
 });

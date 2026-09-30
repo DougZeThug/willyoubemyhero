@@ -32,6 +32,15 @@ export type MarketListingRow = {
   buyer_id: string | null;
   created_at: string;
   resolved_at: string | null;
+  // What was listed, copied onto the row at listing time
+  // (20260924120000_keep_market_receipts.sql). A settled listing can outlive its
+  // card, and then these are all that says what sold. Server-only:
+  // listed_secret_card_id especially must never reach a payload.
+  listed_event_participant_id: string | null;
+  listed_edition: string | null;
+  listed_edition_asserted_by: string | null;
+  listed_secret_card_id: string | null;
+  listed_tier: string | null;
 };
 
 /**

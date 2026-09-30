@@ -63,8 +63,8 @@ export type MillCardCopyResult =
  *
  * No `last_copy` among the refusals, and that is the feature: any copy sells,
  * including your only one — the rule `trade_item_is_spare`'s secret branch
- * already keeps. `too_fresh` covers today's un-granted pull, which is a security
- * rule rather than a product one; see `sell_secret_card`.
+ * already keeps. `too_fresh` is no longer returned — today's pull sells like any
+ * other since 20260930120000 — and stays in the vocabulary for an older server.
  */
 export type SellSecretResult =
   | {

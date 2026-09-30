@@ -236,15 +236,20 @@ async function viewerHoldings(
   };
 }
 
+/** The columns of a copy the spares listing reads. */
+type SpareCopyRow = Pick<
+  CardCopyRow,
+  "id" | "event_participant_id" | "edition" | "edition_asserted_by" | "source" | "acquired_on"
+>;
+
 /**
  * What one member has spare, for composing an offer against.
  *
  * Works for yourself and for a counterparty — see the exception documented at the
  * top of this file. "Two or more copies of the card" and `is_duplicate` are the
- * same two rules `trade_item_is_spare` applies inside the RPC, and today's
- * un-granted secret pull is filtered out here for the same reason it is refused
- * there: it is that member's spent daily slot, and trading it away would hand them
- * a second pull.
+ * same two rules `trade_item_is_spare` applies inside the RPC. Today's pull is
+ * included: the daily deal is gated on `pack_opens`, which no trade or sale
+ * touches, so a card is a spare the moment it lands (20260930120000).
  */
 export const getTradeSpares = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ participantId: zuuid() }).parse(d))
@@ -295,12 +300,10 @@ export const getTradeSpares = createServerFn({ method: "GET" })
             //
             // It stays out of the PUBLIC record either way: see the summary
             // builder in accept_trade_offer.
-            .select("id, event_participant_id, edition, edition_asserted_by")
+            .select("id, event_participant_id, edition, edition_asserted_by, source, acquired_on")
             .eq("participant_id", data.participantId)
             .in("event_participant_id", ids)
-            .returns<
-              Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">[]
-            >()
+            .returns<SpareCopyRow[]>()
         : { data: [], error: null },
       // EVERY copy, duplicate or not. A secret you own one of is still yours to
       // give — unlike a roster card there is no public count riding on you keeping
@@ -308,22 +311,15 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       // tile can say so before somebody hands away their only mythic.
       trades
         .from("secret_card_pulls")
-        .select("id, secret_card_id, tier, granted, pulled_on")
+        .select("id, secret_card_id, tier")
         .eq("participant_id", data.participantId)
-        .returns<
-          Pick<SecretPullRow, "id" | "secret_card_id" | "tier" | "granted" | "pulled_on">[]
-        >(),
+        .returns<Pick<SecretPullRow, "id" | "secret_card_id" | "tier">[]>(),
     ]);
     if (error) throw error;
     if (dupeError) throw dupeError;
 
-    const today = leagueDay();
     const held = dupes ?? [];
-    const stakeable = held.filter((r) => r.granted || r.pulled_on !== today);
 
-    // Counted over EVERY row they hold, not just the stakeable ones: somebody with
-    // today's pull plus one older copy can trade the older one and is not down to
-    // their last, so calling it a last copy would be a lie.
     const perCard = new Map<string, number>();
     for (const r of held) perCard.set(r.secret_card_id, (perCard.get(r.secret_card_id) ?? 0) + 1);
     const lastCopyIds = new Set(
@@ -337,10 +333,8 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       ? { roster: new Set<string>(), secrets: new Set<string>() }
       : await viewerHoldings(asker);
 
-    // Hydrated over every row rather than only the stakeable ones, so the blocked
-    // list below can render a face too — a greyed tile with no art explains nothing.
     const secrets = await hydrateSecrets(
-      mine ? held : stakeable,
+      held,
       lastCopyIds,
       mine ? undefined : viewer.secrets,
       // Somebody else's spares: a card you have never pulled arrives with no
@@ -352,10 +346,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     // beyond the first": the giver picks which copy to keep, so listing only the
     // worst would quietly take that choice away. The rule that they keep ONE is
     // enforced across the whole offer by trade_leaves_a_copy, not by this list.
-    const byCard = new Map<
-      string,
-      Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">[]
-    >();
+    const byCard = new Map<string, SpareCopyRow[]>();
     for (const row of allCopies ?? []) {
       const list = byCard.get(row.event_participant_id) ?? [];
       list.push(row);
@@ -366,36 +357,25 @@ export const getTradeSpares = createServerFn({ method: "GET" })
     // shown greyed rather than silently dropped, because a missing card reads as
     // a bug and "only copy" reads as a rule.
     const blocked: BlockedSpare[] = mine
-      ? [
-          ...[...byCard.values()]
-            .filter((list) => list.length === 1)
-            .flat()
-            .map<BlockedSpare>((r) => ({
-              item: {
-                kind: "roster",
-                copyId: r.id,
-                eventParticipantId: r.event_participant_id,
-                edition: toEdition(r.edition),
-                // Your own card, so nothing to conceal.
-                viewerOwns: true,
-              },
-              reason: "only-copy",
-            })),
-          ...held
-            .filter((r) => !r.granted && r.pulled_on === today)
-            .map((r) => secrets.get(r.id))
-            .filter((s): s is SecretSpare => !!s)
-            .map<BlockedSpare>((s) => ({
-              item: { kind: "secret", ...s, viewerOwns: true },
-              reason: "todays-pull",
-            })),
-        ]
+      ? [...byCard.values()]
+          .filter((list) => list.length === 1)
+          .flat()
+          .map<BlockedSpare>((r) => ({
+            item: {
+              kind: "roster",
+              copyId: r.id,
+              eventParticipantId: r.event_participant_id,
+              edition: toEdition(r.edition),
+              // Your own card, so nothing to conceal.
+              viewerOwns: true,
+            },
+            reason: "only-copy",
+          }))
       : [];
 
+    const today = leagueDay();
     /** One RosterSpare per copy, whatever the size of the holding it came from. */
-    const asSpare = (
-      r: Pick<CardCopyRow, "id" | "event_participant_id" | "edition" | "edition_asserted_by">,
-    ) => ({
+    const asSpare = (r: SpareCopyRow) => ({
       copyId: r.id,
       eventParticipantId: r.event_participant_id,
       edition: toEdition(r.edition),
@@ -404,6 +384,11 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       // about should under-promise rather than over-promise a payout.
       assertedBy: r.edition_asserted_by === "server" ? ("server" as const) : ("client" as const),
       viewerOwns: mine || viewer.roster.has(r.event_participant_id),
+      // Yours only, and only when true: see RosterSpare.pulledToday. A
+      // counterparty's list does not say which of their copies landed today.
+      ...(mine && r.source === "pull" && r.acquired_on === today
+        ? { pulledToday: true as const }
+        : {}),
     });
 
     return {
@@ -417,7 +402,7 @@ export const getTradeSpares = createServerFn({ method: "GET" })
         .filter((list) => list.length >= 2)
         .flat()
         .map(asSpare),
-      secrets: stakeable
+      secrets: held
         .map((r) => secrets.get(r.id)!)
         .filter(Boolean)
         .map((sp) => (mine ? { ...sp, viewerOwns: true } : sp)),

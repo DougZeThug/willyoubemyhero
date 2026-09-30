@@ -6,8 +6,10 @@
 // the one that matters most. Dust cannot be minted faster than the game hands
 // it out: the mill and sale rules, not the prices, are what keep the sinks
 // meaningful. And no sale may buy back a daily pull — pull, sell, pull is the
-// one sequence that would print dust forever, and `sell_secret_card`'s
-// `too_fresh` guard is the only thing standing in front of it.
+// one sequence that would print dust forever. Today's pull sells the day it
+// lands since 20260930120000; what stands in front of that sequence now is
+// open_pack keying the day on pack_opens and the mint cap counting card_mints,
+// neither of which a sale touches.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
 import { MILL_BY_EDITION, MILL_CLIENT_FLAT, SELL_BY_SECRET_TIER, DUST_PRICES } from "../../src/lib/dust"; // prettier-ignore
@@ -37,7 +39,7 @@ const GUEST = "99999999-9999-4999-8999-999999999999";
  * date for five hours every evening — and mill_card_copy would answer `too_fresh`
  * for a copy the test meant to be yesterday's.
  */
-const NY = `(now() AT TIME ZONE 'America/New_York')::date`;
+const NY = "(now() AT TIME ZONE 'America/New_York')::date";
 
 async function cardIds(): Promise<string[]> {
   const rows = await sql<{ id: string }>(
@@ -61,12 +63,13 @@ async function balance(participantId = IDS.alice): Promise<number> {
 }
 
 type Pull = { duplicate: boolean; pullId: string; tier: string };
+/** Today's pack from the secrets alone, reduced to its first secret slot. */
 async function pullSecret(participantId: string | null, guestId: string | null = null) {
-  const [row] = await sql<{ pull_secret_card: Pull }>(
-    "SELECT public.pull_secret_card($1, $2, $3)",
-    [participantId, guestId, IDS.event],
+  const [row] = await sql<{ open_pack: { cards: ({ kind: string } & Pull)[] } | null }>(
+    "SELECT public.open_pack($1, $2, null)",
+    [participantId, guestId],
   );
-  return row.pull_secret_card;
+  return row.open_pack!.cards.find((c) => c.kind === "secret")!;
 }
 
 /** Pretend every pull and copy on file happened `days` ago. */
@@ -79,6 +82,9 @@ async function rewindDay(days = 1) {
   // that table whether this card was already minted today, so a rewind that left
   // it alone would report every seeded copy as still being today's.
   await sql("UPDATE public.card_mints SET minted_on = minted_on - $1::int", [days]);
+  // And the pack itself: open_pack answers today's row back rather than dealing
+  // again, so a rewind that left it in place would never reach a second pull.
+  await sql("UPDATE public.pack_opens SET opened_on = opened_on - $1::int", [days]);
 }
 
 /** Two copies of one card, the older one millable. Returns the spare's id. */
@@ -121,8 +127,8 @@ async function sell(pullId: string, participantId = IDS.alice): Promise<SellResu
  *
  * Written directly rather than pulled and rewound, because the tier is what every
  * assertion here is about and `roll_secret_tier()` will not be told what to roll.
- * `granted` is what keeps it out of the daily-slot rule — it is not the row
- * `pull_secret_card` looks for — which is also true of a real bonus pull.
+ * `granted` is what keeps it out of the daily-slot rule — it is not a row the
+ * pack dealt today — which is also true of a real bonus pull.
  */
 async function heldSecret(tier = "common", participantId = IDS.alice, name = "gary") {
   const cardId = await seedSecret(name);
@@ -156,7 +162,7 @@ async function claimMember(participantId: string) {
 
 async function credit(amount: number, participantId = IDS.alice) {
   await sql(
-    `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')`,
+    "INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')",
     [participantId, amount],
   );
 }
@@ -188,7 +194,7 @@ describe("dust_ledger", () => {
   it("refuses a reason the payout rules do not know", async () => {
     await expect(
       sql(
-        `INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, 5, 'vibes')`,
+        "INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, 5, 'vibes')",
         [IDS.alice],
       ),
     ).rejects.toThrow();
@@ -282,36 +288,40 @@ describe("sell_secret_card", () => {
     expect(await balance()).toBe(SELL_BY_SECRET_TIER.mythic);
   });
 
-  it("refuses today's own un-granted pull", async () => {
+  it("sells today's own pull the day it lands", async () => {
+    // What lets the pack screen offer "Sell for N" on the card it just dealt.
     await seedSecret("only-card");
     const pull = await pullSecret(IDS.alice);
-    expect(await sell(pull.pullId)).toMatchObject({ ok: false, reason: "too_fresh" });
-    expect(await balance()).toBe(0);
+    const res = await sell(pull.pullId);
+    expect(res).toMatchObject({ ok: true });
+    expect(await balance()).toBe(res.awarded);
+    expect(res.awarded).toBe(SELL_BY_SECRET_TIER[pull.tier as keyof typeof SELL_BY_SECRET_TIER]);
   });
 
-  it("cannot buy back the day's pull — the sequence this guard exists for", async () => {
-    // THE EXPLOIT, as a test. pull_secret_card decides whether you have pulled by
-    // looking for exactly `pulled_on = today AND NOT granted`, so deleting that
-    // row would hand the slot straight back and pull -> sell -> pull would print
-    // dust for as long as somebody kept tapping.
+  it("cannot buy back the day's pull — open, sell, open deals nothing new", async () => {
+    // THE EXPLOIT, as a test. This used to be closed by refusing the sale; it is
+    // closed now by open_pack answering today's pack_opens row back byte-for-byte,
+    // which no sale touches. So the second open replays the sold slot, mints no
+    // row, and the replayed slot sells for nothing.
     await seedSecret("only-card");
     const first = await pullSecret(IDS.alice);
-    expect(await sell(first.pullId)).toMatchObject({ ok: false, reason: "too_fresh" });
+    const sold = await sell(first.pullId);
+    expect(sold).toMatchObject({ ok: true });
 
-    // And the second pull is still the same row rather than a new card.
     const again = await pullSecret(IDS.alice);
     expect(again.pullId).toBe(first.pullId);
     const [rows] = await sql<{ n: number }>(
       "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1",
       [IDS.alice],
     );
-    expect(rows.n).toBe(1);
-    expect(await balance()).toBe(0);
+    expect(rows.n).toBe(0);
+    expect(await sell(again.pullId)).toMatchObject({ ok: false, reason: "not_yours" });
+    expect(await balance()).toBe(sold.awarded);
   });
 
   it("sells yesterday's pull quite happily", async () => {
-    // The other side of too_fresh: it is today's slot that is protected, not the
-    // row forever. rewindDay is what every mill test uses for the same reason.
+    // No day rule either way: rewindDay is what every mill test uses to reach
+    // a later day, and a sale on it still works.
     await seedSecret("only-card");
     const pull = await pullSecret(IDS.alice);
     await rewindDay(1);
@@ -519,7 +529,7 @@ describe("the daily mint cap", () => {
       [IDS.alice],
     );
     const [bobSpare] = await sql<{ id: string }>(
-      `SELECT id FROM public.card_copies WHERE participant_id = $1 LIMIT 1`,
+      "SELECT id FROM public.card_copies WHERE participant_id = $1 LIMIT 1",
       [IDS.bob],
     );
 
@@ -610,22 +620,38 @@ describe("mill_card_copy", () => {
     expect(await mill(only.id)).toMatchObject({ ok: false, reason: "last_copy" });
   });
 
-  it("refuses today's own pull, which is what closes the mint-and-mill loop", async () => {
-    // Milling today's copy frees its slot in record_card_pulls' daily cap AND
-    // clears its key on the once-a-day index, so the pack could be recorded again
-    // to mint a replacement and the copy milled again, for dust, forever.
+  it("burns today's own copy, and the mint it came from stays spent", async () => {
+    // The mint-and-mill loop: burn today's copy, record the pack again for a
+    // replacement, burn that, forever. It used to be closed by refusing the burn;
+    // it is closed now by record_card_pulls counting card_mints, which outlives
+    // the copy it minted.
     const ids = await cardIds();
     await sql(
       `INSERT INTO public.card_copies (participant_id, event_participant_id, acquired_on, source)
-       VALUES ($1, $2, ${NY} - 1, 'pull'), ($1, $2, ${NY}, 'pull')`,
+       VALUES ($1, $2, ${NY} - 1, 'pull')`,
       [IDS.alice, ids[0]],
     );
+    const record = async () => {
+      const [row] = await sql<{ record_card_pulls: { recorded: number } }>(
+        "SELECT public.record_card_pulls($1, $2, NULL)",
+        [IDS.alice, [ids[0]]],
+      );
+      return row.record_card_pulls.recorded;
+    };
+    expect(await record()).toBe(1);
     const [today] = await sql<{ id: string }>(
       `SELECT id FROM public.card_copies
         WHERE participant_id = $1 AND acquired_on = ${NY}`,
       [IDS.alice],
     );
-    expect(await mill(today.id)).toMatchObject({ ok: false, reason: "too_fresh" });
+    expect(await mill(today.id)).toMatchObject({ ok: true });
+
+    expect(await record()).toBe(0);
+    const [held] = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.card_copies WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(held.n).toBe(1);
   });
 
   it("refuses a copy somebody has already been offered", async () => {
@@ -791,7 +817,7 @@ describe("buy_bonus_secret_pull", () => {
        ON CONFLICT DO NOTHING`,
     );
     await seedSecret("only-card");
-    await sql(`UPDATE public.secret_cards SET collection = 'set-a'`);
+    await sql("UPDATE public.secret_cards SET collection = 'set-a'");
     await credit(DUST_PRICES.bonusPull);
     const res = (await buy()) as { pull: { completedCollection: unknown } };
     expect(res.pull.completedCollection).not.toBeNull();
@@ -843,7 +869,7 @@ describe("reroll_copy_edition", () => {
     await credit(DUST_PRICES.reroll * 40);
     let wentDown = false;
     for (let i = 0; i < 40 && !wentDown; i++) {
-      await sql(`UPDATE public.card_copies SET edition = 'platinum' WHERE id = $1`, [spareId]);
+      await sql("UPDATE public.card_copies SET edition = 'platinum' WHERE id = $1", [spareId]);
       const res = (await reroll(spareId, `bbbbbbbb-0000-4000-8000-${String(i).padStart(12, "0")}`)) as { to: string }; // prettier-ignore
       wentDown = res.to !== "platinum";
     }

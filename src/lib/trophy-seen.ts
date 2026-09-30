@@ -104,6 +104,25 @@ export function markTrophiesCelebrated(keys: readonly string[]) {
 }
 
 /**
+ * Has this device already thrown a ceremony for that trophy?
+ *
+ * The other half of the handshake above, for the screens that fire their own.
+ * Marking stops the global host playing a second ceremony when the realtime row
+ * arrives a beat later — but only when the response gets here first. It does not
+ * always: the INSERT, the invalidation and the refetch can all land while the
+ * accept is still in the air, and then the host has already queued one and the
+ * screen stacks an identical overlay underneath it. Asking first is what closes
+ * the other direction.
+ *
+ * Reads the module value rather than storage, for the same reason
+ * markTrophiesCelebrated writes it: a private-mode browser that refused the
+ * write still has to stop the repeat for this page load.
+ */
+export function alreadyCelebrated(key: string): boolean {
+  return current.ids.includes(key);
+}
+
+/**
  * Re-file a guest's ceremonies under the player they have just claimed.
  *
  * The pack screen marks a guest's finished set under their PACK identity
@@ -169,12 +188,21 @@ export function useTrophySeen(): TrophySeen {
     // private-mode browser back the state it just refused to save, and the same
     // ceremony would fire again on the next refetch.
     const mine = () => setSeen(current);
-    // Another tab. That one did save, so storage is the truth.
-    const theirs = () => {
+    const reread = () => {
       current = read();
       setSeen(current);
     };
-    theirs();
+    // Another tab, and only if it touched OUR key. `storage` fires for every key
+    // the other tab writes, so this used to spend a getItem and a JSON.parse on
+    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
+    // in-memory hold above with whatever storage happens to hold, putting a
+    // refused write back under the thumb that made it. A null key is
+    // localStorage.clear(), which does concern us.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== KEY) return;
+      reread();
+    };
+    reread();
     window.addEventListener(CHANGED, mine);
     window.addEventListener("storage", theirs);
     return () => {

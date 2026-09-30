@@ -129,6 +129,25 @@ describe("useNavShape", () => {
       }),
     );
   });
+
+  it("keeps the remembered bar when the event read comes back empty", async () => {
+    // getActiveEvent logs a failed read and returns the null anyway, so a flaky
+    // round trip is indistinguishable here from a league with no active event.
+    // Remembering the default for either would hand the next cold load five rows
+    // and re-shape to six once the event did land — the exact correction this
+    // module exists to move off the round trip.
+    window.localStorage.setItem(KEY, JSON.stringify({ dustOn: true, hidden: ["board"] }));
+    readNavShape();
+    const { result } = renderHook(() => useNavShape(null));
+
+    // The bar still DRAWS the default: no event means no dust and no Shop tab.
+    await waitFor(() => expect(result.current).toEqual(DEFAULT_NAV_SHAPE));
+    // What the device remembers is untouched.
+    expect(parseNavShape(window.localStorage.getItem(KEY))).toEqual({
+      dustOn: true,
+      hidden: ["board"],
+    });
+  });
 });
 
 describe("writeNavShape", () => {

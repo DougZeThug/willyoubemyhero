@@ -128,12 +128,21 @@ export function useNavShape(event: unknown): NavShape {
     // Our own writes trust the module value; re-reading storage would hand a
     // private-mode browser back the value it just refused to save.
     const mine = () => setRemembered(current);
-    // Another tab. That one did save, so storage is the truth.
-    const theirs = () => {
+    const reread = () => {
       current = read();
       setRemembered(current);
     };
-    theirs();
+    // Another tab, and only if it touched OUR key. `storage` fires for every key
+    // the other tab writes, so this used to spend a getItem and a JSON.parse on
+    // every unrelated wwbh: write -- and worse, `current = read()` clobbers the
+    // in-memory hold above with whatever storage happens to hold, putting a
+    // refused write back under the thumb that made it. A null key is
+    // localStorage.clear(), which does concern us.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== KEY) return;
+      reread();
+    };
+    reread();
     window.addEventListener(CHANGED, mine);
     window.addEventListener("storage", theirs);
     return () => {
@@ -147,9 +156,17 @@ export function useNavShape(event: unknown): NavShape {
   // not on every render of every screen the bar is mounted on.
   const answered = useMemo(() => shapeOfEvent(event), [event]);
 
+  // Only a shape a real event confirmed is worth remembering. `null` is both "no
+  // active event" and — because getActiveEvent logs a failed read and hands back
+  // the null anyway — "the read did not land", and nothing here can tell the two
+  // apart. Persisting the default for the second lets one bad round trip wipe the
+  // bar this device learned, which is the re-shape this module exists to prevent.
+  // Only the write is gated: a null event still RENDERS the default bar below.
+  const confirmed = event == null ? null : answered;
+
   useEffect(() => {
-    if (answered) writeNavShape(answered);
-  }, [answered]);
+    if (confirmed) writeNavShape(confirmed);
+  }, [confirmed]);
 
   return answered ?? remembered ?? DEFAULT_NAV_SHAPE;
 }

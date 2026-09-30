@@ -134,7 +134,7 @@ export function CollectionComplete({
                 {/* The hook eases through floats; only whole cards mean anything. */}
                 {Math.round(cards ?? 0)}
               </div>
-              <div className="mt-2 font-display text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
+              <div className="mt-2 font-display text-label font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 {trophySizeLabel(size)}, all of them
               </div>
             </motion.div>

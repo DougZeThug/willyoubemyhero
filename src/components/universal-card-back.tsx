@@ -28,8 +28,10 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  // Shared with the sealed pack on /players/pack, which wears this same image —
-  // so an upload here refreshes a pack already open on somebody else's phone.
+  // Shared with the sealed pack on /players/pack, which wears this same image.
+  // The invalidations below only reach this tab; a pack already open on somebody
+  // else's phone is refreshed by useEventBundle, which invalidates the same two
+  // keys when the events row this upload writes comes back down the channel.
   const back = useEventCardBack(eventId);
 
   async function onPick(file: File) {
@@ -119,11 +121,11 @@ export function UniversalCardBack({ eventId }: { eventId: string }) {
               "cursor-pointer rounded-lg border border-dashed p-5 text-center transition-colors",
               dragging
                 ? "border-primary bg-primary/10"
-                : "border-white/15 hover:border-primary/50 hover:bg-white/[0.02]",
+                : "border-border-strong hover:border-primary/50 hover:bg-white/[0.02]",
               busy && "pointer-events-none opacity-60",
             )}
           >
-            <p className="font-display text-sm font-bold uppercase tracking-widest text-foreground">
+            <p className="font-display text-sm font-bold uppercase tracking-[0.08em] text-foreground">
               {busy ? "Uploading…" : url ? "Replace card back" : "Upload card back"}
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">

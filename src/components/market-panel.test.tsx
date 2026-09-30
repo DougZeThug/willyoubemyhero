@@ -18,7 +18,8 @@ import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "@/test/query";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { marketListingsKey, myStallKey } from "@/hooks/use-market";
-import { mySecretsKey, secretStatusKey } from "@/hooks/use-daily-secret";
+import { mySecretsKey } from "@/hooks/use-daily-secret";
+import { packStatusKey } from "@/hooks/use-pack-status";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
@@ -182,7 +183,7 @@ describe("buying", () => {
       // "Packed by N" has genuinely risen.
       cardPullCountsKey(EVENT),
       mySecretsKey(ACTOR),
-      secretStatusKey(ACTOR),
+      packStatusKey(ACTOR),
     ]) {
       expect(refreshed).toContain(JSON.stringify(key));
     }
@@ -381,13 +382,58 @@ describe("while the commissioner has dust switched off", () => {
     expect(sparesFn).not.toHaveBeenCalled();
   });
 
-  it("renders nothing at all once the stall comes back empty", async () => {
-    // Which is every case but the one above. The route's "not switched on yet"
-    // line already says what the screen is; a second empty panel under it would
-    // be noise.
+  it("renders nothing at all once the stall comes back empty on both halves", async () => {
+    // Nothing up and nothing settled. The route's "not switched on yet" line
+    // already says what the screen is; a second empty panel under it would be
+    // noise.
     stallFn.mockResolvedValue({ active: [], recent: [] });
     const { container } = renderPanel(500, false);
     await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it("keeps the Lately strip once the shelf is empty but a sale has settled", async () => {
+    // The settled half is the only place a sale is ever visible, and this guard
+    // was dropping the whole panel on `active` alone. Somebody whose card sold
+    // while their phone was in their pocket, opening the shop after dust went
+    // off, had no screen anywhere that said it had happened.
+    stallFn.mockResolvedValue({
+      active: [],
+      recent: [
+        {
+          ...rosterListing,
+          sellerId: ME,
+          status: "sold" as const,
+          buyerId: THEM,
+          resolvedAt: "2026-08-30T01:00:00Z",
+        },
+      ],
+    });
+    renderPanel(500, false);
+
+    expect(await screen.findByText("to Bob Bison")).toBeInTheDocument();
+    expect(await screen.findByText(/^sold$/i)).toBeInTheDocument();
+  });
+
+  it("does not offer to take back rows that are not there", async () => {
+    // "these are still yours to take back" describing an empty shelf is the copy
+    // half of the same bug — the guard alone would have left it standing.
+    stallFn.mockResolvedValue({
+      active: [],
+      recent: [
+        {
+          ...rosterListing,
+          sellerId: ME,
+          status: "sold" as const,
+          buyerId: THEM,
+          resolvedAt: "2026-08-30T01:00:00Z",
+        },
+      ],
+    });
+    renderPanel(500, false);
+
+    await screen.findByText("to Bob Bison");
+    expect(screen.queryByText(/still yours to take back/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Nothing up at the moment.")).toBeInTheDocument();
   });
 
   it("says it is counting rather than going blank while the stall loads", async () => {

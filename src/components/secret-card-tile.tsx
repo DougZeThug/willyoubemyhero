@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Gift, Loader2, Pencil } from "lucide-react";
 import { BorderFxPicker, FoilPicker } from "@/components/secret-look-picker";
 import { type SecretCollection, secretCollectionLabel } from "@/lib/secret-cards";
@@ -107,6 +108,26 @@ export function SecretCardTile({
   onEdit: () => void;
   busy: boolean;
 }) {
+  // The in-flight text, or null when the box should be showing what is saved.
+  //
+  // This was `defaultValue={card.weight}` under a stable `key={card.id}`, which
+  // meant the DOM value was written once at mount and never again while
+  // card.weight refreshed around it. The onBlur guard below then compared a
+  // stale box against a fresh prop, so a focus and a blur with no typing at all
+  // — clicking the "Weight" label does exactly that — could re-save the old
+  // number over another commissioner's change. Local state rather than a
+  // controlled `card.weight` so typing still never refires the query.
+  const [draft, setDraft] = useState<string | null>(null);
+  // Let go of the edit once the round-trip has landed. savingWeight only clears
+  // after saveWeight's invalidateQueries has resolved, so card.weight is already
+  // fresh by then and the box does not flash the old value on the way back. It
+  // is in the deps as well as card.weight because clearing a box saves the 100
+  // baseline, which for a card already at 100 changes nothing for card.weight to
+  // report — and the box would have stayed empty forever.
+  useEffect(() => {
+    if (!savingWeight) setDraft(null);
+  }, [card.weight, savingWeight]);
+
   return (
     <div
       className={cn(
@@ -137,7 +158,7 @@ export function SecretCardTile({
         <button
           onClick={onEdit}
           aria-label={`Edit ${card.name}`}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/15 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary pointer-fine:h-9 pointer-fine:w-9"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border-strong text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary pointer-fine:h-9 pointer-fine:w-9"
         >
           <Pencil className="h-4 w-4" />
         </button>
@@ -164,8 +185,8 @@ export function SecretCardTile({
               min={0}
               max={10000}
               step={10}
-              defaultValue={card.weight}
-              // Uncontrolled so typing doesn't refire the query on every keystroke.
+              value={draft ?? String(card.weight)}
+              onChange={(e) => setDraft(e.target.value)}
               onBlur={(e) => {
                 if (Number(e.target.value) !== card.weight) onSaveWeight(e.target.value);
               }}
@@ -173,7 +194,7 @@ export function SecretCardTile({
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
               disabled={savingWeight}
-              className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base tabular-nums sm:min-h-0 sm:h-7 sm:w-20 sm:text-xs"
+              className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base tabular-nums pointer-fine:min-h-0 pointer-fine:h-7 sm:w-20 pointer-fine:text-xs"
               aria-label={`Pull weight for ${card.name}`}
             />
             {savingWeight && (
@@ -224,7 +245,7 @@ export function SecretCardTile({
           <select
             value={card.collection ?? ""}
             onChange={(e) => onSaveCollection(e.target.value || null)}
-            className="min-h-11 w-full min-w-0 rounded border border-white/15 bg-background px-1.5 text-base text-foreground sm:h-7 sm:min-h-0 sm:text-xs"
+            className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground pointer-fine:h-7 pointer-fine:min-h-0 pointer-fine:text-xs"
             aria-label={`Set for ${card.name}`}
           >
             <option value="">Unsorted</option>
@@ -257,7 +278,7 @@ export function SecretCardTile({
               value={grantTarget}
               onChange={(e) => onGrantTargetChange(e.target.value)}
               disabled={busy}
-              className="min-h-11 min-w-0 flex-1 rounded border border-white/15 bg-background px-1.5 text-base sm:min-h-0 sm:h-7 sm:text-xs"
+              className="min-h-11 min-w-0 flex-1 rounded border border-border-strong bg-background px-1.5 text-base pointer-fine:min-h-0 pointer-fine:h-7 pointer-fine:text-xs"
               aria-label={`Grant ${card.name} to`}
             >
               <option value="">Grant to…</option>

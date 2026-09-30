@@ -434,14 +434,17 @@ test.describe("trading post", () => {
     expect(server.calls.filter((c) => /acceptTradeOffer/.test(c))).toHaveLength(0);
   });
 
-  test("an empty inbox says so and offers a way out of it", async ({ page, server }) => {
-    // One 12px sentence and no way forward was §10's problem 7.
+  test("an empty inbox says so and offers one way out of it", async ({ page, server }) => {
+    // One 12px sentence and no way forward was §10's problem 7; two controls for
+    // the one action, 600px apart on a screen that is nothing else, was §23 F13.
+    // The survivor is the fixed CTA, which is up without a scroll.
     await signIn(page);
     await page.goto("/players/trade");
 
     await expect(page.getByText("Nobody wants your cards. Yet.")).toBeVisible();
-    await page.getByRole("button", { name: /start the first offer/i }).click();
-    await expect(page.getByRole("dialog", { name: /make an offer/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /start the first offer/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /make an offer/i })).toHaveCount(1);
+    await openBuilder(page);
   });
 
   test("stacks the two trays at a phone width", async ({ page, server }, testInfo) => {

@@ -8,7 +8,12 @@ import { formatTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import {
+  FeedDegradedBanner,
+  FeedError,
+  FeedLoading,
+  FeedPartialBanner,
+} from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
 import { ResultCard } from "@/components/result-card";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
@@ -49,6 +54,18 @@ function LeaderboardPage() {
       ep: parts.find((p) => p.participant_id === s.participantId),
     }));
   }, [bundle]);
+
+  /**
+   * The roster read failed while the runs read did not.
+   *
+   * Worth its own signal because it does NOT empty the board: `standings` ranks
+   * from the runs alone, and drops its roster filter entirely when the roster is
+   * empty — so a failed roster read draws every finisher in the right place at
+   * the right time with an em dash where the name goes. The empty-state copy
+   * below is the only other place this screen reads `failedTables`, and it can
+   * never fire on that board, which is the one it most needed to.
+   */
+  const rosterFailed = failedTables.includes("event_participants");
 
   const shareRow = rows.find((r) => r.run.id === sharingRunId);
   const shareData = shareRow
@@ -97,7 +114,7 @@ function LeaderboardPage() {
   if (loading && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-4xl px-4 py-10">
+        <div className="mx-auto max-w-4xl px-page-x py-10">
           <FeedLoading label="Reading the standings…" />
         </div>
       </div>
@@ -107,7 +124,7 @@ function LeaderboardPage() {
   if (error && !bundle) {
     return (
       <div className="circuit-bg min-h-[var(--page-min-h)]">
-        <div className="mx-auto max-w-4xl px-4 py-10">
+        <div className="mx-auto max-w-4xl px-page-x py-10">
           <FeedError message={error.message} onRetry={() => void refetch()} />
         </div>
       </div>
@@ -116,8 +133,16 @@ function LeaderboardPage() {
 
   return (
     <div className="circuit-bg min-h-[var(--page-min-h)]">
-      <div className="mx-auto max-w-4xl px-4 py-6">
-        {(realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+      <div className="mx-auto max-w-4xl px-page-x py-6">
+        {(realtimeDegraded || Boolean(error)) && <FeedDegradedBanner className="mb-4" />}
+        {rosterFailed && (
+          // The same sentence /live and /order use for this exact read, rather
+          // than a fourth phrasing of it.
+          <FeedPartialBanner
+            className="mb-4"
+            message="Couldn't read the roster just now — retrying."
+          />
+        )}
         <PageHeader
           eyebrow="Standings"
           title="Leaderboard"
@@ -126,7 +151,7 @@ function LeaderboardPage() {
             rows.length > 0 ? (
               <span className="timer-digits tabular text-primary text-lg">
                 {rows.length}{" "}
-                <span className="text-muted-foreground text-xs font-bold uppercase tracking-widest">
+                <span className="text-muted-foreground text-label font-bold uppercase tracking-[0.08em]">
                   finished
                 </span>
               </span>
@@ -137,7 +162,13 @@ function LeaderboardPage() {
           <CardContent className="p-0">
             {rows.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                {failedTables.length > 0
+                {/* The one read that can empty the board, not any of the
+                    seven: a failed splits or stations read cannot, and nor can
+                    the roster — `standings` drops its filter, and the banner
+                    above already names that read. Saying the results were
+                    unreadable over a combine that simply has not started is the
+                    same lie in the other direction. */}
+                {failedTables.includes("runs")
                   ? "Couldn't read the results just now — retrying."
                   : "No official times yet — check back after the first athlete crosses."}
               </div>
@@ -155,14 +186,14 @@ function LeaderboardPage() {
                     )}
                   >
                     <span
-                      className={
-                        "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black tabular " +
-                        (row.place === 1
+                      className={cn(
+                        "grid h-9 w-9 shrink-0 place-items-center rounded-full font-display font-black tabular",
+                        row.place === 1
                           ? "hud-bezel text-primary ring-1 ring-primary/60"
                           : row.place <= 3
                             ? "hud-bezel text-primary/90"
-                            : "bg-white/10 text-foreground")
-                      }
+                            : "bg-white/10 text-foreground",
+                      )}
                     >
                       {row.place}
                     </span>
@@ -190,7 +221,12 @@ function LeaderboardPage() {
                             params={{ id: row.ep.id }}
                             className="flex min-h-11 items-center hover:text-primary"
                           >
-                            <span className="truncate font-display text-lg font-bold uppercase leading-tight">
+                            {/* Clamped, not truncated: at text-lg in a basis-24
+                                column "Carol Crush" lost its tail at 430 as well
+                                as at 320, and a leaderboard that will not say
+                                whose row it is has stopped being one (§23 F8's
+                                rule, one screen over). */}
+                            <span className="line-clamp-2 font-display text-lg font-bold uppercase leading-tight">
                               {row.ep.participant?.name ?? "—"}
                             </span>
                           </Link>
@@ -199,7 +235,7 @@ function LeaderboardPage() {
                             —
                           </div>
                         )}
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="truncate text-meta text-muted-foreground">
                           {row.ep?.participant?.fantasy_team_name ??
                             row.ep?.participant?.nickname ??
                             "—"}
@@ -233,7 +269,15 @@ function LeaderboardPage() {
                       // thirteen identical controls out of context.
                       aria-label={`Share ${row.ep?.participant?.name ?? "this"} result card`}
                       onClick={() => handleShare(row.run.id)}
-                      disabled={sharingRunId === row.run.id}
+                      // The whole group, not this row. One cardRef and one
+                      // offscreen ResultCard serve all thirteen, so a tap on B
+                      // while A is still exporting repoints that single node and
+                      // A's PNG rasterises B under A's filename — Bob's card,
+                      // saved as Alice's, into the group chat. Whichever handler
+                      // lands first then clears sharingRunId and unmounts the
+                      // node under the other. Same shape as secret-cards-panel's
+                      // setBusyId.
+                      disabled={sharingRunId !== null}
                     >
                       <Share2 className="h-4 w-4" />
                     </Button>
@@ -275,7 +319,7 @@ function PageHeader({
         <div>
           <div className="flex items-center gap-2 text-primary">
             {icon}
-            <span className="font-display text-xs font-bold uppercase tracking-[0.08em]">
+            <span className="font-display text-label font-bold uppercase tracking-[0.08em]">
               {eyebrow}
             </span>
           </div>
@@ -286,3 +330,5 @@ function PageHeader({
     </div>
   );
 }
+
+export default LeaderboardPage;

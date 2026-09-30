@@ -1,0 +1,14 @@
+# Will YOU Be My Hero? — Draft Combine
+
+> A phone-first app for a fantasy football draft combine: live timing, a leaderboard, trading cards, packs, trades and end-of-day awards.
+
+## Pages
+
+- [The Vault](/players): Every player's trading card, rarity and collection.
+- [Leaderboard](/leaderboard): Ranked combine results across all stations.
+- [Live](/live): The running clock and current athlete on the course.
+- [Running order](/order): The randomized order athletes run in.
+- [Awards](/awards): Superlatives voted on by the group.
+- [Draft](/draft): The draft board and picks.
+- [League](/league): League standings and history.
+- [TV board](/tv): The big-screen broadcast view of the combine.

@@ -239,9 +239,10 @@ screen reader user learns the page changed only by going looking.
   but that browser is a different device as far as this app is concerned; signing
   in on the original one is what links it. A password under six characters is
   refused by the field before anything is sent.
-- **Two accounts on one phone.** The second sign-in adopts whatever identity the
-  phone holds at that moment, which after the first is the first account's.
-  Signing out between them is the only way to keep them apart.
+- **Two accounts on one phone.** The second sign-in does not adopt the first
+  account's identity. The phone's guest id is already filed under the first
+  account, so the second account is minted a fresh id and starts on an empty
+  collection.
 - **Signing out from the claim screen is not the same button.** The one on
   [claim](claiming-your-player.md) drops the member token only and leaves the
   account signed in, which puts the device in a state where the vault says the
