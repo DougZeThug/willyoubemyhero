@@ -837,6 +837,7 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 ### Player card — `/players/$id`
 
 - **Works**: the full-screen viewer is the default for a tap (`?view=1`), so examining a card starts with the card; zoom, flip, swipe and tilt; the slab and serial plate; the locked state with a route into a pack; the compare drawer; share export.
+- **Remaining**: Filmstrip names clip at every width — all four of them on a locked card (F7). At 320 the card's own "Draft Combine 2026" line clips by 21 px.
 - **Fixed this pass**: the "more actions" overflow menu rendered 32 px rows. Three passes of the tap-target sweep walked past it, because a closed menu has no items in the DOM to measure — the rule was only ever "the controls that happen to be mounted are 44 px", which is not a floor. The sweep opens the menu now.
 - **One detail worth keeping**, because it cost a failed test to learn: this menu is built from `DropdownMenuCheckboxItem` (Tilt, Sound), not `DropdownMenuItem`. A floor on `Item` alone covers the menu nobody opens and misses the menu everybody does. All four item shapes carry it.
 - **Remaining**: nothing else measured against it. The filmstrip's names take two lines and the slab plate wraps the event's own name rather than cutting it.
@@ -884,6 +885,8 @@ Rewritten against this pass's renders. Each screen links to its frames in the [f
 ### Claim and Auth — `/claim`, `/auth`
 
 - **Works**: the 2-col name grid; a big typed code; clear failure copy that distinguishes a wrong code from too many tries; links between the two; an honest "an account is optional" footer.
+- **Remaining**: the privacy explainer and "Not on the roster?" sit at 11 px.
+- **Priority: Medium** (was Low) — this is the front door.
 - **Closed since the second pass**: F1 and F2 both. Every field on both screens now clears 44 px and renders at 16 px on a coarse pointer, and the code field carries `inputMode` and `enterKeyHint`.
 - **Worth recording, because it is the best example of why the guards exist**: the third pass's first run reported the code field at 36 px and both auth fields at 36 px — the second pass's finding, apparently reopened. It was an artefact. A `fullPage` screenshot earlier in the run had dropped the pointer emulation, so `pointer-fine:` was releasing the floor on a context that was no longer a phone. The reading was wrong and looked exactly like a regression on the screen where one would have mattered most.
 - **Two new states here**, both captured and both clean: the roster failing to load, which is a distinct branch from an empty roster, and the roster still in flight.
