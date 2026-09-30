@@ -32,6 +32,13 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@lovable.dev/vite-tanstack-config"
         update-types: ["version-update:semver-major"]
+      # `typescript` stays on 6.x because typescript-eslint throws on load under
+      # 7.x (no classic JS API) and its peer range stops at <6.1.0. The compiler
+      # that typechecks is @typescript/native. Move both by hand — see CLAUDE.md.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@typescript/native"
+        update-types: ["version-update:semver-major"]
       # js-yaml is pinned via overrides to avoid a transitive vulnerability.
       # Ignore patch bumps so the override stays in control.
       - dependency-name: "js-yaml"
