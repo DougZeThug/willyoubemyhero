@@ -16,6 +16,17 @@ TanStack Query · nitro, building for Cloudflare.
 and `package-lock.json` are tracked — **update both** when dependencies change
 (`bun install`, then `npm install --package-lock-only`), or the two drift apart.
 
+**Two TypeScripts, on purpose.** `typescript` is pinned to 6.0.x and
+`@typescript/native` (`npm:typescript@7.0.2`) is the compiler `bun run typecheck`
+runs. TS 7 is the native compiler and no longer ships the classic JS API, so
+typescript-eslint throws on load if `typescript` resolves to 7.x. Both packages
+expose a `tsc` bin and which one wins `.bin/tsc` depends on install order, so the
+script calls `node_modules/@typescript/native/bin/tsc` by path. Don't use
+Microsoft's `typescript: npm:@typescript/typescript6` alias — Bun 1.3.11 installs
+it as an empty self-referencing shim. When typescript-eslint supports TS 7.x
+(typescript-eslint#10940), collapse to a single `typescript@7`, restore
+`"typecheck": "tsc --noEmit"` and drop the Dependabot ignores.
+
 `bunfig.toml` enforces a 24-hour `minimumReleaseAge` as a supply-chain guard.
 Confirm with the user before adding anything to `minimumReleaseAgeExcludes`.
 
