@@ -224,10 +224,9 @@ describe("getTradeSpares", () => {
     ]);
   });
 
-  it("does not call a copy the last one when today's pull is also held", async () => {
-    // Counted over every row held, not just the stakeable ones: today's pull is
-    // hidden from the picker but she still owns it, so the older copy is not her
-    // last.
+  it("offers today's pull beside an older copy, and calls neither the last", async () => {
+    // Both are stakeable since 20260930120000, and both are counted: two copies
+    // held means neither one is her last.
     withDb({
       "event_participants.select": { data: [] },
       "secret_card_pulls.select": {
@@ -239,12 +238,16 @@ describe("getTradeSpares", () => {
       "secret_cards.select": { data: [] },
     });
     const res = await spares(ME, asMe());
-    expect(res.secrets.map((s) => [s.pullId, s.lastCopy])).toEqual([[PULL_ID, false]]);
+    expect(res.secrets.map((s) => [s.pullId, s.lastCopy])).toEqual([
+      [PULL_ID, false],
+      ["p2", false],
+    ]);
   });
 
-  it("hides today's own pull, which is that member's spent daily slot", async () => {
-    // Mirrors trade_item_is_spare. Without it the picker offers a card the RPC
-    // then refuses, and the person is told their own spare is not their spare.
+  it("offers today's own pull the day it lands, and blocks nothing for it", async () => {
+    // Mirrors trade_item_is_spare, which stopped refusing the day's pull once
+    // open_pack gated the daily deal on pack_opens. Hiding it here would keep a
+    // card off the table that the RPC now accepts.
     withDb({
       "event_participants.select": { data: [] },
       "secret_card_pulls.select": {
@@ -254,7 +257,8 @@ describe("getTradeSpares", () => {
       },
     });
     const res = await spares(ME, asMe());
-    expect(res.secrets).toEqual([]);
+    expect(res.secrets.map((s) => s.pullId)).toEqual([PULL_ID]);
+    expect(res.blocked).toEqual([]);
   });
 
   it("offers a copy from an earlier day", async () => {
@@ -294,8 +298,8 @@ describe("getTradeSpares", () => {
   });
 
   it("offers a granted copy even on the day it landed", async () => {
-    // A granted row was never anybody's daily slot, so the rule above does not
-    // apply to it — which is also why the accept marks every traded copy granted.
+    // A milestone reward, a bought pull or a traded copy — offered the same
+    // day, like every other copy.
     withDb({
       "event_participants.select": { data: [] },
       "secret_card_pulls.select": {

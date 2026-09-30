@@ -661,7 +661,8 @@ const BUY_REFUSALS: Record<string, string> = {
 
 const LIST_REFUSALS: Record<string, string> = {
   last_copy: "You would have none left",
-  too_fresh: "Today's pull is not a spare yet",
+  // Nothing returns this since 20260930120000; kept for an older server.
+  too_fresh: "That one cannot go up yet",
   staked: "Take it off the market first",
   already_listed: "That one is already up",
   too_many: "Your stall is full — take something down first",

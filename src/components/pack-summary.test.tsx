@@ -7,7 +7,8 @@
 // secret sits in the slot it was dealt in, plus the two exits, because a payoff
 // nobody can leave is not a payoff.
 import { createElement, type ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { PackSummary } from "./pack-summary";
 import type { StandSlot } from "./pack-stand";
@@ -256,6 +257,74 @@ describe("what a spare is worth", () => {
     // dust switched off all reach this component as nothing at all.
     renderSummary({ slots: [roster(0), secret({ outcome: "duplicate", copies: 2, slot: { duplicate: true } })] }); // prettier-ignore
     expect(worth()).toHaveLength(0);
+  });
+});
+
+describe("selling from the summary", () => {
+  const spare = () => roster(0, { outcome: "duplicate", copies: 2, sellValue: 40 });
+
+  it("leaves the price as plain text when nothing can sell it", () => {
+    renderSummary({ slots: [spare(), roster(1), roster(2)] });
+    expect(screen.queryByRole("button", { name: "Sell for 40" })).toBeNull();
+  });
+
+  it("asks before it sells, and sells on yes", async () => {
+    const onSell = vi.fn(async () => null);
+    renderSummary({ slots: [spare(), roster(1), roster(2)], onSell });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Sell Alice Ace?");
+    expect(dialog).toHaveTextContent("+40 dust. You'll still have 1.");
+    expect(onSell).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
+    expect(onSell).toHaveBeenCalledWith(0);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
+  it("sells nothing on no", async () => {
+    const onSell = vi.fn(async () => null);
+    renderSummary({ slots: [spare(), roster(1), roster(2)], onSell });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(onSell).not.toHaveBeenCalled();
+  });
+
+  it("keeps the question open with the refusal beside it", async () => {
+    const onSell = vi.fn(async () => "Already gone — it left your vault");
+    renderSummary({ slots: [spare(), roster(1), roster(2)], onSell });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Sell for 40" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Already gone");
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("offers a secret only when the pack carried the row to sell", () => {
+    // A slot stored by an older build has no pullId, and nothing to sell by.
+    const onSell = vi.fn(async () => null);
+    const dupe = { outcome: "duplicate" as const, copies: 2, sellValue: 30 };
+    const { unmount } = renderSummary({
+      slots: [secret({ ...dupe, slot: { duplicate: true } })],
+      onSell,
+    });
+    expect(screen.queryByRole("button", { name: "Sell for 30" })).toBeNull();
+    unmount();
+    renderSummary({ slots: [secret({ ...dupe, slot: { duplicate: true, pullId: "pull-1" } })], onSell }); // prettier-ignore
+    expect(screen.getByRole("button", { name: "Sell for 30" })).toBeInTheDocument();
+  });
+
+  it("says what a sold card fetched instead of offering it again", () => {
+    renderSummary({
+      slots: [roster(0, { outcome: "duplicate", copies: 1 }), roster(1), roster(2)],
+      onSell: vi.fn(),
+      sold: { 0: 40 },
+    });
+    expect(screen.getByText("Sold · +40")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sell for/i })).toBeNull();
   });
 });
 

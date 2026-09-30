@@ -38,6 +38,12 @@ export type PackRosterSlot = {
 export type PackSecretSlot = {
   kind: "secret";
   id: string;
+  /**
+   * The `secret_card_pulls` row this slot minted — what the pack screen sells
+   * when "Sell for N" is tapped. Optional because a slot stored on the phone by
+   * an older build never carried it; such a slot simply offers no sale.
+   */
+  pullId?: string;
   card: SecretCardView;
   /** Already owned. The row is a duplicate; the owned copy may have been upgraded. */
   duplicate: boolean;

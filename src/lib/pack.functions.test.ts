@@ -192,6 +192,21 @@ describe("openPack", () => {
     });
   });
 
+  it("carries the pull id, so the pack screen can sell the copy it just dealt", async () => {
+    withDb({
+      "rpc.open_pack": dealt([secret(CARD_ID), secret(OTHER_CARD, { pullId: "p2" })]),
+      "secret_cards.select": { data: [card(CARD_ID), card(OTHER_CARD)] },
+    });
+    const { openPack } = await import("./pack.functions");
+    const res = await callServerFn<OpenPackResponse>(openPack, { headers: asMe() });
+    expect(res).toMatchObject({
+      cards: [
+        { id: CARD_ID, pullId: "p1" },
+        { id: OTHER_CARD, pullId: "p2" },
+      ],
+    });
+  });
+
   it("carries a secret's duplicate flag, the level it beat, and the set it finished", async () => {
     // The set size is the designed exception to the silence rule and the only
     // number in this response that ever describes the catalogue. It arrives

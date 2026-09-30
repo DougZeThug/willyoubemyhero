@@ -181,6 +181,8 @@ export const rosterSlot = (ep: string, over: Record<string, unknown> = {}) => ({
 export const secretSlot = (over: Record<string, unknown> = {}) => ({
   kind: "secret",
   id: SECRET_CARD.id,
+  // The row open_pack minted, which is what the summary's "Sell for" sells.
+  pullId: "pull-today",
   card: SECRET_CARD,
   duplicate: false,
   tierBefore: null,
