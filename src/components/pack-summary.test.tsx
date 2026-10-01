@@ -144,6 +144,31 @@ describe("the NEW / ×N / ↑ ribbon", () => {
     expect(screen.getByRole("img", { name: /^Upgraded to Gold/ })).toHaveTextContent("↑ Gold");
   });
 
+  it("does not call a sold minimal duplicate NEW", () => {
+    // Held one, pulled a second, sold one: the route hands the ribbon the holding
+    // AFTER the sale, which is 1 — and 1 is what NEW means. The card was a
+    // duplicate; "New card" over it is false.
+    renderSummary({
+      slots: [roster(0, { outcome: "duplicate", copies: 1 }), roster(1), roster(2)],
+      onSell: vi.fn(),
+      sold: { 0: 40 },
+    });
+    expect(screen.getByRole("img", { name: "You now hold 1 of this card" })).toHaveTextContent("×1");
+    expect(screen.getAllByRole("img", { name: "New card" })).toHaveLength(2);
+  });
+
+  it("drops the climb from a sold upgrade", () => {
+    // The sale takes the copy that made the climb, so "Upgraded to Gold" would be
+    // describing a card that has left the collection.
+    renderSummary({
+      slots: [roster(0, { outcome: "upgrade", copies: 2, slot: { edition: "gold" } }), roster(1), roster(2)], // prettier-ignore
+      onSell: vi.fn(),
+      sold: { 0: 40 },
+    });
+    expect(screen.queryByRole("img", { name: /^Upgraded to/ })).toBeNull();
+    expect(screen.getByRole("img", { name: "You now hold 2 of this card" })).toBeInTheDocument();
+  });
+
   it("says nothing over a card the sequence has not turned yet", () => {
     // A column still waiting on its reveal is a card mid-ceremony, and its
     // ribbon would answer ahead of the flip.
