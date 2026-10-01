@@ -229,8 +229,10 @@ spoken is the vault's breadcrumb line, which is ordinary text.
   the check and the prune, so it is never disowned, and it returns if that
   combine becomes active again.
 - **A blocked card database.** Everything renders, nothing is held, and pulls made
-  in that session are lost on reload — the same call the app makes everywhere:
-  degrade to "works for this page load" rather than fail.
+  in that session are lost on reload — a deliberate degradation to "works for this
+  page load" rather than a failure. The three identity-change taps are the
+  exception: each stops with a "Could not protect your cards on this device" toast
+  rather than publish a member token the blocked store cannot vouch for.
 - **More than sixty-four cards on one device.** The upload takes the first
   sixty-four. No roster in this league approaches that.
 
