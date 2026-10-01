@@ -121,27 +121,3 @@ export const getEventBundle = createServerFn({ method: "GET" })
       failed,
     };
   });
-
-export const getAllParticipants = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = publicClient();
-  // Roster only: collectors hold cards but never ran the course.
-  const { data } = await sb
-    .from("participants")
-    .select("*")
-    .eq("is_collector", false)
-    .order("name");
-  return data ?? [];
-});
-
-export const getAllTimeRecords = createServerFn({ method: "GET" }).handler(async () => {
-  const sb = publicClient();
-  const { data: runs } = await sb
-    .from("runs")
-    .select(
-      `${RUNS_PUBLIC_COLUMNS}, participant:participants(name, nickname, fantasy_team_name), event:events!inner(name, year)`,
-    )
-    .eq("is_official", true)
-    .order("official_time_ms", { ascending: true })
-    .limit(20);
-  return runs ?? [];
-});
