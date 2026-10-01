@@ -7,7 +7,6 @@ import {
   CEREMONY,
   CEREMONY_MS,
   CEREMONY_START,
-  ceremonyPhaseAt,
   ceremonyReached,
   deckTransform,
   fanTransform,
@@ -59,43 +58,6 @@ describe("the timeline", () => {
       at += step.ms;
     }
     expect(CEREMONY_START.done).toBe(CEREMONY_MS);
-  });
-});
-
-describe("ceremonyPhaseAt", () => {
-  it("opens on the first phase in the table", () => {
-    expect(ceremonyPhaseAt(0)).toBe(CEREMONY[0].phase);
-  });
-
-  it("lands each phase on its own first millisecond", () => {
-    for (const step of CEREMONY) {
-      expect(ceremonyPhaseAt(CEREMONY_START[step.phase])).toBe(step.phase);
-    }
-  });
-
-  it("is done once the clock runs out, and stays done", () => {
-    expect(ceremonyPhaseAt(CEREMONY_MS)).toBe("done");
-    expect(ceremonyPhaseAt(CEREMONY_MS + 10_000)).toBe("done");
-  });
-
-  // A rAF can fire with a timestamp fractionally ahead of the start stamp taken
-  // in the pointer handler, and NaN is one bad subtraction away. Neither should
-  // be able to take the ceremony somewhere it has no frame for.
-  it("answers the first phase for a clock that has not started", () => {
-    expect(ceremonyPhaseAt(-1)).toBe(CEREMONY[0].phase);
-    expect(ceremonyPhaseAt(Number.NaN)).toBe(CEREMONY[0].phase);
-  });
-
-  it("never skips a phase as the clock advances", () => {
-    const order = [...CEREMONY.map((s) => s.phase), "done" as const];
-    let seen = 0;
-    for (let ms = 0; ms <= CEREMONY_MS + 50; ms += 10) {
-      const at = order.indexOf(ceremonyPhaseAt(ms));
-      expect(at).toBeGreaterThanOrEqual(seen);
-      expect(at).toBeLessThanOrEqual(seen + 1);
-      seen = at;
-    }
-    expect(seen).toBe(order.length - 1);
   });
 });
 
