@@ -304,10 +304,16 @@ export function useMyCollection(
     // delete is the same fire-and-forget it always was, and a cancel here would
     // strand ids in `forgottenRef` with nothing left to retry them.
     void (async () => {
+      // A stale list needs a server answer behind it, which needs an event; with
+      // none there is nothing to revalidate against and nothing to delete.
+      if (!eventId) {
+        for (const id of fresh) forgottenRef.current.delete(id);
+        return;
+      }
       try {
         const answer = await qc.fetchQuery({
           queryKey: myCardStatsKey(eventId, participantId),
-          queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<MyCardStats>,
+          queryFn: () => fn({ data: { eventId } }) as Promise<MyCardStats>,
           staleTime: 0,
         });
         const now = await loadUnrecorded();
