@@ -153,7 +153,9 @@ describe("the NEW / ×N / ↑ ribbon", () => {
       onSell: vi.fn(),
       sold: { 0: 40 },
     });
-    expect(screen.getByRole("img", { name: "You now hold 1 of this card" })).toHaveTextContent("×1");
+    expect(screen.getByRole("img", { name: "You now hold 1 of this card" })).toHaveTextContent(
+      "×1",
+    );
     expect(screen.getAllByRole("img", { name: "New card" })).toHaveLength(2);
   });
 

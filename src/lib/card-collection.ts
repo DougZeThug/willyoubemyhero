@@ -433,6 +433,37 @@ function announcePackState() {
   window.dispatchEvent(new Event(PACK_STATE_CHANGED));
 }
 
+/**
+ * The cross-tab half of `PACK_STATE_CHANGED`, for the writes that move the
+ * unrecorded row.
+ *
+ * A `window` event never leaves its tab and IndexedDB fires nothing across tabs,
+ * so a vault open in a second tab only ever read this row when it mounted. A claim
+ * in the first tab hands the profile a member token, which that vault hears about
+ * (member-token.ts listens for `storage`) and answers by reconciling against a
+ * server that has not heard of these cards yet — holding the row it read before
+ * the claim wrote one. localStorage is the one thing that does cross, so the row's
+ * writers bump this key and the hook listens for it, exactly as `PACK_DEALT_KEY`
+ * wakes a pack screen.
+ *
+ * A fresh value every time, unlike that key's constant one: `storage` only fires
+ * on a change, and every write here is a change somebody needs to hear. Writes
+ * that ADD or MOVE protection announce here; `retireUnrecorded` deliberately does
+ * not — see it.
+ */
+export const PACK_UNRECORDED_KEY = "wwbh:pack-unrecorded";
+
+let unrecordedGeneration = 0;
+
+function announceUnrecordedChanged() {
+  announcePackState();
+  try {
+    window.localStorage.setItem(PACK_UNRECORDED_KEY, `${Date.now()}:${++unrecordedGeneration}`);
+  } catch {
+    /* private mode still gets the in-tab half above */
+  }
+}
+
 /** A second row in the same store, so the pack and its unsent ids expire apart. */
 const UNRECORDED_KEY = "unrecorded";
 
@@ -480,7 +511,7 @@ export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
     const ids = [...new Set([...keep, ...state.ids])];
     await tx.store.put({ ...state, ids }, UNRECORDED_KEY);
     await tx.done;
-    announcePackState();
+    announceUnrecordedChanged();
   } catch {
     /* ignore */
   }
@@ -509,6 +540,11 @@ export async function retireUnrecorded(recorded: readonly string[]): Promise<voi
     if (ids.length === 0) await tx.store.delete(UNRECORDED_KEY);
     else await tx.store.put({ ...prior, ids }, UNRECORDED_KEY);
     await tx.done;
+    // Same-tab only, on purpose. Waking another tab here would have it drop a
+    // protection its own cached stats answer — read before the league had heard of
+    // these cards — has not caught up with, and the very next reconcile would
+    // delete them. A tab that holds a row a little longer than needed costs
+    // nothing; one that lets go early loses the card.
     announcePackState();
   } catch {
     /* ignore */
@@ -585,7 +621,7 @@ export async function carryPackToIdentity(
     // The mirror moves with the row, which is also what wakes a pack screen open
     // in another tab: it is watching this key, and the identity has changed.
     markPackDealt(carried);
-    announcePackState();
+    announceUnrecordedChanged();
     return true;
   } catch {
     // A device that cannot write cannot carry. It gets the second pack, which is

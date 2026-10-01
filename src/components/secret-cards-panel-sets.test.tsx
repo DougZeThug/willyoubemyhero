@@ -40,11 +40,7 @@ vi.mock("@/components/admin-section", () => ({
 
 // Real buttons, so a test can fire a look change and read `disabled`.
 vi.mock("@/components/secret-look-picker", () => ({
-  FoilPicker: (props: {
-    cardName: string;
-    disabled?: boolean;
-    onChange: (id: string) => void;
-  }) => (
+  FoilPicker: (props: { cardName: string; disabled?: boolean; onChange: (id: string) => void }) => (
     <button
       type="button"
       aria-label={`Foil for ${props.cardName}`}

@@ -392,6 +392,42 @@ describe("unrecorded pulls", () => {
   });
 });
 
+describe("waking a vault in another tab", () => {
+  // `window` events never leave their tab and IndexedDB fires nothing across tabs,
+  // so a claim writing the row in tab A has to say so through localStorage or the
+  // vault in tab B reconciles against the row it read at mount.
+  const ROW = { dayKey: "2026-07-28", identity: "m:p-alice", ids: [CARD_A] };
+
+  it("bumps a storage key on every write that adds protection", async () => {
+    const mod = await freshModule();
+    window.localStorage.removeItem(mod.PACK_UNRECORDED_KEY);
+    await mod.addUnrecorded(ROW);
+    const first = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
+    expect(first).not.toBeNull();
+
+    await mod.addUnrecorded({ ...ROW, ids: [CARD_B] });
+    // A different value, because `storage` only fires on a change.
+    expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).not.toBe(first);
+  });
+
+  it("does not wake other tabs when protection is retired", async () => {
+    // A tab that let go early would act on its own stale stats, which were read
+    // before the league had heard of these cards, and delete them.
+    const mod = await freshModule();
+    await mod.addUnrecorded(ROW);
+    const before = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
+    await mod.retireUnrecorded([CARD_A]);
+    expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).toBe(before);
+  });
+
+  it("leaves an ordinary pack save out of it", async () => {
+    const mod = await freshModule();
+    window.localStorage.removeItem(mod.PACK_UNRECORDED_KEY);
+    await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A], revealed: [] });
+    expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).toBeNull();
+  });
+});
+
 describe("carrying a pack across a claim", () => {
   // B-07. A guest tears today's pack, claims a player, and comes back — and the
   // stored identity has moved from `d:<deviceId>` to `m:<participantId>`, which

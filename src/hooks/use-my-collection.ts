@@ -8,6 +8,7 @@ import {
   loadCollection,
   loadUnrecorded,
   PACK_STATE_CHANGED,
+  PACK_UNRECORDED_KEY,
   type CollectedCard,
   type UnrecordedPulls,
 } from "@/lib/card-collection";
@@ -140,11 +141,20 @@ export function useMyCollection(
         setUnrecorded((prev) => (sameRow(prev, u) ? prev : u));
         setUnrecordedLoaded(true);
       });
+    // `PACK_STATE_CHANGED` never leaves its tab. A claim in another tab writes this
+    // row and then hands the profile a member token, and this vault would
+    // reconcile against the row it read at mount — before there was one.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== PACK_UNRECORDED_KEY) return;
+      read();
+    };
     read();
     window.addEventListener(PACK_STATE_CHANGED, read);
+    window.addEventListener("storage", theirs);
     return () => {
       cancelled = true;
       window.removeEventListener(PACK_STATE_CHANGED, read);
+      window.removeEventListener("storage", theirs);
     };
   }, []);
 
@@ -272,8 +282,24 @@ export function useMyCollection(
     );
     if (fresh.length === 0) return;
     for (const id of fresh) forgottenRef.current.add(id);
-    void forgetCards(fresh);
-  }, [merged.stale, bumps, protectedIds]);
+    // The row read FRESH, at the moment of the delete. `protectedIds` is a
+    // snapshot, and a snapshot is only as new as the last event this tab heard —
+    // a claim in another tab can have written the row since, and a delete cannot
+    // be taken back. Whatever the row still holds is forgotten about being
+    // forgotten, so a later reconciliation reconsiders it instead of treating it
+    // as already dealt with. Not cancelled on a re-run: the delete is the same
+    // fire-and-forget it always was, and a cancel here would strand ids in
+    // `forgottenRef` with nothing left to retry them.
+    void loadUnrecorded().then((now) => {
+      const held =
+        now && (!participantId || now.identity === `m:${participantId}`)
+          ? new Set(now.ids)
+          : EMPTY_IDS;
+      for (const id of fresh) if (held.has(id)) forgottenRef.current.delete(id);
+      const doomed = fresh.filter((id) => !held.has(id));
+      if (doomed.length > 0) void forgetCards(doomed);
+    });
+  }, [merged.stale, bumps, protectedIds, participantId]);
 
   const markCollected = useCallback(
     (eventParticipantId: string, tier: string, edition: Edition, count: number) => {

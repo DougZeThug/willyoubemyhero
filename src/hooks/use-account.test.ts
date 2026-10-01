@@ -3,7 +3,12 @@ import { renderHook, act } from "@testing-library/react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import {
+  adoptLocalCollection,
+  holdForAdoption,
+  releaseAdoptionHold,
+  snapshotLocalCollection,
+} from "@/lib/adopt-collection";
 import { setAccountSyncState, type AccountSyncState } from "@/lib/account-sync-state";
 import { signOutAccount, useAccountSync } from "./use-account";
 
@@ -26,7 +31,14 @@ vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/adopt-collection")>()),
   adoptLocalCollection: vi.fn(),
   snapshotLocalCollection: vi.fn(),
+  // Spied on for WHEN they run relative to the token; their bodies are IndexedDB
+  // and a refetch, which are the card-collection and adopt-collection suites' job.
+  holdForAdoption: vi.fn().mockResolvedValue(undefined),
+  releaseAdoptionHold: vi.fn().mockResolvedValue(undefined),
 }));
+
+const queryClient = vi.hoisted(() => ({ refetchQueries: vi.fn() }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => queryClient }));
 
 // Real in the app and spied on here, because the only thing this file has to say
 // about it is WHEN it runs relative to the member token landing.
@@ -133,6 +145,8 @@ describe("useAccountSync", () => {
     vi.mocked(adoptLocalCollection).mockReset();
     vi.mocked(syncAccountSession).mockReset();
     vi.mocked(snapshotLocalCollection).mockReset();
+    vi.mocked(holdForAdoption).mockClear();
+    vi.mocked(releaseAdoptionHold).mockClear();
   });
 
   async function settle() {
@@ -183,6 +197,42 @@ describe("useAccountSync", () => {
     expect(tokenWhenCarried).toEqual([null]);
     // And the sync still finished, so this is an ordering change and nothing else.
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(MEMBER_TOKEN);
+  });
+
+  it("holds the guest's cards before the member token lands, and lets go after", async () => {
+    // A vault open in another tab reconciles the moment it hears the token, and
+    // an adoption still in the air answers "you own nothing". The hold is what it
+    // reads to know better — so it has to be down BEFORE the token, and only
+    // lifted once the stats refetch has the adopted cards in it.
+    const tokenWhenHeld: (string | null)[] = [];
+    vi.mocked(holdForAdoption).mockImplementation(async () => {
+      tokenWhenHeld.push(window.localStorage.getItem("wwbh:member-token"));
+    });
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "p-alice",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(holdForAdoption).toHaveBeenCalledWith("p-alice", held);
+    expect(tokenWhenHeld).toEqual([null]);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith(held, queryClient);
+  });
+
+  it("lets the hold go at once when the cards cannot be filed", async () => {
+    // The token comes straight back off, so there is no member to reconcile and
+    // nothing left to hold. No query client: there is no refetch to wait for.
+    vi.mocked(adoptLocalCollection).mockRejectedValue(new Error("offline"));
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(releaseAdoptionHold).toHaveBeenCalledWith(held);
+    expect(releaseAdoptionHold).not.toHaveBeenCalledWith(held, queryClient);
   });
 
   it("takes the member token back off when the cards cannot be filed", async () => {

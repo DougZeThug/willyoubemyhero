@@ -29,7 +29,11 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
   return { ...actual, useServerFn: (fn: unknown) => fn };
 });
 
-vi.mock("@tanstack/react-query", () => ({ useQuery: (...a: unknown[]) => useQuery(...a) }));
+const queryClient = vi.hoisted(() => ({ refetchQueries: vi.fn() }));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: (...a: unknown[]) => useQuery(...a),
+  useQueryClient: () => queryClient,
+}));
 
 vi.mock("@/hooks/use-account", () => ({
   useAuthUser: () => ({ user: null, loading: false }),
@@ -68,9 +72,13 @@ vi.mock("@/lib/card-collection", async (importOriginal) => ({
 }));
 
 const adoptLocalCollection = vi.hoisted(() => vi.fn());
+const holdForAdoption = vi.hoisted(() => vi.fn());
+const releaseAdoptionHold = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/adopt-collection")>()),
   adoptLocalCollection: (...args: unknown[]) => adoptLocalCollection(...args),
+  holdForAdoption: (...args: unknown[]) => holdForAdoption(...args),
+  releaseAdoptionHold: (...args: unknown[]) => releaseAdoptionHold(...args),
   snapshotLocalCollection: () => Promise.resolve({}),
 }));
 
@@ -108,6 +116,8 @@ beforeEach(() => {
   useQuery.mockReturnValue(rosterState({ data: [ATHLETE] }));
   claimPlayer.mockResolvedValue({ ok: true, token: "m.tok", name: "Doug" });
   adoptLocalCollection.mockResolvedValue(1);
+  holdForAdoption.mockResolvedValue(undefined);
+  releaseAdoptionHold.mockResolvedValue(undefined);
   // carryPackToIdentity needs no stubbed answer: the route only awaits it, and a
   // bare vi.fn() already returns undefined, which awaits fine.
 });
@@ -201,11 +211,38 @@ describe("claiming a player", () => {
     );
   });
 
+  it("holds the cards before the token lands, and lets go once adoption stuck", async () => {
+    // A vault in another tab of this profile reconciles on hearing the token, and
+    // reads an adoption still in the air as "you own nothing". The hold is what it
+    // reads instead, so it has to be down before the token and stay down until the
+    // stats refetch can vouch for the cards.
+    await claim();
+
+    expect(holdForAdoption).toHaveBeenCalledWith("p-doug", {});
+    expect(holdForAdoption.mock.invocationCallOrder[0]).toBeLessThan(
+      setMemberToken.mock.invocationCallOrder[0],
+    );
+    expect(releaseAdoptionHold).toHaveBeenCalledWith({}, queryClient);
+    expect(releaseAdoptionHold.mock.invocationCallOrder[0]).toBeGreaterThan(
+      adoptLocalCollection.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("lets the hold go straight away when the cards cannot be filed", async () => {
+    // The token comes back off, so nobody is reconciling and nothing is owed.
+    adoptLocalCollection.mockRejectedValue(new Error("offline"));
+    await claim();
+
+    expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith({});
+  });
+
   it("carries nothing on a code that does not match", async () => {
     claimPlayer.mockResolvedValue({ ok: false, reason: "no_match" });
     await claim();
 
     expect(carryTrophySeen).not.toHaveBeenCalled();
     expect(setMemberToken).not.toHaveBeenCalled();
+    expect(holdForAdoption).not.toHaveBeenCalled();
   });
 });

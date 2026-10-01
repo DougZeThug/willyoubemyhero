@@ -7,7 +7,12 @@ import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member
 import { useAuthUser } from "@/hooks/use-account";
 import { clearGuestToken } from "@/lib/guest-token";
 import { clearAccountHandoff } from "@/lib/account-handoff";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import {
+  adoptLocalCollection,
+  holdForAdoption,
+  releaseAdoptionHold,
+  snapshotLocalCollection,
+} from "@/lib/adopt-collection";
 import { cn } from "@/lib/utils";
 
 /**
@@ -49,6 +54,9 @@ export function CollectorSignup({ className }: { className?: string }) {
       // stick, the token comes straight back off: no member, no reconciliation,
       // nothing pruned, and the next sign-in replays the whole handoff against
       // a store the prune has not been through.
+      //
+      // Held first for the tabs this one cannot see: see claim.tsx.
+      await holdForAdoption(res.participantId, held);
       setMemberToken(res.token, res.name);
       try {
         await adoptLocalCollection(held);
@@ -59,6 +67,7 @@ export function CollectorSignup({ className }: { className?: string }) {
           await adoptLocalCollection(held);
         } catch {
           clearMemberToken();
+          await releaseAdoptionHold(held);
           toast.error(
             "Named, but your cards couldn't be transferred — sign in again on a better connection.",
           );
@@ -66,6 +75,8 @@ export function CollectorSignup({ className }: { className?: string }) {
         }
       }
       await qc.invalidateQueries();
+      // After the refetch above, which is the one the hold is waiting on.
+      void releaseAdoptionHold(held, qc).catch(() => {});
       toast.success(`You're in, ${res.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not set that up");

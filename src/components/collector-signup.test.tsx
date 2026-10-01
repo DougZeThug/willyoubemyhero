@@ -31,10 +31,14 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
 vi.mock("@/hooks/use-account", () => ({ useAuthUser: () => authUser() }));
 
 const adoptLocalCollection = vi.fn();
+const holdForAdoption = vi.fn();
+const releaseAdoptionHold = vi.fn();
 
 vi.mock("@/lib/adopt-collection", () => ({
   snapshotLocalCollection: vi.fn().mockResolvedValue([]),
   adoptLocalCollection: (...a: unknown[]) => adoptLocalCollection(...a),
+  holdForAdoption: (...a: unknown[]) => holdForAdoption(...a),
+  releaseAdoptionHold: (...a: unknown[]) => releaseAdoptionHold(...a),
 }));
 
 vi.mock("sonner", () => ({
@@ -68,8 +72,12 @@ const TOKEN = `m.${PID}.${Date.now() + 90 * 86_400_000}.signature`;
 
 beforeEach(() => {
   window.localStorage.clear();
-  createCollectorIdentity.mockReset().mockResolvedValue({ token: TOKEN, name: "Jane Doe" });
+  createCollectorIdentity
+    .mockReset()
+    .mockResolvedValue({ token: TOKEN, name: "Jane Doe", participantId: PID });
   adoptLocalCollection.mockReset().mockResolvedValue(undefined);
+  holdForAdoption.mockReset().mockResolvedValue(undefined);
+  releaseAdoptionHold.mockReset().mockResolvedValue(undefined);
   toastError.mockReset();
   toastSuccess.mockReset();
   authUser.mockReset().mockReturnValue({ user: user(), loading: false });
@@ -177,5 +185,20 @@ describe("when the cards can't be uploaded", () => {
     expect(getMemberToken()).toBeNull();
     // Not "You're in" over a handoff that did not happen.
     expect(toastSuccess).not.toHaveBeenCalled();
+    // Nobody is reconciling any more, so nothing is owed a hold: released with no
+    // query client, because there is no refetch to wait for.
+    expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
+    expect(releaseAdoptionHold.mock.calls[0]).toHaveLength(1);
+  });
+
+  it("holds the cards before the token lands and lets go once they are filed", async () => {
+    // A vault in another tab reconciles on hearing the token; the hold is what
+    // stops it reading an adoption still in the air as "you own nothing".
+    await renderSignup();
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("You're in, Jane Doe"));
+    expect(holdForAdoption).toHaveBeenCalledWith(PID, []);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith([], expect.anything());
   });
 });

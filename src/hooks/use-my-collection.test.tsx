@@ -23,6 +23,7 @@ vi.mock("@/lib/card-collection", () => ({
   forgetCards: (...args: unknown[]) => forgetCards(...args),
   loadUnrecorded: () => loadUnrecorded(),
   PACK_STATE_CHANGED: "wwbh:pack-state-changed",
+  PACK_UNRECORDED_KEY: "wwbh:pack-unrecorded",
 }));
 vi.mock("@/lib/member-token", () => ({
   useMemberSession: () => useMemberSession(),
@@ -340,6 +341,58 @@ describe("useMyCollection, holding a pull the server has not been told about", (
 
     await waitFor(() => expect(result.current.collection["ep-5"]).toBeUndefined());
     expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).toContain("ep-5");
+  });
+});
+
+describe("useMyCollection, with the row written from another tab", () => {
+  // A claim in tab A files the guest's cards as owed, then hands the profile a
+  // member token. Tab B's vault hears the token through `storage` and asks the
+  // server — which, mid-adoption, lists nothing. `PACK_STATE_CHANGED` never
+  // leaves tab A, and the row was read at mount, before there was one.
+  const unrecorded = (ids: string[]) => ({ dayKey: "2026-07-31", identity: "m:p-me", ids });
+
+  function otherTabWrote(key: string | null = "wwbh:pack-unrecorded") {
+    window.dispatchEvent(new StorageEvent("storage", { key }));
+  }
+
+  it("re-reads the row when another tab says it changed", async () => {
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+    expect(result.current.collection["ep-5"]).toBeUndefined();
+
+    loadUnrecorded.mockResolvedValue(unrecorded(["ep-5"]));
+    await act(async () => otherTabWrote());
+
+    // Held by the row it has just heard about, not the one it read at mount.
+    await waitFor(() => expect(result.current.collection["ep-5"]).toBeDefined());
+  });
+
+  it("ignores another tab's write to some other key", async () => {
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const reads = loadUnrecorded.mock.calls.length;
+
+    await act(async () => otherTabWrote("wwbh:something-else"));
+    expect(loadUnrecorded.mock.calls.length).toBe(reads);
+  });
+
+  it("checks the row again at the moment of the delete, not just at mount", async () => {
+    // The mount read found nothing and no event reached this tab in time — the
+    // row is written between that read and the flush. A delete cannot be taken
+    // back, so the one irreversible step asks again.
+    loadUnrecorded.mockResolvedValueOnce(null).mockResolvedValue(unrecorded(["ep-5"]));
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+
+    const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(deleted).not.toContain("ep-5");
+    expect(deleted).toHaveLength(16);
   });
 });
 
