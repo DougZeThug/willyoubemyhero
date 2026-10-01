@@ -19,13 +19,6 @@ export type ShareCardData = {
   quote?: string | null;
   rarityLabel: string;
   rarityColor: string;
-  /**
-   * The demoted line. On a special finish the headline above is the metal, so
-   * this carries the tier word — null on a standard finish, where the tier is
-   * already the headline and a second badge would just repeat it.
-   */
-  editionLabel?: string | null;
-  editionColor?: string | null;
   /** The metal of the finish, for the inner frame. Null on a standard finish. */
   frameColor?: string | null;
   cardUrl?: ImageUrlSet | string | null;
@@ -92,28 +85,6 @@ export const ShareCard = forwardRef<HTMLDivElement, { data: ShareCardData }>(fun
           {data.rarityLabel}
         </div>
       </div>
-
-      {/* Second badge rather than a combined one, the same rule the app's own
-          ribbons follow: "Gold" is podium's tier label. Its own row so a long
-          tier label and a long finish label cannot collide at 1080 wide. */}
-      {data.editionLabel && (
-        <div
-          style={{
-            alignSelf: "flex-end",
-            border: `2px solid ${data.editionColor ?? data.rarityColor}`,
-            color: data.editionColor ?? data.rarityColor,
-            borderRadius: 999,
-            padding: "8px 20px",
-            fontSize: 20,
-            fontWeight: 900,
-            textTransform: "uppercase",
-            letterSpacing: "0.25em",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {data.editionLabel}
-        </div>
-      )}
 
       <div
         style={{
