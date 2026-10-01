@@ -3,7 +3,12 @@ import { renderHook, act } from "@testing-library/react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
-import { adoptLocalCollection, snapshotLocalCollection } from "@/lib/adopt-collection";
+import {
+  adoptLocalCollection,
+  holdForAdoption,
+  releaseAdoptionHold,
+  snapshotLocalCollection,
+} from "@/lib/adopt-collection";
 import { setAccountSyncState, type AccountSyncState } from "@/lib/account-sync-state";
 import { signOutAccount, useAccountSync } from "./use-account";
 
@@ -26,7 +31,14 @@ vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/adopt-collection")>()),
   adoptLocalCollection: vi.fn(),
   snapshotLocalCollection: vi.fn(),
+  // Spied on for WHEN they run relative to the token; their bodies are IndexedDB
+  // and a refetch, which are the card-collection and adopt-collection suites' job.
+  holdForAdoption: vi.fn().mockImplementation(() => Promise.resolve()),
+  releaseAdoptionHold: vi.fn().mockImplementation(() => Promise.resolve()),
 }));
+
+const queryClient = vi.hoisted(() => ({ refetchQueries: vi.fn() }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => queryClient }));
 
 // Real in the app and spied on here, because the only thing this file has to say
 // about it is WHEN it runs relative to the member token landing.
@@ -133,6 +145,14 @@ describe("useAccountSync", () => {
     vi.mocked(adoptLocalCollection).mockReset();
     vi.mocked(syncAccountSession).mockReset();
     vi.mocked(snapshotLocalCollection).mockReset();
+    // Reset to the resolving default rather than just cleared: a test that makes
+    // the hold reject would otherwise hand that to every test after it.
+    vi.mocked(holdForAdoption)
+      .mockReset()
+      .mockImplementation(() => Promise.resolve());
+    vi.mocked(releaseAdoptionHold)
+      .mockReset()
+      .mockImplementation(() => Promise.resolve());
   });
 
   async function settle() {
@@ -183,6 +203,96 @@ describe("useAccountSync", () => {
     expect(tokenWhenCarried).toEqual([null]);
     // And the sync still finished, so this is an ordering change and nothing else.
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(MEMBER_TOKEN);
+  });
+
+  it("holds the guest's cards before the member token lands, and lets go after", async () => {
+    // A vault open in another tab reconciles the moment it hears the token, and
+    // an adoption still in the air answers "you own nothing". The hold is what it
+    // reads to know better — so it has to be down BEFORE the token, and only
+    // lifted once the stats refetch has the adopted cards in it.
+    const tokenWhenHeld: (string | null)[] = [];
+    vi.mocked(holdForAdoption).mockImplementation(() => {
+      tokenWhenHeld.push(window.localStorage.getItem("wwbh:member-token"));
+      return Promise.resolve();
+    });
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "p-alice",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(holdForAdoption).toHaveBeenCalledWith("p-alice", held);
+    expect(tokenWhenHeld).toEqual([null]);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith("p-alice", held, queryClient);
+  });
+
+  it("does not publish the token when the hold could not be written", async () => {
+    // Thrown into the retry loop like any other failed step; no token is on the
+    // device yet, so there is nothing to take back off.
+    vi.mocked(holdForAdoption).mockRejectedValue(new Error("Could not protect your cards"));
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(window.localStorage.getItem("wwbh:member-token")).toBeNull();
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
+  });
+
+  it("keeps the hold in place while the adoption is still in the air", async () => {
+    // "Eventually released" would pass a hold dropped the moment the token landed,
+    // which is exactly when another tab starts reconciling.
+    let landed!: (n: number) => void;
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "p-alice",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockImplementation(
+      () =>
+        new Promise<number>((resolve) => {
+          landed = resolve;
+        }),
+    );
+    const { unmount } = renderHook(() => useAccountSync(user));
+    // A beat, not `settle()`: running the retry loop's whole backoff would give up
+    // on the pending adoption and start a second sync, and `landed` would then
+    // resolve the wrong one.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(holdForAdoption).toHaveBeenCalled();
+    expect(releaseAdoptionHold).not.toHaveBeenCalled();
+
+    await act(async () => {
+      landed(1);
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(releaseAdoptionHold).toHaveBeenCalledWith("p-alice", held, queryClient);
+    unmount();
+  });
+
+  it("lets the hold go at once when the cards cannot be filed", async () => {
+    // The token comes straight back off, so there is no member to reconcile and
+    // nothing left to hold. No query client: there is no refetch to wait for.
+    vi.mocked(adoptLocalCollection).mockRejectedValue(new Error("offline"));
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    // Two arguments: the snapshot and no query client, because there is no
+    // refetch to wait for. (The sync's id is not what this test is about.)
+    // Every attempt: the retry loop runs the whole step again each time.
+    expect(releaseAdoptionHold).toHaveBeenCalled();
+    for (const [, snapshot, client] of vi.mocked(releaseAdoptionHold).mock.calls) {
+      expect(snapshot).toBe(held);
+      expect(client).toBeUndefined();
+    }
   });
 
   it("takes the member token back off when the cards cannot be filed", async () => {

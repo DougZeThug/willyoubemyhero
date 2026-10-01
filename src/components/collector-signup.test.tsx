@@ -31,10 +31,14 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
 vi.mock("@/hooks/use-account", () => ({ useAuthUser: () => authUser() }));
 
 const adoptLocalCollection = vi.fn();
+const holdForAdoption = vi.fn();
+const releaseAdoptionHold = vi.fn();
 
 vi.mock("@/lib/adopt-collection", () => ({
-  snapshotLocalCollection: vi.fn().mockResolvedValue([]),
+  snapshotLocalCollection: vi.fn().mockResolvedValue({ "ep-1": { eventParticipantId: "ep-1" } }),
   adoptLocalCollection: (...a: unknown[]) => adoptLocalCollection(...a),
+  holdForAdoption: (...a: unknown[]) => holdForAdoption(...a),
+  releaseAdoptionHold: (...a: unknown[]) => releaseAdoptionHold(...a),
 }));
 
 vi.mock("sonner", () => ({
@@ -68,8 +72,12 @@ const TOKEN = `m.${PID}.${Date.now() + 90 * 86_400_000}.signature`;
 
 beforeEach(() => {
   window.localStorage.clear();
-  createCollectorIdentity.mockReset().mockResolvedValue({ token: TOKEN, name: "Jane Doe" });
+  createCollectorIdentity
+    .mockReset()
+    .mockResolvedValue({ token: TOKEN, name: "Jane Doe", participantId: PID });
   adoptLocalCollection.mockReset().mockResolvedValue(undefined);
+  holdForAdoption.mockReset().mockImplementation(() => Promise.resolve());
+  releaseAdoptionHold.mockReset().mockImplementation(() => Promise.resolve());
   toastError.mockReset();
   toastSuccess.mockReset();
   authUser.mockReset().mockReturnValue({ user: user(), loading: false });
@@ -177,5 +185,39 @@ describe("when the cards can't be uploaded", () => {
     expect(getMemberToken()).toBeNull();
     // Not "You're in" over a handoff that did not happen.
     expect(toastSuccess).not.toHaveBeenCalled();
+    // Nobody is reconciling any more, so nothing is owed a hold: released with no
+    // query client, because there is no refetch to wait for.
+    expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
+    expect(releaseAdoptionHold.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("never publishes the token when the hold could not be written", async () => {
+    holdForAdoption.mockRejectedValue(new Error("Could not protect your cards on this device"));
+    await renderSignup();
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/protect your cards/i))); // prettier-ignore
+    expect(getMemberToken()).toBeNull();
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
+  });
+
+  it("holds the cards before the token lands and lets go once they are filed", async () => {
+    // A vault in another tab reconciles on hearing the token; the hold is what
+    // stops it reading an adoption still in the air as "you own nothing".
+    // Asserted as what was on the device WHEN the hold ran, not as call order: a
+    // fire-and-forget hold would still be "called first" while the token raced it.
+    const tokenWhenHeld: (string | null)[] = [];
+    holdForAdoption.mockImplementation(() => {
+      tokenWhenHeld.push(getMemberToken());
+      return Promise.resolve();
+    });
+    await renderSignup();
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("You're in, Jane Doe"));
+    const snapshot = { "ep-1": { eventParticipantId: "ep-1" } };
+    expect(holdForAdoption).toHaveBeenCalledWith(PID, snapshot);
+    expect(tokenWhenHeld).toEqual([null]);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith(PID, snapshot, expect.anything());
   });
 });

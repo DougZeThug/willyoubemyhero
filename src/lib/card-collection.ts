@@ -18,6 +18,9 @@ const COLLECTED = "collected";
 const CARD_META = "card-meta";
 const PACK_STATE = "pack-state";
 
+/** A second row in the same store, so the pack and its unsent ids expire apart. */
+const UNRECORDED_KEY = "unrecorded";
+
 /**
  * The day a pack belongs to: the LEAGUE's, in New York, exactly as `open_pack`
  * stamps it.
@@ -294,12 +297,27 @@ export async function collectCard(
  * hardcoded in e2e/journeys.spec.ts (see the note at the top of this file), and a
  * bump would take out the pack state and card art cache along with it.
  */
-export async function forgetCards(eventParticipantIds: readonly string[]): Promise<void> {
+export async function forgetCards(
+  eventParticipantIds: readonly string[],
+  heldBy?: string,
+): Promise<void> {
   if (!isBrowser() || eventParticipantIds.length === 0) return;
   try {
     const db = await getDb();
-    const tx = db.transaction(COLLECTED, "readwrite");
-    await Promise.all([...eventParticipantIds.map((id) => tx.store.delete(id)), tx.done]);
+    // `heldBy` is the identity whose unrecorded row has to be honoured, and the
+    // row is read in the SAME transaction as the delete. A hold written between a
+    // caller's own read and this delete would otherwise be pruned: two
+    // transactions are two chances for it to land in between, one is none.
+    const tx = db.transaction(heldBy ? [COLLECTED, PACK_STATE] : COLLECTED, "readwrite");
+    const prior = heldBy
+      ? ((await tx.objectStore(PACK_STATE).get(UNRECORDED_KEY)) as UnrecordedPulls | undefined)
+      : undefined;
+    const held = new Set(prior && prior.identity === heldBy ? prior.ids : []);
+    const store = tx.objectStore(COLLECTED);
+    await Promise.all([
+      ...eventParticipantIds.filter((id) => !held.has(id)).map((id) => store.delete(id)),
+      tx.done,
+    ]);
   } catch {
     /* a device with IndexedDB blocked has nothing to forget */
   }
@@ -433,8 +451,38 @@ function announcePackState() {
   window.dispatchEvent(new Event(PACK_STATE_CHANGED));
 }
 
-/** A second row in the same store, so the pack and its unsent ids expire apart. */
-const UNRECORDED_KEY = "unrecorded";
+/**
+ * The cross-tab half of `PACK_STATE_CHANGED`, for the writes that move the
+ * unrecorded row.
+ *
+ * A `window` event never leaves its tab and IndexedDB fires nothing across tabs,
+ * so a vault open in a second tab only ever read this row when it mounted. A claim
+ * in the first tab hands the profile a member token, which that vault hears about
+ * (member-token.ts listens for `storage`) and answers by reconciling against a
+ * server that has not heard of these cards yet — holding the row it read before
+ * the claim wrote one. localStorage is the one thing that does cross, so the row's
+ * writers bump this key and the hook listens for it, exactly as `PACK_DEALT_KEY`
+ * wakes a pack screen.
+ *
+ * A fresh value every time, unlike that key's constant one: `storage` only fires
+ * on a change, and every write here is a change somebody needs to hear. Writes
+ * that ADD or MOVE protection announce here; `retireUnrecorded` deliberately does
+ * not — see it.
+ */
+export const PACK_UNRECORDED_KEY = "wwbh:pack-unrecorded";
+
+function announceUnrecordedChanged() {
+  announcePackState();
+  try {
+    // Random rather than a counter: two tabs writing in the same millisecond with
+    // the same count would store the same value, and the second write is not a
+    // change, so it fires no `storage` event and a vault misses protection.
+    const nonce = Math.random().toString(36).slice(2);
+    window.localStorage.setItem(PACK_UNRECORDED_KEY, `${Date.now()}:${nonce}`);
+  } catch {
+    /* private mode still gets the in-tab half above */
+  }
+}
 
 /**
  * The ids this device pulled and never managed to report, or null.
@@ -480,7 +528,7 @@ export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
     const ids = [...new Set([...keep, ...state.ids])];
     await tx.store.put({ ...state, ids }, UNRECORDED_KEY);
     await tx.done;
-    announcePackState();
+    announceUnrecordedChanged();
   } catch {
     /* ignore */
   }
@@ -493,14 +541,21 @@ export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
  * row would retire an older pack's ids on the strength of a call that never
  * mentioned them.
  */
-export async function retireUnrecorded(recorded: readonly string[]): Promise<void> {
+export async function retireUnrecorded(
+  recorded: readonly string[],
+  identity?: string,
+): Promise<void> {
   if (!isBrowser()) return;
   try {
     const db = await getDb();
     // One transaction, for the reason given in `addUnrecorded`.
     const tx = db.transaction(PACK_STATE, "readwrite");
     const prior = (await tx.store.get(UNRECORDED_KEY)) as UnrecordedPulls | undefined;
-    if (!prior) {
+    // `identity` scopes the retire to the row its caller wrote. The ids are the
+    // handset's, not the member's, so a different member's hold over the same
+    // cards — an account switched mid-adoption — would otherwise be retired by the
+    // first one's completion.
+    if (!prior || (identity !== undefined && prior.identity !== identity)) {
       await tx.done;
       return;
     }
@@ -509,6 +564,11 @@ export async function retireUnrecorded(recorded: readonly string[]): Promise<voi
     if (ids.length === 0) await tx.store.delete(UNRECORDED_KEY);
     else await tx.store.put({ ...prior, ids }, UNRECORDED_KEY);
     await tx.done;
+    // Same-tab only, on purpose. Waking another tab here would have it drop a
+    // protection its own cached stats answer — read before the league had heard of
+    // these cards — has not caught up with, and the very next reconcile would
+    // delete them. A tab that holds a row a little longer than needed costs
+    // nothing; one that lets go early loses the card.
     announcePackState();
   } catch {
     /* ignore */
@@ -585,7 +645,7 @@ export async function carryPackToIdentity(
     // The mirror moves with the row, which is also what wakes a pack screen open
     // in another tab: it is watching this key, and the identity has changed.
     markPackDealt(carried);
-    announcePackState();
+    announceUnrecordedChanged();
     return true;
   } catch {
     // A device that cannot write cannot carry. It gets the second pack, which is

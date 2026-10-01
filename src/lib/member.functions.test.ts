@@ -502,6 +502,21 @@ describe("generateMemberCodes", () => {
     expect(mock.callsFor("member_codes", "upsert")).toHaveLength(0);
   });
 
+  it("surfaces a failed claimed-players read instead of rotating everyone", async () => {
+    // The read that decides who is left alone. Coalesced to empty it says nobody
+    // has claimed, and every on-roster player's code is rotated — claimed_at reset,
+    // the paper slip in their pocket dead — by a re-issue meant for stragglers.
+    withDb({
+      "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] },
+      "member_codes.select": { data: null, error: { message: "connection lost" } },
+      "event_participants.select": { data: [{ participant_id: PARTICIPANT_ID }] },
+    });
+    await expect(generate({ eventId: EVENT_ID, scope: "unclaimed" }, adminOk())).rejects.toThrow(
+      "connection lost",
+    );
+    expect(mock.callsFor("member_codes", "upsert")).toHaveLength(0);
+  });
+
   it("still re-issues for every player when the whole league is asked for", async () => {
     // "Re-issue ALL" promises no number, so it stays league-wide — and must not
     // pick up the roster filter the unclaimed branch just grew.

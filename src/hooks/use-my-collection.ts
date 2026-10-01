@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyCardStats } from "@/lib/card-pulls.functions";
 import { dupeCount, type MyCardStats } from "@/lib/card-pulls";
@@ -8,6 +8,7 @@ import {
   loadCollection,
   loadUnrecorded,
   PACK_STATE_CHANGED,
+  PACK_UNRECORDED_KEY,
   type CollectedCard,
   type UnrecordedPulls,
 } from "@/lib/card-collection";
@@ -140,11 +141,20 @@ export function useMyCollection(
         setUnrecorded((prev) => (sameRow(prev, u) ? prev : u));
         setUnrecordedLoaded(true);
       });
+    // `PACK_STATE_CHANGED` never leaves its tab. A claim in another tab writes this
+    // row and then hands the profile a member token, and this vault would
+    // reconcile against the row it read at mount — before there was one.
+    const theirs = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== PACK_UNRECORDED_KEY) return;
+      read();
+    };
     read();
     window.addEventListener(PACK_STATE_CHANGED, read);
+    window.addEventListener("storage", theirs);
     return () => {
       cancelled = true;
       window.removeEventListener(PACK_STATE_CHANGED, read);
+      window.removeEventListener("storage", theirs);
     };
   }, []);
 
@@ -166,6 +176,7 @@ export function useMyCollection(
   }, [unrecorded, participantId]);
 
   const fn = useServerFn(getMyCardStats);
+  const qc = useQueryClient();
   const stats = useQuery({
     queryKey: myCardStatsKey(eventId, participantId),
     queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<MyCardStats>,
@@ -262,6 +273,13 @@ export function useMyCollection(
   // reconciliation *and* every reveal — turning a card over removes it from the
   // list, which used to re-fire the whole delete for everything still on it.
   const forgottenRef = useRef(new Set<string>());
+  // Who is looking NOW, for the delete below to compare against after its awaits:
+  // a handset changing hands mid-read would otherwise judge the new member's hold
+  // by the previous member's identity and delete it.
+  const participantRef = useRef(participantId);
+  useEffect(() => {
+    participantRef.current = participantId;
+  }, [participantId]);
   useEffect(() => {
     // `protectedIds` is already held out of `stale` by the merge. Repeated at the
     // one site that actually deletes, because that is where the rule has to hold:
@@ -272,8 +290,57 @@ export function useMyCollection(
     );
     if (fresh.length === 0) return;
     for (const id of fresh) forgottenRef.current.add(id);
-    void forgetCards(fresh);
-  }, [merged.stale, bumps, protectedIds]);
+    // Both halves of the decision read FRESH, at the moment of the delete. What
+    // reached this effect is a snapshot — of the protection row, and of a stats
+    // answer that may predate an adoption in flight in ANOTHER tab, whose own
+    // refetch this tab never sees. "Absent from the server" is only worth a
+    // delete if the server is asked again now; otherwise a claim finishing
+    // elsewhere can retire its hold and leave this tab acting on the empty answer
+    // it cached before the cards were filed. A delete cannot be taken back.
+    //
+    // A failed refetch deletes nothing: no answer is not "you own nothing". The
+    // ids come back out of `forgottenRef` so a later reconcile reconsiders them,
+    // as it does for anything the row still holds. Not cancelled on a re-run: the
+    // delete is the same fire-and-forget it always was, and a cancel here would
+    // strand ids in `forgottenRef` with nothing left to retry them.
+    void (async () => {
+      // A stale list needs a server answer behind it, which needs an event; with
+      // none there is nothing to revalidate against and nothing to delete.
+      if (!eventId) {
+        for (const id of fresh) forgottenRef.current.delete(id);
+        return;
+      }
+      try {
+        const answer = await qc.fetchQuery({
+          queryKey: myCardStatsKey(eventId, participantId),
+          queryFn: () => fn({ data: { eventId } }) as Promise<MyCardStats>,
+          staleTime: 0,
+        });
+        const now = await loadUnrecorded();
+        if (participantRef.current !== participantId) {
+          // Somebody else is holding the phone now; their reconcile decides.
+          for (const id of fresh) forgottenRef.current.delete(id);
+          return;
+        }
+        const listed = new Set(answer.cards.map((c) => c.eventParticipantId));
+        const held =
+          now && (!participantId || now.identity === `m:${participantId}`)
+            ? new Set(now.ids)
+            : EMPTY_IDS;
+        const doomed: string[] = [];
+        for (const id of fresh) {
+          if (held.has(id) || listed.has(id)) forgottenRef.current.delete(id);
+          else doomed.push(id);
+        }
+        // `heldBy` makes the row count again inside the delete's own transaction,
+        // closing the gap between the read above and this write.
+        if (doomed.length > 0)
+          await forgetCards(doomed, participantId ? `m:${participantId}` : undefined);
+      } catch {
+        for (const id of fresh) forgottenRef.current.delete(id);
+      }
+    })();
+  }, [merged.stale, bumps, protectedIds, participantId, eventId, qc, fn]);
 
   const markCollected = useCallback(
     (eventParticipantId: string, tier: string, edition: Edition, count: number) => {

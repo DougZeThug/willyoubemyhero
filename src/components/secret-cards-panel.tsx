@@ -143,6 +143,8 @@ export function SecretCardsPanel() {
   // it, and a queue that re-rendered the panel on every keystroke would be its
   // own problem.
   const lookQueue = useRef(new Map<string, Promise<void>>());
+  // The same chain per SET — see saveSetLook.
+  const setLookQueue = useRef(new Map<string, Promise<void>>());
   // The one row whose border previews may animate — see BorderFxPicker.animate.
   const [lookRow, setLookRow] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -182,6 +184,15 @@ export function SecretCardsPanel() {
   const pickerSets: SecretCollection[] = allSets
     .filter((c) => c.active)
     .map((c) => ({ id: c.id, label: c.label, accent: c.accent }));
+  // A hidden set stops being an option, but the ids held in state do not know
+  // that: the sticky target and any staged draft would keep pointing at it while
+  // every <select> fell back to showing "Unsorted", and the next batch would be
+  // filed into a set the admin can no longer see as chosen. Clamped where it is
+  // read rather than reset from an effect, so showing the set again restores the
+  // choice instead of having quietly forgotten it.
+  const activeIds = new Set(pickerSets.map((c) => c.id));
+  const activeOrNull = (id: string | null) => (id && activeIds.has(id) ? id : null);
+  const effectiveUpload = activeOrNull(uploadCollection);
   const cardsPerSet = new Map<string, number>();
   for (const c of cards)
     if (c.collection) cardsPerSet.set(c.collection, (cardsPerSet.get(c.collection) ?? 0) + 1);
@@ -258,7 +269,7 @@ export function SecretCardsPanel() {
         key: `${file.name}-${file.size}-${next.length}-${crypto.randomUUID()}`,
         name: nameFromFile(file.name),
         flavour: "",
-        collection: uploadCollection,
+        collection: effectiveUpload,
         file: staged,
         // Revoked in clearDrafts / removeDraft, and after a successful save.
         previewUrl: URL.createObjectURL(staged),
@@ -284,7 +295,7 @@ export function SecretCardsPanel() {
           // 11pm; the jokes get written on the train. A form that refuses to save
           // without wording guarantees seven unfinished cards.
           flavour: d.flavour.trim() || undefined,
-          collection: d.collection ?? undefined,
+          collection: activeOrNull(d.collection) ?? undefined,
           dataUrl: await encodeUploadImage(d.file),
         })),
       );
@@ -455,27 +466,42 @@ export function SecretCardsPanel() {
   ) {
     const key = collection ?? "";
     setSavingSetIds((prev) => new Set(prev).add(key));
-    const p = setLookFn({ data: { collection, ...look } }).then(async (r) => {
-      await qc.invalidateQueries({ queryKey: ["secret-cards"] });
-      return r;
-    });
-    toast.promise(p, {
-      id: `set-look-${key}`,
-      loading: `Applying to ${label}…`,
-      success: (r) => `${label}: ${r.updated} card${r.updated === 1 ? "" : "s"} updated`,
-      error: (e) => (e instanceof Error ? e.message : "Save failed"),
-    });
-    void p
-      .catch(() => {
-        // toast.promise already surfaced it.
+    // One chain per set, the way saveLook chains per card. The strip's `disabled`
+    // is CSS-only (pointer-events), so the keyboard can still fire a second change
+    // while the first is in the air — and unchained, whichever write the network
+    // delivered last wins, and whichever landed FIRST clears the spinner with the
+    // other still outstanding.
+    const queued = setLookQueue.current.get(key) ?? Promise.resolve();
+    const run = queued
+      .then(async () => {
+        const p = setLookFn({ data: { collection, ...look } }).then(async (r) => {
+          await qc.invalidateQueries({ queryKey: ["secret-cards"] });
+          return r;
+        });
+        toast.promise(p, {
+          id: `set-look-${key}`,
+          loading: `Applying to ${label}…`,
+          success: (r) => `${label}: ${r.updated} card${r.updated === 1 ? "" : "s"} updated`,
+          error: (e) => (e instanceof Error ? e.message : "Save failed"),
+        });
+        try {
+          await p;
+        } catch {
+          // toast.promise already surfaced it, and swallowing it here keeps the
+          // chain alive for the saves still queued behind it.
+        }
       })
       .finally(() => {
+        // Only the last save queued for this set clears its spinner.
+        if (setLookQueue.current.get(key) !== run) return;
+        setLookQueue.current.delete(key);
         setSavingSetIds((prev) => {
           const next = new Set(prev);
           next.delete(key);
           return next;
         });
       });
+    setLookQueue.current.set(key, run);
   }
 
   async function grant(card: SecretCardAdminRow) {
@@ -657,7 +683,7 @@ export function SecretCardsPanel() {
             Add to
           </span>
           <select
-            value={uploadCollection ?? ""}
+            value={effectiveUpload ?? ""}
             onChange={(e) => setUploadCollection(e.target.value || null)}
             className="min-h-11 w-full min-w-0 rounded border border-border-strong bg-background px-1.5 text-base text-foreground pointer-fine:min-h-0 pointer-fine:text-xs"
             aria-label="Set for new uploads"
@@ -724,7 +750,7 @@ export function SecretCardsPanel() {
                       Set
                     </span>
                     <select
-                      value={d.collection ?? ""}
+                      value={activeOrNull(d.collection) ?? ""}
                       aria-label={`Set for ${d.file.name}`}
                       onChange={(e) =>
                         setDrafts((prev) =>
@@ -1134,6 +1160,16 @@ export function SecretCardsPanel() {
                     className="mt-1 min-h-11 w-full rounded border border-border-strong bg-background px-2 text-base text-foreground"
                   >
                     <option value="">Unsorted</option>
+                    {/* A card can sit in a set that has since been hidden. Without
+                        its own option the select falls back to showing
+                        "Unsorted" over a card that is not, and re-picking it
+                        does not fire onChange. Named by the full list: the
+                        picker's one would show the raw id. */}
+                    {editingCard.collection && !activeIds.has(editingCard.collection) && (
+                      <option value={editingCard.collection}>
+                        {secretCollectionLabel(editingCard.collection, sets)} (hidden)
+                      </option>
+                    )}
                     {pickerSets.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label}

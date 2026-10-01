@@ -241,6 +241,32 @@ describe("buying", () => {
     expect(first).toEqual(expect.stringMatching(/^[0-9a-f-]{36}$/));
   });
 
+  it("keeps each tile busy until its own buy settles", async () => {
+    // Two taps in quick succession are two buys on the wire. One shared "which
+    // listing" scalar let the second tap steal the first tile's spinner, and the
+    // first settle clear the second's — re-enabling a button whose buy was still
+    // in flight and inviting a re-tap of it.
+    const other = { ...rosterListing, id: "listing-2", price: 80 };
+    browseFn.mockResolvedValue({ listings: [rosterListing, other], nudgeTopic: null });
+    const settles: Array<(v: unknown) => void> = [];
+    buyFn.mockImplementation(() => new Promise((resolve) => settles.push(resolve)));
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole("button", { name: /buy · 120/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /buy · 80/i }));
+    await waitFor(() => expect(buyFn).toHaveBeenCalledTimes(2));
+
+    // Both on the wire: neither tile may offer its button again.
+    expect(screen.queryByRole("button", { name: /buy ·/i })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "…" })).toHaveLength(2);
+
+    settles[0]({ ok: false, reason: "resolved" });
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "…" })).toHaveLength(1));
+    // The first tile is free again; the second is still waiting on its own buy.
+    expect(screen.getByRole("button", { name: /buy · 120/i })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /buy · 80/i })).toBeNull();
+  });
+
   it("moves no balance and refreshes no collection when the buy was refused", async () => {
     buyFn.mockResolvedValue({ ok: false, reason: "insufficient" });
     const { client, invalidate } = renderPanel();

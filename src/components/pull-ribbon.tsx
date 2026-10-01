@@ -28,7 +28,8 @@ import { cn } from "@/lib/utils";
  */
 export function PullRibbon({
   copies,
-  upgrade = null,
+  upgrade: climbed = null,
+  sold = false,
   className,
 }: {
   /**
@@ -42,9 +43,19 @@ export function PullRibbon({
   copies: number;
   /** The rung this copy climbed to, in its own colour. Null for no climb. */
   upgrade?: { label: string; accent: string } | null;
+  /**
+   * This copy has since been sold, so `copies` is the holding AFTER the sale and
+   * no longer includes it. A minimal duplicate (held one, pulled a second, sold
+   * one) lands on 1, which reads as NEW on a card the player demonstrably already
+   * held; and a sold upgrade's climb left with the copy that made it. Either way
+   * the only true thing left to say is the count, so a sold ribbon never claims
+   * newness or a climb.
+   */
+  sold?: boolean;
   className?: string;
 }) {
-  const first = !upgrade && copies <= 1;
+  const upgrade = sold ? null : climbed;
+  const first = !sold && !upgrade && copies <= 1;
   const label = upgrade
     ? `Upgraded to ${upgrade.label} — you now hold ${copies} of this card`
     : first

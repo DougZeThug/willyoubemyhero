@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { BadgeCheck, LogOut, ShieldCheck, UserRoundCheck } from "lucide-react";
@@ -11,6 +11,8 @@ import { clearMemberToken, setMemberToken, useMemberSession } from "@/lib/member
 import {
   adoptableIds,
   adoptLocalCollection,
+  holdForAdoption,
+  releaseAdoptionHold,
   snapshotLocalCollection,
 } from "@/lib/adopt-collection";
 import { carryPackToIdentity } from "@/lib/card-collection";
@@ -44,6 +46,7 @@ function ClaimPage() {
   const claimFn = useServerFn(claimPlayer);
   const linkFn = useServerFn(linkClaimedPlayer);
   const { user } = useAuthUser();
+  const qc = useQueryClient();
 
   const roster = useQuery({
     queryKey: ["claim-roster"],
@@ -113,6 +116,12 @@ function ClaimPage() {
       // "you own nothing" rather than "we don't know", so it deletes them. So if
       // adoption does not stick, the token comes straight back off: no member,
       // no reconciliation, nothing pruned, and the code still works next time.
+      //
+      // The rule above holds for this tab. A vault open in ANOTHER tab of this
+      // profile hears the token through `storage` and reconciles on its own clock,
+      // so the cards are filed as owed-to-this-member first: the one thing every
+      // reconcile already honours, written before the token that wakes it.
+      await holdForAdoption(selected, held);
       setMemberToken(res.token, res.name);
       try {
         await adoptLocalCollection(held);
@@ -123,12 +132,18 @@ function ClaimPage() {
           await adoptLocalCollection(held);
         } catch {
           clearMemberToken();
+          await releaseAdoptionHold(selected, held);
           toast.error(
             "Claimed, but your cards couldn't be transferred — your code still works, try again on a better connection.",
           );
           return;
         }
       }
+      // Not awaited: it waits on a refetch, and a phone on garden wifi should not
+      // sit on this screen for it. If the refetch fails the hold simply stays.
+      void releaseAdoptionHold(selected, held, qc).catch(() => {
+        // The hold simply stays: keeping it costs nothing, letting go early loses the card.
+      });
       // Their guest pack follows them across, now that the cards themselves have.
       // It is keyed on the identity `usePackIdentity` hands out, and a claim moves
       // that from `d:<deviceId>` to `m:<participantId>` — which every screen keyed

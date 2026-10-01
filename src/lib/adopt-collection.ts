@@ -1,4 +1,11 @@
-import { loadCollection } from "./card-collection";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  addUnrecorded,
+  loadCollection,
+  loadUnrecorded,
+  retireUnrecorded,
+  todayKey,
+} from "./card-collection";
 import { adoptCollection } from "./card-pulls.functions";
 
 /**
@@ -66,3 +73,68 @@ export function adoptableIds(snapshot: Awaited<ReturnType<typeof loadCollection>
 
 /** Read this device's collection before anything can prune it. */
 export const snapshotLocalCollection = loadCollection;
+
+/**
+ * Hold the snapshot's cards out of the prune for the length of the adoption.
+ *
+ * Call it BEFORE the token lands. The moment it does, every mounted
+ * `useMyCollection` — in this tab or any other on the profile — asks the server
+ * what this member owns, and an adoption that has not committed yet answers
+ * "nothing", which the merge reads as "delete the lot". The unrecorded row is the
+ * one thing the merge already honours for exactly this ("the server has not
+ * vouched for these yet"), so the guest's cards are filed under it for the member
+ * they are about to become. Written first so a vault in another tab has it to
+ * read by the time it hears about the token.
+ */
+export async function holdForAdoption(
+  participantId: string,
+  snapshot: Awaited<ReturnType<typeof loadCollection>>,
+): Promise<void> {
+  const ids = adoptableIds(snapshot);
+  if (ids.length === 0) return;
+  const identity = `m:${participantId}`;
+  await addUnrecorded({ dayKey: todayKey(), identity, ids });
+  // Read back, because `addUnrecorded` swallows a failed write by design — the
+  // pack screen would rather deal a pack than stop on a blocked database. Here
+  // that contract is the wrong one: a hold that was never written, reported as
+  // written, lets the caller publish the member token with nothing protecting the
+  // cards, which is the loss this whole step exists to prevent. Thrown, so the
+  // handoff stops before the token; the code and the account still work next time.
+  const row = await loadUnrecorded();
+  const held = new Set(row?.identity === identity ? row.ids : []);
+  if (!ids.every((id) => held.has(id))) {
+    throw new Error("Could not protect your cards on this device");
+  }
+}
+
+/**
+ * Let go of the hold once nothing needs it.
+ *
+ * On success that means AFTER the stats refetch: the cached answer from before
+ * the adoption is the empty one, and dropping the hold while it is still the
+ * freshest word on the matter hands the prune the very cards it was holding. If
+ * that refetch fails the hold stays — it costs nothing to keep and the card is
+ * the one thing that cannot be had back, the same call the pack screen makes for
+ * a carried card. On failure of the ADOPTION the token comes straight back off,
+ * so there is no member to reconcile and the hold can go at once; `qc` is simply
+ * left out.
+ *
+ * Deliberately announced to this tab only (see `retireUnrecorded`): another
+ * tab's cached stats are not refreshed by this refetch, so it keeps holding.
+ */
+export async function releaseAdoptionHold(
+  participantId: string,
+  snapshot: Awaited<ReturnType<typeof loadCollection>>,
+  qc?: QueryClient,
+): Promise<void> {
+  const ids = adoptableIds(snapshot);
+  if (ids.length === 0) return;
+  if (qc) {
+    await qc.refetchQueries(
+      { queryKey: ["my-card-stats"], type: "active" },
+      { throwOnError: true },
+    );
+  }
+  // Scoped to the identity the hold was filed under; see `retireUnrecorded`.
+  await retireUnrecorded(ids, `m:${participantId}`);
+}

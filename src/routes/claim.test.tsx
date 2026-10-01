@@ -7,7 +7,7 @@
 // "loading", then a grid — so a read that failed and a league with nobody on it
 // drew the same blank space over the same dead Claim button.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import ClaimPage from "./claim";
@@ -29,7 +29,11 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
   return { ...actual, useServerFn: (fn: unknown) => fn };
 });
 
-vi.mock("@tanstack/react-query", () => ({ useQuery: (...a: unknown[]) => useQuery(...a) }));
+const queryClient = vi.hoisted(() => ({ refetchQueries: vi.fn() }));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: (...a: unknown[]) => useQuery(...a),
+  useQueryClient: () => queryClient,
+}));
 
 vi.mock("@/hooks/use-account", () => ({
   useAuthUser: () => ({ user: null, loading: false }),
@@ -68,9 +72,13 @@ vi.mock("@/lib/card-collection", async (importOriginal) => ({
 }));
 
 const adoptLocalCollection = vi.hoisted(() => vi.fn());
+const holdForAdoption = vi.hoisted(() => vi.fn());
+const releaseAdoptionHold = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/adopt-collection")>()),
   adoptLocalCollection: (...args: unknown[]) => adoptLocalCollection(...args),
+  holdForAdoption: (...args: unknown[]) => holdForAdoption(...args),
+  releaseAdoptionHold: (...args: unknown[]) => releaseAdoptionHold(...args),
   snapshotLocalCollection: () => Promise.resolve({}),
 }));
 
@@ -108,6 +116,8 @@ beforeEach(() => {
   useQuery.mockReturnValue(rosterState({ data: [ATHLETE] }));
   claimPlayer.mockResolvedValue({ ok: true, token: "m.tok", name: "Doug" });
   adoptLocalCollection.mockResolvedValue(1);
+  holdForAdoption.mockImplementation(() => Promise.resolve());
+  releaseAdoptionHold.mockImplementation(() => Promise.resolve());
   // carryPackToIdentity needs no stubbed answer: the route only awaits it, and a
   // bare vi.fn() already returns undefined, which awaits fine.
 });
@@ -201,11 +211,67 @@ describe("claiming a player", () => {
     );
   });
 
+  it("holds the cards before the token lands, and lets go once adoption stuck", async () => {
+    // A vault in another tab of this profile reconciles on hearing the token, and
+    // reads an adoption still in the air as "you own nothing". The hold is what it
+    // reads instead, so it has to be down before the token and stay down until the
+    // stats refetch can vouch for the cards.
+    await claim();
+
+    expect(holdForAdoption).toHaveBeenCalledWith("p-doug", {});
+    expect(holdForAdoption.mock.invocationCallOrder[0]).toBeLessThan(
+      setMemberToken.mock.invocationCallOrder[0],
+    );
+    expect(releaseAdoptionHold).toHaveBeenCalledWith("p-doug", {}, queryClient);
+    expect(releaseAdoptionHold.mock.invocationCallOrder[0]).toBeGreaterThan(
+      adoptLocalCollection.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("waits for the hold to be down before the token goes out", async () => {
+    // Call order alone would pass a fire-and-forget hold, and the token could then
+    // wake another tab before the row exists. The hold is left pending here and the
+    // token must not move until it settles.
+    let landed!: () => void;
+    holdForAdoption.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          landed = resolve;
+        }),
+    );
+    void claim();
+    await waitFor(() => expect(holdForAdoption).toHaveBeenCalled());
+    expect(setMemberToken).not.toHaveBeenCalled();
+
+    landed();
+    await waitFor(() => expect(setMemberToken).toHaveBeenCalled());
+  });
+
+  it("lets the hold go straight away when the cards cannot be filed", async () => {
+    // The token comes back off, so nobody is reconciling and nothing is owed.
+    adoptLocalCollection.mockRejectedValue(new Error("offline"));
+    await claim();
+
+    expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith("p-doug", {});
+  });
+
+  it("never publishes the token when the hold could not be written", async () => {
+    // `holdForAdoption` throws when its read-back finds nothing. Past that point
+    // the token would land with no protection, and a vault could prune the lot.
+    holdForAdoption.mockRejectedValue(new Error("Could not protect your cards on this device"));
+    await claim();
+
+    expect(setMemberToken).not.toHaveBeenCalled();
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
+  });
+
   it("carries nothing on a code that does not match", async () => {
     claimPlayer.mockResolvedValue({ ok: false, reason: "no_match" });
     await claim();
 
     expect(carryTrophySeen).not.toHaveBeenCalled();
     expect(setMemberToken).not.toHaveBeenCalled();
+    expect(holdForAdoption).not.toHaveBeenCalled();
   });
 });

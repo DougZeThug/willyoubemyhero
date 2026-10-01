@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
 import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
@@ -7,6 +8,8 @@ import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import {
   adoptableIds,
   adoptLocalCollection,
+  holdForAdoption,
+  releaseAdoptionHold,
   snapshotLocalCollection,
 } from "@/lib/adopt-collection";
 import { carryPackToIdentity } from "@/lib/card-collection";
@@ -58,6 +61,7 @@ const WAKE_LIMIT = 6;
  * running it again on every auth event would loop.
  */
 export function useAccountSync(user: User | null) {
+  const qc = useQueryClient();
   const syncedFor = useRef<string | null>(null);
   // Whose run last started on this device. Deliberately not cleared on
   // sign-out: it is how the next run knows the member token it finds belongs to
@@ -166,6 +170,14 @@ export function useAccountSync(user: User | null) {
         // away from; re-filing seen-keys is idempotent and costs nothing if the
         // run turns out to be stale.
         if (carryFrom) carryTrophySeen(`d:${carryFrom}`, res.id);
+        // Held first for the tabs this one cannot see: see claim.tsx. After the
+        // snapshot, before the token that wakes them.
+        await holdForAdoption(res.id, held);
+        if (cancelled) {
+          // No token went on, so nothing is reconciling and nothing needs holding.
+          await releaseAdoptionHold(res.id, held);
+          return;
+        }
         setMemberToken(res.token, res.name ?? "Player");
         wrote = res.token;
         // Every await below is a moment the account can change under this sync.
@@ -188,10 +200,15 @@ export function useAccountSync(user: User | null) {
             // the whole sync to the retry loop below, so a later attempt gets
             // the same snapshot rather than a store the prune has been through.
             clearMemberToken();
+            await releaseAdoptionHold(res.id, held);
             throw e;
           }
         }
         if (cancelled) return;
+        // Not awaited: it waits on a refetch. If that fails the hold stays.
+        void releaseAdoptionHold(res.id, held, qc).catch(() => {
+          // The hold simply stays: keeping it costs nothing, letting go early loses the card.
+        });
         // The claim screen's move — a sign-in is the other way a guest becomes a
         // member, and B-07 does not care which door was used.
         //
@@ -271,7 +288,7 @@ export function useAccountSync(user: User | null) {
       // Compare-and-clear, so a token a newer run has already replaced stays.
       if (wrote && getMemberToken() === wrote) clearMemberToken();
     };
-  }, [authUserId, wake]);
+  }, [authUserId, wake, qc]);
 }
 
 /**

@@ -23,6 +23,7 @@ vi.mock("@/lib/card-collection", () => ({
   forgetCards: (...args: unknown[]) => forgetCards(...args),
   loadUnrecorded: () => loadUnrecorded(),
   PACK_STATE_CHANGED: "wwbh:pack-state-changed",
+  PACK_UNRECORDED_KEY: "wwbh:pack-unrecorded",
 }));
 vi.mock("@/lib/member-token", () => ({
   useMemberSession: () => useMemberSession(),
@@ -340,6 +341,102 @@ describe("useMyCollection, holding a pull the server has not been told about", (
 
     await waitFor(() => expect(result.current.collection["ep-5"]).toBeUndefined());
     expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).toContain("ep-5");
+  });
+});
+
+describe("useMyCollection, with the row written from another tab", () => {
+  // A claim in tab A files the guest's cards as owed, then hands the profile a
+  // member token. Tab B's vault hears the token through `storage` and asks the
+  // server — which, mid-adoption, lists nothing. `PACK_STATE_CHANGED` never
+  // leaves tab A, and the row was read at mount, before there was one.
+  const unrecorded = (ids: string[]) => ({ dayKey: "2026-07-31", identity: "m:p-me", ids });
+
+  function otherTabWrote(key: string | null = "wwbh:pack-unrecorded") {
+    window.dispatchEvent(new StorageEvent("storage", { key }));
+  }
+
+  it("re-reads the row when another tab says it changed", async () => {
+    // The order a real claim produces: the vault mounted before there was a row,
+    // the other tab writes it, and only then does the server answer — empty. The
+    // row has to have been picked up by then, or the answer disowns the card.
+    let resolve!: (v: unknown) => void;
+    getMyCardStats.mockReturnValue(new Promise((r) => (resolve = r)));
+    const { result } = await mount();
+    await waitFor(() => expect(getMyCardStats).toHaveBeenCalled());
+
+    loadUnrecorded.mockResolvedValue(unrecorded(["ep-5"]));
+    const reads = loadUnrecorded.mock.calls.length;
+    act(() => otherTabWrote());
+    await waitFor(() => expect(loadUnrecorded.mock.calls.length).toBeGreaterThan(reads));
+
+    await act(async () => resolve(serverHas(["ep-0"])));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+    // Held by the row it heard about, shown, and never handed to the delete.
+    expect(result.current.collection["ep-5"]).toBeDefined();
+    expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).not.toContain("ep-5");
+  });
+
+  it("ignores another tab's write to some other key", async () => {
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const reads = loadUnrecorded.mock.calls.length;
+
+    act(() => otherTabWrote("wwbh:something-else"));
+    expect(loadUnrecorded.mock.calls.length).toBe(reads);
+  });
+
+  it("checks the row again at the moment of the delete, not just at mount", async () => {
+    // The mount read found nothing and no event reached this tab in time — the
+    // row is written between that read and the flush. A delete cannot be taken
+    // back, so the one irreversible step asks again.
+    loadUnrecorded.mockResolvedValueOnce(null).mockResolvedValue(unrecorded(["ep-5"]));
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+
+    const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(deleted).not.toContain("ep-5");
+    expect(deleted).toHaveLength(16);
+  });
+});
+
+describe("useMyCollection, deleting only on a fresh server answer", () => {
+  // The cached stats answer is a snapshot too. A claim finishing in ANOTHER tab
+  // files the cards and retires its hold, and this tab — whose own cached answer
+  // predates all of it — would otherwise act on "the server lists nothing".
+  it("does not delete a card the server lists when asked again", async () => {
+    getMyCardStats
+      .mockResolvedValueOnce(serverHas(["ep-0"]))
+      .mockResolvedValue(serverHas(["ep-0", "ep-5"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+
+    const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(deleted).not.toContain("ep-5");
+    // Everything the fresh answer still does not list does go.
+    expect(deleted).toHaveLength(16);
+  });
+
+  it("deletes nothing when the fresh answer cannot be had", async () => {
+    // No answer is not "you own nothing".
+    getMyCardStats
+      .mockResolvedValueOnce(serverHas(["ep-0"]))
+      .mockRejectedValue(new Error("offline"));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(getMyCardStats.mock.calls.length).toBeGreaterThan(1));
+    // Let the rejected re-ask settle before saying nothing was deleted.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(forgetCards).not.toHaveBeenCalled();
   });
 });
 

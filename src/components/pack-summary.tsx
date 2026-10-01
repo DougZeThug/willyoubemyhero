@@ -265,7 +265,9 @@ export function PackSummary({
                 )}
                 {/* Only once it has been turned. An unturned column is a card
                     still in the sequence, and its ribbon would answer early. */}
-                {turned && copies != null && <PullRibbon copies={copies} upgrade={climbed} />}
+                {turned && copies != null && (
+                  <PullRibbon copies={copies} upgrade={climbed} sold={sold?.[i] != null} />
+                )}
               </motion.div>
               {turned && (
                 <motion.div
