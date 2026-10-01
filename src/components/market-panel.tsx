@@ -186,7 +186,10 @@ export function MarketPanel({
   // want to have to guess about — so they go quiet with the reason on them.
   const offline = !useIsOnline();
 
-  const [buying, setBuying] = useState<string | null>(null);
+  // A set, not an id: the shelf is a grid of tiles and a second tap lands while
+  // the first buy is still on the wire. `buy.isPending` only describes the latest
+  // `mutate()`, so each tile has to answer for its own listing.
+  const [buying, setBuying] = useState<ReadonlySet<string>>(new Set());
   const [pulling, setPulling] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [staged, setStaged] = useState<{ item: TradeItemView; floor: number } | null>(null);
@@ -254,7 +257,14 @@ export function MarketPanel({
       );
     },
     onError: () => toast("Could not buy that just now"),
-    onSettled: () => setBuying(null),
+    // Only the listing that settled; the others are still in flight.
+    onSettled: (_data, _error, listing) =>
+      setBuying((prev) => {
+        if (!prev.has(listing.id)) return prev;
+        const next = new Set(prev);
+        next.delete(listing.id);
+        return next;
+      }),
   });
 
   const putUp = useMutation({
@@ -398,7 +408,7 @@ export function MarketPanel({
               {listings.map((listing) => {
                 const meta = itemMeta(listing.item, { underATile: true });
                 const broke = balance != null && balance < listing.price;
-                const busy = buying === listing.id && buy.isPending;
+                const busy = buying.has(listing.id);
                 return (
                   <li key={listing.id} className="flex flex-col items-center gap-1.5">
                     <TradeItemTile
@@ -427,7 +437,7 @@ export function MarketPanel({
                       disabled={broke || busy || offline}
                       {...offlineReason(offline)}
                       onClick={() => {
-                        setBuying(listing.id);
+                        setBuying((prev) => new Set(prev).add(listing.id));
                         buy.mutate(listing);
                       }}
                     >
