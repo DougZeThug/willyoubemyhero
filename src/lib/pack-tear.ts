@@ -77,7 +77,6 @@ export function seamY(p: TearPoint, f: number): number {
   return p.y * seamOpen(p.x, f);
 }
 
-const fmt = (p: TearPoint) => `${p.x.toFixed(1)}% ${p.y.toFixed(1)}%`;
 const at = (p: TearPoint, f: number) => `${p.x.toFixed(1)}% ${seamY(p, f).toFixed(1)}%`;
 
 /**
@@ -90,12 +89,6 @@ const at = (p: TearPoint, f: number) => `${p.x.toFixed(1)}% ${seamY(p, f).toFixe
  */
 export function bodyClipAt(points: TearPoint[], f: number): string {
   return `polygon(${points.map((p) => at(p, f)).join(", ")}, 100% 100%, 0% 100%)`;
-}
-
-/** Everything above it — the piece that peels away. Zero area at `f = 0`. */
-export function stripClipAt(points: TearPoint[], f: number): string {
-  const line = [...points].reverse().map((p) => at(p, f));
-  return `polygon(0% 0%, 100% 0%, ${line.join(", ")})`;
 }
 
 /**
