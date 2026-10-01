@@ -141,7 +141,9 @@ function ClaimPage() {
       }
       // Not awaited: it waits on a refetch, and a phone on garden wifi should not
       // sit on this screen for it. If the refetch fails the hold simply stays.
-      void releaseAdoptionHold(held, qc).catch(() => {});
+      void releaseAdoptionHold(held, qc).catch(() => {
+        // The hold simply stays: keeping it costs nothing, letting go early loses the card.
+      });
       // Their guest pack follows them across, now that the cards themselves have.
       // It is keyed on the identity `usePackIdentity` hands out, and a claim moves
       // that from `d:<deviceId>` to `m:<participantId>` — which every screen keyed

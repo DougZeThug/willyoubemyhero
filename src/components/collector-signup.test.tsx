@@ -76,8 +76,8 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ token: TOKEN, name: "Jane Doe", participantId: PID });
   adoptLocalCollection.mockReset().mockResolvedValue(undefined);
-  holdForAdoption.mockReset().mockResolvedValue(undefined);
-  releaseAdoptionHold.mockReset().mockResolvedValue(undefined);
+  holdForAdoption.mockReset().mockImplementation(() => Promise.resolve());
+  releaseAdoptionHold.mockReset().mockImplementation(() => Promise.resolve());
   toastError.mockReset();
   toastSuccess.mockReset();
   authUser.mockReset().mockReturnValue({ user: user(), loading: false });
@@ -189,6 +189,16 @@ describe("when the cards can't be uploaded", () => {
     // query client, because there is no refetch to wait for.
     expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
     expect(releaseAdoptionHold.mock.calls[0]).toHaveLength(1);
+  });
+
+  it("never publishes the token when the hold could not be written", async () => {
+    holdForAdoption.mockRejectedValue(new Error("Could not protect your cards on this device"));
+    await renderSignup();
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/protect your cards/i))); // prettier-ignore
+    expect(getMemberToken()).toBeNull();
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
   });
 
   it("holds the cards before the token lands and lets go once they are filed", async () => {

@@ -14,10 +14,12 @@ vi.mock("./card-pulls.functions", () => ({
 
 const addUnrecorded = vi.fn();
 const retireUnrecorded = vi.fn();
+const loadUnrecorded = vi.fn();
 vi.mock("./card-collection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./card-collection")>()),
   addUnrecorded: (...args: unknown[]) => addUnrecorded(...args),
   retireUnrecorded: (...args: unknown[]) => retireUnrecorded(...args),
+  loadUnrecorded: () => loadUnrecorded(),
 }));
 
 const { adoptLocalCollection, adoptableIds, holdForAdoption, releaseAdoptionHold } =
@@ -39,8 +41,15 @@ function sentIds(): string[] {
 }
 
 beforeEach(() => {
-  addUnrecorded.mockReset().mockResolvedValue(undefined);
-  retireUnrecorded.mockReset().mockResolvedValue(undefined);
+  // The store as a real `addUnrecorded` would leave it, so the read-back in
+  // `holdForAdoption` sees what was just written unless a test says otherwise.
+  let row: unknown = null;
+  addUnrecorded.mockReset().mockImplementation((state: unknown) => {
+    row = state;
+    return Promise.resolve();
+  });
+  loadUnrecorded.mockReset().mockImplementation(() => Promise.resolve(row));
+  retireUnrecorded.mockReset().mockImplementation(() => Promise.resolve());
   adoptCollection.mockReset();
   adoptCollection.mockResolvedValue({ ok: true, adopted: 1 });
 });
@@ -91,20 +100,46 @@ describe("holding the cards while the adoption is in the air", () => {
     });
   });
 
+  it("stops the handoff when the hold was not actually written", async () => {
+    // `addUnrecorded` swallows a failed IndexedDB write by design. Reported as
+    // held, the caller would publish the member token with nothing protecting the
+    // cards — so the helper checks the row for itself.
+    addUnrecorded.mockImplementation(() => Promise.resolve());
+    loadUnrecorded.mockImplementation(() => Promise.resolve(null));
+    await expect(holdForAdoption("p-doug", snapshotOf(2))).rejects.toThrow(/protect your cards/i);
+  });
+
+  it("stops the handoff when only some of the cards were written", async () => {
+    loadUnrecorded.mockImplementation(() =>
+      Promise.resolve({ dayKey: "2026-07-31", identity: "m:p-doug", ids: ["card-000"] }),
+    );
+    await expect(holdForAdoption("p-doug", snapshotOf(2))).rejects.toThrow(/protect your cards/i);
+  });
+
+  it("does not take another member's row for the hold", async () => {
+    loadUnrecorded.mockImplementation(() =>
+      Promise.resolve({ dayKey: "2026-07-31", identity: "m:p-someone-else", ids: ["card-000"] }),
+    );
+    await expect(holdForAdoption("p-doug", snapshotOf(1))).rejects.toThrow(/protect your cards/i);
+  });
+
   it("holds nothing for a handset that holds nothing", async () => {
     await holdForAdoption("p-doug", {});
     expect(addUnrecorded).not.toHaveBeenCalled();
+    expect(loadUnrecorded).not.toHaveBeenCalled();
   });
 
   it("lets go only after the stats refetch has landed", async () => {
     // The cached answer from before the adoption is the empty one; dropping the
     // hold while it is still the freshest word hands the prune the cards.
     const order: string[] = [];
-    const refetchQueries = vi.fn(async () => {
+    const refetchQueries = vi.fn(() => {
       order.push("refetch");
+      return Promise.resolve();
     });
-    retireUnrecorded.mockImplementation(async () => {
+    retireUnrecorded.mockImplementation(() => {
       order.push("retire");
+      return Promise.resolve();
     });
     await releaseAdoptionHold(snapshotOf(2), { refetchQueries } as never);
 

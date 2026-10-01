@@ -237,6 +237,16 @@ describe("claiming a player", () => {
     expect(releaseAdoptionHold).toHaveBeenCalledWith({});
   });
 
+  it("never publishes the token when the hold could not be written", async () => {
+    // `holdForAdoption` throws when its read-back finds nothing. Past that point
+    // the token would land with no protection, and a vault could prune the lot.
+    holdForAdoption.mockRejectedValue(new Error("Could not protect your cards on this device"));
+    await claim();
+
+    expect(setMemberToken).not.toHaveBeenCalled();
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
+  });
+
   it("carries nothing on a code that does not match", async () => {
     claimPlayer.mockResolvedValue({ ok: false, reason: "no_match" });
     await claim();

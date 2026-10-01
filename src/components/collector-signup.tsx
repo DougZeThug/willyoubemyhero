@@ -76,7 +76,9 @@ export function CollectorSignup({ className }: { className?: string }) {
       }
       await qc.invalidateQueries();
       // After the refetch above, which is the one the hold is waiting on.
-      void releaseAdoptionHold(held, qc).catch(() => {});
+      void releaseAdoptionHold(held, qc).catch(() => {
+        // The hold simply stays: keeping it costs nothing, letting go early loses the card.
+      });
       toast.success(`You're in, ${res.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not set that up");

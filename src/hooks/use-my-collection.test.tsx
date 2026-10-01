@@ -363,7 +363,7 @@ describe("useMyCollection, with the row written from another tab", () => {
     expect(result.current.collection["ep-5"]).toBeUndefined();
 
     loadUnrecorded.mockResolvedValue(unrecorded(["ep-5"]));
-    await act(async () => otherTabWrote());
+    act(() => otherTabWrote());
 
     // Held by the row it has just heard about, not the one it read at mount.
     await waitFor(() => expect(result.current.collection["ep-5"]).toBeDefined());
@@ -375,7 +375,7 @@ describe("useMyCollection, with the row written from another tab", () => {
     await waitFor(() => expect(result.current.ready).toBe(true));
     const reads = loadUnrecorded.mock.calls.length;
 
-    await act(async () => otherTabWrote("wwbh:something-else"));
+    act(() => otherTabWrote("wwbh:something-else"));
     expect(loadUnrecorded.mock.calls.length).toBe(reads);
   });
 
@@ -393,6 +393,42 @@ describe("useMyCollection, with the row written from another tab", () => {
     const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
     expect(deleted).not.toContain("ep-5");
     expect(deleted).toHaveLength(16);
+  });
+});
+
+describe("useMyCollection, deleting only on a fresh server answer", () => {
+  // The cached stats answer is a snapshot too. A claim finishing in ANOTHER tab
+  // files the cards and retires its hold, and this tab — whose own cached answer
+  // predates all of it — would otherwise act on "the server lists nothing".
+  it("does not delete a card the server lists when asked again", async () => {
+    getMyCardStats
+      .mockResolvedValueOnce(serverHas(["ep-0"]))
+      .mockResolvedValue(serverHas(["ep-0", "ep-5"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+
+    const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(deleted).not.toContain("ep-5");
+    // Everything the fresh answer still does not list does go.
+    expect(deleted).toHaveLength(16);
+  });
+
+  it("deletes nothing when the fresh answer cannot be had", async () => {
+    // No answer is not "you own nothing".
+    getMyCardStats
+      .mockResolvedValueOnce(serverHas(["ep-0"]))
+      .mockRejectedValue(new Error("offline"));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(getMyCardStats.mock.calls.length).toBeGreaterThan(1));
+    // Let the rejected re-ask settle before saying nothing was deleted.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(forgetCards).not.toHaveBeenCalled();
   });
 });
 

@@ -33,8 +33,8 @@ vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   snapshotLocalCollection: vi.fn(),
   // Spied on for WHEN they run relative to the token; their bodies are IndexedDB
   // and a refetch, which are the card-collection and adopt-collection suites' job.
-  holdForAdoption: vi.fn().mockResolvedValue(undefined),
-  releaseAdoptionHold: vi.fn().mockResolvedValue(undefined),
+  holdForAdoption: vi.fn().mockImplementation(() => Promise.resolve()),
+  releaseAdoptionHold: vi.fn().mockImplementation(() => Promise.resolve()),
 }));
 
 const queryClient = vi.hoisted(() => ({ refetchQueries: vi.fn() }));
@@ -145,8 +145,14 @@ describe("useAccountSync", () => {
     vi.mocked(adoptLocalCollection).mockReset();
     vi.mocked(syncAccountSession).mockReset();
     vi.mocked(snapshotLocalCollection).mockReset();
-    vi.mocked(holdForAdoption).mockClear();
-    vi.mocked(releaseAdoptionHold).mockClear();
+    // Reset to the resolving default rather than just cleared: a test that makes
+    // the hold reject would otherwise hand that to every test after it.
+    vi.mocked(holdForAdoption)
+      .mockReset()
+      .mockImplementation(() => Promise.resolve());
+    vi.mocked(releaseAdoptionHold)
+      .mockReset()
+      .mockImplementation(() => Promise.resolve());
   });
 
   async function settle() {
@@ -205,8 +211,9 @@ describe("useAccountSync", () => {
     // reads to know better — so it has to be down BEFORE the token, and only
     // lifted once the stats refetch has the adopted cards in it.
     const tokenWhenHeld: (string | null)[] = [];
-    vi.mocked(holdForAdoption).mockImplementation(async () => {
+    vi.mocked(holdForAdoption).mockImplementation(() => {
       tokenWhenHeld.push(window.localStorage.getItem("wwbh:member-token"));
+      return Promise.resolve();
     });
     vi.mocked(syncAccountSession).mockResolvedValue({
       kind: "member",
@@ -222,6 +229,18 @@ describe("useAccountSync", () => {
     expect(holdForAdoption).toHaveBeenCalledWith("p-alice", held);
     expect(tokenWhenHeld).toEqual([null]);
     expect(releaseAdoptionHold).toHaveBeenCalledWith(held, queryClient);
+  });
+
+  it("does not publish the token when the hold could not be written", async () => {
+    // Thrown into the retry loop like any other failed step; no token is on the
+    // device yet, so there is nothing to take back off.
+    vi.mocked(holdForAdoption).mockRejectedValue(new Error("Could not protect your cards"));
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(window.localStorage.getItem("wwbh:member-token")).toBeNull();
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
   });
 
   it("lets the hold go at once when the cards cannot be filed", async () => {

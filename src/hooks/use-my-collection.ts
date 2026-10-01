@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyCardStats } from "@/lib/card-pulls.functions";
 import { dupeCount, type MyCardStats } from "@/lib/card-pulls";
@@ -176,6 +176,7 @@ export function useMyCollection(
   }, [unrecorded, participantId]);
 
   const fn = useServerFn(getMyCardStats);
+  const qc = useQueryClient();
   const stats = useQuery({
     queryKey: myCardStatsKey(eventId, participantId),
     queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<MyCardStats>,
@@ -282,24 +283,43 @@ export function useMyCollection(
     );
     if (fresh.length === 0) return;
     for (const id of fresh) forgottenRef.current.add(id);
-    // The row read FRESH, at the moment of the delete. `protectedIds` is a
-    // snapshot, and a snapshot is only as new as the last event this tab heard —
-    // a claim in another tab can have written the row since, and a delete cannot
-    // be taken back. Whatever the row still holds is forgotten about being
-    // forgotten, so a later reconciliation reconsiders it instead of treating it
-    // as already dealt with. Not cancelled on a re-run: the delete is the same
-    // fire-and-forget it always was, and a cancel here would strand ids in
-    // `forgottenRef` with nothing left to retry them.
-    void loadUnrecorded().then((now) => {
-      const held =
-        now && (!participantId || now.identity === `m:${participantId}`)
-          ? new Set(now.ids)
-          : EMPTY_IDS;
-      for (const id of fresh) if (held.has(id)) forgottenRef.current.delete(id);
-      const doomed = fresh.filter((id) => !held.has(id));
-      if (doomed.length > 0) void forgetCards(doomed);
-    });
-  }, [merged.stale, bumps, protectedIds, participantId]);
+    // Both halves of the decision read FRESH, at the moment of the delete. What
+    // reached this effect is a snapshot — of the protection row, and of a stats
+    // answer that may predate an adoption in flight in ANOTHER tab, whose own
+    // refetch this tab never sees. "Absent from the server" is only worth a
+    // delete if the server is asked again now; otherwise a claim finishing
+    // elsewhere can retire its hold and leave this tab acting on the empty answer
+    // it cached before the cards were filed. A delete cannot be taken back.
+    //
+    // A failed refetch deletes nothing: no answer is not "you own nothing". The
+    // ids come back out of `forgottenRef` so a later reconcile reconsiders them,
+    // as it does for anything the row still holds. Not cancelled on a re-run: the
+    // delete is the same fire-and-forget it always was, and a cancel here would
+    // strand ids in `forgottenRef` with nothing left to retry them.
+    void (async () => {
+      try {
+        const answer = await qc.fetchQuery({
+          queryKey: myCardStatsKey(eventId, participantId),
+          queryFn: () => fn({ data: { eventId: eventId! } }) as Promise<MyCardStats>,
+          staleTime: 0,
+        });
+        const now = await loadUnrecorded();
+        const listed = new Set(answer.cards.map((c) => c.eventParticipantId));
+        const held =
+          now && (!participantId || now.identity === `m:${participantId}`)
+            ? new Set(now.ids)
+            : EMPTY_IDS;
+        const doomed: string[] = [];
+        for (const id of fresh) {
+          if (held.has(id) || listed.has(id)) forgottenRef.current.delete(id);
+          else doomed.push(id);
+        }
+        if (doomed.length > 0) await forgetCards(doomed);
+      } catch {
+        for (const id of fresh) forgottenRef.current.delete(id);
+      }
+    })();
+  }, [merged.stale, bumps, protectedIds, participantId, eventId, qc, fn]);
 
   const markCollected = useCallback(
     (eventParticipantId: string, tier: string, edition: Edition, count: number) => {

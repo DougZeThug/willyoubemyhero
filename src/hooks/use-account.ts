@@ -206,7 +206,9 @@ export function useAccountSync(user: User | null) {
         }
         if (cancelled) return;
         // Not awaited: it waits on a refetch. If that fails the hold stays.
-        void releaseAdoptionHold(held, qc).catch(() => {});
+        void releaseAdoptionHold(held, qc).catch(() => {
+          // The hold simply stays: keeping it costs nothing, letting go early loses the card.
+        });
         // The claim screen's move — a sign-in is the other way a guest becomes a
         // member, and B-07 does not care which door was used.
         //

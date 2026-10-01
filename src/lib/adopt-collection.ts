@@ -1,5 +1,11 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { addUnrecorded, loadCollection, retireUnrecorded, todayKey } from "./card-collection";
+import {
+  addUnrecorded,
+  loadCollection,
+  loadUnrecorded,
+  retireUnrecorded,
+  todayKey,
+} from "./card-collection";
 import { adoptCollection } from "./card-pulls.functions";
 
 /**
@@ -86,7 +92,19 @@ export async function holdForAdoption(
 ): Promise<void> {
   const ids = adoptableIds(snapshot);
   if (ids.length === 0) return;
-  await addUnrecorded({ dayKey: todayKey(), identity: `m:${participantId}`, ids });
+  const identity = `m:${participantId}`;
+  await addUnrecorded({ dayKey: todayKey(), identity, ids });
+  // Read back, because `addUnrecorded` swallows a failed write by design — the
+  // pack screen would rather deal a pack than stop on a blocked database. Here
+  // that contract is the wrong one: a hold that was never written, reported as
+  // written, lets the caller publish the member token with nothing protecting the
+  // cards, which is the loss this whole step exists to prevent. Thrown, so the
+  // handoff stops before the token; the code and the account still work next time.
+  const row = await loadUnrecorded();
+  const held = new Set(row?.identity === identity ? row.ids : []);
+  if (!ids.every((id) => held.has(id))) {
+    throw new Error("Could not protect your cards on this device");
+  }
 }
 
 /**
