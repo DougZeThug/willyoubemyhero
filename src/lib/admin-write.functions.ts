@@ -989,31 +989,3 @@ export const undoLastDraftSelection = createServerFn({ method: "POST" })
     if (!undone) return { ok: false as const, reason: "nothing-to-undo" as const };
     return { ok: true as const, participantId: undone as string };
   });
-
-// ---------- Event ----------
-export const updateEvent = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        eventId: zuuid(),
-        status: z.string().optional(),
-        results_locked: z.boolean().optional(),
-        // draft_locked and running_order_locked are deliberately absent.
-        // Both columns exist, this was the only thing that could ever have
-        // written them, and no screen calls it — so a "locked draft" was a
-        // capability the league was told about and could not reach. Dropped
-        // rather than wired up, per the triage. The columns stay: removing
-        // one costs a migration to bring back, and the feature may return.
-        splits_enabled: z.boolean().optional(),
-        timing_mode: z.string().optional(),
-      })
-      .parse(d),
-  )
-  .handler(async ({ data }) => {
-    await requireAdmin(data.eventId);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { eventId, ...rest } = data;
-    const { error } = await supabaseAdmin.from("events").update(rest).eq("id", eventId);
-    if (error) throw error;
-    return { ok: true };
-  });
