@@ -192,6 +192,10 @@ describe("claiming", () => {
     await act(async () => {
       await result.current.claim(3);
     });
+    // Before the status has caught up to the run the claim landed on — the
+    // refetch is still in the air, or has failed. The render is still standing on
+    // the old run, and the rung it just paid must not be offered again.
+    expect(result.current.claimable).toBeNull();
     // The status catches up to the run the claim landed on.
     rerender({ a: "m:alice", s: streak({ current: 3, startedOn: "2026-09-01" }) });
     expect(result.current.claimable).toBeNull();

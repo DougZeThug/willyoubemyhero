@@ -52,10 +52,13 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
   // ref: clearing it in an effect changes nothing anybody is looking at until
   // something else happens to re-render, so the button stayed missing on the one
   // render that mattered.
-  const claimedRef = useRef<{ run: string | null; days: Set<number> }>({
-    run: null,
-    days: new Set(),
-  });
+  //
+  // One set of days PER RUN, not one run: a claim is filed under the run the
+  // server recorded, which can differ from the run this render is still looking
+  // at until the streak refetch lands. A single `{ run, days }` pair could only
+  // answer to one of them, so whichever it wasn't saw an empty latch and offered
+  // the rung it had just paid.
+  const claimedRef = useRef<Map<string | null, Set<number>>>(new Map());
   const [claiming, setClaiming] = useState(false);
   // The refusal, and the rung it was said about — run and days, the same key
   // `claimedRef` uses. See `claimError` below.
@@ -98,7 +101,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
     actorRef.current = actor;
     // The next person's milestones are their own, and a reveal left on screen
     // would be showing them somebody else's card.
-    claimedRef.current = { run: null, days: new Set() };
+    claimedRef.current = new Map();
     claimingRef.current = false;
     setClaiming(false);
     setClaimFailure(null);
@@ -108,7 +111,7 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
   const run = streak?.startedOn ?? null;
   // Only this run's latch counts. A rung taken on a run that has since been
   // broken says nothing about the rung on the run standing today.
-  const shown = claimedRef.current.run === run ? claimedRef.current.days : EMPTY_DAYS;
+  const shown = claimedRef.current.get(run) ?? EMPTY_DAYS;
 
   // The highest rung earned and not yet taken. Highest rather than lowest so a
   // 14-day streak claiming late collects the big one first and the rest follow on
@@ -185,10 +188,14 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
         // exists to prevent. Same call `tierFloor` above makes about not letting
         // an older server's answer decide what this screen does.
         const claimedRun = res.startedOn ?? run;
-        claimedRef.current =
-          claimedRef.current.run === claimedRun
-            ? { run: claimedRun, days: new Set(claimedRef.current.days).add(days) }
-            : { run: claimedRun, days: new Set([days]) };
+        // Latched under the render's run as well. The refetch this claim awaits
+        // below has not landed, so until it does `streak.startedOn` is still the
+        // stale one and a latch under the server's run alone is invisible to the
+        // very render that is showing the rung. Harmless once the run catches up:
+        // the entry is only ever read for a run somebody is standing on.
+        for (const key of new Set([claimedRun, run])) {
+          claimedRef.current.set(key, new Set(claimedRef.current.get(key)).add(days));
+        }
         setMilestoneReveal({
           milestone: res.milestone,
           streak: res.streak,
