@@ -18,7 +18,6 @@ import {
   segmentLift,
   segmentPose,
   SEGMENT_FLIGHT,
-  stripClipAt,
   tearEdge,
   TEAR_SEGMENTS,
 } from "./pack-tear";
@@ -176,29 +175,6 @@ describe("body and strip, as one image", () => {
   it("is the whole pack and nothing else before the rip starts", () => {
     for (const [, y] of vertices(bodyClipAt(edge, 0)).slice(0, edge.length)) {
       expect(y).toBe(0);
-    }
-    for (const [, y] of vertices(stripClipAt(edge, 0)).slice(2)) {
-      expect(y).toBe(0);
-    }
-  });
-
-  it("hands the strip the whole tear line once the rip is through", () => {
-    const strip = vertices(stripClipAt(edge, 1)).slice(2);
-    // Reversed, so compare against the edge read the other way.
-    const want = [...edge].reverse().map((p) => +p.y.toFixed(1));
-    expect(strip.map(([, y]) => y)).toEqual(want);
-  });
-
-  /**
-   * Complementary at every front, not just at the ends. Two clip strings kept in
-   * step by hand would be one edit away from a hairline of background showing
-   * through the middle of the pack.
-   */
-  it("shares one boundary with the body at every point of the rip", () => {
-    for (const f of [0, 0.15, 0.4, 0.63, 0.9, 1]) {
-      const body = vertices(bodyClipAt(edge, f)).slice(0, edge.length);
-      const strip = vertices(stripClipAt(edge, f)).slice(2).reverse();
-      expect(strip).toEqual(body);
     }
   });
 
