@@ -2,9 +2,8 @@
 //
 // Lifted out of the components for the same reason pack.ts was lifted out of the
 // route: a sequence built from seven scattered setTimeouts is impossible to
-// reason about and impossible to test. Here the phases are a table, "where are we
-// at t ms" is a pure function, and the flight geometry is arithmetic somebody can
-// check without a browser.
+// reason about and impossible to test. Here the phases are a table, and the
+// flight geometry is arithmetic somebody can check without a browser.
 //
 // Why the ceremony exists at all: the tear used to commit at 60% of the drag and
 // unmount the wrapper on that same frame, so the strip never travelled the rest
@@ -99,22 +98,6 @@ export const CEREMONY_START: Readonly<Record<CeremonyPhase, number>> = (() => {
   starts.done = at;
   return starts as Record<CeremonyPhase, number>;
 })();
-
-/**
- * Which phase the ceremony is in `ms` after it committed.
- *
- * Total on purpose — a clock that has not started answers "rip" rather than
- * throwing, and anything past the end answers "done".
- */
-export function ceremonyPhaseAt(ms: number): CeremonyPhase {
-  if (!(ms > 0)) return CEREMONY[0].phase;
-  let at = 0;
-  for (const step of CEREMONY) {
-    at += step.ms;
-    if (ms < at) return step.phase;
-  }
-  return "done";
-}
 
 /** True once `phase` has started, so a component can ask "have we got there yet". */
 export function ceremonyReached(phase: CeremonyPhase, at: CeremonyPhase): boolean {
