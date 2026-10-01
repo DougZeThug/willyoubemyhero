@@ -18,6 +18,9 @@ const COLLECTED = "collected";
 const CARD_META = "card-meta";
 const PACK_STATE = "pack-state";
 
+/** A second row in the same store, so the pack and its unsent ids expire apart. */
+const UNRECORDED_KEY = "unrecorded";
+
 /**
  * The day a pack belongs to: the LEAGUE's, in New York, exactly as `open_pack`
  * stamps it.
@@ -480,9 +483,6 @@ function announceUnrecordedChanged() {
     /* private mode still gets the in-tab half above */
   }
 }
-
-/** A second row in the same store, so the pack and its unsent ids expire apart. */
-const UNRECORDED_KEY = "unrecorded";
 
 /**
  * The ids this device pulled and never managed to report, or null.
