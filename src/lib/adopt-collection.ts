@@ -123,6 +123,7 @@ export async function holdForAdoption(
  * tab's cached stats are not refreshed by this refetch, so it keeps holding.
  */
 export async function releaseAdoptionHold(
+  participantId: string,
   snapshot: Awaited<ReturnType<typeof loadCollection>>,
   qc?: QueryClient,
 ): Promise<void> {
@@ -134,5 +135,6 @@ export async function releaseAdoptionHold(
       { throwOnError: true },
     );
   }
-  await retireUnrecorded(ids);
+  // Scoped to the identity the hold was filed under; see `retireUnrecorded`.
+  await retireUnrecorded(ids, `m:${participantId}`);
 }

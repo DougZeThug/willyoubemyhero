@@ -35,7 +35,7 @@ const holdForAdoption = vi.fn();
 const releaseAdoptionHold = vi.fn();
 
 vi.mock("@/lib/adopt-collection", () => ({
-  snapshotLocalCollection: vi.fn().mockResolvedValue([]),
+  snapshotLocalCollection: vi.fn().mockResolvedValue({ "ep-1": { eventParticipantId: "ep-1" } }),
   adoptLocalCollection: (...a: unknown[]) => adoptLocalCollection(...a),
   holdForAdoption: (...a: unknown[]) => holdForAdoption(...a),
   releaseAdoptionHold: (...a: unknown[]) => releaseAdoptionHold(...a),
@@ -188,7 +188,7 @@ describe("when the cards can't be uploaded", () => {
     // Nobody is reconciling any more, so nothing is owed a hold: released with no
     // query client, because there is no refetch to wait for.
     expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
-    expect(releaseAdoptionHold.mock.calls[0]).toHaveLength(1);
+    expect(releaseAdoptionHold.mock.calls[0]).toHaveLength(2);
   });
 
   it("never publishes the token when the hold could not be written", async () => {
@@ -204,11 +204,20 @@ describe("when the cards can't be uploaded", () => {
   it("holds the cards before the token lands and lets go once they are filed", async () => {
     // A vault in another tab reconciles on hearing the token; the hold is what
     // stops it reading an adoption still in the air as "you own nothing".
+    // Asserted as what was on the device WHEN the hold ran, not as call order: a
+    // fire-and-forget hold would still be "called first" while the token raced it.
+    const tokenWhenHeld: (string | null)[] = [];
+    holdForAdoption.mockImplementation(() => {
+      tokenWhenHeld.push(getMemberToken());
+      return Promise.resolve();
+    });
     await renderSignup();
     await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
 
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("You're in, Jane Doe"));
-    expect(holdForAdoption).toHaveBeenCalledWith(PID, []);
-    expect(releaseAdoptionHold).toHaveBeenCalledWith([], expect.anything());
+    const snapshot = { "ep-1": { eventParticipantId: "ep-1" } };
+    expect(holdForAdoption).toHaveBeenCalledWith(PID, snapshot);
+    expect(tokenWhenHeld).toEqual([null]);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith(PID, snapshot, expect.anything());
   });
 });

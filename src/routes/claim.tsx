@@ -132,7 +132,7 @@ function ClaimPage() {
           await adoptLocalCollection(held);
         } catch {
           clearMemberToken();
-          await releaseAdoptionHold(held);
+          await releaseAdoptionHold(selected, held);
           toast.error(
             "Claimed, but your cards couldn't be transferred — your code still works, try again on a better connection.",
           );
@@ -141,7 +141,7 @@ function ClaimPage() {
       }
       // Not awaited: it waits on a refetch, and a phone on garden wifi should not
       // sit on this screen for it. If the refetch fails the hold simply stays.
-      void releaseAdoptionHold(held, qc).catch(() => {
+      void releaseAdoptionHold(selected, held, qc).catch(() => {
         // The hold simply stays: keeping it costs nothing, letting go early loses the card.
       });
       // Their guest pack follows them across, now that the cards themselves have.

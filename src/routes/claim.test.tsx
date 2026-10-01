@@ -7,7 +7,7 @@
 // "loading", then a grid — so a read that failed and a league with nobody on it
 // drew the same blank space over the same dead Claim button.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import ClaimPage from "./claim";
@@ -222,10 +222,29 @@ describe("claiming a player", () => {
     expect(holdForAdoption.mock.invocationCallOrder[0]).toBeLessThan(
       setMemberToken.mock.invocationCallOrder[0],
     );
-    expect(releaseAdoptionHold).toHaveBeenCalledWith({}, queryClient);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith("p-doug", {}, queryClient);
     expect(releaseAdoptionHold.mock.invocationCallOrder[0]).toBeGreaterThan(
       adoptLocalCollection.mock.invocationCallOrder[0],
     );
+  });
+
+  it("waits for the hold to be down before the token goes out", async () => {
+    // Call order alone would pass a fire-and-forget hold, and the token could then
+    // wake another tab before the row exists. The hold is left pending here and the
+    // token must not move until it settles.
+    let landed!: () => void;
+    holdForAdoption.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          landed = resolve;
+        }),
+    );
+    void claim();
+    await waitFor(() => expect(holdForAdoption).toHaveBeenCalled());
+    expect(setMemberToken).not.toHaveBeenCalled();
+
+    landed();
+    await waitFor(() => expect(setMemberToken).toHaveBeenCalled());
   });
 
   it("lets the hold go straight away when the cards cannot be filed", async () => {
@@ -234,7 +253,7 @@ describe("claiming a player", () => {
     await claim();
 
     expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
-    expect(releaseAdoptionHold).toHaveBeenCalledWith({});
+    expect(releaseAdoptionHold).toHaveBeenCalledWith("p-doug", {});
   });
 
   it("never publishes the token when the hold could not be written", async () => {

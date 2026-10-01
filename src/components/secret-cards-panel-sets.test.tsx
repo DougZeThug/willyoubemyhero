@@ -84,10 +84,12 @@ vi.mock("lucide-react", async (importOriginal) => {
 /** A promise this test decides when to settle, standing in for the round trip. */
 function deferred() {
   let resolve!: (v: unknown) => void;
-  const promise = new Promise((r) => {
-    resolve = r;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function listing(active: boolean) {
@@ -202,6 +204,31 @@ describe("a set hidden while it is the upload target", () => {
 });
 
 describe("two whole-set looks at once", () => {
+  it("still sends the second write when the first fails, and clears after it", async () => {
+    // The chain swallows a rejection so the writes queued behind it still run. A
+    // chain that broke on the first error would leave the second never sent and
+    // the strip saving forever.
+    const first = deferred();
+    const second = deferred();
+    updateSecretCollectionLook
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    mount();
+    await userEvent.click(await screen.findByRole("button", { name: /wildcards/i }));
+    const foil = await screen.findByRole("button", { name: "Foil for every card in Wildcards" });
+
+    foil.click();
+    foil.click();
+    await waitFor(() => expect(updateSecretCollectionLook).toHaveBeenCalledTimes(1));
+
+    first.reject(new Error("offline"));
+    await waitFor(() => expect(updateSecretCollectionLook).toHaveBeenCalledTimes(2));
+    expect(foil).toHaveAttribute("data-disabled", "true");
+
+    second.resolve({ updated: 1 });
+    await waitFor(() => expect(foil).toHaveAttribute("data-disabled", "false"));
+  });
+
   it("keeps the set saving until the LAST write lands", async () => {
     // Each call cleared the flag in its own `.finally`, so whichever write came
     // back first re-enabled the strip with the other still in the air.

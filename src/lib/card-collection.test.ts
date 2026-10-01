@@ -420,11 +420,68 @@ describe("waking a vault in another tab", () => {
     expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).toBe(before);
   });
 
+  it("never repeats a value, even for two writes in the same millisecond", async () => {
+    // `storage` only fires on a CHANGE. A clock-and-counter value collides when two
+    // tabs write in the same millisecond, and the second write wakes nobody.
+    const mod = await freshModule();
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const seen = new Set<string | null>();
+    for (let i = 0; i < 5; i++) {
+      await mod.addUnrecorded({ ...ROW, ids: [`card-${i}`] });
+      seen.add(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY));
+    }
+    expect(seen.size).toBe(5);
+  });
+
   it("leaves an ordinary pack save out of it", async () => {
     const mod = await freshModule();
     window.localStorage.removeItem(mod.PACK_UNRECORDED_KEY);
     await mod.savePackState({ dayKey: "2026-07-28", ids: [CARD_A], revealed: [] });
     expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).toBeNull();
+  });
+});
+
+describe("deleting around a hold", () => {
+  const HOLD = { dayKey: "2026-07-28", identity: "m:p-alice", ids: [CARD_A] };
+
+  it("keeps a card the row holds for that identity, in the delete's own transaction", async () => {
+    // The caller's own read of the row can be stale by the time the delete runs: a
+    // hold written in between is pruned. Reading it inside the same transaction
+    // leaves no in-between.
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "champion");
+    await mod.collectCard(CARD_B, "champion");
+    await mod.addUnrecorded(HOLD);
+    await mod.forgetCards([CARD_A, CARD_B], "m:p-alice");
+    expect(Object.keys(await mod.loadCollection())).toEqual([CARD_A]);
+  });
+
+  it("ignores a row held for somebody else", async () => {
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "champion");
+    await mod.addUnrecorded(HOLD);
+    await mod.forgetCards([CARD_A], "m:p-bob");
+    expect(await mod.loadCollection()).toEqual({});
+  });
+
+  it("deletes everything when no identity is given", async () => {
+    const mod = await freshModule();
+    await mod.collectCard(CARD_A, "champion");
+    await mod.addUnrecorded(HOLD);
+    await mod.forgetCards([CARD_A]);
+    expect(await mod.loadCollection()).toEqual({});
+  });
+
+  it("retires only the row of the identity that asked", async () => {
+    // The ids are the handset's, so a different member's hold over the same cards
+    // — an account switched mid-adoption — must survive the first one's release.
+    const mod = await freshModule();
+    await mod.addUnrecorded({ ...HOLD, identity: "m:p-bob" });
+    await mod.retireUnrecorded([CARD_A], "m:p-alice");
+    expect((await mod.loadUnrecorded())?.ids).toEqual([CARD_A]);
+
+    await mod.retireUnrecorded([CARD_A], "m:p-bob");
+    expect(await mod.loadUnrecorded()).toBeNull();
   });
 });
 

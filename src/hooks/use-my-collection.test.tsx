@@ -356,17 +356,25 @@ describe("useMyCollection, with the row written from another tab", () => {
   }
 
   it("re-reads the row when another tab says it changed", async () => {
-    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+    // The order a real claim produces: the vault mounted before there was a row,
+    // the other tab writes it, and only then does the server answer — empty. The
+    // row has to have been picked up by then, or the answer disowns the card.
+    let resolve!: (v: unknown) => void;
+    getMyCardStats.mockReturnValue(new Promise((r) => (resolve = r)));
     const { result } = await mount();
-    await waitFor(() => expect(result.current.ready).toBe(true));
-    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
-    expect(result.current.collection["ep-5"]).toBeUndefined();
+    await waitFor(() => expect(getMyCardStats).toHaveBeenCalled());
 
     loadUnrecorded.mockResolvedValue(unrecorded(["ep-5"]));
+    const reads = loadUnrecorded.mock.calls.length;
     act(() => otherTabWrote());
+    await waitFor(() => expect(loadUnrecorded.mock.calls.length).toBeGreaterThan(reads));
 
-    // Held by the row it has just heard about, not the one it read at mount.
-    await waitFor(() => expect(result.current.collection["ep-5"]).toBeDefined());
+    await act(async () => resolve(serverHas(["ep-0"])));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+    // Held by the row it heard about, shown, and never handed to the delete.
+    expect(result.current.collection["ep-5"]).toBeDefined();
+    expect(forgetCards.mock.calls.flatMap((c) => c[0] as string[])).not.toContain("ep-5");
   });
 
   it("ignores another tab's write to some other key", async () => {

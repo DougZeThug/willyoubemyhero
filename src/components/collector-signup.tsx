@@ -67,7 +67,7 @@ export function CollectorSignup({ className }: { className?: string }) {
           await adoptLocalCollection(held);
         } catch {
           clearMemberToken();
-          await releaseAdoptionHold(held);
+          await releaseAdoptionHold(res.participantId, held);
           toast.error(
             "Named, but your cards couldn't be transferred — sign in again on a better connection.",
           );
@@ -76,7 +76,7 @@ export function CollectorSignup({ className }: { className?: string }) {
       }
       await qc.invalidateQueries();
       // After the refetch above, which is the one the hold is waiting on.
-      void releaseAdoptionHold(held, qc).catch(() => {
+      void releaseAdoptionHold(res.participantId, held, qc).catch(() => {
         // The hold simply stays: keeping it costs nothing, letting go early loses the card.
       });
       toast.success(`You're in, ${res.name}`);

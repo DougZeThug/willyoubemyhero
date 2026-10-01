@@ -196,6 +196,12 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
         for (const key of new Set([claimedRun, run])) {
           claimedRef.current.set(key, new Set(claimedRef.current.get(key)).add(days));
         }
+        // A run that is neither this one nor the one the server filed it under was
+        // superseded by a rebuilt streak, which always gets a new start date, and
+        // is never read again. Dropped so the map does not grow a set per run.
+        for (const key of [...claimedRef.current.keys()]) {
+          if (key !== run && key !== claimedRun) claimedRef.current.delete(key);
+        }
         setMilestoneReveal({
           milestone: res.milestone,
           streak: res.streak,

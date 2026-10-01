@@ -228,7 +228,7 @@ describe("useAccountSync", () => {
 
     expect(holdForAdoption).toHaveBeenCalledWith("p-alice", held);
     expect(tokenWhenHeld).toEqual([null]);
-    expect(releaseAdoptionHold).toHaveBeenCalledWith(held, queryClient);
+    expect(releaseAdoptionHold).toHaveBeenCalledWith("p-alice", held, queryClient);
   });
 
   it("does not publish the token when the hold could not be written", async () => {
@@ -243,6 +243,41 @@ describe("useAccountSync", () => {
     expect(adoptLocalCollection).not.toHaveBeenCalled();
   });
 
+  it("keeps the hold in place while the adoption is still in the air", async () => {
+    // "Eventually released" would pass a hold dropped the moment the token landed,
+    // which is exactly when another tab starts reconciling.
+    let landed!: (n: number) => void;
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "p-alice",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockImplementation(
+      () =>
+        new Promise<number>((resolve) => {
+          landed = resolve;
+        }),
+    );
+    const { unmount } = renderHook(() => useAccountSync(user));
+    // A beat, not `settle()`: running the retry loop's whole backoff would give up
+    // on the pending adoption and start a second sync, and `landed` would then
+    // resolve the wrong one.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(holdForAdoption).toHaveBeenCalled();
+    expect(releaseAdoptionHold).not.toHaveBeenCalled();
+
+    await act(async () => {
+      landed(1);
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(releaseAdoptionHold).toHaveBeenCalledWith("p-alice", held, queryClient);
+    unmount();
+  });
+
   it("lets the hold go at once when the cards cannot be filed", async () => {
     // The token comes straight back off, so there is no member to reconcile and
     // nothing left to hold. No query client: there is no refetch to wait for.
@@ -250,8 +285,14 @@ describe("useAccountSync", () => {
     renderHook(() => useAccountSync(user));
     await settle();
 
-    expect(releaseAdoptionHold).toHaveBeenCalledWith(held);
-    expect(releaseAdoptionHold).not.toHaveBeenCalledWith(held, queryClient);
+    // Two arguments: the snapshot and no query client, because there is no
+    // refetch to wait for. (The sync's id is not what this test is about.)
+    // Every attempt: the retry loop runs the whole step again each time.
+    expect(releaseAdoptionHold).toHaveBeenCalled();
+    for (const [, snapshot, client] of vi.mocked(releaseAdoptionHold).mock.calls) {
+      expect(snapshot).toBe(held);
+      expect(client).toBeUndefined();
+    }
   });
 
   it("takes the member token back off when the cards cannot be filed", async () => {

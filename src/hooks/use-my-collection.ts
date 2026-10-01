@@ -273,6 +273,13 @@ export function useMyCollection(
   // reconciliation *and* every reveal — turning a card over removes it from the
   // list, which used to re-fire the whole delete for everything still on it.
   const forgottenRef = useRef(new Set<string>());
+  // Who is looking NOW, for the delete below to compare against after its awaits:
+  // a handset changing hands mid-read would otherwise judge the new member's hold
+  // by the previous member's identity and delete it.
+  const participantRef = useRef(participantId);
+  useEffect(() => {
+    participantRef.current = participantId;
+  }, [participantId]);
   useEffect(() => {
     // `protectedIds` is already held out of `stale` by the merge. Repeated at the
     // one site that actually deletes, because that is where the rule has to hold:
@@ -304,6 +311,11 @@ export function useMyCollection(
           staleTime: 0,
         });
         const now = await loadUnrecorded();
+        if (participantRef.current !== participantId) {
+          // Somebody else is holding the phone now; their reconcile decides.
+          for (const id of fresh) forgottenRef.current.delete(id);
+          return;
+        }
         const listed = new Set(answer.cards.map((c) => c.eventParticipantId));
         const held =
           now && (!participantId || now.identity === `m:${participantId}`)
@@ -314,7 +326,10 @@ export function useMyCollection(
           if (held.has(id) || listed.has(id)) forgottenRef.current.delete(id);
           else doomed.push(id);
         }
-        if (doomed.length > 0) await forgetCards(doomed);
+        // `heldBy` makes the row count again inside the delete's own transaction,
+        // closing the gap between the read above and this write.
+        if (doomed.length > 0)
+          await forgetCards(doomed, participantId ? `m:${participantId}` : undefined);
       } catch {
         for (const id of fresh) forgottenRef.current.delete(id);
       }

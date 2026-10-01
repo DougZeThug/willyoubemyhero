@@ -141,28 +141,30 @@ describe("holding the cards while the adoption is in the air", () => {
       order.push("retire");
       return Promise.resolve();
     });
-    await releaseAdoptionHold(snapshotOf(2), { refetchQueries } as never);
+    await releaseAdoptionHold("p-doug", snapshotOf(2), { refetchQueries } as never);
 
     expect(order).toEqual(["refetch", "retire"]);
     expect(refetchQueries).toHaveBeenCalledWith(
       { queryKey: ["my-card-stats"], type: "active" },
       { throwOnError: true },
     );
-    expect(retireUnrecorded).toHaveBeenCalledWith(["card-000", "card-001"]);
+    // Scoped to the identity it filed the hold under: the ids are the handset's,
+    // so another member's hold over the same cards must survive this one's release.
+    expect(retireUnrecorded).toHaveBeenCalledWith(["card-000", "card-001"], "m:p-doug");
   });
 
   it("keeps the hold when the refetch fails", async () => {
     // Keeping it costs nothing; letting go while the cached answer is the empty
     // one loses the card.
     const refetchQueries = vi.fn().mockRejectedValue(new Error("offline"));
-    await expect(releaseAdoptionHold(snapshotOf(2), { refetchQueries } as never)).rejects.toThrow(
-      "offline",
-    );
+    await expect(
+      releaseAdoptionHold("p-doug", snapshotOf(2), { refetchQueries } as never),
+    ).rejects.toThrow("offline");
     expect(retireUnrecorded).not.toHaveBeenCalled();
   });
 
   it("lets go at once when there is no refetch to wait for", async () => {
-    await releaseAdoptionHold(snapshotOf(2));
-    expect(retireUnrecorded).toHaveBeenCalledWith(["card-000", "card-001"]);
+    await releaseAdoptionHold("p-doug", snapshotOf(2));
+    expect(retireUnrecorded).toHaveBeenCalledWith(["card-000", "card-001"], "m:p-doug");
   });
 });

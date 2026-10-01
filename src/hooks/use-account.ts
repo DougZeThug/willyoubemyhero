@@ -175,7 +175,7 @@ export function useAccountSync(user: User | null) {
         await holdForAdoption(res.id, held);
         if (cancelled) {
           // No token went on, so nothing is reconciling and nothing needs holding.
-          await releaseAdoptionHold(held);
+          await releaseAdoptionHold(res.id, held);
           return;
         }
         setMemberToken(res.token, res.name ?? "Player");
@@ -200,13 +200,13 @@ export function useAccountSync(user: User | null) {
             // the whole sync to the retry loop below, so a later attempt gets
             // the same snapshot rather than a store the prune has been through.
             clearMemberToken();
-            await releaseAdoptionHold(held);
+            await releaseAdoptionHold(res.id, held);
             throw e;
           }
         }
         if (cancelled) return;
         // Not awaited: it waits on a refetch. If that fails the hold stays.
-        void releaseAdoptionHold(held, qc).catch(() => {
+        void releaseAdoptionHold(res.id, held, qc).catch(() => {
           // The hold simply stays: keeping it costs nothing, letting go early loses the card.
         });
         // The claim screen's move — a sign-in is the other way a guest becomes a

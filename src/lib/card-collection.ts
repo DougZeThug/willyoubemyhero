@@ -294,12 +294,27 @@ export async function collectCard(
  * hardcoded in e2e/journeys.spec.ts (see the note at the top of this file), and a
  * bump would take out the pack state and card art cache along with it.
  */
-export async function forgetCards(eventParticipantIds: readonly string[]): Promise<void> {
+export async function forgetCards(
+  eventParticipantIds: readonly string[],
+  heldBy?: string,
+): Promise<void> {
   if (!isBrowser() || eventParticipantIds.length === 0) return;
   try {
     const db = await getDb();
-    const tx = db.transaction(COLLECTED, "readwrite");
-    await Promise.all([...eventParticipantIds.map((id) => tx.store.delete(id)), tx.done]);
+    // `heldBy` is the identity whose unrecorded row has to be honoured, and the
+    // row is read in the SAME transaction as the delete. A hold written between a
+    // caller's own read and this delete would otherwise be pruned: two
+    // transactions are two chances for it to land in between, one is none.
+    const tx = db.transaction(heldBy ? [COLLECTED, PACK_STATE] : COLLECTED, "readwrite");
+    const prior = heldBy
+      ? ((await tx.objectStore(PACK_STATE).get(UNRECORDED_KEY)) as UnrecordedPulls | undefined)
+      : undefined;
+    const held = new Set(prior && prior.identity === heldBy ? prior.ids : []);
+    const store = tx.objectStore(COLLECTED);
+    await Promise.all([
+      ...eventParticipantIds.filter((id) => !held.has(id)).map((id) => store.delete(id)),
+      tx.done,
+    ]);
   } catch {
     /* a device with IndexedDB blocked has nothing to forget */
   }
@@ -453,12 +468,14 @@ function announcePackState() {
  */
 export const PACK_UNRECORDED_KEY = "wwbh:pack-unrecorded";
 
-let unrecordedGeneration = 0;
-
 function announceUnrecordedChanged() {
   announcePackState();
   try {
-    window.localStorage.setItem(PACK_UNRECORDED_KEY, `${Date.now()}:${++unrecordedGeneration}`);
+    // Random rather than a counter: two tabs writing in the same millisecond with
+    // the same count would store the same value, and the second write is not a
+    // change, so it fires no `storage` event and a vault misses protection.
+    const nonce = Math.random().toString(36).slice(2);
+    window.localStorage.setItem(PACK_UNRECORDED_KEY, `${Date.now()}:${nonce}`);
   } catch {
     /* private mode still gets the in-tab half above */
   }
@@ -524,14 +541,21 @@ export async function addUnrecorded(state: UnrecordedPulls): Promise<void> {
  * row would retire an older pack's ids on the strength of a call that never
  * mentioned them.
  */
-export async function retireUnrecorded(recorded: readonly string[]): Promise<void> {
+export async function retireUnrecorded(
+  recorded: readonly string[],
+  identity?: string,
+): Promise<void> {
   if (!isBrowser()) return;
   try {
     const db = await getDb();
     // One transaction, for the reason given in `addUnrecorded`.
     const tx = db.transaction(PACK_STATE, "readwrite");
     const prior = (await tx.store.get(UNRECORDED_KEY)) as UnrecordedPulls | undefined;
-    if (!prior) {
+    // `identity` scopes the retire to the row its caller wrote. The ids are the
+    // handset's, not the member's, so a different member's hold over the same
+    // cards — an account switched mid-adoption — would otherwise be retired by the
+    // first one's completion.
+    if (!prior || (identity !== undefined && prior.identity !== identity)) {
       await tx.done;
       return;
     }
