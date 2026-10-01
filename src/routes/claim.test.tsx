@@ -116,8 +116,8 @@ beforeEach(() => {
   useQuery.mockReturnValue(rosterState({ data: [ATHLETE] }));
   claimPlayer.mockResolvedValue({ ok: true, token: "m.tok", name: "Doug" });
   adoptLocalCollection.mockResolvedValue(1);
-  holdForAdoption.mockResolvedValue(undefined);
-  releaseAdoptionHold.mockResolvedValue(undefined);
+  holdForAdoption.mockImplementation(() => Promise.resolve());
+  releaseAdoptionHold.mockImplementation(() => Promise.resolve());
   // carryPackToIdentity needs no stubbed answer: the route only awaits it, and a
   // bare vi.fn() already returns undefined, which awaits fine.
 });

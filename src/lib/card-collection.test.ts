@@ -424,11 +424,17 @@ describe("waking a vault in another tab", () => {
     // `storage` only fires on a CHANGE. A clock-and-counter value collides when two
     // tabs write in the same millisecond, and the second write wakes nobody.
     const mod = await freshModule();
-    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
     const seen = new Set<string | null>();
-    for (let i = 0; i < 5; i++) {
-      await mod.addUnrecorded({ ...ROW, ids: [`card-${i}`] });
-      seen.add(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY));
+    try {
+      for (let i = 0; i < 5; i++) {
+        await mod.addUnrecorded({ ...ROW, ids: [`card-${i}`] });
+        seen.add(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY));
+      }
+    } finally {
+      // Restored here because `afterEach` only unstubs globals, and a spy left
+      // behind freezes the clock for every test after this one.
+      clock.mockRestore();
     }
     expect(seen.size).toBe(5);
   });
