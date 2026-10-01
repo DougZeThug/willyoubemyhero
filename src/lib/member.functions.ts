@@ -211,9 +211,15 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
         .order("name");
       targets = rows ?? [];
       if (data.scope === "unclaimed") {
-        const { data: codes } = await supabaseAdmin
+        const { data: codes, error: codesError } = await supabaseAdmin
           .from("member_codes")
           .select("participant_id, claimed_at");
+        // Thrown for the opposite reason to the roster read below: there an empty
+        // answer issues nothing, here it issues to everyone. A failed read
+        // coalesced to "nobody has claimed" rotates every on-roster player's code,
+        // resetting claimed_at and killing the paper slips of exactly the people
+        // this scope exists to leave alone.
+        if (codesError) throw codesError;
         const claimed = new Set(
           (codes ?? []).filter((c) => c.claimed_at).map((c) => c.participant_id),
         );
