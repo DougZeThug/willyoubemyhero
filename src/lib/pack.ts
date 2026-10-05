@@ -93,6 +93,41 @@ export type PackStatus = {
 };
 
 /**
+ * How many copies of a secret the member holds right now, or null when the
+ * secrets query cannot say yet.
+ *
+ * Null while it is loading or refetching: a duplicate was dealt on top of a copy
+ * the member already held, and the answer in the cache may predate the deal or
+ * the sale that follows it. Settled, it is the truth, and a card the list no
+ * longer names is a card the member no longer holds.
+ */
+export function secretHeldNow(args: {
+  cards: readonly { id: string; count: number }[] | undefined;
+  slotId: string;
+  fetching: boolean;
+}): number | null {
+  if (!args.cards || args.fetching) return null;
+  return args.cards.find((c) => c.id === args.slotId)?.count ?? 0;
+}
+
+/**
+ * What the vault holds of a slot's card once that slot is sold, or null when
+ * nobody can say.
+ *
+ * From the live holding where there is one, and the count recorded at the deal
+ * where there is not (a roster card's, which no sale moves). Never from the
+ * ribbon's floored count while the vault says otherwise: that count is about the
+ * pull, and quoting it made "You'll still have 1" of a card held once.
+ */
+export function copiesAfterSale(slot: {
+  copies: number | null;
+  held?: number | null;
+}): number | null {
+  const had = slot.held ?? slot.copies;
+  return had == null ? null : Math.max(0, had - 1);
+}
+
+/**
  * Is today's pack still sealed?
  *
  * Extracted so the nav's Pack tab and the vault's button cannot drift: two

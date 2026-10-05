@@ -5,6 +5,8 @@
 import { describe, expect, it } from "vitest";
 import {
   cardsLeft,
+  copiesAfterSale,
+  secretHeldNow,
   nextLocalMidnight,
   nextPackLabel,
   packStage,
@@ -247,5 +249,45 @@ describe("nextLocalMidnight", () => {
     const at = new Date(nextLocalMidnight(new Date(2026, 8, 30, 23, 59).getTime()));
     expect(at.getMonth()).toBe(9);
     expect(at.getDate()).toBe(1);
+  });
+});
+
+describe("secretHeldNow", () => {
+  const cards = [{ id: "sec-1", count: 2 }];
+
+  it("reads the settled count for the card", () => {
+    expect(secretHeldNow({ cards, slotId: "sec-1", fetching: false })).toBe(2);
+  });
+
+  it("says nothing while the query is loading or refetching", () => {
+    // The cached answer may predate the deal or the sale that followed it.
+    expect(secretHeldNow({ cards: undefined, slotId: "sec-1", fetching: false })).toBeNull();
+    expect(secretHeldNow({ cards, slotId: "sec-1", fetching: true })).toBeNull();
+  });
+
+  it("lets a settled answer lower the count, down to a card no longer held", () => {
+    // The refocus refetch after a sale or a trade elsewhere. A floor here would keep
+    // quoting a copy the vault has already lost.
+    expect(secretHeldNow({ cards: [{ id: "sec-1", count: 1 }], slotId: "sec-1", fetching: false })).toBe(1); // prettier-ignore
+    expect(secretHeldNow({ cards: [], slotId: "sec-1", fetching: false })).toBe(0);
+  });
+});
+
+describe("copiesAfterSale", () => {
+  it("quotes the vault, not the pull, once the vault has moved", () => {
+    // Dealt as a duplicate (ribbon says two), then the other copy was traded away:
+    // selling this one leaves nothing, and the dialog must not say "still have 1".
+    expect(copiesAfterSale({ copies: 2, held: 1 })).toBe(0);
+    expect(copiesAfterSale({ copies: 2, held: 3 })).toBe(2);
+  });
+
+  it("falls back to the recorded count when the vault cannot say", () => {
+    expect(copiesAfterSale({ copies: 2, held: null })).toBe(1);
+    expect(copiesAfterSale({ copies: 3 })).toBe(2);
+    expect(copiesAfterSale({ copies: null, held: null })).toBeNull();
+  });
+
+  it("never goes below none", () => {
+    expect(copiesAfterSale({ copies: 2, held: 0 })).toBe(0);
   });
 });

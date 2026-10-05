@@ -43,7 +43,7 @@ import { adoptCollection } from "@/lib/card-pulls.functions";
 import { secretFoil, SECRET_CHIME, SECRET_DUPE_CHIME } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { deviceId, usePackIdentity } from "@/lib/device-id";
-import { packStage, type PackSlot } from "@/lib/pack";
+import { copiesAfterSale, packStage, secretHeldNow, type PackSlot } from "@/lib/pack";
 import {
   celebrationFor,
   copiesAfter,
@@ -917,25 +917,33 @@ function PackPage() {
     return (slots ?? []).map((slot, i) => {
       if (slot.kind === "secret") {
         const outcome = slotOutcome(slot);
-        // The secret's count lives on the server. `getMySecrets` is invalidated
-        // by the deal itself, so it answers with this copy already counted —
-        // and two is the floor while that refetch is still in the air, because
-        // a duplicate is by definition never your first.
+        // The ribbon's count is about THIS pull, so it never falls below two for a
+        // duplicate — "by definition never your first" — however the vault has
+        // moved since. PullRibbon reads one as NEW, which a sale or a trade later
+        // the same day must not turn a duplicate into. What the vault holds NOW is
+        // `held` below, and it is that, not this, the dialog and the receipt quote.
         // Sold from this screen: the count as it stood the moment the sale
         // landed. Not "the server's count minus one" — the sale invalidates
         // getMySecrets, so the refetch already has the copy gone and the
         // subtraction would count it twice.
-        const copies = sold[i]
-          ? sold[i].copies
-          : !slot.duplicate
-            ? 1
-            : Math.max(2, mySecrets.data?.cards.find((c) => c.id === slot.id)?.count ?? 0);
+        const mine = mySecrets.data?.cards.find((c) => c.id === slot.id)?.count ?? 0;
+        const copies = sold[i] ? sold[i].copies : !slot.duplicate ? 1 : Math.max(2, mine);
+        // Not while the query is in the air: `getMySecrets` is invalidated by the
+        // deal, so until it lands the cached count may predate it.
+        const held = sold[i]
+          ? null
+          : secretHeldNow({
+              cards: mySecrets.data?.cards,
+              slotId: slot.id,
+              fetching: mySecrets.isFetching,
+            });
         return {
           slot,
           rarity: secretFoil(slot.card.foil, slot.card.borderFx, slot.card.tier),
           edition: null,
           outcome,
           copies,
+          held,
           sellValue:
             pricing && slot.duplicate && !(i in sold) ? secretSellValue(slot.card.tier) : null,
           ep: null,
@@ -964,7 +972,17 @@ function PackPage() {
         ep: all.find((p) => p.id === slot.id) ?? null,
       };
     });
-  }, [slots, bundle, rarities, localBefore, mySecrets.data, me?.participantId, event, sold]);
+  }, [
+    slots,
+    bundle,
+    rarities,
+    localBefore,
+    mySecrets.data,
+    mySecrets.isFetching,
+    me?.participantId,
+    event,
+    sold,
+  ]);
 
   async function revealAt(i: number) {
     // Both guards read refs, not state. A tap during a hold, and a second tap in
@@ -1488,7 +1506,7 @@ function PackPage() {
                     if (!stand) return "Couldn't sell it — try again";
                     const res = await sellSlot(stand.slot, stand.edition);
                     if (!res.ok) return res.message;
-                    const left = stand.copies == null ? null : Math.max(0, stand.copies - 1);
+                    const left = copiesAfterSale(stand);
                     setSoldFor((prev) => ({
                       pack: packKey,
                       by: {

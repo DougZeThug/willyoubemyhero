@@ -15,6 +15,7 @@ import { upgradeLabel } from "@/lib/pack-outcome";
 import { nextMilestoneLine, type Streak } from "@/lib/streaks";
 import { secretTierCaption, secretTierFloorLabel, secretTierStyle } from "@/lib/secret-rarity";
 import type { StandSlot } from "@/components/pack-stand";
+import { copiesAfterSale } from "@/lib/pack";
 import type { StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { CardUrls, ImageUrlSet } from "@/lib/media";
 import type { StatsBundle } from "@/lib/card-stats";
@@ -401,7 +402,7 @@ export function PackSummary({
                 : (target.ep?.participant?.name ?? "this card")
             }
             value={target.sellValue}
-            copiesLeft={target.copies == null ? null : Math.max(0, target.copies - 1)}
+            copiesLeft={copiesAfterSale(target)}
             onConfirm={() => onSell(index)}
           />
         );

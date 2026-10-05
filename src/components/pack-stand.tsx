@@ -88,8 +88,20 @@ export type StandSlot = {
   /** The finish Postgres minted. Null is "not decided", never "standard". */
   edition: Edition | null;
   outcome: PackOutcome;
-  /** Copies held once this one lands, or null when nobody can say. */
+  /**
+   * Copies held once this one lands, or null when nobody can say. What the ribbon
+   * prints: a fact about THIS pull, which a later sale or trade does not undo, so a
+   * duplicate is never shown as a first.
+   */
   copies: number | null;
+  /**
+   * Copies held right now, or null when that is not known (or not worth asking, as
+   * for a roster card, whose recorded count is the one to use). What the sell
+   * dialog quotes as "you'll still have" and the receipt records — facts about
+   * the vault, which is where a sale and a trade move the number. Falls back to
+   * `copies` when null.
+   */
+  held?: number | null;
   /** What a spare copy would fetch, or null for nothing to say. */
   sellValue: number | null;
   /** The roster row behind a roster slot. Null on a secret. */
