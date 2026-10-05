@@ -265,6 +265,10 @@ describe("secretHeldNow", () => {
     expect(secretHeldNow({ cards, slotId: "sec-1", fetching: true })).toBeNull();
   });
 
+  it("says nothing after a failed refetch left an older answer in the cache", () => {
+    expect(secretHeldNow({ cards, slotId: "sec-1", fetching: false, errored: true })).toBeNull();
+  });
+
   it("lets a settled answer lower the count, down to a card no longer held", () => {
     // The refocus refetch after a sale or a trade elsewhere. A floor here would keep
     // quoting a copy the vault has already lost.
@@ -281,10 +285,17 @@ describe("copiesAfterSale", () => {
     expect(copiesAfterSale({ copies: 2, held: 3 })).toBe(2);
   });
 
-  it("falls back to the recorded count when the vault cannot say", () => {
-    expect(copiesAfterSale({ copies: 2, held: null })).toBe(1);
+  it("falls back to the recorded count only when the slot has no live holding at all", () => {
+    // A roster card never carries `held`: its count at the deal is the one to use.
     expect(copiesAfterSale({ copies: 3 })).toBe(2);
-    expect(copiesAfterSale({ copies: null, held: null })).toBeNull();
+    expect(copiesAfterSale({ copies: null })).toBeNull();
+  });
+
+  it("leaves an unknown live holding unknown instead of quoting the ribbon's floor", () => {
+    // The secrets query refetching, or failed: the ribbon says two for a duplicate
+    // whatever the vault holds, and "You'll still have 1" of a card held once is the
+    // overquote this exists to remove.
+    expect(copiesAfterSale({ copies: 2, held: null })).toBeNull();
   });
 
   it("never goes below none", () => {

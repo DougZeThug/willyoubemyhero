@@ -936,6 +936,7 @@ function PackPage() {
               cards: mySecrets.data?.cards,
               slotId: slot.id,
               fetching: mySecrets.isFetching,
+              errored: mySecrets.isError,
             });
         return {
           slot,
@@ -979,6 +980,7 @@ function PackPage() {
     localBefore,
     mySecrets.data,
     mySecrets.isFetching,
+    mySecrets.isError,
     me?.participantId,
     event,
     sold,

@@ -28,6 +28,10 @@ export function isHeldByAnotherAccount(
  */
 export function useEventAdmin(eventId: string | null | undefined): boolean {
   const admin = useAdminSession();
-  const { user } = useAuthUser();
+  const { user, loading } = useAuthUser();
+  // Not while the session is still being read. `useAuthUser` starts at "nobody", and a
+  // null user is not "held by another", so a cold load would paint the previous
+  // account's console for the renders before getSession() says who is really here.
+  if (loading) return false;
   return !!eventId && admin?.eventId === eventId && !isHeldByAnotherAccount(admin, user?.id);
 }

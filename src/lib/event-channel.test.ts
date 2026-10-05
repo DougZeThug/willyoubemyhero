@@ -201,16 +201,17 @@ describe("subscribeToEventChannel", () => {
     expect(runs.filter).toBe(`event_id=eq.${EVENT_ID}`);
   });
 
-  it("fans a station edit out, scoped to the event", async () => {
+  it("fans a station edit out, and leaves the binding unfiltered so a delete is heard", async () => {
     // The run console on the timer's phone filters on active and split_enabled, so a
-    // station switched off elsewhere has to reach it without waiting for the poll.
+    // station switched off or removed elsewhere has to reach it without the poll. A
+    // DELETE carries only the primary key, so an event_id filter would drop it.
     const { subscribeToEventChannel } = await freshModule();
-    const a = { change: vi.fn(), health: vi.fn() };
-    subscribeToEventChannel(EVENT_ID, a);
-    const stations = bindings.find((b) => b.cfg.table === "stations")!.cfg as { filter?: string };
-    expect(stations.filter).toBe(`event_id=eq.${EVENT_ID}`);
+    const heard = { change: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, heard);
+    const binding = bindings.find((b) => b.cfg.table === "stations");
+    expect(binding?.cfg).not.toHaveProperty("filter");
     fire("stations");
-    expect(a.change).toHaveBeenCalledTimes(1);
+    expect(heard.change).toHaveBeenCalledTimes(1);
   });
 
   it("watches the event row on its primary key, so other events stay quiet", async () => {

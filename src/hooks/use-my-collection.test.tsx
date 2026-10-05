@@ -489,6 +489,39 @@ describe("useMyCollection, when an adoption hold is released in another tab", ()
   });
 });
 
+describe("useMyCollection, when a stats request is already in flight at the delete", () => {
+  it("asks again instead of trusting a request that left before the adoption", async () => {
+    // fetchQuery joins a request already in the air, so a refetch that left before
+    // another tab committed an adoption would hand its empty answer to the delete.
+    const hold = { dayKey: "2026-07-28", identity: `m:${ME.participantId}`, ids: ROSTER };
+    loadUnrecorded.mockResolvedValue(hold);
+    let resolveOld!: (v: unknown) => void;
+    getMyCardStats
+      .mockResolvedValueOnce(serverHas(["ep-0"]))
+      .mockReturnValueOnce(new Promise((r) => (resolveOld = r)))
+      .mockResolvedValue(serverHas(["ep-0", "ep-5"]));
+
+    const { result, client } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    // The pre-adoption request, in the air.
+    void client.refetchQueries({ queryKey: ["my-card-stats"] });
+    await waitFor(() => expect(getMyCardStats).toHaveBeenCalledTimes(2));
+
+    // The hold is released while it is still there.
+    await act(async () => {
+      loadUnrecorded.mockResolvedValue(null);
+      window.dispatchEvent(new StorageEvent("storage", { key: "wwbh:pack-unrecorded" }));
+    });
+    await waitFor(() => expect(getMyCardStats.mock.calls.length).toBeGreaterThan(2));
+    await act(async () => resolveOld(serverHas(["ep-0"])));
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+
+    const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(deleted).not.toContain("ep-5");
+  });
+});
+
 describe("useMyCollection, when no event id is coming", () => {
   // Two ways to get here and the hook cannot tell them apart: the active-event
   // read failed, or it answered and there is no combine on. Either way the stats

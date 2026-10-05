@@ -177,20 +177,15 @@ function openChannel(eventId: string): Entry {
       },
       fanOut,
     )
-    // The commissioner's station edits — renamed, reordered, switched off, splits
-    // toggled — which the run console on another phone filters on. Without this
-    // binding they only arrived with the backstop poll.
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "stations", filter: `event_id=eq.${eventId}` },
-      fanOut,
-    )
-    // Unlike the four above, these four carry no event_id of their own — splits
-    // and penalties hang off a run, reactions and comments off an
-    // event_participant — so there is nothing to filter on and every event's
-    // rows fan out to every watcher. Invisible while one combine is active,
-    // and a refetch of this event's bundle either way; the note is here so
-    // the asymmetry reads as known rather than as an oversight.
+    // Unlike the three above, these go unfiltered. Splits and penalties hang off a
+    // run, and reactions and comments off an event_participant, so they carry no
+    // event_id of their own; stations does, but a DELETE on it carries only the
+    // primary key (the table's default replica identity), so an `event_id` filter
+    // would drop the very event that removes a station from the run console.
+    // Every event's rows fan out to every watcher either way. Invisible while one
+    // combine is active, and a refetch of this event's bundle regardless; the note
+    // is here so the asymmetry reads as known rather than as an oversight.
+    .on("postgres_changes", { event: "*", schema: "public", table: "stations" }, fanOut)
     .on("postgres_changes", { event: "*", schema: "public", table: "splits" }, fanOut)
     .on("postgres_changes", { event: "*", schema: "public", table: "penalties" }, fanOut)
     .on("postgres_changes", { event: "*", schema: "public", table: "card_reactions" }, fanOut)

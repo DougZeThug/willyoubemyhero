@@ -6,7 +6,8 @@
 -- the commissioner's phone stayed live on that one until the next backstop poll.
 -- Its siblings in the bundle — runs, event_participants, draft_selections — were
 -- all published and bound; stations was in neither, so it had no realtime path at
--- all (src/lib/event-channel.ts binds it now, filtered on event_id).
+-- all (src/lib/event-channel.ts binds it now, unfiltered: a DELETE on this table carries
+-- only the primary key, so an event_id filter would drop the delete of a station).
 --
 -- Safe to publish: stations is already anon-readable ("stations public read"), it
 -- carries a name, an order and two switches, and nothing about who ran what. The

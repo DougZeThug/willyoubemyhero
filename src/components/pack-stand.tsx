@@ -98,8 +98,8 @@ export type StandSlot = {
    * Copies held right now, or null when that is not known (or not worth asking, as
    * for a roster card, whose recorded count is the one to use). What the sell
    * dialog quotes as "you'll still have" and the receipt records — facts about
-   * the vault, which is where a sale and a trade move the number. Falls back to
-   * `copies` when null.
+   * the vault, which is where a sale and a trade move the number. Absent, `copies`
+   * is quoted instead; null stays unknown.
    */
   held?: number | null;
   /** What a spare copy would fetch, or null for nothing to say. */

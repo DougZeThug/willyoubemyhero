@@ -69,6 +69,15 @@ describe("useEventAdmin", () => {
     expect(renderHook(() => useEventAdmin(null)).result.current).toBe(false);
   });
 
+  it("is nobody's console until the session has been read", () => {
+    // useAuthUser starts at "nobody", and nobody is not "held by another": without
+    // this, a cold load paints the previous account's console for the renders before
+    // getSession() says who is really signed in.
+    adminSession.mockReturnValue({ eventId: EVENT_ID, owner: "a" });
+    authUser.mockReturnValue({ user: null, loading: true });
+    expect(renderHook(() => useEventAdmin(EVENT_ID)).result.current).toBe(false);
+  });
+
   it("is not the console for a different account on the same handset", () => {
     adminSession.mockReturnValue({ eventId: EVENT_ID, owner: "a" });
     authUser.mockReturnValue({ user: userOf("b"), loading: false });
@@ -149,6 +158,25 @@ describe("useAdminAutoUnlock", () => {
     expect(startAdminSessionFromAccount).toHaveBeenCalledOnce();
     expect(setAdminToken).toHaveBeenCalledWith("tok", "a");
     expect(result.current).toBe(true);
+  });
+
+  it("asks again when the same account signs back in after a discarded answer", async () => {
+    // A signs out with a request in the air; its answer is dropped, unheard. A signing
+    // back in must not be skipped on a latch that outlived that request.
+    const slow = deferred<{ ok: false }>();
+    startAdminSessionFromAccount
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValue({ ok: true, token: "tok" });
+    const { result, rerender } = mount(props(userOf("a")));
+    rerender(props(null));
+    await act(async () => {
+      slow.resolve({ ok: false });
+      await slow.promise;
+    });
+    rerender(props(userOf("a")));
+    await vi.waitFor(() => expect(setAdminToken).toHaveBeenCalledWith("tok", "a"));
+    await vi.waitFor(() => expect(result.current).toBe(true));
+    expect(startAdminSessionFromAccount).toHaveBeenCalledTimes(2);
   });
 
   it("asks nothing of the server for somebody who is signed out", async () => {

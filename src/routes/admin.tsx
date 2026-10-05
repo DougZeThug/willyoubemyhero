@@ -110,7 +110,10 @@ function AdminPage() {
   // `!!` rather than Boolean() on purpose: it narrows `event` for the right
   // half of the &&, which Boolean() does not, and without it `event.id` there
   // is a type error.
-  const isAdmin = !!event?.id && admin?.eventId === event.id && !heldByAnother;
+  // Not while the session is still being read: a null user is not "held by another",
+  // so the stored token would paint its console for the renders before getSession()
+  // says who is here. The gate below holds the PIN form back for the same stretch.
+  const isAdmin = !!event?.id && admin?.eventId === event.id && !heldByAnother && !authLoading;
   const accountChecked = useAdminAutoUnlock(isAdmin, user, authLoading);
 
   if (!event || !event.id) {

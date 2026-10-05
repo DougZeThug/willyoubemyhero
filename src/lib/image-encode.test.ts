@@ -139,6 +139,28 @@ describe("encodeUploadImageVariants", () => {
     await expect(encodeUploadImageVariants(file)).rejects.toThrow(/huge\.png/);
   });
 
+  it("refuses a canvas that will not encode rather than fall back to the original", async () => {
+    // toDataURL answers "data:," when the canvas is too big to encode. Every slot falls
+    // back to `large`, which used to be the untouched file — and so was `medium`.
+    decodesAs(4000, 3000);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:,");
+    const file = new File([new Uint8Array(2_000_000)], "huge.png", { type: "image/png" });
+    await expect(encodeUploadImageVariants(file)).rejects.toThrow(/huge\.png/);
+  });
+
+  it("keeps the underlying failure as the cause", async () => {
+    decodesAs(4000, 3000);
+    const gone = new Error("no 2d context");
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => {
+      throw gone;
+    });
+    const file = new File([new Uint8Array(2_000_000)], "huge.png", { type: "image/png" });
+    await expect(encodeUploadImageVariants(file)).rejects.toMatchObject({ cause: gone });
+  });
+
   it("still refuses a file it can identify no other way", async () => {
     // Nothing to read a type off, so the server's "Unsupported image format" is
     // the honest answer and this must not invent one.

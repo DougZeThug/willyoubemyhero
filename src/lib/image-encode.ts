@@ -174,8 +174,8 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
     // Always re-encoded from here. Past the passthrough above, a file that needs
     // no shrinking is by definition over the byte budget — an 1100px PNG at
     // 2 MB — and storing it untouched shipped those bytes to every phone that
-    // drew the large slot. The fallback at the bottom still covers a canvas that
-    // cannot encode.
+    // drew the large slot. A canvas that cannot encode is refused at the bottom
+    // rather than answered with the original.
     const large = encodeCanvas(
       resizeCanvas(source as CanvasImageSource, w * scaleLarge, h * scaleLarge),
     );
@@ -192,12 +192,17 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
 
     if ("close" in source) source.close();
 
+    // Not the original when the canvas would not encode: every slot falls back to
+    // `large`, so returning the file here would put it in `medium` too. Thrown into
+    // the catch below instead.
+    if (!large.startsWith("data:image/")) throw new Error("Could not encode image");
+
     return {
       thumb: thumb.startsWith("data:image/") ? thumb : large,
       medium: medium.startsWith("data:image/") ? medium : large,
-      large: large.startsWith("data:image/") ? large : await readAsDataUrl(file),
+      large,
     };
-  } catch {
+  } catch (cause) {
     // Not a passthrough. Handing the original back for every slot would fill the
     // `medium` column with it, and signSet reads a stored medium as "the encoder's
     // own output" and serves it, and `large`, untransformed — the multi-megabyte
@@ -206,6 +211,9 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
     // single byte is sent.
     throw new Error(
       `Couldn't process ${file.name} — pick it again, try a smaller copy, or save it to your phone first`,
+      // Kept for the console: the admin reads one sentence, whoever debugs it needs
+      // to know whether the handle died, the decode failed or the canvas was gone.
+      { cause },
     );
   }
 }

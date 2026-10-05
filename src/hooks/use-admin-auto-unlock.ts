@@ -35,6 +35,10 @@ export function useAdminAutoUnlock(isAdmin: boolean, user: User | null, authLoad
   useEffect(() => {
     if (isAdmin || authLoading) return;
     if (!user) {
+      // Forgotten with the account: an answer discarded while signed out was never
+      // heard, and the same account signing back in must be asked again rather than
+      // skipped on a latch that outlived its request.
+      triedFor.current = null;
       setAccountChecked(true);
       return;
     }
