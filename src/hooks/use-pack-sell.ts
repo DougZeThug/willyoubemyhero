@@ -42,8 +42,8 @@ const REROLLED = "Its finish has changed — sell it from the Shop";
  *   stored on the slot. It pays by that row's tier, which is the level on the
  *   card and the number the button quoted.
  * - A roster slot carries no copy id (open_pack mints through record_card_pulls
- *   and keeps only the finish), so this asks for the spares at the moment of
- *   the tap and burns the copy marked `pulledToday` — the one this pack minted,
+ *   and keeps only the finish), so this asks for the member's copies at the moment
+ *   of the tap and burns the one marked `pulledToday` — the one this pack minted,
  *   and there is only ever one per card per day. Not "any copy at this finish":
  *   the sold-receipts live in the route's state and a reload loses them, so a
  *   replayed slot would otherwise burn an older copy for every reload and
@@ -96,7 +96,13 @@ export function usePackSell(
 
         if (edition == null) return { ok: false, message: FALLBACK };
         const spares = await sparesFn({ data: { participantId } });
-        const copy = spares.roster.find((c) => c.eventParticipantId === slot.id && c.pulledToday);
+        // `ownedRoster`, not `roster`: that one lists only cards held twice or more,
+        // so the day's pull vanishes from it the moment it is the member's only copy
+        // and "Already gone" would be said of a card that is still in the vault. Found
+        // here, a lone copy goes on to the RPC, which answers `last_copy` itself.
+        const copy = spares.ownedRoster.find(
+          (c) => c.eventParticipantId === slot.id && c.pulledToday,
+        );
         if (!copy) return { ok: false, message: REFUSALS.not_yours ?? FALLBACK };
         if (copy.edition !== edition || copy.assertedBy !== "server") {
           return { ok: false, message: REROLLED };
