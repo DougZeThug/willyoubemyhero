@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { useEventBundle } from "@/hooks/use-event-bundle";
 import { useEventPhotoUrls, useEventCardUrls } from "@/hooks/use-photo-urls";
-import { useAdminSession } from "@/lib/admin-token";
+import { useEventAdmin } from "@/hooks/use-event-admin";
 import { recordDraftSelection, undoLastDraftSelection } from "@/lib/admin-write.functions";
 import { ParticipantAvatar } from "@/components/participant-avatar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,8 +46,7 @@ function DraftPage() {
   // and the picker was still staring at their own name.
   const refresh = () => qc.invalidateQueries({ queryKey: ["event-bundle", event?.id] });
 
-  const admin = useAdminSession();
-  const isAdmin = !!event?.id && admin?.eventId === event.id;
+  const isAdmin = useEventAdmin(event?.id);
 
   const { rankings, taken, currentPicker } = useMemo(() => {
     const parts = bundle?.participants ?? [];

@@ -11,9 +11,13 @@ const START = Date.parse("2026-07-28T12:00:00.000Z");
 
 const adminSession = vi.fn();
 const runConsole = vi.fn();
+const signedInAs = vi.fn<() => { id: string } | null>(() => null);
 
 vi.mock("@/lib/admin-token", () => ({ useAdminSession: () => adminSession() }));
 vi.mock("@/hooks/use-run-console", () => ({ useRunConsole: () => runConsole() }));
+vi.mock("@/hooks/use-account", () => ({
+  useAuthUser: () => ({ user: signedInAs(), loading: false }),
+}));
 
 function makeRun(over: Partial<ActiveRun> = {}): ActiveRun {
   return {
@@ -48,6 +52,8 @@ afterEach(() => {
   vi.restoreAllMocks();
   adminSession.mockReset();
   runConsole.mockReset();
+  signedInAs.mockReset();
+  signedInAs.mockReturnValue(null);
 });
 
 describe("useLiveHud", () => {
@@ -68,6 +74,26 @@ describe("useLiveHud", () => {
     const { result } = renderHook(() => useLiveHud(EVENT_ID));
     expect(result.current.isAdmin).toBe(false);
     expect(result.current.adminRun).toBeNull();
+  });
+
+  it("does not hand a token another account earned to whoever signed in next", () => {
+    // The token names no user and the server checks the event alone, so the stored
+    // owner is the only thing that says whose console this is. /admin read it and
+    // /live did not, which left a planted token invisible on the one screen that
+    // looked.
+    adminSession.mockReturnValue({ eventId: EVENT_ID, owner: "user-a" });
+    signedInAs.mockReturnValue({ id: "user-b" });
+    runConsole.mockReturnValue(withRun(makeRun()));
+    const { result } = renderHook(() => useLiveHud(EVENT_ID));
+    expect(result.current.isAdmin).toBe(false);
+    expect(result.current.adminRun).toBeNull();
+  });
+
+  it("keeps the console for the account that earned it", () => {
+    adminSession.mockReturnValue({ eventId: EVENT_ID, owner: "user-a" });
+    signedInAs.mockReturnValue({ id: "user-a" });
+    const { result } = renderHook(() => useLiveHud(EVENT_ID));
+    expect(result.current.isAdmin).toBe(true);
   });
 
   it("is nobody's console before the event has loaded", () => {

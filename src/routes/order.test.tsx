@@ -8,6 +8,7 @@ import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds } from "@/test/f
 
 const useEventBundle = vi.fn();
 const useAdminSession = vi.fn();
+const signedInAs = vi.fn<() => { id: string } | null>(() => null);
 const setRunningOrder = vi.fn(() => Promise.resolve({ ok: true }));
 const recordRandomization = vi.fn(() => Promise.resolve({ ok: true }));
 
@@ -22,6 +23,10 @@ vi.mock("@/hooks/use-photo-urls", () => ({
 
 vi.mock("@/lib/admin-token", () => ({
   useAdminSession: () => useAdminSession(),
+}));
+
+vi.mock("@/hooks/use-account", () => ({
+  useAuthUser: () => ({ user: signedInAs(), loading: false }),
 }));
 
 vi.mock("@/lib/admin-write.functions", () => ({
@@ -102,6 +107,8 @@ beforeEach(() => {
   resetFixtureIds();
   useEventBundle.mockReset();
   useAdminSession.mockReset();
+  signedInAs.mockReset();
+  signedInAs.mockReturnValue(null);
   setRunningOrder.mockClear();
   recordRandomization.mockClear();
   invalidateQueries.mockClear();
@@ -109,6 +116,23 @@ beforeEach(() => {
   toastError.mockClear();
   toastWarning.mockClear();
   recordRandomization.mockImplementation(() => Promise.resolve({ ok: true }));
+});
+
+describe("a token another account earned", () => {
+  it("is not this account's console", () => {
+    asAdminWith([
+      makeParticipant({ participant: { id: "p-a", name: "Alice Ace", nickname: null } }),
+    ]);
+    useAdminSession.mockReturnValue({
+      eventId: EVENT_ID,
+      expiresAt: Date.now() + 60_000,
+      token: "t",
+      owner: "user-a",
+    });
+    signedInAs.mockReturnValue({ id: "user-b" });
+    render(<OrderPage />);
+    expect(screen.queryByRole("button", { name: /re-randomize/i })).not.toBeInTheDocument();
+  });
 });
 
 describe("re-randomizing an empty field", () => {

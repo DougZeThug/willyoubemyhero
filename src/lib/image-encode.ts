@@ -141,14 +141,15 @@ function resizeCanvas(source: CanvasImageSource, width: number, height: number):
  *
  * The original file is passed through unchanged (for all three slots) when it
  * is already small, so a designer-optimised asset does not take a second generation
- * hit. Anything else never comes back as the original in any slot: signSet serves
- * `large` untransformed whenever a medium variant is stored, on the strength of
- * exactly that.
+ * hit. Anything else never comes back as the original in any slot — a file that
+ * cannot be re-encoded throws instead — because signSet serves `large`
+ * untransformed whenever a medium variant is stored, on the strength of exactly
+ * that.
  */
 export async function encodeUploadImageVariants(input: File): Promise<EncodedImageSizes> {
   // Every passthrough below forwards the original bytes, and the server reads the
   // type off the data URL prefix — so the type has to be settled before the first
-  // read, including the one in the catch.
+  // read.
   const file = withImageType(input);
   try {
     const source = await loadImage(file);
@@ -173,8 +174,8 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
     // Always re-encoded from here. Past the passthrough above, a file that needs
     // no shrinking is by definition over the byte budget — an 1100px PNG at
     // 2 MB — and storing it untouched shipped those bytes to every phone that
-    // drew the large slot. The fallback at the bottom still covers a canvas that
-    // cannot encode.
+    // drew the large slot. A canvas that cannot encode is refused at the bottom
+    // rather than answered with the original.
     const large = encodeCanvas(
       resizeCanvas(source as CanvasImageSource, w * scaleLarge, h * scaleLarge),
     );
@@ -191,20 +192,29 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
 
     if ("close" in source) source.close();
 
+    // Not the original when the canvas would not encode: every slot falls back to
+    // `large`, so returning the file here would put it in `medium` too. Thrown into
+    // the catch below instead.
+    if (!large.startsWith("data:image/")) throw new Error("Could not encode image");
+
     return {
       thumb: thumb.startsWith("data:image/") ? thumb : large,
       medium: medium.startsWith("data:image/") ? medium : large,
-      large: large.startsWith("data:image/") ? large : await readAsDataUrl(file),
+      large,
     };
-  } catch {
-    // Last resort. If even a plain read fails the handle is gone, so say
-    // something a human can act on rather than the browser's permission prose.
-    try {
-      const passthrough = await readAsDataUrl(file);
-      return { thumb: passthrough, medium: passthrough, large: passthrough };
-    } catch {
-      throw new Error(`Couldn't read ${file.name} — pick it again, or save it to your phone first`);
-    }
+  } catch (cause) {
+    // Not a passthrough. Handing the original back for every slot would fill the
+    // `medium` column with it, and signSet reads a stored medium as "the encoder's
+    // own output" and serves it, and `large`, untransformed — the multi-megabyte
+    // original, where the server's resize would otherwise have caught it. A file
+    // the browser cannot decode or draw is better refused here, by name, before a
+    // single byte is sent.
+    throw new Error(
+      `Couldn't process ${file.name} — pick it again, try a smaller copy, or save it to your phone first`,
+      // Kept for the console: the admin reads one sentence, whoever debugs it needs
+      // to know whether the handle died, the decode failed or the canvas was gone.
+      { cause },
+    );
   }
 }
 

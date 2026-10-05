@@ -311,8 +311,14 @@ export function useMyCollection(
         return;
       }
       try {
+        // `staleTime: 0` alone is not "asked again now": fetchQuery joins a request
+        // already in flight, and one that left before an adoption committed in
+        // another tab comes back with the pre-adoption answer. Cancelled first so the
+        // answer below is from a request made after the decision to delete.
+        const statsKey = myCardStatsKey(eventId, participantId);
+        await qc.cancelQueries({ queryKey: statsKey, exact: true });
         const answer = await qc.fetchQuery({
-          queryKey: myCardStatsKey(eventId, participantId),
+          queryKey: statsKey,
           queryFn: () => fn({ data: { eventId } }) as Promise<MyCardStats>,
           staleTime: 0,
         });

@@ -466,8 +466,9 @@ function announcePackState() {
  *
  * A fresh value every time, unlike that key's constant one: `storage` only fires
  * on a change, and every write here is a change somebody needs to hear. Writes
- * that ADD or MOVE protection announce here; `retireUnrecorded` deliberately does
- * not — see it.
+ * that ADD, MOVE or RETIRE protection announce here. Retiring has to as well: a
+ * vault in another tab otherwise keeps protecting ids the server has since vouched
+ * for, or that were traded away — see `retireUnrecorded` for why that is safe.
  */
 export const PACK_UNRECORDED_KEY = "wwbh:pack-unrecorded";
 
@@ -564,12 +565,17 @@ export async function retireUnrecorded(
     if (ids.length === 0) await tx.store.delete(UNRECORDED_KEY);
     else await tx.store.put({ ...prior, ids }, UNRECORDED_KEY);
     await tx.done;
-    // Same-tab only, on purpose. Waking another tab here would have it drop a
-    // protection its own cached stats answer — read before the league had heard of
-    // these cards — has not caught up with, and the very next reconcile would
-    // delete them. A tab that holds a row a little longer than needed costs
-    // nothing; one that lets go early loses the card.
-    announcePackState();
+    // Cross-tab as well as same-tab. A vault in another tab holds the row it read,
+    // and an adoption hold covers the member's WHOLE collection: left alone, that
+    // tab would go on passing every card through from its local store, including
+    // the ones traded or sold away since, until a remount.
+    //
+    // Letting go early is safe because the vault never deletes on what it was told
+    // at mount. Before every forgetCards it asks the server again (staleTime 0) and
+    // re-reads this row, so a tab woken here with an older cached answer still
+    // cannot drop a card the league now lists — and every caller retires AFTER the
+    // server has taken the cards.
+    announceUnrecordedChanged();
   } catch {
     /* ignore */
   }

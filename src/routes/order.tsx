@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListOrdered, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAdminSession } from "@/lib/admin-token";
+import { useEventAdmin } from "@/hooks/use-event-admin";
 import { recordRandomization, setRunningOrder } from "@/lib/admin-write.functions";
 import { newSeed, seededRng, shuffle } from "@/lib/format";
 import { toast } from "sonner";
@@ -38,8 +38,7 @@ function OrderPage() {
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
 
-  const admin = useAdminSession();
-  const isAdmin = !!event?.id && admin?.eventId === event.id;
+  const isAdmin = useEventAdmin(event?.id);
 
   const rows = useMemo(
     () => [...(bundle?.participants ?? [])].sort((a, b) => a.running_order - b.running_order),

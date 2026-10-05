@@ -114,7 +114,7 @@ describe("a secret", () => {
 describe("a roster card", () => {
   it("burns the copy today's pack minted, and no other", async () => {
     fns.spares.mockResolvedValue({
-      roster: [
+      ownedRoster: [
         spare("c-old-gold", "gold"),
         spare("c-gold", "gold", { pulledToday: true }),
         spare("c-standard", "standard"),
@@ -133,7 +133,7 @@ describe("a roster card", () => {
     // The replayed pack after a reload: the receipt is lost with the page, and
     // today's gold already went. Another gold is not what this slot dealt, and
     // burning it would let every reload-and-confirm sell one more copy.
-    fns.spares.mockResolvedValue({ roster: [spare("c-old-gold", "gold"), spare("c-std", "standard")] }); // prettier-ignore
+    fns.spares.mockResolvedValue({ ownedRoster: [spare("c-old-gold", "gold"), spare("c-std", "standard")] }); // prettier-ignore
     const { sell } = mount();
 
     const res = await sell(rosterSlot, "gold");
@@ -141,9 +141,28 @@ describe("a roster card", () => {
     expect(fns.mill).not.toHaveBeenCalled();
   });
 
+  it("tells a member their last copy is their last, not that it is gone", async () => {
+    // A card held once is absent from `roster` (duplicates only) and present in
+    // `ownedRoster`. Searching the first made today's pull "Already gone — it left
+    // your vault" the moment it became the only copy, which is false: it is right
+    // there. The RPC owns the rule, so the copy is found and the RPC is asked.
+    fns.spares.mockResolvedValue({
+      roster: [],
+      ownedRoster: [spare("c-gold", "gold", { pulledToday: true })],
+    });
+    fns.mill.mockResolvedValue({ ok: false, reason: "last_copy" });
+    const { sell } = mount();
+
+    await expect(sell(rosterSlot, "gold")).resolves.toEqual({
+      ok: false,
+      message: "That's your last one",
+    });
+    expect(fns.mill).toHaveBeenCalledWith({ data: { cardCopyId: "c-gold" } });
+  });
+
   it("refuses today's copy once its finish has been re-rolled", async () => {
     // The button still quotes gold; the copy is a silver now.
-    fns.spares.mockResolvedValue({ roster: [spare("c-today", "silver", { pulledToday: true })] });
+    fns.spares.mockResolvedValue({ ownedRoster: [spare("c-today", "silver", { pulledToday: true })] }); // prettier-ignore
     const { sell } = mount();
 
     const res = await sell(rosterSlot, "gold");
