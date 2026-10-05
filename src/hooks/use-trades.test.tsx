@@ -48,8 +48,9 @@ describe("useTradeFeed", () => {
     const invalidate = vi.spyOn(client, "invalidateQueries");
     renderHook(() => useTradeFeed(EVENT, ME), { wrapper });
 
-    expect(realtime.handler).not.toBeNull();
-    act(() => realtime.handler!());
+    const onTrade = realtime.handler;
+    if (!onTrade) throw new Error("useTradeFeed never subscribed to trades");
+    act(() => onTrade());
 
     const keys = invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey));
     expect(keys).toContain(JSON.stringify(tradeSparesKey(ME)));
