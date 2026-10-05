@@ -28,6 +28,7 @@ vi.mock("@/lib/nudge-channel", () => ({
 }));
 
 import { markTradeOffersSeen, unreadOfferIds, useTradeBadge } from "./use-trade-badge";
+import { dustSparesKey, tradeSparesKey } from "./use-trades";
 
 const KEY = "wwbh:trade-seen";
 const ME = "p-me";
@@ -204,5 +205,22 @@ describe("useTradeBadge", () => {
     const onNudge = subscribeToNudges.mock.calls[0][1] as () => void;
     act(() => onNudge());
     await waitFor(() => expect(result.current).toBe(1));
+  });
+
+  it("refreshes both spares lists when a nudge lands", async () => {
+    // The shop listens on this topic, not on useTradeFeed. A card traded or sold
+    // away from under an open shop has to leave its burn and sell counters.
+    serverFnMock.mockResolvedValue({ inbox: [], outbox: [], recent: [], nudgeTopic: TOPIC });
+    const { wrapper, client } = createQueryWrapper();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    renderHook(() => useTradeBadge(), { wrapper });
+    await waitFor(() => expect(subscribeToNudges).toHaveBeenCalled());
+
+    const onNudge = subscribeToNudges.mock.calls[0][1] as () => void;
+    act(() => onNudge());
+
+    const keys = invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey));
+    expect(keys).toContain(JSON.stringify(tradeSparesKey(ME)));
+    expect(keys).toContain(JSON.stringify(dustSparesKey(ME)));
   });
 });
