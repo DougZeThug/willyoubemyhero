@@ -128,6 +128,17 @@ describe("encodeUploadImageVariants", () => {
     expect(sizes.large).toBe(ENCODED);
   });
 
+  it("refuses a file it cannot re-encode instead of storing the original as every size", async () => {
+    // Over the byte budget and over 1600px, so it needs a canvas — and the canvas is
+    // the thing that is gone. This used to return the untouched original for all
+    // three slots, which put it in the medium column, and signSet serves a stored
+    // medium and its large untransformed. A throw sends nothing at all.
+    decodesAs(4000, 3000);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+    const file = new File([new Uint8Array(2_000_000)], "huge.png", { type: "image/png" });
+    await expect(encodeUploadImageVariants(file)).rejects.toThrow(/huge\.png/);
+  });
+
   it("still refuses a file it can identify no other way", async () => {
     // Nothing to read a type off, so the server's "Unsupported image format" is
     // the honest answer and this must not invent one.

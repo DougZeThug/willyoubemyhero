@@ -141,14 +141,15 @@ function resizeCanvas(source: CanvasImageSource, width: number, height: number):
  *
  * The original file is passed through unchanged (for all three slots) when it
  * is already small, so a designer-optimised asset does not take a second generation
- * hit. Anything else never comes back as the original in any slot: signSet serves
- * `large` untransformed whenever a medium variant is stored, on the strength of
- * exactly that.
+ * hit. Anything else never comes back as the original in any slot — a file that
+ * cannot be re-encoded throws instead — because signSet serves `large`
+ * untransformed whenever a medium variant is stored, on the strength of exactly
+ * that.
  */
 export async function encodeUploadImageVariants(input: File): Promise<EncodedImageSizes> {
   // Every passthrough below forwards the original bytes, and the server reads the
   // type off the data URL prefix — so the type has to be settled before the first
-  // read, including the one in the catch.
+  // read.
   const file = withImageType(input);
   try {
     const source = await loadImage(file);
@@ -197,14 +198,15 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
       large: large.startsWith("data:image/") ? large : await readAsDataUrl(file),
     };
   } catch {
-    // Last resort. If even a plain read fails the handle is gone, so say
-    // something a human can act on rather than the browser's permission prose.
-    try {
-      const passthrough = await readAsDataUrl(file);
-      return { thumb: passthrough, medium: passthrough, large: passthrough };
-    } catch {
-      throw new Error(`Couldn't read ${file.name} — pick it again, or save it to your phone first`);
-    }
+    // Not a passthrough. Handing the original back for every slot would fill the
+    // `medium` column with it, and signSet reads a stored medium as "the encoder's
+    // own output" and serves it, and `large`, untransformed — the multi-megabyte
+    // original, where the server's resize would otherwise have caught it. A file
+    // the browser cannot decode or draw is better refused here, by name, before a
+    // single byte is sent.
+    throw new Error(
+      `Couldn't process ${file.name} — pick it again, try a smaller copy, or save it to your phone first`,
+    );
   }
 }
 
