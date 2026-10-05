@@ -20,6 +20,7 @@ vi.mock("@/hooks/use-photo-urls", () => ({
 vi.mock("@/hooks/use-finish-watcher", () => ({ useFinishWatcher: () => {} }));
 vi.mock("@/hooks/use-run-console", () => ({ useRunConsole: () => ({ run: null }) }));
 vi.mock("@/lib/admin-token", () => ({ useAdminSession: () => null }));
+vi.mock("@/hooks/use-account", () => ({ useAuthUser: () => ({ user: null, loading: false }) }));
 vi.mock("@/components/hud-timer", () => ({
   HudTimer: (props: { paused: boolean; status: string }) => (
     <div data-stub="hud-timer" data-paused={String(props.paused)} data-status={props.status} />

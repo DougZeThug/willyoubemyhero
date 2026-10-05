@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { verifyEventPin, startAdminSessionFromAccount } from "@/lib/admin.functions";
+import { verifyEventPin } from "@/lib/admin.functions";
 import { clearAdminToken, setAdminToken, useAdminSession } from "@/lib/admin-token";
 import { useAuthUser } from "@/hooks/use-account";
+import { isHeldByAnotherAccount } from "@/hooks/use-event-admin";
+import { useAdminAutoUnlock } from "@/hooks/use-admin-auto-unlock";
 import { setParticipantStatus, resetCombine } from "@/lib/admin-write.functions";
 import { addPlayerToRoster, removeParticipantFromEvent } from "@/lib/admin-write.functions";
 import {
@@ -104,36 +106,12 @@ function AdminPage() {
   // console. useAccountSync takes it off, but from the root and in its own
   // effect — without this the console paints for a commit first, and the
   // account check below is skipped for the person actually signed in.
-  const heldByAnother = !!user && !!admin?.owner && admin.owner !== user.id;
+  const heldByAnother = isHeldByAnotherAccount(admin, user?.id);
   // `!!` rather than Boolean() on purpose: it narrows `event` for the right
   // half of the &&, which Boolean() does not, and without it `event.id` there
   // is a type error.
   const isAdmin = !!event?.id && admin?.eventId === event.id && !heldByAnother;
-  const [accountChecked, setAccountChecked] = useState(false);
-  const triedFor = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (isAdmin || authLoading) return;
-    if (!user) {
-      setAccountChecked(true);
-      return;
-    }
-    if (triedFor.current === user.id) return;
-    triedFor.current = user.id;
-    void (async () => {
-      try {
-        const res = await startAdminSessionFromAccount({ data: undefined });
-        if (res.ok) {
-          setAdminToken(res.token, user.id);
-          toast.success("Admin unlocked via your account");
-        }
-      } catch {
-        /* fall through to the PIN gate */
-      } finally {
-        setAccountChecked(true);
-      }
-    })();
-  }, [isAdmin, user, authLoading]);
+  const accountChecked = useAdminAutoUnlock(isAdmin, user, authLoading);
 
   if (!event || !event.id) {
     return <div className="mx-auto max-w-md p-6 text-sm text-muted-foreground">Loading…</div>;

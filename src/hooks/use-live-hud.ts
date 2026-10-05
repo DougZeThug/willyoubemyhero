@@ -12,14 +12,13 @@
  * Spectators get `isAdmin: false` and a null run, and never see a control.
  */
 import { useMemo } from "react";
-import { useAdminSession } from "@/lib/admin-token";
+import { useEventAdmin } from "@/hooks/use-event-admin";
 import { useRunConsole } from "@/hooks/use-run-console";
 import { computeElapsedMs } from "@/lib/active-run";
 
 export function useLiveHud(eventId: string | null) {
-  const admin = useAdminSession();
+  const isAdmin = useEventAdmin(eventId);
   const rc = useRunConsole();
-  const isAdmin = eventId !== null && admin?.eventId === eventId;
   // A finished run is not being timed any more -- it is waiting for its result
   // to be saved -- so the ring goes back to the crowd's clock rather than
   // freezing on the last athlete's time.

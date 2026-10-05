@@ -17,6 +17,7 @@ vi.mock("@/hooks/use-photo-urls", () => ({
 }));
 
 vi.mock("@/lib/admin-token", () => ({ useAdminSession: () => null }));
+vi.mock("@/hooks/use-account", () => ({ useAuthUser: () => ({ user: null, loading: false }) }));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 vi.mock("@/lib/admin-write.functions", () => ({
   recordDraftSelection: vi.fn(),
