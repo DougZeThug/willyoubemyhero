@@ -410,14 +410,28 @@ describe("waking a vault in another tab", () => {
     expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).not.toBe(first);
   });
 
-  it("does not wake other tabs when protection is retired", async () => {
-    // A tab that let go early would act on its own stale stats, which were read
-    // before the league had heard of these cards, and delete them.
+  it("wakes other tabs when protection is retired", async () => {
+    // An adoption hold covers the member's whole collection, so a vault that never
+    // hears it was released keeps passing a card through after it was traded away.
+    // Letting go early is safe: the vault asks the server again before it deletes.
     const mod = await freshModule();
     await mod.addUnrecorded(ROW);
     const before = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
     await mod.retireUnrecorded([CARD_A]);
+    const after = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
+    expect(after).not.toBeNull();
+    expect(after).not.toBe(before);
+  });
+
+  it("stays quiet when a retire has nothing of its own to retire", async () => {
+    // Scoped to the identity the hold was filed under: another member's retire
+    // touches no row, so there is nothing for another tab to re-read.
+    const mod = await freshModule();
+    await mod.addUnrecorded(ROW);
+    const before = window.localStorage.getItem(mod.PACK_UNRECORDED_KEY);
+    await mod.retireUnrecorded([CARD_A], "m:p-bob");
     expect(window.localStorage.getItem(mod.PACK_UNRECORDED_KEY)).toBe(before);
+    expect(await mod.loadUnrecorded()).toMatchObject({ ids: [CARD_A] });
   });
 
   it("never repeats a value, even for two writes in the same millisecond", async () => {

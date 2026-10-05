@@ -440,6 +440,55 @@ describe("useMyCollection, deleting only on a fresh server answer", () => {
   });
 });
 
+describe("useMyCollection, when an adoption hold is released in another tab", () => {
+  // Adoption files the member's WHOLE collection as owed to them, so the vault
+  // holds every card out of the prune while it lasts. The tab that finished the
+  // claim retires the hold; this one only finds out through `storage`.
+  const HOLD = { dayKey: "2026-07-28", identity: `m:${ME.participantId}`, ids: ROSTER };
+  const releasedElsewhere = () =>
+    act(async () => {
+      loadUnrecorded.mockResolvedValue(null);
+      window.dispatchEvent(new StorageEvent("storage", { key: "wwbh:pack-unrecorded" }));
+    });
+
+  it("drops a card traded away since, once the other tab lets go", async () => {
+    loadUnrecorded.mockResolvedValue(HOLD);
+    // ep-5 was traded away after the hold was filed; the server no longer lists it.
+    getMyCardStats.mockResolvedValue(serverHas(["ep-0"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    // Held: the whole snapshot is passed through and nothing is deleted.
+    expect(Object.keys(result.current.collection)).toHaveLength(18);
+    expect(forgetCards).not.toHaveBeenCalled();
+
+    await releasedElsewhere();
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+    const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(deleted).toContain("ep-5");
+    expect(deleted).not.toContain("ep-0");
+    await waitFor(() => expect(Object.keys(result.current.collection)).toEqual(["ep-0"]));
+  });
+
+  it("still deletes nothing the server lists when asked again after the release", async () => {
+    // Why waking this tab is safe: its cached answer may predate the adoption, and
+    // the delete is only taken on a fresh one.
+    loadUnrecorded.mockResolvedValue(HOLD);
+    getMyCardStats
+      .mockResolvedValueOnce(serverHas(["ep-0"]))
+      .mockResolvedValue(serverHas(["ep-0", "ep-5"]));
+
+    const { result } = await mount();
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await releasedElsewhere();
+    await waitFor(() => expect(forgetCards).toHaveBeenCalled());
+
+    const deleted = forgetCards.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(deleted).not.toContain("ep-5");
+    expect(deleted).not.toContain("ep-0");
+  });
+});
+
 describe("useMyCollection, when no event id is coming", () => {
   // Two ways to get here and the hook cannot tell them apart: the active-event
   // read failed, or it answered and there is no combine on. Either way the stats

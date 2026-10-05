@@ -119,8 +119,10 @@ export async function holdForAdoption(
  * so there is no member to reconcile and the hold can go at once; `qc` is simply
  * left out.
  *
- * Deliberately announced to this tab only (see `retireUnrecorded`): another
- * tab's cached stats are not refreshed by this refetch, so it keeps holding.
+ * Announced to other tabs too (see `retireUnrecorded`). Their cached stats are
+ * not refreshed by this refetch, but a vault only deletes after asking the server
+ * again, so waking it cannot lose a card — and leaving it holding would keep a
+ * traded-away card in its vault, since this hold covers the whole collection.
  */
 export async function releaseAdoptionHold(
   participantId: string,
