@@ -97,7 +97,7 @@ export function usePackSell(
         if (edition == null) return { ok: false, message: FALLBACK };
         const spares = await sparesFn({ data: { participantId } });
         const copy = spares.roster.find((c) => c.eventParticipantId === slot.id && c.pulledToday);
-        if (!copy) return { ok: false, message: REFUSALS.not_yours! };
+        if (!copy) return { ok: false, message: REFUSALS.not_yours ?? FALLBACK };
         if (copy.edition !== edition || copy.assertedBy !== "server") {
           return { ok: false, message: REROLLED };
         }
