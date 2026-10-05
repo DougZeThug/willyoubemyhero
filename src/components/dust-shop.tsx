@@ -31,7 +31,7 @@ import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { packStatusKey } from "@/hooks/use-pack-status";
 import { millCardCopy, rerollCopyEdition, sellSecretCard } from "@/lib/dust.functions";
 import { getTradeSpares } from "@/lib/trades.functions";
-import { tradeSparesKey } from "@/hooks/use-trades";
+import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import type { TradeSpares } from "@/lib/trades";
 
@@ -130,7 +130,7 @@ export function DustShopPanel({
       // lands, while the sheet below and the Trading Post went on showing the
       // list from before the purchase for a cache lifetime. Buying was the only
       // mutation in this file that moved the spares and did not say so.
-      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
       void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       // A bought pull is a real pull: buy_bonus_secret_pull delegates to
       // pull_bonus_secret_card, which mints the row and awards the trophy. Buying
@@ -172,7 +172,7 @@ export function DustShopPanel({
   const sets = useSecretCollections();
   const sparesFn = useServerFn(getTradeSpares);
   const spares = useQuery({
-    queryKey: ["dust-spares", participantId],
+    queryKey: dustSparesKey(participantId),
     queryFn: () => sparesFn({ data: { participantId: participantId! } }) as Promise<TradeSpares>,
     // This used to wait on the sheet being open. Being on the screen is that
     // intent now, so the only gate left is having somebody to ask about.
@@ -210,7 +210,7 @@ export function DustShopPanel({
       qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
       // The copy is gone, so both the spares list and the vault's own counts are
       // now wrong until they are asked again.
-      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
       // The trading post reads a DIFFERENT key for the same list. Without
       // this a milled spare stayed offerable for up to a cache lifetime, and
       // the server refused the offer that was composed from it. market-panel
@@ -249,7 +249,7 @@ export function DustShopPanel({
         return;
       }
       qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
-      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
       // The trading post reads a DIFFERENT key for the same list. Without
       // this a milled spare stayed offerable for up to a cache lifetime, and
       // the server refused the offer that was composed from it. market-panel
@@ -302,7 +302,7 @@ export function DustShopPanel({
         return;
       }
       qc.setQueryData(dustBalanceKey(participantId), { balance: res.balance });
-      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
       // The trading post reads a DIFFERENT key for the same list. Without
       // this a milled spare stayed offerable for up to a cache lifetime, and
       // the server refused the offer that was composed from it. market-panel

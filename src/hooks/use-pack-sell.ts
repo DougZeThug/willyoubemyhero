@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { mySecretsKey } from "@/hooks/use-daily-secret";
 import { packStatusKey } from "@/hooks/use-pack-status";
 import { dustBalanceKey } from "@/hooks/use-dust";
-import { tradeSparesKey } from "@/hooks/use-trades";
+import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { millCardCopy, sellSecretCard } from "@/lib/dust.functions";
@@ -70,7 +70,7 @@ export function usePackSell(
       qc.setQueryData(dustBalanceKey(participantId), { balance });
       // Both spares lists: the shop and the market read one key, the Trading
       // Post another, and a sold copy offered from either is a refused offer.
-      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
       void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId ?? null, participantId) });
       void qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId ?? null) });
