@@ -382,7 +382,16 @@ describe("migrations", () => {
       "SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime'",
     );
     const published = rows.map((r) => r.tablename);
-    for (const table of ["runs", "splits", "penalties", "event_participants", "draft_selections"]) {
+    for (const table of [
+      "runs",
+      "splits",
+      "penalties",
+      "event_participants",
+      "draft_selections",
+      // Read by the bundle and edited mid-event: the run console on another phone
+      // keeps a switched-off station live until the poll if this is missing.
+      "stations",
+    ]) {
       expect(published).toContain(table);
     }
     // A completed trade is the app's only live signal that anything traded at

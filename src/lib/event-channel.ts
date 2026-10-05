@@ -177,7 +177,15 @@ function openChannel(eventId: string): Entry {
       },
       fanOut,
     )
-    // Unlike the three above, these four carry no event_id of their own — splits
+    // The commissioner's station edits — renamed, reordered, switched off, splits
+    // toggled — which the run console on another phone filters on. Without this
+    // binding they only arrived with the backstop poll.
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "stations", filter: `event_id=eq.${eventId}` },
+      fanOut,
+    )
+    // Unlike the four above, these four carry no event_id of their own — splits
     // and penalties hang off a run, reactions and comments off an
     // event_participant — so there is nothing to filter on and every event's
     // rows fan out to every watcher. Invisible while one combine is active,

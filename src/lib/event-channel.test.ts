@@ -189,6 +189,7 @@ describe("subscribeToEventChannel", () => {
       "runs",
       "event_participants",
       "draft_selections",
+      "stations",
       "splits",
       "penalties",
       "card_reactions",
@@ -198,6 +199,18 @@ describe("subscribeToEventChannel", () => {
     ]);
     const runs = bindings[0].cfg as { filter?: string };
     expect(runs.filter).toBe(`event_id=eq.${EVENT_ID}`);
+  });
+
+  it("fans a station edit out, scoped to the event", async () => {
+    // The run console on the timer's phone filters on active and split_enabled, so a
+    // station switched off elsewhere has to reach it without waiting for the poll.
+    const { subscribeToEventChannel } = await freshModule();
+    const a = { change: vi.fn(), health: vi.fn() };
+    subscribeToEventChannel(EVENT_ID, a);
+    const stations = bindings.find((b) => b.cfg.table === "stations")!.cfg as { filter?: string };
+    expect(stations.filter).toBe(`event_id=eq.${EVENT_ID}`);
+    fire("stations");
+    expect(a.change).toHaveBeenCalledTimes(1);
   });
 
   it("watches the event row on its primary key, so other events stay quiet", async () => {
