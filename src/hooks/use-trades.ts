@@ -24,6 +24,14 @@ export const tradeSparesKey = (
   participantId === undefined
     ? (["trade-spares", viewerId] as const)
     : (["trade-spares", viewerId, participantId] as const);
+/**
+ * The SAME getTradeSpares answer as tradeSparesKey, cached a second time for the
+ * shop and the market — your own list only, so keyed on you alone. Two keys for
+ * one list means every place that moves a card has to name both; a trade landing
+ * named only the first, and a card traded away stayed on the sell counter.
+ */
+export const dustSparesKey = (participantId: string | null | undefined) =>
+  ["dust-spares", participantId] as const;
 export const tradeFeedKey = (eventId: string | null | undefined) =>
   ["trade-feed", eventId] as const;
 
@@ -126,6 +134,7 @@ export function useTradeFeed(eventId: string | null | undefined, participantId?:
         qc.invalidateQueries({ queryKey: tradeFeedKey(eventId) });
         qc.invalidateQueries({ queryKey: tradeOffersKey(participantId) });
         qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
+        qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
         qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId) });
         qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
         // The secrets cache is keyed on an actor, which for a claimed member is

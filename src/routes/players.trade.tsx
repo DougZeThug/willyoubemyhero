@@ -30,6 +30,7 @@ import {
 import {
   tradeFeedKey,
   tradeOffersKey,
+  dustSparesKey,
   tradeSparesKey,
   useTradeFeed,
   useTradeOffers,
@@ -257,6 +258,9 @@ function TradePage() {
       qc.invalidateQueries({ queryKey: tradeOffersKey(myId) }),
       // The viewer prefix: theirs and mine alike.
       qc.invalidateQueries({ queryKey: tradeSparesKey(myId) }),
+      // The shop's copy of the same list. Missing it left a card you had just
+      // traded away on the burn and sell counters until the cache aged out.
+      qc.invalidateQueries({ queryKey: dustSparesKey(myId) }),
       qc.invalidateQueries({ queryKey: tradeFeedKey(event?.id) }),
       // The collection caches too, rather than leaving them to the realtime
       // handler in useTradeFeed. That handler is what updates everybody ELSE, and

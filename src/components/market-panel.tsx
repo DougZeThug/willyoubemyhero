@@ -21,7 +21,7 @@ import { packStatusKey } from "@/hooks/use-pack-status";
 import { myCardStatsKey } from "@/hooks/use-my-collection";
 import { cardPullCountsKey } from "@/hooks/use-card-pulls";
 import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
-import { tradeSparesKey } from "@/hooks/use-trades";
+import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { offlineReason, useIsOnline } from "@/hooks/use-online";
 import { editionLabel, editionStyle, toEdition } from "@/lib/card-edition";
 import { secretTierStyle } from "@/lib/secret-rarity";
@@ -174,7 +174,7 @@ export function MarketPanel({
 
   /** The same list the burn and sell sections read — your own spares. */
   const spares = useQuery({
-    queryKey: ["dust-spares", participantId],
+    queryKey: dustSparesKey(participantId),
     queryFn: () => sparesFn({ data: { participantId } }) as Promise<TradeSpares>,
     enabled: dustOn && !!participantId,
     staleTime: 15_000,
@@ -220,7 +220,7 @@ export function MarketPanel({
   function refreshAfterBuy(completedCollection: unknown) {
     void qc.invalidateQueries({ queryKey: marketListingsKey(participantId) });
     void qc.invalidateQueries({ queryKey: myStallKey(participantId) });
-    void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+    void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
     void qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
     void qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
     // A buyer who held none of that card now holds one, so the public "Packed by
@@ -281,7 +281,7 @@ export function MarketPanel({
         return;
       }
       void qc.invalidateQueries({ queryKey: myStallKey(participantId) });
-      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
       setPicking(false);
       setStaged(null);
       setPrice("");
@@ -294,7 +294,7 @@ export function MarketPanel({
     mutationFn: (listingId: string) => cancelFn({ data: { listingId } }),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: myStallKey(participantId) });
-      void qc.invalidateQueries({ queryKey: ["dust-spares", participantId] });
+      void qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
       if (!res.ok) {
         toast(res.reason === "resolved" ? "Somebody already bought that one" : "Could not pull it");
         return;

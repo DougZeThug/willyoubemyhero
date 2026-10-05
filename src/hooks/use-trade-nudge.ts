@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { subscribeToNudges } from "@/lib/nudge-channel";
-import { tradeOffersKey } from "./use-trades";
+import { dustSparesKey, tradeOffersKey, tradeSparesKey } from "./use-trades";
 import { marketListingsKey, myStallKey } from "./use-market";
 import { dustBalanceKey } from "./use-dust";
 
@@ -38,15 +38,15 @@ export function useTradeNudge(topic: string | null, participantId: string | null
     // for a guest or after a sign-out. Focus refetch covers those.
     if (!topic || !participantId) return;
     return subscribeToNudges(topic, () => {
-      // ONE TOPIC, FOUR KEYS. The marketplace pokes this same per-participant
+      // ONE TOPIC, SIX KEYS. The marketplace pokes this same per-participant
       // topic when somebody buys your card, rather than minting a second one:
       // the topic is an HMAC per member and the event carries nothing, so a
       // second reason to send it widens the surface by exactly nothing. The
       // payload being empty is precisely what makes that true — it means
       // "something of yours moved, go and ask properly", and asking properly is
-      // these four member-guarded handlers.
+      // these member-guarded handlers.
       //
-      // Invalidating all four on either kind of nudge is deliberate: there is no
+      // Invalidating all of them on either kind of nudge is deliberate: there is no
       // payload to tell them apart, and for thirteen people the extra refetch is
       // cheaper than a second topic to keep in step.
       qc.invalidateQueries({ queryKey: tradeOffersKey(participantId) });
@@ -54,6 +54,12 @@ export function useTradeNudge(topic: string | null, participantId: string | null
       qc.invalidateQueries({ queryKey: myStallKey(participantId) });
       // A sale moved it, and the seller was not the one who tapped anything.
       qc.invalidateQueries({ queryKey: dustBalanceKey(participantId) });
+      // Both caches of your spares, because either nudge means a card of yours
+      // left. useTradeFeed covers this on the trade route only; this is the
+      // listener the shop mounts, and without it a card traded or sold away
+      // from under an open shop stayed on its burn and sell counters.
+      qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
+      qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
     });
   }, [topic, participantId, qc]);
 }
