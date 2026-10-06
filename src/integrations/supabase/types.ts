@@ -163,6 +163,27 @@ export type Database = {
           },
         ]
       }
+      auth_attempts: {
+        Row: {
+          attempt_count: number
+          key: string
+          kind: string
+          window_started_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          key: string
+          kind: string
+          window_started_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          key?: string
+          kind?: string
+          window_started_at?: string
+        }
+        Relationships: []
+      }
       award_votes: {
         Row: {
           category: string
@@ -872,6 +893,7 @@ export type Database = {
           card_path: string | null
           card_path_medium: string | null
           card_path_thumb: string | null
+          card_rarity: string | null
           created_at: string
           draft_choice_priority: number | null
           event_id: string
@@ -894,6 +916,7 @@ export type Database = {
           card_path?: string | null
           card_path_medium?: string | null
           card_path_thumb?: string | null
+          card_rarity?: string | null
           created_at?: string
           draft_choice_priority?: number | null
           event_id: string
@@ -916,6 +939,7 @@ export type Database = {
           card_path?: string | null
           card_path_medium?: string | null
           card_path_thumb?: string | null
+          card_rarity?: string | null
           created_at?: string
           draft_choice_priority?: number | null
           event_id?: string
@@ -1776,6 +1800,7 @@ export type Database = {
           participant_id: string | null
           reward_kind: string
           reward_ref: string | null
+          reward_tier: string | null
           streak_started_on: string
         }
         Insert: {
@@ -1788,6 +1813,7 @@ export type Database = {
           participant_id?: string | null
           reward_kind?: string
           reward_ref?: string | null
+          reward_tier?: string | null
           streak_started_on: string
         }
         Update: {
@@ -1800,6 +1826,7 @@ export type Database = {
           participant_id?: string | null
           reward_kind?: string
           reward_ref?: string | null
+          reward_tier?: string | null
           streak_started_on?: string
         }
         Relationships: [
@@ -1883,6 +1910,7 @@ export type Database = {
           proposer_id: string
           recipient_id: string
           resolved_at: string | null
+          staked_count: number | null
           status: string
         }
         Insert: {
@@ -1892,6 +1920,7 @@ export type Database = {
           proposer_id: string
           recipient_id: string
           resolved_at?: string | null
+          staked_count?: number | null
           status?: string
         }
         Update: {
@@ -1901,6 +1930,7 @@ export type Database = {
           proposer_id?: string
           recipient_id?: string
           resolved_at?: string | null
+          staked_count?: number | null
           status?: string
         }
         Relationships: [
@@ -2155,6 +2185,10 @@ export type Database = {
         }
         Returns: Json
       }
+      clear_auth_attempts: {
+        Args: { _key: string; _kind: string }
+        Returns: undefined
+      }
       close_award_voting: {
         Args: { _categories: Json; _event_id: string }
         Returns: number
@@ -2174,6 +2208,7 @@ export type Database = {
       grant_card_copy: {
         Args: {
           _edition?: string
+          _event_id?: string
           _event_participant_id: string
           _participant_id: string
         }
@@ -2182,6 +2217,7 @@ export type Database = {
       grant_card_copy_once: {
         Args: {
           _edition?: string
+          _event_id?: string
           _event_participant_id: string
           _grant_key: string
           _participant_id: string
@@ -2240,6 +2276,15 @@ export type Database = {
         Returns: Json
       }
       mill_value: { Args: { _edition: string }; Returns: number }
+      note_auth_attempt: {
+        Args: {
+          _key: string
+          _kind: string
+          _max: number
+          _window_seconds: number
+        }
+        Returns: boolean
+      }
       open_pack: {
         Args: { _event_id: string; _guest_id: string; _participant_id: string }
         Returns: Json
@@ -2247,6 +2292,14 @@ export type Database = {
       pack_status: {
         Args: { _guest_id: string; _participant_id: string }
         Returns: Json
+      }
+      promote_best_secret_copy: {
+        Args: {
+          _guest_id: string
+          _participant_id: string
+          _secret_card_id: string
+        }
+        Returns: undefined
       }
       pull_bonus_secret_card: {
         Args: {
@@ -2283,6 +2336,10 @@ export type Database = {
         Returns: number
       }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
+      reopen_trade_offer: {
+        Args: { _actor_id: string; _offer_id: string; _within_seconds?: number }
+        Returns: Json
+      }
       reroll_copy_edition: {
         Args: {
           _card_copy_id: string
