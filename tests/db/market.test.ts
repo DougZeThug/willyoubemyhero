@@ -1240,3 +1240,83 @@ describe("a stake somebody else holds is skipped, then settles itself", () => {
     expect(await statusOf(listing)).toBe("voided");
   });
 });
+
+describe("a sale that leaves the seller's other stakes on the card unable to settle", () => {
+  // 20261007120000. Selling one copy can make another the seller's last; a stake
+  // on it can never settle, so the sale voids it.
+  async function offerStatus(id: string): Promise<string> {
+    const [row] = await sql<{ status: string }>(
+      "SELECT status FROM public.trade_offers WHERE id = $1",
+      [id],
+    );
+    return row.status;
+  }
+
+  async function seed(copies: number) {
+    const ids = await cardIds();
+    await claimMember(IDS.alice);
+    await claimMember(IDS.carol);
+    const alice = await holdCopies(IDS.alice, ids[0], copies);
+    const carols = await holdCopies(IDS.carol, ids[2], 2);
+    await credit(500, IDS.bob);
+    return { ids, alice, carols };
+  }
+
+  async function offerFor(aliceCopy: string, carolCopy: string) {
+    const [row] = await sql<{ create_trade_offer: { offerId: string } }>(
+      "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [
+        IDS.alice,
+        IDS.carol,
+        IDS.event,
+        JSON.stringify([{ kind: "roster", cardCopyId: aliceCopy }]),
+        JSON.stringify([{ kind: "roster", cardCopyId: carolCopy }]),
+      ],
+    );
+    return row.create_trade_offer.offerId;
+  }
+
+  it("voids the seller's offer on their now-last copy", async () => {
+    const { alice, carols } = await seed(2);
+    const listing = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const offerId = await offerFor(alice[1], carols[0]);
+
+    expect(await buy(IDS.bob, listing)).toMatchObject({ ok: true });
+    expect(await offerStatus(offerId)).toBe("voided");
+  });
+
+  it("leaves an offer on a copy that is still a spare", async () => {
+    const { alice, carols } = await seed(3);
+    const listing = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const offerId = await offerFor(alice[1], carols[0]);
+
+    expect(await buy(IDS.bob, listing)).toMatchObject({ ok: true });
+    expect(await offerStatus(offerId)).toBe("pending");
+  });
+
+  it("voids the seller's other listing once it would take their last copy", async () => {
+    // Two listings of a pair cannot be made directly — list_card_for_dust counts
+    // commitments — but a burn after listing gets there: three copies, two
+    // listed, the third milled.
+    const { alice } = await seed(3);
+    const first = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const second = await listedId(IDS.alice, { copyId: alice[1], price: 10 });
+    const [milled] = await sql<{ r: { ok: boolean } }>(
+      "SELECT public.mill_card_copy($1, $2) AS r",
+      [IDS.alice, alice[2]],
+    );
+    expect(milled.r).toMatchObject({ ok: true });
+
+    expect(await buy(IDS.bob, first)).toMatchObject({ ok: true });
+    expect(await statusOf(second)).toBe("voided");
+  });
+
+  it("leaves the seller's other listing while it is still a spare", async () => {
+    const { alice } = await seed(4);
+    const first = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const second = await listedId(IDS.alice, { copyId: alice[1], price: 10 });
+
+    expect(await buy(IDS.bob, first)).toMatchObject({ ok: true });
+    expect(await statusOf(second)).toBe("active");
+  });
+});

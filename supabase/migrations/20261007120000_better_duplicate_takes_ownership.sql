@@ -35,6 +35,13 @@
 --   * claim_streak_milestone, which already freezes reward_tier
 --     (20260911120000).
 --
+-- ALSO HERE, because these are the newest definitions of the two settle paths:
+-- accept_trade_offer and buy_market_listing now void the giver's (seller's)
+-- other pending offers and active listings on a card that moved when
+-- trade_item_is_spare now refuses them — a roster copy that was a spare until
+-- its sibling was given away is the giver's last, and a stake on it can never
+-- settle but blocked a mill or re-roll. See the comment in accept.
+--
 -- BODIES LIFTED WHOLE from their newest definitions — open_pack from
 -- 20260908165733, pull_bonus_secret_card from 20260829120000, grant_secret_card
 -- from 20260825120000, claim_guest_secrets and merge_guest_pulls from
@@ -691,7 +698,8 @@ REVOKE ALL ON FUNCTION public.merge_guest_pulls(uuid, uuid) FROM PUBLIC, anon, a
 GRANT EXECUTE ON FUNCTION public.merge_guest_pulls(uuid, uuid) TO service_role;
 
 -- ============ THE ACCEPT ============
--- Body from 20261006130000 with the receiver's promotion added.
+-- Body from 20261006130000 with the receiver's promotion added, and the giver's
+-- stakes that are no longer spares voided.
 
 CREATE OR REPLACE FUNCTION public.accept_trade_offer(
   _offer_id     uuid,
@@ -983,6 +991,66 @@ BEGIN
                                    WHERE m.offer_id = _offer_id AND m.secret_pull_id IS NOT NULL))
         FOR NO KEY UPDATE OF x SKIP LOCKED);
 
+  -- AND EVERY STAKE THE GIVING LEAVES UNABLE TO SETTLE. A roster spare is a
+  -- copy beyond the first, so giving one copy away can turn another copy of the
+  -- same card from a spare into the giver's last: Alice holds c1 and c2, stakes
+  -- c1 on one offer and c2 on another, and once c1 goes the c2 offer would take
+  -- her last copy. It can never be accepted (trade_item_is_spare refuses it under
+  -- lock), but left pending it blocks her milling or re-rolling c2, exactly the
+  -- stale-stake trap above. So for each party who GAVE a card here, their other
+  -- stakes on that same card are re-asked the accept's own question, and voided
+  -- when it now says no. Offers and listings on any other card are not looked at,
+  -- and one that still passes stays, so nothing settleable is taken away. The
+  -- buy path's re-validation is the same trade_item_is_spare call, so a listing
+  -- is judged by exactly what a buyer would hit. Same SKIP LOCKED, same reason.
+  UPDATE public.trade_offers o
+     SET status = 'voided', resolved_at = now()
+   WHERE o.id IN (
+     SELECT s.id FROM public.trade_offers s
+      WHERE s.status = 'pending'
+        AND s.id <> _offer_id
+        AND EXISTS (
+          SELECT 1
+            FROM public.trade_offer_items j
+            LEFT JOIN public.card_copies       jc ON jc.id = j.card_copy_id
+            LEFT JOIN public.secret_card_pulls jp ON jp.id = j.secret_pull_id
+            JOIN public.trade_offer_items      m  ON m.offer_id = _offer_id
+            LEFT JOIN public.card_copies       mc ON mc.id = m.card_copy_id
+            LEFT JOIN public.secret_card_pulls mp ON mp.id = m.secret_pull_id
+           WHERE j.offer_id = s.id
+             AND (CASE j.giver_side WHEN 'proposer' THEN s.proposer_id ELSE s.recipient_id END)
+               = (CASE m.giver_side WHEN 'proposer' THEN _offer.proposer_id ELSE _offer.recipient_id END)
+             AND ((j.kind = 'roster' AND m.kind = 'roster'
+                   AND jc.event_participant_id = mc.event_participant_id)
+               OR (j.kind = 'secret' AND m.kind = 'secret'
+                   AND jp.secret_card_id = mp.secret_card_id))
+             AND NOT public.trade_item_is_spare(
+                   CASE j.giver_side WHEN 'proposer' THEN s.proposer_id ELSE s.recipient_id END,
+                   j.kind, j.card_copy_id, j.secret_pull_id))
+        FOR NO KEY UPDATE OF s SKIP LOCKED);
+
+  UPDATE public.market_listings l
+     SET status = 'voided', resolved_at = now()
+   WHERE l.id IN (
+     SELECT x.id FROM public.market_listings x
+      WHERE x.status = 'active'
+        AND EXISTS (
+          SELECT 1
+            FROM public.trade_offer_items      m
+            LEFT JOIN public.card_copies       mc ON mc.id = m.card_copy_id
+            LEFT JOIN public.secret_card_pulls mp ON mp.id = m.secret_pull_id
+            LEFT JOIN public.card_copies       xc ON xc.id = x.card_copy_id
+            LEFT JOIN public.secret_card_pulls xp ON xp.id = x.secret_pull_id
+           WHERE m.offer_id = _offer_id
+             AND x.seller_id
+               = (CASE m.giver_side WHEN 'proposer' THEN _offer.proposer_id ELSE _offer.recipient_id END)
+             AND ((x.kind = 'roster' AND m.kind = 'roster'
+                   AND xc.event_participant_id = mc.event_participant_id)
+               OR (x.kind = 'secret' AND m.kind = 'secret'
+                   AND xp.secret_card_id = mp.secret_card_id)))
+        AND NOT public.trade_item_is_spare(x.seller_id, x.kind, x.card_copy_id, x.secret_pull_id)
+        FOR NO KEY UPDATE OF x SKIP LOCKED);
+
   RETURN jsonb_build_object('ok', true, 'tradeId', _trade_id,
                             'completedCollections', _trophies);
 END;
@@ -992,7 +1060,8 @@ REVOKE ALL ON FUNCTION public.accept_trade_offer(uuid, uuid) FROM PUBLIC, anon, 
 GRANT EXECUTE ON FUNCTION public.accept_trade_offer(uuid, uuid) TO service_role;
 
 -- ============ THE SALE ============
--- Body from 20261006130000 with the buyer's promotion added.
+-- Body from 20261006130000 with the buyer's promotion added, and the seller's
+-- stakes that are no longer spares voided.
 
 CREATE OR REPLACE FUNCTION public.buy_market_listing(
   _participant_id uuid,
@@ -1225,6 +1294,49 @@ BEGIN
            WHERE (_listing.kind = 'roster' AND i.card_copy_id = _listing.card_copy_id)
               OR (_listing.kind = 'secret' AND i.secret_pull_id = _listing.secret_pull_id))
         FOR NO KEY UPDATE OF s SKIP LOCKED);
+
+  -- And the seller's other stakes on the same card that this sale has left
+  -- unable to settle — a copy that was a spare until the sold one went, and is
+  -- now their last. accept_trade_offer explains the rule; this is the one-giver
+  -- case of it, judged by the same trade_item_is_spare call. Same SKIP LOCKED.
+  UPDATE public.trade_offers o
+     SET status = 'voided', resolved_at = now()
+   WHERE o.id IN (
+     SELECT s.id FROM public.trade_offers s
+      WHERE s.status = 'pending'
+        AND EXISTS (
+          SELECT 1
+            FROM public.trade_offer_items j
+            LEFT JOIN public.card_copies       jc ON jc.id = j.card_copy_id
+            LEFT JOIN public.secret_card_pulls jp ON jp.id = j.secret_pull_id
+           WHERE j.offer_id = s.id
+             AND (CASE j.giver_side WHEN 'proposer' THEN s.proposer_id ELSE s.recipient_id END)
+               = _listing.seller_id
+             AND ((_listing.kind = 'roster' AND j.kind = 'roster'
+                   AND jc.event_participant_id = _copy.event_participant_id)
+               OR (_listing.kind = 'secret' AND j.kind = 'secret'
+                   AND jp.secret_card_id = _pull.secret_card_id))
+             AND NOT public.trade_item_is_spare(
+                   _listing.seller_id, j.kind, j.card_copy_id, j.secret_pull_id))
+        FOR NO KEY UPDATE OF s SKIP LOCKED);
+
+  UPDATE public.market_listings l
+     SET status = 'voided', resolved_at = now()
+   WHERE l.id IN (
+     SELECT x.id FROM public.market_listings x
+      WHERE x.status = 'active'
+        AND x.id <> _listing_id
+        AND x.seller_id = _listing.seller_id
+        AND ((_listing.kind = 'roster' AND x.kind = 'roster'
+              AND EXISTS (SELECT 1 FROM public.card_copies xc
+                           WHERE xc.id = x.card_copy_id
+                             AND xc.event_participant_id = _copy.event_participant_id))
+          OR (_listing.kind = 'secret' AND x.kind = 'secret'
+              AND EXISTS (SELECT 1 FROM public.secret_card_pulls xp
+                           WHERE xp.id = x.secret_pull_id
+                             AND xp.secret_card_id = _pull.secret_card_id)))
+        AND NOT public.trade_item_is_spare(x.seller_id, x.kind, x.card_copy_id, x.secret_pull_id)
+        FOR NO KEY UPDATE OF x SKIP LOCKED);
 
   -- WHAT THIS SALE FINISHED. After resync_secret_ownership has settled, for the
   -- reason accept_trade_offer hoists its own trophy loop out of the transfer: a

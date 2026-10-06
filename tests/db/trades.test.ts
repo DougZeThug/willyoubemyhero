@@ -1647,6 +1647,107 @@ describe("a card that changes hands takes its stale stakes with it", () => {
     expect(await reopen(declined.offerId, IDS.bob)).toEqual({ ok: false, reason: "stale" });
   });
 
+  describe("a copy that stopped being a spare", () => {
+    // Giving one copy away can make another copy of the same card the giver's
+    // last. A stake on it can never settle, so it goes with the settle too.
+    async function aliceWith(copies: number) {
+      const [cardA, cardB, cardC] = await cardIds();
+      await claim(IDS.alice);
+      await claim(IDS.bob);
+      await claim(IDS.carol);
+      return {
+        cardA,
+        alice: await giveRoster(IDS.alice, cardA, copies),
+        bob: await giveRoster(IDS.bob, cardB, 2),
+        carol: await giveRoster(IDS.carol, cardC, 2),
+      };
+    }
+
+    it("voids the other offer staking the giver's now-last copy, and frees it for a re-roll", async () => {
+      const { alice, bob, carol } = await aliceWith(2);
+      const [c1, c2] = alice;
+      const o1 = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+      const o2 = await createOffer(IDS.alice, IDS.carol, [copy(c2)], [copy(carol[0])]);
+
+      expect(await accept(o1.offerId, IDS.bob)).toMatchObject({ ok: true });
+
+      expect(await offerStatus(o2.offerId)).toBe("voided");
+      await dustOn();
+      await fund(IDS.alice, 50);
+      expect(await rpc("reroll_copy_edition", [IDS.alice, c2, REQ])).toMatchObject({ ok: true });
+    });
+
+    it("voids an offer asking the giver for their now-last copy too", async () => {
+      // Carol wants Alice's c2: the item's giver is Alice either way.
+      const { alice, bob, carol } = await aliceWith(2);
+      const [c1, c2] = alice;
+      const o1 = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+      const ask = await createOffer(IDS.carol, IDS.alice, [copy(carol[0])], [copy(c2)]);
+
+      expect(await accept(o1.offerId, IDS.bob)).toMatchObject({ ok: true });
+      expect(await offerStatus(ask.offerId)).toBe("voided");
+    });
+
+    it("leaves an offer staking a copy that is still a spare", async () => {
+      const { alice, bob, carol } = await aliceWith(3);
+      const [c1, c2] = alice;
+      const o1 = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+      const o2 = await createOffer(IDS.alice, IDS.carol, [copy(c2)], [copy(carol[0])]);
+
+      expect(await accept(o1.offerId, IDS.bob)).toMatchObject({ ok: true });
+      expect(await offerStatus(o2.offerId)).toBe("pending");
+    });
+
+    it("leaves the giver's offers on a different card alone", async () => {
+      const { alice, bob, carol } = await aliceWith(2);
+      const [, , cardC] = await cardIds();
+      const aliceC = await giveCopies(IDS.alice, cardC, ["standard", "standard"]);
+      const otherCard = await createOffer(
+        IDS.alice,
+        IDS.carol,
+        [copy(aliceC[0])],
+        [copy(carol[0])],
+      );
+      const o1 = await createOffer(IDS.alice, IDS.bob, [copy(alice[0])], [copy(bob[0])]);
+
+      expect(await accept(o1.offerId, IDS.bob)).toMatchObject({ ok: true });
+      expect(await offerStatus(otherCard.offerId)).toBe("pending");
+    });
+
+    it("applies to the recipient's side of the accepted offer as well", async () => {
+      // Bob gave bob[0] of his card in the accept, leaving bob[1] his last.
+      const { alice, bob, carol } = await aliceWith(3);
+      const bobsOther = await createOffer(IDS.bob, IDS.carol, [copy(bob[1])], [copy(carol[0])]);
+      const o1 = await createOffer(IDS.alice, IDS.bob, [copy(alice[0])], [copy(bob[0])]);
+
+      expect(await accept(o1.offerId, IDS.bob)).toMatchObject({ ok: true });
+      expect(await offerStatus(bobsOther.offerId)).toBe("voided");
+    });
+
+    it("takes the giver's listing of their now-last copy off the shelf", async () => {
+      const { alice, bob } = await aliceWith(2);
+      const [c1, c2] = alice;
+      await dustOn();
+      const listing = await rpc("list_card_for_dust", [IDS.alice, "roster", c2, null, 25]);
+      expect(listing).toMatchObject({ ok: true });
+      const o1 = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+
+      expect(await accept(o1.offerId, IDS.bob)).toMatchObject({ ok: true });
+      expect(await listingStatus(listing.listingId!)).toBe("voided");
+    });
+
+    it("leaves a listing of a copy that is still a spare", async () => {
+      const { alice, bob } = await aliceWith(3);
+      const [c1, c2] = alice;
+      await dustOn();
+      const listing = await rpc("list_card_for_dust", [IDS.alice, "roster", c2, null, 25]);
+      const o1 = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+
+      expect(await accept(o1.offerId, IDS.bob)).toMatchObject({ ok: true });
+      expect(await listingStatus(listing.listingId!)).toBe("active");
+    });
+  });
+
   it("cleans up stakes the old behaviour left behind, without touching a copy", async () => {
     const { alice, bob } = await seedThree();
     const [c1, c2] = alice;
