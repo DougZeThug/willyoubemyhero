@@ -501,7 +501,17 @@ describe("today's pack, dusted the day it lands", () => {
     // card_copies row for this event's cards and every secret_card_pulls row the
     // member holds, with no date in either query. So once the pack has landed,
     // today's copies are on the list, and both RPCs take them.
+    //
+    // A pool of exactly three — two roster cards and one secret — so open_pack's
+    // three picks are all of it and the pack is certain to hold both kinds. A
+    // heavy weight only made the secret very likely; with four candidates the
+    // draw could still leave it out.
+    await sql("DELETE FROM public.event_participants WHERE event_id = $1 AND participant_id = $2", [
+      IDS.event,
+      IDS.carol,
+    ]);
     const ids = await cardIds();
+    expect(ids).toHaveLength(2);
     // An older copy of every roster card, so whichever ones the pack deals,
     // today's copy is the second and therefore a spare.
     for (const ep of ids) {
@@ -513,13 +523,12 @@ describe("today's pack, dusted the day it lands", () => {
       );
       await sql("SELECT public.resync_card_pull($1, $2)", [IDS.alice, ep]);
     }
-    // Weighted so heavily it cannot lose the draw against three roster cards.
-    const card = await seedSecret("only-card");
-    await sql("UPDATE public.secret_cards SET weight = 10000 WHERE id = $1", [card]);
+    await seedSecret("only-card");
 
     const [{ open_pack: pack }] = await sql<{
       open_pack: { cards: { kind: string; id: string; pullId?: string; tier?: string }[] };
     }>("SELECT public.open_pack($1, null, $2)", [IDS.alice, IDS.event]);
+    expect(pack.cards).toHaveLength(3);
     const secretSlot = pack.cards.find((c) => c.kind === "secret")!;
     const rosterSlot = pack.cards.find((c) => c.kind === "roster")!;
 
