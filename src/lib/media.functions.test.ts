@@ -1220,3 +1220,56 @@ describe("replacing art reclaims the files it replaced", () => {
     expect(mock.storageBucket.upload).not.toHaveBeenCalled();
   });
 });
+
+describe("listArchives", () => {
+  it("returns the archive rows newest first", async () => {
+    const rows = [{ id: "a1", slug: "combine-2026", event_name: "Combine", event_year: 2026 }];
+    withDb({ "event_archive_snapshots.select": { data: rows } });
+    const mod = await freshModule();
+    await expect(callServerFn(mod.listArchives, {})).resolves.toEqual(rows);
+    const call = mock.callsFor("event_archive_snapshots", "select")[0];
+    expect(call.filters.find((f) => f.method === "order")?.args).toEqual([
+      "created_at",
+      { ascending: false },
+    ]);
+  });
+
+  it("is empty when nothing has been archived", async () => {
+    withDb({ "event_archive_snapshots.select": { data: [] } });
+    const mod = await freshModule();
+    await expect(callServerFn(mod.listArchives, {})).resolves.toEqual([]);
+  });
+
+  it("throws on a failed read instead of reporting an empty archive", async () => {
+    // PostgREST resolves a 5xx with { data: null, error }; coalescing that to []
+    // made a read failure indistinguishable from a combine nobody has archived.
+    withDb({ "event_archive_snapshots.select": { error: { message: "upstream down" } } });
+    const mod = await freshModule();
+    await expect(callServerFn(mod.listArchives, {})).rejects.toMatchObject({
+      message: "upstream down",
+    });
+  });
+});
+
+describe("archiveEvent", () => {
+  it("snapshots only the columns the public grants expose", async () => {
+    // The snapshot is read back by anon. runs.notes and penalties.notes are
+    // withheld from the live tables (rls.test.ts), so copying them in through the
+    // service role would hand out what the grants were written to keep back.
+    withDb({
+      "events.select": { data: { id: EVENT_ID, name: "Combine", year: 2026 } },
+      "event_archive_snapshots.select": { data: null },
+      "event_archive_snapshots.insert": {},
+    });
+    const mod = await freshModule();
+    await callServerFn(mod.archiveEvent, { data: { eventId: EVENT_ID }, headers: asAdmin() });
+
+    for (const table of ["runs", "penalties"]) {
+      const columns = mock.callsFor(table, "select")[0].columns ?? "";
+      expect(columns, table).not.toMatch(/\bnotes\b/);
+      expect(columns, table).not.toMatch(/\bclient_key\b/);
+      expect(columns, table).not.toMatch(/\bcreated_by\b/);
+    }
+    expect(mock.callsFor("event_archive_snapshots", "insert")).toHaveLength(1);
+  });
+});

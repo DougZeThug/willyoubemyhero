@@ -830,7 +830,7 @@ export const archiveEvent = createServerFn({ method: "POST" })
       supabaseAdmin
         .from("runs")
         .select(
-          "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, notes, is_official, created_at, updated_at",
+          "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, is_official, created_at, updated_at",
         )
         .eq("event_id", data.eventId),
       supabaseAdmin
@@ -840,7 +840,7 @@ export const archiveEvent = createServerFn({ method: "POST" })
         ),
       supabaseAdmin
         .from("penalties")
-        .select("id, run_id, station_id, penalty_ms, reason, notes, created_at"),
+        .select("id, run_id, station_id, penalty_ms, reason, created_at"),
       supabaseAdmin
         .from("draft_selections")
         .select("id, event_id, participant_id, selection_order, draft_position, selected_at")
@@ -882,10 +882,13 @@ export const archiveEvent = createServerFn({ method: "POST" })
 
 export const listArchives = createServerFn({ method: "GET" }).handler(async () => {
   const sb = publicClient();
-  const { data } = await sb
+  const { data, error } = await sb
     .from("event_archive_snapshots")
     .select("id, slug, event_name, event_year, created_at")
     .order("created_at", { ascending: false });
+  // Thrown, not coalesced to []: the Archive card reads an empty list as "this
+  // combine has never been archived", and a failed read must not say that.
+  if (error) throw error;
   return data ?? [];
 });
 
