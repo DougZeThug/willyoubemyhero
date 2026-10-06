@@ -779,28 +779,54 @@ describe("renewMemberSession", () => {
 
   describe("across a code rotation", () => {
     const at = (ms: number) => new Date(ms).toISOString();
+    const issued = Date.now() - 65 * DAY;
+
+    function codeRowAt(createdAt: number, claimedAt: number | null) {
+      withDb({
+        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
+        "member_codes.select": {
+          data: {
+            created_at: at(createdAt),
+            claimed_at: claimedAt === null ? null : at(claimedAt),
+          },
+          error: null,
+        },
+      });
+    }
 
     it("refuses a token signed before the current code was issued", async () => {
       // Rotation is how the commissioner takes a player back from a handset;
       // the tokens already out there were left to run out, and renewal must not
       // take that away.
-      const issued = Date.now() - 65 * DAY;
-      withDb({
-        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
-        "member_codes.select": { data: { created_at: at(issued + 60_000) }, error: null },
-      });
+      codeRowAt(issued + 60_000, issued + 120_000);
       expect(await renew(memberHeaders(signedAt(issued)))).toEqual({
         ok: false,
         reason: "rotated",
       });
     });
 
-    it("renews a token signed after the current code was issued", async () => {
-      const issued = Date.now() - 65 * DAY;
-      withDb({
-        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
-        "member_codes.select": { data: { created_at: at(issued - 60_000) }, error: null },
+    it("refuses a token from a code rotated before created_at was stamped", async () => {
+      // The legacy row: created_at is the first issue, long before the token,
+      // but claimed_at — reset by the rotation, set by the next claim — is after.
+      codeRowAt(issued - 30 * DAY, issued + 60_000);
+      expect(await renew(memberHeaders(signedAt(issued)))).toEqual({
+        ok: false,
+        reason: "rotated",
       });
+    });
+
+    it("refuses while the current code has never been claimed", async () => {
+      // claimed_at is null after a rotation until somebody types the new code,
+      // so every token out there came from an older one.
+      codeRowAt(issued - 30 * DAY, null);
+      expect(await renew(memberHeaders(signedAt(issued)))).toEqual({
+        ok: false,
+        reason: "rotated",
+      });
+    });
+
+    it("renews a token signed by the claim of the current code", async () => {
+      codeRowAt(issued - 60_000, issued);
       expect(await renew(memberHeaders(signedAt(issued)))).toMatchObject({ ok: true });
       const [call] = mock.callsFor("member_codes", "select");
       expect(call.filters).toContainEqual(
@@ -808,14 +834,18 @@ describe("renewMemberSession", () => {
       );
     });
 
+    it("renews a token from a later re-claim of the same code", async () => {
+      // Codes stay valid after the first claim; claimed_at keeps that first one.
+      codeRowAt(issued - 20 * DAY, issued - 10 * DAY);
+      expect(await renew(memberHeaders(signedAt(issued)))).toMatchObject({ ok: true });
+    });
+
     it("renews a member with no code row at all, who has nothing to rotate", async () => {
       withDb({
         "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
         "member_codes.select": { data: null, error: null },
       });
-      expect(await renew(memberHeaders(signedAt(Date.now() - 65 * DAY)))).toMatchObject({
-        ok: true,
-      });
+      expect(await renew(memberHeaders(signedAt(issued)))).toMatchObject({ ok: true });
     });
 
     it("surfaces a failed code lookup rather than renewing on it", async () => {

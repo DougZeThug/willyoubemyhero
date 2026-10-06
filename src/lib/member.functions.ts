@@ -181,10 +181,20 @@ export const claimPlayer = createServerFn({ method: "POST" })
  * NOT ACROSS A CODE ROTATION. Rotating a player's code is how the commissioner
  * takes a player back from a handset that should not have it, and the tokens
  * already out there were left to die at their expiry. Renewal would take that
- * expiry away, so a token signed before the current code was issued
- * (member_codes.created_at, which generateMemberCodes stamps on every rotation)
- * is refused and has to claim again with the new code. A participant with no
- * code row — a collector, an account-only member — has nothing to rotate.
+ * expiry away, so a token that predates the current code is refused and has to
+ * claim again with the new one. Two stamps say when that code began, and
+ * either is enough to refuse:
+ *
+ *   - claimed_at. generateMemberCodes resets it to null on every rotation and
+ *     claimPlayer sets it on the first claim after, so a token signed before
+ *     it — or any token while it is still null — came from an older code.
+ *     This is the one that works for rotations made before created_at was
+ *     stamped.
+ *   - created_at, which generateMemberCodes stamps on every rotation since.
+ *
+ * A participant with no code row — a collector, an account-only member — has
+ * nothing to rotate and renews. An account member refused here is not
+ * stranded: syncAccount mints a fresh token on their next sign-in.
  *
  * claimPlayer refuses on no ground but the code itself (and its rate limit): it
  * checks no active or retired flag, so there is nothing else to mirror here.
@@ -205,13 +215,20 @@ export const renewMemberSession = createServerFn({ method: "POST" }).handler(asy
 
   const { data: code, error: codeError } = await supabaseAdmin
     .from("member_codes")
-    .select("created_at")
+    .select("created_at, claimed_at")
     .eq("participant_id", participantId)
     .maybeSingle();
   // Thrown, not read as "no code": that answer is the one that renews.
   if (codeError) throw new Error(codeError.message);
-  if (code && memberTokenIssuedAt(currentExpiry) < Date.parse(code.created_at)) {
-    return { ok: false as const, reason: "rotated" as const };
+  if (code) {
+    const issuedAt = memberTokenIssuedAt(currentExpiry);
+    if (
+      code.claimed_at === null ||
+      issuedAt < Date.parse(code.claimed_at) ||
+      issuedAt < Date.parse(code.created_at)
+    ) {
+      return { ok: false as const, reason: "rotated" as const };
+    }
   }
 
   const { token, expiresAt } = signMemberToken(participantId);

@@ -112,6 +112,20 @@ describe("requireMemberSession", () => {
     ).resolves.toEqual({ participantId: PARTICIPANT_ID, expiresAt });
   });
 
+  it("refuses an admin token", async () => {
+    const { token } = signAdminToken(EVENT_ID);
+    await expect(
+      withRequestHeaders(memberHeaders(token), () => requireMemberSession()),
+    ).rejects.toThrow("Claim your player first");
+  });
+
+  it("refuses a forged token", async () => {
+    const forged = `m.${PARTICIPANT_ID}.${Date.now() + 60_000}.not-a-real-signature`;
+    await expect(
+      withRequestHeaders(memberHeaders(forged), () => requireMemberSession()),
+    ).rejects.toThrow("Claim your player first");
+  });
+
   it("refuses exactly what requireMember refuses", async () => {
     await expect(withRequestHeaders({}, () => requireMemberSession())).rejects.toThrow(
       "Claim your player first",
