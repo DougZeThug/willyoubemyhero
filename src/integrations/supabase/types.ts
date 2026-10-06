@@ -872,6 +872,7 @@ export type Database = {
           card_path: string | null
           card_path_medium: string | null
           card_path_thumb: string | null
+          card_rarity: string | null
           created_at: string
           draft_choice_priority: number | null
           event_id: string
@@ -894,6 +895,7 @@ export type Database = {
           card_path?: string | null
           card_path_medium?: string | null
           card_path_thumb?: string | null
+          card_rarity?: string | null
           created_at?: string
           draft_choice_priority?: number | null
           event_id: string
@@ -916,6 +918,7 @@ export type Database = {
           card_path?: string | null
           card_path_medium?: string | null
           card_path_thumb?: string | null
+          card_rarity?: string | null
           created_at?: string
           draft_choice_priority?: number | null
           event_id?: string
