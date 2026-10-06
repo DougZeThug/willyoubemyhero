@@ -583,16 +583,23 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     // and renumber a first run as attempt 2. Matching on client_key rather than
     // excluding it from the count keeps this NULL-safe — client_key is nullable
     // and Postgres `<>` drops NULL rows.
-    const { data: alreadySaved } = await supabaseAdmin
+    //
+    // Both reads throw on error rather than coalescing to "no row": a failed
+    // lookup would fall through to count + 1, and the upsert below (onConflict
+    // client_key) would then overwrite the saved run's number with it. The
+    // console's Retry re-sends the same client_key, so failing loudly is safe.
+    const { data: alreadySaved, error: lookupError } = await supabaseAdmin
       .from("runs")
       .select("attempt_number")
       .eq("client_key", data.clientKey)
       .maybeSingle();
-    const { count } = await supabaseAdmin
+    if (lookupError) throw lookupError;
+    const { count, error: countError } = await supabaseAdmin
       .from("runs")
       .select("*", { count: "exact", head: true })
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
+    if (countError) throw countError;
 
     const penaltyTotal = data.penalties.reduce((s, p) => s + p.penalty_ms, 0);
 

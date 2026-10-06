@@ -350,6 +350,26 @@ describe("saveCompletedRun", () => {
     expect(mock.eqValue(lookup, "client_key")).toBe("client-key-1");
   });
 
+  it("refuses to number a run when the client_key lookup failed", async () => {
+    // A failed read looks like "nothing saved yet". The upsert would then fall
+    // through to count + 1 and overwrite the real run's number on the same key.
+    withDb({
+      "runs.select": [{ error: { message: "read failed" } }, { count: 1 }],
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
+    await expect(save(base)).rejects.toMatchObject({ message: "read failed" });
+    expect(mock.callsFor("runs", "upsert")).toEqual([]);
+  });
+
+  it("refuses to number a run when the attempt count failed", async () => {
+    withDb({
+      "runs.select": [{ data: null }, { error: { message: "count failed" } }],
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
+    await expect(save(base)).rejects.toMatchObject({ message: "count failed" });
+    expect(mock.callsFor("runs", "upsert")).toEqual([]);
+  });
+
   it("totals the penalties onto the run", async () => {
     withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
     await save({
