@@ -292,10 +292,14 @@ export function useAccountSync(user: User | null) {
       // wrote must be gone before that account's sync reads the headers:
       // syncAccount takes `x-member-token` as the player to bind a new account
       // to, so leaving it would link the next person to this one's collection.
-      // Compare-and-clear, so a token a newer run has already replaced stays.
-      // Compared by participant rather than by string: member-renewal.ts swaps
-      // in a re-signed token for the same person, and that is still the token
-      // this run wrote as far as who it lets in is concerned.
+      // Cleared when the device still holds a token for the participant this
+      // run wrote — the exact string, or a renewal of it. A token for somebody
+      // else (a paper-code claim on this phone since) is not this run's and stays.
+      // By participant rather than by string because member-renewal.ts swaps the
+      // string for the same person, and a renewed token left behind would hand a
+      // signed-out account's player to whoever signs in next. Clearing it on a
+      // same-account re-run (a wake) costs nothing: the re-sync writes a fresh
+      // token straight away, and the carry and adoption it repeats are idempotent.
       if (wrote && memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote)) {
         clearMemberToken();
       }
