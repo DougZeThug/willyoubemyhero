@@ -17,6 +17,7 @@
 //     rather than a deadlock or two winners.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, IDS, newClient, seedEvent, sql } from "./helpers";
+import { migrationFiles, readMigration } from "./cluster";
 import { leagueDay, LEAGUE_TIME_ZONE } from "@/lib/trades";
 
 afterAll(closeDb);
@@ -1210,7 +1211,14 @@ describe("two accepts racing over one spare", () => {
 
       const outcomes = [r1.rows[0].r, r2.rows[0].r];
       expect(outcomes.filter((o) => o.ok)).toHaveLength(1);
-      expect(outcomes.filter((o) => !o.ok && o.reason === "voided")).toHaveLength(1);
+      // The loser's answer depends on timing since 20261006130000. If it had
+      // already locked its offer, the winner skips it and it voids itself on
+      // re-validation ('voided'); if the winner got to it first, the winner voided
+      // it and the loser reads a settled offer ('resolved'). The offer ends
+      // 'voided' either way, which the status check below pins.
+      expect(
+        outcomes.filter((o) => !o.ok && (o.reason === "voided" || o.reason === "resolved")),
+      ).toHaveLength(1);
     } finally {
       await c1.end();
       await c2.end();
@@ -1411,5 +1419,210 @@ describe("reopen_trade_offer", () => {
 
   it("raises on an offer that does not exist", async () => {
     await expect(reopen(IDS.outsider, IDS.bob)).rejects.toThrow(/offer not found/i);
+  });
+});
+
+describe("a card that changes hands takes its stale stakes with it", () => {
+  // Stakes name a copy, not a card. accept_trade_offer used to leave every other
+  // pending offer naming a moved copy standing, and the destructive RPCs refuse a
+  // copy staked on ANY pending offer or active listing — so whoever received the
+  // card could not mill, sell, re-roll or list it until somebody else acted.
+  // 20261006130000 voids those stakes as the copy moves.
+  const REQ = "bbbbbbbb-0000-4000-8000-000000000001";
+
+  async function dustOn() {
+    await sql("UPDATE public.events SET dust_enabled = true");
+  }
+
+  async function fund(participantId: string, amount: number) {
+    await sql(
+      "INSERT INTO public.dust_ledger (participant_id, delta, reason) VALUES ($1, $2, 'admin_adjust')",
+      [participantId, amount],
+    );
+  }
+
+  async function listingStatus(id: string): Promise<string> {
+    const [row] = await sql<{ status: string }>(
+      "SELECT status FROM public.market_listings WHERE id = $1",
+      [id],
+    );
+    return row.status;
+  }
+
+  async function rpc<T = { ok: boolean; reason?: string; listingId?: string }>(
+    name: string,
+    args: unknown[],
+  ): Promise<T> {
+    const marks = args.map((_, i) => `$${i + 1}`).join(", ");
+    const [row] = await sql<{ r: T }>(`SELECT public.${name}(${marks}) AS r`, args);
+    return row.r;
+  }
+
+  /**
+   * Alice holds three copies of card A; Bob and Carol, claimed, each hold two of
+   * their own card so they have a spare to give back. Carol also holds one more
+   * copy of A, so the copy she receives is a spare she is allowed to mill.
+   */
+  async function seedThree() {
+    const [cardA, cardB, cardC] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    await claim(IDS.carol);
+    const alice = await giveRoster(IDS.alice, cardA, 3);
+    const bob = await giveRoster(IDS.bob, cardB, 2);
+    const carol = await giveRoster(IDS.carol, cardC, 2);
+    await giveCopies(IDS.carol, cardA, ["standard"]);
+    return { cardA, alice, bob, carol };
+  }
+
+  it("voids the other offer on a traded copy, and the receiver can list, re-roll and mill it", async () => {
+    const { alice, bob, carol } = await seedThree();
+    const c1 = alice[0];
+    const toBob = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+    const toCarol = await createOffer(IDS.alice, IDS.carol, [copy(c1)], [copy(carol[0])]);
+
+    expect(await accept(toCarol.offerId, IDS.carol)).toMatchObject({ ok: true });
+    expect(await offerStatus(toBob.offerId)).toBe("voided");
+    expect(await copyRow(c1)).toMatchObject({ participant_id: IDS.carol });
+
+    await dustOn();
+    // No 'already_listed', and no 'last_copy' from Alice's dead offer being
+    // counted against Carol's commitments.
+    const listed = await rpc("list_card_for_dust", [IDS.carol, "roster", c1, null, 10]);
+    expect(listed).toMatchObject({ ok: true });
+    expect(await rpc("cancel_market_listing", [IDS.carol, listed.listingId])).toMatchObject({
+      ok: true,
+    });
+    await fund(IDS.carol, 50);
+    expect(await rpc("reroll_copy_edition", [IDS.carol, c1, REQ])).toMatchObject({ ok: true });
+    expect(await rpc("mill_card_copy", [IDS.carol, c1])).toMatchObject({ ok: true });
+  });
+
+  it("does the same for a traded secret, which the receiver can then sell", async () => {
+    const { bob, carol } = await seedThree();
+    const s1 = await giveSecret(IDS.alice, await addCard("Gary the Grill"));
+    const toBob = await createOffer(IDS.alice, IDS.bob, [secret(s1)], [copy(bob[0])]);
+    const toCarol = await createOffer(IDS.alice, IDS.carol, [secret(s1)], [copy(carol[0])]);
+
+    expect(await accept(toCarol.offerId, IDS.carol)).toMatchObject({ ok: true });
+    expect(await offerStatus(toBob.offerId)).toBe("voided");
+
+    await dustOn();
+    const listed = await rpc("list_card_for_dust", [IDS.carol, "secret", null, s1, 10]);
+    expect(listed).toMatchObject({ ok: true });
+    await rpc("cancel_market_listing", [IDS.carol, listed.listingId]);
+    expect(await rpc("sell_secret_card", [IDS.carol, s1])).toMatchObject({ ok: true });
+  });
+
+  it("voids the giver's own offers on the copy they gave away, from either side", async () => {
+    // Carol gave carol[0] in the accepted trade; an offer Bob made asking Carol
+    // for that very copy can never settle now either.
+    const { alice, bob, carol } = await seedThree();
+    const askCarol = await createOffer(IDS.bob, IDS.carol, [copy(bob[0])], [copy(carol[0])]);
+    const toCarol = await createOffer(IDS.alice, IDS.carol, [copy(alice[0])], [copy(carol[0])]);
+
+    expect(await accept(toCarol.offerId, IDS.carol)).toMatchObject({ ok: true });
+    expect(await offerStatus(askCarol.offerId)).toBe("voided");
+  });
+
+  it("takes the giver's active listing of the copy off the shelf, and the receiver can list it", async () => {
+    const { alice, carol } = await seedThree();
+    const c1 = alice[0];
+    await dustOn();
+    const mine = await rpc("list_card_for_dust", [IDS.alice, "roster", c1, null, 25]);
+    expect(mine).toMatchObject({ ok: true });
+    const toCarol = await createOffer(IDS.alice, IDS.carol, [copy(c1)], [copy(carol[0])]);
+
+    expect(await accept(toCarol.offerId, IDS.carol)).toMatchObject({ ok: true });
+
+    expect(await listingStatus(mine.listingId!)).toBe("voided");
+    expect(await rpc("list_card_for_dust", [IDS.carol, "roster", c1, null, 30])).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("leaves an offer or a listing on a DIFFERENT copy of the same card standing", async () => {
+    const { alice, bob, carol } = await seedThree();
+    const [c1, c2, c3] = alice;
+    await dustOn();
+    const otherListing = await rpc("list_card_for_dust", [IDS.alice, "roster", c3, null, 25]);
+    expect(otherListing).toMatchObject({ ok: true });
+    const otherCopy = await createOffer(IDS.alice, IDS.bob, [copy(c2)], [copy(bob[0])]);
+    const toCarol = await createOffer(IDS.alice, IDS.carol, [copy(c1)], [copy(carol[0])]);
+
+    expect(await accept(toCarol.offerId, IDS.carol)).toMatchObject({ ok: true });
+
+    expect(await offerStatus(otherCopy.offerId)).toBe("pending");
+    expect(await listingStatus(otherListing.listingId!)).toBe("active");
+  });
+
+  it("leaves the offer's settled history alone", async () => {
+    // Only PENDING offers are touched; a declined one stays declined (reopen
+    // still refuses it on its own, because the copy is no longer the giver's).
+    const { alice, bob, carol } = await seedThree();
+    const c1 = alice[0];
+    const declined = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+    await settle(declined.offerId, "declined");
+    const toCarol = await createOffer(IDS.alice, IDS.carol, [copy(c1)], [copy(carol[0])]);
+
+    expect(await accept(toCarol.offerId, IDS.carol)).toMatchObject({ ok: true });
+    expect(await offerStatus(declined.offerId)).toBe("declined");
+    expect(await reopen(declined.offerId, IDS.bob)).toEqual({ ok: false, reason: "stale" });
+  });
+
+  it("cleans up stakes the old behaviour left behind, without touching a copy", async () => {
+    const { alice, bob } = await seedThree();
+    const [c1, c2] = alice;
+    const s1 = await giveSecret(IDS.alice, await addCard("Gary the Grill"));
+    await dustOn();
+    // Bob's listing first: the offers below stake his other copy, and a listing
+    // after them would be refused as his last uncommitted one.
+    const fineListing = await rpc("list_card_for_dust", [IDS.bob, "roster", bob[1], null, 25]);
+    expect(fineListing).toMatchObject({ ok: true });
+    const staleListing = await rpc("list_card_for_dust", [IDS.alice, "roster", c1, null, 25]);
+    const staleSecretListing = await rpc("list_card_for_dust", [IDS.alice, "secret", null, s1, 25]); // prettier-ignore
+    expect(staleListing).toMatchObject({ ok: true });
+    expect(staleSecretListing).toMatchObject({ ok: true });
+    const stale = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+    const staleSecret = await createOffer(IDS.alice, IDS.bob, [secret(s1)], [copy(bob[0])]);
+    const fine = await createOffer(IDS.alice, IDS.bob, [copy(c2)], [copy(bob[0])]);
+
+    // The state an accept under the old rules left: the copies moved, and
+    // nothing naming them was touched.
+    await sql("UPDATE public.card_copies SET participant_id = $1 WHERE id = $2", [IDS.carol, c1]);
+    await sql("UPDATE public.secret_card_pulls SET participant_id = $1 WHERE id = $2", [
+      IDS.carol,
+      s1,
+    ]);
+
+    const snapshot = async () => ({
+      copies: await sql("SELECT * FROM public.card_copies ORDER BY id"),
+      pulls: await sql("SELECT * FROM public.secret_card_pulls ORDER BY id"),
+    });
+    const before = await snapshot();
+
+    const file = (await migrationFiles()).find((f) =>
+      f.endsWith("20261006130000_moved_cards_take_their_stakes.sql"),
+    );
+    // The whole file, not just its last statements: replaying it is also the
+    // proof that it is idempotent.
+    await sql(await readMigration(file!));
+
+    expect(await offerStatus(stale.offerId)).toBe("voided");
+    expect(await offerStatus(staleSecret.offerId)).toBe("voided");
+    expect(await offerStatus(fine.offerId)).toBe("pending");
+    expect(await listingStatus(staleListing.listingId!)).toBe("voided");
+    expect(await listingStatus(staleSecretListing.listingId!)).toBe("voided");
+    expect(await listingStatus(fineListing.listingId!)).toBe("active");
+    expect(await snapshot()).toEqual(before);
+
+    // And a second run finds nothing left to do.
+    const resolved = await sql(
+      "SELECT id, status, resolved_at FROM public.trade_offers ORDER BY id",
+    );
+    await sql(await readMigration(file!));
+    expect(
+      await sql("SELECT id, status, resolved_at FROM public.trade_offers ORDER BY id"),
+    ).toEqual(resolved);
   });
 });
