@@ -31,6 +31,10 @@
 -- market_listings are in no publication, and the accept's `trades` row is what
 -- reaches screens already.
 --
+-- And accept answers 'voided' rather than 'resolved' for an offer that is
+-- already voided, so somebody tapping Accept on a stale inbox is told a card
+-- moved on rather than that the offer was answered.
+--
 -- BODIES LIFTED WHOLE from their newest definitions — accept_trade_offer from
 -- 20260827130000, buy_market_listing from 20260830120000 — with only the
 -- statements above added and the comments that described the old behaviour
@@ -55,7 +59,7 @@ CREATE INDEX IF NOT EXISTS trade_offer_items_secret_pull_idx
   WHERE secret_pull_id IS NOT NULL;
 
 -- ============ THE ACCEPT ============
--- Body from 20260827130000 with the closing block replaced.
+-- Body from 20260827130000 with the closing block replaced and the voided answer added.
 
 CREATE OR REPLACE FUNCTION public.accept_trade_offer(
   _offer_id     uuid,
@@ -89,6 +93,15 @@ BEGIN
 
   -- Returned rather than raised: a double-tap, or a phone acting on an inbox it
   -- rendered a minute ago, should get a toast rather than a stack trace.
+  --
+  -- A VOIDED offer says so. Since this migration most voids happen off-screen —
+  -- another accept or a market buy moved one of its copies — and the recipient
+  -- may still have it in an inbox rendered before that. 'resolved' told them
+  -- somebody had answered it; 'voided' is the truth, and the same answer the
+  -- re-validation below gives when it is the one that finds the copy gone.
+  IF _offer.status = 'voided' THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'voided');
+  END IF;
   IF _offer.status <> 'pending' THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'resolved');
   END IF;

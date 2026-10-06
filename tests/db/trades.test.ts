@@ -1211,14 +1211,10 @@ describe("two accepts racing over one spare", () => {
 
       const outcomes = [r1.rows[0].r, r2.rows[0].r];
       expect(outcomes.filter((o) => o.ok)).toHaveLength(1);
-      // The loser's answer depends on timing since 20261006130000. If it had
-      // already locked its offer, the winner skips it and it voids itself on
-      // re-validation ('voided'); if the winner got to it first, the winner voided
-      // it and the loser reads a settled offer ('resolved'). The offer ends
-      // 'voided' either way, which the status check below pins.
-      expect(
-        outcomes.filter((o) => !o.ok && (o.reason === "voided" || o.reason === "resolved")),
-      ).toHaveLength(1);
+      // Deterministic either way the race falls: the loser either voids itself
+      // on re-validation or finds the winner already voided it, and accept
+      // answers 'voided' for both since 20261006130000.
+      expect(outcomes.filter((o) => !o.ok && o.reason === "voided")).toHaveLength(1);
     } finally {
       await c1.end();
       await c2.end();
@@ -1484,6 +1480,9 @@ describe("a card that changes hands takes its stale stakes with it", () => {
     expect(await accept(toCarol.offerId, IDS.carol)).toMatchObject({ ok: true });
     expect(await offerStatus(toBob.offerId)).toBe("voided");
     expect(await copyRow(c1)).toMatchObject({ participant_id: IDS.carol });
+    // Bob, tapping Accept on the inbox he rendered before that, is told a card
+    // moved on — not that somebody answered the offer.
+    expect(await accept(toBob.offerId, IDS.bob)).toEqual({ ok: false, reason: "voided" });
 
     await dustOn();
     // No 'already_listed', and no 'last_copy' from Alice's dead offer being
