@@ -168,6 +168,33 @@ describe("merge_guest_packs", () => {
   });
 });
 
+describe("merge_guest_pulls decides ownership once", () => {
+  const ownerOf = async (guestId: string, card: string) =>
+    (
+      await sql<{ id: string }>(
+        `SELECT id FROM public.secret_card_pulls
+          WHERE guest_id = $1 AND secret_card_id = $2 AND NOT is_duplicate`,
+        [guestId, card],
+      )
+    ).map((r) => r.id);
+
+  it("keeps the destination's own row on a tie of level and day", async () => {
+    const card = await addCard("merge-tie");
+    const mine = await givePull(GUEST_A, card, { tier: "rare" });
+    await givePull(GUEST_B, card, { tier: "rare" });
+    await merge();
+    expect(await ownerOf(GUEST_A, card)).toEqual([mine]);
+  });
+
+  it("gives an owner to a card the destination held only as duplicates", async () => {
+    const card = await addCard("merge-dupes-only");
+    const mine = await givePull(GUEST_A, card, { tier: "epic", duplicate: true });
+    await givePull(GUEST_B, card, { tier: "common" });
+    await merge();
+    expect(await ownerOf(GUEST_A, card)).toEqual([mine]);
+  });
+});
+
 describe("merge_guest_into_guest", () => {
   // syncAccount's guest branch, as one transaction (20261008120000): the three
   // steps it used to run as separate requests, in the same order, under both

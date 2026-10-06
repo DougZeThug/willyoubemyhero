@@ -159,6 +159,58 @@ describe("claim_guest_secrets", () => {
     expect(id).toBeTruthy();
   });
 
+  describe("who owns the card afterwards, decided once", () => {
+    // promote_best_secret_copy is the one decider since 20261007120000; the
+    // inline DISTINCT ON fill that used to run first is gone.
+    async function row(over: {
+      participant?: string;
+      guest?: string;
+      card: string;
+      tier: string;
+      duplicate: boolean;
+    }) {
+      const [r] = await sql<{ id: string }>(
+        `INSERT INTO public.secret_card_pulls
+           (participant_id, guest_id, secret_card_id, pulled_on, is_duplicate, granted, tier)
+         VALUES ($1, $2, $3, '2026-01-01', $4, true, $5) RETURNING id`,
+        [over.participant ?? null, over.guest ?? null, over.card, over.duplicate, over.tier],
+      );
+      return r.id;
+    }
+    const owner = async (card: string) =>
+      (
+        await sql<{ id: string }>(
+          `SELECT id FROM public.secret_card_pulls
+            WHERE participant_id = $1 AND secret_card_id = $2 AND NOT is_duplicate`,
+          [IDS.alice, card],
+        )
+      ).map((r) => r.id);
+
+    it("keeps the member's own row on a tie of level and day", async () => {
+      const card = await addCard("Gary the Grill");
+      const mine = await row({ participant: IDS.alice, card, tier: "rare", duplicate: false });
+      await row({ guest: GUEST_A, card, tier: "rare", duplicate: false });
+      await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+      expect(await owner(card)).toEqual([mine]);
+    });
+
+    it("hands ownership to a better guest copy", async () => {
+      const card = await addCard("Gary the Grill");
+      await row({ participant: IDS.alice, card, tier: "common", duplicate: false });
+      const theirs = await row({ guest: GUEST_A, card, tier: "epic", duplicate: false });
+      await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+      expect(await owner(card)).toEqual([theirs]);
+    });
+
+    it("gives an owner to a card the member held only as duplicates", async () => {
+      const card = await addCard("Gary the Grill");
+      const mine = await row({ participant: IDS.alice, card, tier: "epic", duplicate: true });
+      await row({ guest: GUEST_A, card, tier: "common", duplicate: false });
+      await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+      expect(await owner(card)).toEqual([mine]);
+    });
+  });
+
   it("keeps the member's own row when both spent the same day", async () => {
     // Their own pull is the one attached to the name the cards live on. Both
     // packs are dealt from a one-card catalogue, so both hold exactly Gary.

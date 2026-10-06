@@ -40,7 +40,8 @@
 -- from 20260825120000, claim_guest_secrets and merge_guest_pulls from
 -- 20261006120000, accept_trade_offer and buy_market_listing from 20261006130000
 -- — with only the "raise the owned row" UPDATE replaced by the helper (and, in
--- the two guest merges, the "hands its tier over" UPDATE dropped), for the
+-- the two guest merges, the "hands its tier over" UPDATE and the inline
+-- DISTINCT ON ownership fill dropped, so the helper is the single decider), for the
 -- reason 20260930120000 gives: a body retyped from a stale copy silently
 -- reverts whatever landed in between. The audit fixes in the two 20261006
 -- files (the pack_opens / cards IS NOT NULL predicate, stake voiding with SKIP
@@ -579,27 +580,11 @@ BEGIN
 
   GET DIAGNOSTICS _n = ROW_COUNT;
 
-  -- A card the member now holds only as duplicates gets one owning row: best
-  -- tier first, then the oldest, the order resync_secret_ownership uses.
-  -- secret_card_pulls_owned_once is satisfied by construction — the NOT EXISTS
-  -- proves there is no owning row to collide with, and DISTINCT ON picks one.
-  UPDATE public.secret_card_pulls p
-     SET is_duplicate = false
-    FROM (
-      SELECT DISTINCT ON (q.secret_card_id) q.id
-        FROM public.secret_card_pulls q
-       WHERE q.participant_id = _participant_id
-         AND NOT EXISTS (SELECT 1 FROM public.secret_card_pulls o
-                          WHERE o.participant_id = _participant_id
-                            AND o.secret_card_id = q.secret_card_id
-                            AND NOT o.is_duplicate)
-       ORDER BY q.secret_card_id, public.secret_tier_rank(q.tier) ASC, q.pulled_on ASC
-    ) promote
-   WHERE p.id = promote.id;
-
   -- Merging two identities must not lose the better roll: for every card that
   -- moved, the best copy now owns it and the rest are spares, with no level
-  -- rewritten. A tie keeps the member's own row.
+  -- rewritten. A tie keeps the member's own row. The one decider: this also
+  -- gives an owner to a card the member held only as duplicates, which an
+  -- inline DISTINCT ON used to do first with a tiebreak of its own.
   FOREACH _card IN ARRAY _cards LOOP
     PERFORM public.promote_best_secret_copy(_participant_id, NULL, _card);
   END LOOP;
@@ -691,23 +676,9 @@ BEGIN
 
   GET DIAGNOSTICS _n = ROW_COUNT;
 
-  -- The same promotion as claim_guest_secrets, for the guest side of the index.
-  UPDATE public.secret_card_pulls p
-     SET is_duplicate = false
-    FROM (
-      SELECT DISTINCT ON (q.secret_card_id) q.id
-        FROM public.secret_card_pulls q
-       WHERE q.guest_id = _into_guest
-         AND NOT EXISTS (SELECT 1 FROM public.secret_card_pulls o
-                          WHERE o.guest_id = _into_guest
-                            AND o.secret_card_id = q.secret_card_id
-                            AND NOT o.is_duplicate)
-       ORDER BY q.secret_card_id, public.secret_tier_rank(q.tier) ASC, q.pulled_on ASC
-    ) promote
-   WHERE p.id = promote.id;
-
-  -- And the best copy of each card that moved owns it. A tie keeps the
-  -- destination's own row.
+  -- The best copy of each card that moved owns it — including one the
+  -- destination held only as duplicates. A tie keeps the destination's own row.
+  -- promote_best_secret_copy is the one decider, as in claim_guest_secrets.
   FOREACH _card IN ARRAY _cards LOOP
     PERFORM public.promote_best_secret_copy(NULL, _into_guest, _card);
   END LOOP;
