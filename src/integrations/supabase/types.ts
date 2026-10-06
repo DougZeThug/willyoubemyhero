@@ -2208,6 +2208,7 @@ export type Database = {
       grant_card_copy: {
         Args: {
           _edition?: string
+          _event_id?: string
           _event_participant_id: string
           _participant_id: string
         }
@@ -2216,6 +2217,7 @@ export type Database = {
       grant_card_copy_once: {
         Args: {
           _edition?: string
+          _event_id?: string
           _event_participant_id: string
           _grant_key: string
           _participant_id: string
