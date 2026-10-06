@@ -503,9 +503,6 @@ function PlayerCardPage() {
     // thing about it that cannot be guessed.
     rarityLabel: shareBadge.headline,
     rarityColor: shareBadge.color,
-    // No second badge: the metal is the whole caption now.
-    editionLabel: null,
-    editionColor: null,
     frameColor: shareBadge.isEdition ? editionStyle(edition).accent : null,
     cardUrl: urls?.front ?? null,
     photoUrl,
