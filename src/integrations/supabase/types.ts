@@ -163,6 +163,27 @@ export type Database = {
           },
         ]
       }
+      auth_attempts: {
+        Row: {
+          attempt_count: number
+          key: string
+          kind: string
+          window_started_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          key: string
+          kind: string
+          window_started_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          key?: string
+          kind?: string
+          window_started_at?: string
+        }
+        Relationships: []
+      }
       award_votes: {
         Row: {
           category: string
@@ -2158,6 +2179,10 @@ export type Database = {
         }
         Returns: Json
       }
+      clear_auth_attempts: {
+        Args: { _key: string; _kind: string }
+        Returns: undefined
+      }
       close_award_voting: {
         Args: { _categories: Json; _event_id: string }
         Returns: number
@@ -2243,6 +2268,15 @@ export type Database = {
         Returns: Json
       }
       mill_value: { Args: { _edition: string }; Returns: number }
+      note_auth_attempt: {
+        Args: {
+          _key: string
+          _kind: string
+          _max: number
+          _window_seconds: number
+        }
+        Returns: boolean
+      }
       open_pack: {
         Args: { _event_id: string; _guest_id: string; _participant_id: string }
         Returns: Json
