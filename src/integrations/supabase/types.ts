@@ -1907,6 +1907,7 @@ export type Database = {
           proposer_id: string
           recipient_id: string
           resolved_at: string | null
+          staked_count: number | null
           status: string
         }
         Insert: {
@@ -1916,6 +1917,7 @@ export type Database = {
           proposer_id: string
           recipient_id: string
           resolved_at?: string | null
+          staked_count?: number | null
           status?: string
         }
         Update: {
@@ -1925,6 +1927,7 @@ export type Database = {
           proposer_id?: string
           recipient_id?: string
           resolved_at?: string | null
+          staked_count?: number | null
           status?: string
         }
         Relationships: [
@@ -2320,6 +2323,10 @@ export type Database = {
         Returns: number
       }
       reopen_award_voting: { Args: { _event_id: string }; Returns: undefined }
+      reopen_trade_offer: {
+        Args: { _actor_id: string; _offer_id: string; _within_seconds?: number }
+        Returns: Json
+      }
       reroll_copy_edition: {
         Args: {
           _card_copy_id: string
