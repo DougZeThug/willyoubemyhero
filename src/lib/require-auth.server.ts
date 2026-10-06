@@ -20,6 +20,21 @@ export async function requireMember(): Promise<string> {
   return claims.participantId;
 }
 
+/**
+ * requireMember, with the verified token's expiry as well as its participant.
+ * For the one handler that has to reason about the token itself: renewal.
+ */
+export async function requireMemberSession(): Promise<{
+  participantId: string;
+  expiresAt: number;
+}> {
+  const claims = verifyMemberToken(getRequestHeader("x-member-token") ?? null);
+  if (!claims) {
+    throw new Error("Claim your player first");
+  }
+  return claims;
+}
+
 /** Member id when one is present, otherwise null. For read paths that personalise. */
 export function optionalMember(): string | null {
   return verifyMemberToken(getRequestHeader("x-member-token") ?? null)?.participantId ?? null;

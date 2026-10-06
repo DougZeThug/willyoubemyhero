@@ -588,6 +588,16 @@ describe("generateMemberCodes", () => {
     expect(upsert.options).toEqual({ onConflict: "participant_id" });
   });
 
+  it("stamps when the new code was issued, so tokens from before it stop renewing", async () => {
+    withDb({ "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] } });
+    const before = Date.now();
+    await generate({ eventId: EVENT_ID }, adminOk());
+    const [upsert] = mock.callsFor("member_codes", "upsert");
+    const [row] = upsert.payload as { created_at: string }[];
+    expect(Date.parse(row.created_at)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(row.created_at)).toBeLessThanOrEqual(Date.now());
+  });
+
   it("writes the whole roster in one statement, so a failure rotates nobody", async () => {
     // The loop this replaced threw on its first failure with earlier upserts
     // already committed. Those players held live codes nobody had ever seen —
@@ -764,6 +774,58 @@ describe("renewMemberSession", () => {
     expect(await renew(memberHeaders(signMemberToken(PARTICIPANT_ID).token))).toEqual({
       ok: false,
       reason: "no_player",
+    });
+  });
+
+  describe("across a code rotation", () => {
+    const at = (ms: number) => new Date(ms).toISOString();
+
+    it("refuses a token signed before the current code was issued", async () => {
+      // Rotation is how the commissioner takes a player back from a handset;
+      // the tokens already out there were left to run out, and renewal must not
+      // take that away.
+      const issued = Date.now() - 65 * DAY;
+      withDb({
+        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
+        "member_codes.select": { data: { created_at: at(issued + 60_000) }, error: null },
+      });
+      expect(await renew(memberHeaders(signedAt(issued)))).toEqual({
+        ok: false,
+        reason: "rotated",
+      });
+    });
+
+    it("renews a token signed after the current code was issued", async () => {
+      const issued = Date.now() - 65 * DAY;
+      withDb({
+        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
+        "member_codes.select": { data: { created_at: at(issued - 60_000) }, error: null },
+      });
+      expect(await renew(memberHeaders(signedAt(issued)))).toMatchObject({ ok: true });
+      const [call] = mock.callsFor("member_codes", "select");
+      expect(call.filters).toContainEqual(
+        expect.objectContaining({ args: ["participant_id", PARTICIPANT_ID] }),
+      );
+    });
+
+    it("renews a member with no code row at all, who has nothing to rotate", async () => {
+      withDb({
+        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
+        "member_codes.select": { data: null, error: null },
+      });
+      expect(await renew(memberHeaders(signedAt(Date.now() - 65 * DAY)))).toMatchObject({
+        ok: true,
+      });
+    });
+
+    it("surfaces a failed code lookup rather than renewing on it", async () => {
+      withDb({
+        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
+        "member_codes.select": { data: null, error: { message: "codes down" } },
+      });
+      await expect(renew(memberHeaders(signMemberToken(PARTICIPANT_ID).token))).rejects.toThrow(
+        "codes down",
+      );
     });
   });
 

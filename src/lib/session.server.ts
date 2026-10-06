@@ -61,8 +61,19 @@ export function verifyAdminToken(
 // parsed as a member token (3 parts vs 4) and a signature cannot be transplanted
 // between the two, because the prefix is part of what gets signed.
 
-const MEMBER_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days — this is a party app
+export const MEMBER_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days — this is a party app
 const MEMBER_PREFIX = "m";
+
+/**
+ * When a member token was signed, recovered from its expiry.
+ *
+ * The token carries no issue time of its own, and adding one would change the
+ * signed shape session.server.test.ts pins. Every member token is signed with
+ * exactly this TTL, so the expiry already says when it was minted.
+ */
+export function memberTokenIssuedAt(expiresAt: number): number {
+  return expiresAt - MEMBER_TOKEN_TTL_MS;
+}
 
 export function hashCode(salt: string, code: string): string {
   // Codes are handed out on paper; compare case-insensitively.

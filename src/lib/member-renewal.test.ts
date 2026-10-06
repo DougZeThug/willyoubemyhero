@@ -80,6 +80,17 @@ describe("renewMemberTokenIfDue", () => {
     expect(window.localStorage.getItem(NAME_KEY)).toBe("Doug");
   });
 
+  it("keeps the old token when the server refuses a renewal across a code rotation", async () => {
+    // The token keeps working until it runs out, exactly as a rotation promises;
+    // it is simply not extended.
+    const token = tokenFor(Date.now() + 10 * DAY);
+    store(token);
+    const renew = vi.fn(() => Promise.resolve({ ok: false as const, reason: "rotated" }));
+    expect(await renewMemberTokenIfDue(renew)).toBe(false);
+    expect(window.localStorage.getItem(KEY)).toBe(token);
+    expect(window.localStorage.getItem(NAME_KEY)).toBe("Doug");
+  });
+
   it("keeps the old token when the server refuses", async () => {
     const token = tokenFor(Date.now() + 10 * DAY);
     store(token);

@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { hashCode, signMemberToken } from "./session.server";
-import { optionalGuest, requireAdmin, requireMember } from "./require-auth.server";
+import { hashCode, memberTokenIssuedAt, signMemberToken } from "./session.server";
+import { optionalGuest, requireAdmin, requireMemberSession } from "./require-auth.server";
 import { timingSafeEq } from "./session.server";
 import { uuid as zuuid } from "./zod-uuid";
 
@@ -174,12 +174,23 @@ export const claimPlayer = createServerFn({ method: "POST" })
  * warning — and a guest pack opened in that state is a second collection. The
  * client calls this once the token is inside its last month (member-renewal.ts).
  *
- * Only a still-valid token renews: an expired one fails requireMember, so a lost
- * or lapsed session still has to go back through the code. The id is the one in
+ * Only a still-valid token renews: an expired one fails the guard, so a lost or
+ * lapsed session still has to go back through the code. The id is the one in
  * the verified token and nothing else — the request carries no payload at all.
+ *
+ * NOT ACROSS A CODE ROTATION. Rotating a player's code is how the commissioner
+ * takes a player back from a handset that should not have it, and the tokens
+ * already out there were left to die at their expiry. Renewal would take that
+ * expiry away, so a token signed before the current code was issued
+ * (member_codes.created_at, which generateMemberCodes stamps on every rotation)
+ * is refused and has to claim again with the new code. A participant with no
+ * code row — a collector, an account-only member — has nothing to rotate.
+ *
+ * claimPlayer refuses on no ground but the code itself (and its rate limit): it
+ * checks no active or retired flag, so there is nothing else to mirror here.
  */
 export const renewMemberSession = createServerFn({ method: "POST" }).handler(async () => {
-  const participantId = await requireMember();
+  const { participantId, expiresAt: currentExpiry } = await requireMemberSession();
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   // A signature outlives the row it names. A player the commissioner has
   // deleted keeps a token that verifies until it expires; it must not be
@@ -191,6 +202,18 @@ export const renewMemberSession = createServerFn({ method: "POST" }).handler(asy
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!row) return { ok: false as const, reason: "no_player" as const };
+
+  const { data: code, error: codeError } = await supabaseAdmin
+    .from("member_codes")
+    .select("created_at")
+    .eq("participant_id", participantId)
+    .maybeSingle();
+  // Thrown, not read as "no code": that answer is the one that renews.
+  if (codeError) throw new Error(codeError.message);
+  if (code && memberTokenIssuedAt(currentExpiry) < Date.parse(code.created_at)) {
+    return { ok: false as const, reason: "rotated" as const };
+  }
+
   const { token, expiresAt } = signMemberToken(participantId);
   return { ok: true as const, token, expiresAt };
 });
@@ -296,7 +319,11 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
           code_salt: m.salt,
           code_hash: hashCode(m.salt, m.code),
           // Rotating a code resets the claim record; existing tokens keep working
-          // until they expire, which is the intended behaviour for a re-issue.
+          // until they expire, which is the intended behaviour for a re-issue —
+          // and they are never renewed past it. created_at is when the CURRENT
+          // code was issued, which renewMemberSession compares a token's issue
+          // time against: anything signed before this rotation runs out.
+          created_at: new Date().toISOString(),
           claimed_at: null,
           last_claimed_at: null,
           claim_count: 0,
