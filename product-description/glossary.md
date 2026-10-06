@@ -128,9 +128,10 @@ Postgres for anyone the server can name. Claiming a player or signing in merges
 the two.
 
 **Baseline.** The snapshot of your collection taken at the moment a pack was
-dealt. The pack's last slot prefers a card the baseline lacks — which is the only
-mechanism by which a set ever completes — and it is a snapshot rather than the
-live collection so the pack cannot shift under you as you reveal it.
+dealt — how many of each roster card you already held, and at what finish. It
+tags each card NEW, an upgrade, or ×N as it turns on the stand, and it is a
+snapshot rather than the live collection so the tags cannot shift under you as
+you reveal it.
 
 **Shelf.** One section of the vault: Favourites, Complete, a secret set, or the
 Roster. Shelves can be reordered and rolled up, per device. A shelf with nothing

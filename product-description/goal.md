@@ -93,9 +93,10 @@ the user would expect.
 - **Postgres rolls anything worth money.** Editions and secret levels are decided
   server-side, not on the phone, because a value the client chooses is a value
   anybody can reroll by refreshing.
-- **A pack is three roster cards plus a secret slot**, seeded on event, league day
-  and identity. The last slot prefers a card the baseline lacks. The tear commits
-  at 60% of a travel worth 80% of the pack's width.
+- **A pack is three cards from one pool** of every roster card of the active event
+  and every active secret, owned or not, dealt by Postgres — one per identity per
+  league day, so re-opening answers the same three. There is no prefer-lack slot
+  any more. The tear commits at 60% of a travel worth 80% of the pack's width.
 - **The set size is withheld.** No screen and no server response says how many
   secret cards exist. Do not write a document that implies a total.
 - **The dust switch changes the shape of the nav**, from five tabs to six. While
