@@ -179,6 +179,64 @@ describe("useAdminAutoUnlock", () => {
     expect(startAdminSessionFromAccount).toHaveBeenCalledTimes(2);
   });
 
+  it("asks again on the next auth event after a call that threw", async () => {
+    // A dropped connection says nothing about whether this account is an admin, so
+    // the next token refresh gets another go instead of leaving the PIN as the
+    // only way in.
+    startAdminSessionFromAccount
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ ok: true, token: "tok" });
+    const { result, rerender } = mount(props(userOf("a")));
+    await vi.waitFor(() => expect(result.current).toBe(true));
+    expect(setAdminToken).not.toHaveBeenCalled();
+
+    rerender(props(userOf("a")));
+    await vi.waitFor(() => expect(setAdminToken).toHaveBeenCalledWith("tok", "a"));
+    expect(startAdminSessionFromAccount).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks again after finding no live event, which is a passing condition", async () => {
+    startAdminSessionFromAccount
+      .mockResolvedValueOnce({ ok: false, reason: "event_not_found" })
+      .mockResolvedValue({ ok: true, token: "tok" });
+    const { result, rerender } = mount(props(userOf("a")));
+    await vi.waitFor(() => expect(result.current).toBe(true));
+
+    rerender(props(userOf("a")));
+    await vi.waitFor(() => expect(setAdminToken).toHaveBeenCalledWith("tok", "a"));
+  });
+
+  it("does not ask again once the account is known not to be an admin", async () => {
+    startAdminSessionFromAccount.mockResolvedValue({ ok: false, reason: "not_admin" });
+    const { result, rerender } = mount(props(userOf("a")));
+    await vi.waitFor(() => expect(result.current).toBe(true));
+
+    rerender(props(userOf("a")));
+    rerender(props(userOf("a")));
+    expect(startAdminSessionFromAccount).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the PIN gate up while a retry is in the air", async () => {
+    // Blanking `accountChecked` for the retry would swap the PIN form for
+    // "Checking access…" under a commissioner who is already typing.
+    const retry = deferred<{ ok: false; reason: "not_admin" }>();
+    startAdminSessionFromAccount
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockReturnValueOnce(retry.promise);
+    const { result, rerender } = mount(props(userOf("a")));
+    await vi.waitFor(() => expect(result.current).toBe(true));
+
+    rerender(props(userOf("a")));
+    await vi.waitFor(() => expect(startAdminSessionFromAccount).toHaveBeenCalledTimes(2));
+    expect(result.current).toBe(true);
+
+    await act(async () => {
+      retry.resolve({ ok: false, reason: "not_admin" });
+      await retry.promise;
+    });
+    expect(result.current).toBe(true);
+  });
+
   it("asks nothing of the server for somebody who is signed out", async () => {
     const { result } = mount(props(null));
     await vi.waitFor(() => expect(result.current).toBe(true));
