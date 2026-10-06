@@ -36,6 +36,13 @@
       "when": 1791298925491,
       "tag": "0004_scope_grants_to_their_event",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791298950445,
+      "tag": "0005_pack_status_says_whether_anything_is_dealable",
+      "breakpoints": true
     }
   ]
 }
