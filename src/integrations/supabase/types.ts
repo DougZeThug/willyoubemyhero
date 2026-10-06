@@ -2293,6 +2293,14 @@ export type Database = {
         Args: { _guest_id: string; _participant_id: string }
         Returns: Json
       }
+      promote_best_secret_copy: {
+        Args: {
+          _guest_id: string
+          _participant_id: string
+          _secret_card_id: string
+        }
+        Returns: undefined
+      }
       pull_bonus_secret_card: {
         Args: {
           _event_id: string
