@@ -22,6 +22,13 @@
       "when": 1791298849141,
       "tag": "0002_reopen_trade_offer",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791298895076,
+      "tag": "0003_freeze_milestone_reward_tier",
+      "breakpoints": true
     }
   ]
 }

@@ -1800,6 +1800,7 @@ export type Database = {
           participant_id: string | null
           reward_kind: string
           reward_ref: string | null
+          reward_tier: string | null
           streak_started_on: string
         }
         Insert: {
@@ -1812,6 +1813,7 @@ export type Database = {
           participant_id?: string | null
           reward_kind?: string
           reward_ref?: string | null
+          reward_tier?: string | null
           streak_started_on: string
         }
         Update: {
@@ -1824,6 +1826,7 @@ export type Database = {
           participant_id?: string | null
           reward_kind?: string
           reward_ref?: string | null
+          reward_tier?: string | null
           streak_started_on?: string
         }
         Relationships: [
