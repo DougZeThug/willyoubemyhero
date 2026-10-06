@@ -50,6 +50,13 @@
       "when": 1791298998063,
       "tag": "0006_todays_pull_is_a_spare",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791299010064,
+      "tag": "0007_publish_stations",
+      "breakpoints": true
     }
   ]
 }
