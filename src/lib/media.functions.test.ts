@@ -1273,3 +1273,75 @@ describe("archiveEvent", () => {
     expect(mock.callsFor("event_archive_snapshots", "insert")).toHaveLength(1);
   });
 });
+
+describe("getArchivedRecap", () => {
+  const ROW = { slug: "combine-2026", snapshot: {}, created_at: "2026-08-01T00:00:00Z" };
+
+  it("returns the archived row", async () => {
+    withDb({ "event_archive_snapshots.select": { data: ROW } });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.getArchivedRecap, { data: { slug: "combine-2026" } }),
+    ).resolves.toEqual(ROW);
+  });
+
+  it("returns null for a slug nobody archived, which the route reads as not found", async () => {
+    withDb({ "event_archive_snapshots.select": { data: null } });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.getArchivedRecap, { data: { slug: "nope" } }),
+    ).resolves.toBeNull();
+  });
+
+  it("throws on a failed read instead of reporting a recap that does not exist", async () => {
+    withDb({ "event_archive_snapshots.select": { error: { message: "upstream down" } } });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.getArchivedRecap, { data: { slug: "combine-2026" } }),
+    ).rejects.toMatchObject({ message: "upstream down" });
+  });
+});
+
+describe("archiveEvent with a read that fails", () => {
+  // What it archives is permanent and public, so a snapshot built from a failed
+  // read — a combine with no runs, no roster — must never be written.
+  const HEALTHY: SupabaseResponses = {
+    "events.select": { data: { id: EVENT_ID, name: "Combine", year: 2026 } },
+    "event_archive_snapshots.select": { data: null },
+    "event_archive_snapshots.insert": {},
+  };
+  const failed = { error: { message: "read failed" } };
+
+  async function archive() {
+    const mod = await freshModule();
+    return callServerFn(mod.archiveEvent, { data: { eventId: EVENT_ID }, headers: asAdmin() });
+  }
+
+  it("archives when every read lands", async () => {
+    withDb(HEALTHY);
+    await expect(archive()).resolves.toMatchObject({ ok: true, slug: "combine-2026" });
+    expect(mock.callsFor("event_archive_snapshots", "insert")).toHaveLength(1);
+  });
+
+  it.each(["event_participants", "stations", "runs", "splits", "penalties", "draft_selections"])(
+    "inserts nothing when the %s read fails",
+    async (table) => {
+      withDb({ ...HEALTHY, [`${table}.select`]: failed });
+      await expect(archive()).rejects.toMatchObject({ message: "read failed" });
+      expect(mock.callsFor("event_archive_snapshots", "insert")).toEqual([]);
+    },
+  );
+
+  it("reports a failed event read as that, not as a missing event", async () => {
+    withDb({ ...HEALTHY, "events.select": failed });
+    await expect(archive()).rejects.toMatchObject({ message: "read failed" });
+    expect(mock.callsFor("event_archive_snapshots", "insert")).toEqual([]);
+  });
+
+  it("inserts nothing when the slug lookup fails", async () => {
+    // Read as "the slug is free", a failed lookup skipped the dedupe.
+    withDb({ ...HEALTHY, "event_archive_snapshots.select": failed });
+    await expect(archive()).rejects.toMatchObject({ message: "read failed" });
+    expect(mock.callsFor("event_archive_snapshots", "insert")).toEqual([]);
+  });
+});

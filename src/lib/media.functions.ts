@@ -846,6 +846,13 @@ export const archiveEvent = createServerFn({ method: "POST" })
         .select("id, event_id, participant_id, selection_order, draft_position, selected_at")
         .eq("event_id", data.eventId),
     ]);
+    // Every read throws on failure rather than coalescing to "none". The snapshot
+    // goes into an append-only table the public reads, so one failed SELECT would
+    // otherwise be archived for good as a combine with no runs, or no roster.
+    if (event.error) throw event.error;
+    for (const read of [eps, stations, runs, splits, penalties, drafts]) {
+      if (read.error) throw read.error;
+    }
     if (!event.data) throw new Error("Event not found");
     const runIds = new Set((runs.data ?? []).map((r) => r.id));
     const snapshot = {
@@ -861,11 +868,13 @@ export const archiveEvent = createServerFn({ method: "POST" })
     const base = slugify(`${event.data.name}-${event.data.year ?? new Date().getFullYear()}`);
     let slug = base;
     for (let i = 2; i < 20; i++) {
-      const { data: existing } = await supabaseAdmin
+      const { data: existing, error: slugError } = await supabaseAdmin
         .from("event_archive_snapshots")
         .select("id")
         .eq("slug", slug)
         .maybeSingle();
+      // A failed lookup reads as "slug is free" and would skip the dedupe.
+      if (slugError) throw slugError;
       if (!existing) break;
       slug = `${base}-${i}`;
     }
@@ -896,10 +905,13 @@ export const getArchivedRecap = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ slug: z.string().min(1).max(80) }).parse(d))
   .handler(async ({ data }) => {
     const sb = publicClient();
-    const { data: row } = await sb
+    const { data: row, error } = await sb
       .from("event_archive_snapshots")
       .select("*")
       .eq("slug", data.slug)
       .maybeSingle();
+    // Thrown, not returned as null: the recap loader turns null into "No recap
+    // found.", and a failed read must reach its error screen instead.
+    if (error) throw error;
     return row;
   });
