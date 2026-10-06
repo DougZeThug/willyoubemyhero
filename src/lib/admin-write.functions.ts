@@ -163,7 +163,9 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
     // everybody's collection at once, which is exactly how two players' cards
     // disappeared from the league. Once anybody has packed the card, the row is
     // no longer the admin's to delete: it is retired instead.
-    const [{ count: copies }, { count: pulls }] = await Promise.all([
+    // Both reads throw on failure: a null count is `?? 0` below, which is the
+    // answer "nobody has this card" and would let the cascade delete through.
+    const [copiesRead, pullsRead] = await Promise.all([
       supabaseAdmin
         .from("card_copies")
         .select("id", { count: "exact", head: true })
@@ -173,6 +175,10 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
         .select("participant_id", { count: "exact", head: true })
         .eq("event_participant_id", data.eventParticipantId),
     ]);
+    if (copiesRead.error) throw copiesRead.error;
+    if (pullsRead.error) throw pullsRead.error;
+    const { count: copies } = copiesRead;
+    const { count: pulls } = pullsRead;
 
     if ((copies ?? 0) > 0 || (pulls ?? 0) > 0) {
       const { data: retired, error: retireError } = await supabaseAdmin
@@ -511,7 +517,9 @@ export const deleteStation = createServerFn({ method: "POST" })
     // station crown is computed from splits, that silently demotes somebody's
     // stationKing card to base. The stations panel refuses this too, but a check
     // that lives only in a screen is not a check.
-    const [{ count: splits }, { count: penalties }] = await Promise.all([
+    // A failed count throws rather than reading as 0: 0 is "never run", the
+    // answer that lets the cascade delete go ahead.
+    const [splitsRead, penaltiesRead] = await Promise.all([
       supabaseAdmin
         .from("splits")
         .select("id", { count: "exact", head: true })
@@ -521,6 +529,10 @@ export const deleteStation = createServerFn({ method: "POST" })
         .select("id", { count: "exact", head: true })
         .eq("station_id", data.id),
     ]);
+    if (splitsRead.error) throw splitsRead.error;
+    if (penaltiesRead.error) throw penaltiesRead.error;
+    const { count: splits } = splitsRead;
+    const { count: penalties } = penaltiesRead;
     if ((splits ?? 0) > 0 || (penalties ?? 0) > 0) {
       throw new Error(
         "That station already has recorded times — switch it to inactive instead of deleting it.",
@@ -708,17 +720,25 @@ export const deleteRunResult = createServerFn({ method: "POST" })
     if (runError) throw runError;
     if (!run) throw new Error("That run is not part of this event.");
 
+    // Counted BEFORE the delete, so a failed read aborts with nothing destroyed
+    // and the commissioner can simply retry. Counted after, a null count read as
+    // "no runs left" and sent an athlete who still had runs back to waiting — and
+    // throwing then would have left the run gone and the retry refused. The run
+    // is proven to be this athlete's by the lookup above, so it is in the count.
+    const { count, error: countError } = await supabaseAdmin
+      .from("runs")
+      .select("*", { count: "exact", head: true })
+      .eq("event_id", data.eventId)
+      .eq("participant_id", run.participant_id);
+    if (countError) throw countError;
+    const remaining = Math.max(0, (count ?? 0) - 1);
+
     await supabaseAdmin.from("penalties").delete().eq("run_id", run.id);
     await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
     const { error } = await supabaseAdmin.from("runs").delete().eq("id", run.id);
     if (error) throw error;
 
-    const { count } = await supabaseAdmin
-      .from("runs")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", run.participant_id);
-    if (!count) {
+    if (remaining === 0) {
       const { error: statusError } = await supabaseAdmin
         .from("event_participants")
         .update(withOnClock({ participation_status: "waiting" }, null))
@@ -736,7 +756,7 @@ export const deleteRunResult = createServerFn({ method: "POST" })
       performed_by: "admin",
     });
 
-    return { ok: true, remainingRuns: count ?? 0 };
+    return { ok: true, remainingRuns: remaining };
   });
 
 /**
@@ -777,11 +797,14 @@ export const createManualRun = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { count } = await supabaseAdmin
+    // Thrown, not coalesced: a null count numbered this run attempt 1 whatever
+    // the athlete had already run.
+    const { count, error: countError } = await supabaseAdmin
       .from("runs")
       .select("*", { count: "exact", head: true })
       .eq("event_id", data.eventId)
       .eq("participant_id", data.participantId);
+    if (countError) throw countError;
 
     const penaltyTotal = data.penalties.reduce((sum, p) => sum + p.penalty_ms, 0);
     const finishedAt = new Date();
