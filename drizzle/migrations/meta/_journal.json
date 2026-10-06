@@ -78,6 +78,13 @@
       "when": 1791299373887,
       "tag": "0010_better_duplicate_takes_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791299467460,
+      "tag": "0011_merge_guest_into_guest_in_one_transaction",
+      "breakpoints": true
     }
   ]
 }
