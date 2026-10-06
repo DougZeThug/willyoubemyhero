@@ -11,7 +11,7 @@
 // open_pack keying the day on pack_opens and the mint cap counting card_mints,
 // neither of which a sale touches.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
+import { closeDb, isDenied, IDS, newClient, seedEvent, sql, withSecretRoll } from "./helpers";
 import { MILL_BY_EDITION, MILL_CLIENT_FLAT, SELL_BY_SECRET_TIER, DUST_PRICES } from "../../src/lib/dust"; // prettier-ignore
 
 afterAll(closeDb);
@@ -438,27 +438,51 @@ describe("the dupe, now that the credit is folded into the sale", () => {
     expect(rows.n).toBe(2);
   });
 
-  it("still upgrades the copy you own when the duplicate rolls better", async () => {
-    // Best wins, never down. The credit went; this did not, and it is the other
-    // half of what makes a duplicate worth having.
+  it("hands ownership to a better duplicate, so each copy sells at the level it rolled", async () => {
+    // The double pay this closed. Raising the owned row to the duplicate's level
+    // left two mythics where one was rolled, and selling both paid 600. Now the
+    // mythic takes ownership, the common becomes the spare, and the two sell for
+    // what they are: 300 + 15.
     await seedSecret("only-card");
-    const first = await pullSecret(IDS.alice);
-    await sql("UPDATE public.secret_card_pulls SET tier = 'common' WHERE id = $1", [first.pullId]);
+    const first = await withSecretRoll("common", () => pullSecret(IDS.alice));
     await rewindDay(1);
-    const dupe = await pullSecret(IDS.alice);
+    const dupe = await withSecretRoll("mythic", () => pullSecret(IDS.alice));
     expect(dupe.duplicate).toBe(true);
 
-    // Stated as the invariant rather than as one expected tier, since the roll is
-    // random: whatever the dupe came in at, the owning row is at least as good.
-    const [owning] = await sql<{ rank: number }>(
-      "SELECT public.secret_tier_rank(tier) AS rank FROM public.secret_card_pulls WHERE id = $1",
-      [first.pullId],
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      "SELECT id, tier, is_duplicate FROM public.secret_card_pulls ORDER BY created_at",
     );
-    const [rolled] = await sql<{ rank: number }>(
-      "SELECT public.secret_tier_rank(tier) AS rank FROM public.secret_card_pulls WHERE id = $1",
-      [dupe.pullId],
+    expect(rows).toEqual([
+      { id: first.pullId, tier: "common", is_duplicate: true },
+      { id: dupe.pullId, tier: "mythic", is_duplicate: false },
+    ]);
+
+    expect(await sell(first.pullId)).toMatchObject({ ok: true, awarded: SELL_BY_SECRET_TIER.common }); // prettier-ignore
+    expect(await sell(dupe.pullId)).toMatchObject({ ok: true, awarded: SELL_BY_SECRET_TIER.mythic }); // prettier-ignore
+    expect(await balance()).toBe(SELL_BY_SECRET_TIER.mythic + SELL_BY_SECRET_TIER.common);
+    expect(await balance()).toBe(315);
+  });
+
+  it("hands ownership to a better bought pull the same way", async () => {
+    // buy_bonus_secret_pull goes through pull_bonus_secret_card, the streak
+    // rung's path too.
+    await seedSecret("only-card");
+    const first = await withSecretRoll("rare", () => pullSecret(IDS.alice));
+    await credit(DUST_PRICES.bonusPull);
+    const [row] = await withSecretRoll("legendary", () =>
+      sql<{ r: { ok: boolean; pull: { pullId: string; duplicate: boolean; tier: string } } }>(
+        "SELECT public.buy_bonus_secret_pull($1, $2, $3) AS r",
+        [IDS.alice, IDS.event, "aaaaaaaa-0000-4000-8000-0000000000b1"],
+      ),
     );
-    expect(owning.rank).toBeLessThanOrEqual(rolled.rank);
+    expect(row.r.pull).toMatchObject({ duplicate: true, tier: "legendary" });
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      "SELECT id, tier, is_duplicate FROM public.secret_card_pulls ORDER BY created_at",
+    );
+    expect(rows).toEqual([
+      { id: first.pullId, tier: "rare", is_duplicate: true },
+      { id: row.r.pull.pullId, tier: "legendary", is_duplicate: false },
+    ]);
   });
 
   it("pays a guest nothing either, because dust starts at the claim", async () => {
@@ -468,6 +492,69 @@ describe("the dupe, now that the credit is folded into the sale", () => {
     const dupe = await pullSecret(null, GUEST);
     expect(dupe.duplicate).toBe(true);
     expect(await sql("SELECT count(*)::int AS n FROM public.dust_ledger")).toEqual([{ n: 0 }]);
+  });
+});
+
+describe("today's pack, dusted the day it lands", () => {
+  it("lists today's roster spare and secret where the Shop reads them, and burns and sells both", async () => {
+    // The Shop's "Burn" and "Sell" lists are getTradeSpares, which reads every
+    // card_copies row for this event's cards and every secret_card_pulls row the
+    // member holds, with no date in either query. So once the pack has landed,
+    // today's copies are on the list, and both RPCs take them.
+    const ids = await cardIds();
+    // An older copy of every roster card, so whichever ones the pack deals,
+    // today's copy is the second and therefore a spare.
+    for (const ep of ids) {
+      await sql(
+        `INSERT INTO public.card_copies
+           (participant_id, event_participant_id, edition, acquired_on, source, edition_asserted_by)
+         VALUES ($1, $2, 'standard', ${NY} - 1, 'pull', 'server')`,
+        [IDS.alice, ep],
+      );
+      await sql("SELECT public.resync_card_pull($1, $2)", [IDS.alice, ep]);
+    }
+    // Weighted so heavily it cannot lose the draw against three roster cards.
+    const card = await seedSecret("only-card");
+    await sql("UPDATE public.secret_cards SET weight = 10000 WHERE id = $1", [card]);
+
+    const [{ open_pack: pack }] = await sql<{
+      open_pack: { cards: { kind: string; id: string; pullId?: string; tier?: string }[] };
+    }>("SELECT public.open_pack($1, null, $2)", [IDS.alice, IDS.event]);
+    const secretSlot = pack.cards.find((c) => c.kind === "secret")!;
+    const rosterSlot = pack.cards.find((c) => c.kind === "roster")!;
+
+    // getTradeSpares' two reads, as it makes them.
+    const copies =
+      await sql<{ id: string; event_participant_id: string; acquired_on: string | null }> // prettier-ignore
+      (
+        `SELECT id, event_participant_id, acquired_on::text FROM public.card_copies
+        WHERE participant_id = $1 AND event_participant_id = ANY($2::uuid[])`,
+        [IDS.alice, ids],
+      );
+    const [{ day }] = await sql<{ day: string }>(`SELECT ${NY}::text AS day`);
+    const todaysCopy = copies.find(
+      (c) => c.event_participant_id === rosterSlot.id && c.acquired_on === day,
+    );
+    expect(todaysCopy).toBeTruthy();
+    const held = await sql<{ id: string }>(
+      "SELECT id FROM public.secret_card_pulls WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(held.map((r) => r.id)).toContain(secretSlot.pullId);
+
+    // The spare rule both lists and both RPCs share.
+    const [spare] = await sql<{ roster: boolean; secret: boolean }>(
+      `SELECT public.trade_item_is_spare($1, 'roster', $2, NULL) AS roster,
+              public.trade_item_is_spare($1, 'secret', NULL, $3) AS secret`,
+      [IDS.alice, todaysCopy!.id, secretSlot.pullId],
+    );
+    expect(spare).toEqual({ roster: true, secret: true });
+
+    expect(await mill(todaysCopy!.id)).toMatchObject({ ok: true });
+    expect(await sell(secretSlot.pullId!)).toMatchObject({
+      ok: true,
+      awarded: SELL_BY_SECRET_TIER[secretSlot.tier as keyof typeof SELL_BY_SECRET_TIER],
+    });
   });
 });
 
@@ -1010,8 +1097,8 @@ describe("while the switch is off", () => {
   });
 
   it("leaves the pull itself working, switch or no switch", async () => {
-    // The economy is off, not the game. A dupe still lands, still upgrades a
-    // tier, still counts — it simply pays nothing.
+    // The economy is off, not the game. A dupe still lands, still takes
+    // ownership when it rolled better, still counts — it simply pays nothing.
     await seedSecret("only-card");
     await switchOff();
     const first = await pullSecret(IDS.alice);

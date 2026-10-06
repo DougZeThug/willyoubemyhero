@@ -686,11 +686,13 @@ describe("buying a secret", () => {
   });
 
   it("arrives as a duplicate when the buyer already owns the card", async () => {
+    // The buyer's own copy outranks the rare being bought, so ownership stays
+    // put; a better copy arriving is the next test.
     const { pullId, cardId } = await heldSecret(IDS.alice, "shared");
     await sql(
       `INSERT INTO public.secret_card_pulls
          (participant_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
-       VALUES ($1, $2, ${NY} - 2, $3, false, true, 'common')`,
+       VALUES ($1, $2, ${NY} - 2, $3, false, true, 'epic')`,
       [IDS.bob, cardId, IDS.event],
     );
     await credit(500, IDS.bob);
@@ -701,6 +703,30 @@ describe("buying a secret", () => {
       [pullId],
     );
     expect(row.is_duplicate).toBe(true);
+  });
+
+  it("hands the buyer ownership when the copy bought is better than theirs", async () => {
+    // Same rule as a trade: the better copy owns the card, no level is rewritten,
+    // and the receipt still says the buyer already had one.
+    const { pullId, cardId } = await heldSecret(IDS.alice, "shared", "mythic");
+    const [mine] = await sql<{ id: string }>(
+      `INSERT INTO public.secret_card_pulls
+         (participant_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+       VALUES ($1, $2, ${NY} - 2, $3, false, true, 'common') RETURNING id`,
+      [IDS.bob, cardId, IDS.event],
+    );
+    await credit(500, IDS.bob);
+    const res = await list(IDS.alice, { pullId, price: 300 });
+    expect(await buy(IDS.bob, res.listingId!)).toMatchObject({ ok: true, duplicate: true, tier: "mythic" }); // prettier-ignore
+
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      "SELECT id, tier, is_duplicate FROM public.secret_card_pulls WHERE participant_id = $1 ORDER BY tier", // prettier-ignore
+      [IDS.bob],
+    );
+    expect(rows).toEqual([
+      { id: mine.id, tier: "common", is_duplicate: true },
+      { id: pullId, tier: "mythic", is_duplicate: false },
+    ]);
   });
 
   it("leaves the seller owning none of it when it was their only copy", async () => {

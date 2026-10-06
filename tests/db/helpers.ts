@@ -140,3 +140,36 @@ export async function seedEvent() {
     [IDS.event, IDS.alice, IDS.bob, IDS.carol],
   );
 }
+
+const SECRET_TIERS = ["mythic", "legendary", "epic", "rare", "common"] as const;
+
+/**
+ * Run `fn` with `roll_secret_tier()` answering `tier` every time.
+ *
+ * Which copy owns a secret after a duplicate lands depends on the level it
+ * rolled, and the real roll is common seven times in ten — a test that waits
+ * for a better one is a flaky test. `roll_secret_tier_at_least` calls through
+ * this, so a streak rung's floor still applies on top of the rigged value.
+ *
+ * The original definition is read back from the catalogue and restored in a
+ * `finally`, so a failing assertion cannot leave every later suite on this
+ * cluster rolling a constant. CREATE OR REPLACE keeps the function's grants.
+ */
+export async function withSecretRoll<T>(
+  tier: (typeof SECRET_TIERS)[number],
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!SECRET_TIERS.includes(tier)) throw new Error(`Not a secret tier: ${tier}`);
+  const [{ def }] = await sql<{ def: string }>(
+    "SELECT pg_get_functiondef('public.roll_secret_tier()'::regprocedure) AS def",
+  );
+  await sql(
+    `CREATE OR REPLACE FUNCTION public.roll_secret_tier() RETURNS text
+       LANGUAGE sql VOLATILE AS $$ SELECT '${tier}'::text $$`,
+  );
+  try {
+    return await fn();
+  } finally {
+    await sql(def);
+  }
+}

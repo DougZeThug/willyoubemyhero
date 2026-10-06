@@ -7,7 +7,7 @@
 // pool — every roster card and every active secret — so a secret is simply a
 // card that can be in the pack, owned or not.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
+import { closeDb, isDenied, IDS, newClient, seedEvent, sql, withSecretRoll } from "./helpers";
 
 afterAll(closeDb);
 beforeEach(seedEvent);
@@ -93,6 +93,13 @@ const secretRows = async () =>
     "SELECT participant_id, guest_id, secret_card_id, is_duplicate, granted, tier FROM public.secret_card_pulls ORDER BY created_at",
   );
 
+/** Every copy of one secret, oldest first, as the ownership tests read them. */
+const pullsOf = async (cardId: string) =>
+  sql<{ id: string; tier: string; is_duplicate: boolean }>(
+    "SELECT id, tier, is_duplicate FROM public.secret_card_pulls WHERE secret_card_id = $1 ORDER BY created_at",
+    [cardId],
+  );
+
 const copyRows = async () =>
   sql<{ participant_id: string; event_participant_id: string; edition: string; source: string; edition_asserted_by: string | null }> // prettier-ignore
   (
@@ -114,6 +121,24 @@ describe("the RPCs are unreachable with the publishable key", () => {
 
   it.each(["anon", "authenticated"] as const)("%s cannot execute pack_status", async (role) => {
     expect(await isDenied(role, "SELECT public.pack_status($1, null)", [IDS.alice])).toBe(true);
+  });
+
+  it.each(["anon", "authenticated"] as const)(
+    "%s cannot execute promote_best_secret_copy",
+    async (role) => {
+      // SECURITY DEFINER and it flips ownership, so an open grant would let the
+      // publishable key re-point anybody's secrets.
+      expect(
+        await isDenied(role, "SELECT public.promote_best_secret_copy($1, null, $2)", [IDS.alice, IDS.bob]), // prettier-ignore
+      ).toBe(true);
+    },
+  );
+
+  it("lets service_role execute promote_best_secret_copy, which is the point of the grant", async () => {
+    // The positive control: a misspelt name would pass the denials above too.
+    expect(
+      await isDenied("service_role", "SELECT public.promote_best_secret_copy($1, null, $2)", [IDS.alice, IDS.bob]), // prettier-ignore
+    ).toBe(false);
   });
 });
 
@@ -367,39 +392,78 @@ describe("secret slots", () => {
   });
 
   it("hands a card you own back as a duplicate, without a second ownership row", async () => {
+    // Both rolls pinned to the same level: a better second roll would take
+    // ownership, which is the next test's business, not this one's.
     const id = await addCard("Gary the Grill");
-    const first = await open(IDS.alice, null);
+    const first = await withSecretRoll("common", () => open(IDS.alice, null));
     await rewindDay();
-    const second = await open(IDS.alice, null);
+    const second = await withSecretRoll("common", () => open(IDS.alice, null));
     const dupe = secrets(second)[0];
     expect(dupe).toMatchObject({ id, duplicate: true, tierBefore: secrets(first)[0].tier });
     expect((await secretRows()).map((r) => r.is_duplicate)).toEqual([false, true]);
     expect((await status()).secretsOwned).toBe(1);
   });
 
-  it("upgrades the copy you own when the duplicate rolls better, and never downgrades it", async () => {
+  it("hands ownership to a duplicate that rolls better, and rewrites no level", async () => {
+    // The rule that replaced "raise the copy you own": that raise left two rows
+    // at the better level where one was rolled, and both sold at it.
     const id = await addCard("Gary the Grill");
-    await open(IDS.alice, null);
-    await sql("UPDATE public.secret_card_pulls SET tier = 'common'");
+    const first = await withSecretRoll("common", () => open(IDS.alice, null));
+    const oldId = secrets(first)[0].pullId;
     await rewindDay();
-    const second = await open(IDS.alice, null);
-    const rolled = secrets(second)[0].tier;
-    const [owning] = await sql<{ tier: string }>(
-      "SELECT tier FROM public.secret_card_pulls WHERE secret_card_id = $1 AND NOT is_duplicate",
-      [id],
-    );
-    // Whatever was rolled, the owning row is now the better of the two.
-    expect(owning.tier).toBe(rolled === "common" ? "common" : rolled);
+    const second = await withSecretRoll("mythic", () => open(IDS.alice, null));
+    const slot = secrets(second)[0];
 
-    // And a worse roll leaves a better copy alone.
-    await sql("UPDATE public.secret_card_pulls SET tier = 'mythic' WHERE NOT is_duplicate");
+    // The reveal is unchanged: a duplicate, compared against the copy they held.
+    expect(slot).toMatchObject({ id, duplicate: true, tierBefore: "common", tier: "mythic" });
+    expect(await pullsOf(id)).toEqual([
+      { id: oldId, tier: "common", is_duplicate: true },
+      { id: slot.pullId, tier: "mythic", is_duplicate: false },
+    ]);
+    // The slot's pullId is now the owned copy, so "Sell for N" on it sells the
+    // mythic it shows — and the stored pack replays the same slot.
+    const again = await open(IDS.alice, null);
+    expect(again?.fresh).toBe(false);
+    expect(again?.cards).toEqual(second?.cards);
+    expect((await status()).secretsOwned).toBe(1);
+  });
+
+  it("leaves a worse or equal duplicate as the spare, at the level it rolled", async () => {
+    const id = await addCard("Gary the Grill");
+    const first = await withSecretRoll("rare", () => open(IDS.alice, null));
+    const ownerId = secrets(first)[0].pullId;
+
     await rewindDay();
-    await open(IDS.alice, null);
-    const [still] = await sql<{ tier: string }>(
-      "SELECT tier FROM public.secret_card_pulls WHERE secret_card_id = $1 AND NOT is_duplicate",
-      [id],
+    const worse = await withSecretRoll("common", () => open(IDS.alice, null));
+    // A tie keeps the copy they already own, rather than moving ownership to
+    // whichever row happens to sort first.
+    await rewindDay();
+    const equal = await withSecretRoll("rare", () => open(IDS.alice, null));
+
+    expect(secrets(worse)[0]).toMatchObject({ duplicate: true, tierBefore: "rare" });
+    expect(secrets(equal)[0]).toMatchObject({ duplicate: true, tierBefore: "rare" });
+    expect(await pullsOf(id)).toEqual([
+      { id: ownerId, tier: "rare", is_duplicate: false },
+      { id: secrets(worse)[0].pullId, tier: "common", is_duplicate: true },
+      { id: secrets(equal)[0].pullId, tier: "rare", is_duplicate: true },
+    ]);
+  });
+
+  it("does the same for a guest, under the guest half of the index", async () => {
+    const id = await addCard("Gary the Grill");
+    await withSecretRoll("common", () => openAsGuest(GUEST_A, null));
+    await rewindDay();
+    const second = await withSecretRoll("legendary", () => openAsGuest(GUEST_A, null));
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      `SELECT id, tier, is_duplicate FROM public.secret_card_pulls
+        WHERE guest_id = $1 AND secret_card_id = $2 ORDER BY created_at`,
+      [GUEST_A, id],
     );
-    expect(still.tier).toBe("mythic");
+    expect(rows.map((r) => [r.tier, r.is_duplicate])).toEqual([
+      ["common", true],
+      ["legendary", false],
+    ]);
+    expect(rows[1].id).toBe(secrets(second)[0].pullId);
   });
 
   it("hands the set size back on the slot that finishes it, once, and again on the replay", async () => {

@@ -4,7 +4,7 @@
 // key ships to every browser, so `anon` reaching it would expose which account
 // owns which collection. And `merge_guest_pulls` is what stops a second device's
 // pulls being stranded when somebody signs in: it has to collapse duplicates,
-// keep the better tier, and never hand anybody a second daily pull.
+// let the better copy own the card, and never hand anybody a second daily pull.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, isDenied, IDS, seedEvent, sql } from "./helpers";
 
@@ -88,14 +88,35 @@ describe("merge_guest_pulls", () => {
     expect(await pullsFor(GUEST_A)).toHaveLength(2);
   });
 
-  it("carries the better tier over before demoting the losing copy", async () => {
+  it("hands ownership to the better copy, and the losing copy keeps its own tier", async () => {
+    // Merging must not lose the better roll, and must not mint a second one:
+    // the mythic owns the card and the common stays a common spare.
     const card = await addCard("merge-tier");
-    await givePull(GUEST_A, card, { tier: "common" });
-    await givePull(GUEST_B, card, { day: "2026-01-02", tier: "mythic" });
+    const mine = await givePull(GUEST_A, card, { tier: "common" });
+    const theirs = await givePull(GUEST_B, card, { day: "2026-01-02", tier: "mythic" });
 
     await merge();
-    const owned = (await pullsFor(GUEST_A)).find((p) => !p.is_duplicate);
-    expect(owned?.tier).toBe("mythic");
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      "SELECT id, tier, is_duplicate FROM public.secret_card_pulls WHERE guest_id = $1 ORDER BY tier",
+      [GUEST_A],
+    );
+    expect(rows).toEqual([
+      { id: mine, tier: "common", is_duplicate: true },
+      { id: theirs, tier: "mythic", is_duplicate: false },
+    ]);
+  });
+
+  it("keeps the destination's own copy on a tie", async () => {
+    const card = await addCard("merge-tie");
+    const mine = await givePull(GUEST_A, card, { tier: "rare" });
+    await givePull(GUEST_B, card, { day: "2026-01-02", tier: "rare" });
+
+    await merge();
+    const [owner] = await sql<{ id: string }>(
+      "SELECT id FROM public.secret_card_pulls WHERE guest_id = $1 AND NOT is_duplicate",
+      [GUEST_A],
+    );
+    expect(owner.id).toBe(mine);
   });
 
   it("drops an incoming pull that would collide with today's unspent one", async () => {

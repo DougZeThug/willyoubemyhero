@@ -756,6 +756,43 @@ describe("accept_trade_offer — secret cards", () => {
     expect(row.n).toBe(1);
   });
 
+  it("hands the receiver ownership when the copy arriving is better than theirs", async () => {
+    // The rule every way of adding a copy follows: the better copy owns the card
+    // and no level is rewritten. Before 20261007120000 this mythic sat as a
+    // duplicate under Bob's common.
+    const { bobCopies } = await twoSpares();
+    const card = await addCard("Gary the Grill");
+    await giveSecret(IDS.alice, card, { duplicate: false, tier: "common" });
+    const mythic = await giveSecret(IDS.alice, card, { duplicate: true, tier: "mythic" });
+    const bobs = await giveSecret(IDS.bob, card, { duplicate: false, tier: "common" });
+
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(mythic)], [copy(bobCopies[0])]); // prettier-ignore
+    expect((await accept(offerId, IDS.bob)).ok).toBe(true);
+
+    expect(await secretRow(mythic)).toMatchObject({ participant_id: IDS.bob, is_duplicate: false, tier: "mythic" }); // prettier-ignore
+    expect(await secretRow(bobs)).toMatchObject({ participant_id: IDS.bob, is_duplicate: true, tier: "common" }); // prettier-ignore
+    // The giver kept the copy that owned it, so their side is untouched.
+    const alice = await sql<{ tier: string; is_duplicate: boolean }>(
+      "SELECT tier, is_duplicate FROM public.secret_card_pulls WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(alice).toEqual([{ tier: "common", is_duplicate: false }]);
+  });
+
+  it("leaves a worse copy arriving as the receiver's duplicate", async () => {
+    const { bobCopies } = await twoSpares();
+    const card = await addCard("Gary the Grill");
+    await giveSecret(IDS.alice, card, { duplicate: false, tier: "common" });
+    const spare = await giveSecret(IDS.alice, card, { duplicate: true, tier: "rare" });
+    const bobs = await giveSecret(IDS.bob, card, { duplicate: false, tier: "epic" });
+
+    const { offerId } = await createOffer(IDS.alice, IDS.bob, [secret(spare)], [copy(bobCopies[0])]); // prettier-ignore
+    expect((await accept(offerId, IDS.bob)).ok).toBe(true);
+
+    expect(await secretRow(spare)).toMatchObject({ is_duplicate: true, tier: "rare" });
+    expect(await secretRow(bobs)).toMatchObject({ is_duplicate: false, tier: "epic" });
+  });
+
   it("turns two copies of one secret into one ownership row and one duplicate", async () => {
     const { bobCopies } = await twoSpares();
     const card = await addCard("Gary the Grill");
@@ -1604,24 +1641,35 @@ describe("a card that changes hands takes its stale stakes with it", () => {
       f.endsWith("20261006130000_moved_cards_take_their_stakes.sql"),
     );
     // The whole file, not just its last statements: replaying it is also the
-    // proof that it is idempotent.
-    await sql(await readMigration(file!));
+    // proof that it is idempotent. It also re-creates accept_trade_offer and
+    // buy_market_listing as that file had them, so every later migration that
+    // redefines them is re-applied afterwards — otherwise every test after this
+    // one, here and in later suites on this cluster, would run the old bodies.
+    const later = (await migrationFiles()).filter((f) => f > file!);
+    const restore = async () => {
+      for (const f of later) await sql(await readMigration(f));
+    };
+    try {
+      await sql(await readMigration(file!));
 
-    expect(await offerStatus(stale.offerId)).toBe("voided");
-    expect(await offerStatus(staleSecret.offerId)).toBe("voided");
-    expect(await offerStatus(fine.offerId)).toBe("pending");
-    expect(await listingStatus(staleListing.listingId!)).toBe("voided");
-    expect(await listingStatus(staleSecretListing.listingId!)).toBe("voided");
-    expect(await listingStatus(fineListing.listingId!)).toBe("active");
-    expect(await snapshot()).toEqual(before);
+      expect(await offerStatus(stale.offerId)).toBe("voided");
+      expect(await offerStatus(staleSecret.offerId)).toBe("voided");
+      expect(await offerStatus(fine.offerId)).toBe("pending");
+      expect(await listingStatus(staleListing.listingId!)).toBe("voided");
+      expect(await listingStatus(staleSecretListing.listingId!)).toBe("voided");
+      expect(await listingStatus(fineListing.listingId!)).toBe("active");
+      expect(await snapshot()).toEqual(before);
 
-    // And a second run finds nothing left to do.
-    const resolved = await sql(
-      "SELECT id, status, resolved_at FROM public.trade_offers ORDER BY id",
-    );
-    await sql(await readMigration(file!));
-    expect(
-      await sql("SELECT id, status, resolved_at FROM public.trade_offers ORDER BY id"),
-    ).toEqual(resolved);
+      // And a second run finds nothing left to do.
+      const resolved = await sql(
+        "SELECT id, status, resolved_at FROM public.trade_offers ORDER BY id",
+      );
+      await sql(await readMigration(file!));
+      expect(
+        await sql("SELECT id, status, resolved_at FROM public.trade_offers ORDER BY id"),
+      ).toEqual(resolved);
+    } finally {
+      await restore();
+    }
   });
 });
