@@ -43,6 +43,13 @@
       "when": 1791298950445,
       "tag": "0005_pack_status_says_whether_anything_is_dealable",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791298998063,
+      "tag": "0006_todays_pull_is_a_spare",
+      "breakpoints": true
     }
   ]
 }
