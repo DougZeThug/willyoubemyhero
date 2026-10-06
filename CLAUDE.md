@@ -219,6 +219,26 @@ Dependabot auto-merge waits for every check on the PR to finish and requires
 `lint / build`, `database` and `e2e` by name before it approves anything: an
 unattended merge has nobody reading the result.
 
+## Specialist workflow
+
+Substantial work on the card game — packs, rarity, rewards, streaks, dust,
+collection, trading, secret cards, the Vault/Pack/Trade/League/You screens — runs
+through a team of specialist subagents in `.claude/agents/`, coordinated by the
+main session acting as Lead Product / Game Director. The playbook is the
+`hero-lead` skill (`.claude/skills/hero-lead/SKILL.md`); the verified rules and the
+design principles are in `docs/game-principles.md`.
+
+- Pipeline: specialists in parallel → `skeptic` → Lead synthesis with explicit
+  acceptance criteria → `implementer` → `qa-verifier` (`PASS`/`PARTIAL`/`FAIL`).
+- Only `implementer` edits files. The others are read-only advisers.
+- Economy values (pull rates, prices, streak rungs, trade limits) change only with
+  the user's explicit approval, never as a side effect.
+- Escalate to the user only for product/game-design decisions (economy philosophy,
+  meaningful progression, major trading restrictions, collection identity,
+  competing UX directions). Resolve technical questions with the agents.
+- When the user corrects a game rule or product principle, decide whether it is
+  durable and record it where `docs/game-principles.md` says.
+
 ## Lovable
 
 This project is connected to Lovable, and commits pushed to the connected branch
