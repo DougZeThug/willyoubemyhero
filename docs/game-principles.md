@@ -62,7 +62,8 @@ podium is a fact about the real combine results.
   steered the last slot; that predates the server deal and should be re-checked.)
 - Finish and level ladders are untouched by the deal: a roster slot's finish is
   `roll_card_edition`, a secret slot's level is `roll_secret_tier`, and a
-  duplicate secret upgrades the copy you own.
+  duplicate secret that rolls better becomes the copy you own (see **Ownership
+  and copies**).
 - A guest mints no editions until they claim; a roster card cannot be granted to a
   guest (`card_copies.participant_id` is NOT NULL), which is why streaks pay
   secrets.
@@ -85,6 +86,10 @@ Source: `src/lib/streaks.ts`.
 - Roster card: you always **keep one**; you choose which copy goes. The public
   "Packed by N" count must not move because of a trade.
 - Secret card: **any copy**, including your only one, may be traded or sold.
+- A duplicate secret never rewrites a level: if it rolls better, it becomes your
+  owned copy and the old one becomes a spare (`promote_best_secret_copy`,
+  `20261007120000`). Today's pull is a spare the moment it lands and can be
+  dusted the same day.
 - **Today's pull is a spare the moment it lands**: it sells, burns, lists and
   trades the same day (`20260930120000_todays_pull_is_a_spare.sql` _removed_ an
   older same-day block). That is safe only because the daily deal is keyed on

@@ -65,9 +65,10 @@ is gone, and a tab left open across midnight re-seals on one clock.
 ## The level
 
 Every secret slot rolls a level for _your copy_, on the same ladder as before:
-Mythic 0.5%, Legendary 3.5%, Epic 8%, Rare 18%, Common 70%. A duplicate that
-rolls better than the copy you own upgrades that copy; one that rolls worse
-leaves it alone. Two people can hold the same secret at two different levels,
+Mythic 0.5%, Legendary 3.5%, Epic 8%, Rare 18%, Common 70%. A duplicate never
+rewrites a level: one that rolls better than the copy you own becomes your owned
+copy and the old one becomes a spare; one that rolls worse or the same is the
+spare. Two people can hold the same secret at two different levels,
 which is the whole point of a level belonging to the copy rather than the card.
 
 ## Modifiers
