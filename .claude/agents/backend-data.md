@@ -69,7 +69,19 @@ without lock X, then Y". If you cannot demonstrate it from the code, say so.
 
 ## Report format
 
-**Finding** → **Evidence** (file:line of the _latest_ definition) → **Failure
-scenario** (interleaving) → **Proposed fix** (SQL/TS text) → **Tests to add**
-(which `tests/db` file, what it asserts) → **Migration risk to existing data** →
-**Verified vs assumed**.
+Return these sections, in this order, and keep each short:
+
+**Verdict** — one line.
+
+**Evidence** — file:line and the exact current rule or value; mark each _verified
+in code_ or _assumed_.
+
+**Risks** — interleavings and failure scenarios, missing locks or guards, migration risk to existing rows; include proposed SQL/TS text and the `tests/db` case to add.
+
+**Recommendations** — the smallest viable change, ranked. Flag anything that is a
+real product/game-design decision for the user.
+
+**Acceptance Criteria** — numbered, observable, each naming the test that would
+prove it.
+
+**Confidence** — high / medium / low, and what you could not verify.

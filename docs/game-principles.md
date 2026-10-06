@@ -2,8 +2,8 @@
 
 The durable record of how the card game is meant to behave, and why. The
 specialist agents in `.claude/agents/` read this before they reason about the
-economy, trading, content or UX, and the Lead writes to it when the user
-corrects a rule (see **Recording a correction** below).
+economy, trading, content or UX, and the Lead proposes additions to it when the
+user corrects a rule (see **Recording a correction** below).
 
 This file is a **map to the source of truth, not a replacement for it.** Every
 number below lives in code and is pinned by a test; when this file and the code
@@ -179,8 +179,9 @@ matters:
 | How agents should work                 | The relevant `.claude/agents/*.md`, or `.claude/skills/hero-lead/SKILL.md` |
 | Build, tooling, safety, repo-wide      | `CLAUDE.md`                                                                |
 
-State what was recorded and where in the reply, so the user can veto it. Never
-record a correction that contradicts the code without first telling the user the
-code disagrees — either the code or the correction is a bug.
+**Recommend, don't auto-record.** Quote the exact text and the target file, and
+write it once the user agrees. Never record a correction that contradicts the code
+without first telling the user the code disagrees — either the code or the
+correction is a bug.
 
 `AGENTS.md` and `.lovable/` are Lovable-managed. Do not record guidance there.

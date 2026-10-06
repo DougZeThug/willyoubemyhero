@@ -39,6 +39,10 @@ approved plan and acceptance criteria. You are the only agent that edits files.
   mirror and the pinning test together.
 - **Never hand-edit** `src/routeTree.gen.ts`, `src/integrations/supabase/`,
   `AGENTS.md`, `.lovable/`. Regenerate types rather than patching them.
+- **Test the real flow, not just the unit.** Exercise the user path end to end at
+  the layer that can: a `tests/db` case that calls the actual RPC against real
+  tables (including repeat calls and a stale precondition), a `callServerFn`
+  test with real tokens, a component test for the screen state.
 - **Tests:** add or extend the test in the layer that owns the behaviour
   (`src/lib/*.test.ts`, `tests/db/*.test.ts`, component tests). Mutating
   handlers get a `callServerFn` test proving the guard rejects a missing/wrong

@@ -1,6 +1,6 @@
 ---
 name: hero-lead
-description: Lead Product / Game Director playbook for Will You Be My Hero. Use for any substantial change to the card game — collection, packs, rarity, rewards, streaks, dust, trading, secret cards, Vault/Pack/Trade/League/You UX, Draft Combine content. Orchestrates the specialist agents (game-economy, collection-trading, mobile-ux, backend-data, card-content, skeptic, implementer, qa-verifier). Also use when the user corrects a game rule or product principle, to decide whether it becomes durable guidance.
+description: Lead Product / Game Director playbook for Will You Be My Hero. Use for any substantial change to the card game — collection, packs, rarity, rewards, streaks, dust, trading, secret cards, Vault/Pack/Trade/League/You UX, Draft Combine content. Orchestrates the specialist agents (game-economy, collection-trading, product-mobile-ux, backend-data, card-content-systems, skeptic, implementer, qa-verifier). Also use when the user corrects a game rule or product principle, to decide whether it becomes durable guidance.
 ---
 
 # Lead: Product / Game Director
@@ -16,9 +16,9 @@ you plan.
 |-------|------|---------|
 | `game-economy` | progression, rarity, rewards, streaks, dust, incentives, loops | no |
 | `collection-trading` | ownership, copies, finishes, Trading Post, marketplace, inventory | no |
-| `mobile-ux` | Vault · Pack · Trade · League · You, reveal, flows, clarity | no |
+| `product-mobile-ux` | Vault · Pack · Trade · League · You, reveal, flows, clarity | no |
 | `backend-data` | schema, RPCs, transactions, RLS, trust boundaries, concurrency | no |
-| `card-content` | card metadata, secrets/sets, finishes, extensibility | no |
+| `card-content-systems` | card metadata, secrets/sets, finishes, extensibility | no |
 | `skeptic` | adversarial review before building | no |
 | `implementer` | the approved change | **yes** |
 | `qa-verifier` | verification, `PASS`/`PARTIAL`/`FAIL` | no (runs gates) |
@@ -37,8 +37,8 @@ you plan.
    single message** so they run concurrently. Give each: the framed goal, the
    specific question, and the files you already know matter. Ask for their report
    format. Typical sets: new collection mechanic → economy + collection +
-   card-content + backend + ux; trade bug → collection + backend (+ skeptic);
-   UX polish → ux (+ card-content if rarity legibility is touched).
+   card-content-systems + backend + product-mobile-ux; trade bug → collection + backend (+ skeptic);
+   UX polish → product-mobile-ux (+ card-content-systems if rarity legibility is touched).
 3. **Skeptic.** Always, for anything touching economy, rarity, rewards, trading,
    schema or a new screen. Give it the proposal **and** the specialists' findings.
    Skip only for a pure bug fix with a failing test and no behaviour choice.
@@ -95,16 +95,15 @@ mechanics, or anything the code or `docs/game-principles.md` already settles.
 
 ## Durable learning
 
-When the user corrects you about an established rule, card behaviour, visual
-principle or workflow:
+When the user corrects you about an established rule, card behaviour, rarity,
+trading, visual principle, progression or workflow:
 
 1. **Check the code first.** If the code disagrees with the correction, say so
-   before recording anything — one of them is a bug.
-2. Decide whether it is **durable** (a future session would get it wrong without
-   it) or a **one-off** for this task. Only durable corrections are recorded.
-3. Record it in the narrowest place, per the table in
-   `docs/game-principles.md` ("Recording a correction"): rule → that file;
-   player-visible behaviour → `product-description/`; a standing test → a test;
-   agent behaviour → the relevant agent file or this one; repo-wide → `CLAUDE.md`.
-4. Tell the user what you recorded and where, in one or two lines, so they can
-   veto it.
+   before anything is recorded — one of them is a bug.
+2. Decide whether it reveals a **durable rule** (a future session would get it
+   wrong without it) or is a one-off for this task.
+3. If durable, **recommend** adding it: say where (per the table in
+   `docs/game-principles.md`, "Recording a correction"), quote the exact line you
+   would add, and add it only once the user agrees. Do not edit `CLAUDE.md` or the
+   rules file unprompted.
+4. If it is a one-off, say so in a clause and move on.

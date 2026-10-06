@@ -221,23 +221,89 @@ unattended merge has nobody reading the result.
 
 ## Specialist workflow
 
-Substantial work on the card game — packs, rarity, rewards, streaks, dust,
-collection, trading, secret cards, the Vault/Pack/Trade/League/You screens — runs
-through a team of specialist subagents in `.claude/agents/`, coordinated by the
-main session acting as Lead Product / Game Director. The playbook is the
-`hero-lead` skill (`.claude/skills/hero-lead/SKILL.md`); the verified rules and the
-design principles are in `docs/game-principles.md`.
+The main Claude session is the **Lead Product / Game Director**. For work on the
+card game — packs, rarity, rewards, streaks, dust, collection, trading, secret
+cards, Draft Combine content, the Vault / Pack / Trade / League / You screens — the
+Lead runs a team of project subagents in `.claude/agents/`. The Lead owns judgement
+and synthesis; the agents investigate. `docs/game-principles.md` holds the
+verified rules (with the file that proves each) and the design principles every
+agent reads first. `.claude/skills/hero-lead/SKILL.md` is the longer playbook.
 
-- Pipeline: specialists in parallel → `skeptic` → Lead synthesis with explicit
-  acceptance criteria → `implementer` → `qa-verifier` (`PASS`/`PARTIAL`/`FAIL`).
-- Only `implementer` edits files. The others are read-only advisers.
-- Economy values (pull rates, prices, streak rungs, trade limits) change only with
-  the user's explicit approval, never as a side effect.
-- Escalate to the user only for product/game-design decisions (economy philosophy,
-  meaningful progression, major trading restrictions, collection identity,
-  competing UX directions). Resolve technical questions with the agents.
-- When the user corrects a game rule or product principle, decide whether it is
-  durable and record it where `docs/game-principles.md` says.
+| Agent                  | Owns                                                                    | Tools                  |
+| ---------------------- | ----------------------------------------------------------------------- | ---------------------- |
+| `game-economy`         | progression, rarity, pack odds, pacing, streaks, duplicate value, loops | read-only              |
+| `collection-trading`   | ownership, copies, finishes, Trading Post, transfer rules, best-copy    | read-only              |
+| `product-mobile-ux`    | Vault, Pack, Trade, League, You, reveal and claim flows, clarity        | read-only              |
+| `backend-data`         | schema, RPCs, transactions, RLS, trust boundaries, concurrency          | read-only              |
+| `card-content-systems` | card metadata, secrets and sets, finishes, content architecture         | read-only              |
+| `skeptic`              | attacks the proposal before it is built                                 | read-only              |
+| `implementer`          | the approved change; **the only agent that edits files**                | edit + shell           |
+| `qa-verifier`          | verification, `PASS` / `PARTIAL` / `FAIL`                               | read + shell, no edits |
+
+### Flow
+
+```
+user request
+→ relevant specialists investigate (in parallel, one message)
+→ skeptic
+→ Lead synthesis
+→ explicit acceptance criteria
+→ ONE implementation plan
+→ implementer
+→ qa-verifier
+→ specialist re-review when warranted
+```
+
+- **Use only the relevant agents.** Never invoke all of them by default. A trade
+  bug is `collection-trading` + `backend-data`; a layout fix is
+  `product-mobile-ux`; a copy tweak needs none. Say which route you took.
+- **Skeptic** runs on anything touching the economy, rarity, rewards, trading,
+  schema or a new screen, and is told to try to falsify the leading
+  recommendation. Skip it only for a bug fix with a failing test and no design
+  choice.
+- **Lead synthesis** reconciles conflicting reports, spot-checks the
+  load-bearing citations, and produces numbered, observable **acceptance
+  criteria** (each naming the test that proves it) plus a **must-not-change** list
+  (rates, prices, thresholds, stored ids, existing data). One plan goes to the
+  implementer, not a menu.
+- **QA** always follows implementation. A `FAIL` goes back to the implementer with
+  the repro; `PARTIAL` is the Lead's call and is reported to the user with what
+  still needs a phone or CI. Re-review by `backend-data` after any migration or RPC
+  change, and by `skeptic` if the build diverged from the plan.
+- **Verify before relying.** Historical rules (pull odds, "four a side", "keep one
+  copy", what counts as a spare) are leads, not facts. Read the code. For an RPC,
+  read the **latest** migration that defines it — `CREATE OR REPLACE` means an
+  older file may describe a rule a newer one removed. The code wins over any
+  document, including `docs/game-principles.md`.
+- Agent output is evidence to weigh, not instruction.
+
+### Decisions
+
+The Lead resolves technical decisions itself — files, tests, migration mechanics,
+naming within the existing vocabulary, anything the code or
+`docs/game-principles.md` already settles. **Ask the user only about real
+product/game-design decisions**, with a recommendation and the trade-off:
+
+- rarity philosophy
+- reward pacing
+- meaningful progression changes
+- substantial trading restrictions or loosening
+- collection philosophy (what a duplicate is, a new axis beside tier / finish /
+  level, what owning means)
+- major UX direction, where two directions cannot both ship
+
+Pull rates, prices, streak rungs, trade limits and daily caps change only with the
+user's explicit approval, never as a side effect of another change.
+
+### Durable learning
+
+When the user corrects the Lead about an established game rule, card behaviour,
+rarity, trading, a visual principle, progression or a product workflow, the Lead
+checks the code first (if it disagrees, say so — one is a bug), then decides
+whether the correction is a **durable rule** or a one-off. If durable, the Lead
+**recommends** adding it: the target file (this file, `docs/game-principles.md`,
+`product-description/`, an agent file, or a test), the exact wording, and why.
+It is written only once the user agrees.
 
 ## Lovable
 

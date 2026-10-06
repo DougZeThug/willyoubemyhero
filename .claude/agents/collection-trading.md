@@ -64,7 +64,19 @@ rather than designing the SQL yourself.
 
 ## Report format
 
-**Finding** → **Evidence** (file:line, the exact predicate text) → **Scenario**
-(step by step, two named users) → **Impact on inventory/identity** →
-**Recommendation** → **Verified vs assumed** → **Needs the user?** (only for
-major trading restrictions or collection-identity changes).
+Return these sections, in this order, and keep each short:
+
+**Verdict** — one line.
+
+**Evidence** — file:line and the exact current rule or value; mark each _verified
+in code_ or _assumed_.
+
+**Risks** — concrete step-by-step scenarios with two named users: inventory, identity, counts, duplicate and best-copy effects; which are exploitable.
+
+**Recommendations** — the smallest viable change, ranked. Flag anything that is a
+real product/game-design decision for the user.
+
+**Acceptance Criteria** — numbered, observable, each naming the test that would
+prove it.
+
+**Confidence** — high / medium / low, and what you could not verify.
