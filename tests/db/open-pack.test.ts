@@ -613,3 +613,165 @@ describe("the pack travels with the rest of a guest's history", () => {
     expect(await packRows()).toMatchObject([{ guest_id: GUEST_A }]);
   });
 });
+
+describe("a guest's daily secrets do not ride in on a day the member already spent", () => {
+  // claim_guest_secrets used to drop a guest's daily pulls only while the member
+  // STILL HELD one from that day. Selling it (allowed the moment it lands since
+  // 20260930120000), or a pack that dealt no secret, left the day looking
+  // unspent — and a fresh guest id plus the member's own reusable paper code
+  // carried a second day's secrets in. 20261006120000 keys it on pack_opens.
+  const nonGranted = async (col: "participant_id" | "guest_id", id: string) =>
+    (
+      await sql<{ n: number }>(
+        `SELECT count(*)::int AS n FROM public.secret_card_pulls
+          WHERE ${col} = $1 AND NOT granted`,
+        [id],
+      )
+    )[0].n;
+
+  async function sellEverything(participantId: string) {
+    await sql("UPDATE public.events SET dust_enabled = true");
+    const rows = await sql<{ id: string }>(
+      "SELECT id FROM public.secret_card_pulls WHERE participant_id = $1",
+      [participantId],
+    );
+    for (const r of rows) {
+      const [res] = await sql<{ r: { ok: boolean } }>(
+        "SELECT public.sell_secret_card($1, $2) AS r",
+        [participantId, r.id],
+      );
+      expect(res.r.ok).toBe(true);
+    }
+  }
+
+  const attach = (participantId: string, guestId: string) =>
+    sql("SELECT public.attach_device_to_player($1, $2)", [participantId, guestId]);
+
+  it("keeps a sold-off day spent: a fresh guest's secrets do not come across", async () => {
+    await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    await addCard("The Dog");
+    expect(secrets(await open(IDS.alice, null))).toHaveLength(3);
+    await sellEverything(IDS.alice);
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+
+    expect(secrets(await openAsGuest(GUEST_A, null))).toHaveLength(3);
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+    // And it does not get easier with practice: a second fresh guest, same day.
+    expect(secrets(await openAsGuest(GUEST_B, null))).toHaveLength(3);
+    await attach(IDS.alice, GUEST_B);
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    // The member's own pack is still the one on the books.
+    expect(await packRows()).toMatchObject([{ participant_id: IDS.alice, guest_id: null }]);
+  });
+
+  it("counts a pack that dealt no secret as the day's pack", async () => {
+    // Opened before the catalogue had a secret in it: three roster cards.
+    expect(secrets(await open(IDS.alice))).toHaveLength(0);
+    await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    expect(secrets(await openAsGuest(GUEST_A, null))).toHaveLength(2);
+
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+  });
+
+  it("still brings a mid-day guest pack across when the member has not opened today", async () => {
+    // B-07: somebody who pulls as a guest and then claims keeps what they pulled.
+    await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    expect(secrets(await openAsGuest(GUEST_A, null))).toHaveLength(2);
+
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(2);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+    expect(await packRows()).toMatchObject([{ participant_id: IDS.alice, guest_id: null }]);
+  });
+
+  it("still brings across a pack from a day the member did not open, alongside today's", async () => {
+    await addCard("Gary the Grill");
+    await openAsGuest(GUEST_A, null);
+    await rewindDay();
+    expect(secrets(await open(IDS.alice, null))).toHaveLength(1);
+    await sellEverything(IDS.alice);
+
+    await attach(IDS.alice, GUEST_A);
+
+    // Yesterday's guest pull comes over; today's member pull was sold.
+    const rows = await sql<{ pulled_on: string }>(
+      "SELECT pulled_on::text FROM public.secret_card_pulls WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("always keeps a guest's granted rows", async () => {
+    await addCard("Gary the Grill", { weight: 10000 });
+    await open(IDS.alice, null);
+    await sellEverything(IDS.alice);
+    await openAsGuest(GUEST_A, null);
+    const [bonus] = await sql<{ r: { granted: boolean } | null }>(
+      "SELECT public.pull_bonus_secret_card(null, $1, $2, null) AS r",
+      [GUEST_A, IDS.event],
+    );
+    expect(bonus.r?.granted).toBe(true);
+
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    const granted = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1 AND granted",
+      [IDS.alice],
+    );
+    expect(granted[0].n).toBe(1);
+  });
+
+  it("holds through the account sign-in path too", async () => {
+    // syncAccount's member branch now goes through merge_guest_into_collector.
+    await addCard("Gary the Grill");
+    await open(IDS.alice, null);
+    await sellEverything(IDS.alice);
+    await openAsGuest(GUEST_A, null);
+
+    await sql("SELECT public.merge_guest_into_collector($1, $2)", [IDS.alice, GUEST_A]);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+  });
+
+  describe("merge_guest_pulls, guest into guest", () => {
+    const merge = (into: string, from: string) =>
+      sql("SELECT public.merge_guest_pulls($1, $2)", [into, from]);
+
+    it("drops the incoming guest's daily pulls when the destination already opened that day", async () => {
+      // The destination's pack dealt nothing secret; a guest cannot sell, so this
+      // is the shape of "opened but holds nothing" on the guest side.
+      await openAsGuest(GUEST_A);
+      await addCard("Gary the Grill");
+      await addCard("The Gazebo");
+      expect(secrets(await openAsGuest(GUEST_B, null))).toHaveLength(2);
+
+      await merge(GUEST_A, GUEST_B);
+
+      expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+      expect(await nonGranted("guest_id", GUEST_B)).toBe(0);
+    });
+
+    it("still moves them when the destination has not opened that day", async () => {
+      await addCard("Gary the Grill");
+      await addCard("The Gazebo");
+      expect(secrets(await openAsGuest(GUEST_B, null))).toHaveLength(2);
+
+      await merge(GUEST_A, GUEST_B);
+
+      expect(await nonGranted("guest_id", GUEST_A)).toBe(2);
+      expect(await nonGranted("guest_id", GUEST_B)).toBe(0);
+    });
+  });
+});

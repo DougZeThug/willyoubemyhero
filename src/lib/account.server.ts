@@ -91,24 +91,18 @@ function toIdentity(row: Row): AccountIdentity {
 async function mergeGuestInto(identity: AccountIdentity, guestId: string) {
   if (identity.kind === "guest" && identity.id === guestId) return;
   if (identity.kind === "member") {
-    const { error: secretsError } = await supabaseAdmin.rpc("claim_guest_secrets", {
+    // One RPC, one transaction: secrets, then packs, then the streak claims keyed
+    // off those packs, then reactions and comments, under the participant lock.
+    // Three calls from here used to commit separately, so a failure after the
+    // packs left the milestone claims on the dead guest id — read as unclaimed
+    // on this identity, they paid a second time. The secrets have to go first:
+    // claim_guest_secrets drops the guest's daily pulls for any day this member
+    // already opened a pack, and that test must see only the member's own packs.
+    const { error } = await supabaseAdmin.rpc("merge_guest_into_collector", {
       _participant_id: identity.id,
       _guest_id: guestId,
     });
-    if (secretsError) throw secretsError;
-    const { error: packsError } = await supabaseAdmin.rpc("claim_guest_packs", {
-      _participant_id: identity.id,
-      _guest_id: guestId,
-    });
-    if (packsError) throw packsError;
-    // Must follow the packs, and must never be skipped: the streak walks the rows
-    // claim_guest_packs just re-parented, so a claim left behind on the dead guest
-    // id reads as unclaimed on this identity and pays its milestone a second time.
-    const { error: streakError } = await supabaseAdmin.rpc("claim_guest_streak_milestones", {
-      _participant_id: identity.id,
-      _guest_id: guestId,
-    });
-    if (streakError) throw streakError;
+    if (error) throw error;
   } else {
     const { error: secretsError } = await supabaseAdmin.rpc("merge_guest_pulls", {
       _into_guest: identity.id,
