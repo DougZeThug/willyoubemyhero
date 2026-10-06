@@ -103,6 +103,19 @@ describe("a secret", () => {
     expect(keys()).toEqual([]);
   });
 
+  it("names an older server's same-day refusal rather than saying try again", async () => {
+    // Only a server from before 20260930120000 answers this, and "Couldn't sell
+    // it — try again" invites a retry that cannot work until tomorrow.
+    fns.sell.mockResolvedValue({ ok: false, reason: "too_fresh" });
+    const { sell, keys } = mount();
+
+    await expect(sell(secretSlot(), null)).resolves.toEqual({
+      ok: false,
+      message: "Today's pull can be dusted from tomorrow",
+    });
+    expect(keys()).toEqual([]);
+  });
+
   it("sells nothing for a slot with no pull to sell", async () => {
     const { sell } = mount();
     const res = await sell(secretSlot({ pullId: undefined }), null);

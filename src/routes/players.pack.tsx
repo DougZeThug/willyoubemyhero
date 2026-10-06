@@ -61,6 +61,7 @@ import { preloadCard } from "@/lib/preload";
 import { streakStatusKey, useStreakStatus } from "@/hooks/use-streak";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { usePackSell } from "@/hooks/use-pack-sell";
+import { dustSparesKey, tradeSparesKey } from "@/hooks/use-trades";
 import { streakLine } from "@/lib/streaks";
 import { cardPullCountsKey, useCardPullCounts } from "@/hooks/use-card-pulls";
 import { urlFromSet } from "@/lib/media";
@@ -826,6 +827,11 @@ function PackPage() {
                 qc.invalidateQueries({
                   queryKey: myCardStatsKey(eventIdRef.current, participantIdRef.current),
                 }),
+                // Both spares lists — the Shop and market read one key, the
+                // Trading Post the other. Today's pull is a spare the moment it
+                // lands, and a list cached before the pack would not have it.
+                qc.invalidateQueries({ queryKey: dustSparesKey(participantIdRef.current) }),
+                qc.invalidateQueries({ queryKey: tradeSparesKey(participantIdRef.current) }),
               ]
             : []),
         ]);

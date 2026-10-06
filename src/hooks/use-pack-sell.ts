@@ -27,6 +27,8 @@ const REFUSALS: Partial<Record<DustFailure, string>> = {
   last_copy: "That's your last one",
   staked: "It's on an offer or up for sale",
   disabled: "Dust is switched off",
+  // Only a server from before 20260930120000 says this; read as a rule, not a fault.
+  too_fresh: "Today's pull can be dusted from tomorrow",
 };
 const FALLBACK = "Couldn't sell it — try again";
 const REROLLED = "Its finish has changed — sell it from the Shop";

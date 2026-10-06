@@ -3,7 +3,12 @@ import type { User } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
-import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
+import {
+  setMemberToken,
+  clearMemberToken,
+  getMemberToken,
+  memberTokenParticipant,
+} from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import {
   adoptableIds,
@@ -217,9 +222,11 @@ export function useAccountSync(user: User | null) {
         // strictly stronger than `cancelled`: that flips on unmount too, and says
         // nothing about which identity localStorage holds by now. A pack rewritten
         // to an account that has already been switched away from cannot be carried
-        // again, and the next run would deal a second one.
+        // again, and the next run would deal a second one. By participant, as
+        // the cleanup compares: a renewal landing mid-sync swaps the string for
+        // the same person, and must not cost them their pack.
         const device = deviceId();
-        if (device && getMemberToken() === wrote) {
+        if (device && memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote)) {
           await carryPackToIdentity(`d:${device}`, `m:${res.id}`, adoptableIds(held));
         }
         // Only now. Clearing it before the upload left a phone whose adoption
@@ -285,8 +292,17 @@ export function useAccountSync(user: User | null) {
       // wrote must be gone before that account's sync reads the headers:
       // syncAccount takes `x-member-token` as the player to bind a new account
       // to, so leaving it would link the next person to this one's collection.
-      // Compare-and-clear, so a token a newer run has already replaced stays.
-      if (wrote && getMemberToken() === wrote) clearMemberToken();
+      // Cleared when the device still holds a token for the participant this
+      // run wrote — the exact string, or a renewal of it. A token for somebody
+      // else (a paper-code claim on this phone since) is not this run's and stays.
+      // By participant rather than by string because member-renewal.ts swaps the
+      // string for the same person, and a renewed token left behind would hand a
+      // signed-out account's player to whoever signs in next. Clearing it on a
+      // same-account re-run (a wake) costs nothing: the re-sync writes a fresh
+      // token straight away, and the carry and adoption it repeats are idempotent.
+      if (wrote && memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote)) {
+        clearMemberToken();
+      }
     };
   }, [authUserId, wake, qc]);
 }

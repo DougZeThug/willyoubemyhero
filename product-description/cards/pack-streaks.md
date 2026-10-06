@@ -236,9 +236,9 @@ server rolled.
 [secret card](../foundations/the-card.md#what-a-secret-card-is) like any other:
 filed into a [set](secret-sets.md), countable towards
 [finishing one](collection-trophies.md), sellable as a spare. It never
-pays dust and never costs any. A duplicate upgrades the copy you already hold if
-it rolled better, which is what stops sixty days being spent on a card you
-own.
+pays dust and never costs any. A duplicate that rolled better becomes the copy
+you own, with the old one kept as a spare, which is what stops sixty days being
+spent on a card you own.
 
 **Motion and sound.** A rising tone under the flame, then the secret chime — or
 the duplicate's quieter one — as the card turns, and confetti on anything that is
@@ -280,7 +280,8 @@ and its failure text sits next to it rather than arriving as a toast.
   in a bit._ No claim is filed and nothing is spent, so the rung is still there
   when there is something to pay it with.
 - **A capstone that can only be a duplicate.** It still rolls mythic, and a
-  duplicate that rolled better upgrades the copy in the vault.
+  duplicate that rolled better becomes the copy in the vault; the old one stays
+  as a spare at its own level.
 - **The day the capstone is cashed.** The flame drops back to 1 that same day,
   because the claim day is the first day of the new run. Tomorrow's pack makes it 2.
 

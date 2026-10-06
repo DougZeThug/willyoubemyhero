@@ -81,8 +81,8 @@ everything else the tap is the confirm.
 What is decided at that instant, and decided in Postgres rather than on the
 phone:
 
-- **Whether it is allowed at all.** Is it yours, is it a spare, is it today's
-  pull, is it staked on a pending offer or up for sale, is dust even switched on.
+- **Whether it is allowed at all.** Is it yours, is it a spare, is it staked on
+  a pending offer or up for sale, is dust even switched on.
   Every one of those is a question about a count or a state that two taps can
   race, so it is answered under a lock on your player row rather than in the
   button that was drawn a minute ago.
@@ -188,9 +188,11 @@ than predicted, so there is nothing to roll back.
 
 **The card economy.** These two counters are the economy's only faucets. Every
 other movement of dust is a transfer or a purchase, so the total in the league
-rises only when somebody mills or sells. That is why both have a spare rule and a
-freshness rule around them: the sequence pull, sell, pull would otherwise print
-dust for as long as somebody kept tapping.
+rises only when somebody mills or sells. That is why the burn keeps your last copy.
+Selling or burning today's pull pays its dust like any other copy, but it never
+gives back the day's pack: the daily deal is keyed on its own record of the pack
+being opened (`pack_opens`), not on the cards it dealt, and that is what stops
+pull, sell, pull from printing dust.
 
 **Motion and sound.** No animation and no chime. A toast, and a number that
 moves.

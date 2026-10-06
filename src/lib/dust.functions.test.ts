@@ -147,7 +147,9 @@ describe("sellSecretCard", () => {
     });
   });
 
-  it("passes today's pull back as a reason rather than throwing", async () => {
+  it("passes an older server's same-day refusal back as a reason rather than throwing", async () => {
+    // Nothing since 20260930120000 answers too_fresh — today's pull sells the day
+    // it lands — but a phone can reach a server that predates it.
     withDb({ "rpc.sell_secret_card": { data: { ok: false, reason: "too_fresh" } } });
     const { sellSecretCard } = await import("./dust.functions");
     const res = await callServerFn<{ ok: boolean; reason: string }>(sellSecretCard, {

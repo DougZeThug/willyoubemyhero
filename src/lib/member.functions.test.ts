@@ -588,6 +588,16 @@ describe("generateMemberCodes", () => {
     expect(upsert.options).toEqual({ onConflict: "participant_id" });
   });
 
+  it("stamps when the new code was issued, so tokens from before it stop renewing", async () => {
+    withDb({ "participants.select": { data: [{ id: PARTICIPANT_ID, name: "Doug" }] } });
+    const before = Date.now();
+    await generate({ eventId: EVENT_ID }, adminOk());
+    const [upsert] = mock.callsFor("member_codes", "upsert");
+    const [row] = upsert.payload as { created_at: string }[];
+    expect(Date.parse(row.created_at)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(row.created_at)).toBeLessThanOrEqual(Date.now());
+  });
+
   it("writes the whole roster in one statement, so a failure rotates nobody", async () => {
     // The loop this replaced threw on its first failure with earlier upserts
     // already committed. Those players held live codes nobody had ever seen —
@@ -689,5 +699,170 @@ describe("listMemberClaims", () => {
     // service_role, so RLS will not save us if it asks for the hash.
     expect(call.filters).toHaveLength(0);
     expect(mock.client.from).toHaveBeenCalledWith("member_codes");
+  });
+});
+
+describe("renewMemberSession", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  async function renew(headers?: Record<string, string>) {
+    const { renewMemberSession } = await import("./member.functions");
+    return callServerFn(renewMemberSession, { headers });
+  }
+
+  function signedAt(at: number, participantId = PARTICIPANT_ID) {
+    const spy = vi.spyOn(Date, "now").mockReturnValue(at);
+    try {
+      return signMemberToken(participantId).token;
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it("re-signs the token for the same participant, for another ninety days", async () => {
+    withDb({ "participants.select": { data: { id: PARTICIPANT_ID }, error: null } });
+    // Sixty-five days into a ninety-day token: inside the renewal window.
+    const old = signedAt(Date.now() - 65 * DAY);
+    const res = (await renew(memberHeaders(old))) as {
+      ok: true;
+      token: string;
+      expiresAt: number;
+    };
+    expect(res.ok).toBe(true);
+    expect(res.token).not.toBe(old);
+    expect(verifyMemberToken(res.token)?.participantId).toBe(PARTICIPANT_ID);
+    expect(verifyMemberToken(res.token)?.expiresAt).toBe(res.expiresAt);
+    expect(Math.abs(res.expiresAt - (Date.now() + 90 * DAY))).toBeLessThan(60_000);
+  });
+
+  it("looks up the participant named by the verified token", async () => {
+    withDb({ "participants.select": { data: { id: OTHER_ID }, error: null } });
+    await renew(memberHeaders(signMemberToken(OTHER_ID).token));
+    const [call] = mock.callsFor("participants", "select");
+    expect(call.filters).toContainEqual(expect.objectContaining({ args: ["id", OTHER_ID] }));
+  });
+
+  it("refuses a device with no member token, before touching the database", async () => {
+    await expect(renew()).rejects.toThrow("Claim your player first");
+    expect(mock.client.from).not.toHaveBeenCalled();
+  });
+
+  it("refuses an expired token: a lapsed session goes back through the code", async () => {
+    const expired = signedAt(Date.now() - 91 * DAY);
+    await expect(renew(memberHeaders(expired))).rejects.toThrow("Claim your player first");
+    expect(mock.client.from).not.toHaveBeenCalled();
+  });
+
+  it("refuses a forged token", async () => {
+    const [prefix, , exp, sig] = signMemberToken(PARTICIPANT_ID).token.split(".");
+    // Somebody else's id under this token's signature.
+    const forged = `${prefix}.${OTHER_ID}.${exp}.${sig}`;
+    await expect(renew(memberHeaders(forged))).rejects.toThrow("Claim your player first");
+  });
+
+  it("refuses a guest or admin token presented as a member one", async () => {
+    await expect(renew(memberHeaders(signGuestToken(GUEST_ID).token))).rejects.toThrow(
+      "Claim your player first",
+    );
+    await expect(renew(memberHeaders(signAdminToken(EVENT_ID).token))).rejects.toThrow(
+      "Claim your player first",
+    );
+  });
+
+  it("refuses to extend a token for a player who no longer exists", async () => {
+    withDb({ "participants.select": { data: null, error: null } });
+    expect(await renew(memberHeaders(signMemberToken(PARTICIPANT_ID).token))).toEqual({
+      ok: false,
+      reason: "no_player",
+    });
+  });
+
+  describe("across a code rotation", () => {
+    const at = (ms: number) => new Date(ms).toISOString();
+    const issued = Date.now() - 65 * DAY;
+
+    function codeRowAt(createdAt: number, claimedAt: number | null) {
+      withDb({
+        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
+        "member_codes.select": {
+          data: {
+            created_at: at(createdAt),
+            claimed_at: claimedAt === null ? null : at(claimedAt),
+          },
+          error: null,
+        },
+      });
+    }
+
+    it("refuses a token signed before the current code was issued", async () => {
+      // Rotation is how the commissioner takes a player back from a handset;
+      // the tokens already out there were left to run out, and renewal must not
+      // take that away.
+      codeRowAt(issued + 60_000, issued + 120_000);
+      expect(await renew(memberHeaders(signedAt(issued)))).toEqual({
+        ok: false,
+        reason: "rotated",
+      });
+    });
+
+    it("refuses a token from a code rotated before created_at was stamped", async () => {
+      // The legacy row: created_at is the first issue, long before the token,
+      // but claimed_at — reset by the rotation, set by the next claim — is after.
+      codeRowAt(issued - 30 * DAY, issued + 60_000);
+      expect(await renew(memberHeaders(signedAt(issued)))).toEqual({
+        ok: false,
+        reason: "rotated",
+      });
+    });
+
+    it("refuses while the current code has never been claimed", async () => {
+      // claimed_at is null after a rotation until somebody types the new code,
+      // so every token out there came from an older one.
+      codeRowAt(issued - 30 * DAY, null);
+      expect(await renew(memberHeaders(signedAt(issued)))).toEqual({
+        ok: false,
+        reason: "rotated",
+      });
+    });
+
+    it("renews a token signed by the claim of the current code", async () => {
+      codeRowAt(issued - 60_000, issued);
+      expect(await renew(memberHeaders(signedAt(issued)))).toMatchObject({ ok: true });
+      const [call] = mock.callsFor("member_codes", "select");
+      expect(call.filters).toContainEqual(
+        expect.objectContaining({ args: ["participant_id", PARTICIPANT_ID] }),
+      );
+    });
+
+    it("renews a token from a later re-claim of the same code", async () => {
+      // Codes stay valid after the first claim; claimed_at keeps that first one.
+      codeRowAt(issued - 20 * DAY, issued - 10 * DAY);
+      expect(await renew(memberHeaders(signedAt(issued)))).toMatchObject({ ok: true });
+    });
+
+    it("renews a member with no code row at all, who has nothing to rotate", async () => {
+      withDb({
+        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
+        "member_codes.select": { data: null, error: null },
+      });
+      expect(await renew(memberHeaders(signedAt(issued)))).toMatchObject({ ok: true });
+    });
+
+    it("surfaces a failed code lookup rather than renewing on it", async () => {
+      withDb({
+        "participants.select": { data: { id: PARTICIPANT_ID }, error: null },
+        "member_codes.select": { data: null, error: { message: "codes down" } },
+      });
+      await expect(renew(memberHeaders(signMemberToken(PARTICIPANT_ID).token))).rejects.toThrow(
+        "codes down",
+      );
+    });
+  });
+
+  it("surfaces a failed lookup rather than treating it as either answer", async () => {
+    withDb({ "participants.select": { data: null, error: { message: "boom" } } });
+    await expect(renew(memberHeaders(signMemberToken(PARTICIPANT_ID).token))).rejects.toThrow(
+      "boom",
+    );
   });
 });

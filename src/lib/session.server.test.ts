@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   hashCode,
   hashPin,
+  MEMBER_TOKEN_TTL_MS,
+  memberTokenIssuedAt,
   signAdminToken,
   signGuestToken,
   signMemberToken,
@@ -195,6 +197,20 @@ describe("member tokens", () => {
     const { token } = signMemberToken(PARTICIPANT_ID);
     vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
     expect(verifyMemberToken(token)).toBeNull();
+  });
+});
+
+describe("memberTokenIssuedAt", () => {
+  it("recovers the signing time from a member token's expiry", () => {
+    const now = Date.now();
+    const spy = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const { expiresAt } = signMemberToken(PARTICIPANT_ID);
+      expect(memberTokenIssuedAt(expiresAt)).toBe(now);
+      expect(MEMBER_TOKEN_TTL_MS).toBe(90 * 24 * 60 * 60 * 1000);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

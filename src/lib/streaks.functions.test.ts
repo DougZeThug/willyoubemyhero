@@ -481,13 +481,12 @@ describe("getStreakHistory", () => {
   });
 
   it("says what the rung paid, not what the copy has since been upgraded to", async () => {
-    // reward_ref names a pull, and a pull's `tier` is a live value: both
-    // pull_secret_card and pull_bonus_secret_card raise the owning copy in place
-    // when a later duplicate rolls better. That is the rule the vault wants —
-    // "what do I hold" — and the wrong one for a receipt. On a first acquisition
-    // reward_ref points at that owning row, so a mythic pulled months later
-    // rewrote what this rung was shown to have paid, against a claim toast that
-    // had said "common" on the day.
+    // reward_ref names a pull, and until 20261007120000 a pull's `tier` was a
+    // live value: a later duplicate that rolled better raised the owning copy in
+    // place. On a first acquisition reward_ref points at that owning row, so a
+    // mythic pulled months later rewrote what this rung was shown to have paid,
+    // against a claim toast that had said "common" on the day. Rows raised
+    // before then still carry the raised tier, which is what this pins.
     withHistory(
       [{ milestone: 3, streak_started_on: "2026-08-01", claimed_on: "2026-08-03", reward_ref: PULL, reward_tier: "common" }], // prettier-ignore
       [{ id: PULL, secret_card_id: CARD, tier: "mythic" }],

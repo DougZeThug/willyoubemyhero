@@ -7,7 +7,7 @@
 // A rescue was three RPCs plus an account repair, and the half where packs moved
 // but their milestone claims did not is the one that pays a milestone twice.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, IDS, seedEvent, sql } from "./helpers";
+import { closeDb, IDS, seedEvent, sql, withSecretRoll } from "./helpers";
 
 const GUEST = "00000000-0000-4000-8000-00000000de01";
 const CARD = "00000000-0000-4000-8000-00000000ca11";
@@ -252,6 +252,35 @@ describe("grant_secret_card_once", () => {
     ]);
     expect(first[0].grant_secret_card_once.completedCollection).not.toBeNull();
     expect(second[0].grant_secret_card_once.completedCollection).toBeNull();
+  });
+
+  it("hands ownership to a better granted copy, and rewrites no level", async () => {
+    // grant_secret_card follows the rule every other add-a-copy path does: the
+    // better roll owns the card, the old copy becomes the spare at its own level.
+    const grant = (key: string) =>
+      sql<{ grant_secret_card_once: { pullId: string; duplicate: boolean; tier: string } }>(
+        "SELECT public.grant_secret_card_once($1, $2, $3, $4)",
+        [key, IDS.alice, CARD, IDS.event],
+      ).then((r) => r[0].grant_secret_card_once);
+    const first = await withSecretRoll("epic", () => grant("key-1"));
+    const second = await withSecretRoll("mythic", () => grant("key-2"));
+    expect(second).toMatchObject({ duplicate: true, tier: "mythic" });
+
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      "SELECT id, tier, is_duplicate FROM public.secret_card_pulls ORDER BY created_at",
+    );
+    expect(rows).toEqual([
+      { id: first.pullId, tier: "epic", is_duplicate: true },
+      { id: second.pullId, tier: "mythic", is_duplicate: false },
+    ]);
+
+    // A worse one after that stays the spare.
+    const third = await withSecretRoll("rare", () => grant("key-3"));
+    const [owner] = await sql<{ id: string }>(
+      "SELECT id FROM public.secret_card_pulls WHERE NOT is_duplicate",
+    );
+    expect(owner.id).toBe(second.pullId);
+    expect(third).toMatchObject({ duplicate: true, tier: "rare" });
   });
 });
 

@@ -94,8 +94,9 @@ export function secretTierLevel(tier: string | null | undefined): number {
 
 /**
  * Best wins, never down. A second copy that rolled worse is a duplicate, not a
- * downgrade. The identical rule runs in Postgres inside `pull_secret_card`,
- * because the vault and the ledger have to agree about which copy you own.
+ * downgrade. Postgres keeps the same order in `promote_best_secret_copy`, which
+ * hands ownership to the best copy rather than rewriting a level, because the
+ * vault and the ledger have to agree about which copy you own.
  */
 export function bestSecretTier(
   a: string | null | undefined,

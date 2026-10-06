@@ -686,11 +686,13 @@ describe("buying a secret", () => {
   });
 
   it("arrives as a duplicate when the buyer already owns the card", async () => {
+    // The buyer's own copy outranks the rare being bought, so ownership stays
+    // put; a better copy arriving is the next test.
     const { pullId, cardId } = await heldSecret(IDS.alice, "shared");
     await sql(
       `INSERT INTO public.secret_card_pulls
          (participant_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
-       VALUES ($1, $2, ${NY} - 2, $3, false, true, 'common')`,
+       VALUES ($1, $2, ${NY} - 2, $3, false, true, 'epic')`,
       [IDS.bob, cardId, IDS.event],
     );
     await credit(500, IDS.bob);
@@ -701,6 +703,30 @@ describe("buying a secret", () => {
       [pullId],
     );
     expect(row.is_duplicate).toBe(true);
+  });
+
+  it("hands the buyer ownership when the copy bought is better than theirs", async () => {
+    // Same rule as a trade: the better copy owns the card, no level is rewritten,
+    // and the receipt still says the buyer already had one.
+    const { pullId, cardId } = await heldSecret(IDS.alice, "shared", "mythic");
+    const [mine] = await sql<{ id: string }>(
+      `INSERT INTO public.secret_card_pulls
+         (participant_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+       VALUES ($1, $2, ${NY} - 2, $3, false, true, 'common') RETURNING id`,
+      [IDS.bob, cardId, IDS.event],
+    );
+    await credit(500, IDS.bob);
+    const res = await list(IDS.alice, { pullId, price: 300 });
+    expect(await buy(IDS.bob, res.listingId!)).toMatchObject({ ok: true, duplicate: true, tier: "mythic" }); // prettier-ignore
+
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      "SELECT id, tier, is_duplicate FROM public.secret_card_pulls WHERE participant_id = $1 ORDER BY tier", // prettier-ignore
+      [IDS.bob],
+    );
+    expect(rows).toEqual([
+      { id: mine.id, tier: "common", is_duplicate: true },
+      { id: pullId, tier: "mythic", is_duplicate: false },
+    ]);
   });
 
   it("leaves the seller owning none of it when it was their only copy", async () => {
@@ -1018,5 +1044,305 @@ describe("while the switch is off", () => {
       "SELECT count(*)::int AS n FROM public.dust_ledger WHERE reason LIKE 'market%'",
     );
     expect(row.n).toBe(0);
+  });
+});
+
+describe("a bought card takes its stale offers with it", () => {
+  // 20261006130000. An offer names a copy, so once the copy is the buyer's it
+  // can never settle — and left pending it stopped the buyer milling, selling,
+  // re-rolling or listing what they paid for.
+  async function offer(proposer: string, recipient: string, give: unknown[], want: unknown[]) {
+    const [row] = await sql<{ create_trade_offer: { ok: boolean; offerId: string } }>(
+      "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [proposer, recipient, IDS.event, JSON.stringify(give), JSON.stringify(want)],
+    );
+    return row.create_trade_offer;
+  }
+
+  async function offerStatus(id: string): Promise<string> {
+    const [row] = await sql<{ status: string }>(
+      "SELECT status FROM public.trade_offers WHERE id = $1",
+      [id],
+    );
+    return row.status;
+  }
+
+  it("voids pending offers naming the copy, and the buyer can mill it", async () => {
+    const ids = await cardIds();
+    await claimMember(IDS.alice);
+    await claimMember(IDS.carol);
+    const [listed, other] = await holdCopies(IDS.alice, ids[0], 3);
+    const carols = await holdCopies(IDS.carol, ids[2], 2);
+    await holdCopies(IDS.bob, ids[0], 1);
+    await credit(500, IDS.bob);
+    const listing = await listedId(IDS.alice, { copyId: listed, price: 10 });
+    const staked = await offer(IDS.alice, IDS.carol, [{ kind: "roster", cardCopyId: listed }], [{ kind: "roster", cardCopyId: carols[0] }]); // prettier-ignore
+    const untouched = await offer(IDS.alice, IDS.carol, [{ kind: "roster", cardCopyId: other }], [{ kind: "roster", cardCopyId: carols[0] }]); // prettier-ignore
+
+    expect(await buy(IDS.bob, listing)).toMatchObject({ ok: true });
+
+    expect(await offerStatus(staked.offerId)).toBe("voided");
+    expect(await offerStatus(untouched.offerId)).toBe("pending");
+    const [milled] = await sql<{ r: { ok: boolean; reason?: string } }>(
+      "SELECT public.mill_card_copy($1, $2) AS r",
+      [IDS.bob, listed],
+    );
+    expect(milled.r).toMatchObject({ ok: true });
+  });
+
+  it("voids pending offers naming a bought secret, and the buyer can sell it", async () => {
+    const ids = await cardIds();
+    await claimMember(IDS.alice);
+    await claimMember(IDS.carol);
+    const carols = await holdCopies(IDS.carol, ids[2], 2);
+    const { pullId } = await heldSecret(IDS.alice);
+    await credit(500, IDS.bob);
+    const listing = await listedId(IDS.alice, { pullId, price: 10 });
+    const staked = await offer(IDS.alice, IDS.carol, [{ kind: "secret", secretPullId: pullId }], [{ kind: "roster", cardCopyId: carols[0] }]); // prettier-ignore
+
+    expect(await buy(IDS.bob, listing)).toMatchObject({ ok: true });
+
+    expect(await offerStatus(staked.offerId)).toBe("voided");
+    const [sold] = await sql<{ r: { ok: boolean; reason?: string } }>(
+      "SELECT public.sell_secret_card($1, $2) AS r",
+      [IDS.bob, pullId],
+    );
+    expect(sold.r).toMatchObject({ ok: true });
+  });
+
+  it("does not deadlock when a buy and an accept race for the same copy", async () => {
+    // Each takes its own top row (listing / offer), then the sorted participant
+    // pair, then wants to void the other's row. Waiting there would be a cycle;
+    // SKIP LOCKED leaves it to the loser's own re-validation, which voids it.
+    const ids = await cardIds();
+    await claimMember(IDS.alice);
+    await claimMember(IDS.carol);
+    const [contested] = await holdCopies(IDS.alice, ids[0], 3);
+    const carols = await holdCopies(IDS.carol, ids[2], 2);
+    await credit(500, IDS.bob);
+    const listing = await listedId(IDS.alice, { copyId: contested, price: 10 });
+    const staked = await offer(IDS.alice, IDS.carol, [{ kind: "roster", cardCopyId: contested }], [{ kind: "roster", cardCopyId: carols[0] }]); // prettier-ignore
+
+    const one = await newClient();
+    const two = await newClient();
+    try {
+      const [b, a] = await Promise.all([
+        one.query<{ r: { ok: boolean; reason?: string } }>("SELECT public.buy_market_listing($1, $2, $3) AS r", [IDS.bob, listing, REQ("f")]), // prettier-ignore
+        two.query<{ r: { ok: boolean; reason?: string } }>("SELECT public.accept_trade_offer($1, $2) AS r", [staked.offerId, IDS.carol]), // prettier-ignore
+      ]);
+      // Exactly one of them moved the copy.
+      expect([b.rows[0].r.ok, a.rows[0].r.ok].filter(Boolean)).toHaveLength(1);
+    } finally {
+      await one.end();
+      await two.end();
+    }
+
+    // And whichever lost is settled, not left standing.
+    const [{ owner }] = await sql<{ owner: string }>(
+      "SELECT participant_id AS owner FROM public.card_copies WHERE id = $1",
+      [contested],
+    );
+    if (owner === IDS.bob) {
+      expect(await offerStatus(staked.offerId)).toBe("voided");
+      expect(await statusOf(listing)).toBe("sold");
+    } else {
+      expect(owner).toBe(IDS.carol);
+      expect(await offerStatus(staked.offerId)).toBe("accepted");
+      expect(await statusOf(listing)).toBe("voided");
+    }
+  });
+});
+
+describe("a stake somebody else holds is skipped, then settles itself", () => {
+  // The Promise.all races above may or may not land on SKIP LOCKED. These hold
+  // the lock deliberately, so the skip is what is being tested: the settle path
+  // must not wait (statement_timeout turns a wait into a failure), must leave the
+  // held row alone, and the held row's own re-validation must void it after.
+  async function offer(proposer: string, recipient: string, give: unknown[], want: unknown[]) {
+    const [row] = await sql<{ create_trade_offer: { ok: boolean; offerId: string } }>(
+      "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [proposer, recipient, IDS.event, JSON.stringify(give), JSON.stringify(want)],
+    );
+    return row.create_trade_offer;
+  }
+
+  async function offerStatus(id: string): Promise<string> {
+    const [row] = await sql<{ status: string }>(
+      "SELECT status FROM public.trade_offers WHERE id = $1",
+      [id],
+    );
+    return row.status;
+  }
+
+  async function seed() {
+    const ids = await cardIds();
+    await claimMember(IDS.alice);
+    await claimMember(IDS.carol);
+    const [contested] = await holdCopies(IDS.alice, ids[0], 3);
+    const carols = await holdCopies(IDS.carol, ids[2], 2);
+    await credit(500, IDS.bob);
+    const listing = await listedId(IDS.alice, { copyId: contested, price: 10 });
+    const staked = await offer(IDS.alice, IDS.carol, [{ kind: "roster", cardCopyId: contested }], [{ kind: "roster", cardCopyId: carols[0] }]); // prettier-ignore
+    return { listing, offerId: staked.offerId };
+  }
+
+  it("a buy skips an offer another transaction holds, and the offer voids itself on accept", async () => {
+    const { listing, offerId } = await seed();
+    const holder = await newClient();
+    const buyer = await newClient();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT 1 FROM public.trade_offers WHERE id = $1 FOR UPDATE", [offerId]);
+      await buyer.query("SET statement_timeout = '3s'");
+      const res = await buyer.query<{ r: { ok: boolean } }>(
+        "SELECT public.buy_market_listing($1, $2, $3) AS r",
+        [IDS.bob, listing, REQ("9")],
+      );
+      expect(res.rows[0].r).toMatchObject({ ok: true });
+      expect(await offerStatus(offerId)).toBe("pending");
+      await holder.query("ROLLBACK");
+    } finally {
+      await holder.end();
+      await buyer.end();
+    }
+
+    const [row] = await sql<{ r: { ok: boolean; reason?: string } }>(
+      "SELECT public.accept_trade_offer($1, $2) AS r",
+      [offerId, IDS.carol],
+    );
+    expect(row.r).toEqual({ ok: false, reason: "voided" });
+    expect(await offerStatus(offerId)).toBe("voided");
+  });
+
+  it("an accept skips a listing another transaction holds, and the listing voids itself on buy", async () => {
+    const { listing, offerId } = await seed();
+    const holder = await newClient();
+    const accepter = await newClient();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT 1 FROM public.market_listings WHERE id = $1 FOR UPDATE", [
+        listing,
+      ]);
+      await accepter.query("SET statement_timeout = '3s'");
+      const res = await accepter.query<{ r: { ok: boolean } }>(
+        "SELECT public.accept_trade_offer($1, $2) AS r",
+        [offerId, IDS.carol],
+      );
+      expect(res.rows[0].r).toMatchObject({ ok: true });
+      expect(await statusOf(listing)).toBe("active");
+      await holder.query("ROLLBACK");
+    } finally {
+      await holder.end();
+      await accepter.end();
+    }
+
+    expect(await buy(IDS.bob, listing, REQ("8"))).toEqual({ ok: false, reason: "voided" });
+    expect(await statusOf(listing)).toBe("voided");
+  });
+});
+
+describe("a sale that leaves the seller's other stakes on the card unable to settle", () => {
+  // 20261007120000. Selling one copy can make another the seller's last; a stake
+  // on it can never settle, so the sale voids it.
+  async function offerStatus(id: string): Promise<string> {
+    const [row] = await sql<{ status: string }>(
+      "SELECT status FROM public.trade_offers WHERE id = $1",
+      [id],
+    );
+    return row.status;
+  }
+
+  async function seed(copies: number) {
+    const ids = await cardIds();
+    await claimMember(IDS.alice);
+    await claimMember(IDS.carol);
+    const alice = await holdCopies(IDS.alice, ids[0], copies);
+    const carols = await holdCopies(IDS.carol, ids[2], 2);
+    await credit(500, IDS.bob);
+    return { ids, alice, carols };
+  }
+
+  async function offerFor(aliceCopy: string, carolCopy: string) {
+    const [row] = await sql<{ create_trade_offer: { offerId: string } }>(
+      "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [
+        IDS.alice,
+        IDS.carol,
+        IDS.event,
+        JSON.stringify([{ kind: "roster", cardCopyId: aliceCopy }]),
+        JSON.stringify([{ kind: "roster", cardCopyId: carolCopy }]),
+      ],
+    );
+    return row.create_trade_offer.offerId;
+  }
+
+  it("voids the seller's offer on their now-last copy", async () => {
+    const { alice, carols } = await seed(2);
+    const listing = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const offerId = await offerFor(alice[1], carols[0]);
+
+    expect(await buy(IDS.bob, listing)).toMatchObject({ ok: true });
+    expect(await offerStatus(offerId)).toBe("voided");
+  });
+
+  it("leaves an offer on a copy that is still a spare", async () => {
+    const { alice, carols } = await seed(3);
+    const listing = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const offerId = await offerFor(alice[1], carols[0]);
+
+    expect(await buy(IDS.bob, listing)).toMatchObject({ ok: true });
+    expect(await offerStatus(offerId)).toBe("pending");
+  });
+
+  it("voids a seller's offer staking copies that would now take the last together", async () => {
+    // Four copies, one sold: three left. Giving two still leaves one; giving
+    // all three does not, though each is a spare on its own.
+    const { alice, carols } = await seed(4);
+    const listing = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const offer = async (copies: string[]) => {
+      const [row] = await sql<{ create_trade_offer: { offerId: string } }>(
+        "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+        [
+          IDS.alice,
+          IDS.carol,
+          IDS.event,
+          JSON.stringify(copies.map((cardCopyId) => ({ kind: "roster", cardCopyId }))),
+          JSON.stringify([{ kind: "roster", cardCopyId: carols[0] }]),
+        ],
+      );
+      return row.create_trade_offer.offerId;
+    };
+    const three = await offer([alice[1], alice[2], alice[3]]);
+    const two = await offer([alice[1], alice[2]]);
+
+    expect(await buy(IDS.bob, listing)).toMatchObject({ ok: true });
+    expect(await offerStatus(three)).toBe("voided");
+    expect(await offerStatus(two)).toBe("pending");
+  });
+
+  it("voids the seller's other listing once it would take their last copy", async () => {
+    // Two listings of a pair cannot be made directly — list_card_for_dust counts
+    // commitments — but a burn after listing gets there: three copies, two
+    // listed, the third milled.
+    const { alice } = await seed(3);
+    const first = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const second = await listedId(IDS.alice, { copyId: alice[1], price: 10 });
+    const [milled] = await sql<{ r: { ok: boolean } }>(
+      "SELECT public.mill_card_copy($1, $2) AS r",
+      [IDS.alice, alice[2]],
+    );
+    expect(milled.r).toMatchObject({ ok: true });
+
+    expect(await buy(IDS.bob, first)).toMatchObject({ ok: true });
+    expect(await statusOf(second)).toBe("voided");
+  });
+
+  it("leaves the seller's other listing while it is still a spare", async () => {
+    const { alice } = await seed(4);
+    const first = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const second = await listedId(IDS.alice, { copyId: alice[1], price: 10 });
+
+    expect(await buy(IDS.bob, first)).toMatchObject({ ok: true });
+    expect(await statusOf(second)).toBe("active");
   });
 });

@@ -7,7 +7,7 @@
 // pool — every roster card and every active secret — so a secret is simply a
 // card that can be in the pack, owned or not.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, isDenied, IDS, newClient, seedEvent, sql } from "./helpers";
+import { closeDb, isDenied, IDS, newClient, seedEvent, sql, withSecretRoll } from "./helpers";
 
 afterAll(closeDb);
 beforeEach(seedEvent);
@@ -93,6 +93,13 @@ const secretRows = async () =>
     "SELECT participant_id, guest_id, secret_card_id, is_duplicate, granted, tier FROM public.secret_card_pulls ORDER BY created_at",
   );
 
+/** Every copy of one secret, oldest first, as the ownership tests read them. */
+const pullsOf = async (cardId: string) =>
+  sql<{ id: string; tier: string; is_duplicate: boolean }>(
+    "SELECT id, tier, is_duplicate FROM public.secret_card_pulls WHERE secret_card_id = $1 ORDER BY created_at",
+    [cardId],
+  );
+
 const copyRows = async () =>
   sql<{ participant_id: string; event_participant_id: string; edition: string; source: string; edition_asserted_by: string | null }> // prettier-ignore
   (
@@ -114,6 +121,24 @@ describe("the RPCs are unreachable with the publishable key", () => {
 
   it.each(["anon", "authenticated"] as const)("%s cannot execute pack_status", async (role) => {
     expect(await isDenied(role, "SELECT public.pack_status($1, null)", [IDS.alice])).toBe(true);
+  });
+
+  it.each(["anon", "authenticated"] as const)(
+    "%s cannot execute promote_best_secret_copy",
+    async (role) => {
+      // SECURITY DEFINER and it flips ownership, so an open grant would let the
+      // publishable key re-point anybody's secrets.
+      expect(
+        await isDenied(role, "SELECT public.promote_best_secret_copy($1, null, $2)", [IDS.alice, IDS.bob]), // prettier-ignore
+      ).toBe(true);
+    },
+  );
+
+  it("lets service_role execute promote_best_secret_copy, which is the point of the grant", async () => {
+    // The positive control: a misspelt name would pass the denials above too.
+    expect(
+      await isDenied("service_role", "SELECT public.promote_best_secret_copy($1, null, $2)", [IDS.alice, IDS.bob]), // prettier-ignore
+    ).toBe(false);
   });
 });
 
@@ -367,39 +392,78 @@ describe("secret slots", () => {
   });
 
   it("hands a card you own back as a duplicate, without a second ownership row", async () => {
+    // Both rolls pinned to the same level: a better second roll would take
+    // ownership, which is the next test's business, not this one's.
     const id = await addCard("Gary the Grill");
-    const first = await open(IDS.alice, null);
+    const first = await withSecretRoll("common", () => open(IDS.alice, null));
     await rewindDay();
-    const second = await open(IDS.alice, null);
+    const second = await withSecretRoll("common", () => open(IDS.alice, null));
     const dupe = secrets(second)[0];
     expect(dupe).toMatchObject({ id, duplicate: true, tierBefore: secrets(first)[0].tier });
     expect((await secretRows()).map((r) => r.is_duplicate)).toEqual([false, true]);
     expect((await status()).secretsOwned).toBe(1);
   });
 
-  it("upgrades the copy you own when the duplicate rolls better, and never downgrades it", async () => {
+  it("hands ownership to a duplicate that rolls better, and rewrites no level", async () => {
+    // The rule that replaced "raise the copy you own": that raise left two rows
+    // at the better level where one was rolled, and both sold at it.
     const id = await addCard("Gary the Grill");
-    await open(IDS.alice, null);
-    await sql("UPDATE public.secret_card_pulls SET tier = 'common'");
+    const first = await withSecretRoll("common", () => open(IDS.alice, null));
+    const oldId = secrets(first)[0].pullId;
     await rewindDay();
-    const second = await open(IDS.alice, null);
-    const rolled = secrets(second)[0].tier;
-    const [owning] = await sql<{ tier: string }>(
-      "SELECT tier FROM public.secret_card_pulls WHERE secret_card_id = $1 AND NOT is_duplicate",
-      [id],
-    );
-    // Whatever was rolled, the owning row is now the better of the two.
-    expect(owning.tier).toBe(rolled === "common" ? "common" : rolled);
+    const second = await withSecretRoll("mythic", () => open(IDS.alice, null));
+    const slot = secrets(second)[0];
 
-    // And a worse roll leaves a better copy alone.
-    await sql("UPDATE public.secret_card_pulls SET tier = 'mythic' WHERE NOT is_duplicate");
+    // The reveal is unchanged: a duplicate, compared against the copy they held.
+    expect(slot).toMatchObject({ id, duplicate: true, tierBefore: "common", tier: "mythic" });
+    expect(await pullsOf(id)).toEqual([
+      { id: oldId, tier: "common", is_duplicate: true },
+      { id: slot.pullId, tier: "mythic", is_duplicate: false },
+    ]);
+    // The slot's pullId is now the owned copy, so "Sell for N" on it sells the
+    // mythic it shows — and the stored pack replays the same slot.
+    const again = await open(IDS.alice, null);
+    expect(again?.fresh).toBe(false);
+    expect(again?.cards).toEqual(second?.cards);
+    expect((await status()).secretsOwned).toBe(1);
+  });
+
+  it("leaves a worse or equal duplicate as the spare, at the level it rolled", async () => {
+    const id = await addCard("Gary the Grill");
+    const first = await withSecretRoll("rare", () => open(IDS.alice, null));
+    const ownerId = secrets(first)[0].pullId;
+
     await rewindDay();
-    await open(IDS.alice, null);
-    const [still] = await sql<{ tier: string }>(
-      "SELECT tier FROM public.secret_card_pulls WHERE secret_card_id = $1 AND NOT is_duplicate",
-      [id],
+    const worse = await withSecretRoll("common", () => open(IDS.alice, null));
+    // A tie keeps the copy they already own, rather than moving ownership to
+    // whichever row happens to sort first.
+    await rewindDay();
+    const equal = await withSecretRoll("rare", () => open(IDS.alice, null));
+
+    expect(secrets(worse)[0]).toMatchObject({ duplicate: true, tierBefore: "rare" });
+    expect(secrets(equal)[0]).toMatchObject({ duplicate: true, tierBefore: "rare" });
+    expect(await pullsOf(id)).toEqual([
+      { id: ownerId, tier: "rare", is_duplicate: false },
+      { id: secrets(worse)[0].pullId, tier: "common", is_duplicate: true },
+      { id: secrets(equal)[0].pullId, tier: "rare", is_duplicate: true },
+    ]);
+  });
+
+  it("does the same for a guest, under the guest half of the index", async () => {
+    const id = await addCard("Gary the Grill");
+    await withSecretRoll("common", () => openAsGuest(GUEST_A, null));
+    await rewindDay();
+    const second = await withSecretRoll("legendary", () => openAsGuest(GUEST_A, null));
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      `SELECT id, tier, is_duplicate FROM public.secret_card_pulls
+        WHERE guest_id = $1 AND secret_card_id = $2 ORDER BY created_at`,
+      [GUEST_A, id],
     );
-    expect(still.tier).toBe("mythic");
+    expect(rows.map((r) => [r.tier, r.is_duplicate])).toEqual([
+      ["common", true],
+      ["legendary", false],
+    ]);
+    expect(rows[1].id).toBe(secrets(second)[0].pullId);
   });
 
   it("hands the set size back on the slot that finishes it, once, and again on the replay", async () => {
@@ -611,5 +675,211 @@ describe("the pack travels with the rest of a guest's history", () => {
     await openAsGuest(GUEST_B);
     await sql("SELECT public.merge_guest_packs($1, $2)", [GUEST_A, GUEST_B]);
     expect(await packRows()).toMatchObject([{ guest_id: GUEST_A }]);
+  });
+});
+
+describe("a guest's daily secrets do not ride in on a day the member already spent", () => {
+  // claim_guest_secrets used to drop a guest's daily pulls only while the member
+  // STILL HELD one from that day. Selling it (allowed the moment it lands since
+  // 20260930120000), or a pack that dealt no secret, left the day looking
+  // unspent — and a fresh guest id plus the member's own reusable paper code
+  // carried a second day's secrets in. 20261006120000 keys it on pack_opens.
+  const nonGranted = async (col: "participant_id" | "guest_id", id: string) =>
+    (
+      await sql<{ n: number }>(
+        `SELECT count(*)::int AS n FROM public.secret_card_pulls
+          WHERE ${col} = $1 AND NOT granted`,
+        [id],
+      )
+    )[0].n;
+
+  async function sellEverything(participantId: string) {
+    await sql("UPDATE public.events SET dust_enabled = true");
+    const rows = await sql<{ id: string }>(
+      "SELECT id FROM public.secret_card_pulls WHERE participant_id = $1",
+      [participantId],
+    );
+    for (const r of rows) {
+      const [res] = await sql<{ r: { ok: boolean } }>(
+        "SELECT public.sell_secret_card($1, $2) AS r",
+        [participantId, r.id],
+      );
+      expect(res.r.ok).toBe(true);
+    }
+  }
+
+  const attach = (participantId: string, guestId: string) =>
+    sql("SELECT public.attach_device_to_player($1, $2)", [participantId, guestId]);
+
+  it("keeps a sold-off day spent: a fresh guest's secrets do not come across", async () => {
+    await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    await addCard("The Dog");
+    expect(secrets(await open(IDS.alice, null))).toHaveLength(3);
+    await sellEverything(IDS.alice);
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+
+    expect(secrets(await openAsGuest(GUEST_A, null))).toHaveLength(3);
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+    // And it does not get easier with practice: a second fresh guest, same day.
+    expect(secrets(await openAsGuest(GUEST_B, null))).toHaveLength(3);
+    await attach(IDS.alice, GUEST_B);
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    // The member's own pack is still the one on the books.
+    expect(await packRows()).toMatchObject([{ participant_id: IDS.alice, guest_id: null }]);
+  });
+
+  it("counts a pack that dealt no secret as the day's pack", async () => {
+    // Opened before the catalogue had a secret in it: three roster cards.
+    expect(secrets(await open(IDS.alice))).toHaveLength(0);
+    await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    expect(secrets(await openAsGuest(GUEST_A, null))).toHaveLength(2);
+
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+  });
+
+  it("still brings a mid-day guest pack across when the member has not opened today", async () => {
+    // B-07: somebody who pulls as a guest and then claims keeps what they pulled.
+    await addCard("Gary the Grill");
+    await addCard("The Gazebo");
+    expect(secrets(await openAsGuest(GUEST_A, null))).toHaveLength(2);
+
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(2);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+    expect(await packRows()).toMatchObject([{ participant_id: IDS.alice, guest_id: null }]);
+  });
+
+  it("still brings across a pack from a day the member did not open, alongside today's", async () => {
+    await addCard("Gary the Grill");
+    await openAsGuest(GUEST_A, null);
+    await rewindDay();
+    expect(secrets(await open(IDS.alice, null))).toHaveLength(1);
+    await sellEverything(IDS.alice);
+
+    await attach(IDS.alice, GUEST_A);
+
+    // Yesterday's guest pull comes over; today's member pull was sold.
+    const rows = await sql<{ pulled_on: string }>(
+      "SELECT pulled_on::text FROM public.secret_card_pulls WHERE participant_id = $1",
+      [IDS.alice],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("still moves a guest's secret from a day the member only opened an old, undealt pack", async () => {
+    // Before server-dealt packs the pack and the daily secret were separate, so a
+    // pack row with no cards says nothing about whether that day's secret was
+    // spent. The guest's secret from such a day moved before and still does.
+    const OLD_DAY = "2026-01-01";
+    const card = await addCard("Gary the Grill");
+    await sql(
+      `INSERT INTO public.pack_opens (participant_id, opened_on, event_id, card_count)
+       VALUES ($1, $2::date, $3, 3)`,
+      [IDS.alice, OLD_DAY, IDS.event],
+    );
+    await sql(
+      `INSERT INTO public.secret_card_pulls
+         (guest_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+       VALUES ($1, $2, $3::date, $4, false, false, 'common')`,
+      [GUEST_A, card, OLD_DAY, IDS.event],
+    );
+
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(1);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+  });
+
+  it("always keeps a guest's granted rows", async () => {
+    await addCard("Gary the Grill", { weight: 10000 });
+    await open(IDS.alice, null);
+    await sellEverything(IDS.alice);
+    await openAsGuest(GUEST_A, null);
+    const [bonus] = await sql<{ r: { granted: boolean } | null }>(
+      "SELECT public.pull_bonus_secret_card(null, $1, $2, null) AS r",
+      [GUEST_A, IDS.event],
+    );
+    expect(bonus.r?.granted).toBe(true);
+
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    const granted = await sql<{ n: number }>(
+      "SELECT count(*)::int AS n FROM public.secret_card_pulls WHERE participant_id = $1 AND granted",
+      [IDS.alice],
+    );
+    expect(granted[0].n).toBe(1);
+  });
+
+  it("holds through the account sign-in path too", async () => {
+    // syncAccount's member branch now goes through merge_guest_into_collector.
+    await addCard("Gary the Grill");
+    await open(IDS.alice, null);
+    await sellEverything(IDS.alice);
+    await openAsGuest(GUEST_A, null);
+
+    await sql("SELECT public.merge_guest_into_collector($1, $2)", [IDS.alice, GUEST_A]);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(0);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+  });
+
+  describe("merge_guest_pulls, guest into guest", () => {
+    const merge = (into: string, from: string) =>
+      sql("SELECT public.merge_guest_pulls($1, $2)", [into, from]);
+
+    it("drops the incoming guest's daily pulls when the destination already opened that day", async () => {
+      // The destination's pack dealt nothing secret; a guest cannot sell, so this
+      // is the shape of "opened but holds nothing" on the guest side.
+      await openAsGuest(GUEST_A);
+      await addCard("Gary the Grill");
+      await addCard("The Gazebo");
+      expect(secrets(await openAsGuest(GUEST_B, null))).toHaveLength(2);
+
+      await merge(GUEST_A, GUEST_B);
+
+      expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+      expect(await nonGranted("guest_id", GUEST_B)).toBe(0);
+    });
+
+    it("still moves them when the destination's pack that day predates dealt packs", async () => {
+      const OLD_DAY = "2026-01-01";
+      const card = await addCard("Gary the Grill");
+      await sql(
+        `INSERT INTO public.pack_opens (guest_id, opened_on, event_id, card_count)
+         VALUES ($1, $2::date, $3, 3)`,
+        [GUEST_A, OLD_DAY, IDS.event],
+      );
+      await sql(
+        `INSERT INTO public.secret_card_pulls
+           (guest_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+         VALUES ($1, $2, $3::date, $4, false, false, 'common')`,
+        [GUEST_B, card, OLD_DAY, IDS.event],
+      );
+
+      await merge(GUEST_A, GUEST_B);
+
+      expect(await nonGranted("guest_id", GUEST_A)).toBe(1);
+    });
+
+    it("still moves them when the destination has not opened that day", async () => {
+      await addCard("Gary the Grill");
+      await addCard("The Gazebo");
+      expect(secrets(await openAsGuest(GUEST_B, null))).toHaveLength(2);
+
+      await merge(GUEST_A, GUEST_B);
+
+      expect(await nonGranted("guest_id", GUEST_A)).toBe(2);
+      expect(await nonGranted("guest_id", GUEST_B)).toBe(0);
+    });
   });
 });

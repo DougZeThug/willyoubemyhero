@@ -6,7 +6,7 @@
 // wrote — the publishable key ships to every browser — and claim_guest_secrets,
 // which grafts a guest's pulls onto the player they claim.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, isDenied, IDS, seedEvent, sql } from "./helpers";
+import { closeDb, isDenied, IDS, seedEvent, sql, withSecretRoll } from "./helpers";
 
 afterAll(closeDb);
 beforeEach(seedEvent);
@@ -159,6 +159,58 @@ describe("claim_guest_secrets", () => {
     expect(id).toBeTruthy();
   });
 
+  describe("who owns the card afterwards, decided once", () => {
+    // promote_best_secret_copy is the one decider since 20261007120000; the
+    // inline DISTINCT ON fill that used to run first is gone.
+    async function row(over: {
+      participant?: string;
+      guest?: string;
+      card: string;
+      tier: string;
+      duplicate: boolean;
+    }) {
+      const [r] = await sql<{ id: string }>(
+        `INSERT INTO public.secret_card_pulls
+           (participant_id, guest_id, secret_card_id, pulled_on, is_duplicate, granted, tier)
+         VALUES ($1, $2, $3, '2026-01-01', $4, true, $5) RETURNING id`,
+        [over.participant ?? null, over.guest ?? null, over.card, over.duplicate, over.tier],
+      );
+      return r.id;
+    }
+    const owner = async (card: string) =>
+      (
+        await sql<{ id: string }>(
+          `SELECT id FROM public.secret_card_pulls
+            WHERE participant_id = $1 AND secret_card_id = $2 AND NOT is_duplicate`,
+          [IDS.alice, card],
+        )
+      ).map((r) => r.id);
+
+    it("keeps the member's own row on a tie of level and day", async () => {
+      const card = await addCard("Gary the Grill");
+      const mine = await row({ participant: IDS.alice, card, tier: "rare", duplicate: false });
+      await row({ guest: GUEST_A, card, tier: "rare", duplicate: false });
+      await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+      expect(await owner(card)).toEqual([mine]);
+    });
+
+    it("hands ownership to a better guest copy", async () => {
+      const card = await addCard("Gary the Grill");
+      await row({ participant: IDS.alice, card, tier: "common", duplicate: false });
+      const theirs = await row({ guest: GUEST_A, card, tier: "epic", duplicate: false });
+      await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+      expect(await owner(card)).toEqual([theirs]);
+    });
+
+    it("gives an owner to a card the member held only as duplicates", async () => {
+      const card = await addCard("Gary the Grill");
+      const mine = await row({ participant: IDS.alice, card, tier: "epic", duplicate: true });
+      await row({ guest: GUEST_A, card, tier: "common", duplicate: false });
+      await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+      expect(await owner(card)).toEqual([mine]);
+    });
+  });
+
   it("keeps the member's own row when both spent the same day", async () => {
     // Their own pull is the one attached to the name the cards live on. Both
     // packs are dealt from a one-card catalogue, so both hold exactly Gary.
@@ -184,6 +236,46 @@ describe("claim_guest_secrets", () => {
     expect(rows).toHaveLength(2);
     expect(rows.filter((r) => !r.is_duplicate)).toHaveLength(1);
     expect(await status(IDS.alice)).toMatchObject({ secretsOwned: 1 });
+  });
+
+  it("hands ownership to a better guest copy, and rewrites no level", async () => {
+    // The member's own copy used to be raised to the guest's level before the
+    // guest's was demoted, leaving two rows at the better level.
+    const id = await addCard("Gary the Grill");
+    const mine = await withSecretRoll("rare", () => pull(IDS.alice));
+    const theirs = await withSecretRoll("legendary", () => pullAsGuest(GUEST_A));
+    // Off the member's day, so only the ownership rule bites.
+    await sql("UPDATE public.secret_card_pulls SET pulled_on = pulled_on - 1 WHERE guest_id = $1", [
+      GUEST_A,
+    ]);
+
+    await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      `SELECT id, tier, is_duplicate FROM public.secret_card_pulls
+        WHERE participant_id = $1 AND secret_card_id = $2 ORDER BY created_at`,
+      [IDS.alice, id],
+    );
+    expect(rows).toEqual([
+      { id: mine!.pullId, tier: "rare", is_duplicate: true },
+      { id: theirs!.pullId, tier: "legendary", is_duplicate: false },
+    ]);
+    expect(await status(IDS.alice)).toMatchObject({ secretsOwned: 1 });
+  });
+
+  it("keeps the member's own copy when the guest's only ties it", async () => {
+    await addCard("Gary the Grill");
+    const mine = await withSecretRoll("epic", () => pull(IDS.alice));
+    await withSecretRoll("epic", () => pullAsGuest(GUEST_A));
+    await sql("UPDATE public.secret_card_pulls SET pulled_on = pulled_on - 1 WHERE guest_id = $1", [
+      GUEST_A,
+    ]);
+
+    await sql("SELECT public.claim_guest_secrets($1, $2)", [IDS.alice, GUEST_A]);
+    const [owner] = await sql<{ id: string }>(
+      "SELECT id FROM public.secret_card_pulls WHERE participant_id = $1 AND NOT is_duplicate",
+      [IDS.alice],
+    );
+    expect(owner.id).toBe(mine!.pullId);
   });
 
   it("does nothing, and does not raise, for a participant who no longer exists", async () => {

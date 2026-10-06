@@ -36,6 +36,13 @@ import { myCardStatsKey } from "@/hooks/use-my-collection";
 import type { TradeSpares } from "@/lib/trades";
 
 /**
+ * A server from before 20260930120000 refuses today's pull with `too_fresh`.
+ * Nothing newer returns it, but a phone can be ahead of the database it talks
+ * to, and "Could not burn that one" reads like a bug rather than a rule.
+ */
+const TOO_FRESH = "Today's pull can be dusted from tomorrow";
+
+/**
  * What dust buys, and what it is made of.
  *
  * Four sections and a price table: a bonus pull, the mill, the secret counter,
@@ -203,7 +210,9 @@ export function DustShopPanel({
             ? "That is your only copy"
             : res.reason === "staked"
               ? "That one is on an open offer or up for sale"
-              : "Could not burn that one",
+              : res.reason === "too_fresh"
+                ? TOO_FRESH
+                : "Could not burn that one",
         );
         return;
       }
@@ -244,7 +253,9 @@ export function DustShopPanel({
         toast(
           res.reason === "staked"
             ? "That one is on an open offer or up for sale"
-            : "Could not sell that one",
+            : res.reason === "too_fresh"
+              ? TOO_FRESH
+              : "Could not sell that one",
         );
         return;
       }

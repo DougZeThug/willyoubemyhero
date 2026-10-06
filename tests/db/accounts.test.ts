@@ -4,7 +4,7 @@
 // key ships to every browser, so `anon` reaching it would expose which account
 // owns which collection. And `merge_guest_pulls` is what stops a second device's
 // pulls being stranded when somebody signs in: it has to collapse duplicates,
-// keep the better tier, and never hand anybody a second daily pull.
+// let the better copy own the card, and never hand anybody a second daily pull.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, isDenied, IDS, seedEvent, sql } from "./helpers";
 
@@ -88,14 +88,35 @@ describe("merge_guest_pulls", () => {
     expect(await pullsFor(GUEST_A)).toHaveLength(2);
   });
 
-  it("carries the better tier over before demoting the losing copy", async () => {
+  it("hands ownership to the better copy, and the losing copy keeps its own tier", async () => {
+    // Merging must not lose the better roll, and must not mint a second one:
+    // the mythic owns the card and the common stays a common spare.
     const card = await addCard("merge-tier");
-    await givePull(GUEST_A, card, { tier: "common" });
-    await givePull(GUEST_B, card, { day: "2026-01-02", tier: "mythic" });
+    const mine = await givePull(GUEST_A, card, { tier: "common" });
+    const theirs = await givePull(GUEST_B, card, { day: "2026-01-02", tier: "mythic" });
 
     await merge();
-    const owned = (await pullsFor(GUEST_A)).find((p) => !p.is_duplicate);
-    expect(owned?.tier).toBe("mythic");
+    const rows = await sql<{ id: string; tier: string; is_duplicate: boolean }>(
+      "SELECT id, tier, is_duplicate FROM public.secret_card_pulls WHERE guest_id = $1 ORDER BY tier",
+      [GUEST_A],
+    );
+    expect(rows).toEqual([
+      { id: mine, tier: "common", is_duplicate: true },
+      { id: theirs, tier: "mythic", is_duplicate: false },
+    ]);
+  });
+
+  it("keeps the destination's own copy on a tie", async () => {
+    const card = await addCard("merge-tie");
+    const mine = await givePull(GUEST_A, card, { tier: "rare" });
+    await givePull(GUEST_B, card, { day: "2026-01-02", tier: "rare" });
+
+    await merge();
+    const [owner] = await sql<{ id: string }>(
+      "SELECT id FROM public.secret_card_pulls WHERE guest_id = $1 AND NOT is_duplicate",
+      [GUEST_A],
+    );
+    expect(owner.id).toBe(mine);
   });
 
   it("drops an incoming pull that would collide with today's unspent one", async () => {
@@ -144,6 +165,97 @@ describe("merge_guest_packs", () => {
   it("is not executable by anon or authenticated", async () => {
     expect(await isDenied("anon", "SELECT public.merge_guest_packs($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
     expect(await isDenied("authenticated", "SELECT public.merge_guest_packs($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
+  });
+});
+
+describe("merge_guest_pulls decides ownership once", () => {
+  const ownerOf = async (guestId: string, card: string) =>
+    (
+      await sql<{ id: string }>(
+        `SELECT id FROM public.secret_card_pulls
+          WHERE guest_id = $1 AND secret_card_id = $2 AND NOT is_duplicate`,
+        [guestId, card],
+      )
+    ).map((r) => r.id);
+
+  it("keeps the destination's own row on a tie of level and day", async () => {
+    const card = await addCard("merge-tie");
+    const mine = await givePull(GUEST_A, card, { tier: "rare" });
+    await givePull(GUEST_B, card, { tier: "rare" });
+    await merge();
+    expect(await ownerOf(GUEST_A, card)).toEqual([mine]);
+  });
+
+  it("gives an owner to a card the destination held only as duplicates", async () => {
+    const card = await addCard("merge-dupes-only");
+    const mine = await givePull(GUEST_A, card, { tier: "epic", duplicate: true });
+    await givePull(GUEST_B, card, { tier: "common" });
+    await merge();
+    expect(await ownerOf(GUEST_A, card)).toEqual([mine]);
+  });
+});
+
+describe("merge_guest_into_guest", () => {
+  // syncAccount's guest branch, as one transaction (20261008120000): the three
+  // steps it used to run as separate requests, in the same order, under both
+  // guest locks for the whole run.
+  const mergeAll = (into: string | null = GUEST_A, from: string | null = GUEST_B) =>
+    sql("SELECT public.merge_guest_into_guest($1, $2)", [into, from]);
+
+  it("moves the pulls, the packs and the milestone claims, as the three steps did", async () => {
+    const card = await addCard("merge-all");
+    await givePull(GUEST_B, card);
+    await sql(
+      `INSERT INTO public.pack_opens (guest_id, opened_on, card_count)
+       VALUES ($1, '2026-01-01', 3), ($2, '2026-01-01', 3), ($2, '2026-01-02', 3)`,
+      [GUEST_A, GUEST_B],
+    );
+    await sql(
+      `INSERT INTO public.streak_milestone_claims
+         (guest_id, streak_started_on, milestone, claimed_on, reward_kind)
+       VALUES ($1, '2026-01-01', 3, '2026-01-03', 'secret')`,
+      [GUEST_B],
+    );
+
+    await mergeAll();
+
+    expect(await pullsFor(GUEST_A)).toHaveLength(1);
+    expect(await pullsFor(GUEST_B)).toHaveLength(0);
+    const packs = await sql<{ guest_id: string }>("SELECT guest_id FROM public.pack_opens");
+    expect(packs).toHaveLength(2);
+    expect(packs.every((p) => p.guest_id === GUEST_A)).toBe(true);
+    expect(await sql("SELECT guest_id FROM public.streak_milestone_claims")).toEqual([
+      { guest_id: GUEST_A },
+    ]);
+  });
+
+  it("keeps the day rule: a day the destination was dealt a pack drops the incoming daily secret", async () => {
+    const card = await addCard("merge-day");
+    await sql(
+      `INSERT INTO public.pack_opens (guest_id, opened_on, card_count, cards)
+       VALUES ($1, '2026-01-01', 3, '[]'::jsonb)`,
+      [GUEST_A],
+    );
+    await givePull(GUEST_B, card, { granted: false });
+
+    await mergeAll();
+
+    expect(await pullsFor(GUEST_A)).toHaveLength(0);
+    expect(await pullsFor(GUEST_B)).toHaveLength(0);
+  });
+
+  it("does nothing for a missing or identical id", async () => {
+    const card = await addCard("merge-noop");
+    await givePull(GUEST_B, card);
+    await mergeAll(null, GUEST_B);
+    await mergeAll(GUEST_A, null);
+    await mergeAll(GUEST_B, GUEST_B);
+    expect(await pullsFor(GUEST_B)).toHaveLength(1);
+  });
+
+  it("is not executable by anon or authenticated", async () => {
+    expect(await isDenied("anon", "SELECT public.merge_guest_into_guest($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
+    expect(await isDenied("authenticated", "SELECT public.merge_guest_into_guest($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
   });
 });
 

@@ -10,6 +10,7 @@ import {
   snapshotLocalCollection,
 } from "@/lib/adopt-collection";
 import { setAccountSyncState, type AccountSyncState } from "@/lib/account-sync-state";
+import { refreshMemberToken } from "@/lib/member-token";
 import { signOutAccount, useAccountSync } from "./use-account";
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -46,6 +47,13 @@ const carryTrophySeen = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/trophy-seen", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/trophy-seen")>()),
   carryTrophySeen: (...args: unknown[]) => carryTrophySeen(...args),
+}));
+
+// Spied on for whether it runs at all; its body is the card-collection suite's job.
+const carryPackToIdentity = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/card-collection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/card-collection")>()),
+  carryPackToIdentity: (...args: unknown[]) => carryPackToIdentity(...args),
 }));
 
 // The state module is a singleton; read it the way the app does.
@@ -142,6 +150,7 @@ describe("useAccountSync", () => {
   afterEach(() => {
     vi.useRealTimers();
     carryTrophySeen.mockReset();
+    carryPackToIdentity.mockReset();
     vi.mocked(adoptLocalCollection).mockReset();
     vi.mocked(syncAccountSession).mockReset();
     vi.mocked(snapshotLocalCollection).mockReset();
@@ -368,6 +377,102 @@ describe("useAccountSync", () => {
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(MEMBER_TOKEN);
     expect(window.localStorage.getItem("wwbh:guest-token")).toBeNull();
     expect(lastState).toMatchObject({ status: "ready", userId: "user-1" });
+  });
+
+  it("re-runs none of the sign-in work when the member token is renewed", async () => {
+    // member-renewal.ts swaps a re-signed token in for the same participant.
+    // The trophy carry, the adoption hold and upload, the pack carry and the sync
+    // itself all belong to an identity ARRIVING; replaying any of them for a
+    // person who never changed would re-file seen-keys and re-hold cards.
+    window.localStorage.setItem("wwbh:device-id", "dev-1");
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "00000000-0000-4000-8000-0000000000aa",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), { initialProps: { u: user } });
+    await settle();
+    const counts = () => ({
+      sync: vi.mocked(syncAccountSession).mock.calls.length,
+      trophies: carryTrophySeen.mock.calls.length,
+      hold: vi.mocked(holdForAdoption).mock.calls.length,
+      adopt: vi.mocked(adoptLocalCollection).mock.calls.length,
+      release: vi.mocked(releaseAdoptionHold).mock.calls.length,
+    });
+    const before = counts();
+    expect(before.sync).toBe(1);
+
+    const RENEWED = "m.00000000-0000-4000-8000-0000000000aa.9999999999998.sig";
+    act(() => {
+      expect(refreshMemberToken(RENEWED)).toBe(true);
+    });
+    // The swap re-renders every subscriber; the host re-renders with it.
+    rerender({ u: user });
+    await settle();
+
+    expect(counts()).toEqual(before);
+    expect(window.localStorage.getItem("wwbh:member-token")).toBe(RENEWED);
+    expect(window.localStorage.getItem("wwbh:member-name")).toBe("Alice");
+    expect(lastState).toMatchObject({ status: "ready", userId: "user-1" });
+  });
+
+  it("still carries the pack when a renewal lands in the middle of the sync", async () => {
+    // The carry is gated on this run's token still being on the device. A
+    // renewal swaps the string for the same participant; compared as strings,
+    // the gate read that as an account switch and the guest's pack stayed
+    // behind, so the next run would deal a second one.
+    window.localStorage.setItem("wwbh:device-id", "dev-1");
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "00000000-0000-4000-8000-0000000000aa",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockImplementation(async () => {
+      refreshMemberToken("m.00000000-0000-4000-8000-0000000000aa.9999999999998.sig");
+      return 1;
+    });
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(carryPackToIdentity).toHaveBeenCalledWith(
+      "d:dev-1",
+      "m:00000000-0000-4000-8000-0000000000aa",
+      expect.anything(),
+    );
+  });
+
+  it("does not carry the pack once the device has become somebody else", async () => {
+    window.localStorage.setItem("wwbh:device-id", "dev-1");
+    vi.mocked(adoptLocalCollection).mockImplementation(async () => {
+      window.localStorage.setItem(
+        "wwbh:member-token",
+        "m.00000000-0000-4000-8000-0000000000bb.9999999999999.sig",
+      );
+      return 1;
+    });
+    renderHook(() => useAccountSync(user));
+    await settle();
+    expect(carryPackToIdentity).not.toHaveBeenCalled();
+  });
+
+  it("still takes a renewed token off when the account goes away", async () => {
+    // The cleanup compares what it wrote with what is on the device. Compared
+    // as strings, a renewal made them differ and a lapsed account's player
+    // stayed on the handset for whoever signed in next.
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    const { rerender } = renderHook(({ u }) => useAccountSync(u), {
+      initialProps: { u: user as User | null },
+    });
+    await settle();
+    act(() => {
+      refreshMemberToken("m.00000000-0000-4000-8000-0000000000aa.9999999999998.sig");
+    });
+    rerender({ u: null });
+    await settle();
+    expect(window.localStorage.getItem("wwbh:member-token")).toBeNull();
   });
 
   it("takes the previous account's member token off before the next account syncs", async () => {
