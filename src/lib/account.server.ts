@@ -104,21 +104,16 @@ async function mergeGuestInto(identity: AccountIdentity, guestId: string) {
     });
     if (error) throw error;
   } else {
-    const { error: secretsError } = await supabaseAdmin.rpc("merge_guest_pulls", {
+    // The same one-transaction rule for a guest folding into a guest. Three
+    // calls left gaps: the destination could open today's pack between the
+    // pulls and the packs, so merge_guest_pulls kept a second day's secret, and
+    // a failure after the packs stranded milestone claims on the dead id.
+    // Not in the generated types yet, hence the widened client.
+    const { error } = await untypedDb().rpc("merge_guest_into_guest", {
       _into_guest: identity.id,
       _from_guest: guestId,
     });
-    if (secretsError) throw secretsError;
-    const { error: packsError } = await supabaseAdmin.rpc("merge_guest_packs", {
-      _into_guest: identity.id,
-      _from_guest: guestId,
-    });
-    if (packsError) throw packsError;
-    const { error: streakError } = await supabaseAdmin.rpc("merge_guest_streak_milestones", {
-      _into_guest: identity.id,
-      _from_guest: guestId,
-    });
-    if (streakError) throw streakError;
+    if (error) throw error;
   }
 }
 

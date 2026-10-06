@@ -168,6 +168,70 @@ describe("merge_guest_packs", () => {
   });
 });
 
+describe("merge_guest_into_guest", () => {
+  // syncAccount's guest branch, as one transaction (20261008120000): the three
+  // steps it used to run as separate requests, in the same order, under both
+  // guest locks for the whole run.
+  const mergeAll = (into: string | null = GUEST_A, from: string | null = GUEST_B) =>
+    sql("SELECT public.merge_guest_into_guest($1, $2)", [into, from]);
+
+  it("moves the pulls, the packs and the milestone claims, as the three steps did", async () => {
+    const card = await addCard("merge-all");
+    await givePull(GUEST_B, card);
+    await sql(
+      `INSERT INTO public.pack_opens (guest_id, opened_on, card_count)
+       VALUES ($1, '2026-01-01', 3), ($2, '2026-01-01', 3), ($2, '2026-01-02', 3)`,
+      [GUEST_A, GUEST_B],
+    );
+    await sql(
+      `INSERT INTO public.streak_milestone_claims
+         (guest_id, streak_started_on, milestone, claimed_on, reward_kind)
+       VALUES ($1, '2026-01-01', 3, '2026-01-03', 'secret')`,
+      [GUEST_B],
+    );
+
+    await mergeAll();
+
+    expect(await pullsFor(GUEST_A)).toHaveLength(1);
+    expect(await pullsFor(GUEST_B)).toHaveLength(0);
+    const packs = await sql<{ guest_id: string }>("SELECT guest_id FROM public.pack_opens");
+    expect(packs).toHaveLength(2);
+    expect(packs.every((p) => p.guest_id === GUEST_A)).toBe(true);
+    expect(await sql("SELECT guest_id FROM public.streak_milestone_claims")).toEqual([
+      { guest_id: GUEST_A },
+    ]);
+  });
+
+  it("keeps the day rule: a day the destination was dealt a pack drops the incoming daily secret", async () => {
+    const card = await addCard("merge-day");
+    await sql(
+      `INSERT INTO public.pack_opens (guest_id, opened_on, card_count, cards)
+       VALUES ($1, '2026-01-01', 3, '[]'::jsonb)`,
+      [GUEST_A],
+    );
+    await givePull(GUEST_B, card, { granted: false });
+
+    await mergeAll();
+
+    expect(await pullsFor(GUEST_A)).toHaveLength(0);
+    expect(await pullsFor(GUEST_B)).toHaveLength(0);
+  });
+
+  it("does nothing for a missing or identical id", async () => {
+    const card = await addCard("merge-noop");
+    await givePull(GUEST_B, card);
+    await mergeAll(null, GUEST_B);
+    await mergeAll(GUEST_A, null);
+    await mergeAll(GUEST_B, GUEST_B);
+    expect(await pullsFor(GUEST_B)).toHaveLength(1);
+  });
+
+  it("is not executable by anon or authenticated", async () => {
+    expect(await isDenied("anon", "SELECT public.merge_guest_into_guest($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
+    expect(await isDenied("authenticated", "SELECT public.merge_guest_into_guest($1, $2)", [GUEST_A, GUEST_B])).toBe(true); // prettier-ignore
+  });
+});
+
 describe("account_identities", () => {
   it("is unreadable and unwritable by anon and authenticated", async () => {
     for (const role of ["anon", "authenticated"] as const) {

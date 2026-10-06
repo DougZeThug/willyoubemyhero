@@ -115,7 +115,10 @@ describe("syncAccount", () => {
     const res = await sync({ memberId: null, guestId: GUEST_DEVICE });
 
     expect(res.id).toBe(GUEST_ACCOUNT);
-    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_pulls", {
+    // One RPC, so the destination cannot open a pack between the pulls and
+    // the packs, and a failure cannot strand milestone claims on the dead id.
+    expect(mock.client.rpc).toHaveBeenCalledTimes(1);
+    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_into_guest", {
       _into_guest: GUEST_ACCOUNT,
       _from_guest: GUEST_DEVICE,
     });
@@ -222,7 +225,7 @@ describe("syncAccount", () => {
   it("refuses to replace the device identity when a merge fails", async () => {
     withDb({
       ...existing({ guest_id: GUEST_ACCOUNT }),
-      "rpc.merge_guest_pulls": { error: { message: "nope" } },
+      "rpc.merge_guest_into_guest": { error: { message: "nope" } },
     });
     await expect(sync({ memberId: null, guestId: GUEST_DEVICE })).rejects.toEqual({
       message: "nope",
@@ -233,7 +236,7 @@ describe("syncAccount", () => {
     withDb(existing({ guest_id: GUEST_ACCOUNT }));
     const { syncAccount } = await import("./account.server");
     await syncAccount(USER, { memberId: null, guestIds: [GUEST_DEVICE, GUEST_ACCOUNT] });
-    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_pulls", {
+    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_into_guest", {
       _into_guest: GUEST_ACCOUNT,
       _from_guest: GUEST_DEVICE,
     });
@@ -284,7 +287,7 @@ describe("syncAccount", () => {
     withDb(identityRow({ guest_id: GUEST_ACCOUNT }, []));
     await sync({ memberId: null, guestId: GUEST_DEVICE });
 
-    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_pulls", {
+    expect(mock.client.rpc).toHaveBeenCalledWith("merge_guest_into_guest", {
       _into_guest: GUEST_ACCOUNT,
       _from_guest: GUEST_DEVICE,
     });
