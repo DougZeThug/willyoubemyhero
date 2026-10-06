@@ -204,8 +204,9 @@ bottom bar reflows from five columns to six when the switch flips.
 gold 40, silver 20, bronze 10, standard 5. A copy whose finish the server did not
 decide pays a flat 5 however rare it claims to be.
 
-**Sell.** Turning a spare secret copy into dust, paid by level: mythic 300,
-legendary 120, epic 60, rare 30, common 15 — the roster ladder times three.
+**Sell.** Turning any secret copy you hold into dust — your only one and today's
+pull included — paid by level: mythic 300, legendary 120, epic 60, rare 30,
+common 15 — the roster ladder times three.
 
 **The shop.** What the house sells: a bonus secret pull for 150 dust, and a
 reroll of a copy's finish for 50. A reroll can go down; a best-of would make it a

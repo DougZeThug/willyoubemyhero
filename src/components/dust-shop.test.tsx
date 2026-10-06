@@ -19,6 +19,7 @@ import { collectionTrophiesKey } from "@/hooks/use-collection-trophies";
 import { dustBalanceKey } from "@/hooks/use-dust";
 import { tradeSparesKey } from "@/hooks/use-trades";
 import { DUST_PRICES, SELL_BY_SECRET_TIER } from "@/lib/dust";
+import { toast } from "sonner";
 import { DustShopPanel } from "./dust-shop";
 
 const ME = "11111111-1111-4111-8111-111111111111";
@@ -401,5 +402,50 @@ describe("selling a secret", () => {
     await waitFor(() => expect(sellFn).toHaveBeenCalled());
     expect(keys(invalidate)).not.toContain(JSON.stringify(mySecretsKey(ACTOR)));
     expect(client.getQueryData(dustBalanceKey(ME))).toBeUndefined();
+  });
+});
+
+describe("an older server's same-day refusal", () => {
+  // Production ran a server that still answered `too_fresh` for today's pull
+  // while the app already listed it, and the Shop said "Could not burn that one"
+  // — which reads as a bug. Nothing from 20260930120000 on returns it.
+  const COPY = "77777777-7777-4777-8777-777777777777";
+  const PULL = "88888888-8888-4888-8888-888888888888";
+
+  beforeEach(() => {
+    sparesFn.mockResolvedValue({
+      participantId: ME,
+      ownedRoster: [],
+      roster: [{ copyId: COPY, eventParticipantId: "ep-1", edition: "gold", assertedBy: "server" }],
+      secrets: [
+        {
+          pullId: PULL,
+          name: "Gary The Grill",
+          artUrl: null,
+          tier: "rare",
+          lastCopy: false,
+          viewerOwns: true,
+        },
+      ],
+      blocked: [],
+    });
+  });
+
+  it("says so in words when the burn is refused", async () => {
+    millFn.mockResolvedValue({ ok: false, reason: "too_fresh" });
+    renderShop();
+
+    await userEvent.click(await screen.findByRole("button", { name: /burn \+/i }));
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Today's pull can be dusted from tomorrow")); // prettier-ignore
+  });
+
+  it("says so in words when the sale is refused", async () => {
+    sellFn.mockResolvedValue({ ok: false, reason: "too_fresh" });
+    renderShop();
+
+    await userEvent.click(await screen.findByRole("button", { name: /sell \+/i }));
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Today's pull can be dusted from tomorrow")); // prettier-ignore
   });
 });
