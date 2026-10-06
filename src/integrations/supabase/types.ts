@@ -2255,6 +2255,10 @@ export type Database = {
         Args: { _guest_id: string; _participant_id: string }
         Returns: undefined
       }
+      merge_guest_into_guest: {
+        Args: { _from_guest: string; _into_guest: string }
+        Returns: undefined
+      }
       merge_guest_packs: {
         Args: { _from_guest: string; _into_guest: string }
         Returns: number
