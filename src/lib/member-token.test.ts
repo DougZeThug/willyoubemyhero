@@ -3,7 +3,15 @@
 // can never be confused for one another.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { clearMemberToken, getMemberToken, setMemberToken, useMemberSession } from "./member-token";
+import {
+  clearMemberToken,
+  getMemberToken,
+  memberTokenParticipant,
+  refreshMemberToken,
+  setMemberToken,
+  useMemberSession,
+  WAS_MEMBER_KEY,
+} from "./member-token";
 
 const KEY = "wwbh:member-token";
 const NAME_KEY = "wwbh:member-name";
@@ -163,4 +171,60 @@ describe("useMemberSession", () => {
       vi.useRealTimers();
     }
   });
+});
+
+describe("refreshMemberToken", () => {
+  const OTHER_ID = "00000000-0000-4000-8000-0000000000bb";
+  const later = () => tokenExpiring(Date.now() + 90 * 24 * 60 * 60_000);
+
+  it("swaps the token for the same participant and leaves the name alone", () => {
+    setMemberToken(VALID(), "Doug");
+    const next = later();
+    expect(refreshMemberToken(next)).toBe(true);
+    expect(getMemberToken()).toBe(next);
+    expect(window.localStorage.getItem(NAME_KEY)).toBe("Doug");
+  });
+
+  it("refuses a token for somebody else", () => {
+    const mine = VALID();
+    setMemberToken(mine, "Doug");
+    expect(refreshMemberToken(`m.${OTHER_ID}.${Date.now() + 60_000}.sig`)).toBe(false);
+    expect(getMemberToken()).toBe(mine);
+  });
+
+  it("refuses when there is no live member on the device to refresh", () => {
+    // A renewal is never how an identity arrives; that is setMemberToken's job,
+    // with the breadcrumb and the claim-time work that go with it.
+    expect(refreshMemberToken(later())).toBe(false);
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    expect(window.localStorage.getItem(WAS_MEMBER_KEY)).toBeNull();
+  });
+
+  it("keeps the session's participant steady across the swap, so member-keyed effects stay put", () => {
+    setMemberToken(VALID(), "Doug");
+    const { result } = renderHook(() => useMemberSession());
+    const before = result.current;
+    const next = later();
+    act(() => {
+      refreshMemberToken(next);
+    });
+    // The snapshot moves (new token, new expiry) — the identity does not.
+    expect(result.current).not.toBe(before);
+    expect(result.current?.token).toBe(next);
+    expect(result.current?.participantId).toBe(before?.participantId);
+    expect(result.current?.name).toBe("Doug");
+  });
+});
+
+describe("memberTokenParticipant", () => {
+  it("names the participant even once the token has lapsed", () => {
+    expect(memberTokenParticipant(tokenExpiring(Date.now() - 1))).toBe(PARTICIPANT_ID);
+  });
+
+  it.each([null, "garbage", `g.${PARTICIPANT_ID}.${Date.now() + 60_000}.sig`])(
+    "is null for %s",
+    (token) => {
+      expect(memberTokenParticipant(token)).toBeNull();
+    },
+  );
 });

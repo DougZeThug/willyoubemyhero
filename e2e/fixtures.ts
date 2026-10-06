@@ -337,6 +337,13 @@ export const DEFAULT_RESPONSES: Responses = {
   // key above nor a superset of one — assertDistinctKeys checks, and the rule now
   // has to hold across every key in this object.
   getRecentAcquisitions: { roster: [], secrets: [] },
+  // Member-token renewal (member-renewal.ts). Every spec that seeds a member
+  // token gives it an hour to live, which is inside the renewal window, so the
+  // root asks on every load. Refused by default: the stored token is left
+  // exactly as the spec seeded it, and no screen re-renders under a test for a
+  // swap it never asked about. `renewMemberSession` is neither a substring of
+  // any key above nor contains one — assertDistinctKeys checks.
+  renewMemberSession: { ok: false, reason: "no_player" },
 };
 
 assertDistinctKeys(DEFAULT_RESPONSES);

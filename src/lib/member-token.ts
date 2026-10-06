@@ -15,7 +15,7 @@ export type MemberSession = {
   name: string | null;
 };
 
-function parse(token: string | null, name: string | null): MemberSession | null {
+function parse(token: string | null, name: string | null, now = Date.now()): MemberSession | null {
   if (!token) return null;
   const parts = token.split(".");
   if (parts.length !== 4) return null;
@@ -23,7 +23,7 @@ function parse(token: string | null, name: string | null): MemberSession | null 
   if (prefix !== "m") return null;
   const expiresAt = Number(expStr);
   if (!participantId || !Number.isFinite(expiresAt)) return null;
-  if (Date.now() > expiresAt) return null;
+  if (now > expiresAt) return null;
   return { participantId, expiresAt, token, name };
 }
 
@@ -48,6 +48,39 @@ export function setMemberToken(token: string, name: string) {
   // by then the token that would have proved they had one is gone.
   window.localStorage.setItem(WAS_MEMBER_KEY, "1");
   window.dispatchEvent(new Event("wwbh:member-token-changed"));
+}
+
+/**
+ * The participant a member-shaped token names, or null if it is not one.
+ *
+ * Ignores expiry on purpose: this answers "whose token is that", and a token
+ * written long ago still names the same person after it has lapsed.
+ */
+export function memberTokenParticipant(token: string | null): string | null {
+  return parse(token, null, -Infinity)?.participantId ?? null;
+}
+
+/**
+ * Swap in a renewed token for the member already on this device.
+ *
+ * Not setMemberToken, which is how an identity ARRIVES: claim and account sync
+ * call it after carrying ceremonies and holding cards for adoption. A renewal is
+ * the same person with a later expiry, so it writes only the token — the cached
+ * name stays as it is — and only when the device still holds a live token for
+ * that same participant. Anything else means the identity changed while the
+ * request was out (a sign-out, a switch of player), and a late answer must not
+ * put the old one back. Returns whether it wrote.
+ *
+ * Still announced, so the session snapshot carries the new expiry; every effect
+ * keyed on the member is keyed on `participantId`, which has not moved.
+ */
+export function refreshMemberToken(token: string): boolean {
+  if (typeof window === "undefined") return false;
+  const next = memberTokenParticipant(token);
+  if (!next || next !== memberTokenParticipant(getMemberToken())) return false;
+  window.localStorage.setItem(KEY, token);
+  window.dispatchEvent(new Event("wwbh:member-token-changed"));
+  return true;
 }
 
 export function clearMemberToken() {

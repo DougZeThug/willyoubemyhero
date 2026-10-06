@@ -3,7 +3,12 @@ import type { User } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { syncAccountSession } from "@/lib/account.functions";
-import { setMemberToken, clearMemberToken, getMemberToken } from "@/lib/member-token";
+import {
+  setMemberToken,
+  clearMemberToken,
+  getMemberToken,
+  memberTokenParticipant,
+} from "@/lib/member-token";
 import { setGuestToken, clearGuestToken } from "@/lib/guest-token";
 import {
   adoptableIds,
@@ -286,7 +291,12 @@ export function useAccountSync(user: User | null) {
       // syncAccount takes `x-member-token` as the player to bind a new account
       // to, so leaving it would link the next person to this one's collection.
       // Compare-and-clear, so a token a newer run has already replaced stays.
-      if (wrote && getMemberToken() === wrote) clearMemberToken();
+      // Compared by participant rather than by string: member-renewal.ts swaps
+      // in a re-signed token for the same person, and that is still the token
+      // this run wrote as far as who it lets in is concerned.
+      if (wrote && memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote)) {
+        clearMemberToken();
+      }
     };
   }, [authUserId, wake, qc]);
 }

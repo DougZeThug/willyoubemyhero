@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { hashCode, signMemberToken } from "./session.server";
-import { optionalGuest, requireAdmin } from "./require-auth.server";
+import { optionalGuest, requireAdmin, requireMember } from "./require-auth.server";
 import { timingSafeEq } from "./session.server";
 import { uuid as zuuid } from "./zod-uuid";
 
@@ -165,6 +165,35 @@ export const claimPlayer = createServerFn({ method: "POST" })
     const { token, expiresAt } = signMemberToken(data.participantId);
     return { ok: true as const, token, expiresAt, name: participant?.name ?? "Player" };
   });
+
+/**
+ * Re-sign the member token this device already holds, for another 90 days.
+ *
+ * A paper-code member is only ever re-signed by claimPlayer, so without this a
+ * phone that had been in use all season dropped to guest on day 91 with no
+ * warning — and a guest pack opened in that state is a second collection. The
+ * client calls this once the token is inside its last month (member-renewal.ts).
+ *
+ * Only a still-valid token renews: an expired one fails requireMember, so a lost
+ * or lapsed session still has to go back through the code. The id is the one in
+ * the verified token and nothing else — the request carries no payload at all.
+ */
+export const renewMemberSession = createServerFn({ method: "POST" }).handler(async () => {
+  const participantId = await requireMember();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  // A signature outlives the row it names. A player the commissioner has
+  // deleted keeps a token that verifies until it expires; it must not be
+  // extended for another season on the strength of that.
+  const { data: row, error } = await supabaseAdmin
+    .from("participants")
+    .select("id")
+    .eq("id", participantId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!row) return { ok: false as const, reason: "no_player" as const };
+  const { token, expiresAt } = signMemberToken(participantId);
+  return { ok: true as const, token, expiresAt };
+});
 
 // ---------- Admin ----------
 

@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { useAccountSync, useAuthUser } from "@/hooks/use-account";
+import { useMemberTokenRenewal } from "@/hooks/use-member-renewal";
 
 /**
  * The app's single `onAuthStateChange` consumer, plus the token sync.
@@ -17,6 +18,7 @@ export function AccountBridge() {
   const queryClient = useQueryClient();
 
   useAccountSync(user);
+  useMemberTokenRenewal();
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {

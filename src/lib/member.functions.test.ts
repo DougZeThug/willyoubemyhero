@@ -691,3 +691,86 @@ describe("listMemberClaims", () => {
     expect(mock.client.from).toHaveBeenCalledWith("member_codes");
   });
 });
+
+describe("renewMemberSession", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  async function renew(headers?: Record<string, string>) {
+    const { renewMemberSession } = await import("./member.functions");
+    return callServerFn(renewMemberSession, { headers });
+  }
+
+  function signedAt(at: number, participantId = PARTICIPANT_ID) {
+    const spy = vi.spyOn(Date, "now").mockReturnValue(at);
+    try {
+      return signMemberToken(participantId).token;
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it("re-signs the token for the same participant, for another ninety days", async () => {
+    withDb({ "participants.select": { data: { id: PARTICIPANT_ID }, error: null } });
+    // Sixty-five days into a ninety-day token: inside the renewal window.
+    const old = signedAt(Date.now() - 65 * DAY);
+    const res = (await renew(memberHeaders(old))) as {
+      ok: true;
+      token: string;
+      expiresAt: number;
+    };
+    expect(res.ok).toBe(true);
+    expect(res.token).not.toBe(old);
+    expect(verifyMemberToken(res.token)?.participantId).toBe(PARTICIPANT_ID);
+    expect(verifyMemberToken(res.token)?.expiresAt).toBe(res.expiresAt);
+    expect(Math.abs(res.expiresAt - (Date.now() + 90 * DAY))).toBeLessThan(60_000);
+  });
+
+  it("looks up the participant named by the verified token", async () => {
+    withDb({ "participants.select": { data: { id: OTHER_ID }, error: null } });
+    await renew(memberHeaders(signMemberToken(OTHER_ID).token));
+    const [call] = mock.callsFor("participants", "select");
+    expect(call.filters).toContainEqual(expect.objectContaining({ args: ["id", OTHER_ID] }));
+  });
+
+  it("refuses a device with no member token, before touching the database", async () => {
+    await expect(renew()).rejects.toThrow("Claim your player first");
+    expect(mock.client.from).not.toHaveBeenCalled();
+  });
+
+  it("refuses an expired token: a lapsed session goes back through the code", async () => {
+    const expired = signedAt(Date.now() - 91 * DAY);
+    await expect(renew(memberHeaders(expired))).rejects.toThrow("Claim your player first");
+    expect(mock.client.from).not.toHaveBeenCalled();
+  });
+
+  it("refuses a forged token", async () => {
+    const [prefix, , exp, sig] = signMemberToken(PARTICIPANT_ID).token.split(".");
+    // Somebody else's id under this token's signature.
+    const forged = `${prefix}.${OTHER_ID}.${exp}.${sig}`;
+    await expect(renew(memberHeaders(forged))).rejects.toThrow("Claim your player first");
+  });
+
+  it("refuses a guest or admin token presented as a member one", async () => {
+    await expect(renew(memberHeaders(signGuestToken(GUEST_ID).token))).rejects.toThrow(
+      "Claim your player first",
+    );
+    await expect(renew(memberHeaders(signAdminToken(EVENT_ID).token))).rejects.toThrow(
+      "Claim your player first",
+    );
+  });
+
+  it("refuses to extend a token for a player who no longer exists", async () => {
+    withDb({ "participants.select": { data: null, error: null } });
+    expect(await renew(memberHeaders(signMemberToken(PARTICIPANT_ID).token))).toEqual({
+      ok: false,
+      reason: "no_player",
+    });
+  });
+
+  it("surfaces a failed lookup rather than treating it as either answer", async () => {
+    withDb({ "participants.select": { data: null, error: { message: "boom" } } });
+    await expect(renew(memberHeaders(signMemberToken(PARTICIPANT_ID).token))).rejects.toThrow(
+      "boom",
+    );
+  });
+});
