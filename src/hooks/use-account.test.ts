@@ -49,6 +49,13 @@ vi.mock("@/lib/trophy-seen", async (importOriginal) => ({
   carryTrophySeen: (...args: unknown[]) => carryTrophySeen(...args),
 }));
 
+// Spied on for whether it runs at all; its body is the card-collection suite's job.
+const carryPackToIdentity = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/card-collection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/card-collection")>()),
+  carryPackToIdentity: (...args: unknown[]) => carryPackToIdentity(...args),
+}));
+
 // The state module is a singleton; read it the way the app does.
 let lastState: AccountSyncState | null = null;
 vi.mock("@/lib/account-sync-state", async (importOriginal) => {
@@ -143,6 +150,7 @@ describe("useAccountSync", () => {
   afterEach(() => {
     vi.useRealTimers();
     carryTrophySeen.mockReset();
+    carryPackToIdentity.mockReset();
     vi.mocked(adoptLocalCollection).mockReset();
     vi.mocked(syncAccountSession).mockReset();
     vi.mocked(snapshotLocalCollection).mockReset();
@@ -408,6 +416,46 @@ describe("useAccountSync", () => {
     expect(window.localStorage.getItem("wwbh:member-token")).toBe(RENEWED);
     expect(window.localStorage.getItem("wwbh:member-name")).toBe("Alice");
     expect(lastState).toMatchObject({ status: "ready", userId: "user-1" });
+  });
+
+  it("still carries the pack when a renewal lands in the middle of the sync", async () => {
+    // The carry is gated on this run's token still being on the device. A
+    // renewal swaps the string for the same participant; compared as strings,
+    // the gate read that as an account switch and the guest's pack stayed
+    // behind, so the next run would deal a second one.
+    window.localStorage.setItem("wwbh:device-id", "dev-1");
+    vi.mocked(syncAccountSession).mockResolvedValue({
+      kind: "member",
+      token: MEMBER_TOKEN,
+      name: "Alice",
+      id: "00000000-0000-4000-8000-0000000000aa",
+    } as never);
+    vi.mocked(adoptLocalCollection).mockImplementation(async () => {
+      refreshMemberToken("m.00000000-0000-4000-8000-0000000000aa.9999999999998.sig");
+      return 1;
+    });
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(carryPackToIdentity).toHaveBeenCalledWith(
+      "d:dev-1",
+      "m:00000000-0000-4000-8000-0000000000aa",
+      expect.anything(),
+    );
+  });
+
+  it("does not carry the pack once the device has become somebody else", async () => {
+    window.localStorage.setItem("wwbh:device-id", "dev-1");
+    vi.mocked(adoptLocalCollection).mockImplementation(async () => {
+      window.localStorage.setItem(
+        "wwbh:member-token",
+        "m.00000000-0000-4000-8000-0000000000bb.9999999999999.sig",
+      );
+      return 1;
+    });
+    renderHook(() => useAccountSync(user));
+    await settle();
+    expect(carryPackToIdentity).not.toHaveBeenCalled();
   });
 
   it("still takes a renewed token off when the account goes away", async () => {

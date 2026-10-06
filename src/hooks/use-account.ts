@@ -222,9 +222,11 @@ export function useAccountSync(user: User | null) {
         // strictly stronger than `cancelled`: that flips on unmount too, and says
         // nothing about which identity localStorage holds by now. A pack rewritten
         // to an account that has already been switched away from cannot be carried
-        // again, and the next run would deal a second one.
+        // again, and the next run would deal a second one. By participant, as
+        // the cleanup compares: a renewal landing mid-sync swaps the string for
+        // the same person, and must not cost them their pack.
         const device = deviceId();
-        if (device && getMemberToken() === wrote) {
+        if (device && memberTokenParticipant(getMemberToken()) === memberTokenParticipant(wrote)) {
           await carryPackToIdentity(`d:${device}`, `m:${res.id}`, adoptableIds(held));
         }
         // Only now. Clearing it before the upload left a phone whose adoption
