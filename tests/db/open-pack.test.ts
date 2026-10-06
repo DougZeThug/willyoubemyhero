@@ -711,6 +711,30 @@ describe("a guest's daily secrets do not ride in on a day the member already spe
     expect(rows).toHaveLength(1);
   });
 
+  it("still moves a guest's secret from a day the member only opened an old, undealt pack", async () => {
+    // Before server-dealt packs the pack and the daily secret were separate, so a
+    // pack row with no cards says nothing about whether that day's secret was
+    // spent. The guest's secret from such a day moved before and still does.
+    const OLD_DAY = "2026-01-01";
+    const card = await addCard("Gary the Grill");
+    await sql(
+      `INSERT INTO public.pack_opens (participant_id, opened_on, event_id, card_count)
+       VALUES ($1, $2::date, $3, 3)`,
+      [IDS.alice, OLD_DAY, IDS.event],
+    );
+    await sql(
+      `INSERT INTO public.secret_card_pulls
+         (guest_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+       VALUES ($1, $2, $3::date, $4, false, false, 'common')`,
+      [GUEST_A, card, OLD_DAY, IDS.event],
+    );
+
+    await attach(IDS.alice, GUEST_A);
+
+    expect(await nonGranted("participant_id", IDS.alice)).toBe(1);
+    expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
+  });
+
   it("always keeps a guest's granted rows", async () => {
     await addCard("Gary the Grill", { weight: 10000 });
     await open(IDS.alice, null);
@@ -761,6 +785,26 @@ describe("a guest's daily secrets do not ride in on a day the member already spe
 
       expect(await nonGranted("guest_id", GUEST_A)).toBe(0);
       expect(await nonGranted("guest_id", GUEST_B)).toBe(0);
+    });
+
+    it("still moves them when the destination's pack that day predates dealt packs", async () => {
+      const OLD_DAY = "2026-01-01";
+      const card = await addCard("Gary the Grill");
+      await sql(
+        `INSERT INTO public.pack_opens (guest_id, opened_on, event_id, card_count)
+         VALUES ($1, $2::date, $3, 3)`,
+        [GUEST_A, OLD_DAY, IDS.event],
+      );
+      await sql(
+        `INSERT INTO public.secret_card_pulls
+           (guest_id, secret_card_id, pulled_on, event_id, is_duplicate, granted, tier)
+         VALUES ($1, $2, $3::date, $4, false, false, 'common')`,
+        [GUEST_B, card, OLD_DAY, IDS.event],
+      );
+
+      await merge(GUEST_A, GUEST_B);
+
+      expect(await nonGranted("guest_id", GUEST_A)).toBe(1);
     });
 
     it("still moves them when the destination has not opened that day", async () => {

@@ -9,11 +9,17 @@
 -- own paper code (codes stay valid; attach_device_to_player runs this on every
 -- claim), keeping the guest's secrets too. Repeatable, once per fresh guest.
 --
--- The test is now the member's pack_opens row for D, OR the old condition. The
--- day is keyed on pack_opens for the same reason open_pack keys the deal on it:
--- nothing a sale or a trade does can make that row disappear. The OR keeps any
--- day that has a daily secret row but no pack row (pull_secret_card, before
--- 20260908120000 retired it) behaving exactly as before.
+-- The test is now the member's SERVER-DEALT pack_opens row for D, OR the old
+-- condition. The day is keyed on pack_opens for the same reason open_pack keys
+-- the deal on it: nothing a sale or a trade does can make that row disappear.
+--
+-- Server-dealt only (`cards IS NOT NULL`; NULL on every row from before
+-- 20260908120000/20260908165733, see the column comment there). Before then a
+-- pack and the daily secret were separate draws: a member could open a roster
+-- pack and pull no secret that day, so their pack row says nothing about
+-- whether the day's SECRET was spent, and a guest's secret from such a day
+-- still moves, as it always did. The OR keeps those older days — a daily
+-- secret row but no dealt pack (pull_secret_card) — behaving exactly as before.
 --
 -- Ordering this relies on, verified in the newest definition of every caller:
 -- attach_device_to_player, bind_account_to_player and merge_guest_into_collector
@@ -59,9 +65,11 @@ BEGIN
   -- Only the guest's DAILY pull loses to the member's daily pull. A granted row
   -- — a milestone's reward, a bought pull — spent no slot and keeps its place.
   --
-  -- "The member's daily pull" is their pack for that day, not whatever secret
-  -- rows they still hold from it: a member who sold today's secret, or whose
-  -- pack dealt none, has spent the day all the same. Every caller runs this
+  -- "The member's daily pull" is their dealt pack for that day, not whatever
+  -- secret rows they still hold from it: a member who sold today's secret, or
+  -- whose pack dealt none, has spent the day all the same. A pack row with no
+  -- cards predates server-dealt packs, when the secret was a separate pull, so
+  -- it does not count. Every caller runs this
   -- BEFORE claim_guest_packs, so the pack_opens row read here is the member's
   -- own and never the guest's, which has not moved yet.
   DELETE FROM public.secret_card_pulls g
@@ -69,7 +77,8 @@ BEGIN
      AND NOT g.granted
      AND (EXISTS (SELECT 1 FROM public.pack_opens po
                    WHERE po.participant_id = _participant_id
-                     AND po.opened_on = g.pulled_on)
+                     AND po.opened_on = g.pulled_on
+                     AND po.cards IS NOT NULL)
        OR EXISTS (SELECT 1 FROM public.secret_card_pulls m
                    WHERE m.participant_id = _participant_id
                      AND m.pulled_on = g.pulled_on
@@ -168,15 +177,16 @@ BEGIN
     PERFORM pg_advisory_xact_lock(hashtextextended(_into_guest::text, 0));
   END IF;
 
-  -- The same rule as claim_guest_secrets: a day the destination guest opened
-  -- a pack is spent, whether or not they still hold what it dealt. Runs before
+  -- The same rule as claim_guest_secrets: a day the destination guest was
+  -- dealt a pack is spent, whether or not they still hold what it dealt. Runs before
   -- merge_guest_packs, so the row read here is the destination's own.
   DELETE FROM public.secret_card_pulls g
    WHERE g.guest_id = _from_guest
      AND NOT g.granted
      AND (EXISTS (SELECT 1 FROM public.pack_opens po
                    WHERE po.guest_id = _into_guest
-                     AND po.opened_on = g.pulled_on)
+                     AND po.opened_on = g.pulled_on
+                     AND po.cards IS NOT NULL)
        OR EXISTS (SELECT 1 FROM public.secret_card_pulls m
                    WHERE m.guest_id = _into_guest
                      AND m.pulled_on = g.pulled_on
