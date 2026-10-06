@@ -1,6 +1,6 @@
 // Renewing a member token inside its last month, client side.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renewMemberTokenIfDue, RENEW_WITHIN_MS, type Renew } from "./member-renewal";
+import { REFUSED_KEY, renewMemberTokenIfDue, RENEW_WITHIN_MS, type Renew } from "./member-renewal";
 
 const KEY = "wwbh:member-token";
 const NAME_KEY = "wwbh:member-name";
@@ -138,5 +138,97 @@ describe("renewMemberTokenIfDue", () => {
     resolve({ ok: true, token: tokenFor(Date.now() + 90 * DAY), expiresAt: Date.now() + 90 * DAY });
     expect(await pending).toBe(false);
     expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  describe("a refusal that will not change", () => {
+    it.each(["rotated", "no_player"])(
+      "is remembered for that token, and not asked again (%s)",
+      async (reason) => {
+        const token = tokenFor(Date.now() + 10 * DAY);
+        store(token);
+        const renew = vi.fn(() => Promise.resolve({ ok: false as const, reason }));
+        expect(await renewMemberTokenIfDue(renew)).toBe(false);
+        expect(window.localStorage.getItem(REFUSED_KEY)).toBe(token);
+        expect(await renewMemberTokenIfDue(renew)).toBe(false);
+        expect(await renewMemberTokenIfDue(renew)).toBe(false);
+        expect(renew).toHaveBeenCalledTimes(1);
+        expect(window.localStorage.getItem(KEY)).toBe(token);
+      },
+    );
+
+    it("is forgotten once the device holds a different token", async () => {
+      store(tokenFor(Date.now() + 10 * DAY));
+      const fresh = tokenFor(Date.now() + 90 * DAY);
+      const renew = vi
+        .fn<Renew>()
+        .mockResolvedValueOnce({ ok: false, reason: "rotated" })
+        .mockResolvedValue({ ok: true, token: fresh, expiresAt: Date.now() + 90 * DAY });
+      await renewMemberTokenIfDue(renew);
+      // A fresh claim with the new code: a different string.
+      const reclaimed = tokenFor(Date.now() + 9 * DAY);
+      store(reclaimed);
+      expect(await renewMemberTokenIfDue(renew)).toBe(true);
+      expect(renew).toHaveBeenCalledTimes(2);
+      expect(window.localStorage.getItem(REFUSED_KEY)).toBeNull();
+    });
+
+    it("does not remember a transient failure", async () => {
+      store(tokenFor(Date.now() + 10 * DAY));
+      const renew = vi.fn<Renew>().mockRejectedValue(new Error("offline"));
+      await renewMemberTokenIfDue(renew);
+      await renewMemberTokenIfDue(renew);
+      expect(renew).toHaveBeenCalledTimes(2);
+      expect(window.localStorage.getItem(REFUSED_KEY)).toBeNull();
+    });
+
+    it("does not remember a refusal it does not know to be permanent", async () => {
+      store(tokenFor(Date.now() + 10 * DAY));
+      const renew = vi.fn(() => Promise.resolve({ ok: false as const, reason: "busy" }));
+      await renewMemberTokenIfDue(renew);
+      await renewMemberTokenIfDue(renew);
+      expect(renew).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("a token that expires while the request is out", () => {
+    it("still takes the renewal, because the stored string is the one renewed", async () => {
+      const t0 = Date.now();
+      const token = tokenFor(t0 + 1_000);
+      store(token);
+      let resolve!: (v: { ok: true; token: string; expiresAt: number }) => void;
+      const renew = vi.fn(
+        () => new Promise<{ ok: true; token: string; expiresAt: number }>((r) => (resolve = r)),
+      );
+      const pending = renewMemberTokenIfDue(renew);
+      // The old token lapses before the answer lands.
+      const later = vi.spyOn(Date, "now").mockReturnValue(t0 + 5_000);
+      try {
+        const fresh = tokenFor(t0 + 90 * DAY);
+        resolve({ ok: true, token: fresh, expiresAt: t0 + 90 * DAY });
+        expect(await pending).toBe(true);
+        expect(window.localStorage.getItem(KEY)).toBe(fresh);
+        expect(window.localStorage.getItem(NAME_KEY)).toBe("Doug");
+      } finally {
+        later.mockRestore();
+      }
+    });
+
+    it("still drops it when another token for the same person landed meanwhile", async () => {
+      store(tokenFor(Date.now() + 10 * DAY));
+      let resolve!: (v: { ok: true; token: string; expiresAt: number }) => void;
+      const renew = vi.fn(
+        () => new Promise<{ ok: true; token: string; expiresAt: number }>((r) => (resolve = r)),
+      );
+      const pending = renewMemberTokenIfDue(renew);
+      const other = tokenFor(Date.now() + 80 * DAY);
+      store(other);
+      resolve({
+        ok: true,
+        token: tokenFor(Date.now() + 90 * DAY),
+        expiresAt: Date.now() + 90 * DAY,
+      });
+      expect(await pending).toBe(false);
+      expect(window.localStorage.getItem(KEY)).toBe(other);
+    });
   });
 });

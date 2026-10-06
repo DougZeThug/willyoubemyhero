@@ -16,6 +16,33 @@ function expiryOf(token: string): number {
   return Number(token.split(".")[2]);
 }
 
+/**
+ * The exact token the server last refused for good ("rotated", "no_player").
+ *
+ * Neither answer changes with time, so asking again every hour for the rest of
+ * the token's life is noise. Keyed on the token string itself: a new token —
+ * a fresh claim, a sign-in — no longer matches and is asked about normally.
+ */
+export const REFUSED_KEY = "wwbh:member-renewal-refused";
+const PERMANENT = new Set(["rotated", "no_player"]);
+
+function readRefused(): string | null {
+  try {
+    return window.localStorage.getItem(REFUSED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeRefused(token: string | null) {
+  try {
+    if (token === null) window.localStorage.removeItem(REFUSED_KEY);
+    else window.localStorage.setItem(REFUSED_KEY, token);
+  } catch {
+    // Storage full or blocked: the cost is one more refused request next hour.
+  }
+}
+
 let inFlight: Promise<boolean> | null = null;
 
 /**
@@ -25,18 +52,29 @@ let inFlight: Promise<boolean> | null = null;
  * landing together ask once. A failure leaves the stored token exactly as it
  * was and is not retried here — the next tick is soon enough, and a phone on
  * garden wifi must not spin. An absent or already-expired token is never sent:
- * getMemberToken evicts it, and the server would refuse it anyway.
+ * getMemberToken evicts it, and the server would refuse it anyway. A token the
+ * server has refused for good (see REFUSED_KEY) is not sent again.
  *
  * Resolves true only when a renewed token was stored.
  */
 export function renewMemberTokenIfDue(renew: Renew, now = Date.now()): Promise<boolean> {
   if (inFlight) return inFlight;
   const token = getMemberToken();
-  if (!token || expiryOf(token) - now >= RENEW_WITHIN_MS) return Promise.resolve(false);
+  const refused = readRefused();
+  if (refused !== null && refused !== token) writeRefused(null);
+  if (!token || refused === token || expiryOf(token) - now >= RENEW_WITHIN_MS) {
+    return Promise.resolve(false);
+  }
   inFlight = (async () => {
     try {
       const res = await renew();
-      return res.ok ? refreshMemberToken(res.token) : false;
+      if (!res.ok) {
+        if (PERMANENT.has(res.reason)) writeRefused(token);
+        return false;
+      }
+      // Against the token this request renewed, not whatever is live now: it
+      // may have expired while the request was out, and that is still ours.
+      return refreshMemberToken(res.token, token);
     } catch {
       return false;
     }

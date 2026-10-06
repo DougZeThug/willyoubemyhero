@@ -71,13 +71,25 @@ export function memberTokenParticipant(token: string | null): string | null {
  * request was out (a sign-out, a switch of player), and a late answer must not
  * put the old one back. Returns whether it wrote.
  *
+ * `renewed` is the token the request was made with. Given it, the swap is
+ * keyed on the raw stored string still being exactly that token — even if it
+ * has expired while the request was in flight, which is the one moment a
+ * renewal matters most. Read raw rather than through getMemberToken, which
+ * would evict the expired token and then refuse its own replacement.
+ *
  * Still announced, so the session snapshot carries the new expiry; every effect
  * keyed on the member is keyed on `participantId`, which has not moved.
  */
-export function refreshMemberToken(token: string): boolean {
+export function refreshMemberToken(token: string, renewed?: string): boolean {
   if (typeof window === "undefined") return false;
   const next = memberTokenParticipant(token);
-  if (!next || next !== memberTokenParticipant(getMemberToken())) return false;
+  if (!next) return false;
+  if (renewed !== undefined) {
+    if (window.localStorage.getItem(KEY) !== renewed) return false;
+    if (memberTokenParticipant(renewed) !== next) return false;
+  } else if (next !== memberTokenParticipant(getMemberToken())) {
+    return false;
+  }
   window.localStorage.setItem(KEY, token);
   window.dispatchEvent(new Event("wwbh:member-token-changed"));
   return true;
