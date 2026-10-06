@@ -1126,3 +1126,91 @@ describe("a bought card takes its stale offers with it", () => {
     }
   });
 });
+
+describe("a stake somebody else holds is skipped, then settles itself", () => {
+  // The Promise.all races above may or may not land on SKIP LOCKED. These hold
+  // the lock deliberately, so the skip is what is being tested: the settle path
+  // must not wait (statement_timeout turns a wait into a failure), must leave the
+  // held row alone, and the held row's own re-validation must void it after.
+  async function offer(proposer: string, recipient: string, give: unknown[], want: unknown[]) {
+    const [row] = await sql<{ create_trade_offer: { ok: boolean; offerId: string } }>(
+      "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+      [proposer, recipient, IDS.event, JSON.stringify(give), JSON.stringify(want)],
+    );
+    return row.create_trade_offer;
+  }
+
+  async function offerStatus(id: string): Promise<string> {
+    const [row] = await sql<{ status: string }>(
+      "SELECT status FROM public.trade_offers WHERE id = $1",
+      [id],
+    );
+    return row.status;
+  }
+
+  async function seed() {
+    const ids = await cardIds();
+    await claimMember(IDS.alice);
+    await claimMember(IDS.carol);
+    const [contested] = await holdCopies(IDS.alice, ids[0], 3);
+    const carols = await holdCopies(IDS.carol, ids[2], 2);
+    await credit(500, IDS.bob);
+    const listing = await listedId(IDS.alice, { copyId: contested, price: 10 });
+    const staked = await offer(IDS.alice, IDS.carol, [{ kind: "roster", cardCopyId: contested }], [{ kind: "roster", cardCopyId: carols[0] }]); // prettier-ignore
+    return { listing, offerId: staked.offerId };
+  }
+
+  it("a buy skips an offer another transaction holds, and the offer voids itself on accept", async () => {
+    const { listing, offerId } = await seed();
+    const holder = await newClient();
+    const buyer = await newClient();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT 1 FROM public.trade_offers WHERE id = $1 FOR UPDATE", [offerId]);
+      await buyer.query("SET statement_timeout = '3s'");
+      const res = await buyer.query<{ r: { ok: boolean } }>(
+        "SELECT public.buy_market_listing($1, $2, $3) AS r",
+        [IDS.bob, listing, REQ("9")],
+      );
+      expect(res.rows[0].r).toMatchObject({ ok: true });
+      expect(await offerStatus(offerId)).toBe("pending");
+      await holder.query("ROLLBACK");
+    } finally {
+      await holder.end();
+      await buyer.end();
+    }
+
+    const [row] = await sql<{ r: { ok: boolean; reason?: string } }>(
+      "SELECT public.accept_trade_offer($1, $2) AS r",
+      [offerId, IDS.carol],
+    );
+    expect(row.r).toEqual({ ok: false, reason: "voided" });
+    expect(await offerStatus(offerId)).toBe("voided");
+  });
+
+  it("an accept skips a listing another transaction holds, and the listing voids itself on buy", async () => {
+    const { listing, offerId } = await seed();
+    const holder = await newClient();
+    const accepter = await newClient();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT 1 FROM public.market_listings WHERE id = $1 FOR UPDATE", [
+        listing,
+      ]);
+      await accepter.query("SET statement_timeout = '3s'");
+      const res = await accepter.query<{ r: { ok: boolean } }>(
+        "SELECT public.accept_trade_offer($1, $2) AS r",
+        [offerId, IDS.carol],
+      );
+      expect(res.rows[0].r).toMatchObject({ ok: true });
+      expect(await statusOf(listing)).toBe("active");
+      await holder.query("ROLLBACK");
+    } finally {
+      await holder.end();
+      await accepter.end();
+    }
+
+    expect(await buy(IDS.bob, listing, REQ("8"))).toEqual({ ok: false, reason: "voided" });
+    expect(await statusOf(listing)).toBe("voided");
+  });
+});
