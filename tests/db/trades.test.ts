@@ -16,7 +16,7 @@
 //  4. Two accepts racing over one spare produce one winner and one voided offer,
 //     rather than a deadlock or two winners.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closeDb, IDS, newClient, seedEvent, sql } from "./helpers";
+import { closeDb, IDS, newClient, seedEvent, sql, withSecretRoll } from "./helpers";
 import { migrationFiles, readMigration } from "./cluster";
 import { leagueDay, LEAGUE_TIME_ZONE } from "@/lib/trades";
 
@@ -791,6 +791,47 @@ describe("accept_trade_offer — secret cards", () => {
 
     expect(await secretRow(spare)).toMatchObject({ is_duplicate: true, tier: "rare" });
     expect(await secretRow(bobs)).toMatchObject({ is_duplicate: false, tier: "epic" });
+  });
+
+  it("moves ownership off a worse legacy owner without touching the offers that stake either row", async () => {
+    // Before 20261007120000 a better copy that arrived by trade stayed a
+    // duplicate under a worse owner. The next copy added re-points ownership to
+    // the best row. That is a flag flip on an existing holding, so it must not
+    // change any level, and an offer is staked on a ROW rather than on the
+    // ownership flag — both offers stay standing and still settle.
+    const [, bobCard] = await cardIds();
+    await claim(IDS.alice);
+    await claim(IDS.bob);
+    const bobCopies = await giveRoster(IDS.bob, bobCard, 3);
+    const card = await addCard("Gary the Grill");
+    const owner = await giveSecret(IDS.alice, card, { duplicate: false, tier: "common" });
+    const better = await giveSecret(IDS.alice, card, { duplicate: true, tier: "mythic" });
+
+    const onOwner = await createOffer(IDS.alice, IDS.bob, [secret(owner)], [copy(bobCopies[0])]);
+    const onBetter = await createOffer(IDS.alice, IDS.bob, [secret(better)], [copy(bobCopies[1])]); // prettier-ignore
+    expect(onOwner.ok && onBetter.ok).toBe(true);
+
+    // A worse copy added through the commissioner's grant.
+    const [{ g }] = await withSecretRoll("rare", () =>
+      sql<{ g: { pullId: string; duplicate: boolean } }>(
+        "SELECT public.grant_secret_card($1, $2, $3) AS g",
+        [IDS.alice, card, IDS.event],
+      ),
+    );
+    expect(g.duplicate).toBe(true);
+
+    expect(await secretRow(owner)).toMatchObject({ tier: "common", is_duplicate: true });
+    expect(await secretRow(better)).toMatchObject({ tier: "mythic", is_duplicate: false });
+    expect(await secretRow(g.pullId)).toMatchObject({ tier: "rare", is_duplicate: true });
+    expect(await offerStatus(onOwner.offerId)).toBe("pending");
+    expect(await offerStatus(onBetter.offerId)).toBe("pending");
+
+    // And the offer on the row that now owns the card still accepts.
+    expect((await accept(onBetter.offerId, IDS.bob)).ok).toBe(true);
+    expect(await secretRow(better)).toMatchObject({ participant_id: IDS.bob, tier: "mythic" });
+    // Alice's best remaining copy takes over, and the other offer is untouched.
+    expect(await secretRow(g.pullId)).toMatchObject({ participant_id: IDS.alice, is_duplicate: false }); // prettier-ignore
+    expect(await offerStatus(onOwner.offerId)).toBe("pending");
   });
 
   it("turns two copies of one secret into one ownership row and one duplicate", async () => {
@@ -1641,16 +1682,23 @@ describe("a card that changes hands takes its stale stakes with it", () => {
       f.endsWith("20261006130000_moved_cards_take_their_stakes.sql"),
     );
     // The whole file, not just its last statements: replaying it is also the
-    // proof that it is idempotent. It also re-creates accept_trade_offer and
-    // buy_market_listing as that file had them, so every later migration that
-    // redefines them is re-applied afterwards — otherwise every test after this
-    // one, here and in later suites on this cluster, would run the old bodies.
-    const later = (await migrationFiles()).filter((f) => f > file!);
-    const restore = async () => {
-      for (const f of later) await sql(await readMigration(f));
-    };
+    // proof that it is idempotent. It also re-creates every function it defines
+    // as that file had them, and a later migration may have replaced those — so
+    // the live definitions are snapshotted first and put back in `finally`, or
+    // every test after this one, here and in later suites on this cluster, would
+    // run the old bodies. Restored from the catalogue rather than by re-running
+    // later files, which need not be re-runnable.
+    const text = await readMigration(file!);
+    const names = [...new Set([...text.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)/g)].map((m) => m[1]))]; // prettier-ignore
+    expect(names.length).toBeGreaterThan(0);
+    const live = await sql<{ def: string }>(
+      `SELECT pg_get_functiondef(p.oid) AS def FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = ANY($1::text[])`,
+      [names],
+    );
     try {
-      await sql(await readMigration(file!));
+      await sql(text);
 
       expect(await offerStatus(stale.offerId)).toBe("voided");
       expect(await offerStatus(staleSecret.offerId)).toBe("voided");
@@ -1664,12 +1712,14 @@ describe("a card that changes hands takes its stale stakes with it", () => {
       const resolved = await sql(
         "SELECT id, status, resolved_at FROM public.trade_offers ORDER BY id",
       );
-      await sql(await readMigration(file!));
+      await sql(text);
       expect(
         await sql("SELECT id, status, resolved_at FROM public.trade_offers ORDER BY id"),
       ).toEqual(resolved);
     } finally {
-      await restore();
+      // CREATE OR REPLACE keeps each function's grants, so the bodies are all
+      // that has to come back.
+      for (const { def } of live) await sql(def);
     }
   });
 });

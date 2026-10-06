@@ -352,11 +352,12 @@ export const getStreakHistory = createServerFn({ method: "GET" }).handler(
       if (pull && card) {
         // The claim row's own tier first, and the pull's only as a fallback.
         // This is a receipt — what the rung paid on the day — and a pull's tier
-        // is not one: pull_secret_card raises the owning copy in place when a
-        // later duplicate rolls better, which is the rule the VAULT wants, since
-        // the vault answers "what do I hold". Read straight it meant a mythic
-        // pulled in October rewrote what September's rung was shown to have
-        // paid, against a claim toast that had said something else. The fallback
+        // was not one: until 20261007120000 a later duplicate that rolled better
+        // raised the owning copy in place, so a mythic pulled in October rewrote
+        // what September's rung was shown to have paid, against a claim toast
+        // that had said something else. Tiers no longer move (a better copy takes
+        // ownership instead), but rows raised before then keep the raised value,
+        // and the claim's own column is what cannot drift either way. The fallback
         // is for claims made before the column existed and is the same value
         // those rows already rendered — no history moves the day this ships.
         const tier = row.reward_tier ?? pull.tier;

@@ -63,6 +63,16 @@
 -- guest — and every other writer of these rows takes that lock first. The two
 -- UPDATEs below touch only this owner's rows for this one card, so they add row
 -- locks under a lock the caller already holds, in no new order.
+--
+-- The one writer that does not: an accept_trade_offer, reopen_trade_offer or
+-- buy_market_listing whose stake is STALE row-locks the staked secret row
+-- under its own two participant locks, and that row may since have moved to a
+-- third person — whose lock it does not hold. Harmless here. It takes that row
+-- lock only after both of its participant locks are granted, and from then on
+-- it only re-validates, voids its own already-locked offer or listing and
+-- returns; it never waits on the new owner's participant lock. So at worst one
+-- side waits for the other's row lock to clear, and neither can be waiting on
+-- something the other holds.
 CREATE OR REPLACE FUNCTION public.promote_best_secret_copy(
   _participant_id uuid,
   _guest_id       uuid,

@@ -246,8 +246,9 @@ type SpareCopyRow = Pick<
  * What one member has spare, for composing an offer against.
  *
  * Works for yourself and for a counterparty — see the exception documented at the
- * top of this file. "Two or more copies of the card" and `is_duplicate` are the
- * same two rules `trade_item_is_spare` applies inside the RPC. Today's pull is
+ * top of this file. "Two or more copies of the card" for a roster card and "any
+ * copy you hold" for a secret are the same two rules `trade_item_is_spare`
+ * applies inside the RPC; neither reads `is_duplicate`. Today's pull is
  * included: the daily deal is gated on `pack_opens`, which no trade or sale
  * touches, so a card is a spare the moment it lands (20260930120000).
  */

@@ -158,8 +158,10 @@ export const getMySecrets = createServerFn({ method: "GET" }).handler(async () =
       seen.count += 1;
       // Ordered newest first, so every later row is older than the one held.
       seen.firstPulledOn = p.pulled_on;
-      // Best wins across every copy, so a duplicate that rolled better shows the
-      // better level even if the owning row has not been upgraded yet.
+      // Best wins across every copy. Postgres hands ownership to the best copy
+      // when one is added, but a better copy that arrived before 20261007120000
+      // by trade or purchase can still sit as a duplicate under a worse owner,
+      // and the vault should show the level actually held.
       seen.tier = bestSecretTier(seen.tier, p.tier);
     } else {
       owned.set(p.secret_card_id, {
