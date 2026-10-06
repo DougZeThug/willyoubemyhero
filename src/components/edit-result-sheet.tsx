@@ -29,12 +29,21 @@ import { cn } from "@/lib/utils";
 
 type PenaltyDraft = { stationId: string; ms: string; reason: string };
 
+// The one definition of the hundredth grid. parseTime keeps up to three
+// decimals but the boxes only carry two, and official_time_ms (what standings
+// and records sort on) is the sum of the course time and the penalties, so
+// anything a typed value contributes has to land here or a 5ms stray survives
+// into a ranking that formatTime then displays as a tie.
+function snapMs(ms: number): number {
+  return Math.round(ms / 10) * 10;
+}
+
 function timeField(ms: number | null | undefined): string {
   if (ms == null) return "";
   // The boxes only carry hundredths, so a stored value with stray milliseconds
   // has to land on the nearest hundredth rather than being truncated: opening a
   // result and saving it untouched would otherwise shave time off every leg.
-  return formatTime(Math.round(ms / 10) * 10).replace("—", "");
+  return formatTime(snapMs(ms)).replace("—", "");
 }
 
 export function EditResultSheet({
@@ -114,7 +123,7 @@ export function EditResultSheet({
     for (const st of stations) {
       const ms = cumulative[st.id];
       if (ms == null) continue;
-      const at = Math.round(ms / 10) * 10;
+      const at = snapMs(ms);
       seeded[st.id] = timeField(Math.max(0, at - prev));
       prev = at;
     }
@@ -147,7 +156,7 @@ export function EditResultSheet({
       // leg typed as 15.005 saved a 15005 split under a 15010 course time — and
       // the server differences these cumulatives into the segment times that
       // stationKing is awarded on, so the stray 5ms could take a crown.
-      const leg = Math.round(parsed / 10) * 10;
+      const leg = snapMs(parsed);
       total += leg;
       return { id: st.id, leg, at: total };
     });
@@ -167,8 +176,12 @@ export function EditResultSheet({
     setRawTime((prev) => (prev === next ? prev : next));
   }, [open, courseTouched, splitDerivedMs, run, legsTouched]);
 
-  const rawMs = parseTime(rawTime);
-  const penaltyMs = penalties.reduce((sum, p) => sum + (parseTime(p.ms) ?? 0), 0);
+  // Gridded like the legs, so the Official-time pill and the saved payload agree.
+  // null stays null: it is what marks an unparseable box.
+  const parsedRaw = parseTime(rawTime);
+  const rawMs = parsedRaw == null ? null : snapMs(parsedRaw);
+  const penaltyOf = (p: PenaltyDraft) => snapMs(parseTime(p.ms) ?? 0);
+  const penaltyMs = penalties.reduce((sum, p) => sum + penaltyOf(p), 0);
   const badSplit = Object.values(legTimes).some((v) => v.trim() !== "" && parseTime(v) == null);
   const badPenalty = penalties.some((p) => parseTime(p.ms) == null);
   const valid = rawMs != null && !badSplit && !badPenalty;
@@ -179,7 +192,7 @@ export function EditResultSheet({
       .map((c) => ({ stationId: c.id, cumulative_time_ms: c.at })),
     penalties: penalties.map((p) => ({
       stationId: p.stationId || null,
-      penalty_ms: parseTime(p.ms) ?? 0,
+      penalty_ms: penaltyOf(p),
       reason: p.reason.trim() || null,
     })),
   });

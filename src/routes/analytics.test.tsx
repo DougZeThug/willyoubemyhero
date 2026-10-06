@@ -1,6 +1,7 @@
 // Does mocking lucide-react with simple stubs fix the two empty-splits tests?
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import AnalyticsPage from "./analytics";
 import {
@@ -373,5 +374,69 @@ describe("a station nobody reached", () => {
     render(<AnalyticsPage />);
 
     expect(plotted()).toEqual([{ name: "Sled Push", avgSec: 10, bestSec: 10 }]);
+  });
+});
+
+describe("AnalyticsPage archive", () => {
+  const row = {
+    id: "arch-1",
+    slug: "combine-2025",
+    event_name: "Draft Combine",
+    event_year: 2025,
+    created_at: "2025-08-01T12:00:00Z",
+  };
+  const query = (result: Record<string, unknown>) =>
+    vi.mocked(useQuery).mockReturnValue(result as never);
+
+  afterEach(() => {
+    vi.mocked(useQuery).mockImplementation((() => ({ data: undefined })) as never);
+  });
+
+  it("says nothing has been archived only when the read succeeded and was empty", () => {
+    query({ data: [], isError: false, isPending: false });
+    render(<AnalyticsPage />);
+    expect(screen.getByText("No archived events yet.")).toBeInTheDocument();
+  });
+
+  it("says the read is pending rather than empty", () => {
+    query({ data: undefined, isError: false, isPending: true });
+    render(<AnalyticsPage />);
+    expect(screen.getByText("Reading the archive…")).toBeInTheDocument();
+    expect(screen.queryByText("No archived events yet.")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry when the read failed and there is nothing to show", () => {
+    const refetch = vi.fn();
+    query({ data: undefined, isError: true, isPending: false, refetch });
+    render(<AnalyticsPage />);
+    expect(screen.getByText("Couldn't read the archive just now.")).toBeInTheDocument();
+    expect(screen.queryByText("No archived events yet.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not call a failed refresh of an empty archive empty", () => {
+    // A cached [] is not "nothing to show" evidence once the refetch has failed.
+    const refetch = vi.fn();
+    query({ data: [], isError: true, isPending: false, refetch });
+    render(<AnalyticsPage />);
+    expect(screen.getByText("Couldn't read the archive just now.")).toBeInTheDocument();
+    expect(screen.queryByText("No archived events yet.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the rows it has but admits a failed refresh", () => {
+    query({ data: [row], isError: true, isPending: false, refetch: vi.fn() });
+    render(<AnalyticsPage />);
+    expect(screen.getByText(/Draft Combine 2025/)).toBeInTheDocument();
+    expect(screen.getByText(/Couldn't refresh the archive/)).toBeInTheDocument();
+  });
+
+  it("lists the archive with no warning when the read is healthy", () => {
+    query({ data: [row], isError: false, isPending: false });
+    render(<AnalyticsPage />);
+    expect(screen.getByText(/Draft Combine 2025/)).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't refresh the archive/)).not.toBeInTheDocument();
   });
 });

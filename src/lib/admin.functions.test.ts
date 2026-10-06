@@ -209,4 +209,19 @@ describe("startAdminSessionFromAccount", () => {
     });
     expect(await start({ userId: USER_ID })).toEqual({ ok: false, reason: "event_not_found" });
   });
+
+  it("throws rather than answering not_admin when the admin list cannot be read", async () => {
+    // The client latches not_admin as final, so a failed read must not wear it.
+    withDb({ "admin_accounts.select": { data: null, error: { message: "read failed" } } });
+    await expect(start({ userId: USER_ID })).rejects.toMatchObject({ message: "read failed" });
+    expect(mock.callsFor("events", "select")).toHaveLength(0);
+  });
+
+  it("throws rather than answering event_not_found when the event read fails", async () => {
+    withDb({
+      "admin_accounts.select": { data: { user_id: USER_ID }, error: null },
+      "events.select": { data: null, error: { message: "read failed" } },
+    });
+    await expect(start({ userId: USER_ID })).rejects.toMatchObject({ message: "read failed" });
+  });
 });

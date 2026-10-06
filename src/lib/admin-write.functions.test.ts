@@ -350,6 +350,26 @@ describe("saveCompletedRun", () => {
     expect(mock.eqValue(lookup, "client_key")).toBe("client-key-1");
   });
 
+  it("refuses to number a run when the client_key lookup failed", async () => {
+    // A failed read looks like "nothing saved yet". The upsert would then fall
+    // through to count + 1 and overwrite the real run's number on the same key.
+    withDb({
+      "runs.select": [{ error: { message: "read failed" } }, { count: 1 }],
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
+    await expect(save(base)).rejects.toMatchObject({ message: "read failed" });
+    expect(mock.callsFor("runs", "upsert")).toEqual([]);
+  });
+
+  it("refuses to number a run when the attempt count failed", async () => {
+    withDb({
+      "runs.select": [{ data: null }, { error: { message: "count failed" } }],
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
+    await expect(save(base)).rejects.toMatchObject({ message: "count failed" });
+    expect(mock.callsFor("runs", "upsert")).toEqual([]);
+  });
+
   it("totals the penalties onto the run", async () => {
     withDb({ "runs.select": { count: 0 }, "runs.upsert": { data: { id: RUN_ID } } });
     await save({
@@ -871,5 +891,119 @@ describe("addPlayerToRoster", () => {
     });
     expect(res).toMatchObject({ alreadyOnRoster: true });
     expect(mock.callsFor("event_participants", "insert")).toHaveLength(0);
+  });
+});
+
+describe("deleteRunResult", () => {
+  const RUN_ROW = { data: { id: RUN_ID, participant_id: PARTICIPANT_ID } };
+
+  async function remove() {
+    const { deleteRunResult } = await import("./admin-write.functions");
+    return callServerFn(deleteRunResult, {
+      data: { eventId: EVENT_ID, runId: RUN_ID },
+      headers: asAdmin(),
+    });
+  }
+
+  it("sends an athlete back to waiting when that was their last run", async () => {
+    withDb({ "runs.select": [RUN_ROW, { count: 1 }, { count: 0 }] });
+    await expect(remove()).resolves.toEqual({ ok: true, remainingRuns: 0 });
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(1);
+  });
+
+  it("leaves the athlete where they are when another run remains", async () => {
+    withDb({ "runs.select": [RUN_ROW, { count: 2 }, { count: 1 }] });
+    await expect(remove()).resolves.toEqual({ ok: true, remainingRuns: 1 });
+    expect(mock.callsFor("event_participants", "update")).toEqual([]);
+  });
+
+  it("trusts the count taken after the delete when a concurrent delete beat it", async () => {
+    // Two deletions of an athlete's last two runs each see a count of 2 beforehand.
+    // Judged on that alone neither resets them, stranding the athlete in `finished`
+    // with no run; the re-count sees the other delete land.
+    withDb({ "runs.select": [RUN_ROW, { count: 2 }, { count: 0 }] });
+    await expect(remove()).resolves.toEqual({ ok: true, remainingRuns: 0 });
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(1);
+  });
+
+  it("falls back to the count taken before when the re-count fails", async () => {
+    withDb({
+      "runs.select": [RUN_ROW, { count: 2 }, { error: { message: "recount failed" } }],
+    });
+    await expect(remove()).resolves.toEqual({ ok: true, remainingRuns: 1 });
+    expect(mock.callsFor("event_participants", "update")).toEqual([]);
+  });
+
+  it("destroys nothing when the run count cannot be read", async () => {
+    // The count used to follow the delete and coalesce to 0, which put an athlete
+    // who still had runs back to waiting. Throwing after the delete would have left
+    // the run gone and the retry refused, so the read comes first and aborts clean.
+    withDb({ "runs.select": [RUN_ROW, { error: { message: "count failed" } }] });
+    await expect(remove()).rejects.toMatchObject({ message: "count failed" });
+    for (const table of ["runs", "splits", "penalties"]) {
+      expect(mock.callsFor(table, "delete"), table).toEqual([]);
+    }
+    expect(mock.callsFor("event_participants", "update")).toEqual([]);
+  });
+});
+
+describe("createManualRun", () => {
+  async function create() {
+    const { createManualRun } = await import("./admin-write.functions");
+    return callServerFn(createManualRun, {
+      data: VALID_PAYLOADS.createManualRun,
+      headers: asAdmin(),
+    });
+  }
+
+  it("numbers the run after the athlete's existing ones", async () => {
+    withDb({ "runs.select": { count: 2 }, "runs.insert": { data: { id: RUN_ID } } });
+    await create();
+    const row = mock.callsFor("runs", "insert")[0].payload as Record<string, unknown>;
+    expect(row.attempt_number).toBe(3);
+  });
+
+  it("refuses to number a run when the attempt count cannot be read", async () => {
+    // A null count numbered the run attempt 1 whatever the athlete had already run.
+    withDb({ "runs.select": { error: { message: "count failed" } } });
+    await expect(create()).rejects.toMatchObject({ message: "count failed" });
+    expect(mock.callsFor("runs", "insert")).toEqual([]);
+  });
+});
+
+describe("a delete guard whose count cannot be read", () => {
+  // The guards read "no copies" / "no recorded times" as a licence to cascade-delete.
+  // A failed read must not look like either, so the delete never runs.
+  const failed = { count: null, error: { message: "count failed" } };
+
+  it.each([
+    ["card_copies", { "card_copies.select": failed, "card_pulls.select": { count: 0 } }],
+    ["card_pulls", { "card_copies.select": { count: 0 }, "card_pulls.select": failed }],
+  ])("keeps the athlete on the roster when %s cannot be counted", async (_table, responses) => {
+    const { removeParticipantFromEvent } = await import("./admin-write.functions");
+    withDb(responses);
+    await expect(
+      callServerFn(removeParticipantFromEvent, {
+        data: { eventId: EVENT_ID, eventParticipantId: EVENT_PARTICIPANT_ID },
+        headers: asAdmin(),
+      }),
+    ).rejects.toMatchObject({ message: "count failed" });
+    expect(mock.callsFor("event_participants", "delete")).toEqual([]);
+    expect(mock.callsFor("event_participants", "update")).toEqual([]);
+  });
+
+  it.each([
+    ["splits", { "splits.select": failed, "penalties.select": { count: 0 } }],
+    ["penalties", { "splits.select": { count: 0 }, "penalties.select": failed }],
+  ])("keeps the station when %s cannot be counted", async (_table, responses) => {
+    const { deleteStation } = await import("./admin-write.functions");
+    withDb(responses);
+    await expect(
+      callServerFn(deleteStation, {
+        data: { eventId: EVENT_ID, id: STATION_ID },
+        headers: asAdmin(),
+      }),
+    ).rejects.toMatchObject({ message: "count failed" });
+    expect(mock.callsFor("stations", "delete")).toEqual([]);
   });
 });

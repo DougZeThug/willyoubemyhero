@@ -9,7 +9,14 @@ import { listArchives } from "@/lib/media.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTime } from "@/lib/format";
 import { standings } from "@/lib/standings";
-import { FeedDegradedBanner, FeedError, FeedLoading } from "@/components/feed-state";
+import {
+  FeedDegradedBanner,
+  FeedError,
+  FeedLoading,
+  FeedPartialBanner,
+} from "@/components/feed-state";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
@@ -222,10 +229,37 @@ function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            {!archives.data?.length ? (
-              <p className="text-xs text-muted-foreground">No archived events yet.</p>
+            {/* A failed read, a pending one and a combine nobody has archived used
+                to render the same "No archived events yet." */}
+            {/* Nothing to show covers a cached [] too: after an empty read, a failed
+                refetch leaves data at [] and must not pass for "never archived". */}
+            {archives.isError && !archives.data?.length ? (
+              <div className="flex flex-col items-start gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Couldn&apos;t read the archive just now.
+                </p>
+                <Button
+                  size="default"
+                  variant="secondary"
+                  className="min-h-11"
+                  onClick={() => void archives.refetch()}
+                >
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Try again
+                </Button>
+              </div>
+            ) : !archives.data?.length ? (
+              <p className="text-xs text-muted-foreground">
+                {archives.isPending ? "Reading the archive…" : "No archived events yet."}
+              </p>
             ) : (
               <ul className="space-y-1.5">
+                {/* Stale rows are kept when a refetch fails, which would otherwise
+                    pass for a fresh list. */}
+                {archives.isError && (
+                  <li className="list-none">
+                    <FeedPartialBanner message="Couldn't refresh the archive — showing what we had." />
+                  </li>
+                )}
                 {archives.data.map((a) => (
                   <li key={a.id}>
                     <Link

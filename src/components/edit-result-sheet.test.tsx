@@ -227,4 +227,35 @@ describe("EditResultSheet", () => {
     expect(sent.raw_time_ms).toBe(101_320);
     expect(sent.splits.at(-1).cumulative_time_ms).toBe(101_320);
   });
+
+  it("snaps a hand-typed course time onto the hundredth grid like the legs", async () => {
+    // official_time_ms is the course time plus the penalties and is what the board
+    // and the records sort on, so a stray 5ms here outranks a hundredth nobody sees.
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.type(screen.getByLabelText(/course time/i), "15.005");
+    await user.click(screen.getByRole("button", { name: /add result/i }));
+
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    expect(serverFnMock.mock.calls[0]?.[0].data.raw_time_ms).toBe(15_010);
+  });
+
+  it("snaps a hand-typed penalty onto the hundredth grid like the legs", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.type(screen.getByLabelText(/course time/i), "15.00");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    const penaltyTime = screen.getByLabelText("Penalty time");
+    await user.clear(penaltyTime);
+    await user.type(penaltyTime, "5.005");
+    // The pill and the payload must agree: 15.00 + 5.01, not 15.00 + 5.005.
+    await waitFor(() => expect(screen.getByText("20.01")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: /add result/i }));
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    const sent = serverFnMock.mock.calls[0]?.[0].data;
+    expect(sent.penalties[0].penalty_ms).toBe(5_010);
+  });
 });

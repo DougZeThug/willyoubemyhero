@@ -64,20 +64,25 @@ export const startAdminSessionFromAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: admin } = await supabaseAdmin
+    // Both reads throw on error: the client treats "not_admin" as a settled answer
+    // and never asks again, so a failed read answered that way would lock a real
+    // commissioner out of the PIN-free path until they reload. A throw is retried.
+    const { data: admin, error: adminError } = await supabaseAdmin
       .from("admin_accounts")
       .select("user_id")
       .eq("user_id", context.userId)
       .maybeSingle();
+    if (adminError) throw adminError;
     if (!admin) return { ok: false as const, reason: "not_admin" as const };
 
-    const { data: event } = await supabaseAdmin
+    const { data: event, error: eventError } = await supabaseAdmin
       .from("events")
       .select("id")
       .eq("active", true)
       .order("year", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (eventError) throw eventError;
     if (!event) return { ok: false as const, reason: "event_not_found" as const };
 
     const { token, expiresAt } = signAdminToken(event.id);
