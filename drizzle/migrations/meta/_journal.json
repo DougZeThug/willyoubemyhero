@@ -64,6 +64,13 @@
       "when": 1791299047858,
       "tag": "0008_daily_secrets_follow_the_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791299151516,
+      "tag": "0009_moved_cards_take_their_stakes",
+      "breakpoints": true
     }
   ]
 }
