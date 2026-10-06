@@ -38,7 +38,7 @@
 -- ALSO HERE, because these are the newest definitions of the two settle paths:
 -- accept_trade_offer and buy_market_listing now void the giver's (seller's)
 -- other pending offers and active listings on a card that moved when
--- trade_item_is_spare now refuses them — a roster copy that was a spare until
+-- trade_item_is_spare (or, for an offer, trade_leaves_a_copy) now refuses them — a roster copy that was a spare until
 -- its sibling was given away is the giver's last, and a stake on it can never
 -- settle but blocked a mill or re-roll. See the comment in accept.
 --
@@ -998,8 +998,10 @@ BEGIN
   -- her last copy. It can never be accepted (trade_item_is_spare refuses it under
   -- lock), but left pending it blocks her milling or re-rolling c2, exactly the
   -- stale-stake trap above. So for each party who GAVE a card here, their other
-  -- stakes on that same card are re-asked the accept's own question, and voided
-  -- when it now says no. Offers and listings on any other card are not looked at,
+  -- stakes on that same card are re-asked the accept's own questions — is each
+  -- item still a spare (trade_item_is_spare), and does the offer as a whole
+  -- still leave them a copy (trade_leaves_a_copy) — and voided when either now
+  -- says no. Both are plain STABLE reads, so they add no lock to the order. Offers and listings on any other card are not looked at,
   -- and one that still passes stays, so nothing settleable is taken away. The
   -- buy path's re-validation is the same trade_item_is_spare call, so a listing
   -- is judged by exactly what a buyer would hit. Same SKIP LOCKED, same reason.
@@ -1024,9 +1026,12 @@ BEGIN
                    AND jc.event_participant_id = mc.event_participant_id)
                OR (j.kind = 'secret' AND m.kind = 'secret'
                    AND jp.secret_card_id = mp.secret_card_id))
-             AND NOT public.trade_item_is_spare(
-                   CASE j.giver_side WHEN 'proposer' THEN s.proposer_id ELSE s.recipient_id END,
-                   j.kind, j.card_copy_id, j.secret_pull_id))
+             AND (NOT public.trade_item_is_spare(
+                        CASE j.giver_side WHEN 'proposer' THEN s.proposer_id ELSE s.recipient_id END,
+                        j.kind, j.card_copy_id, j.secret_pull_id)
+                  -- Each copy still a spare on its own, but the offer stakes
+                  -- enough of them to take the last: accept's other refusal.
+                  OR NOT public.trade_leaves_a_copy(s.id)))
         FOR NO KEY UPDATE OF s SKIP LOCKED);
 
   UPDATE public.market_listings l
@@ -1316,8 +1321,9 @@ BEGIN
                    AND jc.event_participant_id = _copy.event_participant_id)
                OR (_listing.kind = 'secret' AND j.kind = 'secret'
                    AND jp.secret_card_id = _pull.secret_card_id))
-             AND NOT public.trade_item_is_spare(
-                   _listing.seller_id, j.kind, j.card_copy_id, j.secret_pull_id))
+             AND (NOT public.trade_item_is_spare(
+                        _listing.seller_id, j.kind, j.card_copy_id, j.secret_pull_id)
+                  OR NOT public.trade_leaves_a_copy(s.id)))
         FOR NO KEY UPDATE OF s SKIP LOCKED);
 
   UPDATE public.market_listings l

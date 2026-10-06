@@ -1294,6 +1294,32 @@ describe("a sale that leaves the seller's other stakes on the card unable to set
     expect(await offerStatus(offerId)).toBe("pending");
   });
 
+  it("voids a seller's offer staking copies that would now take the last together", async () => {
+    // Four copies, one sold: three left. Giving two still leaves one; giving
+    // all three does not, though each is a spare on its own.
+    const { alice, carols } = await seed(4);
+    const listing = await listedId(IDS.alice, { copyId: alice[0], price: 10 });
+    const offer = async (copies: string[]) => {
+      const [row] = await sql<{ create_trade_offer: { offerId: string } }>(
+        "SELECT public.create_trade_offer($1, $2, $3, $4::jsonb, $5::jsonb)",
+        [
+          IDS.alice,
+          IDS.carol,
+          IDS.event,
+          JSON.stringify(copies.map((cardCopyId) => ({ kind: "roster", cardCopyId }))),
+          JSON.stringify([{ kind: "roster", cardCopyId: carols[0] }]),
+        ],
+      );
+      return row.create_trade_offer.offerId;
+    };
+    const three = await offer([alice[1], alice[2], alice[3]]);
+    const two = await offer([alice[1], alice[2]]);
+
+    expect(await buy(IDS.bob, listing)).toMatchObject({ ok: true });
+    expect(await offerStatus(three)).toBe("voided");
+    expect(await offerStatus(two)).toBe("pending");
+  });
+
   it("voids the seller's other listing once it would take their last copy", async () => {
     // Two listings of a pair cannot be made directly — list_card_for_dust counts
     // commitments — but a burn after listing gets there: three copies, two

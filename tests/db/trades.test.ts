@@ -1724,6 +1724,26 @@ describe("a card that changes hands takes its stale stakes with it", () => {
       expect(await offerStatus(bobsOther.offerId)).toBe("voided");
     });
 
+    it("voids an offer staking several still-spare copies that together would now take the last", async () => {
+      // Alice holds four; o1 gives one, leaving three. Each of c2, c3 and c4 is
+      // still a spare on its own. An offer giving two of them leaves her one and
+      // stays; one giving all three leaves none: trade_leaves_a_copy says no.
+      const { alice, bob, carol } = await aliceWith(4);
+      const [c1, c2, c3, c4] = alice;
+      const three = await createOffer(
+        IDS.alice,
+        IDS.carol,
+        [copy(c2), copy(c3), copy(c4)],
+        [copy(carol[0])],
+      );
+      const two = await createOffer(IDS.alice, IDS.carol, [copy(c2), copy(c3)], [copy(carol[0])]);
+      const o1 = await createOffer(IDS.alice, IDS.bob, [copy(c1)], [copy(bob[0])]);
+
+      expect(await accept(o1.offerId, IDS.bob)).toMatchObject({ ok: true });
+      expect(await offerStatus(three.offerId)).toBe("voided");
+      expect(await offerStatus(two.offerId)).toBe("pending");
+    });
+
     it("takes the giver's listing of their now-last copy off the shelf", async () => {
       const { alice, bob } = await aliceWith(2);
       const [c1, c2] = alice;
