@@ -906,13 +906,30 @@ describe("deleteRunResult", () => {
   }
 
   it("sends an athlete back to waiting when that was their last run", async () => {
-    withDb({ "runs.select": [RUN_ROW, { count: 1 }] });
+    withDb({ "runs.select": [RUN_ROW, { count: 1 }, { count: 0 }] });
     await expect(remove()).resolves.toEqual({ ok: true, remainingRuns: 0 });
     expect(mock.callsFor("event_participants", "update")).toHaveLength(1);
   });
 
   it("leaves the athlete where they are when another run remains", async () => {
-    withDb({ "runs.select": [RUN_ROW, { count: 2 }] });
+    withDb({ "runs.select": [RUN_ROW, { count: 2 }, { count: 1 }] });
+    await expect(remove()).resolves.toEqual({ ok: true, remainingRuns: 1 });
+    expect(mock.callsFor("event_participants", "update")).toEqual([]);
+  });
+
+  it("trusts the count taken after the delete when a concurrent delete beat it", async () => {
+    // Two deletions of an athlete's last two runs each see a count of 2 beforehand.
+    // Judged on that alone neither resets them, stranding the athlete in `finished`
+    // with no run; the re-count sees the other delete land.
+    withDb({ "runs.select": [RUN_ROW, { count: 2 }, { count: 0 }] });
+    await expect(remove()).resolves.toEqual({ ok: true, remainingRuns: 0 });
+    expect(mock.callsFor("event_participants", "update")).toHaveLength(1);
+  });
+
+  it("falls back to the count taken before when the re-count fails", async () => {
+    withDb({
+      "runs.select": [RUN_ROW, { count: 2 }, { error: { message: "recount failed" } }],
+    });
     await expect(remove()).resolves.toEqual({ ok: true, remainingRuns: 1 });
     expect(mock.callsFor("event_participants", "update")).toEqual([]);
   });

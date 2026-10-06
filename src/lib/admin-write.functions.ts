@@ -720,23 +720,33 @@ export const deleteRunResult = createServerFn({ method: "POST" })
     if (runError) throw runError;
     if (!run) throw new Error("That run is not part of this event.");
 
+    const countRuns = () =>
+      supabaseAdmin
+        .from("runs")
+        .select("*", { count: "exact", head: true })
+        .eq("event_id", data.eventId)
+        .eq("participant_id", run.participant_id);
+
     // Counted BEFORE the delete, so a failed read aborts with nothing destroyed
-    // and the commissioner can simply retry. Counted after, a null count read as
-    // "no runs left" and sent an athlete who still had runs back to waiting — and
+    // and the commissioner can simply retry. Counted only after, a null count read
+    // as "no runs left" and sent an athlete who still had runs back to waiting — and
     // throwing then would have left the run gone and the retry refused. The run
     // is proven to be this athlete's by the lookup above, so it is in the count.
-    const { count, error: countError } = await supabaseAdmin
-      .from("runs")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", data.eventId)
-      .eq("participant_id", run.participant_id);
+    const { count: before, error: countError } = await countRuns();
     if (countError) throw countError;
-    const remaining = Math.max(0, (count ?? 0) - 1);
+    const expected = Math.max(0, (before ?? 0) - 1);
 
     await supabaseAdmin.from("penalties").delete().eq("run_id", run.id);
     await supabaseAdmin.from("splits").delete().eq("run_id", run.id);
     const { error } = await supabaseAdmin.from("runs").delete().eq("id", run.id);
     if (error) throw error;
+
+    // Counted again now the run is gone, and that answer wins: two deletions of
+    // one athlete's last two runs can each see a count of 2 beforehand and each
+    // conclude somebody remains, stranding the athlete in `finished` with no run.
+    // The pre-delete count only stands in if this read fails.
+    const { count: after, error: afterError } = await countRuns();
+    const remaining = afterError ? expected : (after ?? expected);
 
     if (remaining === 0) {
       const { error: statusError } = await supabaseAdmin

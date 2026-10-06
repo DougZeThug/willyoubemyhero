@@ -415,6 +415,17 @@ describe("AnalyticsPage archive", () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 
+  it("does not call a failed refresh of an empty archive empty", () => {
+    // A cached [] is not "nothing to show" evidence once the refetch has failed.
+    const refetch = vi.fn();
+    query({ data: [], isError: true, isPending: false, refetch });
+    render(<AnalyticsPage />);
+    expect(screen.getByText("Couldn't read the archive just now.")).toBeInTheDocument();
+    expect(screen.queryByText("No archived events yet.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
   it("keeps the rows it has but admits a failed refresh", () => {
     query({ data: [row], isError: true, isPending: false, refetch: vi.fn() });
     render(<AnalyticsPage />);

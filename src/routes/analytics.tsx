@@ -231,7 +231,9 @@ function AnalyticsPage() {
           <CardContent className="pt-0">
             {/* A failed read, a pending one and a combine nobody has archived used
                 to render the same "No archived events yet." */}
-            {archives.isError && !archives.data ? (
+            {/* Nothing to show covers a cached [] too: after an empty read, a failed
+                refetch leaves data at [] and must not pass for "never archived". */}
+            {archives.isError && !archives.data?.length ? (
               <div className="flex flex-col items-start gap-2">
                 <p className="text-xs text-muted-foreground">
                   Couldn&apos;t read the archive just now.
