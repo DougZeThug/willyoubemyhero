@@ -632,8 +632,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     // belongs to this event and athlete; anything else is somebody else's run.
     if (
       alreadySaved &&
-      (alreadySaved.event_id !== data.eventId ||
-        alreadySaved.participant_id !== data.participantId)
+      (alreadySaved.event_id !== data.eventId || alreadySaved.participant_id !== data.participantId)
     ) {
       throw new Error("That run belongs to a different result");
     }
