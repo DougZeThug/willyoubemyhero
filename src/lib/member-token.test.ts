@@ -216,6 +216,61 @@ describe("refreshMemberToken", () => {
   });
 });
 
+describe("a renewal that outlives its token's eviction", () => {
+  const OTHER_ID = "00000000-0000-4000-8000-0000000000bb";
+  const fresh = () => tokenExpiring(Date.now() + 90 * 24 * 60 * 60_000);
+
+  /** Expired and evicted by an unrelated getMemberToken(), as attachMemberToken does. */
+  function lapse() {
+    const old = tokenExpiring(Date.now() - 1);
+    window.localStorage.setItem(KEY, old);
+    window.localStorage.setItem(NAME_KEY, "Doug");
+    expect(getMemberToken()).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    return old;
+  }
+
+  it("still lands, and brings the cached name back", () => {
+    const old = lapse();
+    const next = fresh();
+    expect(refreshMemberToken(next, old)).toBe(true);
+    expect(getMemberToken()).toBe(next);
+    expect(window.localStorage.getItem(NAME_KEY)).toBe("Doug");
+  });
+
+  it("does not land after a sign-out", () => {
+    const old = lapse();
+    clearMemberToken();
+    expect(refreshMemberToken(fresh(), old)).toBe(false);
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("does not land after somebody else signs in", () => {
+    const old = lapse();
+    setMemberToken(`m.${OTHER_ID}.${Date.now() + 60_000}.sig`, "Bob");
+    expect(refreshMemberToken(fresh(), old)).toBe(false);
+    expect(memberTokenParticipant(getMemberToken())).toBe(OTHER_ID);
+  });
+
+  it("does not land for a token the eviction did not take", () => {
+    lapse();
+    expect(refreshMemberToken(fresh(), tokenExpiring(Date.now() - 5))).toBe(false);
+  });
+
+  it("lands only once", () => {
+    const old = lapse();
+    expect(refreshMemberToken(fresh(), old)).toBe(true);
+    clearMemberToken();
+    expect(refreshMemberToken(fresh(), old)).toBe(false);
+  });
+
+  it("leaves no marker behind for a malformed token", () => {
+    window.localStorage.setItem(KEY, "garbage");
+    getMemberToken();
+    expect(refreshMemberToken(fresh(), "garbage")).toBe(false);
+  });
+});
+
 describe("memberTokenParticipant", () => {
   it("names the participant even once the token has lapsed", () => {
     expect(memberTokenParticipant(tokenExpiring(Date.now() - 1))).toBe(PARTICIPANT_ID);

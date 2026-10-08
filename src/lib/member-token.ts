@@ -6,6 +6,15 @@ const KEY = "wwbh:member-token";
 const NAME_KEY = "wwbh:member-name";
 /** Breadcrumb that outlives the token. See setMemberToken. */
 export const WAS_MEMBER_KEY = "wwbh:was-member";
+/**
+ * The token getMemberToken last evicted for EXPIRING, and the name beside it.
+ *
+ * Eviction and sign-out both leave the token key empty, and a renewal that lands
+ * after its token lapsed has to tell them apart: the first is the same person
+ * whose answer came late, the second is somebody who left. Written only by the
+ * expiry eviction; every deliberate change of identity removes it.
+ */
+const LAPSED_KEY = "wwbh:member-lapsed";
 
 export type MemberSession = {
   participantId: string;
@@ -32,16 +41,46 @@ export function getMemberToken(): string | null {
   const raw = window.localStorage.getItem(KEY);
   const parsed = parse(raw, null);
   if (!parsed) {
-    if (raw) clearMemberToken();
+    if (raw) {
+      // Well-formed but past its expiry is a lapse, not junk: a renewal already
+      // in the air for this exact token may still arrive, and every server call
+      // reads the token through here — so the first one after expiry lands in
+      // exactly that window. Remembered rather than cleared outright.
+      if (memberTokenParticipant(raw)) lapseMemberToken(raw);
+      else clearMemberToken();
+    }
     return null;
   }
   return parsed.token;
+}
+
+function lapseMemberToken(raw: string) {
+  const name = window.localStorage.getItem(NAME_KEY);
+  window.localStorage.setItem(LAPSED_KEY, JSON.stringify({ token: raw, name }));
+  window.localStorage.removeItem(KEY);
+  window.localStorage.removeItem(NAME_KEY);
+  window.dispatchEvent(new Event("wwbh:member-token-changed"));
+}
+
+/** The lapsed token and name, if the last thing to empty the token key was its expiry. */
+function readLapsed(): { token: string; name: string | null } | null {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LAPSED_KEY) ?? "null");
+    if (parsed && typeof parsed.token === "string") {
+      return { token: parsed.token, name: typeof parsed.name === "string" ? parsed.name : null };
+    }
+  } catch {
+    /* a marker nobody can read is no marker */
+  }
+  return null;
 }
 
 export function setMemberToken(token: string, name: string) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(KEY, token);
   window.localStorage.setItem(NAME_KEY, name);
+  // A new identity arriving ends any renewal still waiting on the old one.
+  window.localStorage.removeItem(LAPSED_KEY);
   // Deliberately never cleared, including on sign-out. A member's secret cards
   // live on their name rather than on the phone, so somebody arriving on a new
   // handset to an empty vault needs to be told where their collection went — and
@@ -77,6 +116,12 @@ export function memberTokenParticipant(token: string | null): string | null {
  * renewal matters most. Read raw rather than through getMemberToken, which
  * would evict the expired token and then refuse its own replacement.
  *
+ * And if something else DID evict it first — every server call reads the token
+ * through getMemberToken, and one fired after expiry will — the swap still lands
+ * when the key is empty only because of that lapse (see LAPSED_KEY): the same
+ * token, hence the same person, with the name the eviction took restored. A
+ * sign-out or a different identity removes the marker, so those still drop it.
+ *
  * Still announced, so the session snapshot carries the new expiry; every effect
  * keyed on the member is keyed on `participantId`, which has not moved.
  */
@@ -85,8 +130,15 @@ export function refreshMemberToken(token: string, renewed?: string): boolean {
   const next = memberTokenParticipant(token);
   if (!next) return false;
   if (renewed !== undefined) {
-    if (window.localStorage.getItem(KEY) !== renewed) return false;
-    if (memberTokenParticipant(renewed) !== next) return false;
+    const stored = window.localStorage.getItem(KEY);
+    if (stored !== renewed) {
+      const lapsed = stored === null ? readLapsed() : null;
+      if (lapsed?.token !== renewed || memberTokenParticipant(renewed) !== next) return false;
+      if (lapsed.name !== null) window.localStorage.setItem(NAME_KEY, lapsed.name);
+    } else if (memberTokenParticipant(renewed) !== next) {
+      return false;
+    }
+    window.localStorage.removeItem(LAPSED_KEY);
   } else if (next !== memberTokenParticipant(getMemberToken())) {
     return false;
   }
@@ -99,6 +151,7 @@ export function clearMemberToken() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(KEY);
   window.localStorage.removeItem(NAME_KEY);
+  window.localStorage.removeItem(LAPSED_KEY);
   window.dispatchEvent(new Event("wwbh:member-token-changed"));
 }
 
