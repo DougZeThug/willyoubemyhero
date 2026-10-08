@@ -6,6 +6,7 @@ import { subscribeToNudges } from "@/lib/nudge-channel";
 import { dustSparesKey, tradeOffersKey, tradeSparesKey } from "./use-trades";
 import { marketListingsKey, myStallKey } from "./use-market";
 import { dustBalanceKey } from "./use-dust";
+import { mySecretsKey } from "./use-daily-secret";
 
 /**
  * Subscribe this device to its own trade nudges.
@@ -38,7 +39,7 @@ export function useTradeNudge(topic: string | null, participantId: string | null
     // for a guest or after a sign-out. Focus refetch covers those.
     if (!topic || !participantId) return;
     return subscribeToNudges(topic, () => {
-      // ONE TOPIC, SIX KEYS. The marketplace pokes this same per-participant
+      // ONE TOPIC, SEVEN KEYS. The marketplace pokes this same per-participant
       // topic when somebody buys your card, rather than minting a second one:
       // the topic is an HMAC per member and the event carries nothing, so a
       // second reason to send it widens the surface by exactly nothing. The
@@ -60,6 +61,12 @@ export function useTradeNudge(topic: string | null, participantId: string | null
       // from under an open shop stayed on its burn and sell counters.
       qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
       qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
+      // And a secret you listed and sold is gone from your collection. A trade
+      // would have said so through useTradeFeed; a sale writes no `trades` row, so
+      // this nudge is the only thing on the seller's phone that hears of it. The
+      // cache is keyed on the actor, which for a claimed member is
+      // `m:<participantId>` — see useSecretActor.
+      qc.invalidateQueries({ queryKey: mySecretsKey(`m:${participantId}`) });
     });
   }, [topic, participantId, qc]);
 }
