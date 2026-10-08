@@ -99,7 +99,10 @@ describe("StreakLadder", () => {
     // Deliberately read-only: claiming lives where the run was extended, and a
     // third button for a once-a-run action is a third way for it to half-happen.
     render(<StreakLadder streak={streak({ current: 8 })} history={[]} />);
-    expect(screen.getByText(/three days is waiting/i)).toBeInTheDocument();
+    // The rung the claim button on the vault will actually offer: the highest
+    // one earned and not taken, not the lowest.
+    expect(screen.getByText(/one week is waiting/i)).toBeInTheDocument();
+    expect(screen.queryByText(/three days is waiting/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /claim it on the vault/i })).toHaveAttribute(
       "href",
       "/players",
@@ -110,20 +113,34 @@ describe("StreakLadder", () => {
     // §23 F12. "Waiting" with the reason two sections up under ACCOUNT is not a
     // reason anybody reading a rung can see.
     render(<StreakLadder streak={streak({ current: 8, canClaim: false })} history={[]} />);
-    const three = screen.getByText("Three Days").closest("li")!;
-    expect(within(three).getByText(/an account is what claims it/i)).toBeInTheDocument();
+    const week = screen.getByText("One Week").closest("li")!;
+    expect(within(week).getByText(/an account is what claims it/i)).toBeInTheDocument();
   });
 
   it("says it once, on the rung that is actually next", () => {
     render(<StreakLadder streak={streak({ current: 8, canClaim: false })} history={[]} />);
-    const week = screen.getByText("One Week").closest("li")!;
-    expect(within(week).queryByText(/an account/i)).not.toBeInTheDocument();
+    const three = screen.getByText("Three Days").closest("li")!;
+    expect(within(three).queryByText(/an account/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/an account is what claims it/i)).toHaveLength(1);
   });
 
   it("keeps the reason off a rung somebody can already claim", () => {
     render(<StreakLadder streak={streak({ current: 8 })} history={[]} />);
     expect(screen.queryByText(/an account/i)).not.toBeInTheDocument();
+  });
+
+  it("names the same rung the vault will claim when several are waiting", () => {
+    // current 14 earns 3, 7 and 14. useMilestoneClaim offers the highest of them,
+    // so a ladder that named the lowest sent people to claim a different rung.
+    render(<StreakLadder streak={streak({ current: 14 })} history={[]} />);
+    expect(screen.getByText(/two weeks is waiting/i)).toBeInTheDocument();
+  });
+
+  it("falls back to the lower rung once the higher one is taken", () => {
+    const s = streak({ current: 14 });
+    s.milestones = s.milestones.map((m) => (m.days === 14 ? { ...m, claimed: true } : m));
+    render(<StreakLadder streak={s} history={[]} />);
+    expect(screen.getByText(/one week is waiting/i)).toBeInTheDocument();
   });
 
   it("promises the next rung when nothing is waiting", () => {

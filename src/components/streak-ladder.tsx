@@ -43,7 +43,12 @@ export function StreakLadder({
     );
   }
 
-  const claimable = streak.milestones.find((m) => m.earned && !m.claimed) ?? null;
+  // The HIGHEST rung earned and not taken, because that is the one the claim
+  // button on the vault offers (useMilestoneClaim, which also skips a rung whose
+  // reveal this session has already played). `milestones` runs ascending, so a
+  // `find` named the lowest and sent people to claim a different rung than the
+  // one this line promised.
+  const claimable = streak.milestones.filter((m) => m.earned && !m.claimed).at(-1) ?? null;
   // Earned, unclaimed, and no account to cash it against — which the server
   // works out from whether this actor has one at all (streaks.functions.ts:172).
   const blocked = claimable != null && !streak.canClaim;
