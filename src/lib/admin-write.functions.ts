@@ -551,6 +551,26 @@ export const deleteStation = createServerFn({ method: "POST" })
   });
 
 // ---------- Runs ----------
+/**
+ * The admin token is scoped to one event, and the privileged client trusts
+ * whatever athlete id it is handed — so the roster check is what keeps a result
+ * typed for this combine from landing on somebody outside it.
+ */
+async function assertOnRoster(
+  supabaseAdmin: (typeof import("@/integrations/supabase/client.server"))["supabaseAdmin"],
+  eventId: string,
+  participantId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("event_participants")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("participant_id", participantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Player is not in this event");
+}
+
 export const saveCompletedRun = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
@@ -600,12 +620,23 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
     // lookup would fall through to count + 1, and the upsert below (onConflict
     // client_key) would then overwrite the saved run's number with it. The
     // console's Retry re-sends the same client_key, so failing loudly is safe.
+    await assertOnRoster(supabaseAdmin, data.eventId, data.participantId);
     const { data: alreadySaved, error: lookupError } = await supabaseAdmin
       .from("runs")
-      .select("attempt_number")
+      .select("attempt_number, event_id, participant_id")
       .eq("client_key", data.clientKey)
       .maybeSingle();
     if (lookupError) throw lookupError;
+    // client_key is unique across ALL events, so the upsert below would rewrite
+    // whichever run holds it. A retry is only a retry when the key already
+    // belongs to this event and athlete; anything else is somebody else's run.
+    if (
+      alreadySaved &&
+      (alreadySaved.event_id !== data.eventId ||
+        alreadySaved.participant_id !== data.participantId)
+    ) {
+      throw new Error("That run belongs to a different result");
+    }
     const { count, error: countError } = await supabaseAdmin
       .from("runs")
       .select("*", { count: "exact", head: true })
