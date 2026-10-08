@@ -1007,3 +1007,29 @@ describe("a delete guard whose count cannot be read", () => {
     expect(mock.callsFor("stations", "delete")).toEqual([]);
   });
 });
+
+describe("recordRandomization", () => {
+  // The only copy of the order a shuffle overwrote. order.tsx gives the call its
+  // own catch and a warning toast, which a swallowed insert error never reached.
+  it("records the shuffle's provenance", async () => {
+    const mod = await import("./admin-write.functions");
+    await expect(
+      callServerFn(mod.recordRandomization, {
+        data: VALID_PAYLOADS.recordRandomization,
+        headers: asAdmin(),
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(mock.callsFor("running_order_randomizations", "insert")).toHaveLength(1);
+  });
+
+  it("throws when the insert fails, instead of reporting it recorded", async () => {
+    withDb({ "running_order_randomizations.insert": { error: { message: "boom" } } });
+    const mod = await import("./admin-write.functions");
+    await expect(
+      callServerFn(mod.recordRandomization, {
+        data: VALID_PAYLOADS.recordRandomization,
+        headers: asAdmin(),
+      }),
+    ).rejects.toMatchObject({ message: "boom" });
+  });
+});

@@ -438,7 +438,7 @@ export const recordRandomization = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("running_order_randomizations").insert({
+    const { error } = await supabaseAdmin.from("running_order_randomizations").insert({
       event_id: data.eventId,
       randomized_scope: data.scope,
       previous_order: data.previous,
@@ -446,6 +446,11 @@ export const recordRandomization = createServerFn({ method: "POST" })
       randomization_seed: data.seed,
       randomized_by: "admin",
     });
+    // Thrown rather than swallowed: this row is the only copy of the order the
+    // shuffle overwrote, and order.tsx catches the rejection to tell the
+    // commissioner it was not recorded. A resolved `ok` here made that warning
+    // unreachable for the one failure it was written for.
+    if (error) throw error;
     return { ok: true };
   });
 
