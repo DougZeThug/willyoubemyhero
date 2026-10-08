@@ -16,6 +16,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import PackPage from "./players.pack";
 import { EVENT_ID, makeBundle } from "@/test/fixtures";
+import { PACK_DEALT_KEY } from "@/lib/card-collection";
 
 const who = vi.hoisted(() => ({ identity: "d:device", member: false }));
 const openPack = vi.hoisted(() => vi.fn());
@@ -246,6 +247,40 @@ describe("resuming a carried pack", () => {
 
     await waitFor(() => expect(openPack).toHaveBeenCalled());
     await sleep(100);
+    expect(adoptCollection).not.toHaveBeenCalled();
+  });
+
+  it("keeps the cards turned on screen and in the row when nobody carried the pack", async () => {
+    // Another tab saved card 1 while this one holds card 0. The row is the
+    // fresher word on one card and the screen on the other; losing either flips a
+    // card face-down. Nothing is filed: only a carried pack owes anybody that.
+    who.identity = "m:me";
+    who.member = true;
+    const cards = [
+      { kind: "roster", id: CARD, heldBefore: 0 },
+      { kind: "roster", id: "ep-2", heldBefore: 0 },
+    ];
+    openPack.mockReset().mockResolvedValue({
+      ok: true,
+      day: (await row({})).dayKey,
+      fresh: false,
+      packsOpened: 1,
+      cards: cards.map((c) => ({ ...c, edition: "standard", editionBefore: null })),
+    });
+    loadPackState.mockResolvedValue(
+      await row({ identity: "m:me", ids: [CARD, "ep-2"], cards, revealed: [0], cursor: 1 }),
+    );
+    render(<PackPage />);
+    await waitFor(() => expect(lastSave()).toMatchObject({ revealed: [0] }));
+
+    loadPackState.mockResolvedValue(
+      await row({ identity: "m:me", ids: [CARD, "ep-2"], cards, revealed: [1], cursor: 1 }),
+    );
+    window.dispatchEvent(new StorageEvent("storage", { key: PACK_DEALT_KEY }));
+
+    await waitFor(() =>
+      expect([...((lastSave()?.revealed as number[]) ?? [])].sort()).toEqual([0, 1]),
+    );
     expect(adoptCollection).not.toHaveBeenCalled();
   });
 
