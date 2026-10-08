@@ -112,6 +112,26 @@ export function streakMilestone(days: number): StreakMilestone | undefined {
   return STREAK_MILESTONES.find((m) => m.days === days);
 }
 
+/**
+ * The rung a person would claim next: the HIGHEST one earned and not yet taken.
+ *
+ * Highest rather than lowest so a 14-day streak claiming late collects the big one
+ * first and the rest follow on the next taps, instead of making somebody work up
+ * the ladder. `milestones` runs ascending, so this is the last match.
+ *
+ * One rule for every screen that names a rung to claim — the vault's button
+ * (useMilestoneClaim) and the profile ladder's "waiting" line. They kept a copy
+ * each and the ladder's said the lowest, so it promised one rung and linked to a
+ * button that offered another. `taken` is the one thing they cannot share: rungs
+ * whose reveal this session has already played, which only the claim hook knows.
+ */
+export function claimableRung<T extends { days: number; earned: boolean; claimed: boolean }>(
+  milestones: readonly T[],
+  taken: ReadonlySet<number> = new Set(),
+): T | null {
+  return milestones.filter((m) => m.earned && !m.claimed && !taken.has(m.days)).at(-1) ?? null;
+}
+
 /** The next rung above this streak, or null once they are all behind you. */
 export function nextMilestone(streak: number): StreakMilestone | null {
   return STREAK_MILESTONES.find((m) => m.days > streak) ?? null;

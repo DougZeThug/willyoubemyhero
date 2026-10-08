@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   STREAK_MILESTONES,
+  claimableRung,
   isStreakMilestone,
   nextMilestone,
   nextMilestoneLine,
@@ -261,5 +262,42 @@ describe("streakLine", () => {
     const line = streakLine(walkStreak(["2026-08-24"], "2026-08-24"));
     expect(line).toContain("Day 1");
     expect(line).not.toContain("keep it alive");
+  });
+});
+
+describe("claimableRung", () => {
+  // The one rule behind the ladder's "waiting" line and the vault's Claim button.
+  // Two copies of it drifted once: the ladder named the lowest rung while the
+  // button offered the highest.
+  const rung = (days: number, earned: boolean, claimed = false) => ({ days, earned, claimed });
+  const ladder = (current: number, claimedDays: number[] = []) =>
+    STREAK_MILESTONES.map((m) => rung(m.days, current >= m.days, claimedDays.includes(m.days)));
+
+  it("is the highest rung earned and not taken", () => {
+    expect(claimableRung(ladder(14))?.days).toBe(14);
+    expect(claimableRung(ladder(8))?.days).toBe(7);
+  });
+
+  it("falls back to a lower rung once the higher one is taken", () => {
+    expect(claimableRung(ladder(14, [14]))?.days).toBe(7);
+    expect(claimableRung(ladder(14, [14, 7]))?.days).toBe(3);
+  });
+
+  it("is null when nothing is waiting", () => {
+    expect(claimableRung(ladder(2))).toBeNull();
+    expect(claimableRung(ladder(8, [3, 7]))).toBeNull();
+    expect(claimableRung([])).toBeNull();
+  });
+
+  it("skips rungs the caller says it has already taken this session", () => {
+    // The claim hook's latch for a rung whose reveal has played but whose claimed
+    // flag has not come back from the server yet.
+    expect(claimableRung(ladder(14), new Set([14]))?.days).toBe(7);
+    expect(claimableRung(ladder(14), new Set([14, 7, 3]))).toBeNull();
+  });
+
+  it("hands back the rung it was given, not a copy", () => {
+    const rungs = ladder(8);
+    expect(claimableRung(rungs)).toBe(rungs[1]);
   });
 });

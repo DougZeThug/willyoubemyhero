@@ -6,7 +6,7 @@ import { packStatusKey } from "@/hooks/use-pack-status";
 import { streakHistoryKey, streakStatusKey } from "@/hooks/use-streak";
 import { claimStreakMilestone, type StreakMilestoneStatus } from "@/lib/streaks.functions";
 import type { StreakStatus } from "@/lib/streaks.functions";
-import { streakMilestone } from "@/lib/streaks";
+import { claimableRung, streakMilestone } from "@/lib/streaks";
 import type { SecretCardView } from "@/lib/secret-cards";
 import type { SecretTier } from "@/lib/secret-rarity";
 
@@ -113,11 +113,11 @@ export function useMilestoneClaim(actor: string | null, streak: StreakStatus | n
   // broken says nothing about the rung on the run standing today.
   const shown = claimedRef.current.get(run) ?? EMPTY_DAYS;
 
-  // The highest rung earned and not yet taken. Highest rather than lowest so a
-  // 14-day streak claiming late collects the big one first and the rest follow on
-  // the next taps, instead of making somebody work up the ladder.
-  const claimable: StreakMilestoneStatus | null =
-    streak?.milestones.filter((m) => m.earned && !m.claimed && !shown.has(m.days)).at(-1) ?? null;
+  // The highest rung earned and not yet taken — see claimableRung, which the
+  // profile ladder shares so the two cannot name different rungs.
+  const claimable: StreakMilestoneStatus | null = streak
+    ? claimableRung(streak.milestones, shown)
+    : null;
 
   // Only while the button still offers the rung the refusal was about. A
   // "claimed" refusal refetches the ladder, and on a long streak that moves the
