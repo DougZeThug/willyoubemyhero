@@ -302,6 +302,34 @@ describe("merge_guest_into_guest", () => {
       ]);
     });
 
+    it("refuses a destination that has been claimed, for comments as well as reactions", async () => {
+      const ep = await card();
+      await sql("INSERT INTO public.claimed_guests (guest_id, participant_id) VALUES ($1, $2)", [
+        GUEST_A,
+        IDS.alice,
+      ]);
+      // Comments only: the reaction INSERT would trip the trigger by itself, the
+      // comments UPDATE would not.
+      await comment(ep, GUEST_B, "orphan");
+
+      await expect(mergeAll()).rejects.toThrow(/belongs to a player now/);
+
+      expect(await commentsOf()).toEqual([
+        { guest_key: GUEST_B, body: "orphan", guest_name: "Guest" },
+      ]);
+    });
+
+    it("still merges pulls into a claimed destination when there is no social to move", async () => {
+      const card2 = await addCard("merge-claimed-pulls");
+      await sql("INSERT INTO public.claimed_guests (guest_id, participant_id) VALUES ($1, $2)", [
+        GUEST_A,
+        IDS.alice,
+      ]);
+      await givePull(GUEST_B, card2);
+      await mergeAll();
+      expect(await pullsFor(GUEST_A)).toHaveLength(1);
+    });
+
     it("leaves a third guest's reactions and comments where they are", async () => {
       const ep = await card();
       await react(ep, GUEST_C, "🔥");

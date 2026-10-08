@@ -21,10 +21,14 @@
 -- function already holds, which are the keys every guest write serialises on
 -- (the refuse_claimed_guest_social trigger takes the same one before each guest
 -- insert), so a reaction in flight under either id finishes first or queues
--- behind the move. The INSERT fires that trigger for the destination too, so a
--- destination that has been claimed in the meantime refuses the merge outright
--- and the sync retries as the player — which is better than moving rows onto a
--- guest key that now belongs to somebody.
+-- behind the move.
+--
+-- A destination that has been claimed in the meantime refuses the move, for
+-- reactions AND comments: moving rows onto a guest key that now belongs to a
+-- player is the orphan this exists to prevent. The trigger would catch the
+-- reaction INSERT, but the comments move is an UPDATE and it is BEFORE INSERT
+-- only, so the check is explicit. Raised only when there is social to move, so a
+-- merge of pulls alone behaves as it did. The sync retries as the player.
 
 CREATE OR REPLACE FUNCTION public.merge_guest_into_guest(
   _into_guest uuid,
@@ -50,6 +54,12 @@ BEGIN
   PERFORM public.merge_guest_pulls(_into_guest, _from_guest);
   PERFORM public.merge_guest_packs(_into_guest, _from_guest);
   PERFORM public.merge_guest_streak_milestones(_into_guest, _from_guest);
+
+  IF EXISTS (SELECT 1 FROM public.claimed_guests WHERE guest_id = _into_guest)
+     AND (EXISTS (SELECT 1 FROM public.card_reactions WHERE guest_key = _from_guest::text)
+          OR EXISTS (SELECT 1 FROM public.card_comments WHERE guest_key = _from_guest::text)) THEN
+    RAISE EXCEPTION 'This phone belongs to a player now. Claim your player to join in.';
+  END IF;
 
   INSERT INTO public.card_reactions (event_participant_id, guest_key, guest_name, emoji, created_at)
   SELECT event_participant_id, _into_guest::text, guest_name, emoji, created_at
