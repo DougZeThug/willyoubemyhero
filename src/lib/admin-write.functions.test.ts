@@ -341,13 +341,36 @@ describe("saveCompletedRun", () => {
     // would turn a first run into "attempt 2" purely because the phone had to
     // try twice.
     withDb({
-      "runs.select": [{ data: { attempt_number: 1 } }, { count: 1 }],
+      "runs.select": [
+        { data: { attempt_number: 1, event_id: EVENT_ID, participant_id: PARTICIPANT_ID } },
+        { count: 1 },
+      ],
       "runs.upsert": { data: { id: RUN_ID } },
     });
     await save(base);
     expect(runInserted().attempt_number).toBe(1);
     const lookup = mock.callsFor("runs", "select").find((c) => c.terminal === "maybeSingle")!;
     expect(mock.eqValue(lookup, "client_key")).toBe("client-key-1");
+  });
+
+  it("refuses a client_key that already belongs to another event's run", async () => {
+    // client_key is unique across every event, so upserting on it would rewrite
+    // a run this admin token has no say over.
+    withDb({
+      "runs.select": [
+        { data: { attempt_number: 1, event_id: OTHER_EVENT, participant_id: PARTICIPANT_ID } },
+        { count: 0 },
+      ],
+      "runs.upsert": { data: { id: RUN_ID } },
+    });
+    await expect(save(base)).rejects.toThrow("different result");
+    expect(mock.callsFor("runs", "upsert")).toEqual([]);
+  });
+
+  it("refuses a result for somebody not on this event's roster", async () => {
+    withDb({ "event_participants.select": { data: null } });
+    await expect(save(base)).rejects.toThrow("not in this event");
+    expect(mock.callsFor("runs", "upsert")).toEqual([]);
   });
 
   it("refuses to number a run when the client_key lookup failed", async () => {
