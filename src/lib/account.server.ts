@@ -108,7 +108,8 @@ async function mergeGuestInto(identity: AccountIdentity, guestId: string) {
     // calls left gaps: the destination could open today's pack between the
     // pulls and the packs, so merge_guest_pulls kept a second day's secret, and
     // a failure after the packs stranded milestone claims on the dead id.
-    // Not in the generated types yet, hence the widened client.
+    // Reactions and comments move with them (20261008130000), as in the member
+    // branch. Not in the generated types yet, hence the widened client.
     const { error } = await untypedDb().rpc("merge_guest_into_guest", {
       _into_guest: identity.id,
       _from_guest: guestId,

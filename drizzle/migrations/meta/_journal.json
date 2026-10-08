@@ -85,6 +85,13 @@
       "when": 1791299467460,
       "tag": "0011_merge_guest_into_guest_in_one_transaction",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791458927227,
+      "tag": "0012_merge_guest_social_into_guest",
+      "breakpoints": true
     }
   ]
 }

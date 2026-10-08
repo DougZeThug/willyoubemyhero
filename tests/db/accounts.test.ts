@@ -244,6 +244,80 @@ describe("merge_guest_into_guest", () => {
     expect(await pullsFor(GUEST_B)).toHaveLength(0);
   });
 
+  describe("reactions and comments (20261008130000)", () => {
+    const GUEST_C = "00000000-0000-4000-8000-00000000ac03";
+
+    async function card(): Promise<string> {
+      const [row] = await sql<{ id: string }>(
+        "SELECT id::text FROM public.event_participants WHERE event_id = $1 AND participant_id = $2",
+        [IDS.event, IDS.bob],
+      );
+      return row.id;
+    }
+    const react = (ep: string, guest: string, emoji: string) =>
+      sql(
+        `INSERT INTO public.card_reactions (event_participant_id, guest_key, guest_name, emoji)
+         VALUES ($1, $2, 'Guest', $3)`,
+        [ep, guest, emoji],
+      );
+    const comment = (ep: string, guest: string, body: string) =>
+      sql(
+        `INSERT INTO public.card_comments (event_participant_id, guest_key, guest_name, body)
+         VALUES ($1, $2, 'Guest', $3)`,
+        [ep, guest, body],
+      );
+    const reactionsOf = () =>
+      sql<{ guest_key: string; emoji: string }>(
+        `SELECT guest_key, emoji FROM public.card_reactions ORDER BY emoji COLLATE "C", guest_key`,
+      );
+    const commentsOf = () =>
+      sql<{ guest_key: string; body: string; guest_name: string }>(
+        "SELECT guest_key, body, guest_name FROM public.card_comments ORDER BY body",
+      );
+
+    it("moves the absorbed guest's reactions and comments onto the destination", async () => {
+      const ep = await card();
+      await react(ep, GUEST_B, "🔥");
+      await comment(ep, GUEST_B, "slow");
+
+      await mergeAll();
+
+      expect(await reactionsOf()).toEqual([{ guest_key: GUEST_A, emoji: "🔥" }]);
+      expect(await commentsOf()).toEqual([
+        { guest_key: GUEST_A, body: "slow", guest_name: "Guest" },
+      ]);
+    });
+
+    it("collapses a reaction both guests left, rather than tripping the unique index", async () => {
+      const ep = await card();
+      await react(ep, GUEST_A, "🔥");
+      await react(ep, GUEST_B, "🔥");
+      await react(ep, GUEST_B, "💀");
+
+      await mergeAll();
+
+      expect(await reactionsOf()).toEqual([
+        { guest_key: GUEST_A, emoji: "💀" },
+        { guest_key: GUEST_A, emoji: "🔥" },
+      ]);
+    });
+
+    it("leaves a third guest's reactions and comments where they are", async () => {
+      const ep = await card();
+      await react(ep, GUEST_C, "🔥");
+      await comment(ep, GUEST_C, "mine");
+      await react(ep, GUEST_B, "👏");
+
+      await mergeAll();
+
+      expect(await reactionsOf()).toEqual([
+        { guest_key: GUEST_A, emoji: "👏" },
+        { guest_key: GUEST_C, emoji: "🔥" },
+      ]);
+      expect((await commentsOf()).map((c) => c.guest_key)).toEqual([GUEST_C]);
+    });
+  });
+
   it("does nothing for a missing or identical id", async () => {
     const card = await addCard("merge-noop");
     await givePull(GUEST_B, card);
