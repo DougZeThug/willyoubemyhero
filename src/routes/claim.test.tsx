@@ -74,12 +74,13 @@ vi.mock("@/lib/card-collection", async (importOriginal) => ({
 const adoptLocalCollection = vi.hoisted(() => vi.fn());
 const holdForAdoption = vi.hoisted(() => vi.fn());
 const releaseAdoptionHold = vi.hoisted(() => vi.fn());
+const snapshotLocalCollection = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/adopt-collection")>()),
   adoptLocalCollection: (...args: unknown[]) => adoptLocalCollection(...args),
   holdForAdoption: (...args: unknown[]) => holdForAdoption(...args),
   releaseAdoptionHold: (...args: unknown[]) => releaseAdoptionHold(...args),
-  snapshotLocalCollection: () => Promise.resolve({}),
+  snapshotLocalCollection: () => snapshotLocalCollection(),
 }));
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
@@ -116,6 +117,7 @@ beforeEach(() => {
   useQuery.mockReturnValue(rosterState({ data: [ATHLETE] }));
   claimPlayer.mockResolvedValue({ ok: true, token: "m.tok", name: "Doug" });
   adoptLocalCollection.mockResolvedValue(1);
+  snapshotLocalCollection.mockImplementation(() => Promise.resolve({}));
   holdForAdoption.mockImplementation(() => Promise.resolve());
   releaseAdoptionHold.mockImplementation(() => Promise.resolve());
   // carryPackToIdentity needs no stubbed answer: the route only awaits it, and a
@@ -226,6 +228,38 @@ describe("claiming a player", () => {
     expect(releaseAdoptionHold.mock.invocationCallOrder[0]).toBeGreaterThan(
       adoptLocalCollection.mock.invocationCallOrder[0],
     );
+  });
+
+  it("reads the collection after the claim's round trip, so a card turned meanwhile is filed", async () => {
+    // A pack screen open in another tab keeps flipping cards while the request is
+    // out. The snapshot drives both the hold and the filing, so one read before the
+    // round trip left anything turned in that time in neither, and the reconcile
+    // that follows the token deleted it.
+    const before = {};
+    const turned = { "ep-9": { eventParticipantId: "ep-9" } };
+    snapshotLocalCollection.mockImplementation(() => Promise.resolve(before));
+    claimPlayer.mockImplementation(async () => {
+      snapshotLocalCollection.mockImplementation(() => Promise.resolve(turned));
+      return { ok: true, token: "m.tok", name: "Doug" };
+    });
+    await claim();
+
+    expect(holdForAdoption).toHaveBeenCalledWith("p-doug", turned);
+    expect(adoptLocalCollection).toHaveBeenCalledWith(turned);
+    expect(carryPackToIdentity).toHaveBeenCalledWith("d:dev-1", "m:p-doug", ["ep-9"]);
+  });
+
+  it("still reads the collection before the member token lands", async () => {
+    // Moving the read past the round trip must not move it past the token: the
+    // prune starts the instant the token does.
+    let readAt = 0;
+    snapshotLocalCollection.mockImplementation(() => {
+      readAt = setMemberToken.mock.calls.length;
+      return Promise.resolve({});
+    });
+    await claim();
+    expect(snapshotLocalCollection).toHaveBeenCalledTimes(1);
+    expect(readAt).toBe(0);
   });
 
   it("waits for the hold to be down before the token goes out", async () => {

@@ -714,6 +714,34 @@ describe("useAccountSync", () => {
     expect(adoptLocalCollection).toHaveBeenLastCalledWith(held);
   });
 
+  it("reads the store after the sync's round trip, so a card turned meanwhile is filed", async () => {
+    // A pack screen in another tab keeps flipping cards while the request is out;
+    // the snapshot drives both the hold and the filing. Still before the token.
+    const turned = { ...held, "ep-9": { ...held["ep-1"], eventParticipantId: "ep-9" } };
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    let tokenAtRead: string | null = "unset";
+    vi.mocked(syncAccountSession).mockImplementation(async () => {
+      vi.mocked(snapshotLocalCollection).mockImplementation(async () => {
+        tokenAtRead = window.localStorage.getItem("wwbh:member-token");
+        return turned;
+      });
+      return { kind: "member", token: MEMBER_TOKEN, name: "Alice" } as never;
+    });
+    renderHook(() => useAccountSync(user));
+    await settle();
+
+    expect(vi.mocked(holdForAdoption).mock.calls[0]?.[1]).toBe(turned);
+    expect(adoptLocalCollection).toHaveBeenCalledWith(turned);
+    expect(tokenAtRead).toBeNull();
+  });
+
+  it("does not read the store for an account that stays a guest", async () => {
+    vi.mocked(syncAccountSession).mockResolvedValue({ kind: "guest", token: GUEST_TOKEN } as never);
+    renderHook(() => useAccountSync(user));
+    await settle();
+    expect(snapshotLocalCollection).not.toHaveBeenCalled();
+  });
+
   it("snapshots the store once, before the first token lands", async () => {
     // A re-read on retry would adopt whatever the prune had already left.
     vi.mocked(adoptLocalCollection)

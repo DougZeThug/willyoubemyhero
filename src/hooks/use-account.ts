@@ -143,7 +143,9 @@ export function useAccountSync(user: User | null) {
     // reason as the claim page: once this device is a member, its unrecognised
     // local cards are pruned, and a guest's base cards exist nowhere else. Once
     // rather than per attempt or per wake, because a read after the prune has
-    // run would snapshot a store that has already lost them.
+    // run would snapshot a store that has already lost them. Called after the
+    // sync's round trip (below), not before it, so a card turned in another tab
+    // while the request was out is in the hold and the filing.
     async function snapshot() {
       if (heldFor.current?.userId === userId) return heldFor.current.snapshot;
       const captured = await snapshotLocalCollection();
@@ -159,10 +161,14 @@ export function useAccountSync(user: User | null) {
     let wrote: string | null = null;
 
     async function runSync() {
-      const held = await snapshot();
       const res = await syncAccountSession({ data: undefined });
       if (cancelled) return;
       if (res.kind === "member") {
+        // Still before the token, which is all the prune is waiting on. Only this
+        // branch needs it: a guest answer writes no member token, so nothing is
+        // reconciled and nothing is adopted.
+        const held = await snapshot();
+        if (cancelled) return;
         const carryFrom = deviceId();
         // BEFORE the token, for the reason claim.tsx spells out at length: the
         // token is what gives the root ceremony host a participant id, and the

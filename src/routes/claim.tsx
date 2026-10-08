@@ -75,9 +75,6 @@ function ClaimPage() {
     if (!selected || !code.trim() || busy) return;
     setBusy(true);
     try {
-      // Read the cards on this handset BEFORE it becomes a member: the collection
-      // hook starts pruning against the server the instant the token lands.
-      const held = await snapshotLocalCollection();
       const res = await claimFn({ data: { participantId: selected, code: code.trim() } });
       if (!res.ok) {
         // Distinguished from a wrong code: during a lockout the RIGHT code
@@ -90,6 +87,15 @@ function ClaimPage() {
         setCode("");
         return;
       }
+      // Read the cards on this handset BEFORE it becomes a member: the collection
+      // hook starts pruning against the server the instant the token lands.
+      //
+      // AFTER the claim's round trip rather than before it. This is the only
+      // record of what the guest holds — it drives both the hold and the filing —
+      // and a pack screen open in another tab keeps flipping cards for as long as
+      // the request is out; read first, anything turned in that time was in
+      // neither, and the reconcile that follows the token deleted it.
+      const held = await snapshotLocalCollection();
       const device = deviceId();
       // THE CEREMONIES GO ACROSS BEFORE THE TOKEN, and that ordering is the whole
       // point of this line. `claim_guest_secrets` has already banked the trophy

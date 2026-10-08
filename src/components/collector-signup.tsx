@@ -37,10 +37,12 @@ export function CollectorSignup({ className }: { className?: string }) {
     if (displayName.length < 2 || busy) return;
     setBusy(true);
     try {
-      // Snapshotted before the token lands, exactly as the claim page does: a
-      // guest's base cards live only on this handset until they are adopted.
-      const held = await snapshotLocalCollection();
       const res = await createFn({ data: { displayName } });
+      // Snapshotted before the token lands, exactly as the claim page does: a
+      // guest's base cards live only on this handset until they are adopted. After
+      // the round trip, not before it, so a card turned in another tab while the
+      // request was out is in the hold and the filing — see claim.tsx.
+      const held = await snapshotLocalCollection();
       clearGuestToken();
       clearAccountHandoff();
       // The claim screen's rule, which this door used to be the only one to

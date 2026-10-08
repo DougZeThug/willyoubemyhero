@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import type { User } from "@supabase/supabase-js";
 import { createQueryWrapper } from "@/test/query";
 import { getMemberToken, setMemberToken } from "@/lib/member-token";
+import { snapshotLocalCollection } from "@/lib/adopt-collection";
 
 const createCollectorIdentity = vi.fn();
 const toastError = vi.fn();
@@ -75,6 +76,9 @@ beforeEach(() => {
   createCollectorIdentity
     .mockReset()
     .mockResolvedValue({ token: TOKEN, name: "Jane Doe", participantId: PID });
+  vi.mocked(snapshotLocalCollection).mockResolvedValue({
+    "ep-1": { eventParticipantId: "ep-1" },
+  } as never);
   adoptLocalCollection.mockReset().mockResolvedValue(undefined);
   holdForAdoption.mockReset().mockImplementation(() => Promise.resolve());
   releaseAdoptionHold.mockReset().mockImplementation(() => Promise.resolve());
@@ -199,6 +203,22 @@ describe("when the cards can't be uploaded", () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/protect your cards/i))); // prettier-ignore
     expect(getMemberToken()).toBeNull();
     expect(adoptLocalCollection).not.toHaveBeenCalled();
+  });
+
+  it("reads the collection after the set-up round trip, so a card turned meanwhile is filed", async () => {
+    // See the claim page: the snapshot drives both the hold and the filing, and a
+    // pack screen in another tab keeps flipping cards while the request is out.
+    const turned = { "ep-1": { eventParticipantId: "ep-1" }, "ep-9": { eventParticipantId: "ep-9" } }; // prettier-ignore
+    createCollectorIdentity.mockImplementation(async () => {
+      vi.mocked(snapshotLocalCollection).mockResolvedValue(turned as never);
+      return { token: TOKEN, name: "Jane Doe", participantId: PID };
+    });
+    await renderSignup();
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("You're in, Jane Doe"));
+    expect(holdForAdoption).toHaveBeenCalledWith(PID, turned);
+    expect(adoptLocalCollection).toHaveBeenCalledWith(turned);
   });
 
   it("holds the cards before the token lands and lets go once they are filed", async () => {
