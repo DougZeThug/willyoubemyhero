@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { getMyTradeOffers, getTradeFeed, getTradeSpares } from "@/lib/trades.functions";
@@ -7,6 +7,7 @@ import type { TradeFeedEntry, TradeOfferView, TradeSpares } from "@/lib/trades";
 import { mySecretsKey } from "./use-daily-secret";
 import { myCardStatsKey } from "./use-my-collection";
 import { cardPullCountsKey } from "./use-card-pulls";
+import { marketListingsKey } from "./use-market";
 
 export const tradeOffersKey = (participantId: string | null | undefined) =>
   ["trade-offers", participantId] as const;
@@ -103,6 +104,45 @@ export function useTradeSpares(
 }
 
 /**
+ * Everything a completed trade can move, invalidated in one place.
+ *
+ * Two paths need exactly this list and used to keep a copy each: the realtime
+ * handler below, which updates everybody else, and the trade screen's own
+ * refresh after accept, which cannot lean on realtime (the channel may still be
+ * subscribing when someone arrives from the vault and acts at once, or be
+ * unavailable altogether). The copies drifted — the shop's spares list was added
+ * to one commit before the market shelf was missed by both — so there is one.
+ *
+ * `my-card-stats` holds for 60s and `my-secrets` for five minutes, so getting
+ * this wrong shows somebody their pre-trade collection for minutes.
+ *
+ * The market shelf is here because accept_trade_offer voids the active
+ * `market_listings` that stake the copies it moves (20261006130000), and the
+ * shelf lives on a route the trade screen never renders.
+ */
+export function invalidateTradeCaches(
+  qc: QueryClient,
+  eventId: string | null | undefined,
+  participantId: string | null | undefined,
+): Promise<unknown> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: tradeFeedKey(eventId) }),
+    qc.invalidateQueries({ queryKey: tradeOffersKey(participantId) }),
+    // The viewer prefix: theirs and mine alike.
+    qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) }),
+    // The shop's copy of the same list. Missing it left a card you had just
+    // traded away on the burn and sell counters until the cache aged out.
+    qc.invalidateQueries({ queryKey: dustSparesKey(participantId) }),
+    qc.invalidateQueries({ queryKey: marketListingsKey(participantId) }),
+    qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId) }),
+    qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) }),
+    // The secrets cache is keyed on an actor, which for a claimed member is
+    // `m:<participantId>` — see useSecretActor.
+    qc.invalidateQueries({ queryKey: mySecretsKey(participantId ? `m:${participantId}` : null) }),
+  ]);
+}
+
+/**
  * The public feed of completed trades, kept live.
  *
  * `trades` is the one trading table in the realtime publication, and an insert
@@ -128,20 +168,9 @@ export function useTradeFeed(eventId: string | null | undefined, participantId?:
       .channel(`trades:${eventId}:${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => {
         // A trade landing is the moment two collections changed, so the feed is
-        // not the only thing stale. Everything a swap can move gets invalidated
-        // off the one event — including on the phones of people who were not in
-        // it, whose "Packed by N" counts have genuinely moved.
-        qc.invalidateQueries({ queryKey: tradeFeedKey(eventId) });
-        qc.invalidateQueries({ queryKey: tradeOffersKey(participantId) });
-        qc.invalidateQueries({ queryKey: tradeSparesKey(participantId) });
-        qc.invalidateQueries({ queryKey: dustSparesKey(participantId) });
-        qc.invalidateQueries({ queryKey: cardPullCountsKey(eventId) });
-        qc.invalidateQueries({ queryKey: myCardStatsKey(eventId, participantId) });
-        // The secrets cache is keyed on an actor, which for a claimed member is
-        // `m:<participantId>` — see useSecretActor.
-        qc.invalidateQueries({
-          queryKey: mySecretsKey(participantId ? `m:${participantId}` : null),
-        });
+        // not the only thing stale — including on the phones of people who were
+        // not in it, whose "Packed by N" counts have genuinely moved.
+        void invalidateTradeCaches(qc, eventId, participantId);
       })
       .subscribe();
     return () => {
