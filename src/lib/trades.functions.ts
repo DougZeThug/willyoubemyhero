@@ -6,7 +6,7 @@ import { signPath } from "./media.functions";
 import { VARIANT_WIDTHS } from "./media";
 import { toSecretTier } from "./secret-rarity";
 import { toEdition } from "./card-edition";
-import { leagueDay, TRADE_UNDO_WINDOW_SECONDS } from "./trades";
+import { TRADE_UNDO_WINDOW_SECONDS } from "./trades";
 import type {
   BlockedSpare,
   SecretSpare,
@@ -374,7 +374,6 @@ export const getTradeSpares = createServerFn({ method: "GET" })
           }))
       : [];
 
-    const today = leagueDay();
     /** One RosterSpare per copy, whatever the size of the holding it came from. */
     const asSpare = (r: SpareCopyRow) => ({
       copyId: r.id,
@@ -385,11 +384,9 @@ export const getTradeSpares = createServerFn({ method: "GET" })
       // about should under-promise rather than over-promise a payout.
       assertedBy: r.edition_asserted_by === "server" ? ("server" as const) : ("client" as const),
       viewerOwns: mine || viewer.roster.has(r.event_participant_id),
-      // Yours only, and only when true: see RosterSpare.pulledToday. A
-      // counterparty's list does not say which of their copies landed today.
-      ...(mine && r.source === "pull" && r.acquired_on === today
-        ? { pulledToday: true as const }
-        : {}),
+      // Yours only, and only for a pull: see RosterSpare.pulledOn. A
+      // counterparty's list does not say which of their copies a pack minted.
+      ...(mine && r.source === "pull" && r.acquired_on ? { pulledOn: r.acquired_on } : {}),
     });
 
     return {

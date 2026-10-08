@@ -45,8 +45,11 @@ const REROLLED = "Its finish has changed — sell it from the Shop";
  *   card and the number the button quoted.
  * - A roster slot carries no copy id (open_pack mints through record_card_pulls
  *   and keeps only the finish), so this asks for the member's copies at the moment
- *   of the tap and burns the one marked `pulledToday` — the one this pack minted,
- *   and there is only ever one per card per day. Not "any copy at this finish":
+ *   of the tap and burns the one pulled on the day this pack was dealt — the one
+ *   this pack minted, and there is only ever one per card per day. The day is the
+ *   pack's, passed in, not "today": a summary still on screen a minute past
+ *   midnight is yesterday's, and its copy is yesterday's too. Not "any copy at
+ *   this finish":
  *   the sold-receipts live in the route's state and a reload loses them, so a
  *   replayed slot would otherwise burn an older copy for every reload and
  *   confirm. Gone, it answers "already gone"; re-rolled since, it refuses too,
@@ -85,7 +88,12 @@ export function usePackSell(
   );
 
   return useCallback(
-    async (slot: PackSlot, edition: Edition | null): Promise<PackSellResult> => {
+    async (
+      slot: PackSlot,
+      edition: Edition | null,
+      /** The league day the pack on screen was dealt (not the live day). */
+      packDay: string | null,
+    ): Promise<PackSellResult> => {
       if (!participantId) return { ok: false, message: FALLBACK };
       try {
         if (slot.kind === "secret") {
@@ -96,14 +104,14 @@ export function usePackSell(
           return { ok: true, awarded: res.awarded };
         }
 
-        if (edition == null) return { ok: false, message: FALLBACK };
+        if (edition == null || !packDay) return { ok: false, message: FALLBACK };
         const spares = await sparesFn({ data: { participantId } });
         // `ownedRoster`, not `roster`: that one lists only cards held twice or more,
         // so the day's pull vanishes from it the moment it is the member's only copy
         // and "Already gone" would be said of a card that is still in the vault. Found
         // here, a lone copy goes on to the RPC, which answers `last_copy` itself.
         const copy = spares.ownedRoster.find(
-          (c) => c.eventParticipantId === slot.id && c.pulledToday,
+          (c) => c.eventParticipantId === slot.id && c.pulledOn === packDay,
         );
         if (!copy) return { ok: false, message: REFUSALS.not_yours ?? FALLBACK };
         if (copy.edition !== edition || copy.assertedBy !== "server") {

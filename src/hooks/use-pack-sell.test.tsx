@@ -34,6 +34,9 @@ import { tradeSparesKey } from "./use-trades";
 const ME = "me-1";
 const ACTOR = `m:${ME}`;
 const EVENT = "ev-1";
+/** The league day the pack on screen was dealt. */
+const DAY = "2026-10-07";
+const OTHER_DAY = "2026-10-06";
 
 const rosterSlot: PackRosterSlot = {
   kind: "roster",
@@ -81,7 +84,7 @@ describe("a secret", () => {
     fns.sell.mockResolvedValue({ ok: true, awarded: 60, balance: 160 });
     const { sell, client, keys } = mount();
 
-    await expect(sell(secretSlot(), null)).resolves.toEqual({ ok: true, awarded: 60 });
+    await expect(sell(secretSlot(), null, DAY)).resolves.toEqual({ ok: true, awarded: 60 });
     expect(fns.sell).toHaveBeenCalledWith({ data: { secretPullId: "pull-today" } });
     expect(client.getQueryData(dustBalanceKey(ME))).toEqual({ balance: 160 });
     expect(keys()).toContain(JSON.stringify(mySecretsKey(ACTOR)));
@@ -95,7 +98,7 @@ describe("a secret", () => {
     fns.sell.mockResolvedValue({ ok: false, reason: "not_yours" });
     const { sell, client, keys } = mount();
 
-    await expect(sell(secretSlot(), null)).resolves.toEqual({
+    await expect(sell(secretSlot(), null, DAY)).resolves.toEqual({
       ok: false,
       message: "Already gone — it left your vault",
     });
@@ -109,7 +112,7 @@ describe("a secret", () => {
     fns.sell.mockResolvedValue({ ok: false, reason: "too_fresh" });
     const { sell, keys } = mount();
 
-    await expect(sell(secretSlot(), null)).resolves.toEqual({
+    await expect(sell(secretSlot(), null, DAY)).resolves.toEqual({
       ok: false,
       message: "Today's pull can be dusted from tomorrow",
     });
@@ -118,7 +121,7 @@ describe("a secret", () => {
 
   it("sells nothing for a slot with no pull to sell", async () => {
     const { sell } = mount();
-    const res = await sell(secretSlot({ pullId: undefined }), null);
+    const res = await sell(secretSlot({ pullId: undefined }), null, DAY);
     expect(res.ok).toBe(false);
     expect(fns.sell).not.toHaveBeenCalled();
   });
@@ -129,14 +132,14 @@ describe("a roster card", () => {
     fns.spares.mockResolvedValue({
       ownedRoster: [
         spare("c-old-gold", "gold"),
-        spare("c-gold", "gold", { pulledToday: true }),
+        spare("c-gold", "gold", { pulledOn: DAY }),
         spare("c-standard", "standard"),
       ],
     });
     fns.mill.mockResolvedValue({ ok: true, awarded: 40, balance: 90 });
     const { sell, client } = mount();
 
-    await expect(sell(rosterSlot, "gold")).resolves.toEqual({ ok: true, awarded: 40 });
+    await expect(sell(rosterSlot, "gold", DAY)).resolves.toEqual({ ok: true, awarded: 40 });
     expect(fns.spares).toHaveBeenCalledWith({ data: { participantId: ME } });
     expect(fns.mill).toHaveBeenCalledWith({ data: { cardCopyId: "c-gold" } });
     expect(client.getQueryData(dustBalanceKey(ME))).toEqual({ balance: 90 });
@@ -149,8 +152,45 @@ describe("a roster card", () => {
     fns.spares.mockResolvedValue({ ownedRoster: [spare("c-old-gold", "gold"), spare("c-std", "standard")] }); // prettier-ignore
     const { sell } = mount();
 
-    const res = await sell(rosterSlot, "gold");
+    const res = await sell(rosterSlot, "gold", DAY);
     expect(res).toEqual({ ok: false, message: "Already gone — it left your vault" });
+    expect(fns.mill).not.toHaveBeenCalled();
+  });
+
+  it("still finds the copy a pack minted yesterday, once midnight has passed", async () => {
+    // The summary stays on screen until the day tick re-seals it, and for that
+    // minute "today" is a day the pack was not dealt on. The copy is the pack's
+    // own and is still in the vault, so it is milled — it is identified by the
+    // day the pack was dealt, not by the day it happens to be.
+    fns.spares.mockResolvedValue({
+      ownedRoster: [spare("c-gold", "gold", { pulledOn: OTHER_DAY })],
+    });
+    fns.mill.mockResolvedValue({ ok: true, awarded: 40, balance: 90 });
+    const { sell } = mount();
+
+    await expect(sell(rosterSlot, "gold", OTHER_DAY)).resolves.toEqual({ ok: true, awarded: 40 });
+    expect(fns.mill).toHaveBeenCalledWith({ data: { cardCopyId: "c-gold" } });
+  });
+
+  it("does not burn a copy pulled on a different day than the pack was dealt", async () => {
+    // Yesterday's pack, and the only copy on the list is today's pull of the same
+    // card. Not the one this slot minted.
+    fns.spares.mockResolvedValue({ ownedRoster: [spare("c-today", "gold", { pulledOn: DAY })] });
+    const { sell } = mount();
+
+    await expect(sell(rosterSlot, "gold", OTHER_DAY)).resolves.toEqual({
+      ok: false,
+      message: "Already gone — it left your vault",
+    });
+    expect(fns.mill).not.toHaveBeenCalled();
+  });
+
+  it("sells nothing without knowing which day the pack was dealt", async () => {
+    fns.spares.mockResolvedValue({ ownedRoster: [spare("c-gold", "gold", { pulledOn: DAY })] });
+    const { sell } = mount();
+
+    const res = await sell(rosterSlot, "gold", null);
+    expect(res.ok).toBe(false);
     expect(fns.mill).not.toHaveBeenCalled();
   });
 
@@ -161,12 +201,12 @@ describe("a roster card", () => {
     // there. The RPC owns the rule, so the copy is found and the RPC is asked.
     fns.spares.mockResolvedValue({
       roster: [],
-      ownedRoster: [spare("c-gold", "gold", { pulledToday: true })],
+      ownedRoster: [spare("c-gold", "gold", { pulledOn: DAY })],
     });
     fns.mill.mockResolvedValue({ ok: false, reason: "last_copy" });
     const { sell } = mount();
 
-    await expect(sell(rosterSlot, "gold")).resolves.toEqual({
+    await expect(sell(rosterSlot, "gold", DAY)).resolves.toEqual({
       ok: false,
       message: "That's your last one",
     });
@@ -175,10 +215,10 @@ describe("a roster card", () => {
 
   it("refuses today's copy once its finish has been re-rolled", async () => {
     // The button still quotes gold; the copy is a silver now.
-    fns.spares.mockResolvedValue({ ownedRoster: [spare("c-today", "silver", { pulledToday: true })] }); // prettier-ignore
+    fns.spares.mockResolvedValue({ ownedRoster: [spare("c-today", "silver", { pulledOn: DAY })] }); // prettier-ignore
     const { sell } = mount();
 
-    const res = await sell(rosterSlot, "gold");
+    const res = await sell(rosterSlot, "gold", DAY);
     expect(res.ok).toBe(false);
     expect(fns.mill).not.toHaveBeenCalled();
   });
@@ -186,7 +226,7 @@ describe("a roster card", () => {
   it("turns a failed request into a line to show, not a throw", async () => {
     fns.spares.mockRejectedValue(new Error("offline"));
     const { sell } = mount();
-    await expect(sell(rosterSlot, "gold")).resolves.toEqual({
+    await expect(sell(rosterSlot, "gold", DAY)).resolves.toEqual({
       ok: false,
       message: "Couldn't sell it — try again",
     });
@@ -195,7 +235,7 @@ describe("a roster card", () => {
 
 it("sells nothing for somebody who is not a member", async () => {
   const { sell } = mount(null);
-  const res = await sell(secretSlot(), null);
+  const res = await sell(secretSlot(), null, DAY);
   expect(res.ok).toBe(false);
   expect(fns.sell).not.toHaveBeenCalled();
 });

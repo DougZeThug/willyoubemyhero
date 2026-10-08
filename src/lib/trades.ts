@@ -125,13 +125,17 @@ export type RosterSpare = {
    */
   assertedBy: "client" | "server";
   /**
-   * The copy today's pack minted for you: `source = 'pull'` on the current league
-   * day. Present only on your own list and only when true. record_card_pulls
-   * mints at most one copy per card per day, so this names exactly one copy — the
-   * one the pack screen's "Sell for" sells. Traded, bought or burnt, it is gone
-   * from the list, and the pack screen says so rather than burning another.
+   * The league day this copy was minted by a pack — `card_copies.acquired_on` for
+   * a `source = 'pull'` copy. Present only on your own list, and only for a pull.
+   *
+   * record_card_pulls mints at most one copy per card per day, so a day names
+   * exactly one copy: the one the pack screen's "Sell for" sells, matched against
+   * the day the pack on screen was DEALT. A flag computed against "today" instead
+   * stopped naming it at midnight, while yesterday's summary was still showing.
+   * Traded, bought or burnt, the copy is gone from the list, and the pack screen
+   * says so rather than burning another.
    */
-  pulledToday?: true;
+  pulledOn?: string;
 };
 
 /**

@@ -1562,7 +1562,9 @@ function PackPage() {
                 ? async (i) => {
                     const stand = standSlots[i];
                     if (!stand) return "Couldn't sell it — try again";
-                    const res = await sellSlot(stand.slot, stand.edition);
+                    // The day the pack on screen was DEALT, not the live `dayKey`: that moves
+                    // at midnight a render before the tick re-seals the stand.
+                    const res = await sellSlot(stand.slot, stand.edition, dealtOnRef.current);
                     if (!res.ok) return res.message;
                     const left = copiesAfterSale(stand);
                     setSoldFor((prev) => ({

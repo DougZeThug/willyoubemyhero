@@ -187,7 +187,7 @@ describe("getTradeSpares", () => {
     expect(res.roster[0].edition).toBe("standard");
   });
 
-  it("marks the copy today's pack minted, on your own list only", async () => {
+  it("dates the copies a pack minted, on your own list only", async () => {
     // The pack screen's "Sell for" burns exactly this copy, and nothing else, so a
     // replayed slot cannot sell an older copy at the same finish. A traded copy
     // (source 'trade') and yesterday's pull are not it.
@@ -203,14 +203,20 @@ describe("getTradeSpares", () => {
       "card_copies.select": copies,
     });
     const mine = await spares(ME, asMe());
-    expect(mine.roster.filter((r) => r.pulledToday).map((r) => r.copyId)).toEqual([COPY_1]);
+    // Named by the day it was pulled rather than by "today": the pack on screen
+    // can be yesterday's for a minute past midnight, and the copy it minted is
+    // still the one it sells.
+    expect(mine.roster.filter((r) => r.pulledOn).map((r) => [r.copyId, r.pulledOn])).toEqual([
+      [COPY_1, leagueDay()],
+      [COPY_2, "2026-01-02"],
+    ]);
 
     withDb({
       "event_participants.select": { data: [{ id: CARD_A }] },
       "card_copies.select": copies,
     });
     const theirs = await spares(THEM, asMe());
-    expect(theirs.roster.some((r) => "pulledToday" in r)).toBe(false);
+    expect(theirs.roster.some((r) => "pulledOn" in r)).toBe(false);
   });
 
   it("asks about the participant in the payload, not the one holding the token", async () => {
