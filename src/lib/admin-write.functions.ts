@@ -838,6 +838,8 @@ export const createManualRun = createServerFn({ method: "POST" })
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    await assertOnRoster(supabaseAdmin, data.eventId, data.participantId);
+
     // Thrown, not coalesced: a null count numbered this run attempt 1 whatever
     // the athlete had already run.
     const { count, error: countError } = await supabaseAdmin
