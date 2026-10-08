@@ -151,8 +151,13 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
   // type off the data URL prefix — so the type has to be settled before the first
   // read.
   const file = withImageType(input);
+  // Outside the try so the finally can reach it: an ImageBitmap holds its decoded
+  // pixels (~48 MB for a 4000x3000 photo) until it is closed, and every exit
+  // below — a passthrough, a canvas that would not draw, a failed encode — has
+  // to let go of it, not just the one that returns variants.
+  let source: ImageBitmap | HTMLImageElement | undefined;
   try {
-    const source = await loadImage(file);
+    source = await loadImage(file);
     const w = "naturalWidth" in source ? source.naturalWidth : source.width;
     const h = "naturalHeight" in source ? source.naturalHeight : source.height;
     if (!w || !h) {
@@ -167,7 +172,6 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
 
     if (scaleLarge === 1 && file.size <= PASSTHROUGH_BYTES) {
       const passthrough = await readAsDataUrl(file);
-      if ("close" in source) source.close();
       return { thumb: passthrough, medium: passthrough, large: passthrough };
     }
 
@@ -189,8 +193,6 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
       scaleThumb < 1
         ? encodeCanvas(resizeCanvas(source as CanvasImageSource, w * scaleThumb, h * scaleThumb))
         : medium;
-
-    if ("close" in source) source.close();
 
     // Not the original when the canvas would not encode: every slot falls back to
     // `large`, so returning the file here would put it in `medium` too. Thrown into
@@ -215,6 +217,8 @@ export async function encodeUploadImageVariants(input: File): Promise<EncodedIma
       // to know whether the handle died, the decode failed or the canvas was gone.
       { cause },
     );
+  } finally {
+    if (source && "close" in source) source.close();
   }
 }
 

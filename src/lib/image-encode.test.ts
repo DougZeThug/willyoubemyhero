@@ -65,10 +65,12 @@ describe("encodeUploadImageVariants", () => {
   // never settles. Standing createImageBitmap up puts these on the real
   // small-file passthrough branch, which is the one a dragged card takes.
   function decodesAs(width: number, height: number) {
+    const close = vi.fn();
     vi.stubGlobal(
       "createImageBitmap",
-      vi.fn(async () => ({ width, height, close: () => {} }) as unknown as ImageBitmap),
+      vi.fn(async () => ({ width, height, close }) as unknown as ImageBitmap),
     );
+    return close;
   }
 
   afterEach(() => {
@@ -137,6 +139,43 @@ describe("encodeUploadImageVariants", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     const file = new File([new Uint8Array(2_000_000)], "huge.png", { type: "image/png" });
     await expect(encodeUploadImageVariants(file)).rejects.toThrow(/huge\.png/);
+  });
+
+  describe("releasing the decoded bitmap", () => {
+    // A 4000x3000 ImageBitmap is ~48 MB until close(), and the throw path is the
+    // one that fires when the browser is already short of memory.
+    it("closes it when the canvas will not draw", async () => {
+      const close = decodesAs(4000, 3000);
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+      const file = new File([new Uint8Array(2_000_000)], "huge.png", { type: "image/png" });
+      await expect(encodeUploadImageVariants(file)).rejects.toThrow(/huge\.png/);
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes it after a successful re-encode", async () => {
+      const close = decodesAs(4000, 3000);
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+        drawImage: vi.fn(),
+      } as unknown as CanvasRenderingContext2D);
+      vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+        "data:image/webp;base64,RU5DT0RFRA==",
+      );
+      const file = new File([new Uint8Array(2_000_000)], "big.png", { type: "image/png" });
+      await encodeUploadImageVariants(file);
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes it on the small-file passthrough", async () => {
+      const close = decodesAs(1, 1);
+      await encodeUploadImageVariants(new File([new Uint8Array([1])], "c.png", { type: "image/png" })); // prettier-ignore
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes it on the zero-dimension passthrough", async () => {
+      const close = decodesAs(0, 0);
+      await encodeUploadImageVariants(new File([new Uint8Array([1])], "c.png", { type: "image/png" })); // prettier-ignore
+      expect(close).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("refuses a canvas that will not encode rather than fall back to the original", async () => {
