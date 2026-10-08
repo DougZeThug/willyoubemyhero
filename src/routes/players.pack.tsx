@@ -400,6 +400,49 @@ function PackPage() {
    * `clearMemberToken()` when the deal answers "Claim your player first".
    */
   const resumeDeferredRef = useRef(false);
+  /**
+   * `slots`, for the resume load's asynchronous tail, where its own closure is
+   * stale. Compared against the stored row to tell the pack on screen from a
+   * different one — see the resume branch.
+   */
+  const slotsRef = useRef<PackSlot[] | null>(null);
+  useEffect(() => {
+    slotsRef.current = slots;
+  }, [slots]);
+
+  /**
+   * File a carried pack's roster card the claim's adoption never saw.
+   *
+   * The server minted nothing for a guest, and `collectCard` runs inside the
+   * reveal, so a card turned after the claim took its snapshot is in no
+   * adoption: filing it is this screen's job. Protected by the unrecorded row
+   * until it lands, because the merge deletes anything the server cannot vouch
+   * for. Deduped on `carriedAdoptedRef`, which is what lets the reveal and the
+   * resume pass below both call it for the same card.
+   *
+   * Idempotent server-side as well — the adoption keeps one copy of each card the
+   * member does not already hold — so a card filed twice costs a round trip.
+   */
+  function fileCarriedCard(id: string) {
+    const participantId = me?.participantId;
+    if (!carriedFromRef.current || !participantId || carriedAdoptedRef.current.includes(id)) return;
+    carriedAdoptedRef.current = [...carriedAdoptedRef.current, id];
+    void (async () => {
+      await addUnrecorded({ dayKey, identity: identity ?? undefined, ids: [id] });
+      try {
+        await adopt({ data: { eventParticipantIds: [id] } });
+        await qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, participantId) });
+        await retireUnrecorded([id]);
+      } catch {
+        /* the row keeps protecting it; the next claim adopts it */
+      }
+    })();
+  }
+  /** The latest `fileCarriedCard`, for the resume load, which outlives the render it ran in. */
+  const fileCarriedRef = useRef(fileCarriedCard);
+  useEffect(() => {
+    fileCarriedRef.current = fileCarriedCard;
+  });
 
   /**
    * Act on a deferred identity change, now that nothing is in the air.
@@ -446,7 +489,9 @@ function PackPage() {
     if (identity == null) return;
     // The day tick's guard, which this effect went without. Deferred rather than
     // dropped: whoever the pack now belongs to, the cards already on the stand
-    // finish their reveal first and the re-seal happens after.
+    // finish their reveal first and the re-seal happens after. What that reveal
+    // turned is not in the stored row — the save effect refuses to write under a
+    // moved identity — so the branch below merges it back in and files it.
     if (revealingRef.current || openingRef.current) {
       resumeDeferredRef.current = true;
       return;
@@ -492,12 +537,36 @@ function PackPage() {
       // deals it, and either way the row is rewritten.
       const mine = s?.identity == null || s.identity === identity;
       if (s && s.dayKey === dayKey && mine && s.cards && s.cards.length > 0) {
-        revealedRef.current = s.revealed;
-        setRevealed(s.revealed);
+        // The pack on screen can be AHEAD of its row. The save effect will not
+        // write a pack under an identity it was not dealt to, so a card turned
+        // after `identity` moved (a claim in another tab) never reached the row
+        // this load has just read — and taking the row's word for it turned the
+        // card face-down again. The same pack, so the same indices: keep both.
+        const live = slotsRef.current;
+        const samePack =
+          dealtOnRef.current === s.dayKey &&
+          !!live &&
+          live.length === s.cards.length &&
+          live.every((slot, i) => slot.id === s.cards![i].id);
+        const turned = samePack
+          ? [...new Set([...s.revealed, ...revealedRef.current])]
+          : s.revealed;
+        revealedRef.current = turned;
+        setRevealed(turned);
         // Come back to the card you were on, not to the start.
-        setCursor(s.cursor ?? s.revealed.length);
+        setCursor(s.cursor ?? turned.length);
         carriedFromRef.current = s.carriedFrom ?? null;
         carriedAdoptedRef.current = s.carriedAdopted ?? [];
+        // Every roster card already face-up that the claim's adoption did not
+        // take. `revealAt` files the ones turned from here on, but it ran for the
+        // card above with `carriedFromRef` still null — this is the only other
+        // place that learns the pack was carried, so it files the rest.
+        if (carriedFromRef.current) {
+          for (const i of turned) {
+            const card = s.cards[i];
+            if (card?.kind === "roster") fileCarriedRef.current(card.id);
+          }
+        }
         dealtForRef.current = s.identity ?? identity;
         dealtOnRef.current = s.dayKey;
         const before: Record<string, LocalBefore> = {};
@@ -1045,27 +1114,8 @@ function PackPage() {
         // vanish. Counted from the snapshot the pack was dealt against.
         const before = slot.heldBefore ?? localBefore[slot.id]?.heldBefore ?? 0;
         mine.markCollected(slot.id, rarity.tier, edition, before + 1);
-        // A carried pack's card the claim's adoption never saw. The server
-        // minted nothing for a guest, and this is the only thing that will ever
-        // file it — protected by the unrecorded row until it lands, because the
-        // merge deletes anything the server cannot vouch for.
-        if (
-          carriedFromRef.current &&
-          me?.participantId &&
-          !carriedAdoptedRef.current.includes(slot.id)
-        ) {
-          carriedAdoptedRef.current = [...carriedAdoptedRef.current, slot.id];
-          void (async () => {
-            await addUnrecorded({ dayKey, identity: identity ?? undefined, ids: [slot.id] });
-            try {
-              await adopt({ data: { eventParticipantIds: [slot.id] } });
-              await qc.invalidateQueries({ queryKey: myCardStatsKey(event?.id, me.participantId) }); // prettier-ignore
-              await retireUnrecorded([slot.id]);
-            } catch {
-              /* the row keeps protecting it; the next claim adopts it */
-            }
-          })();
-        }
+        // A carried pack's card the claim's adoption never saw.
+        fileCarriedCard(slot.id);
       }
 
       // Which burst, if any: the tier's own for a champion or a good finish, the
