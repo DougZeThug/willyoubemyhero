@@ -833,14 +833,19 @@ export const archiveEvent = createServerFn({ method: "POST" })
           "id, event_id, participant_id, attempt_number, started_at, finished_at, raw_time_ms, paused_duration_ms, penalty_ms, official_time_ms, status, is_official, created_at, updated_at",
         )
         .eq("event_id", data.eventId),
+      // Neither table has an event_id, so both are scoped through their run, the
+      // way event.functions.ts reads them. Unscoped, every archive pulled every
+      // split and penalty the league had ever recorded and threw most of them away.
       supabaseAdmin
         .from("splits")
         .select(
-          "id, run_id, station_id, recorded_at, cumulative_time_ms, segment_time_ms, entry_method, corrected, correction_reason, created_at, updated_at",
-        ),
+          "id, run_id, station_id, recorded_at, cumulative_time_ms, segment_time_ms, entry_method, corrected, correction_reason, created_at, updated_at, run:runs!inner(event_id)",
+        )
+        .eq("run.event_id", data.eventId),
       supabaseAdmin
         .from("penalties")
-        .select("id, run_id, station_id, penalty_ms, reason, created_at"),
+        .select("id, run_id, station_id, penalty_ms, reason, created_at, run:runs!inner(event_id)")
+        .eq("run.event_id", data.eventId),
       supabaseAdmin
         .from("draft_selections")
         .select("id, event_id, participant_id, selection_order, draft_position, selected_at")
@@ -860,8 +865,16 @@ export const archiveEvent = createServerFn({ method: "POST" })
       participants: eps.data ?? [],
       stations: stations.data ?? [],
       runs: runs.data ?? [],
-      splits: (splits.data ?? []).filter((s) => runIds.has(s.run_id)),
-      penalties: (penalties.data ?? []).filter((p) => runIds.has(p.run_id)),
+      // The join's `run` column was only there to scope the read: it is not part
+      // of the snapshot, which is public. The membership filter stays — it costs
+      // nothing now, and a run created between the parallel reads would otherwise
+      // put a split in the snapshot whose run is not in it.
+      splits: (splits.data ?? [])
+        .filter((s) => runIds.has(s.run_id))
+        .map(({ run: _run, ...split }) => split),
+      penalties: (penalties.data ?? [])
+        .filter((p) => runIds.has(p.run_id))
+        .map(({ run: _run, ...penalty }) => penalty),
       drafts: drafts.data ?? [],
       archivedAt: new Date().toISOString(),
     };

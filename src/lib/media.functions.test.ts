@@ -1272,6 +1272,54 @@ describe("archiveEvent", () => {
     }
     expect(mock.callsFor("event_archive_snapshots", "insert")).toHaveLength(1);
   });
+
+  describe("reading only this event's splits and penalties", () => {
+    // Neither table has an event_id, so the scope comes from the run they hang
+    // off. Unscoped, every archive read every split and penalty ever recorded and
+    // filtered them in Node — correct output, a read that grows with the league.
+    const RUN = "00000000-0000-4000-8000-0000000000aa";
+    const withRuns = () =>
+      withDb({
+        "events.select": { data: { id: EVENT_ID, name: "Combine", year: 2026 } },
+        "event_archive_snapshots.select": { data: null },
+        "event_archive_snapshots.insert": {},
+        "runs.select": { data: [{ id: RUN }] },
+        "splits.select": {
+          data: [
+            { id: "s1", run_id: RUN, run: { event_id: EVENT_ID } },
+            // Landed between the parallel reads: its run is not in `runs`.
+            { id: "s2", run_id: "late-run", run: { event_id: EVENT_ID } },
+          ],
+        },
+        "penalties.select": { data: [{ id: "p1", run_id: RUN, run: { event_id: EVENT_ID } }] },
+      });
+
+    it.each(["splits", "penalties"])(
+      "scopes the %s read to this event through its run",
+      async (table) => {
+        withRuns();
+        const mod = await freshModule();
+        await callServerFn(mod.archiveEvent, { data: { eventId: EVENT_ID }, headers: asAdmin() });
+
+        const [read] = mock.callsFor(table, "select");
+        expect(read.columns).toContain("run:runs!inner(event_id)");
+        expect(read.filters).toContainEqual({ method: "eq", args: ["run.event_id", EVENT_ID] });
+      },
+    );
+
+    it("keeps the join's helper column out of the public snapshot", async () => {
+      withRuns();
+      const mod = await freshModule();
+      await callServerFn(mod.archiveEvent, { data: { eventId: EVENT_ID }, headers: asAdmin() });
+
+      const [insert] = mock.callsFor("event_archive_snapshots", "insert");
+      const { snapshot } = insert.payload as {
+        snapshot: { splits: object[]; penalties: object[] };
+      };
+      expect(snapshot.splits).toEqual([{ id: "s1", run_id: RUN }]);
+      expect(snapshot.penalties).toEqual([{ id: "p1", run_id: RUN }]);
+    });
+  });
 });
 
 describe("getArchivedRecap", () => {
