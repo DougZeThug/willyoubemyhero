@@ -1,30 +1,4 @@
-// A supabase client that will talk to tables `types.ts` has never heard of.
-//
-// src/integrations/supabase/types.ts is `supabase gen types` output, must not be
-// hand-edited, and is .prettierignore'd — so `secret_cards`, `secret_card_pulls`,
-// `card_pulls` and `pack_opens`, along with `open_pack`, `pack_status`,
-// `record_card_pulls` and `record_pack_open`, are invisible to the typed client
-// until somebody regenerates it,
-// long after this lands. `.from("secret_cards")` and `.rpc("pull_secret_card")`
-// are compile errors against the generated Database type, and `Database` is a
-// type alias rather than an interface, so declaration merging cannot rescue it.
-//
-// Rather than hand-write a Database slice (whose exact shape depends on
-// supabase-js generic arity that has moved across 2.x minors), widen to the
-// ungenericised client and recover shape per query with `.returns<T>()` /
-// `.maybeSingle<T>()`, which is already the house style in social.functions.ts.
-// It is not `any` in our source, so @typescript-eslint/no-explicit-any is happy.
-//
-// DELETE THIS FILE once types.ts has been regenerated against a project with
-// 20260728143000_secret_holo_cards.sql, 20260728160000_player_card_pulls.sql,
-// 20260731120000_pack_opens.sql, 20260802120000_secret_card_border_fx.sql and
-// 20260813120000_card_pull_editions.sql
-// applied: every call site then switches to plain `supabaseAdmin` unchanged.
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CompletedCollection } from "./collection-trophies";
-// A top-level client.server import is safe here and nowhere else: this is a
-// *.server.ts module, so it never reaches the client bundle.
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type SecretCardRow = {
   id: string;
@@ -142,7 +116,3 @@ export type PackOpenRow = {
   cards: unknown | null;
   created_at: string;
 };
-
-export function secretsDb(): SupabaseClient {
-  return supabaseAdmin as unknown as SupabaseClient;
-}
