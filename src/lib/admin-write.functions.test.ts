@@ -358,7 +358,13 @@ describe("saveCompletedRun", () => {
     // a run this admin token has no say over.
     withDb({
       "runs.select": [
-        { data: { attempt_number: 1, event_id: OTHER_EVENT, participant_id: PARTICIPANT_ID } },
+        {
+          data: {
+            attempt_number: 1,
+            event_id: "99999999-9999-4999-8999-999999999999",
+            participant_id: PARTICIPANT_ID,
+          },
+        },
         { count: 0 },
       ],
       "runs.upsert": { data: { id: RUN_ID } },
@@ -984,6 +990,11 @@ describe("createManualRun", () => {
     await create();
     const row = mock.callsFor("runs", "insert")[0].payload as Record<string, unknown>;
     expect(row.attempt_number).toBe(3);
+  });
+  it("refuses a result for somebody not on this event's roster", async () => {
+    withDb({ "event_participants.select": { data: null } });
+    await expect(create()).rejects.toThrow("not in this event");
+    expect(mock.callsFor("runs", "insert")).toEqual([]);
   });
 
   it("refuses to number a run when the attempt count cannot be read", async () => {
