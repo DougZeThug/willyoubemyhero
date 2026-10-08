@@ -170,7 +170,12 @@ export type SizedDataUrls = {
   large: string;
 };
 
+// Client-resized images are well under this; the cap stops an admin token (or a
+// stolen one) from filling storage with arbitrarily large files.
+export const MAX_IMAGE_DATA_URL_LENGTH = 8 * 1024 * 1024;
+
 export function decodeImageDataUrl(dataUrl: string) {
+  if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error("Image is too large");
   const m = dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/);
   if (!m) throw new Error("Unsupported image format");
   return {
@@ -355,9 +360,9 @@ export const uploadEventCardBack = createServerFn({ method: "POST" })
       .object({
         eventId: zuuid(),
         dataUrls: z.object({
-          thumb: z.string().min(32),
-          medium: z.string().min(32),
-          large: z.string().min(32),
+          thumb: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+          medium: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+          large: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
         }),
       })
       .parse(d),
@@ -432,9 +437,9 @@ export const uploadParticipantCard = createServerFn({ method: "POST" })
         eventParticipantId: zuuid(),
         side: cardSide.default("front"),
         dataUrls: z.object({
-          thumb: z.string().min(32),
-          medium: z.string().min(32),
-          large: z.string().min(32),
+          thumb: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+          medium: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+          large: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
         }),
       })
       .parse(d),
@@ -456,9 +461,9 @@ export const uploadParticipantCardsBulk = createServerFn({ method: "POST" })
               eventParticipantId: zuuid(),
               side: cardSide,
               dataUrls: z.object({
-                thumb: z.string().min(32),
-                medium: z.string().min(32),
-                large: z.string().min(32),
+                thumb: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+                medium: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+                large: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
               }),
             }),
           )
@@ -556,9 +561,9 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
         eventId: zuuid(),
         eventParticipantId: zuuid(),
         dataUrls: z.object({
-          thumb: z.string().min(32),
-          medium: z.string().min(32),
-          large: z.string().min(32),
+          thumb: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+          medium: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+          large: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
         }),
       })
       .parse(d),
@@ -682,9 +687,9 @@ export const writeImageVariants = createServerFn({ method: "POST" })
               // getImagePathsNeedingVariants handed out. See the check below.
               source: z.string().min(1),
               dataUrls: z.object({
-                thumb: z.string().min(32),
-                medium: z.string().min(32),
-                large: z.string().min(32),
+                thumb: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+                medium: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
+                large: z.string().min(32).max(MAX_IMAGE_DATA_URL_LENGTH),
               }),
             }),
           )
