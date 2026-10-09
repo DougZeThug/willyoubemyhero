@@ -222,8 +222,8 @@ limit is announced before it is hit.
 - **A retired secret.** A card whose catalogue entry has been removed still
   trades; it just has nothing left to name it, and shows as "Secret card".
 - **Several offers on one copy.** Nothing stops the same spare being staked on
-  three pending offers at once. The first accept wins and the others fail when
-  they are answered.
+  three pending offers at once. The first accept wins, and the others are voided
+  with it, since the copy they staked has gone.
 
 ## Open questions and verification
 

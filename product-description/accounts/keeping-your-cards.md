@@ -111,7 +111,9 @@ Afterwards, and without anything on screen announcing it:
 - Your secrets are filed against your name, not the handset. A day you had
   already spent as a member keeps the member's own pull; the guest's is dropped.
   A secret you already held arrives as a duplicate rather than as a second
-  ownership row.
+  ownership row — unless it rolled better than the one you already own, in
+  which case the new copy takes over as the owned one and the old becomes the
+  duplicate.
 - Your pack history came with them, so the streak does not restart at zero — and
   the milestones those packs already paid came too, in that order, so a rung
   cannot pay twice once the streak recomputes against the moved rows.
