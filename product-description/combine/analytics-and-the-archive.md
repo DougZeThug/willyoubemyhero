@@ -69,13 +69,14 @@ stateDiagram-v2
     [*] --> asking
     asking --> drawn : the combine and the archives answer
     asking --> empty : they answer with nothing
-    asking --> empty : they fail
+    asking --> failed : they fail
+    failed --> asking : Try again
     drawn --> drawn : a run or a split lands, the charts redraw
     drawn --> recap : tap an archive row
 ```
 
-The two failing paths and the genuinely empty one land in the same place, which
-is the most surprising thing about this screen and is covered under edge cases.
+The failing path and the genuinely empty one land in different places; the
+words each card uses are covered under edge cases.
 
 ### Arrive
 
@@ -87,10 +88,10 @@ The charts are computed on the device from the bundle — the splits, the statio
 and the runs that are already on the phone. Nothing is aggregated server-side and
 no analytics query exists.
 
-This screen takes the bundle's data and ignores everything else the bundle tells
-it. It does not show the "Reading the combine…" state, the "can't reach the
-combine" state, or the banner that says the live feed is down. What it shows
-while it waits is "No split data yet."
+This screen takes the bundle's data and uses its loading and error states like
+every other combine screen does. A cold load shows "Reading the splits…"; a
+whole-bundle failure shows "Can't reach the combine" with a retry. With data on
+the page, a card with no rows of its own reads "No ... yet."
 
 ### Leave without acting
 
@@ -136,8 +137,8 @@ readout.
 | Navigating away inside the app              | No effect. The bundle stays cached and the live channel is held through its grace period.                      | No effect.                                                                              |
 | Reload                                      | Both reads happen again. The archive list is served from cache for a minute.                                   | Same.                                                                                   |
 | Backgrounded                                | The live feed may drop. Nothing on this screen says so, and the charts silently stop moving until it recovers. | Same. Regaining focus refetches the bundle.                                             |
-| Network lost mid-request                    | The charts show their empty text as though there were no data.                                                 | No effect; nothing was in flight.                                                       |
-| The request fails or times out              | Identical to having no data: "No split data yet.", "No official finishes yet.", "No archived events yet."      | No effect.                                                                              |
+| Network lost mid-request                    | Each card names the read that failed and offers a retry, distinct from a genuinely empty combine; a whole-bundle failure shows the "Can't reach the combine" full screen. | No effect; nothing was in flight.                                                       |
+| The request fails or times out              | Each card names the read that failed and offers a retry, distinct from the "No ... yet." text a genuine empty shows; the archive card carries a "Try again" of its own. | No effect.                                                                              |
 | The token expires or is cleared             | No effect. This screen needs no token of any kind.                                                             | No effect.                                                                              |
 | Changed by someone else                     | This is the normal case: a live combine changes constantly and the charts follow it.                           | Same.                                                                                   |
 | A second tab or device                      | Every device computes the same charts from the same bundle and agrees.                                         | Same.                                                                                   |
@@ -186,11 +187,10 @@ read fine.
 
 ## Edge cases
 
-- **Loading, failed and genuinely empty look identical.** All three read "No
-  split data yet." / "No official finishes yet." / "No archived events yet." The
-  app has a shared vocabulary for exactly this distinction — a spinner, a
-  can't-reach message with a retry, and a degraded banner — and this is one of
-  the few combine screens that does not use it.
+- **Failed reads are named, not passed off as empty.** Each card names the
+  read that failed ("Couldn't read the splits just now — retrying." etc., the
+  archive card with a "Try again" button) and offers a retry, distinct from the
+  "No ... yet." text a genuine empty shows.
 - **A degraded live feed is silent here.** Every other spectator screen puts a
   banner up. This one keeps drawing the last numbers it had.
 - **Unofficial runs count toward the station averages** but not toward Personal
@@ -210,10 +210,10 @@ read fine.
 
 ## Open questions and verification
 
-- That the loading and failed states are indistinguishable from an empty combine
-  was read from the screen's own data handling; it has not been watched on a
-  phone with the connection cut. It is the highest-value verification item here,
-  and the most likely genuine defect in this document.
+- That failed reads are shown distinctly from a genuinely empty combine —
+  each card names the read that failed — was read from the screen's own data
+  handling; the actual rendering on a phone with the connection cut has not
+  been watched.
 - What an official run with a missing time actually renders was derived from the
   formatting rules rather than observed. It should not be reachable through the
   admin screens; whether it ever is has not been established.
