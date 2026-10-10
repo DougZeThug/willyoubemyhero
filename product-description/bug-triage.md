@@ -309,8 +309,9 @@ in the screen rather than in the handler that cascades.
   precisely for this and was not used here.
 - **Severity:** `medium`. The same failure the live screen was fixed for.
 - **Fixed:** The screen uses `FeedLoading`, `FeedError` and
-  `FeedDegradedBanner`, in the same shape as `/leaderboard`, and both of its
-  empty states say whether the read failed or the combine is genuinely empty.
+  `FeedDegradedBanner`, in the same shape as `/leaderboard`, and all three of
+  its empty states say whether the read failed or the combine is genuinely
+  empty.
 - **Raised by:** [analytics and the archive](combine/analytics-and-the-archive.md#open-questions-and-verification).
 
 ### B-10: The trade screen's set-complete ceremony leaves the nav reachable
