@@ -75,9 +75,11 @@ device holds, and the handler decides what to do with it.
 
 ### Leave without acting
 
-Nothing is recorded. Reading a screen never touches an identity, never extends a
-token, and never tells anyone you were there. Tokens expire on wall-clock time
-from the moment they were issued; using the app does not renew them.
+Nothing is recorded. Reading a screen never touches an identity, and never tells
+anyone you were there. Tokens expire on wall-clock time for the life of the exact
+string the server signed; a member token inside its last month is the one
+exception, silently re-signed for the same participant at load and then hourly,
+so a phone in use does not lapse to guest on day 91.
 
 ### The tap that starts something
 
