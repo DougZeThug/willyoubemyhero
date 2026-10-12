@@ -242,4 +242,110 @@ describe("useAdminAutoUnlock", () => {
     await vi.waitFor(() => expect(result.current).toBe(true));
     expect(startAdminSessionFromAccount).not.toHaveBeenCalled();
   });
+
+  describe("Lock", () => {
+    // A stored token makes `isAdmin` true on the first settled render, so the hook
+    // never gets as far as asking. Lock clears the token; that must read as the
+    // commissioner's choice, not as a first visit to be answered with a new token.
+    it("does not hand the console back to an account that arrived already unlocked", async () => {
+      startAdminSessionFromAccount.mockResolvedValue({ ok: true, token: "fresh" });
+      const { result, rerender } = mount(props(userOf("a"), true));
+      expect(result.current).toBe(true);
+
+      rerender(props(userOf("a"), false));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(startAdminSessionFromAccount).not.toHaveBeenCalled();
+      expect(setAdminToken).not.toHaveBeenCalled();
+      // Straight to the PIN gate, not "Checking access…" for a round trip.
+      expect(result.current).toBe(true);
+    });
+
+    it("still asks for the next account that signs in after a Lock", async () => {
+      startAdminSessionFromAccount.mockResolvedValue({ ok: true, token: "b-token" });
+      const { rerender } = mount(props(userOf("a"), true));
+      rerender(props(userOf("a"), false));
+      rerender(props(userOf("b"), false));
+
+      await vi.waitFor(() => expect(setAdminToken).toHaveBeenCalledWith("b-token", "b"));
+      expect(startAdminSessionFromAccount).toHaveBeenCalledOnce();
+    });
+
+    it("leaves a signed-out device that holds a token alone", async () => {
+      // The token outlives a sign-out on purpose (ADM-16); nobody is there to ask for.
+      const { result } = mount(props(null, true));
+      expect(result.current).toBe(true);
+      expect(startAdminSessionFromAccount).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("a request that outlived a sign-out", () => {
+    // Signing out resets the latch so the same account is asked again, but the first
+    // request is still in the air. When it lands, the account is "current" again and
+    // an id-only check lets it through over the answer the second one gave.
+    it("does not plant a stale ok over the fresh answer for the same account", async () => {
+      const stale = deferred<{ ok: true; token: string }>();
+      startAdminSessionFromAccount
+        .mockReturnValueOnce(stale.promise)
+        .mockResolvedValue({ ok: false, reason: "not_admin" });
+      const { result, rerender } = mount(props(userOf("a")));
+      rerender(props(null));
+      rerender(props(userOf("a")));
+      await vi.waitFor(() => expect(startAdminSessionFromAccount).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(result.current).toBe(true));
+
+      await act(async () => {
+        stale.resolve({ ok: true, token: "stale-token" });
+        await stale.promise;
+      });
+
+      expect(setAdminToken).not.toHaveBeenCalled();
+    });
+
+    it("does not let the stale answer settle the check the fresh request is making", async () => {
+      const stale = deferred<{ ok: false; reason: "not_admin" }>();
+      const fresh = deferred<{ ok: false; reason: "not_admin" }>();
+      startAdminSessionFromAccount
+        .mockReturnValueOnce(stale.promise)
+        .mockReturnValueOnce(fresh.promise);
+      const { result, rerender } = mount(props(userOf("a")));
+      rerender(props(null));
+      // Signed out is "nothing to check", and A coming back makes it a check again.
+      rerender(props(userOf("a")));
+      await vi.waitFor(() => expect(result.current).toBe(false));
+
+      await act(async () => {
+        stale.resolve({ ok: false, reason: "not_admin" });
+        await stale.promise;
+      });
+      // The PIN gate stays held back: the answer that counts is still on its way.
+      expect(result.current).toBe(false);
+
+      await act(async () => {
+        fresh.resolve({ ok: false, reason: "not_admin" });
+        await fresh.promise;
+      });
+      expect(result.current).toBe(true);
+    });
+
+    it("drops the first answer when the account went A to B to A without being signed out", async () => {
+      const first = deferred<{ ok: true; token: string }>();
+      startAdminSessionFromAccount
+        .mockReturnValueOnce(first.promise)
+        .mockResolvedValue({ ok: false, reason: "not_admin" });
+      const { rerender } = mount(props(userOf("a")));
+      rerender(props(userOf("b")));
+      rerender(props(userOf("a")));
+      await vi.waitFor(() => expect(startAdminSessionFromAccount).toHaveBeenCalledTimes(3));
+
+      await act(async () => {
+        first.resolve({ ok: true, token: "stale-token" });
+        await first.promise;
+      });
+
+      expect(setAdminToken).not.toHaveBeenCalled();
+    });
+  });
 });

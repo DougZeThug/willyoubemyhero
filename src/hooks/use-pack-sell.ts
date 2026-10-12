@@ -13,8 +13,15 @@ import type { DustFailure } from "@/lib/dust-rows";
 import type { PackSlot } from "@/lib/pack";
 import type { Edition } from "@/lib/card-edition";
 
-/** What the pack screen hears back: the dust it got, or one line to show inline. */
-export type PackSellResult = { ok: true; awarded: number } | { ok: false; message: string };
+/**
+ * What the pack screen hears back: the dust it got, or one line to show inline.
+ *
+ * `remaining` is the copies of the card left in the vault, counted off the list read
+ * for this very sale, so it is right whatever happened since the deal. A roster
+ * card's only; a secret's receipt comes from the secrets query.
+ */
+export type PackSellResult =
+  { ok: true; awarded: number; remaining?: number } | { ok: false; message: string };
 
 /**
  * Said beside the button, never as a toast — the pack summary does not toast.
@@ -112,7 +119,8 @@ export function usePackSell(
         const res = await millFn({ data: { cardCopyId: copy.copyId } });
         if (!res.ok) return { ok: false, message: REFUSALS[res.reason] ?? FALLBACK };
         settle(res.balance);
-        return { ok: true, awarded: res.awarded };
+        const held = spares.ownedRoster.filter((c) => c.eventParticipantId === slot.id).length;
+        return { ok: true, awarded: res.awarded, remaining: Math.max(0, held - 1) };
       } catch {
         return { ok: false, message: FALLBACK };
       }
