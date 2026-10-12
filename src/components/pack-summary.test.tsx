@@ -313,7 +313,7 @@ describe("selling from the summary", () => {
   it("quotes the live holding over the count recorded at the deal", async () => {
     // Dealt as a third copy, then an older one was traded away: selling leaves one.
     const traded = roster(0, { outcome: "duplicate", copies: 3, held: 2, sellValue: 40 });
-    renderSummary({ slots: [traded, roster(1), roster(2)], onSell: vi.fn(async () => null) });
+    renderSummary({ slots: [traded, roster(1), roster(2)], onSell: vi.fn(() => Promise.resolve(null)) }); // prettier-ignore
 
     await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
     expect(await screen.findByRole("alertdialog")).toHaveTextContent(
@@ -323,7 +323,7 @@ describe("selling from the summary", () => {
 
   it("does not guess at what is left while the live holding is unknown", async () => {
     const unknown = roster(0, { outcome: "duplicate", copies: 3, held: null, sellValue: 40 });
-    renderSummary({ slots: [unknown, roster(1), roster(2)], onSell: vi.fn(async () => null) });
+    renderSummary({ slots: [unknown, roster(1), roster(2)], onSell: vi.fn(() => Promise.resolve(null)) }); // prettier-ignore
 
     await userEvent.click(screen.getByRole("button", { name: "Sell for 40" }));
     const dialog = await screen.findByRole("alertdialog");

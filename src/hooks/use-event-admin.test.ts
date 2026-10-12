@@ -273,7 +273,7 @@ describe("useAdminAutoUnlock", () => {
       expect(startAdminSessionFromAccount).toHaveBeenCalledOnce();
     });
 
-    it("leaves a signed-out device that holds a token alone", async () => {
+    it("leaves a signed-out device that holds a token alone", () => {
       // The token outlives a sign-out on purpose (ADM-16); nobody is there to ask for.
       const { result } = mount(props(null, true));
       expect(result.current).toBe(true);
