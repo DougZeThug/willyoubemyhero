@@ -94,6 +94,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
+      // Google Search Console ownership proof for https://willyoubemyhero.com/.
+      { name: "google-site-verification", content: "70BVEIK7P4PKlQfaFfn4LYTsk1g-Q7f7p2lSmVkcXGo" },
       // viewport-fit=cover is what makes env(safe-area-inset-*) report anything
       // at all on iOS. Without it every inset is 0, and the header's top padding,
       // the tab bar's bottom spacer and --above-tab-bar are all writing zero into
