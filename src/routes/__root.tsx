@@ -148,6 +148,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         src: "https://progressier.app/exUpvbkPunrEKfGQew3K/script.js",
         defer: true,
       },
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "WebSite",
+              name: "Will YOU Be My Hero?",
+              url: "https://willyoubemyhero.com/",
+            },
+            {
+              "@type": "Organization",
+              name: "Will YOU Be My Hero? Draft Combine",
+              url: "https://willyoubemyhero.com/",
+            },
+          ],
+        }),
+      },
     ],
   }),
   shellComponent: RootShell,

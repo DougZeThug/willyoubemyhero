@@ -150,9 +150,10 @@ function LivePage() {
       <div className="mx-auto max-w-6xl space-y-6 px-4 pb-6 pt-4 sm:pt-6">
         <div className="flex items-center justify-center gap-2 text-primary">
           <Radio className="h-4 w-4 animate-pulse" />
-          <span className="font-display text-label font-black uppercase tracking-[0.08em]">
+          {/* The page's only h1, so the sections below aren't orphaned h2s. */}
+          <h1 className="font-display text-label font-black uppercase tracking-[0.08em]">
             Live · Spectator
-          </span>
+          </h1>
         </div>
 
         {(realtimeDegraded || !!error) && <FeedDegradedBanner />}

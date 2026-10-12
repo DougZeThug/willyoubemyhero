@@ -31,6 +31,17 @@ export const Route = createFileRoute("/leaderboard")({
       { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Leaderboard" },
       { property: "og:description", content: "Official combine times, penalties, and splits." },
     ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "ItemList",
+          name: "Draft Combine Leaderboard",
+          url: "https://willyoubemyhero.com/leaderboard",
+        }),
+      },
+    ],
   }),
   component: LeaderboardPage,
 });
