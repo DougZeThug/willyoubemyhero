@@ -12,7 +12,9 @@ export const Route = createFileRoute("/")({
         content:
           "A pack a day, secret pulls, trades, dust and trophies — and the combine board when game day comes back around.",
       },
-      { property: "og:title", content: "Will YOU Be My Hero? — The Vault" },
+      { property: "og:title", content: "Will YOU Be My Hero? — Draft Combine Card Game" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       {
         property: "og:description",
         content:

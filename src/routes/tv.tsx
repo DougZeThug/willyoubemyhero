@@ -97,9 +97,9 @@ function TvPage() {
           <div className="font-display text-xs font-black uppercase tracking-[0.5em] text-primary">
             Will YOU Be My Hero?
           </div>
-          <div className="font-display text-5xl font-black uppercase leading-none">
+          <h1 className="font-display text-5xl font-black uppercase leading-none">
             Draft Combine {event?.year ?? ""}
-          </div>
+          </h1>
         </div>
         {current && (
           <div className="text-right">

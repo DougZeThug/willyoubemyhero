@@ -20,7 +20,11 @@ export const Route = createFileRoute("/order")({
   head: () => ({
     meta: [
       { title: "Running Order — Will YOU Be My Hero? Draft Combine" },
-      { name: "description", content: "Randomized athlete order for the combine." },
+      {
+        name: "description",
+        content:
+          "View the randomized athlete running order for the Will YOU Be My Hero? fantasy draft combine.",
+      },
       { property: "og:title", content: "Will YOU Be My Hero? Draft Combine — Order" },
       { property: "og:description", content: "Who's up when." },
     ],
