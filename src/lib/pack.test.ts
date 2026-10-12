@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   cardsLeft,
   copiesAfterSale,
+  rosterHeldNow,
   secretHeldNow,
   nextLocalMidnight,
   nextPackLabel,
@@ -277,6 +278,29 @@ describe("secretHeldNow", () => {
   });
 });
 
+describe("rosterHeldNow", () => {
+  const copy = (eventParticipantId: string) => ({ eventParticipantId });
+  const spares = { ownedRoster: [copy("ep-1"), copy("ep-1"), copy("ep-2")] };
+
+  it("counts every copy of the card, whatever its finish", () => {
+    expect(rosterHeldNow({ spares, slotId: "ep-1", fetching: false })).toBe(2);
+    expect(rosterHeldNow({ spares, slotId: "ep-2", fetching: false })).toBe(1);
+  });
+
+  it("says nothing while the list is loading, refetching or failed", () => {
+    // Same rule as the secrets: the cached list may predate a deal, a sale or a
+    // trade, and quoting it is quoting a count the vault no longer has.
+    expect(rosterHeldNow({ spares: undefined, slotId: "ep-1", fetching: false })).toBeNull();
+    expect(rosterHeldNow({ spares, slotId: "ep-1", fetching: true })).toBeNull();
+    expect(rosterHeldNow({ spares, slotId: "ep-1", fetching: false, errored: true })).toBeNull();
+  });
+
+  it("reads a card the list no longer names as none held", () => {
+    expect(rosterHeldNow({ spares, slotId: "ep-9", fetching: false })).toBe(0);
+    expect(rosterHeldNow({ spares: { ownedRoster: [] }, slotId: "ep-1", fetching: false })).toBe(0);
+  });
+});
+
 describe("copiesAfterSale", () => {
   it("quotes the vault, not the pull, once the vault has moved", () => {
     // Dealt as a duplicate (ribbon says two), then the other copy was traded away:
@@ -286,7 +310,8 @@ describe("copiesAfterSale", () => {
   });
 
   it("falls back to the recorded count only when the slot has no live holding at all", () => {
-    // A roster card never carries `held`: its count at the deal is the one to use.
+    // A slot with no live source (a guest's, or one already sold) carries no `held`:
+    // its count at the deal is the one to use.
     expect(copiesAfterSale({ copies: 3 })).toBe(2);
     expect(copiesAfterSale({ copies: null })).toBeNull();
   });

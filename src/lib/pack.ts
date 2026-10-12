@@ -113,11 +113,31 @@ export function secretHeldNow(args: {
 }
 
 /**
+ * How many copies of a roster card the member holds right now, or null when the
+ * spares list cannot say yet.
+ *
+ * `secretHeldNow`'s rule over `ownedRoster`, for the same reason: the pack was dealt
+ * as "your Nth copy", and a trade since (the other phone accepting an offer needs
+ * nothing from this one) has moved the count under it. Counted off the list rather
+ * than `useMyCollection`, whose reveal-time floor pins the count to the deal's.
+ */
+export function rosterHeldNow(args: {
+  spares: { ownedRoster: readonly { eventParticipantId: string }[] } | undefined;
+  slotId: string;
+  fetching: boolean;
+  errored?: boolean;
+}): number | null {
+  const { spares, slotId, ...settled } = args;
+  const count = spares?.ownedRoster.filter((c) => c.eventParticipantId === slotId).length ?? 0;
+  return secretHeldNow({ ...settled, slotId, cards: spares && [{ id: slotId, count }] });
+}
+
+/**
  * What the vault holds of a slot's card once that slot is sold, or null when
  * nobody can say.
  *
  * From the live holding where the slot has one, and the count recorded at the deal
- * where it has no such thing (`held` absent: a roster card's, which no sale moves).
+ * where it has no such thing (`held` absent: a slot built without a live source).
  * A `held` of null is "the vault cannot say yet" and stays unknown rather than
  * borrowing the ribbon's floored count, which is about the pull: quoting it made
  * "You'll still have 1" of a card held once.

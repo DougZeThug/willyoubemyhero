@@ -35,6 +35,7 @@ import {
   type PackSlotRef,
 } from "@/lib/card-collection";
 import { myCardStatsKey, useMyCollection } from "@/hooks/use-my-collection";
+import { useTradeSpares } from "@/hooks/use-trades";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { playReveal, playSecretRiser, playTear } from "@/lib/card-sfx";
 import { celebrate, celebrateSecret, celebrateUpgrade } from "@/lib/card-confetti";
@@ -43,7 +44,13 @@ import { adoptCollection } from "@/lib/card-pulls.functions";
 import { secretFoil, SECRET_CHIME, SECRET_DUPE_CHIME } from "@/lib/secret-cards";
 import { clearMemberToken, useMemberSession } from "@/lib/member-token";
 import { deviceId, usePackIdentity } from "@/lib/device-id";
-import { copiesAfterSale, packStage, secretHeldNow, type PackSlot } from "@/lib/pack";
+import {
+  copiesAfterSale,
+  packStage,
+  rosterHeldNow,
+  secretHeldNow,
+  type PackSlot,
+} from "@/lib/pack";
 import {
   celebrationFor,
   copiesAfter,
@@ -246,6 +253,9 @@ function PackPage() {
   const streakQuery = useStreakStatus(actor);
   const status = usePackStatus(actor);
   const mySecrets = useMySecrets(actor);
+  // What the vault holds of each roster card right now, for the sell dialog. Not
+  // `mine.collection`: its count has a floor pinned to the deal's at every reveal.
+  const mySpares = useTradeSpares(me?.participantId, me?.participantId);
 
   /**
    * The request in flight, or the one that failed and is waiting on a retry.
@@ -958,9 +968,19 @@ function PackPage() {
       }
       const local = localBefore[slot.id];
       const outcome = slotOutcome(slot, local);
-      // A roster slot's count comes from the collection as it stood at the deal,
-      // which no sale moves, so the recorded count is the one to show.
+      // The ribbon's count is the collection as it stood at the deal, and is about
+      // this pull. What the vault holds NOW is `held`, and it is that the dialog
+      // quotes: a trade since the deal (the other phone accepting an offer) moves it.
+      // Sold from this screen, the receipt is the count the sale itself read.
       const copies = sold[i] ? sold[i].copies : copiesAfter(slot, local);
+      const held = sold[i]
+        ? null
+        : rosterHeldNow({
+            spares: mySpares.data,
+            slotId: slot.id,
+            fetching: mySpares.isFetching,
+            errored: mySpares.isError,
+          });
       // `MILL_BY_EDITION` rather than `millValue`, and that is safe rather than
       // optimistic: the finish is the one Postgres minted. A finish it did not
       // decide is null, and null prices nothing — no number is better than a
@@ -975,6 +995,7 @@ function PackPage() {
         edition: slot.edition,
         outcome,
         copies,
+        held,
         sellValue,
         ep: all.find((p) => p.id === slot.id) ?? null,
       };
@@ -987,6 +1008,9 @@ function PackPage() {
     mySecrets.data,
     mySecrets.isFetching,
     mySecrets.isError,
+    mySpares.data,
+    mySpares.isFetching,
+    mySpares.isError,
     me?.participantId,
     event,
     sold,
@@ -1514,7 +1538,9 @@ function PackPage() {
                     if (!stand) return "Couldn't sell it — try again";
                     const res = await sellSlot(stand.slot, stand.edition);
                     if (!res.ok) return res.message;
-                    const left = copiesAfterSale(stand);
+                    // A roster sale counted what was left itself; a secret's comes from
+                    // the live secrets holding quoted on the button.
+                    const left = res.remaining ?? copiesAfterSale(stand);
                     setSoldFor((prev) => ({
                       pack: packKey,
                       by: {

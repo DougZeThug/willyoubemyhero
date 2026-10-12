@@ -21,6 +21,16 @@ import { setAdminToken } from "@/lib/admin-token";
  * asking again. A cleanup flag would discard the answer of the only request ever
  * made and leave the page on "Checking access…" for good.
  *
+ * Who is current is not enough on its own, though. A sign-out resets the latch so
+ * the same account is asked again, and the request it left in the air is still
+ * coming back: when the account returns, that request passes a who-is-current
+ * check and plants its `ok` over whatever the fresh request said. Each request
+ * therefore also carries a number, and only the newest is heard.
+ *
+ * An account that arrives already holding its console (a stored token) is
+ * latched as asked too. Lock clears that token, and without the latch the clear
+ * reads as a first visit and the server hands the console straight back.
+ *
  * "Once" means once per answer, not once per session: a request that threw, or
  * that found no live event, is asked again on the next auth event (the same
  * unlatch-on-failure `useAccountSync` does). A plain "not an admin" is final.
@@ -33,6 +43,9 @@ export function useAdminAutoUnlock(isAdmin: boolean, user: User | null, authLoad
   // under a commissioner who is already typing their PIN.
   const settledFor = useRef<string | null>(null);
   const currentUserId = useRef<string | null>(null);
+  // The newest request made, whoever it was for. Never reset: a number that went
+  // back to zero could match a request from before the reset.
+  const latestRequest = useRef(0);
   const userId = user?.id ?? null;
 
   // Declared before the effect below so both see the new account in one commit.
@@ -41,7 +54,19 @@ export function useAdminAutoUnlock(isAdmin: boolean, user: User | null, authLoad
   }, [userId]);
 
   useEffect(() => {
-    if (isAdmin || authLoading) return;
+    if (authLoading) return;
+    if (isAdmin) {
+      // Nothing to ask, but remember being here. The only way `isAdmin` goes false
+      // under a signed-in account is Lock (or the token running out, which lands on
+      // the PIN gate too until a reload: the two look the same from here). Neither
+      // is a first visit to answer with a new token.
+      if (user) {
+        triedFor.current = user.id;
+        settledFor.current = user.id;
+      }
+      setAccountChecked(true);
+      return;
+    }
     if (!user) {
       // Forgotten with the account: an answer discarded while signed out was never
       // heard, and the same account signing back in must be asked again rather than
@@ -57,6 +82,9 @@ export function useAdminAutoUnlock(isAdmin: boolean, user: User | null, authLoad
     // A different account than the one a previous check settled for: the PIN gate
     // must not flash for them while their own answer is on its way.
     if (settledFor.current !== askedFor) setAccountChecked(false);
+    const request = ++latestRequest.current;
+    // Superseded by a newer request, or asked for an account that is not here now.
+    const stale = () => latestRequest.current !== request || currentUserId.current !== askedFor;
     void (async () => {
       // A failed call and "no event is live yet" are both passing conditions, so
       // they hand the latch back and the next auth event (a token refresh) asks
@@ -65,7 +93,7 @@ export function useAdminAutoUnlock(isAdmin: boolean, user: User | null, authLoad
       let retryable = false;
       try {
         const res = await startAdminSessionFromAccount({ data: undefined });
-        if (currentUserId.current !== askedFor) return;
+        if (stale()) return;
         if (res.ok) {
           setAdminToken(res.token, askedFor);
           toast.success("Admin unlocked via your account");
@@ -77,7 +105,7 @@ export function useAdminAutoUnlock(isAdmin: boolean, user: User | null, authLoad
         retryable = true;
       } finally {
         // The account that is signed in now has its own check, or none to make.
-        if (currentUserId.current === askedFor) {
+        if (!stale()) {
           settledFor.current = askedFor;
           if (retryable && triedFor.current === askedFor) triedFor.current = null;
           setAccountChecked(true);

@@ -136,10 +136,47 @@ describe("a roster card", () => {
     fns.mill.mockResolvedValue({ ok: true, awarded: 40, balance: 90 });
     const { sell, client } = mount();
 
-    await expect(sell(rosterSlot, "gold")).resolves.toEqual({ ok: true, awarded: 40 });
+    await expect(sell(rosterSlot, "gold")).resolves.toEqual({
+      ok: true,
+      awarded: 40,
+      remaining: 2,
+    });
     expect(fns.spares).toHaveBeenCalledWith({ data: { participantId: ME } });
     expect(fns.mill).toHaveBeenCalledWith({ data: { cardCopyId: "c-gold" } });
     expect(client.getQueryData(dustBalanceKey(ME))).toEqual({ balance: 90 });
+  });
+
+  it("reports what the vault holds after the sale, counted at the tap", async () => {
+    // The pack was dealt as "you'll have 3", and an old copy has since been traded
+    // away. The receipt quotes the list read for this sale, not the deal's count.
+    fns.mill.mockResolvedValue({ ok: true, awarded: 40, balance: 90 });
+    fns.spares.mockResolvedValueOnce({
+      ownedRoster: [
+        spare("c-1", "standard"),
+        spare("c-2", "standard"),
+        spare("c-gold", "gold", { pulledToday: true }),
+      ],
+    });
+    const first = await mount().sell(rosterSlot, "gold");
+    expect(first).toMatchObject({ ok: true, remaining: 2 });
+
+    fns.spares.mockResolvedValueOnce({
+      ownedRoster: [spare("c-2", "standard"), spare("c-gold", "gold", { pulledToday: true })],
+    });
+    const second = await mount().sell(rosterSlot, "gold");
+    expect(second).toMatchObject({ ok: true, remaining: 1 });
+  });
+
+  it("does not count another card's copies as this one's", async () => {
+    fns.mill.mockResolvedValue({ ok: true, awarded: 40, balance: 90 });
+    fns.spares.mockResolvedValue({
+      ownedRoster: [
+        spare("c-gold", "gold", { pulledToday: true }),
+        spare("c-other", "gold", { eventParticipantId: "ep-2" }),
+      ],
+    });
+    const res = await mount().sell(rosterSlot, "gold");
+    expect(res).toMatchObject({ ok: true, remaining: 0 });
   });
 
   it("says today's copy is gone rather than burn an older one at the same finish", async () => {
