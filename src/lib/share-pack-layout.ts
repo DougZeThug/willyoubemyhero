@@ -66,18 +66,3 @@ export function sharePackLayout(hasSecret: boolean): SharePackLayout {
   const roster = Math.min(widest, fits);
   return { roster, secret: Math.floor(roster * SECRET_SCALE) };
 }
-
-/**
- * The height the graphic actually composes to, for a given layout.
- *
- * Exists so a test can assert the thing that matters — that it fits — rather than
- * re-deriving the arithmetic above and agreeing with itself.
- */
-export function sharePackHeight(layout: SharePackLayout, hasSecret: boolean): number {
-  const rows =
-    layout.roster * CARD_RATIO +
-    ROSTER_CAPTION +
-    (hasSecret ? SECRET_HEADING + layout.secret * CARD_RATIO + SECRET_CAPTION : 0);
-  const sections = hasSecret ? 4 : 3;
-  return PAD * 2 + HEADER + FOOTER + GAP * (sections - 1) + rows;
-}

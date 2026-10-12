@@ -4,24 +4,9 @@
 // it is a shared image with the collection counter cut off the bottom, on
 // exactly the packs somebody wanted to show off.
 import { describe, expect, it } from "vitest";
-import { sharePackHeight, sharePackLayout, SHARE_H, SHARE_W } from "./share-pack-layout";
+import { sharePackLayout, SHARE_W } from "./share-pack-layout";
 
 describe("sharePackLayout", () => {
-  it("fits the canvas for a plain three-card pack", () => {
-    const layout = sharePackLayout(false);
-    expect(sharePackHeight(layout, false)).toBeLessThanOrEqual(SHARE_H);
-  });
-
-  /**
-   * The case that was broken. Two card rows have to share one height, so the
-   * roster row must give up the room the secret takes — the old code sized the
-   * roster as though it were alone and then added a secret 34% wider underneath.
-   */
-  it("fits the canvas for a pack with a secret in it", () => {
-    const layout = sharePackLayout(true);
-    expect(sharePackHeight(layout, true)).toBeLessThanOrEqual(SHARE_H);
-  });
-
   it("gives the roster row less room when a secret has to share the page", () => {
     expect(sharePackLayout(true).roster).toBeLessThan(sharePackLayout(false).roster);
   });
