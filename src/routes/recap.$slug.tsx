@@ -13,6 +13,18 @@ export const Route = createFileRoute("/recap/$slug")({
       },
       { property: "og:title", content: `Draft Combine Recap · ${params.slug}` },
       { property: "og:description", content: "Final combine results and draft order." },
+      { property: "og:type", content: "article" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Article",
+          headline: `Draft Combine Recap · ${params.slug}`,
+          url: `https://willyoubemyhero.com/recap/${params.slug}`,
+        }),
+      },
     ],
   }),
   loader: async ({ params }) => {
