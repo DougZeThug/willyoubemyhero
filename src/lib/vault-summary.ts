@@ -29,7 +29,7 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
  * "Roster 3 / 13 · Secrets 3 across 2 sets · 1 set complete".
  *
  * Every clause but the first is dropped at zero, on the same rule as
- * `secretsPulledLabel` and `packedByLabel`: "0 secrets" would announce that a set
+ * `packedByLabel`: "0 secrets" would announce that a set
  * exists at all, and "0 sets complete" is a running reminder of something you
  * have not done on the one screen whose whole posture is to show what you have.
  */

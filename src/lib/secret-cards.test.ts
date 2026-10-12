@@ -10,7 +10,6 @@ import {
   SECRET_FOIL_OPTIONS,
   SECRET_RARITY,
   secretFoil,
-  secretsPulledLabel,
   SECRET_REASON,
   UNSORTED_COLLECTION_LABEL,
 } from "./secret-cards";
@@ -194,15 +193,6 @@ describe("secretFoil", () => {
     expect(secretFoil("aurora", "pulse", "mythic")).toBe(secretFoil("aurora", "pulse", "mythic"));
     expect(secretFoil("aurora", "pulse", "mythic")).not.toBe(secretFoil("aurora", "pulse"));
     expect(secretFoil("ember")).toBe(secretFoil("ember"));
-  });
-});
-
-describe("secretsPulledLabel", () => {
-  it.each([
-    [1, "1 secret pulled"],
-    [3, "3 secrets pulled"],
-  ])("reads %i as %s", (n, expected) => {
-    expect(secretsPulledLabel(n)).toBe(expected);
   });
 });
 
