@@ -1,6 +1,6 @@
 // The 1080×1350 share graphic. It is rasterised by html-to-image, so every
 // style is inline and the only thing worth asserting is the content.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ResultCard, type ResultCardData } from "./result-card";
 
@@ -11,8 +11,8 @@ function data(over: Partial<ResultCardData> = {}): ResultCardData {
     participantName: "Doug Weidensaul",
     totalMs: 63_450,
     splits: [
-      { label: "SLED", ms: 20_000 },
-      { label: "BEER", ms: 43_450 },
+      { id: "split-1", label: "SLED", ms: 20_000 },
+      { id: "split-2", label: "BEER", ms: 43_450 },
     ],
     ...over,
   };
@@ -50,6 +50,29 @@ describe("ResultCard", () => {
     expect(screen.getByText("SLED")).toBeInTheDocument();
     expect(screen.getByText("BEER")).toBeInTheDocument();
     expect(screen.getByText("20.00")).toBeInTheDocument();
+  });
+
+  it("lists two splits that share a name, each on its own row", () => {
+    // Station names may repeat within an event, and every split whose station
+    // cannot be found is labelled "Split" — so the label cannot be what tells the
+    // rows apart. Duplicate keys make React's reconciliation undefined.
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <ResultCard
+        data={data({
+          splits: [
+            { id: "split-1", label: "Split", ms: 20_000 },
+            { id: "split-2", label: "Split", ms: 43_450 },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getAllByText("Split")).toHaveLength(2);
+    expect(screen.getByText("20.00")).toBeInTheDocument();
+    expect(screen.getByText("43.45")).toBeInTheDocument();
+    const duplicateKey = error.mock.calls.some((c) => String(c[0]).includes("same key"));
+    error.mockRestore();
+    expect(duplicateKey).toBe(false);
   });
 
   it("copes with no splits at all", () => {
