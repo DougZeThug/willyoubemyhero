@@ -202,22 +202,6 @@ export function packStage(args: {
 }
 
 /**
- * Which card to come back to after a reload.
- *
- * Derived from what is already persisted — `PackState` carries `revealed` — so
- * resuming needs no extra stored field. The first card still face-down, or past
- * the end when every one has been seen: re-running a ceremony on every reload
- * would turn the payoff into a toll.
- */
-export function resumeCursor(args: { packSize: number; revealed: readonly number[] }): number {
-  const { packSize, revealed } = args;
-  for (let i = 0; i < packSize; i++) {
-    if (!revealed.includes(i)) return i;
-  }
-  return packSize;
-}
-
-/**
  * Tearing the wrapper.
  *
  * Measured as horizontal *travel* from where the finger landed, not as its
