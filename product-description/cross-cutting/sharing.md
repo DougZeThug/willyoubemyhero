@@ -21,8 +21,8 @@ proportions inside a frame in its own colour, the name, the fantasy team, the
 trash-talk quote, and four stats — order, pick, time and rank. You pick a chat
 and send it.
 
-The same button on the pack summary gives you all four cards on one image, with
-the secret bigger underneath the roster three and a "Collected N / M" line at the
+The same button on the pack summary gives you the whole pack on one image, with
+the secrets bigger underneath the roster and a "Collected N / M" line at the
 bottom. The board's rows each carry a small share icon that gives you one
 result, splits and all.
 
@@ -33,10 +33,11 @@ _inside_ that frame, exactly as the card wears it — a special finish takes the
 headline badge and the tier drops to the line under it, following the same rule
 as everywhere else. Where there is no art, the player's initials fill the frame.
 
-**A pack.** The three roster cards across one row, then "One More Card" and the
-secret a third wider on its own row below, then the collection counter. The
-widths are solved against the canvas rather than chosen, because the canvas is
-fixed and clips what does not fit.
+**A pack.** The roster cards across one row, then "One More Card" — or "Secret
+Cards" when there are several — and the secrets, bigger than the roster cards,
+on their own row below, then the collection counter. The widths are solved
+against the canvas rather than chosen, because the canvas is fixed and clips
+what does not fit.
 
 > Technical note: sized for three cards and then given a bigger secret
 > underneath, the pack image overflowed by about 170 pixels and cut the counter
@@ -127,8 +128,9 @@ vault's preview text anyway, because it is the link people share.
 Claim, admin and the TV board ask search engines not to index them.
 
 **No preview carries an image.** The root, live timing and sign-in ask for the
-large-image style of preview card, which then has no image to show. A link to
-this app arrives in a chat as text.
+small `summary` card style rather than the large-image one, because a large
+card with no `og:image` renders as a big empty rectangle. A link to this app
+arrives in a chat as text.
 
 ## Modifiers
 
