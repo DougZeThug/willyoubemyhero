@@ -174,6 +174,7 @@ function LivePage() {
 
         <LiveTopFive
           leaderboard={leaderboard}
+          runsFailed={failedTables.includes("runs")}
           done={done}
           total={total}
           cards={cards}
@@ -319,12 +320,19 @@ function LiveHero({
 /** The board, and the tally that has to agree with it. */
 function LiveTopFive({
   leaderboard,
+  runsFailed,
   done,
   total,
   cards,
   photos,
 }: {
   leaderboard: Leader[];
+  /**
+   * The runs read failed, which the bundle coalesces to an empty list — so the
+   * board is empty and the tally is zero for a reason that is not "nobody has
+   * finished". The same read tv.tsx and leaderboard.tsx tell apart.
+   */
+  runsFailed: boolean;
   done: number;
   total: number;
   cards: CardUrls;
@@ -338,12 +346,17 @@ function LiveTopFive({
             Top 5
           </h2>
           <span className="text-label uppercase tracking-[0.08em] text-muted-foreground">
-            {done}/{total} done
+            {/* An unread count is a dash, not a zero. */}
+            {runsFailed ? "—" : done}/{total} done
           </span>
           <Trophy className="h-3.5 w-3.5 text-primary/60" />
         </div>
         {leaderboard.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No official times yet.</p>
+          <p className="text-xs text-muted-foreground">
+            {runsFailed
+              ? "Couldn't read the results just now — retrying."
+              : "No official times yet."}
+          </p>
         ) : (
           <ol className="space-y-1.5">
             {leaderboard.map((row) => {

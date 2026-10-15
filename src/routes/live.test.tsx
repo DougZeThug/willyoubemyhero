@@ -53,13 +53,13 @@ vi.mock("lucide-react", async (importOriginal) => {
   return stubs;
 });
 
-function showBundle(over: Parameters<typeof makeBundle>[0]) {
+function showBundle(over: Parameters<typeof makeBundle>[0], failedTables: string[] = []) {
   useEventBundle.mockReturnValue({
     event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-    bundle: makeBundle(over),
+    bundle: makeBundle({ ...over, failed: failedTables }),
     loading: false,
     error: null,
-    failedTables: [],
+    failedTables,
     realtimeDegraded: false,
     refetch: vi.fn(async () => {}),
   });
@@ -143,6 +143,42 @@ describe("LivePage standings", () => {
     expect(screen.queryByText("Every athlete is done. Nice work.")).toBeNull();
     expect(screen.getByText("0/1 done")).toBeInTheDocument();
     expect(screen.queryByText("Dave Dropout")).toBeNull();
+  });
+});
+
+describe("LivePage when the runs read fails", () => {
+  // A failed runs read coalesces to an empty list, so the board is empty for a
+  // reason that is not "nobody has finished" — and the page used to say so anyway.
+  const athletes = () => [
+    makeParticipant({ participation_status: "finished" }),
+    makeParticipant({ participation_status: "queued" }),
+  ];
+
+  it("says the results could not be read, not that there are none", () => {
+    showBundle({ participants: athletes(), runs: [] }, ["runs"]);
+    render(<LivePage />);
+    expect(screen.getByText("Couldn't read the results just now — retrying.")).toBeInTheDocument();
+    expect(screen.queryByText("No official times yet.")).toBeNull();
+  });
+
+  it("does not print a zero tally over results it could not read", () => {
+    showBundle({ participants: athletes(), runs: [] }, ["runs"]);
+    render(<LivePage />);
+    expect(screen.getByText("—/2 done")).toBeInTheDocument();
+    expect(screen.queryByText("0/2 done")).toBeNull();
+  });
+
+  it("still says no official times for a combine that simply has none", () => {
+    showBundle({ participants: athletes(), runs: [] });
+    render(<LivePage />);
+    expect(screen.getByText("No official times yet.")).toBeInTheDocument();
+    expect(screen.getByText("0/2 done")).toBeInTheDocument();
+  });
+
+  it("is not moved by a failed read of some other table", () => {
+    showBundle({ participants: athletes(), runs: [] }, ["splits"]);
+    render(<LivePage />);
+    expect(screen.getByText("No official times yet.")).toBeInTheDocument();
   });
 });
 
