@@ -21,16 +21,28 @@
  * Out of season (no combine, nothing loading, nothing failed) IS known: the
  * roster is genuinely empty, and the rest of the line still has something to say.
  */
-export function rosterKnown(s: {
+export type RosterRead = {
   loading: boolean;
   error: unknown;
   hasBundle: boolean;
   failedTables: readonly string[];
-}): boolean {
+};
+
+export function rosterKnown(s: RosterRead): boolean {
   if (s.loading) return false;
   // An error beside a bundle is a refetch that failed on top of a good answer.
   if (s.error && !s.hasBundle) return false;
   return !s.failedTables.includes("event_participants");
+}
+
+/**
+ * Whether the line may be drawn at all: the collection has settled AND the roster
+ * has answered. A function rather than `ready && rosterKnown(...)` at each call
+ * site, because the vault and the profile are both very large components and the
+ * extra branch is what a complexity gate counts against them.
+ */
+export function summaryReady(ready: boolean, roster: RosterRead): boolean {
+  return ready && rosterKnown(roster);
 }
 
 /** The numbers behind the line. Every one of them is about what you HOLD. */

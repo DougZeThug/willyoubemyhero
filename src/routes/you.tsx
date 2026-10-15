@@ -25,7 +25,7 @@ import { requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { groupBySecretCollection } from "@/lib/secret-cards";
 import { getStreakHistory, type StreakHistoryEntry } from "@/lib/streaks.functions";
-import { rosterKnown, vaultSummaryLine } from "@/lib/vault-summary";
+import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/you")({
@@ -116,18 +116,22 @@ function YouPage() {
   // And the roster's own answer, which `ready` does not cover: a bundle still in
   // the air or a failed roster read is an empty roster, and the line would say
   // "Roster 3 / 0" over it.
-  const summary =
-    ready && rosterKnown({ loading: eventLoading, error, hasBundle: Boolean(bundle), failedTables })
-      ? vaultSummaryLine({
-          rosterHeld: mine.collectedCount,
-          rosterSize: rosterIds.length,
-          secrets: secrets.data?.pulled ?? 0,
-          // Its own grouping, exactly as the vault does it: how many sets your
-          // cards came from, never how many sets there are.
-          sets: groupBySecretCollection(ownedSecrets, collections).length,
-          complete: myTrophies.length,
-        })
-      : null;
+  const summary = summaryReady(ready, {
+    loading: eventLoading,
+    error,
+    hasBundle: Boolean(bundle),
+    failedTables,
+  })
+    ? vaultSummaryLine({
+        rosterHeld: mine.collectedCount,
+        rosterSize: rosterIds.length,
+        secrets: secrets.data?.pulled ?? 0,
+        // Its own grouping, exactly as the vault does it: how many sets your
+        // cards came from, never how many sets there are.
+        sets: groupBySecretCollection(ownedSecrets, collections).length,
+        complete: myTrophies.length,
+      })
+    : null;
   const packs = packsOpenedLabel(mine.packsOpened);
   const spares = mine.dupes;
   // Off the stats query rather than the local store, so these two never carried

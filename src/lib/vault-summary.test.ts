@@ -6,7 +6,7 @@
 // same two here, over every shape the line can take, is what stops somebody
 // adding a clause that only the browser catches.
 import { describe, expect, it } from "vitest";
-import { rosterKnown, vaultSummaryLine } from "./vault-summary";
+import { rosterKnown, summaryReady, vaultSummaryLine } from "./vault-summary";
 
 const base = { rosterHeld: 3, rosterSize: 13, secrets: 0, sets: 0, complete: 0 };
 
@@ -91,6 +91,23 @@ describe("rosterKnown", () => {
 
   it("is known out of season, when no combine is on and the roster really is empty", () => {
     expect(rosterKnown({ ...settled, hasBundle: false })).toBe(true);
+  });
+});
+
+describe("summaryReady", () => {
+  const settled = { loading: false, error: null, hasBundle: true, failedTables: [] as string[] };
+
+  it("draws the line only when the collection and the roster have both answered", () => {
+    expect(summaryReady(true, settled)).toBe(true);
+  });
+
+  it("waits for the collection even when the roster has answered", () => {
+    expect(summaryReady(false, settled)).toBe(false);
+  });
+
+  it("waits for the roster even when the collection has answered", () => {
+    expect(summaryReady(true, { ...settled, loading: true })).toBe(false);
+    expect(summaryReady(true, { ...settled, failedTables: ["event_participants"] })).toBe(false);
   });
 });
 

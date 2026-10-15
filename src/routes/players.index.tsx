@@ -69,7 +69,7 @@ import { usePackProgress } from "@/hooks/use-pack-progress";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { useIsOnline } from "@/hooks/use-online";
 import { nextLocalMidnight, packWaiting as packStillSealed } from "@/lib/pack";
-import { rosterKnown, vaultSummaryLine } from "@/lib/vault-summary";
+import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import {
   acquisitionWindow,
   isNewSince,
@@ -1127,16 +1127,20 @@ function PlayersPage() {
   //
   // Blank, not zero, until the roster has answered: `ready` is the collection's
   // flag, and a bundle still in the air reads as "Roster 0 / 0".
-  const summary =
-    ready && rosterKnown({ loading: eventLoading, error, hasBundle: Boolean(bundle), failedTables })
-      ? vaultSummaryLine({
-          rosterHeld: mine.collectedCount,
-          rosterSize: rows.length,
-          secrets: secrets.data?.pulled ?? 0,
-          sets: secretSetCount,
-          complete: myTrophies.length,
-        })
-      : null;
+  const summary = summaryReady(ready, {
+    loading: eventLoading,
+    error,
+    hasBundle: Boolean(bundle),
+    failedTables,
+  })
+    ? vaultSummaryLine({
+        rosterHeld: mine.collectedCount,
+        rosterSize: rows.length,
+        secrets: secrets.data?.pulled ?? 0,
+        sets: secretSetCount,
+        complete: myTrophies.length,
+      })
+    : null;
 
   // A claim's reveal takes the whole screen the way the pack's ceremony does, so
   // it claims the chrome the same way. The card viewer is the same kind of
