@@ -117,7 +117,7 @@ function YouPage() {
   // the air or a failed roster read is an empty roster, and the line would say
   // "Roster 3 / 0" over it.
   const summary =
-    ready && rosterKnown({ loading: eventLoading, error, hasBundle: !!bundle, failedTables })
+    ready && rosterKnown({ loading: eventLoading, error, hasBundle: Boolean(bundle), failedTables })
       ? vaultSummaryLine({
           rosterHeld: mine.collectedCount,
           rosterSize: rosterIds.length,

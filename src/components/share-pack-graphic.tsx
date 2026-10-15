@@ -18,6 +18,8 @@ import type { ImageUrlSet } from "@/lib/media";
  */
 
 export type SharePackCard = {
+  /** The dealt slot's own id, which is what keys the row: names and positions are not identity. */
+  id: string;
   name: string;
   rarityLabel: string;
   rarityColor: string;
@@ -149,8 +151,8 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
           would still cost a flex gap the layout did not budget for. */}
       {roster.length > 0 && (
         <div style={{ display: "flex", justifyContent: "center", gap: 28 }}>
-          {roster.map((card, i) => (
-            <Slot key={i} card={card} width={size.roster} />
+          {roster.map((card) => (
+            <Slot key={card.id} card={card} width={size.roster} />
           ))}
         </div>
       )}
@@ -179,8 +181,8 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
           {/* Bigger than the roster cards where there is room, which is the whole
               point of them. */}
           <div style={{ display: "flex", justifyContent: "center", gap: 28 }}>
-            {secrets.map((card, i) => (
-              <Slot key={i} card={card} width={size.secret} />
+            {secrets.map((card) => (
+              <Slot key={card.id} card={card} width={size.secret} />
             ))}
           </div>
         </div>

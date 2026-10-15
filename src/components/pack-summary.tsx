@@ -128,6 +128,7 @@ export function PackSummary({
   const shareCards: SharePackCard[] = slots.map(({ slot, rarity, ep }) =>
     slot.kind === "secret"
       ? {
+          id: slot.id,
           name: slot.card.name,
           rarityLabel: "Secret",
           rarityColor: rarity.accent,
@@ -135,6 +136,7 @@ export function PackSummary({
           secret: true,
         }
       : {
+          id: slot.id,
           name: ep?.participant?.name ?? "—",
           rarityLabel: rarity.label,
           rarityColor: rarity.accent,

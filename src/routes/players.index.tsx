@@ -1128,7 +1128,7 @@ function PlayersPage() {
   // Blank, not zero, until the roster has answered: `ready` is the collection's
   // flag, and a bundle still in the air reads as "Roster 0 / 0".
   const summary =
-    ready && rosterKnown({ loading: eventLoading, error, hasBundle: !!bundle, failedTables })
+    ready && rosterKnown({ loading: eventLoading, error, hasBundle: Boolean(bundle), failedTables })
       ? vaultSummaryLine({
           rosterHeld: mine.collectedCount,
           rosterSize: rows.length,

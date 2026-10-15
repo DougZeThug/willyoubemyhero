@@ -56,7 +56,7 @@ describe("ResultCard", () => {
     // Station names may repeat within an event, and every split whose station
     // cannot be found is labelled "Split" — so the label cannot be what tells the
     // rows apart. Duplicate keys make React's reconciliation undefined.
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     render(
       <ResultCard
         data={data({

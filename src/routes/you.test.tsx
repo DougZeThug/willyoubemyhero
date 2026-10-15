@@ -54,7 +54,7 @@ const settledBundle = (over: Record<string, unknown> = {}) => ({
   loading: false,
   failedTables: [] as string[],
   realtimeDegraded: false,
-  refetch: vi.fn(async () => {}),
+  refetch: vi.fn(async () => undefined),
   ...over,
 });
 

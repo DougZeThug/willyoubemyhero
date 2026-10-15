@@ -6,11 +6,13 @@ import { render, screen } from "@testing-library/react";
 import { SharePack, type SharePackCard } from "./share-pack-graphic";
 
 const roster = (name: string): SharePackCard => ({
+  id: name,
   name,
   rarityLabel: "Base",
   rarityColor: "#fff",
 });
 const secret = (name: string): SharePackCard => ({
+  id: name,
   name,
   rarityLabel: "Secret",
   rarityColor: "#f0f",
