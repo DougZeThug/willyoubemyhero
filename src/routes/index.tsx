@@ -14,7 +14,10 @@ export const Route = createFileRoute("/")({
       },
       { property: "og:title", content: "Will YOU Be My Hero? — Draft Combine Card Game" },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      // This route's meta wins over the root's, so it has to carry the root's
+      // `summary` itself — see the note there on why no route may ask for a large
+      // card until an og:image exists.
+      { name: "twitter:card", content: "summary" },
       {
         property: "og:description",
         content:
