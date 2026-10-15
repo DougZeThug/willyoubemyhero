@@ -69,7 +69,7 @@ import { usePackProgress } from "@/hooks/use-pack-progress";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { useIsOnline } from "@/hooks/use-online";
 import { nextLocalMidnight, packWaiting as packStillSealed } from "@/lib/pack";
-import { vaultSummaryLine } from "@/lib/vault-summary";
+import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import {
   acquisitionWindow,
   isNewSince,
@@ -120,7 +120,14 @@ const LOCKED_RARITY_RANK = 99;
 const SKELETON_TILES = 6;
 
 function PlayersPage() {
-  const { event, bundle, error, loading: eventLoading, realtimeDegraded } = useEventBundle();
+  const {
+    event,
+    bundle,
+    error,
+    loading: eventLoading,
+    failedTables,
+    realtimeDegraded,
+  } = useEventBundle();
   const cards = useEventCardUrls(event?.id ?? null);
   // Hoisted once for the whole grid, and the *event's* back rather than each
   // player's — see the note on useEventCardBack. A player's own back on their
@@ -1117,7 +1124,15 @@ function PlayersPage() {
   // instead of the four-counter stack: how much of the ROSTER you hold (public,
   // so a fraction is fine), how many secrets you have found and across how many
   // sets — never how many exist — and how many sets you have finished.
-  const summary = ready
+  //
+  // Blank, not zero, until the roster has answered: `ready` is the collection's
+  // flag, and a bundle still in the air reads as "Roster 0 / 0".
+  const summary = summaryReady(ready, {
+    loading: eventLoading,
+    error,
+    hasBundle: Boolean(bundle),
+    failedTables,
+  })
     ? vaultSummaryLine({
         rosterHeld: mine.collectedCount,
         rosterSize: rows.length,

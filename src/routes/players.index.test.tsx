@@ -10,8 +10,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import PlayersPage from "./players.index";
-import { EVENT_ID, makeBundle } from "@/test/fixtures";
+import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds } from "@/test/fixtures";
 
+const useEventBundle = vi.fn();
 const useCollectionTrophies = vi.fn();
 const useMySecrets = vi.fn();
 const useMemberSession = vi.fn();
@@ -35,16 +36,19 @@ vi.mock("@tanstack/react-start", async (importOriginal) => {
 // nothing and falls back to the shipped labels. "Pets" is one of those.
 vi.mock("@tanstack/react-query", () => ({ useQuery: vi.fn(() => ({ data: undefined })) }));
 
-vi.mock("@/hooks/use-event-bundle", () => ({
-  useEventBundle: () => ({
-    event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-    bundle: makeBundle(),
-    error: null,
-    loading: false,
-    realtimeDegraded: false,
-    refetch: vi.fn(async () => {}),
-  }),
-}));
+vi.mock("@/hooks/use-event-bundle", () => ({ useEventBundle: () => useEventBundle() }));
+
+/** What the hook hands back once the bundle has settled. */
+const settledBundle = (over: Record<string, unknown> = {}) => ({
+  event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+  bundle: makeBundle(),
+  error: null,
+  loading: false,
+  failedTables: [] as string[],
+  realtimeDegraded: false,
+  refetch: vi.fn(() => Promise.resolve()),
+  ...over,
+});
 
 vi.mock("@/hooks/use-photo-urls", () => ({
   useEventCardUrls: () => ({ data: undefined }),
@@ -158,9 +162,50 @@ function setChips() {
 }
 
 beforeEach(() => {
+  resetFixtureIds();
+  useEventBundle.mockReturnValue(settledBundle());
   useMySecrets.mockReturnValue({ data: { cards: PETS, pulled: PETS.length } });
   useCollectionTrophies.mockReturnValue({ data: { trophies: [] } });
   useMemberSession.mockReturnValue({ participantId: ME });
+});
+
+describe("the vault's summary line", () => {
+  // `ready` is the collection's flag and the roster is a second request, so the
+  // line used to print "Roster 0 / 0" over a bundle that simply had not answered.
+  const roster = () => [makeParticipant(), makeParticipant()];
+
+  it("states the roster once the bundle has landed", () => {
+    useEventBundle.mockReturnValue(
+      settledBundle({ bundle: makeBundle({ participants: roster() }) }),
+    );
+    render(<PlayersPage />);
+    expect(screen.getByText(/Roster 0 \/ 2/)).toBeInTheDocument();
+  });
+
+  it("stays blank while the bundle is still loading", () => {
+    useEventBundle.mockReturnValue(settledBundle({ bundle: undefined, loading: true }));
+    render(<PlayersPage />);
+    expect(screen.queryByText(/Roster \d+ \/ \d+/)).toBeNull();
+  });
+
+  it("stays blank when the roster table failed to read", () => {
+    useEventBundle.mockReturnValue(
+      settledBundle({
+        bundle: makeBundle({ participants: [], failed: ["event_participants"] }),
+        failedTables: ["event_participants"],
+      }),
+    );
+    render(<PlayersPage />);
+    expect(screen.queryByText(/Roster \d+ \/ \d+/)).toBeNull();
+  });
+
+  it("stays blank when the whole bundle failed", () => {
+    useEventBundle.mockReturnValue(
+      settledBundle({ bundle: undefined, error: new Error("offline") }),
+    );
+    render(<PlayersPage />);
+    expect(screen.queryByText(/Roster \d+ \/ \d+/)).toBeNull();
+  });
 });
 
 describe("the mystery slot on a set shelf", () => {

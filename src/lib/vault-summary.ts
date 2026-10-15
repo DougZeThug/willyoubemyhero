@@ -9,6 +9,42 @@
 // The roster is the exception and is stated as a fraction on purpose: thirteen
 // people, publicly, is the one denominator this app has always been allowed.
 
+/**
+ * Whether the roster has answered, so the line may state it as a fraction.
+ *
+ * The collection's `ready` flag does not cover this: the roster is a second
+ * request behind the bundle, and a bundle that is loading or has failed reads as
+ * a roster of nobody — "Roster 0 / 0", stated as fact to somebody holding cards.
+ * `failedTables` is the only thing that tells a failed roster read from an empty
+ * one, because the bundle coalesces the former to `[]`.
+ *
+ * Out of season (no combine, nothing loading, nothing failed) IS known: the
+ * roster is genuinely empty, and the rest of the line still has something to say.
+ */
+export type RosterRead = {
+  loading: boolean;
+  error: unknown;
+  hasBundle: boolean;
+  failedTables: readonly string[];
+};
+
+export function rosterKnown(s: RosterRead): boolean {
+  if (s.loading) return false;
+  // An error beside a bundle is a refetch that failed on top of a good answer.
+  if (s.error && !s.hasBundle) return false;
+  return !s.failedTables.includes("event_participants");
+}
+
+/**
+ * Whether the line may be drawn at all: the collection has settled AND the roster
+ * has answered. A function rather than `ready && rosterKnown(...)` at each call
+ * site, because the vault and the profile are both very large components and the
+ * extra branch is what a complexity gate counts against them.
+ */
+export function summaryReady(ready: boolean, roster: RosterRead): boolean {
+  return ready && rosterKnown(roster);
+}
+
 /** The numbers behind the line. Every one of them is about what you HOLD. */
 export type VaultSummary = {
   /** Roster cards collected. */

@@ -95,6 +95,7 @@ function LeaderboardPage() {
         splits: (bundle?.splits ?? [])
           .filter((s) => s.run_id === shareRow.run.id)
           .map((s) => ({
+            id: s.id,
             label: bundle?.stations.find((st) => st.id === s.station_id)?.name ?? "Split",
             ms: s.segment_time_ms ?? 0,
           })),

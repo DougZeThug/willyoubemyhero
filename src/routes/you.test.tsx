@@ -21,6 +21,7 @@ const useStreakStatus = vi.fn();
 const useQuery = vi.fn();
 const requestGyroAccess = vi.fn();
 const useMyCollection = vi.fn();
+const useEventBundle = vi.fn();
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -43,16 +44,19 @@ vi.mock("@tanstack/react-query", () => ({
 /** Five on the roster, so the summary's fraction has a denominator to print. */
 const ROSTER = Array.from({ length: 5 }, () => makeParticipant());
 
-vi.mock("@/hooks/use-event-bundle", () => ({
-  useEventBundle: () => ({
-    event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
-    bundle: makeBundle({ participants: ROSTER }),
-    error: null,
-    loading: false,
-    realtimeDegraded: false,
-    refetch: vi.fn(async () => {}),
-  }),
-}));
+vi.mock("@/hooks/use-event-bundle", () => ({ useEventBundle: () => useEventBundle() }));
+
+/** What the hook hands back once the bundle has settled. */
+const settledBundle = (over: Record<string, unknown> = {}) => ({
+  event: { id: EVENT_ID, name: "Draft Combine", year: 2026, active: true },
+  bundle: makeBundle({ participants: ROSTER }),
+  error: null,
+  loading: false,
+  failedTables: [] as string[],
+  realtimeDegraded: false,
+  refetch: vi.fn(() => Promise.resolve()),
+  ...over,
+});
 
 vi.mock("@/hooks/use-active-event", () => ({ useActiveEvent: () => useActiveEvent() }));
 vi.mock("@/hooks/use-daily-secret", () => ({
@@ -138,6 +142,7 @@ beforeEach(() => {
   localStorage.removeItem(WAS_MEMBER_KEY);
   setAccountSyncState({ status: "idle", userId: null, message: null });
   useMyCollection.mockReturnValue(COLLECTION);
+  useEventBundle.mockReturnValue(settledBundle());
   useMemberSession.mockReturnValue({ participantId: "p-me", name: "Bob Blitz", expiresAt: 0, token: "t" }); // prettier-ignore
   useActiveEvent.mockReturnValue({ data: { id: EVENT_ID, dust_enabled: false } });
   useStreakStatus.mockReturnValue({ data: streak, isPending: false });
@@ -146,6 +151,34 @@ beforeEach(() => {
   setCardSfxMuted(false);
   setHapticsOff(false);
   setTiltWanted(false);
+});
+
+describe("/you collection line", () => {
+  // `ready` is the collection's flag and the roster is a second request, so the
+  // line used to say "Roster 3 / 0" over a bundle that simply had not answered.
+  it("states the roster once the bundle has landed", () => {
+    render(<YouPage />);
+    expect(screen.getByText(/Roster 3 \/ 5/)).toBeInTheDocument();
+  });
+
+  it("holds on 'Counting your cards…' while the bundle is still loading", () => {
+    useEventBundle.mockReturnValue(settledBundle({ bundle: undefined, loading: true }));
+    render(<YouPage />);
+    expect(screen.queryByText(/Roster \d+ \/ \d+/)).toBeNull();
+    expect(screen.getByText("Counting your cards…")).toBeInTheDocument();
+  });
+
+  it("holds on 'Counting your cards…' when the roster table failed to read", () => {
+    useEventBundle.mockReturnValue(
+      settledBundle({
+        bundle: makeBundle({ participants: [], failed: ["event_participants"] }),
+        failedTables: ["event_participants"],
+      }),
+    );
+    render(<YouPage />);
+    expect(screen.queryByText(/Roster \d+ \/ \d+/)).toBeNull();
+    expect(screen.getByText("Counting your cards…")).toBeInTheDocument();
+  });
 });
 
 describe("/you", () => {

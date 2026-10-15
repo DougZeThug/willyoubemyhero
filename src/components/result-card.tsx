@@ -12,7 +12,8 @@ export type ResultCardData = {
   totalMs: number;
   penaltyMs?: number;
   rank?: number | null;
-  splits: { label: string; ms: number }[];
+  /** `id` is the split row's own, because a label is not unique: station names may repeat. */
+  splits: { id: string; label: string; ms: number }[];
 };
 
 export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(function ResultCard(
@@ -176,7 +177,7 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {data.splits.map((s) => (
               <div
-                key={s.label}
+                key={s.id}
                 style={{
                   display: "flex",
                   justifyContent: "space-between",

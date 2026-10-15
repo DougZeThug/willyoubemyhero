@@ -25,7 +25,7 @@ import { requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 import { groupBySecretCollection } from "@/lib/secret-cards";
 import { getStreakHistory, type StreakHistoryEntry } from "@/lib/streaks.functions";
-import { vaultSummaryLine } from "@/lib/vault-summary";
+import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/you")({
@@ -67,7 +67,7 @@ export const Route = createFileRoute("/you")({
 function YouPage() {
   const member = useMemberSession();
   const actor = useSecretActor();
-  const { event, bundle, loading: eventLoading } = useEventBundle();
+  const { event, bundle, error, loading: eventLoading, failedTables } = useEventBundle();
   const activeEvent = useActiveEvent().data;
   const dustOn = dustLive(activeEvent ?? event);
   // Gated twice, the way the vault gates it: a balance nobody can hold and
@@ -112,7 +112,16 @@ function YouPage() {
   // guest's store is a guest's own cards, and counting them is the right answer.
   const sync = useAccountSyncState();
   const ready = mine.ready && sync.status !== "syncing" && !(wasMember && !member);
-  const summary = ready
+  //
+  // And the roster's own answer, which `ready` does not cover: a bundle still in
+  // the air or a failed roster read is an empty roster, and the line would say
+  // "Roster 3 / 0" over it.
+  const summary = summaryReady(ready, {
+    loading: eventLoading,
+    error,
+    hasBundle: Boolean(bundle),
+    failedTables,
+  })
     ? vaultSummaryLine({
         rosterHeld: mine.collectedCount,
         rosterSize: rosterIds.length,

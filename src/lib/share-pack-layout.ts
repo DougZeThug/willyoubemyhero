@@ -6,7 +6,8 @@
 //
 // The version this replaces sized the roster row for the three-card case and then
 // added a secret slot 34% wider underneath it, which overflowed by roughly 170px
-// on exactly the packs worth sharing.
+// on exactly the packs worth sharing. It also assumed a single secret, so a pack
+// that dealt two or three lost the extras from the image.
 
 /** The exported image, in pixels. Instagram-portrait, as the per-card export is. */
 export const SHARE_W = 1080;
@@ -42,21 +43,38 @@ export type SharePackLayout = { roster: number; secret: number };
 /**
  * The card widths that fill the canvas without overflowing it.
  *
- * Solved rather than chosen. With a secret there are two card rows to fit into
- * one height, so the roster row has to give up the room the secret takes — which
- * is why this cannot be a constant, and why the three-card and four-card packs
- * do not share a number.
+ * Solved rather than chosen. A pack is dealt three cards from one pool, so it can
+ * hold none, one, two or all three secrets, and the secrets sit in a row of their
+ * own under the roster. With both rows there are two card rows to fit into one
+ * height, so the roster row has to give up the room the secrets take — which is
+ * why this cannot be a constant, and why a pack with secrets and one without do
+ * not share a number.
+ *
+ * Takes counts rather than a flag because a row of two or three secrets is
+ * narrower than a lone one, and a pack that is all secrets has no roster row to
+ * pay for at all.
  */
-export function sharePackLayout(hasSecret: boolean): SharePackLayout {
+export function sharePackLayout(rosterCount: number, secretCount: number): SharePackLayout {
   // Three across, minus the page padding and the two gutters between them.
   const widest = Math.floor((SHARE_W - PAD * 2 - GAP * 2) / 3);
-  // header + roster + footer, or header + roster + secret + footer.
-  const sections = hasSecret ? 4 : 3;
+  const hasRoster = rosterCount > 0 || secretCount === 0;
+  const hasSecrets = secretCount > 0;
+  // header and footer, plus a section for each row of cards that is present.
+  const sections = 2 + (hasRoster ? 1 : 0) + (hasSecrets ? 1 : 0);
   const spare = SHARE_H - PAD * 2 - HEADER - FOOTER - GAP * (sections - 1);
 
-  if (!hasSecret) {
+  if (!hasSecrets) {
     const fits = Math.floor((spare - ROSTER_CAPTION) / CARD_RATIO);
     return { roster: Math.min(widest, fits), secret: 0 };
+  }
+
+  // The widest a secret can be with the whole row of them across the page.
+  const rowCap = Math.floor((SHARE_W - PAD * 2 - GAP * (secretCount - 1)) / secretCount);
+
+  if (!hasRoster) {
+    // The secrets are the whole pack: no roster row, so nothing to be bigger than.
+    const fits = Math.floor((spare - SECRET_HEADING - SECRET_CAPTION) / CARD_RATIO);
+    return { roster: 0, secret: Math.min(rowCap, Math.floor(widest * SECRET_SCALE), fits) };
   }
 
   // spare = (r*RATIO + rosterCaption) + (secretHeading + r*SCALE*RATIO + secretCaption)
@@ -64,5 +82,5 @@ export function sharePackLayout(hasSecret: boolean): SharePackLayout {
   const perWidth = CARD_RATIO * (1 + SECRET_SCALE);
   const fits = Math.floor((spare - fixed) / perWidth);
   const roster = Math.min(widest, fits);
-  return { roster, secret: Math.floor(roster * SECRET_SCALE) };
+  return { roster, secret: Math.min(rowCap, Math.floor(roster * SECRET_SCALE)) };
 }
