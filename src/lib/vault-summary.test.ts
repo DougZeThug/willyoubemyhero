@@ -6,7 +6,7 @@
 // same two here, over every shape the line can take, is what stops somebody
 // adding a clause that only the browser catches.
 import { describe, expect, it } from "vitest";
-import { vaultSummaryLine } from "./vault-summary";
+import { rosterKnown, vaultSummaryLine } from "./vault-summary";
 
 const base = { rosterHeld: 3, rosterSize: 13, secrets: 0, sets: 0, complete: 0 };
 
@@ -56,6 +56,41 @@ describe("vaultSummaryLine", () => {
   it("counts an empty roster without dividing by it", () => {
     // Out of season the bundle is empty, so the size is genuinely zero.
     expect(vaultSummaryLine({ ...base, rosterHeld: 0, rosterSize: 0 })).toBe("Roster 0 / 0");
+  });
+});
+
+describe("rosterKnown", () => {
+  // The line states the roster as a fraction, and an empty roster that has not
+  // answered looks exactly like a roster of nobody. Only a settled read may print it.
+  const settled = { loading: false, error: null, hasBundle: true, failedTables: [] as string[] };
+
+  it("is known once the bundle has settled cleanly", () => {
+    expect(rosterKnown(settled)).toBe(true);
+  });
+
+  it("is not known while the bundle is still on its way", () => {
+    expect(rosterKnown({ ...settled, loading: true, hasBundle: false })).toBe(false);
+  });
+
+  it("is not known when the whole read failed and there is nothing to show", () => {
+    expect(rosterKnown({ ...settled, error: new Error("offline"), hasBundle: false })).toBe(false);
+  });
+
+  it("is not known when the roster table alone failed to read", () => {
+    expect(rosterKnown({ ...settled, failedTables: ["event_participants"] })).toBe(false);
+  });
+
+  it("does not wait on a table that has nothing to do with the roster", () => {
+    expect(rosterKnown({ ...settled, failedTables: ["splits"] })).toBe(true);
+  });
+
+  it("keeps a roster it already has through a refetch that errored", () => {
+    // A later failure with the last good bundle still in hand is stale, not unknown.
+    expect(rosterKnown({ ...settled, error: new Error("offline") })).toBe(true);
+  });
+
+  it("is known out of season, when no combine is on and the roster really is empty", () => {
+    expect(rosterKnown({ ...settled, hasBundle: false })).toBe(true);
   });
 });
 
