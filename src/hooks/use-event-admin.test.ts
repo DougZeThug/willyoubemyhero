@@ -273,6 +273,25 @@ describe("useAdminAutoUnlock", () => {
       expect(startAdminSessionFromAccount).toHaveBeenCalledOnce();
     });
 
+    it("does not let a request made before the console was held reopen it after Lock", async () => {
+      // A cold load asks while `isAdmin` is still false; the console is then held
+      // (a PIN, another tab) and Locked while that answer is still in the air. Same
+      // account, same latch: only voiding the request stops it re-planting the token.
+      const slow = deferred<{ ok: true; token: string }>();
+      startAdminSessionFromAccount.mockReturnValueOnce(slow.promise);
+      const { rerender } = mount(props(userOf("a")));
+
+      rerender(props(userOf("a"), true));
+      rerender(props(userOf("a"), false));
+      await act(async () => {
+        slow.resolve({ ok: true, token: "late-token" });
+        await slow.promise;
+      });
+
+      expect(setAdminToken).not.toHaveBeenCalled();
+      expect(startAdminSessionFromAccount).toHaveBeenCalledOnce();
+    });
+
     it("leaves a signed-out device that holds a token alone", () => {
       // The token outlives a sign-out on purpose (ADM-16); nobody is there to ask for.
       const { result } = mount(props(null, true));

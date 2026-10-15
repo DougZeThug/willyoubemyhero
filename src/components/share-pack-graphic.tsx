@@ -14,7 +14,7 @@ import type { ImageUrlSet } from "@/lib/media";
  *
  * A pack, not a card. The per-card export already exists and is the right thing
  * for showing off one pull; this is the thing you put in the group chat to say
- * what you opened, so every card is in it and the fourth one is bigger.
+ * what you opened, so every card is in it and the secrets are printed bigger.
  */
 
 export type SharePackCard = {
@@ -22,7 +22,7 @@ export type SharePackCard = {
   rarityLabel: string;
   rarityColor: string;
   artUrl?: ImageUrlSet | string | null;
-  /** The daily secret, which is printed larger and on its own row. */
+  /** A secret, which is printed larger and on its own row. A pack can hold several. */
   secret?: boolean;
 };
 
@@ -100,13 +100,15 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
   ref,
 ) {
   const roster = data.cards.filter((c) => !c.secret);
-  const secret = data.cards.find((c) => c.secret);
+  // Every one of them, not the first: a pack is dealt from one pool and can hold
+  // two or three secrets, and the image is for showing off what was opened.
+  const secrets = data.cards.filter((c) => c.secret);
   // Solved against the canvas rather than chosen, because the canvas is fixed and
   // its root clips: a pack with a secret in it has two card rows to fit into one
-  // height, so the roster row has to give up the room the secret takes. Sized for
+  // height, so the roster row has to give up the room the secrets take. Sized for
   // three and then given a secret 34% wider underneath, this overflowed by about
   // 170px and cut the collection counter off the bottom of the image.
-  const size = sharePackLayout(!!secret);
+  const size = sharePackLayout(roster.length, secrets.length);
 
   return (
     <div
@@ -143,13 +145,17 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", gap: 28 }}>
-        {roster.map((card, i) => (
-          <Slot key={i} card={card} width={size.roster} />
-        ))}
-      </div>
+      {/* Left out when empty: an all-secret pack has no roster, and an empty row
+          would still cost a flex gap the layout did not budget for. */}
+      {roster.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 28 }}>
+          {roster.map((card, i) => (
+            <Slot key={i} card={card} width={size.roster} />
+          ))}
+        </div>
+      )}
 
-      {secret && (
+      {secrets.length > 0 && (
         <div
           style={{
             display: "flex",
@@ -165,13 +171,18 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
               fontWeight: 900,
               textTransform: "uppercase",
               letterSpacing: "0.35em",
-              color: secret.rarityColor,
+              color: secrets[0].rarityColor,
             }}
           >
-            One More Card
+            {secrets.length === 1 ? "One More Card" : "Secret Cards"}
           </div>
-          {/* Bigger than the roster three, which is the whole point of it. */}
-          <Slot card={secret} width={size.secret} />
+          {/* Bigger than the roster cards where there is room, which is the whole
+              point of them. */}
+          <div style={{ display: "flex", justifyContent: "center", gap: 28 }}>
+            {secrets.map((card, i) => (
+              <Slot key={i} card={card} width={size.secret} />
+            ))}
+          </div>
         </div>
       )}
 

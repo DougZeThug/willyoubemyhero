@@ -29,7 +29,8 @@ import { setAdminToken } from "@/lib/admin-token";
  *
  * An account that arrives already holding its console (a stored token) is
  * latched as asked too. Lock clears that token, and without the latch the clear
- * reads as a first visit and the server hands the console straight back.
+ * reads as a first visit and the server hands the console straight back. The same
+ * branch voids any request already in the air, so its late answer cannot do it.
  *
  * "Once" means once per answer, not once per session: a request that threw, or
  * that found no live event, is asked again on the next auth event (the same
@@ -60,6 +61,12 @@ export function useAdminAutoUnlock(isAdmin: boolean, user: User | null, authLoad
       // under a signed-in account is Lock (or the token running out, which lands on
       // the PIN gate too until a reload: the two look the same from here). Neither
       // is a first visit to answer with a new token.
+      //
+      // Holding the console also voids any request still in the air. One asked
+      // while `isAdmin` was false (a cold load) would otherwise still be the newest
+      // when it lands, pass the staleness check for the same signed-in account, and
+      // re-plant the token over a Lock the commissioner has just pressed.
+      latestRequest.current++;
       if (user) {
         triedFor.current = user.id;
         settledFor.current = user.id;
