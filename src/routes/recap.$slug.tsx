@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getArchivedRecap } from "@/lib/media.functions";
 import { formatTime } from "@/lib/format";
+import { jsonLd } from "@/lib/json-ld";
 import { standings } from "@/lib/standings";
 
 export const Route = createFileRoute("/recap/$slug")({
@@ -18,7 +19,8 @@ export const Route = createFileRoute("/recap/$slug")({
     scripts: [
       {
         type: "application/ld+json",
-        children: JSON.stringify({
+        // params.slug is attacker-controlled and this is a raw inline script body.
+        children: jsonLd({
           "@context": "https://schema.org",
           "@type": "Article",
           headline: `Draft Combine Recap · ${params.slug}`,
