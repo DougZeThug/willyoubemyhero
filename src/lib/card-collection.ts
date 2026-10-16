@@ -105,7 +105,7 @@ export type PackState = {
    * pressed Next on is indistinguishable from one you finished with, so
    * resuming from `revealed` alone dropped you on the *following* card and you
    * never got the one you were holding back. Optional, so a row written before
-   * the stand existed still loads and falls back to `resumeCursor`.
+   * the stand existed still loads and falls back to `revealed.length`.
    *
    * Its absence is also how a pre-stand row is recognised, which matters beyond
    * the fallback: that ceremony wrote every index into `revealed` the moment the
