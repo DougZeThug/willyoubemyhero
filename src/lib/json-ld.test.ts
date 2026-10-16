@@ -12,7 +12,7 @@ describe("jsonLd", () => {
   it("escapes the line separators and round-trips them", () => {
     const data = { a: "x\u2028y\u2029z" };
     const out = jsonLd(data);
-    expect(out).not.toMatch(/[\u2028\u2029]/);
+    expect(out).not.toMatch(/[\u2028\u2029]/u);
     expect(JSON.parse(out)).toEqual(data);
   });
 
