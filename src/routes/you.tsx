@@ -23,6 +23,9 @@ import { trophiesFor } from "@/lib/collection-trophies";
 import { dustLive } from "@/lib/dust";
 import { requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
+
+// Nothing in this tab writes the flag while /you is open; a read per render is enough.
+const noSubscribe = () => () => {};
 import { groupBySecretCollection } from "@/lib/secret-cards";
 import { getStreakHistory, type StreakHistoryEntry } from "@/lib/streaks.functions";
 import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
