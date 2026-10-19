@@ -86,7 +86,12 @@ function useSteppedImage(set: Parameters<typeof urlFromSet>[0], eager: boolean) 
       ? set
       : [set?.large ?? "", set?.medium ?? "", set?.thumb ?? ""].join("|");
   // Any re-signed or replaced rendition is a fresh chance, not only `large`.
-  useEffect(() => setStep(start), [key, start]);
+  // Reset during render, so a new rendition never paints at the old step.
+  const [stepFor, setStepFor] = useState(`${key}#${start}`);
+  if (stepFor !== `${key}#${start}`) {
+    setStepFor(`${key}#${start}`);
+    setStep(start);
+  }
 
   const failed = step >= SIZE_STEPS.length;
   const size = SIZE_STEPS[Math.min(step, SIZE_STEPS.length - 1)];

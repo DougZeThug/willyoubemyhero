@@ -72,9 +72,12 @@ export function NavRowsPanel({
   // a save landing should reach these switches.
   const storedKey = [...known].sort().join(" ");
   const [draft, setDraft] = useState<Set<string>>(() => new Set(known));
-  useEffect(() => {
+  // Re-seeded during render when the stored value changes, not in an effect.
+  const [seededFrom, setSeededFrom] = useState(storedKey);
+  if (seededFrom !== storedKey) {
+    setSeededFrom(storedKey);
     setDraft(new Set(storedKey ? storedKey.split(" ") : []));
-  }, [storedKey]);
+  }
 
   const dirty = [...draft].sort().join(" ") !== storedKey;
   const saved = navTabs({ dustOn, hidden });

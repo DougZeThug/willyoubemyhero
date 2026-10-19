@@ -157,7 +157,12 @@ export function CardViewer({
   );
 
   // A new card always lands face up, however the last one was left.
-  useEffect(() => setFlipped(false), [card?.id]);
+  // Reset during render when the card changes, so the new one never paints flipped.
+  const [flippedFor, setFlippedFor] = useState(card?.id);
+  if (flippedFor !== card?.id) {
+    setFlippedFor(card?.id);
+    setFlipped(false);
+  }
 
   // Escape, and the arrow keys for the swipe. Nothing else in this codebase
   // hand-rolls an Escape handler — every other dialog is Radix or vaul and gets

@@ -66,9 +66,8 @@ function ClaimPage() {
   const [signingOut, setSigningOut] = useState(false);
 
   // Once you're claimed there's nothing to do here but sign out.
-  useEffect(() => {
-    if (session) setSelected(session.participantId);
-  }, [session]);
+  // Adjusted during render rather than from an effect: same answer, one render fewer.
+  if (session && selected !== session.participantId) setSelected(session.participantId);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

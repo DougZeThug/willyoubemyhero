@@ -70,5 +70,13 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // A route file is `export const Route = createFileRoute(...)` plus private
+    // components — the shape TanStack requires. The router plugin splits those
+    // components out and owns their hot reload, so this rule only ever flagged
+    // the convention itself (33 warnings, none actionable).
+    files: ["src/routes/**/*.{ts,tsx}"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
   eslintPluginPrettier,
 );

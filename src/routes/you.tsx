@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -23,6 +23,9 @@ import { trophiesFor } from "@/lib/collection-trophies";
 import { dustLive } from "@/lib/dust";
 import { requestGyroAccess, setTiltWanted, useTiltWanted } from "@/lib/gyro";
 import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
+
+// Nothing in this tab writes the flag while /you is open; a read per render is enough.
+const noSubscribe = () => () => {};
 import { groupBySecretCollection } from "@/lib/secret-cards";
 import { getStreakHistory, type StreakHistoryEntry } from "@/lib/streaks.functions";
 import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
@@ -87,11 +90,13 @@ function YouPage() {
   const mine = useMyCollection(event?.id ?? null, rosterIds, !event && !eventLoading);
 
   // Set on claim and never cleared, so somebody reading this on a new phone is
-  // told where their cards went. Read in an effect: SSR has no localStorage.
-  const [wasMember, setWasMember] = useState(false);
-  useEffect(() => {
-    setWasMember(localStorage.getItem(WAS_MEMBER_KEY) === "1");
-  }, []);
+  // told where their cards went. SSR has no localStorage, so the server snapshot
+  // is `false` and the client re-reads after hydration.
+  const wasMember = useSyncExternalStore(
+    noSubscribe,
+    () => localStorage.getItem(WAS_MEMBER_KEY) === "1",
+    () => false,
+  );
 
   const myTrophies = trophiesFor(allTrophies.data?.trophies ?? [], member?.participantId ?? null);
   const ownedSecrets = secrets.data?.cards ?? [];
