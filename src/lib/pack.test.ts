@@ -1,7 +1,6 @@
 // The pack's client-side rules. Composition is Postgres's now (open_pack), so
-// what is tested here is the reading of it: where the ceremony is, which card
-// to come back to, what the vault says about a stored row, and the one cue the
-// nav and the vault share.
+// what is tested here is the reading of it: where the ceremony is, what the
+// vault says about a stored row, and the one cue the nav and the vault share.
 import { describe, expect, it } from "vitest";
 import {
   cardsLeft,
@@ -12,7 +11,6 @@ import {
   nextPackLabel,
   packStage,
   packWaiting,
-  resumeCursor,
   TEAR,
   tearProgress,
   todayPackState,
@@ -94,24 +92,6 @@ describe("packStage", () => {
   it("gives a secret no step of its own — it is a slot like any other", () => {
     // Three slots, whatever kind they are. There is no fourth step to park on.
     expect(packStage({ torn: true, opening: false, packSize: 3, cursor: 3 })).toBe("complete");
-  });
-});
-
-describe("resumeCursor", () => {
-  it("comes back to the first card still face-down", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [0] })).toBe(1);
-  });
-
-  it("starts at the beginning on a pack nobody has touched", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [] })).toBe(0);
-  });
-
-  it("goes past the end once every card has been seen", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [0, 1, 2] })).toBe(3);
-  });
-
-  it("ignores the order cards were turned in", () => {
-    expect(resumeCursor({ packSize: 3, revealed: [2, 0] })).toBe(1);
   });
 });
 
