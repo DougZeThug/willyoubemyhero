@@ -66,13 +66,17 @@ export default tseslint.config(
       // wrapped across lines stays legal — it only fires when some operand is
       // neither: a call, a ternary, an identifier.
       "prefer-template": "error",
-      // TanStack route files must export `Route`; the router plugin owns their HMR.
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true, allowExportNames: ["Route"] },
-      ],
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
     },
+  },
+  {
+    // A route file is `export const Route = createFileRoute(...)` plus private
+    // components — the shape TanStack requires. The router plugin splits those
+    // components out and owns their hot reload, so this rule only ever flagged
+    // the convention itself (33 warnings, none actionable).
+    files: ["src/routes/**/*.{ts,tsx}"],
+    rules: { "react-refresh/only-export-components": "off" },
   },
   eslintPluginPrettier,
 );
