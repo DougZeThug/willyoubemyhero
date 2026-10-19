@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
  * drawing one: two module constants with the same name in two routes is one
  * edit away from a vault that hides tiers and a card page that does not.
  */
+// It belongs to the locked slot (see above); a hot-reload remount here is harmless.
+// eslint-disable-next-line react-refresh/only-export-components
 export const LOCKED_RARITY = rarityStyle("base");
 
 /**
