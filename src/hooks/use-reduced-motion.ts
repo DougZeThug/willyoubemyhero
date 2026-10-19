@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /**
  * Whether the device asks for less motion, as a live subscription.
@@ -17,20 +17,21 @@ import { useEffect, useState } from "react";
  * app can tell, because the module-scope reads happen inside event handlers that
  * are a whole gesture away from a media query flipping.
  */
+const QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribe(onChange: () => void) {
+  const mq = window.matchMedia?.(QUERY);
+  if (!mq) return () => {};
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
 export function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-
-  // Not an initialiser: the server has no matchMedia, and starting at `true` on the
-  // client would hand hydration a different first render than the one it is
-  // matching against. Everything animates for one frame, then settles.
-  useEffect(() => {
-    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (!mq) return;
-    setReduced(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-
-  return reduced;
+  // The server snapshot is `false`: the server has no matchMedia, and hydration
+  // has to match the server's render. React then re-reads the client snapshot.
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia?.(QUERY).matches ?? false,
+    () => false,
+  );
 }

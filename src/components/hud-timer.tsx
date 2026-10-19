@@ -30,26 +30,7 @@ export function HudTimer({
   children?: React.ReactNode;
   className?: string;
 }) {
-  const [now, setNow] = useState(() => performance.now());
-  const anchor = useRef({ perf: performance.now(), base: runningSinceMs, paused });
-
-  useEffect(() => {
-    anchor.current = { perf: performance.now(), base: runningSinceMs, paused };
-    setNow(performance.now());
-  }, [runningSinceMs, paused]);
-
-  useEffect(() => {
-    if (paused) return;
-    let raf = 0;
-    const tick = () => {
-      setNow(performance.now());
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [paused]);
-
-  const ms = paused ? runningSinceMs : Math.max(0, runningSinceMs + (now - anchor.current.perf));
+  const ms = useElapsed(runningSinceMs, paused);
 
   const strokeW = 8;
   const r = size / 2 - strokeW * 2 - 6;
