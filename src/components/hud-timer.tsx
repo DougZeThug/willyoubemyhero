@@ -1,5 +1,4 @@
 import { useElapsed } from "@/hooks/use-elapsed";
-import { useEffect, useRef, useState } from "react";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
