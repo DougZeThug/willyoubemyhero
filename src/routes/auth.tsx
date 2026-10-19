@@ -79,9 +79,8 @@ function AuthPage() {
    * mounted, so the sign-in that follows still lands where it should.
    */
   const [wasSignedOut, setWasSignedOut] = useState(false);
-  useEffect(() => {
-    if (!loading && !user) setWasSignedOut(true);
-  }, [loading, user]);
+  // A latch on our own state, so it is set during render rather than in an effect.
+  if (!loading && !user && !wasSignedOut) setWasSignedOut(true);
 
   /**
    * The `next` a round trip left behind, claimed back on the way in.

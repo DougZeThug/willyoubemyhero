@@ -87,11 +87,13 @@ function YouPage() {
   const mine = useMyCollection(event?.id ?? null, rosterIds, !event && !eventLoading);
 
   // Set on claim and never cleared, so somebody reading this on a new phone is
-  // told where their cards went. Read in an effect: SSR has no localStorage.
-  const [wasMember, setWasMember] = useState(false);
-  useEffect(() => {
-    setWasMember(localStorage.getItem(WAS_MEMBER_KEY) === "1");
-  }, []);
+  // told where their cards went. SSR has no localStorage, so the server snapshot
+  // is `false` and the client re-reads after hydration.
+  const wasMember = useSyncExternalStore(
+    noSubscribe,
+    () => localStorage.getItem(WAS_MEMBER_KEY) === "1",
+    () => false,
+  );
 
   const myTrophies = trophiesFor(allTrophies.data?.trophies ?? [], member?.participantId ?? null);
   const ownedSecrets = secrets.data?.cards ?? [];
