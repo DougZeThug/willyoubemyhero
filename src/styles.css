@@ -283,6 +283,10 @@
   html {
     color-scheme: dark;
     max-width: 100%;
+    /* `clip` here too: clip on the body alone did not stop Android Chrome
+       from panning the whole page sideways a few pixels. `clip` (never
+       `hidden`) creates no scroll container, so touch scrolling survives. */
+    overflow-x: clip;
   }
   body {
     /* `clip` on the body alone, not `hidden` on both elements. `overflow-x:
