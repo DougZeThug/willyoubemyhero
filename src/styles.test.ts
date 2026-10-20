@@ -157,6 +157,12 @@ describe("scroll containment", () => {
         "page gesture that crosses it.",
     ).toBe(false);
   });
+
+  it("clips sideways bleed on html and body without making a scroll box", () => {
+    expect(/html\s*\{[^}]*overflow-x:\s*clip/.test(css)).toBe(true);
+    expect(/body\s*\{[^}]*overflow-x:\s*clip/.test(css)).toBe(true);
+    expect(/(html|body)\s*\{[^}]*overflow-x:\s*hidden/.test(css)).toBe(false);
+  });
 });
 
 /**
