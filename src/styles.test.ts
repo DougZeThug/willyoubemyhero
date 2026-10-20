@@ -161,7 +161,7 @@ describe("scroll containment", () => {
   it("clips sideways bleed on html and body without making a scroll box", () => {
     expect(/html\s*\{[^}]*overflow-x:\s*clip/.test(css)).toBe(true);
     expect(/body\s*\{[^}]*overflow-x:\s*clip/.test(css)).toBe(true);
-    expect(/(html|body)\s*\{[^}]*overflow-x:\s*hidden/.test(css)).toBe(false);
+    expect(/(html|body)\s*\{[^}]*overflow-x:\s*hidden/.test(css.replace(/\/\*[\s\S]*?\*\//g, "")))).toBe(false);
   });
 });
 
