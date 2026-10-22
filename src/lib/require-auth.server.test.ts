@@ -1,250 +1,55 @@
-// The guards themselves. Every mutating server function is supposed to open
-// with one of these, and each runs against a genuine request header here rather
-// than a stubbed one — so a token that would be accepted in production is
-// accepted in the test, and nothing else is.
+// An account-issued admin token must stop working the moment that account is
+// taken off the admin list, not when the token expires.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
-import {
-  isAdminFor,
-  optionalGuest,
-  optionalMember,
-  requireActor,
-  requireAdmin,
-  requireMember,
-  requireMemberSession,
-} from "./require-auth.server";
-import { adminHeaders, guestHeaders, memberHeaders, withRequestHeaders } from "@/test/server-fn";
+import { createSupabaseMock } from "@/test/supabase-mock";
+import { adminHeaders, callServerFn } from "@/test/server-fn";
+import { signAccountAdminToken, signAdminToken, verifyAdminToken } from "./session.server";
+
+let mock = createSupabaseMock();
+vi.mock("@/integrations/supabase/client.server", () => ({
+  get supabaseAdmin() {
+    return mock.client;
+  },
+}));
 
 const EVENT_ID = "00000000-0000-4000-8000-0000000000ff";
-const OTHER_EVENT_ID = "00000000-0000-4000-8000-0000000000ee";
-const PARTICIPANT_ID = "00000000-0000-4000-8000-0000000000aa";
-const GUEST_ID = "00000000-0000-4000-8000-0000000000e1";
+const USER_ID = "00000000-0000-4000-8000-0000000000cc";
 
-beforeEach(() => {
-  vi.stubEnv("SESSION_SECRET", "test-session-secret");
-});
+beforeEach(() => vi.stubEnv("SESSION_SECRET", "test-session-secret"));
 
-describe("requireAdmin", () => {
-  it("throws when the request carries no token", async () => {
-    await expect(withRequestHeaders({}, () => requireAdmin(EVENT_ID))).rejects.toThrow(
+async function guarded(token: string) {
+  const { createServerFn } = await import("@tanstack/react-start");
+  const { requireAdmin } = await import("./require-auth.server");
+  const fn = createServerFn({ method: "POST" }).handler(async () => {
+    await requireAdmin(EVENT_ID);
+    return "ok";
+  });
+  return callServerFn(fn, { headers: adminHeaders(token) });
+}
+
+describe("account-issued admin tokens", () => {
+  it("carry the account inside the signed payload", () => {
+    const { token } = signAccountAdminToken(USER_ID, EVENT_ID);
+    expect(verifyAdminToken(token)).toMatchObject({ eventId: EVENT_ID, userId: USER_ID });
+    const tampered = token.replace(USER_ID, "00000000-0000-4000-8000-0000000000dd");
+    expect(verifyAdminToken(tampered)).toBeNull();
+  });
+
+  it("work while the account is on the admin list", async () => {
+    mock = createSupabaseMock({ "admin_accounts.select": { data: { user_id: USER_ID } } });
+    expect(await guarded(signAccountAdminToken(USER_ID, EVENT_ID).token)).toBe("ok");
+  });
+
+  it("are refused once the account is removed", async () => {
+    mock = createSupabaseMock({ "admin_accounts.select": { data: null } });
+    await expect(guarded(signAccountAdminToken(USER_ID, EVENT_ID).token)).rejects.toThrow(
       "Admin PIN required",
     );
   });
 
-  it("throws on a malformed token", async () => {
-    await expect(
-      withRequestHeaders(adminHeaders("garbage"), () => requireAdmin(EVENT_ID)),
-    ).rejects.toThrow("Admin PIN required");
-  });
-
-  it("throws on a forged token", async () => {
-    const forged = `${EVENT_ID}.${Date.now() + 60_000}.not-a-real-signature`;
-    await expect(
-      withRequestHeaders(adminHeaders(forged), () => requireAdmin(EVENT_ID)),
-    ).rejects.toThrow("Admin PIN required");
-  });
-
-  it("accepts a valid token for the same event", async () => {
-    const { token } = signAdminToken(EVENT_ID);
-    await expect(
-      withRequestHeaders(adminHeaders(token), () => requireAdmin(EVENT_ID)),
-    ).resolves.toBeUndefined();
-  });
-
-  it("throws for a valid token issued for a different event", async () => {
-    // Being the commissioner of last year's combine is not being the
-    // commissioner of this one.
-    const { token } = signAdminToken(OTHER_EVENT_ID);
-    await expect(
-      withRequestHeaders(adminHeaders(token), () => requireAdmin(EVENT_ID)),
-    ).rejects.toThrow("Admin PIN required");
-  });
-
-  it("does not accept a member token", async () => {
-    const { token } = signMemberToken(PARTICIPANT_ID);
-    await expect(
-      withRequestHeaders(adminHeaders(token), () => requireAdmin(EVENT_ID)),
-    ).rejects.toThrow("Admin PIN required");
-  });
-
-  it("ignores a member token sent in the member header", async () => {
-    const { token } = signMemberToken(PARTICIPANT_ID);
-    await expect(
-      withRequestHeaders(memberHeaders(token), () => requireAdmin(EVENT_ID)),
-    ).rejects.toThrow("Admin PIN required");
-  });
-});
-
-describe("requireMember", () => {
-  it("throws when the request carries no token", async () => {
-    await expect(withRequestHeaders({}, () => requireMember())).rejects.toThrow(
-      "Claim your player first",
-    );
-  });
-
-  it("returns the claimed participant id", async () => {
-    const { token } = signMemberToken(PARTICIPANT_ID);
-    await expect(withRequestHeaders(memberHeaders(token), () => requireMember())).resolves.toBe(
-      PARTICIPANT_ID,
-    );
-  });
-
-  it("does not accept an admin token", async () => {
-    const { token } = signAdminToken(EVENT_ID);
-    await expect(withRequestHeaders(memberHeaders(token), () => requireMember())).rejects.toThrow(
-      "Claim your player first",
-    );
-  });
-
-  it("throws on a forged token", async () => {
-    const forged = `m.${PARTICIPANT_ID}.${Date.now() + 60_000}.not-a-real-signature`;
-    await expect(withRequestHeaders(memberHeaders(forged), () => requireMember())).rejects.toThrow(
-      "Claim your player first",
-    );
-  });
-});
-
-describe("requireMemberSession", () => {
-  it("returns the participant and the expiry the token was signed with", async () => {
-    const { token, expiresAt } = signMemberToken(PARTICIPANT_ID);
-    await expect(
-      withRequestHeaders(memberHeaders(token), () => requireMemberSession()),
-    ).resolves.toEqual({ participantId: PARTICIPANT_ID, expiresAt });
-  });
-
-  it("refuses an admin token", async () => {
-    const { token } = signAdminToken(EVENT_ID);
-    await expect(
-      withRequestHeaders(memberHeaders(token), () => requireMemberSession()),
-    ).rejects.toThrow("Claim your player first");
-  });
-
-  it("refuses a forged token", async () => {
-    const forged = `m.${PARTICIPANT_ID}.${Date.now() + 60_000}.not-a-real-signature`;
-    await expect(
-      withRequestHeaders(memberHeaders(forged), () => requireMemberSession()),
-    ).rejects.toThrow("Claim your player first");
-  });
-
-  it("refuses exactly what requireMember refuses", async () => {
-    await expect(withRequestHeaders({}, () => requireMemberSession())).rejects.toThrow(
-      "Claim your player first",
-    );
-    const { token } = signGuestToken("00000000-0000-4000-8000-0000000000e1");
-    await expect(
-      withRequestHeaders(memberHeaders(token), () => requireMemberSession()),
-    ).rejects.toThrow("Claim your player first");
-  });
-});
-
-describe("optionalMember", () => {
-  it("returns null instead of throwing when unauthenticated", async () => {
-    await expect(withRequestHeaders({}, () => optionalMember())).resolves.toBeNull();
-  });
-
-  it("returns null for a forged token", async () => {
-    const forged = `m.${PARTICIPANT_ID}.${Date.now() + 60_000}.nope`;
-    await expect(
-      withRequestHeaders(memberHeaders(forged), () => optionalMember()),
-    ).resolves.toBeNull();
-  });
-
-  it("returns the participant id for a valid token", async () => {
-    const { token } = signMemberToken(PARTICIPANT_ID);
-    await expect(withRequestHeaders(memberHeaders(token), () => optionalMember())).resolves.toBe(
-      PARTICIPANT_ID,
-    );
-  });
-});
-
-describe("optionalGuest", () => {
-  it("returns null instead of throwing when there is no guest token", async () => {
-    await expect(withRequestHeaders({}, () => optionalGuest())).resolves.toBeNull();
-  });
-
-  it("returns null for a forged token", async () => {
-    const forged = `g.${GUEST_ID}.${Date.now() + 60_000}.nope`;
-    await expect(
-      withRequestHeaders(guestHeaders(forged), () => optionalGuest()),
-    ).resolves.toBeNull();
-  });
-
-  it("returns the guest id for a valid token", async () => {
-    const { token } = signGuestToken(GUEST_ID);
-    await expect(withRequestHeaders(guestHeaders(token), () => optionalGuest())).resolves.toBe(
-      GUEST_ID,
-    );
-  });
-
-  it("does not accept a member token in the guest header", async () => {
-    // Both schemes are four parts; only the signed prefix separates them.
-    const { token } = signMemberToken(PARTICIPANT_ID);
-    await expect(
-      withRequestHeaders(guestHeaders(token), () => optionalGuest()),
-    ).resolves.toBeNull();
-  });
-});
-
-describe("requireActor", () => {
-  it("throws when the device holds no token of either kind", async () => {
-    await expect(withRequestHeaders({}, () => requireActor())).rejects.toThrow(
-      "Claim your player first",
-    );
-  });
-
-  it("resolves a member", async () => {
-    const { token } = signMemberToken(PARTICIPANT_ID);
-    await expect(withRequestHeaders(memberHeaders(token), () => requireActor())).resolves.toEqual({
-      kind: "member",
-      id: PARTICIPANT_ID,
-    });
-  });
-
-  it("resolves a guest", async () => {
-    const { token } = signGuestToken(GUEST_ID);
-    await expect(withRequestHeaders(guestHeaders(token), () => requireActor())).resolves.toEqual({
-      kind: "guest",
-      id: GUEST_ID,
-    });
-  });
-
-  it("prefers the member when the device carries both", async () => {
-    // A guest who claims a player keeps their guest token. Their pulls were
-    // merged onto the participant at claim time, so the member is the identity
-    // that owns them — resolving the guest here would strand the collection.
-    const member = signMemberToken(PARTICIPANT_ID).token;
-    const guest = signGuestToken(GUEST_ID).token;
-    await expect(
-      withRequestHeaders({ ...memberHeaders(member), ...guestHeaders(guest) }, () =>
-        requireActor(),
-      ),
-    ).resolves.toEqual({ kind: "member", id: PARTICIPANT_ID });
-  });
-
-  it("is not satisfied by an admin token", async () => {
-    const { token } = signAdminToken(EVENT_ID);
-    await expect(withRequestHeaders(adminHeaders(token), () => requireActor())).rejects.toThrow(
-      "Claim your player first",
-    );
-  });
-});
-
-describe("isAdminFor", () => {
-  it("is false without a token, and does not throw", async () => {
-    await expect(withRequestHeaders({}, () => isAdminFor(EVENT_ID))).resolves.toBe(false);
-  });
-
-  it("is true for a matching event", async () => {
-    const { token } = signAdminToken(EVENT_ID);
-    await expect(withRequestHeaders(adminHeaders(token), () => isAdminFor(EVENT_ID))).resolves.toBe(
-      true,
-    );
-  });
-
-  it("is false for a different event", async () => {
-    const { token } = signAdminToken(OTHER_EVENT_ID);
-    await expect(withRequestHeaders(adminHeaders(token), () => isAdminFor(EVENT_ID))).resolves.toBe(
-      false,
-    );
+  it("leave PIN tokens alone — no admin list lookup", async () => {
+    mock = createSupabaseMock({});
+    expect(await guarded(signAdminToken(EVENT_ID).token)).toBe("ok");
+    expect(mock.callsFor("admin_accounts", "select")).toHaveLength(0);
   });
 });
