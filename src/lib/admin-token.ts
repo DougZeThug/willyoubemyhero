@@ -13,8 +13,12 @@ export type AdminSession = Parsed & { owner: string | null };
 function parse(token: string | null): Parsed | null {
   if (!token) return null;
   const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [eventId, expStr] = parts;
+  // 3 parts from the PIN, 5 ("a.<user>.<event>.<exp>.<sig>") from an account.
+  let eventId: string | undefined;
+  let expStr: string | undefined;
+  if (parts.length === 3) [eventId, expStr] = parts;
+  else if (parts.length === 5 && parts[0] === "a") [, , eventId, expStr] = parts;
+  else return null;
   const expiresAt = Number(expStr);
   if (!eventId || !Number.isFinite(expiresAt)) return null;
   if (Date.now() > expiresAt) return null;
