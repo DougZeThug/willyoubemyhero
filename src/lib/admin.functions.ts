@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { hashPin, signAdminToken, timingSafeEq } from "./session.server";
+import { hashPin, signAccountAdminToken, signAdminToken, timingSafeEq } from "./session.server";
 import { uuid as zuuid } from "./zod-uuid";
 
 // Ten tries per event per ten minutes. Wide enough for a fumbled garden unlock,
@@ -85,6 +85,6 @@ export const startAdminSessionFromAccount = createServerFn({ method: "POST" })
     if (eventError) throw eventError;
     if (!event) return { ok: false as const, reason: "event_not_found" as const };
 
-    const { token, expiresAt } = signAdminToken(event.id);
+    const { token, expiresAt } = signAccountAdminToken(context.userId, event.id);
     return { ok: true as const, token, expiresAt };
   });

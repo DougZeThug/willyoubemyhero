@@ -9,6 +9,19 @@ export async function requireAdmin(eventId: string) {
   if (!claims || claims.eventId !== eventId) {
     throw new Error("Admin PIN required");
   }
+  // A token minted from an account is only as good as that account's place on
+  // the admin list, checked now rather than when it was issued. PIN tokens name
+  // no account and are unaffected.
+  if (claims.userId) {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("admin_accounts")
+      .select("user_id")
+      .eq("user_id", claims.userId)
+      .maybeSingle();
+    if (error) throw new Error("Could not confirm admin access");
+    if (!data) throw new Error("Admin PIN required");
+  }
 }
 
 /** Resolves to the claimed participant id, or throws. */

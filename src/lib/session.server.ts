@@ -37,13 +37,41 @@ export function signAdminToken(eventId: string): { token: string; expiresAt: num
   return { token: `${payload}.${sig}`, expiresAt };
 }
 
+// An admin token issued from an account on the admin list, rather than the PIN.
+// It names the account inside the signed payload — "a.<userId>.<eventId>.<exp>" —
+// so requireAdmin can re-check admin_accounts on every write and a commissioner
+// taken off the list loses the console at once, not twelve hours later. Five
+// parts, so it can never parse as a PIN token (3) or a member/guest token (4).
+const ACCOUNT_ADMIN_PREFIX = "a";
+
+export function signAccountAdminToken(
+  userId: string,
+  eventId: string,
+): { token: string; expiresAt: number } {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("SESSION_SECRET is not set");
+  const expiresAt = Date.now() + TOKEN_TTL_MS;
+  const payload = `${ACCOUNT_ADMIN_PREFIX}.${userId}.${eventId}.${expiresAt}`;
+  return { token: `${payload}.${hmac(payload, secret)}`, expiresAt };
+}
+
 export function verifyAdminToken(
   token: string | null | undefined,
-): { eventId: string; expiresAt: number } | null {
+): { eventId: string; expiresAt: number; userId?: string } | null {
   if (!token) return null;
   const secret = process.env.SESSION_SECRET;
   if (!secret) return null;
   const parts = token.split(".");
+  if (parts.length === 5) {
+    const [prefix, userId, eventId, expStr, sig] = parts;
+    if (prefix !== ACCOUNT_ADMIN_PREFIX || !userId || !eventId) return null;
+    const expiresAt = Number(expStr);
+    if (!Number.isFinite(expiresAt)) return null;
+    const expected = hmac(`${ACCOUNT_ADMIN_PREFIX}.${userId}.${eventId}.${expiresAt}`, secret);
+    if (!timingSafeEq(sig, expected)) return null;
+    if (Date.now() > expiresAt) return null;
+    return { eventId, expiresAt, userId };
+  }
   if (parts.length !== 3) return null;
   const [eventId, expStr, sig] = parts;
   const expiresAt = Number(expStr);
