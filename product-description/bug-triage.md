@@ -640,8 +640,9 @@ in the screen rather than in the handler that cascades.
   offscreen node before rasterising, and cache-busts the artwork URL by appending
   a query parameter to a _signed_ Supabase URL — either can produce a shared card
   showing initials where a face should be. Separately, splits on the exported
-  card render in the bundle's return order, which is unordered, and are keyed by
-  station name, so two identically-named stations collide and one is dropped.
+  card rendered in the bundle's return order, which was unordered, and were keyed
+  by station name, so two identically-named stations collided and one was
+  dropped (both fixed, see below).
   A fourth: the three share buttons fail three different ways. The pack summary
   swallows the failure deliberately, the player page reports it, and the
   leaderboard has a `try`/`finally` with **no `catch` at all** — an unhandled
@@ -657,10 +658,10 @@ in the screen rather than in the handler that cascades.
   callers used. The splits query is ordered. The leaderboard's handler has a
   catch, and reports a failure rather than swallowing an unhandled rejection; the
   pack summary keeps its deliberate quiet but says so in a polite live region
-  (see B-30). The exported splits are still keyed by station name in
-  `ResultCard`'s row keys; two identically-named stations in one event is a
-  problem the stations panel should refuse rather than the exporter work around,
-  and it is not one this pass created or closed.
+  (see B-30). The exported splits were later keyed by split id in
+  `ResultCard` (`src/components/result-card.tsx`), so two identically-named
+  stations each get their own row and none is dropped. Refusing duplicate
+  station names in the stations panel is a separate question and is still open.
 - **Raised by:** [sharing](cross-cutting/sharing.md#open-questions-and-verification),
   [the leaderboard](combine/the-leaderboard.md#open-questions-and-verification).
 

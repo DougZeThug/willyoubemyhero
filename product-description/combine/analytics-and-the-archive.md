@@ -217,8 +217,9 @@ read fine.
 - What an official run with a missing time actually renders was derived from the
   formatting rules rather than observed. It should not be reachable through the
   admin screens; whether it ever is has not been established.
-- Whether the station names collide on a phone at thirteen stations was inferred
-  from the fixed font size, not measured.
+- The result card now budgets its rows for any number of stations
+  (`src/lib/share-result-layout.ts`). A real render with thirteen splits has still
+  not been checked on a phone.
 - The tooltip's behaviour under a thumb — how it opens, whether it stays, how it
   closes — is the chart library's, and was not tested on a touch device.
 - The page having no side gutter, unlike its sibling League screens, was read
