@@ -333,8 +333,8 @@ describe("a secret open in the viewer", () => {
 // nothing matches) cannot be reached: "all" matches every row, so either nothing is
 // unpinned or something matches. It gets no test on purpose.
 describe("why the roster shelf is empty", () => {
-  const A = makeParticipant();
-  const B = makeParticipant();
+  const firstCard = makeParticipant();
+  const secondCard = makeParticipant();
 
   /** Only the fields the vault reads; `count` is what a spare is made of. */
   const held = (id: string, count = 1) => ({
@@ -350,7 +350,9 @@ describe("why the roster shelf is empty", () => {
     setVaultFavourites(pinned.map(rosterFavouriteId));
     // No secrets, so no secret shelf can stand in for the roster's own message.
     useMySecrets.mockReturnValue({ data: { cards: [], pulled: 0 } });
-    useEventBundle.mockReturnValue(settledBundle({ bundle: makeBundle({ participants: [A, B] }) }));
+    useEventBundle.mockReturnValue(
+      settledBundle({ bundle: makeBundle({ participants: [firstCard, secondCard] }) }),
+    );
     useMyCollection.mockReturnValue({
       collection,
       collectedCount: Object.keys(collection).length,
@@ -367,26 +369,34 @@ describe("why the roster shelf is empty", () => {
   });
 
   it("says every card is pinned when nothing is left below Favourites", () => {
-    showRoster("all", { [A.id]: held(A.id), [B.id]: held(B.id) }, [A.id, B.id]);
+    showRoster(
+      "all",
+      { [firstCard.id]: held(firstCard.id), [secondCard.id]: held(secondCard.id) },
+      [firstCard.id, secondCard.id],
+    );
     expect(screen.getByText("Every card is pinned to Favourites.")).toBeInTheDocument();
   });
 
   it("says every matching card is pinned when the filter's cards are all upstairs", () => {
-    // A is owned and pinned, B is locked: the "owned" filter matches A, which is
+    // firstCard is owned and pinned, secondCard is locked: the "owned" filter matches firstCard, which is
     // not on this shelf, so "Nothing packed yet" would be a lie.
-    showRoster("owned", { [A.id]: held(A.id) }, [A.id]);
+    showRoster("owned", { [firstCard.id]: held(firstCard.id) }, [firstCard.id]);
     expect(screen.getByText("Every matching card is pinned to Favourites.")).toBeInTheDocument();
   });
 
   it("says no spares yet when nothing has a second copy", () => {
-    showRoster("spares", { [A.id]: held(A.id) }, []);
+    showRoster("spares", { [firstCard.id]: held(firstCard.id) }, []);
     expect(
       screen.getByText("No spares yet. A second copy of a card turns up here."),
     ).toBeInTheDocument();
   });
 
   it("says nothing is missing when every card is collected", () => {
-    showRoster("missing", { [A.id]: held(A.id), [B.id]: held(B.id) }, []);
+    showRoster(
+      "missing",
+      { [firstCard.id]: held(firstCard.id), [secondCard.id]: held(secondCard.id) },
+      [],
+    );
     expect(screen.getByText("Nothing missing — you have packed every card.")).toBeInTheDocument();
   });
 

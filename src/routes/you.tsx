@@ -98,7 +98,7 @@ function dustHolder(dustOn: boolean, member: { participantId: string } | null | 
 }
 
 function historyLoading(isPending: boolean, actor: string | null) {
-  return isPending && !!actor;
+  return isPending && Boolean(actor);
 }
 
 /** The vault's second gate, folded into one flag — see the comment where it is used. */

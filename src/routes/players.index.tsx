@@ -136,7 +136,7 @@ function useVaultStreak(actor: string | null) {
   // device with no actor, where the query never runs at all — and that person
   // has no streak to wait for, so the slot should collapse rather than sit
   // empty above the shelves.
-  const streakPending = !!actor && streakQuery.isPending;
+  const streakPending = Boolean(actor) && streakQuery.isPending;
   // Claiming a rung from home. The same hook the pack summary's button uses, so
   // a milestone cannot pay twice or show its reveal on two screens at once.
   const milestone = useMilestoneClaim(actor, streak);
@@ -148,7 +148,7 @@ function canClaim(streak: { canClaim?: boolean } | null) {
 }
 
 function showFeedBanner(presenting: boolean, realtimeDegraded: boolean, error: unknown) {
-  return !presenting && (realtimeDegraded || !!error);
+  return !presenting && (realtimeDegraded || Boolean(error));
 }
 
 /** The vault's one-line summary, or null until the roster has answered. */
