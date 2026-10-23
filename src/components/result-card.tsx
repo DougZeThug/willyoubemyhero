@@ -32,7 +32,7 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
   ref,
 ) {
   const photoUrl = urlFromSet(data.photoUrl);
-  const hasPenalty = !!data.penaltyMs && data.penaltyMs > 0;
+  const hasPenalty = (data.penaltyMs ?? 0) > 0;
   // The canvas is fixed and clips, so how the splits sit is a height budget, not
   // a style choice. Every text block below carries an explicit lineHeight because
   // that budget is exact only if "normal" is not what sets a height.

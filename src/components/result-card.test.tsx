@@ -114,7 +114,8 @@ describe("ResultCard", () => {
       const { container } = render(<ResultCard data={data({ splits: many(13) })} />);
       for (let i = 1; i <= 13; i++) expect(screen.getByText(`STATION ${i}`)).toBeInTheDocument();
       expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
-      const root = container.firstElementChild!;
+      const root = container.firstElementChild;
+      if (!root) throw new Error("card root missing");
       expect(root.lastElementChild).toHaveTextContent("willyoubemyhero.com · Draft Combine");
     });
 
@@ -130,7 +131,9 @@ describe("ResultCard", () => {
     it("sets the grid from the layout, so the budget is what is drawn", () => {
       const { container } = render(<ResultCard data={data({ splits: many(13) })} />);
       const layout = shareResultLayout(13, false);
-      const grid = screen.getByText("STATION 1").parentElement!.parentElement!;
+      const cell = screen.getByText("STATION 1").parentElement;
+      const grid = cell?.parentElement;
+      if (!grid) throw new Error("station grid missing");
       expect(grid).toHaveStyle({
         gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
         gridAutoRows: `${layout.rowH}px`,

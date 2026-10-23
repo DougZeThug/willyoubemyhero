@@ -117,9 +117,13 @@ describe("LeaderboardPage sharing", () => {
     // node between the paint wait and the rasterise: a blank PNG in the group chat.
     twoFinishers();
     let release: () => void = () => {};
-    let exported: HTMLElement | null = null;
+    let exportedNode: HTMLElement | null = null;
+    const exported = (): HTMLElement => {
+      if (!exportedNode) throw new Error("card was never exported");
+      return exportedNode;
+    };
     exportCardPng.mockImplementation((node: HTMLElement) => {
-      exported = node;
+      exportedNode = node;
       return new Promise<void>((r) => {
         release = r;
       });
@@ -128,8 +132,8 @@ describe("LeaderboardPage sharing", () => {
     const { rerender } = render(<LeaderboardPage />);
     await userEvent.click(screen.getAllByRole("button", { name: /share .* result card/i })[0]);
     await waitFor(() => expect(exportCardPng).toHaveBeenCalledTimes(1));
-    expect(exported!.isConnected).toBe(true);
-    expect(exported!.textContent).toContain("Official Time50.00");
+    expect(exported().isConnected).toBe(true);
+    expect(exported().textContent).toContain("Official Time50.00");
 
     // Alice vanishes from the bundle while her export is in the air.
     showBoard({
@@ -138,11 +142,11 @@ describe("LeaderboardPage sharing", () => {
     });
     rerender(<LeaderboardPage />);
 
-    expect(exported!.isConnected).toBe(true);
-    expect(exported!.textContent).toContain("Official Time50.00");
+    expect(exported().isConnected).toBe(true);
+    expect(exported().textContent).toContain("Official Time50.00");
 
     release();
-    await waitFor(() => expect(exported!.isConnected).toBe(false));
+    await waitFor(() => expect(exported().isConnected).toBe(false));
   });
 
   it("hands the buttons back once the export settles", async () => {

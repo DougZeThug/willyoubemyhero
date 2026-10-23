@@ -29,7 +29,7 @@ async function accountStillAdmin(userId: string): Promise<boolean> {
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error("Could not confirm admin access");
-  return !!data;
+  return data !== null;
 }
 
 /** Resolves to the claimed participant id, or throws. */
