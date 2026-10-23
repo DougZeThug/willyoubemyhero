@@ -25,7 +25,7 @@
 // `refetchOnWindowFocus` already on useTradeOffers, and a second app-wide poller
 // is not free.
 import { browserSupabase, type BrowserSupabase } from "@/lib/browser-supabase";
-...
+import { TRADE_NUDGE_EVENT } from "./trades";
 type NudgeChannel = ReturnType<BrowserSupabase["channel"]>;
 
 type Entry = {
