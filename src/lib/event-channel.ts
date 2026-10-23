@@ -4,7 +4,7 @@
 // name, so /admin alone held eight websocket channels for one event and fired
 // eight invalidations per database change. Worse, `.subscribe()` was called bare:
 // when the socket died nothing noticed, and the screens froze with no signal.
-import { supabase } from "@/integrations/supabase/client";
+import { browserSupabase, type BrowserSupabase } from "@/lib/browser-supabase";
 
 export type ChannelHealth = "connecting" | "live" | "degraded";
 
@@ -35,7 +35,7 @@ export type EventChannelSubscriber = {
   health: (health: ChannelHealth) => void;
 };
 
-type EventChannel = ReturnType<typeof supabase.channel>;
+type EventChannel = ReturnType<BrowserSupabase["channel"]>;
 
 type Entry = {
   channel: EventChannel;
@@ -147,6 +147,14 @@ function openChannel(eventId: string): Entry {
     }
   };
 
+  const supabase = browserSupabase();
+  if (!supabase) {
+    // No client on this device, so no socket: run on the degraded poll, which is
+    // exactly the backstop it exists to be when updates may be going missing.
+    setHealth("degraded");
+    restartPoll();
+    return entry;
+  }
   entry.channel = supabase
     .channel(`event:${eventId}:${++channelSeq}`)
     .on(
@@ -250,7 +258,8 @@ export function subscribeToEventChannel(
       joined.poll = null;
       if (joined.participantRow) clearTimeout(joined.participantRow);
       joined.participantRow = null;
-      supabase.removeChannel(joined.channel);
+      // Never built when this device had no client.
+      if (joined.channel) void browserSupabase()?.removeChannel(joined.channel);
     }, TEARDOWN_GRACE_MS);
   };
 }
