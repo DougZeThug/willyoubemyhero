@@ -8,8 +8,10 @@
 // have to be held.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import PlayersPage from "./players.index";
+import { setVaultFavourites } from "@/lib/vault-favourites";
 import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds } from "@/test/fixtures";
 
 const useEventBundle = vi.fn();
@@ -282,5 +284,39 @@ describe("the mystery slot on a set shelf", () => {
 
     expect(screen.getByRole("heading", { level: 2, name: /^secrets$/i })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Unknown cards remain" })).toBeNull();
+  });
+});
+
+describe("a secret open in the viewer", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    setVaultFavourites([]);
+  });
+
+  async function openGazebo() {
+    const view = render(<PlayersPage />);
+    // The second card on the shelf, so a stale index and the right one differ.
+    await userEvent.click(screen.getByRole("button", { name: /^The Gazebo/ }));
+    expect(screen.getByRole("dialog", { name: "The Gazebo" })).toBeInTheDocument();
+    return view;
+  }
+
+  it("stays on the same card after it is pinned from the viewer's own menu", async () => {
+    // Pinning lifts the card out of its shelf into Favourites, which reorders the
+    // list the viewer is reading. An index kept across that landed on a neighbour.
+    await openGazebo();
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^pin$/i }));
+
+    expect(screen.getByRole("dialog", { name: "The Gazebo" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Gary The Grill" })).toBeNull();
+  });
+
+  it("closes when the card leaves the list, rather than showing a neighbour", async () => {
+    const view = await openGazebo();
+    useMySecrets.mockReturnValue({ data: { cards: [PETS[0]], pulled: 1 } });
+    view.rerender(<PlayersPage />);
+
+    expect(screen.queryByTestId("card-viewer")).toBeNull();
   });
 });

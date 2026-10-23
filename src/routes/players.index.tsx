@@ -654,13 +654,20 @@ function PlayersPage() {
   /**
    * The open secret, once it is known to still be there.
    *
-   * The shelves' list is live, so a card can leave it — traded away, or its shelf
-   * rolled up — while the viewer is holding an index into it. Null then, and both
-   * the viewer and the chrome below read this rather than `openSecret`: a viewer
-   * that renders nothing while presentation mode still holds the nav inert is a
-   * screen with no way off it.
+   * Follows the card by id, not by the index it was opened at. The shelves' list
+   * is live and reorders under the viewer: pinning from its own menu lifts the
+   * card out of its shelf, and an index kept across that points at a neighbour,
+   * so the sheet swapped to a different card the moment you pinned this one. Null
+   * only when the card is truly gone from the list — traded away, or its shelf
+   * rolled up — and both the viewer and the chrome below read this rather than
+   * `openSecret`: a viewer that renders nothing while presentation mode still
+   * holds the nav inert is a screen with no way off it.
    */
-  const openSecretIndex = openSecret && openSecretCards[openSecret.index] ? openSecret.index : null;
+  const openSecretIndex = (() => {
+    if (!openSecret) return null;
+    const at = openSecretCards.findIndex((c) => c.id === openSecret.id);
+    return at >= 0 ? at : null;
+  })();
 
   /**
    * The secrets the "new since" strip is showing, in the order it shows them.
