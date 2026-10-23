@@ -97,7 +97,7 @@ export const getEventSocial = createServerFn({ method: "GET" })
     const meMember = optionalMember();
     const meGuest = meMember ? null : optionalGuest();
     const isMine = (row: { participant_id: string | null; guest_key: string | null }) =>
-      meMember ? row.participant_id === meMember : !!meGuest && row.guest_key === meGuest;
+      meMember ? row.participant_id === meMember : Boolean(meGuest) && row.guest_key === meGuest;
 
     return {
       reactions: (reactions ?? []).map(({ guest_key, ...r }) => ({
@@ -125,14 +125,14 @@ export const toggleReaction = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const who = actor(data.guest);
     const sb = await admin();
-    const q = sb
+    const reactionQuery = sb
       .from("card_reactions")
       .select("id")
       .eq("event_participant_id", data.eventParticipantId)
       .eq("emoji", data.emoji);
     const { data: existing } = who.member
-      ? await q.eq("participant_id", who.member).maybeSingle()
-      : await q.eq("guest_key", who.guest!.key).maybeSingle();
+      ? await reactionQuery.eq("participant_id", who.member).maybeSingle()
+      : await reactionQuery.eq("guest_key", who.guest!.key).maybeSingle();
 
     if (existing) {
       await sb.from("card_reactions").delete().eq("id", existing.id);
@@ -215,11 +215,11 @@ export const deleteComment = createServerFn({ method: "POST" })
     const eventId = row.event_participant?.event_id ?? null;
     if (!eventId || !(await isAdminFor(eventId))) {
       const me = optionalMember();
-      const isOwnMember = !!me && row.participant_id === me;
+      const isOwnMember = Boolean(me) && row.participant_id === me;
       // Guest ownership is decided by the signed token, never by a key in the
       // request body — that key is copyable and used to be readable publicly.
       const guestId = me ? null : optionalGuest();
-      const isOwnGuest = !!guestId && !!row.guest_key && row.guest_key === guestId;
+      const isOwnGuest = Boolean(guestId) && Boolean(row.guest_key) && row.guest_key === guestId;
       if (!isOwnMember && !isOwnGuest) throw new Error("Not your comment");
     }
     await sb.from("card_comments").delete().eq("id", data.commentId);

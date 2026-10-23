@@ -111,6 +111,6 @@ export function requireActor(): Actor {
 export async function isAdminFor(eventId: string): Promise<boolean> {
   const claims = verifyAdminToken(getRequestHeader("x-admin-token") ?? null);
   if (!claims || claims.eventId !== eventId) return false;
-  if (claims.userId) return accountStillAdmin(claims.userId);
+  if (claims.userId) return await accountStillAdmin(claims.userId);
   return true;
 }

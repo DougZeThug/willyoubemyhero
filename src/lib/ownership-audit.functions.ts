@@ -104,7 +104,7 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
 
     const claimed = new Map((codes ?? []).map((c) => [c.participant_id, c.claimed_at]));
     const linked = new Set(
-      (accounts ?? []).map((a) => a.participant_id).filter((id): id is string => !!id),
+      (accounts ?? []).map((a) => a.participant_id).filter((id): id is string => Boolean(id)),
     );
     const accountGuests = new Set(
       (accounts ?? [])
@@ -147,8 +147,8 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
       return {
         participantId: p.id,
         name: p.name,
-        isCollector: !!p.is_collector,
-        reachable: !!claimed.get(p.id) || linked.has(p.id),
+        isCollector: Boolean(p.is_collector),
+        reachable: Boolean(claimed.get(p.id)) || linked.has(p.id),
         secrets: secrets.total,
         tradeableSecrets: secrets.tradeable,
         rosterCopies,

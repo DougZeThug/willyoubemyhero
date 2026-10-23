@@ -116,7 +116,7 @@ describe("LeaderboardPage sharing", () => {
     // update that dropped the row (a re-time, a scratch) unmounted the offscreen
     // node between the paint wait and the rasterise: a blank PNG in the group chat.
     twoFinishers();
-    let release: () => void = () => {};
+    let release: () => void = () => undefined;
     let exportedNode: HTMLElement | null = null;
     const exported = (): HTMLElement => {
       if (!exportedNode) throw new Error("card was never exported");
