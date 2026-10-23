@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LoaderCircle, LogIn, LogOut, ShieldCheck, UserRoundPlus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { browserSupabase } from "@/lib/browser-supabase";
 import { lovable } from "@/integrations/lovable";
 import { signOutAccount, useAuthUser } from "@/hooks/use-account";
 import { useMemberSession } from "@/lib/member-token";
@@ -155,6 +155,10 @@ function AuthPage() {
     e.preventDefault();
     setBusy(true);
     try {
+      const supabase = browserSupabase();
+      if (!supabase) {
+        throw new Error("Sign-in needs browser storage, which is blocked on this device");
+      }
       if (mode === "signup") {
         preserveAccountHandoff();
         // Same as Google, and under the same rule: with confirmation on, the
