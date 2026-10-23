@@ -111,6 +111,40 @@ describe("LeaderboardPage sharing", () => {
     });
   });
 
+  it("keeps the tapped card mounted and unchanged when the row leaves the board mid-export", async () => {
+    // The card was derived from the live rows on every render, so a realtime
+    // update that dropped the row (a re-time, a scratch) unmounted the offscreen
+    // node between the paint wait and the rasterise: a blank PNG in the group chat.
+    twoFinishers();
+    let release: () => void = () => {};
+    let exported: HTMLElement | null = null;
+    exportCardPng.mockImplementation((node: HTMLElement) => {
+      exported = node;
+      return new Promise<void>((r) => {
+        release = r;
+      });
+    });
+
+    const { rerender } = render(<LeaderboardPage />);
+    await userEvent.click(screen.getAllByRole("button", { name: /share .* result card/i })[0]);
+    await waitFor(() => expect(exportCardPng).toHaveBeenCalledTimes(1));
+    expect(exported!.isConnected).toBe(true);
+    expect(exported!.textContent).toContain("Official Time50.00");
+
+    // Alice vanishes from the bundle while her export is in the air.
+    showBoard({
+      participants: [],
+      runs: [makeRun({ participant_id: "p-b", official_time_ms: 60_000 })],
+    });
+    rerender(<LeaderboardPage />);
+
+    expect(exported!.isConnected).toBe(true);
+    expect(exported!.textContent).toContain("Official Time50.00");
+
+    release();
+    await waitFor(() => expect(exported!.isConnected).toBe(false));
+  });
+
   it("hands the buttons back once the export settles", async () => {
     twoFinishers();
     // beforeEach resets it to a bare vi.fn(), whose undefined return awaits
