@@ -69,7 +69,7 @@ import { useAccountSyncState } from "@/lib/account-sync-state";
 import { usePackProgress } from "@/hooks/use-pack-progress";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { useIsOnline } from "@/hooks/use-online";
-import { nextLocalMidnight, packWaiting as packStillSealed } from "@/lib/pack";
+import { packResetAt, packWaiting as packStillSealed } from "@/lib/pack";
 import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import {
   acquisitionWindow,
@@ -141,11 +141,6 @@ function useVaultStreak(actor: string | null) {
   // a milestone cannot pay twice or show its reveal on two screens at once.
   const milestone = useMilestoneClaim(actor, streak);
   return { streak, streakPending, milestone };
-}
-
-/** The league's reset when the server has said it, else this device's own midnight. */
-function packResetAt(resetsAt: string | null | undefined, now: number) {
-  return resetsAt ?? nextLocalMidnight(now);
 }
 
 function canClaim(streak: { canClaim?: boolean } | null) {

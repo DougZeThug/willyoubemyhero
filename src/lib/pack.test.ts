@@ -9,6 +9,7 @@ import {
   secretHeldNow,
   nextLocalMidnight,
   nextPackLabel,
+  packResetAt,
   packStage,
   packWaiting,
   TEAR,
@@ -230,6 +231,20 @@ describe("nextLocalMidnight", () => {
     const at = new Date(nextLocalMidnight(new Date(2026, 8, 30, 23, 59).getTime()));
     expect(at.getMonth()).toBe(9);
     expect(at.getDate()).toBe(1);
+  });
+});
+
+describe("packResetAt", () => {
+  const now = new Date(2026, 8, 4, 18, 30).getTime();
+
+  it("trusts the server's reset over this phone's midnight", () => {
+    const league = "2026-09-05T04:00:00.000Z";
+    expect(packResetAt(league, now)).toBe(league);
+  });
+
+  it("falls back to the phone's next midnight when the server has not answered", () => {
+    expect(packResetAt(null, now)).toBe(nextLocalMidnight(now));
+    expect(packResetAt(undefined, now)).toBe(nextLocalMidnight(now));
   });
 });
 

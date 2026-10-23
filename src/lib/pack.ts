@@ -295,3 +295,8 @@ export function nextLocalMidnight(now: number): string {
   const d = new Date(now);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).toISOString();
 }
+
+/** The league's reset when the server has said it, else this device's own midnight. */
+export function packResetAt(resetsAt: string | null | undefined, now: number): string {
+  return resetsAt ?? nextLocalMidnight(now);
+}
