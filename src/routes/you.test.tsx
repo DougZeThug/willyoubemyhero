@@ -335,3 +335,38 @@ describe("/you", () => {
     expect(screen.getByRole("link", { name: /admin/i })).toHaveAttribute("href", "/admin");
   });
 });
+
+// Who this phone is, in one sentence. The order is the point: a member who also
+// has the breadcrumb is a member, not a returning visitor.
+describe("/you player blurb", () => {
+  const MEMBER =
+    "Your player code is claimed on this phone. Your cards are filed under your name, so they follow you to another one.";
+  const RETURNING =
+    "This phone has been signed in before. Your cards are on your name, not on the handset — put the code back in to see them.";
+  const FRESH = "Nothing is claimed here yet. A player code turns this phone into your collection.";
+
+  it("tells a member their code is claimed", () => {
+    render(<YouPage />);
+    expect(screen.getByText(MEMBER)).toBeInTheDocument();
+  });
+
+  it("tells a signed-out phone that has been signed in before", () => {
+    useMemberSession.mockReturnValue(null);
+    localStorage.setItem(WAS_MEMBER_KEY, "1");
+    render(<YouPage />);
+    expect(screen.getByText(RETURNING)).toBeInTheDocument();
+  });
+
+  it("tells a phone nobody has claimed that nothing is claimed", () => {
+    useMemberSession.mockReturnValue(null);
+    render(<YouPage />);
+    expect(screen.getByText(FRESH)).toBeInTheDocument();
+  });
+
+  it("lets the member sentence win over the breadcrumb", () => {
+    localStorage.setItem(WAS_MEMBER_KEY, "1");
+    render(<YouPage />);
+    expect(screen.getByText(MEMBER)).toBeInTheDocument();
+    expect(screen.queryByText(RETURNING)).toBeNull();
+  });
+});

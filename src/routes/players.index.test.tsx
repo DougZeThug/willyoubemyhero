@@ -6,18 +6,21 @@
 // already been finished. Two of those three rules are invisible in the component
 // itself — they live in the condition at the render site — so this is where they
 // have to be held.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import PlayersPage from "./players.index";
-import { setVaultFavourites } from "@/lib/vault-favourites";
+import { rosterFavouriteId, setVaultFavourites } from "@/lib/vault-favourites";
+import { setVaultLayout, type VaultFilter } from "@/lib/vault-layout";
 import { EVENT_ID, makeBundle, makeParticipant, resetFixtureIds } from "@/test/fixtures";
 
 const useEventBundle = vi.fn();
 const useCollectionTrophies = vi.fn();
 const useMySecrets = vi.fn();
 const useMemberSession = vi.fn();
+const useMyCollection = vi.fn();
+const useMilestoneClaim = vi.fn();
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -78,15 +81,10 @@ vi.mock("@/hooks/use-recent-acquisitions", () => ({
   useRecentAcquisitions: () => ({ data: undefined }),
 }));
 vi.mock("@/hooks/use-milestone-claim", () => ({
-  useMilestoneClaim: () => ({ milestoneReveal: null, claim: vi.fn(), claiming: false }),
+  useMilestoneClaim: (...args: unknown[]) => useMilestoneClaim(...args),
 }));
 vi.mock("@/hooks/use-my-collection", () => ({
-  useMyCollection: () => ({
-    collection: {},
-    collectedCount: 0,
-    ready: true,
-    markCollected: vi.fn(),
-  }),
+  useMyCollection: (...args: unknown[]) => useMyCollection(...args),
 }));
 
 // Partial, because both of these modules export helpers the page calls as well as
@@ -169,6 +167,13 @@ beforeEach(() => {
   useMySecrets.mockReturnValue({ data: { cards: PETS, pulled: PETS.length } });
   useCollectionTrophies.mockReturnValue({ data: { trophies: [] } });
   useMemberSession.mockReturnValue({ participantId: ME });
+  useMyCollection.mockReturnValue({
+    collection: {},
+    collectedCount: 0,
+    ready: true,
+    markCollected: vi.fn(),
+  });
+  useMilestoneClaim.mockReturnValue({ milestoneReveal: null, claim: vi.fn(), claiming: false });
 });
 
 describe("the vault's summary line", () => {
@@ -318,5 +323,116 @@ describe("a secret open in the viewer", () => {
     view.rerender(<PlayersPage />);
 
     expect(screen.queryByTestId("card-viewer")).toBeNull();
+  });
+});
+
+// Why the roster shelf is empty. Each sentence has a different next move, and all
+// five are the same markup, so only the words tell them apart.
+//
+// The last fallback in emptyRosterMessage (filter "all", unpinned cards exist, yet
+// nothing matches) cannot be reached: "all" matches every row, so either nothing is
+// unpinned or something matches. It gets no test on purpose.
+describe("why the roster shelf is empty", () => {
+  const A = makeParticipant();
+  const B = makeParticipant();
+
+  /** Only the fields the vault reads; `count` is what a spare is made of. */
+  const held = (id: string, count = 1) => ({
+    eventParticipantId: id,
+    pulledAt: 1,
+    count,
+    tier: "base",
+  });
+
+  function showRoster(filter: VaultFilter, collection: Record<string, unknown>, pinned: string[]) {
+    // Before render: the page reads the stored filter, not a prop.
+    setVaultLayout({ order: [], collapsed: [], sort: "name", filter, density: 2 });
+    setVaultFavourites(pinned.map(rosterFavouriteId));
+    // No secrets, so no secret shelf can stand in for the roster's own message.
+    useMySecrets.mockReturnValue({ data: { cards: [], pulled: 0 } });
+    useEventBundle.mockReturnValue(settledBundle({ bundle: makeBundle({ participants: [A, B] }) }));
+    useMyCollection.mockReturnValue({
+      collection,
+      collectedCount: Object.keys(collection).length,
+      ready: true,
+      markCollected: vi.fn(),
+    });
+    render(<PlayersPage />);
+  }
+
+  afterEach(() => {
+    // `current` in both stores outlives the test that set it.
+    setVaultLayout({ order: [], collapsed: [], sort: "name", filter: "all", density: 2 });
+    setVaultFavourites([]);
+  });
+
+  it("says every card is pinned when nothing is left below Favourites", () => {
+    showRoster("all", { [A.id]: held(A.id), [B.id]: held(B.id) }, [A.id, B.id]);
+    expect(screen.getByText("Every card is pinned to Favourites.")).toBeInTheDocument();
+  });
+
+  it("says every matching card is pinned when the filter's cards are all upstairs", () => {
+    // A is owned and pinned, B is locked: the "owned" filter matches A, which is
+    // not on this shelf, so "Nothing packed yet" would be a lie.
+    showRoster("owned", { [A.id]: held(A.id) }, [A.id]);
+    expect(screen.getByText("Every matching card is pinned to Favourites.")).toBeInTheDocument();
+  });
+
+  it("says no spares yet when nothing has a second copy", () => {
+    showRoster("spares", { [A.id]: held(A.id) }, []);
+    expect(
+      screen.getByText("No spares yet. A second copy of a card turns up here."),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing is missing when every card is collected", () => {
+    showRoster("missing", { [A.id]: held(A.id), [B.id]: held(B.id) }, []);
+    expect(screen.getByText("Nothing missing — you have packed every card.")).toBeInTheDocument();
+  });
+
+  it("points at today's pack when nothing is collected yet", () => {
+    showRoster("owned", {}, []);
+    expect(screen.getByText("Nothing packed yet. Open today's pack.")).toBeInTheDocument();
+  });
+});
+
+// The same banner five other screens show. It stays quiet while a reveal has the
+// screen, and the condition for that lives only at the render site.
+describe("the degraded-feed banner", () => {
+  const BANNER = "Live feed down — refreshing every few seconds";
+
+  it("shows when the live channel is down", () => {
+    useEventBundle.mockReturnValue(settledBundle({ realtimeDegraded: true }));
+    render(<PlayersPage />);
+    expect(screen.getByText(BANNER)).toBeInTheDocument();
+  });
+
+  it("shows when the bundle failed to load", () => {
+    useEventBundle.mockReturnValue(settledBundle({ error: new Error("offline") }));
+    render(<PlayersPage />);
+    expect(screen.getByText(BANNER)).toBeInTheDocument();
+  });
+
+  it("stays away on a healthy feed", () => {
+    render(<PlayersPage />);
+    expect(screen.queryByText(BANNER)).toBeNull();
+  });
+
+  it("stays silent while a milestone reveal has the screen, even when degraded", () => {
+    useEventBundle.mockReturnValue(settledBundle({ realtimeDegraded: true }));
+    useMilestoneClaim.mockReturnValue({
+      milestoneReveal: {
+        milestone: 7,
+        streak: 7,
+        card: PETS[0],
+        tierFloor: null,
+        duplicate: false,
+      },
+      claim: vi.fn(),
+      dismiss: vi.fn(),
+      claiming: false,
+    });
+    render(<PlayersPage />);
+    expect(screen.queryByText(BANNER)).toBeNull();
   });
 });
