@@ -143,10 +143,14 @@ function YouPage() {
   // the previous person's cards — but "No packs opened yet." is still an answer,
   // and giving it while the account is mid-link is the same mistake in the
   // quieter direction.
+  //
+  // The same goes for a stats read that failed or never ran: `ready` settles on
+  // it, and `packsOpened` is then 0 because it is unknown, so "No packs opened
+  // yet." is only said once the query has really answered. Otherwise no line.
   const counters =
     [packs, spares > 0 ? `${spares} spare${spares === 1 ? "" : "s"} to trade` : null]
       .filter(Boolean)
-      .join(" · ") || "No packs opened yet.";
+      .join(" · ") || (mine.statsKnown ? "No packs opened yet." : null);
 
   return (
     <div className="card-bg min-h-[var(--page-min-h)]">
@@ -208,7 +212,9 @@ function YouPage() {
             {/* The two counters PR 5 took off the vault's header. They belong to
                 somebody looking themselves up, not to the screen whose job is
                 "what should I do right now". */}
-            {ready && <p className="mt-1 text-meta text-muted-foreground">{counters}</p>}
+            {ready && counters && (
+              <p className="mt-1 text-meta text-muted-foreground">{counters}</p>
+            )}
           </section>
 
           {dustOn && (

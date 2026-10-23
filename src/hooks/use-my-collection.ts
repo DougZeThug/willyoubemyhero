@@ -56,6 +56,14 @@ export type MyCollection = {
    * old inflated number for a frame before it snaps down is the bug, briefly.
    */
   ready: boolean;
+  /**
+   * True only when the stats query actually answered.
+   *
+   * `ready` also settles on a failed or absent stats read, where `packsOpened`
+   * is 0 because it is UNKNOWN, not because none were opened. A caller about to
+   * say "no packs yet" must check this first.
+   */
+  statsKnown: boolean;
   /** True once a claimed member has been resolved on this device. */
   isMember: boolean;
   /**
@@ -382,6 +390,7 @@ export function useMyCollection(
     dupes: dupeCount(stats.data?.cards ?? []),
     firstPackOn: stats.data?.firstPackOn ?? null,
     ready: settled,
+    statsKnown: stats.isSuccess,
     isMember: !!participantId,
     markCollected,
   };

@@ -97,6 +97,7 @@ describe("useMyCollection, for a member", () => {
     getMyCardStats.mockResolvedValue(serverHas(["ep-0", "ep-1", "ep-2"]));
     const { result } = await mount();
     await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.statsKnown).toBe(true);
     expect(result.current.collectedCount).toBe(3);
     await waitFor(() => expect(forgetCards).toHaveBeenCalled());
     expect(forgetCards.mock.calls[0][0]).toHaveLength(15);
@@ -110,6 +111,8 @@ describe("useMyCollection, for a member", () => {
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(Object.keys(result.current.collection)).toHaveLength(18);
     expect(forgetCards).not.toHaveBeenCalled();
+    // Ready, yet the pack count of 0 is unknown rather than zero.
+    expect(result.current.statsKnown).toBe(false);
   });
 });
 
@@ -534,6 +537,8 @@ describe("useMyCollection, when no event id is coming", () => {
     expect(Object.keys(result.current.collection)).toHaveLength(18);
     expect(getMyCardStats).not.toHaveBeenCalled();
     expect(forgetCards).not.toHaveBeenCalled();
+    // The query is disabled, so the 0 packs it would have counted is unknown.
+    expect(result.current.statsKnown).toBe(false);
   });
 
   it("hangs, as before, while the read is merely slow", async () => {

@@ -132,6 +132,7 @@ const COLLECTION = {
   dupes: 2,
   firstPackOn: null,
   ready: true,
+  statsKnown: true,
   isMember: true,
   markCollected: vi.fn(),
 };
@@ -246,6 +247,22 @@ describe("/you", () => {
     useMyCollection.mockReturnValue({ ...COLLECTION, isMember: false });
     render(<YouPage />);
     expect(screen.getByText(/roster 3 \/ 5/i)).toBeInTheDocument();
+  });
+
+  it("does not claim no packs were opened when the stats never answered", () => {
+    // `ready` settles on a failed stats read, where packsOpened is 0 because it
+    // is unknown. Saying "No packs opened yet." would be a statement of fact
+    // the app does not have.
+    useMyCollection.mockReturnValue({ ...COLLECTION, packsOpened: 0, dupes: 0, statsKnown: false });
+    render(<YouPage />);
+    expect(screen.getByText(/roster 3 \/ 5/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no packs opened yet/i)).not.toBeInTheDocument();
+  });
+
+  it("says no packs were opened once the stats have answered with none", () => {
+    useMyCollection.mockReturnValue({ ...COLLECTION, packsOpened: 0, dupes: 0, statsKnown: true });
+    render(<YouPage />);
+    expect(screen.getByText(/no packs opened yet/i)).toBeInTheDocument();
   });
 
   it("keeps counting while the collection itself is unsettled", () => {
