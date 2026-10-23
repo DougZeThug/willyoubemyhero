@@ -2,7 +2,7 @@
 //
 // Everything in require-auth.server.ts reads its token through
 // `getRequestHeader`, which resolves out of h3's AsyncLocalStorage. Establishing
-// that store — which is exactly what `requestHandler` does in production — means
+// that store — which is exactly what the Start request entry does in production — means
 // the auth guards run for real: a test that passes an admin token passes an
 // actual HMAC-signed string through an actual header, and `requireAdmin`
 // verifies it the same way production does.
@@ -10,7 +10,7 @@
 // Server functions themselves are made directly callable by
 // src/test/setup-server.ts, which replaces the babel-transformed
 // `createServerFn` with a builder that still runs the validator and the handler.
-import { requestHandler } from "@tanstack/react-start/server";
+import { createServerEntry } from "@tanstack/react-start/server";
 
 /** Run `fn` inside a request whose headers are `headers`. */
 export async function withRequestHeaders<T>(
@@ -26,28 +26,23 @@ export async function withRequestHeaders<T>(
   let failure: unknown;
   let threw = false;
 
-  // `requestHandler` hands its callback's promise straight to h3's response
-  // coercion without awaiting it, so awaiting the handler alone can return
-  // before the inner work has finished. This latch is what we wait on.
-  let settle!: () => void;
-  const finished = new Promise<void>((resolve) => {
-    settle = resolve;
+  // `createServerEntry().fetch` runs its callback inside the same request scope
+  // production uses, and awaits it. It turns anything the callback throws into a
+  // 500 Response, so the callback captures its own error and we rethrow it
+  // below; the caller still sees the original error, not a Response.
+  const entry = createServerEntry({
+    fetch: async () => {
+      try {
+        result = await fn();
+      } catch (error) {
+        threw = true;
+        failure = error;
+      }
+      return new Response(null, { status: 204 });
+    },
   });
 
-  const handler = requestHandler(async () => {
-    try {
-      result = await fn();
-    } catch (error) {
-      threw = true;
-      failure = error;
-    } finally {
-      settle();
-    }
-    return new Response(null, { status: 204 });
-  });
-
-  await handler(request, {});
-  await finished;
+  await entry.fetch(request, {});
 
   if (threw) throw failure;
   return result as T;
