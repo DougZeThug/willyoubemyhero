@@ -213,7 +213,7 @@ export const deleteComment = createServerFn({ method: "POST" })
     // Authorize against the comment's actual event, not a caller-supplied one —
     // otherwise an admin for event A could delete comments belonging to event B.
     const eventId = row.event_participant?.event_id ?? null;
-    if (!eventId || !isAdminFor(eventId)) {
+    if (!eventId || !(await isAdminFor(eventId))) {
       const me = optionalMember();
       const isOwnMember = !!me && row.participant_id === me;
       // Guest ownership is decided by the signed token, never by a key in the

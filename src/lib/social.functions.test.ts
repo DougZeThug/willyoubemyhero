@@ -6,7 +6,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type SupabaseResponses } from "@/test/supabase-mock";
 import { adminHeaders, callServerFn, guestHeaders, memberHeaders } from "@/test/server-fn";
-import { signAdminToken, signGuestToken, signMemberToken } from "./session.server";
+import {
+  signAccountAdminToken,
+  signAdminToken,
+  signGuestToken,
+  signMemberToken,
+} from "./session.server";
 import { AWARD_CATEGORIES } from "./awards";
 
 let mock = createSupabaseMock();
@@ -293,6 +298,39 @@ describe("deleteComment", () => {
     withDb(commentBy(THEM));
     expect(await del(asAdmin())).toEqual({ ok: true });
     expect(mock.callsFor("card_comments", "delete")).toHaveLength(1);
+  });
+
+  describe("with an account-minted admin token", () => {
+    const ACCOUNT = "00000000-0000-4000-8000-0000000000cc";
+    const asAccountAdmin = () => adminHeaders(signAccountAdminToken(ACCOUNT, EVENT_ID).token);
+
+    it("refuses once the account has left the admin list", async () => {
+      // The token stays signed for hours after revocation; the list is the truth.
+      withDb({ ...commentBy(THEM), "admin_accounts.select": { data: null } });
+      await expect(del(asAccountAdmin())).rejects.toThrow("Not your comment");
+      expect(mock.callsFor("card_comments", "delete")).toHaveLength(0);
+    });
+
+    it("deletes while the account is still on the list", async () => {
+      withDb({ ...commentBy(THEM), "admin_accounts.select": { data: { user_id: ACCOUNT } } });
+      expect(await del(asAccountAdmin())).toEqual({ ok: true });
+      expect(mock.callsFor("card_comments", "delete")).toHaveLength(1);
+    });
+
+    it("fails closed when the list cannot be read", async () => {
+      withDb({
+        ...commentBy(THEM),
+        "admin_accounts.select": { data: null, error: { message: "boom" } },
+      });
+      await expect(del(asAccountAdmin())).rejects.toThrow("Could not confirm admin access");
+      expect(mock.callsFor("card_comments", "delete")).toHaveLength(0);
+    });
+  });
+
+  it("does not look up the admin list for a PIN token", async () => {
+    withDb(commentBy(THEM));
+    expect(await del(asAdmin())).toEqual({ ok: true });
+    expect(mock.callsFor("admin_accounts", "select")).toHaveLength(0);
   });
 
   it("authorises against the comment's own event, not one the caller names", async () => {

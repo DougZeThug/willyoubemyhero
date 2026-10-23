@@ -12,16 +12,24 @@ export async function requireAdmin(eventId: string) {
   // A token minted from an account is only as good as that account's place on
   // the admin list, checked now rather than when it was issued. PIN tokens name
   // no account and are unaffected.
-  if (claims.userId) {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
-      .from("admin_accounts")
-      .select("user_id")
-      .eq("user_id", claims.userId)
-      .maybeSingle();
-    if (error) throw new Error("Could not confirm admin access");
-    if (!data) throw new Error("Admin PIN required");
+  if (claims.userId && !(await accountStillAdmin(claims.userId))) {
+    throw new Error("Admin PIN required");
   }
+}
+
+/**
+ * Whether this account is still on the admin list. Throws when the lookup
+ * fails: an outage must not read as "still an admin" (fail closed).
+ */
+async function accountStillAdmin(userId: string): Promise<boolean> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("admin_accounts")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error("Could not confirm admin access");
+  return !!data;
 }
 
 /** Resolves to the claimed participant id, or throws. */
@@ -95,7 +103,14 @@ export function requireActor(): Actor {
   return actor;
 }
 
-export function isAdminFor(eventId: string): boolean {
+/**
+ * Non-throwing admin check for handlers where an admin is one of several
+ * allowed callers. Re-checks the admin list for account tokens, like
+ * requireAdmin: a revoked account's token stays signed until it expires.
+ */
+export async function isAdminFor(eventId: string): Promise<boolean> {
   const claims = verifyAdminToken(getRequestHeader("x-admin-token") ?? null);
-  return !!claims && claims.eventId === eventId;
+  if (!claims || claims.eventId !== eventId) return false;
+  if (claims.userId) return accountStillAdmin(claims.userId);
+  return true;
 }
