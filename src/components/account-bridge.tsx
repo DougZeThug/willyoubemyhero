@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
+import { browserSupabase } from "@/lib/browser-supabase";
 import { useAccountSync, useAuthUser } from "@/hooks/use-account";
 import { useMemberTokenRenewal } from "@/hooks/use-member-renewal";
 
@@ -21,7 +21,9 @@ export function AccountBridge() {
   useMemberTokenRenewal();
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+    const sb = browserSupabase();
+    if (!sb) return;
+    const { data: sub } = sb.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       void router.invalidate();
       // Refetching on SIGNED_OUT would only hammer a cleared session.
