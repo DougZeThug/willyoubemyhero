@@ -1,12 +1,17 @@
 // The spectator screen behind the QR code, where the Top 5 and the done counter
 // sit one above the other and must agree.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import LivePage from "./live";
+import { ACTIVE_RUN_VERSION } from "@/lib/active-run";
 import { EVENT_ID, makeBundle, makeParticipant, makeRun, resetFixtureIds } from "@/test/fixtures";
 
 const useEventBundle = vi.fn();
+const { useRunConsole, useAdminSession } = vi.hoisted(() => ({
+  useRunConsole: vi.fn((): { run: unknown; currentEp?: unknown } => ({ run: null })),
+  useAdminSession: vi.fn((): { eventId: string } | null => null),
+}));
 
 vi.mock("@/hooks/use-event-bundle", () => ({
   useEventBundle: (...args: unknown[]) => useEventBundle(...args),
@@ -18,12 +23,17 @@ vi.mock("@/hooks/use-photo-urls", () => ({
 }));
 
 vi.mock("@/hooks/use-finish-watcher", () => ({ useFinishWatcher: () => {} }));
-vi.mock("@/hooks/use-run-console", () => ({ useRunConsole: () => ({ run: null }) }));
-vi.mock("@/lib/admin-token", () => ({ useAdminSession: () => null }));
+vi.mock("@/hooks/use-run-console", () => ({ useRunConsole: () => useRunConsole() }));
+vi.mock("@/lib/admin-token", () => ({ useAdminSession: () => useAdminSession() }));
 vi.mock("@/hooks/use-account", () => ({ useAuthUser: () => ({ user: null, loading: false }) }));
 vi.mock("@/components/hud-timer", () => ({
-  HudTimer: (props: { paused: boolean; status: string }) => (
-    <div data-stub="hud-timer" data-paused={String(props.paused)} data-status={props.status} />
+  HudTimer: (props: { paused: boolean; status: string; runningSinceMs: number }) => (
+    <div
+      data-stub="hud-timer"
+      data-paused={String(props.paused)}
+      data-status={props.status}
+      data-base={String(props.runningSinceMs)}
+    />
   ),
 }));
 vi.mock("@/components/finish-celebration", () => ({
@@ -68,6 +78,14 @@ function showBundle(over: Parameters<typeof makeBundle>[0], failedTables: string
 beforeEach(() => {
   resetFixtureIds();
   useEventBundle.mockReset();
+  useRunConsole.mockReset();
+  useRunConsole.mockReturnValue({ run: null });
+  useAdminSession.mockReset();
+  useAdminSession.mockReturnValue(null);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("LivePage standings", () => {
@@ -226,5 +244,46 @@ describe("LivePage crowd clock", () => {
     render(<LivePage />);
     expect(ring().dataset.paused).toBe("false");
     expect(screen.getByText("Unofficial")).toBeInTheDocument();
+  });
+
+  it("hands the ring to the crowd's clock without jumping back when the admin run ends", () => {
+    // The crowd base was memoised on the stamp alone, so it held the Date.now()
+    // from when the stamp last changed and the ring jumped backward at the handoff.
+    const T0 = Date.parse("2026-07-28T12:00:00.000Z");
+    const since = new Date(T0).toISOString();
+    const running = makeParticipant({
+      participation_status: "running",
+      on_clock_since: since,
+      participant: { id: "p-r", name: "Alice Ace", nickname: null },
+    });
+    showBundle({ participants: [running], runs: [] });
+    useAdminSession.mockReturnValue({ eventId: EVENT_ID });
+    const adminRun = {
+      v: ACTIVE_RUN_VERSION,
+      clientKey: "ck-run",
+      eventId: EVENT_ID,
+      participantId: running.participant_id,
+      startedAtIso: since,
+      startedAt: T0,
+      status: "running",
+      pauses: [],
+      splits: [],
+      penalties: [],
+    };
+    const now = vi.spyOn(Date, "now").mockReturnValue(T0 + 5_000);
+    useRunConsole.mockReturnValue({ run: adminRun, currentEp: running });
+
+    const { rerender } = render(<LivePage />);
+    expect(ring().dataset.base).toBe("5000");
+
+    now.mockReturnValue(T0 + 65_000);
+    useRunConsole.mockReturnValue({ run: null });
+    rerender(<LivePage />);
+    expect(ring().dataset.base).toBe("65000");
+
+    // A refetch with the same stamp must not re-anchor the running ring.
+    now.mockReturnValue(T0 + 70_000);
+    rerender(<LivePage />);
+    expect(ring().dataset.base).toBe("65000");
   });
 });
