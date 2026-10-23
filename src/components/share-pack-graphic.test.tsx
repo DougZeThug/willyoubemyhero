@@ -44,4 +44,26 @@ describe("SharePack", () => {
     draw([secret("Alpha"), secret("Beta"), secret("Gamma")]);
     for (const name of ["Alpha", "Beta", "Gamma"]) expect(screen.getByText(name)).toBeTruthy();
   });
+
+  // jsdom cannot measure layout, so the height budget is pinned through the
+  // styles it is derived from: two lines of name, line-height 1 on the label
+  // and the counter. Change one and the caption constants no longer add up.
+  it("clamps a long name to two lines so it cannot push the counter off the canvas", () => {
+    draw([roster("Bartholomew-Featherstonehaugh"), secret("Alpha Beta Gamma Delta"), roster("C")]);
+    const name = screen.getByText("Bartholomew-Featherstonehaugh");
+    expect(name.style.maxHeight).toBe(`${2 * 28 * 1.05}px`);
+    expect(name.style.overflow).toBe("hidden");
+    expect(name.style.overflowWrap).toBe("anywhere");
+    expect(screen.getByText("Alpha Beta Gamma Delta").style.maxHeight).toBe(`${2 * 34 * 1.05}px`);
+  });
+
+  it("sets line-height 1 on the rarity labels and the counter, as the budget assumes", () => {
+    draw([roster("Beta"), secret("Alpha")]);
+    expect(screen.getByText("Base").style.lineHeight).toBe("1");
+    expect(screen.getByText("Secret").style.lineHeight).toBe("1");
+    expect(
+      screen.getByText((_, el) => el?.textContent === "3 / 13" && el.children.length === 0).style
+        .lineHeight,
+    ).toBe("1");
+  });
 });
