@@ -7,9 +7,13 @@
 // couple of frames — on WebKit only, which the Chromium-only e2e suite will never
 // catch.
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { playFlip } from "@/lib/card-sfx";
 import { HoloCard, FLIP_CURVE, FLIP_EDGE_AT } from "./holo-card";
 import { rarityStyle } from "@/lib/card-rarity";
+
+vi.mock("@/lib/card-sfx", () => ({ playFlip: vi.fn() }));
 
 /** One axis of a cubic bezier, as CSS defines it: implicit 0 and 1 endpoints. */
 function axis(p1: number, p2: number, t: number): number {
@@ -185,5 +189,40 @@ describe("the edition frame", () => {
     card({ rarity: rarityStyle("base") });
     expect(screen.getByText(/Base card/)).toBeInTheDocument();
     expect(screen.queryByText(/Platinum|Bronze|Silver/)).toBeNull();
+  });
+});
+
+describe("the flip sound", () => {
+  const card = (props: Partial<React.ComponentProps<typeof HoloCard>> = {}) =>
+    render(
+      <HoloCard
+        frontUrl={null}
+        backUrl={null}
+        backContent={<div />}
+        name="Alice Ace"
+        rarity={rarityStyle("base")}
+        {...props}
+      />,
+    );
+
+  it("stays quiet on a controlled card with nobody listening for the turn", async () => {
+    // Nothing moves, so the sound would announce a flip that never happens.
+    card({ flipped: false });
+    await userEvent.click(screen.getByRole("button"));
+    expect(playFlip).not.toHaveBeenCalled();
+  });
+
+  it("plays when a controlled card's owner is told to turn it", async () => {
+    const onFlippedChange = vi.fn();
+    card({ flipped: false, onFlippedChange });
+    await userEvent.click(screen.getByRole("button"));
+    expect(onFlippedChange).toHaveBeenCalledWith(true);
+    expect(playFlip).toHaveBeenCalledTimes(1);
+  });
+
+  it("plays on a card that turns itself", async () => {
+    card();
+    await userEvent.click(screen.getByRole("button"));
+    expect(playFlip).toHaveBeenCalledTimes(1);
   });
 });

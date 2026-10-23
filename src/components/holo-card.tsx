@@ -615,9 +615,12 @@ function HoloCardImpl({
   function toggleFlip() {
     if (!canFlip) return;
     const next = !isFlipped;
+    // A controlled card with no handler cannot turn: nothing moves, so the
+    // sound would announce a flip that never happens.
+    const willFlip = flipped === undefined || onFlippedChange !== undefined;
     if (flipped === undefined) setUncontrolledFlip(next);
     onFlippedChange?.(next);
-    playFlip();
+    if (willFlip) playFlip();
   }
 
   function handleClick() {
