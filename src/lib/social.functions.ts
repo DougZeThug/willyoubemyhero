@@ -53,15 +53,16 @@ const guestSchema = z
   .optional();
 type GuestInput = z.infer<typeof guestSchema>;
 
-function actor(input: GuestInput): {
-  member: string | null;
-  guest: { key: string; name: string } | null;
-} {
+// Discriminated on `kind` so each branch narrows to the identity it actually has.
+type Who =
+  { kind: "member"; member: string } | { kind: "guest"; guest: { key: string; name: string } };
+
+function actor(input: GuestInput): Who {
   const member = optionalMember();
-  if (member) return { member, guest: null };
+  if (member) return { kind: "member", member };
   const guestId = optionalGuest();
   if (!guestId) throw new Error("Claim your player or add a name to join in");
-  return { member: null, guest: { key: guestId, name: input?.name?.trim() || "Guest" } };
+  return { kind: "guest", guest: { key: guestId, name: input?.name?.trim() || "Guest" } };
 }
 
 /** Every reaction and comment for one event, in a single round trip. */
@@ -130,16 +131,17 @@ export const toggleReaction = createServerFn({ method: "POST" })
       .select("id")
       .eq("event_participant_id", data.eventParticipantId)
       .eq("emoji", data.emoji);
-    const { data: existing } = who.member
-      ? await reactionQuery.eq("participant_id", who.member).maybeSingle()
-      : await reactionQuery.eq("guest_key", who.guest!.key).maybeSingle();
+    const { data: existing } =
+      who.kind === "member"
+        ? await reactionQuery.eq("participant_id", who.member).maybeSingle()
+        : await reactionQuery.eq("guest_key", who.guest.key).maybeSingle();
 
     if (existing) {
       await sb.from("card_reactions").delete().eq("id", existing.id);
       return { ok: true as const, reacted: false as const };
     }
     const { error } = await sb.from("card_reactions").insert(
-      who.member
+      who.kind === "member"
         ? {
             event_participant_id: data.eventParticipantId,
             participant_id: who.member,
@@ -148,8 +150,8 @@ export const toggleReaction = createServerFn({ method: "POST" })
         : {
             event_participant_id: data.eventParticipantId,
             participant_id: null,
-            guest_key: who.guest!.key,
-            guest_name: who.guest!.name,
+            guest_key: who.guest.key,
+            guest_name: who.guest.name,
             emoji: data.emoji,
           },
     );
@@ -173,7 +175,7 @@ export const postComment = createServerFn({ method: "POST" })
     const { data: row, error } = await sb
       .from("card_comments")
       .insert(
-        who.member
+        who.kind === "member"
           ? {
               event_participant_id: data.eventParticipantId,
               participant_id: who.member,
@@ -182,8 +184,8 @@ export const postComment = createServerFn({ method: "POST" })
           : {
               event_participant_id: data.eventParticipantId,
               participant_id: null,
-              guest_key: who.guest!.key,
-              guest_name: who.guest!.name,
+              guest_key: who.guest.key,
+              guest_name: who.guest.name,
               body: data.body,
             },
       )
