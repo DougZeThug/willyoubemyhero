@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
+import { browserSupabase } from "@/lib/browser-supabase";
 import { getCollectionTrophies } from "@/lib/secret-cards.functions";
 import type { CollectionTrophy } from "@/lib/collection-trophies";
 import { useMemberSession } from "@/lib/member-token";
@@ -75,6 +75,8 @@ export function useCollectionTrophyWatcher() {
   const primedRef = useRef(false);
 
   useEffect(() => {
+    const supabase = browserSupabase();
+    if (!supabase) return;
     const channel = supabase
       // The random suffix is what lets two tabs hold their own channel, same as
       // useTradeFeed.

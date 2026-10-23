@@ -24,10 +24,9 @@
 // without its health tracking and backstop poll: the backstop here is the
 // `refetchOnWindowFocus` already on useTradeOffers, and a second app-wide poller
 // is not free.
-import { supabase } from "@/integrations/supabase/client";
+import { browserSupabase, type BrowserSupabase } from "@/lib/browser-supabase";
 import { TRADE_NUDGE_EVENT } from "./trades";
-
-type NudgeChannel = ReturnType<typeof supabase.channel>;
+type NudgeChannel = ReturnType<BrowserSupabase["channel"]>;
 
 type Entry = {
   /**
@@ -73,6 +72,9 @@ function openChannel(topic: string): Entry {
   void (closing.get(topic) ?? Promise.resolve()).then(() => {
     // Superseded while we waited — somebody else owns this topic now.
     if (entries.get(topic) !== entry) return;
+    // No client on this device: nudges are a nicety, the feed still refetches.
+    const supabase = browserSupabase();
+    if (!supabase) return;
     entry.channel = supabase
       .channel(topic)
       .on("broadcast", { event: TRADE_NUDGE_EVENT }, fanOut)
@@ -122,7 +124,9 @@ export function subscribeToNudges(topic: string, onNudge: () => void): () => voi
       if (!joined.channel) return;
       // Published BEFORE it can resolve, so a resubscribe on the next tick finds
       // it and waits rather than racing the removal.
-      const removal = supabase.removeChannel(joined.channel).catch(() => {});
+      const removal = (browserSupabase()?.removeChannel(joined.channel) ?? Promise.resolve()).catch(
+        () => {},
+      );
       closing.set(topic, removal);
       void removal.then(() => {
         if (closing.get(topic) === removal) closing.delete(topic);

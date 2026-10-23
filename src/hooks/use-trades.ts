@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { supabase } from "@/integrations/supabase/client";
+import { browserSupabase } from "@/lib/browser-supabase";
 import { getMyTradeOffers, getTradeFeed, getTradeSpares } from "@/lib/trades.functions";
 import type { TradeFeedEntry, TradeOfferView, TradeSpares } from "@/lib/trades";
 import { mySecretsKey } from "./use-daily-secret";
@@ -124,6 +124,8 @@ export function useTradeFeed(eventId: string | null | undefined, participantId?:
 
   useEffect(() => {
     if (!eventId) return;
+    const supabase = browserSupabase();
+    if (!supabase) return;
     const channel = supabase
       .channel(`trades:${eventId}:${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "trades" }, () => {

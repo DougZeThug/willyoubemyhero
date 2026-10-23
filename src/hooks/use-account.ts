@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { browserSupabase } from "@/lib/browser-supabase";
 import { syncAccountSession } from "@/lib/account.functions";
 import {
   setMemberToken,
@@ -33,12 +33,18 @@ export function useAuthUser(): { user: User | null; loading: boolean } {
 
   useEffect(() => {
     let alive = true;
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const sb = browserSupabase();
+    if (!sb) {
+      // No client on this device: nobody can be signed in, so stop waiting.
+      setLoading(false);
+      return;
+    }
+    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       if (!alive) return;
       setUser(session?.user ?? null);
       setLoading(false);
     });
-    void supabase.auth.getSession().then(({ data }) => {
+    void sb.auth.getSession().then(({ data }) => {
       if (!alive) return;
       setUser(data.session?.user ?? null);
       setLoading(false);
@@ -325,7 +331,7 @@ export function useAccountSync(user: User | null) {
  * off the moment a different account signs in on this handset.
  */
 export async function signOutAccount() {
-  await supabase.auth.signOut();
+  await browserSupabase()?.auth.signOut();
   clearMemberToken();
   // Both of these were held for an auth round trip that never finished, and
   // handsets change hands in this league, so neither may be waiting for whoever
