@@ -58,9 +58,130 @@ export type OwnershipAudit = {
   stranded: StrandedDevice[];
 };
 
+type PullRow = {
+  participant_id: string | null;
+  guest_id: string | null;
+  secret_card_id: string;
+  pulled_on: string;
+};
+
+/** Secrets, by owner. A row belongs to a player or to a device, never both. */
+function tallySecrets(pulls: PullRow[]) {
+  const secretsBy = new Map<string, { total: number; tradeable: number }>();
+  for (const row of pulls) {
+    const key = row.participant_id ?? `guest:${row.guest_id}`;
+    if (!row.participant_id && !row.guest_id) continue;
+    const cur = secretsBy.get(key) ?? { total: 0, tradeable: 0 };
+    cur.total += 1;
+    // Every secret is stakeable, today's pull included: the daily deal is
+    // gated on pack_opens, which a trade never touches (20260930120000).
+    cur.tradeable += 1;
+    secretsBy.set(key, cur);
+  }
+  return secretsBy;
+}
+
+/** Roster copies per player, per card. */
+function tallyCopies(copies: { participant_id: string; event_participant_id: string }[]) {
+  const copiesBy = new Map<string, Map<string, number>>();
+  for (const row of copies) {
+    const perCard = copiesBy.get(row.participant_id) ?? new Map<string, number>();
+    perCard.set(row.event_participant_id, (perCard.get(row.event_participant_id) ?? 0) + 1);
+    copiesBy.set(row.participant_id, perCard);
+  }
+  return copiesBy;
+}
+
+/** How many roster copies a player holds, and how many of them clear the "keep one" rule. */
+function rosterTotals(perCard: Map<string, number>) {
+  let rosterCopies = 0;
+  let tradeableRoster = 0;
+  for (const count of perCard.values()) {
+    rosterCopies += count;
+    // The spare of a card held N times is N-1: one copy has to stay home,
+    // which is the rule trade_leaves_a_copy enforces on the offer itself.
+    if (count >= 2) tradeableRoster += count - 1;
+  }
+  return { rosterCopies, tradeableRoster };
+}
+
+function buildPlayers(
+  participants: { id: string; name: string; is_collector: boolean | null }[],
+  secretsBy: Map<string, { total: number; tradeable: number }>,
+  copiesBy: Map<string, Map<string, number>>,
+  claimed: Map<string, string | null>,
+  linked: Set<string>,
+): OwnershipRow[] {
+  return participants.map((p) => {
+    const { rosterCopies, tradeableRoster } = rosterTotals(
+      copiesBy.get(p.id) ?? new Map<string, number>(),
+    );
+    const secrets = secretsBy.get(p.id) ?? { total: 0, tradeable: 0 };
+    return {
+      participantId: p.id,
+      name: p.name,
+      isCollector: Boolean(p.is_collector),
+      reachable: Boolean(claimed.get(p.id)) || linked.has(p.id),
+      secrets: secrets.total,
+      tradeableSecrets: secrets.tradeable,
+      rosterCopies,
+      tradeableRoster,
+    };
+  });
+}
+
+/** Rows held by a device (no player), counted per device. */
+function countByGuest(rows: { participant_id: string | null; guest_id: string | null }[]) {
+  const byGuest = new Map<string, number>();
+  for (const row of rows) {
+    if (row.participant_id || !row.guest_id) continue;
+    byGuest.set(row.guest_id, (byGuest.get(row.guest_id) ?? 0) + 1);
+  }
+  return byGuest;
+}
+
+function buildStranded(
+  strandedIds: string[],
+  pulls: PullRow[],
+  packsByGuest: Map<string, number>,
+  rungsByGuest: Map<string, number>,
+  accountGuests: Set<string>,
+  nameOfCard: Map<string, string>,
+): StrandedDevice[] {
+  return (
+    strandedIds
+      .map((guestId) => {
+        const rows = pulls.filter((r) => !r.participant_id && r.guest_id === guestId);
+        const days = rows.map((r) => r.pulled_on).sort();
+        return {
+          guestId,
+          secrets: rows.length,
+          packOpens: packsByGuest.get(guestId) ?? 0,
+          milestoneClaims: rungsByGuest.get(guestId) ?? 0,
+          firstSeen: days[0] ?? null,
+          lastSeen: days[days.length - 1] ?? null,
+          signedIn: accountGuests.has(guestId),
+          sample: [
+            ...new Set(rows.map((r) => nameOfCard.get(r.secret_card_id) ?? "Secret card")),
+          ].slice(0, 4),
+        };
+      })
+      // By everything it is holding, not by secrets alone — a device with only
+      // packs or only rungs would otherwise sort to the bottom at zero, under
+      // every device that has nothing to do with it.
+      .sort(
+        (a, b) =>
+          b.secrets +
+          b.packOpens +
+          b.milestoneClaims -
+          (a.secrets + a.packOpens + a.milestoneClaims),
+      )
+  );
+}
+
 /** Per-player ownership plus every device holding cards nobody can trade. */
 export const getOwnershipAudit = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<OwnershipAudit> => {
     await requireAdmin(data.eventId);
     const sb = await admin();
@@ -104,7 +225,7 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
 
     const claimed = new Map((codes ?? []).map((c) => [c.participant_id, c.claimed_at]));
     const linked = new Set(
-      (accounts ?? []).map((a) => a.participant_id).filter((id): id is string => !!id),
+      (accounts ?? []).map((a) => a.participant_id).filter((id): id is string => Boolean(id)),
     );
     const accountGuests = new Set(
       (accounts ?? [])
@@ -112,60 +233,16 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
         .map((a) => a.guest_id as string),
     );
 
-    // Secrets, by owner. A row belongs to a player or to a device, never both.
-    const secretsBy = new Map<string, { total: number; tradeable: number }>();
-    for (const row of pulls ?? []) {
-      const key = row.participant_id ?? `guest:${row.guest_id}`;
-      if (!row.participant_id && !row.guest_id) continue;
-      const cur = secretsBy.get(key) ?? { total: 0, tradeable: 0 };
-      cur.total += 1;
-      // Every secret is stakeable, today's pull included: the daily deal is
-      // gated on pack_opens, which a trade never touches (20260930120000).
-      cur.tradeable += 1;
-      secretsBy.set(key, cur);
-    }
+    const players = buildPlayers(
+      participants ?? [],
+      tallySecrets(pulls ?? []),
+      tallyCopies(copies ?? []),
+      claimed,
+      linked,
+    );
 
-    // Roster copies per player, and how many of them clear the "keep one" rule.
-    const copiesBy = new Map<string, Map<string, number>>();
-    for (const row of copies ?? []) {
-      const perCard = copiesBy.get(row.participant_id) ?? new Map<string, number>();
-      perCard.set(row.event_participant_id, (perCard.get(row.event_participant_id) ?? 0) + 1);
-      copiesBy.set(row.participant_id, perCard);
-    }
-
-    const players: OwnershipRow[] = (participants ?? []).map((p) => {
-      const perCard = copiesBy.get(p.id) ?? new Map<string, number>();
-      let rosterCopies = 0;
-      let tradeableRoster = 0;
-      for (const count of perCard.values()) {
-        rosterCopies += count;
-        // The spare of a card held N times is N-1: one copy has to stay home,
-        // which is the rule trade_leaves_a_copy enforces on the offer itself.
-        if (count >= 2) tradeableRoster += count - 1;
-      }
-      const secrets = secretsBy.get(p.id) ?? { total: 0, tradeable: 0 };
-      return {
-        participantId: p.id,
-        name: p.name,
-        isCollector: !!p.is_collector,
-        reachable: !!claimed.get(p.id) || linked.has(p.id),
-        secrets: secrets.total,
-        tradeableSecrets: secrets.tradeable,
-        rosterCopies,
-        tradeableRoster,
-      };
-    });
-
-    const packsByGuest = new Map<string, number>();
-    for (const row of packs ?? []) {
-      if (row.participant_id || !row.guest_id) continue;
-      packsByGuest.set(row.guest_id, (packsByGuest.get(row.guest_id) ?? 0) + 1);
-    }
-    const rungsByGuest = new Map<string, number>();
-    for (const row of rungs ?? []) {
-      if (row.participant_id || !row.guest_id) continue;
-      rungsByGuest.set(row.guest_id, (rungsByGuest.get(row.guest_id) ?? 0) + 1);
-    }
+    const packsByGuest = countByGuest(packs ?? []);
+    const rungsByGuest = countByGuest(rungs ?? []);
 
     // Device-held rows: the whole point of the panel.
     //
@@ -188,33 +265,14 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
     const { data: cardNames } = await sb.from("secret_cards").select("id, name");
     const nameOfCard = new Map((cardNames ?? []).map((c) => [c.id, c.name]));
 
-    const stranded: StrandedDevice[] = strandedIds
-      .map((guestId) => {
-        const rows = (pulls ?? []).filter((r) => !r.participant_id && r.guest_id === guestId);
-        const days = rows.map((r) => r.pulled_on).sort();
-        return {
-          guestId,
-          secrets: rows.length,
-          packOpens: packsByGuest.get(guestId) ?? 0,
-          milestoneClaims: rungsByGuest.get(guestId) ?? 0,
-          firstSeen: days[0] ?? null,
-          lastSeen: days[days.length - 1] ?? null,
-          signedIn: accountGuests.has(guestId),
-          sample: [
-            ...new Set(rows.map((r) => nameOfCard.get(r.secret_card_id) ?? "Secret card")),
-          ].slice(0, 4),
-        };
-      })
-      // By everything it is holding, not by secrets alone — a device with only
-      // packs or only rungs would otherwise sort to the bottom at zero, under
-      // every device that has nothing to do with it.
-      .sort(
-        (a, b) =>
-          b.secrets +
-          b.packOpens +
-          b.milestoneClaims -
-          (a.secrets + a.packOpens + a.milestoneClaims),
-      );
+    const stranded = buildStranded(
+      strandedIds,
+      pulls ?? [],
+      packsByGuest,
+      rungsByGuest,
+      accountGuests,
+      nameOfCard,
+    );
 
     return { players, stranded };
   });
@@ -229,7 +287,7 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
  * as a trade partner.
  */
 export const attachDeviceToPlayer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z.object({ eventId: zuuid(), guestId: zuuid(), participantId: zuuid() }).parse(d),
   )
   .handler(async ({ data }) => {

@@ -11,9 +11,7 @@ import type { CollectorIdentity } from "./collector.server";
  * authoritative, so an overwrite would strand the first collection.
  */
 export const createCollectorIdentity = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ displayName: z.string().trim().min(2).max(32) }).parse(d),
-  )
+  .validator((d: unknown) => z.object({ displayName: z.string().trim().min(2).max(32) }).parse(d))
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }): Promise<CollectorIdentity> => {
     const { createCollector } = await import("./collector.server");

@@ -243,9 +243,17 @@ function LiveHero({
   // types (supabase/migrations/20260821120000_on_clock_since.sql), the same way
   // card-rarity.ts declares card_rarity for itself.
   const onClockSince = onClock ? ((current as OnClockEntry | null)?.on_clock_since ?? null) : null;
+  // `timing` is a dep so the base is re-read at the moment the admin run ends.
+  // While a run is being timed the ring shows runBaseMs and this value goes
+  // unused, so on the stamp alone it would still hold the Date.now() from when
+  // the stamp last changed and the ring would jump backward at the handoff. It
+  // is a boolean, so it changes once at that edge and never re-anchors the
+  // clock on a bundle refetch.
+  const timing = adminRun !== null;
   const onClockElapsed = useMemo(
     () => onClockElapsedMs({ on_clock_since: onClockSince }, Date.now()),
-    [onClockSince],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onClockSince, timing],
   );
   // Somebody is on the clock but there is nothing real to count from: a row put
   // on the clock before on_clock_since existed, or a stamp that will not parse.

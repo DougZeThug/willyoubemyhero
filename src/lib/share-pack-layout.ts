@@ -23,17 +23,26 @@ const CARD_RATIO = 1.4;
 /**
  * Everything under a card that is not the card.
  *
- * The gap to its caption plus two lines of it. Measured generously — a name that
- * wraps to two lines must not be what pushes the footer off the bottom.
+ * The gap to its caption, a name of two lines (the graphic clamps it there), the
+ * 4px above the rarity label and the label itself, which is set at line-height 1.
+ * Roster: 12 + 2 x 28 x 1.05 + 4 + 17 = 91.8. Secret: 12 + 2 x 34 x 1.05 + 4 + 20
+ * = 107.4. Budgeted for two lines so a name that wraps is not what pushes the
+ * footer off the bottom. Exported so the test reads the same numbers.
  */
-const ROSTER_CAPTION = 63;
-const SECRET_CAPTION = 72;
+export const ROSTER_CAPTION = 92;
+export const SECRET_CAPTION = 108;
 /** The "One More Card" line above the secret, plus its gap. */
 const SECRET_HEADING = 50;
 
-/** The title block at the top and the collection footer at the bottom. */
+/**
+ * The title block at the top and the collection footer at the bottom.
+ *
+ * The footer is the 22px of padding, the 2px rule and the 44px counter, which is
+ * set at line-height 1: left to inherit 1.5 it was 66px tall and the budget was
+ * short of it.
+ */
 const HEADER = 94;
-const FOOTER = 66;
+export const FOOTER = 68;
 
 /** How much wider the secret is than a roster card. It is the point of the image. */
 const SECRET_SCALE = 1.34;

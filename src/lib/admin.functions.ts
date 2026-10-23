@@ -11,7 +11,7 @@ const PIN_ATTEMPT_WINDOW_S = 600;
 const PIN_ATTEMPT_MAX = 10;
 
 export const verifyEventPin = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) =>
+  .validator((data: unknown) =>
     z.object({ eventId: zuuid(), pin: z.string().min(1).max(32) }).parse(data),
   )
   .handler(async ({ data }) => {

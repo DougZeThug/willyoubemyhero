@@ -26,7 +26,7 @@ import { useMemberSession, WAS_MEMBER_KEY } from "@/lib/member-token";
 
 // Nothing in this tab writes the flag while /you is open; a read per render is enough.
 const noSubscribe = () => () => {};
-import { groupBySecretCollection } from "@/lib/secret-cards";
+import { groupBySecretCollection, type OwnedSecret } from "@/lib/secret-cards";
 import { getStreakHistory, type StreakHistoryEntry } from "@/lib/streaks.functions";
 import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,92 @@ export const Route = createFileRoute("/you")({
   }),
   component: YouPage,
 });
+
+function CollectionLines({
+  summary,
+  counters,
+  ready,
+}: {
+  summary: string | null;
+  counters: string | null;
+  ready: boolean;
+}) {
+  return (
+    <>
+      {summary ? (
+        <p className="text-sm">{summary}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground">Counting your cards…</p>
+      )}
+      {/* The two counters PR 5 took off the vault's header. They belong to
+                somebody looking themselves up, not to the screen whose job is
+                "what should I do right now". */}
+      {ready && counters && <p className="mt-1 text-meta text-muted-foreground">{counters}</p>}
+    </>
+  );
+}
+
+function trophiesOf(
+  data: { trophies?: Parameters<typeof trophiesFor>[0] } | undefined,
+  member: { participantId: string } | null | undefined,
+) {
+  return trophiesFor(data?.trophies ?? [], member?.participantId ?? null);
+}
+
+function cardsOf(data: { cards?: OwnedSecret[] } | undefined) {
+  return data?.cards ?? [];
+}
+
+function pulledOf(data: { pulled?: number } | undefined) {
+  return data?.pulled ?? 0;
+}
+
+function idOf(event: { id?: string | null } | null | undefined) {
+  return event?.id ?? null;
+}
+
+/** Members only: a guest has no dust balance, so the hook is handed nothing to ask about. */
+function dustHolder(dustOn: boolean, member: { participantId: string } | null | undefined) {
+  return dustOn ? member?.participantId : null;
+}
+
+function historyLoading(isPending: boolean, actor: string | null) {
+  return isPending && Boolean(actor);
+}
+
+/** The vault's second gate, folded into one flag — see the comment where it is used. */
+function collectionSettled(
+  mineReady: boolean,
+  sync: ReturnType<typeof useAccountSyncState>,
+  wasMember: boolean,
+  isMember: boolean,
+) {
+  return mineReady && sync.status !== "syncing" && !(wasMember && !isMember);
+}
+
+function summaryLine(
+  ready: boolean,
+  roster: Parameters<typeof summaryReady>[1],
+  counts: Parameters<typeof vaultSummaryLine>[0],
+) {
+  return summaryReady(ready, roster) ? vaultSummaryLine(counts) : null;
+}
+
+function playerBlurb(isMember: boolean, wasMember: boolean) {
+  if (isMember)
+    return "Your player code is claimed on this phone. Your cards are filed under your name, so they follow you to another one.";
+  if (wasMember)
+    return "This phone has been signed in before. Your cards are on your name, not on the handset — put the code back in to see them.";
+  return "Nothing is claimed here yet. A player code turns this phone into your collection.";
+}
+
+function collectionCounters(packs: string | null, spares: number, statsKnown: boolean) {
+  return (
+    [packs, spares > 0 ? `${spares} spare${spares === 1 ? "" : "s"} to trade` : null]
+      .filter(Boolean)
+      .join(" · ") || (statsKnown ? "No packs opened yet." : null)
+  );
+}
 
 /**
  * Everything about you, in one place.
@@ -75,7 +161,7 @@ function YouPage() {
   const dustOn = dustLive(activeEvent ?? event);
   // Gated twice, the way the vault gates it: a balance nobody can hold and
   // nowhere to spend it is a round trip for a chip that will not render.
-  const dust = useDustBalance(dustOn ? member?.participantId : null);
+  const dust = useDustBalance(dustHolder(dustOn, member));
 
   const streakQuery = useStreakStatus(actor);
   const history = useStreakHistory(actor);
@@ -87,7 +173,7 @@ function YouPage() {
   // Third argument as the vault passes it, and for the same reason: without it
   // a league with no combine on never settles, so `ready` never turns true and
   // this screen counts your cards forever.
-  const mine = useMyCollection(event?.id ?? null, rosterIds, !event && !eventLoading);
+  const mine = useMyCollection(idOf(event), rosterIds, !event && !eventLoading);
 
   // Set on claim and never cleared, so somebody reading this on a new phone is
   // told where their cards went. SSR has no localStorage, so the server snapshot
@@ -98,8 +184,8 @@ function YouPage() {
     () => false,
   );
 
-  const myTrophies = trophiesFor(allTrophies.data?.trophies ?? [], member?.participantId ?? null);
-  const ownedSecrets = secrets.data?.cards ?? [];
+  const myTrophies = trophiesOf(allTrophies.data, member);
+  const ownedSecrets = cardsOf(secrets.data);
   // The vault's second gate, which this screen was written without. A phone with
   // no member token has nothing to adjudicate the local card store against, so
   // `useMyCollection` settles off that store alone — and it is per-device, not
@@ -116,37 +202,35 @@ function YouPage() {
   // claiming. A device that was NEVER a member is not in here on purpose — a
   // guest's store is a guest's own cards, and counting them is the right answer.
   const sync = useAccountSyncState();
-  const ready = mine.ready && sync.status !== "syncing" && !(wasMember && !member);
+  const ready = collectionSettled(mine.ready, sync, wasMember, Boolean(member));
   //
   // And the roster's own answer, which `ready` does not cover: a bundle still in
   // the air or a failed roster read is an empty roster, and the line would say
   // "Roster 3 / 0" over it.
-  const summary = summaryReady(ready, {
-    loading: eventLoading,
-    error,
-    hasBundle: Boolean(bundle),
-    failedTables,
-  })
-    ? vaultSummaryLine({
-        rosterHeld: mine.collectedCount,
-        rosterSize: rosterIds.length,
-        secrets: secrets.data?.pulled ?? 0,
-        // Its own grouping, exactly as the vault does it: how many sets your
-        // cards came from, never how many sets there are.
-        sets: groupBySecretCollection(ownedSecrets, collections).length,
-        complete: myTrophies.length,
-      })
-    : null;
+  const summary = summaryLine(
+    ready,
+    { loading: eventLoading, error, hasBundle: Boolean(bundle), failedTables },
+    {
+      rosterHeld: mine.collectedCount,
+      rosterSize: rosterIds.length,
+      secrets: pulledOf(secrets.data),
+      // Its own grouping, exactly as the vault does it: how many sets your
+      // cards came from, never how many sets there are.
+      sets: groupBySecretCollection(ownedSecrets, collections).length,
+      complete: myTrophies.length,
+    },
+  );
   const packs = packsOpenedLabel(mine.packsOpened);
   const spares = mine.dupes;
   // Off the stats query rather than the local store, so these two never carried
   // the previous person's cards — but "No packs opened yet." is still an answer,
   // and giving it while the account is mid-link is the same mistake in the
   // quieter direction.
-  const counters =
-    [packs, spares > 0 ? `${spares} spare${spares === 1 ? "" : "s"} to trade` : null]
-      .filter(Boolean)
-      .join(" · ") || "No packs opened yet.";
+  //
+  // The same goes for a stats read that failed or never ran: `ready` settles on
+  // it, and `packsOpened` is then 0 because it is unknown, so "No packs opened
+  // yet." is only said once the query has really answered. Otherwise no line.
+  const counters = collectionCounters(packs, spares, mine.statsKnown);
 
   return (
     <div className="card-bg min-h-[var(--page-min-h)]">
@@ -172,11 +256,7 @@ function YouPage() {
                 {member?.name ?? "No player claimed"}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                {member
-                  ? "Your player code is claimed on this phone. Your cards are filed under your name, so they follow you to another one."
-                  : wasMember
-                    ? "This phone has been signed in before. Your cards are on your name, not on the handset — put the code back in to see them."
-                    : "Nothing is claimed here yet. A player code turns this phone into your collection."}
+                {playerBlurb(Boolean(member), wasMember)}
               </p>
               <Link to="/claim" className="neon-btn-sm mt-3 inline-flex">
                 {member ? "Switch player" : "Claim your player"}
@@ -194,21 +274,13 @@ function YouPage() {
             <StreakLadder
               streak={streakQuery.data}
               history={history.data ?? []}
-              historyLoading={history.isPending && !!actor}
+              historyLoading={historyLoading(history.isPending, actor)}
             />
           </section>
 
           <section>
             <SectionTitle label="Collection" />
-            {summary ? (
-              <p className="text-sm">{summary}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">Counting your cards…</p>
-            )}
-            {/* The two counters PR 5 took off the vault's header. They belong to
-                somebody looking themselves up, not to the screen whose job is
-                "what should I do right now". */}
-            {ready && <p className="mt-1 text-meta text-muted-foreground">{counters}</p>}
+            <CollectionLines summary={summary} counters={counters} ready={ready} />
           </section>
 
           {dustOn && (

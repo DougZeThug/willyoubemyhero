@@ -820,6 +820,28 @@ describe("when IndexedDB is unavailable", () => {
     expect(await mod.loadCollection()).toEqual({});
   });
 
+  it("lets the claim's read throw, so a failure never looks like an empty device", async () => {
+    // The claim drops the guest token on the strength of this read.
+    const mod = await blockedModule();
+    await expect(mod.loadCollectionOrThrow()).rejects.toThrow("IndexedDB is disabled");
+  });
+
+  it("opens the database again after a failed open, rather than caching the rejection", async () => {
+    // A real, asynchronous refusal: the database is already at a newer version
+    // than the module asks for, which raises VersionError. A synchronous throw
+    // would never reach the cached promise at all.
+    const mod = await freshModule();
+    const newer = await openDB("wwbh-cards", 3);
+    await expect(mod.loadCollectionOrThrow()).rejects.toThrow();
+    newer.close();
+    await new Promise<void>((resolve, reject) => {
+      const del = indexedDB.deleteDatabase("wwbh-cards");
+      del.onsuccess = () => resolve();
+      del.onerror = () => reject(del.error);
+    });
+    await expect(mod.loadCollectionOrThrow()).resolves.toEqual({});
+  });
+
   it("swallows a collect attempt", async () => {
     const mod = await blockedModule();
     await expect(mod.collectCard(CARD_A, "base")).resolves.toBeUndefined();
@@ -857,6 +879,7 @@ describe("on the server", () => {
   it("returns empty defaults without touching storage", async () => {
     const mod = await serverModule();
     expect(await mod.loadCollection()).toEqual({});
+    expect(await mod.loadCollectionOrThrow()).toEqual({});
     expect(await mod.loadPackState()).toBeNull();
     expect(await mod.loadUnrecorded()).toBeNull();
     await expect(mod.collectCard(CARD_A, "base")).resolves.toBeUndefined();

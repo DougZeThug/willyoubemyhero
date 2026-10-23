@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import type { User } from "@supabase/supabase-js";
 import { createQueryWrapper } from "@/test/query";
 import { getMemberToken, setMemberToken } from "@/lib/member-token";
+import { snapshotLocalCollection } from "@/lib/adopt-collection";
 
 const createCollectorIdentity = vi.fn();
 const toastError = vi.fn();
@@ -189,6 +190,21 @@ describe("when the cards can't be uploaded", () => {
     // query client, because there is no refetch to wait for.
     expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
     expect(releaseAdoptionHold.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("sets nothing up when this handset's cards could not be read", async () => {
+    // The guest token is cleared only after the snapshot, so a failed read must
+    // stop before the identity is created and leave the device as it was.
+    vi.mocked(snapshotLocalCollection).mockRejectedValueOnce(new Error("Could not read cards"));
+    window.localStorage.setItem("wwbh:guest-token", "g.tok");
+    await renderSignup();
+    await userEvent.click(screen.getByRole("button", { name: /start trading/i }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Could not read cards"));
+    expect(createCollectorIdentity).not.toHaveBeenCalled();
+    expect(getMemberToken()).toBeNull();
+    expect(window.localStorage.getItem("wwbh:guest-token")).toBe("g.tok");
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
   });
 
   it("never publishes the token when the hold could not be written", async () => {

@@ -39,6 +39,7 @@ export type SharePackData = {
 /** One card in the row, sized by the caller so the secret can be bigger. */
 function Slot({ card, width }: { card: SharePackCard; width: number }) {
   const art = urlFromSet(card.artUrl);
+  const nameSize = card.secret ? 34 : 28;
   return (
     <div style={{ width, display: "flex", flexDirection: "column", gap: 12 }}>
       <div
@@ -72,10 +73,17 @@ function Slot({ card, width }: { card: SharePackCard; width: number }) {
       <div style={{ textAlign: "center" }}>
         <div
           style={{
-            fontSize: card.secret ? 34 : 28,
+            fontSize: nameSize,
             fontWeight: 900,
             textTransform: "uppercase",
             lineHeight: 1.05,
+            // Two lines and no more: the caption budget in share-pack-layout is
+            // for two, and a third would push the counter off the clipped canvas.
+            // maxHeight rather than line-clamp, which the image exporter does not
+            // reliably rasterise.
+            maxHeight: 2 * nameSize * 1.05,
+            overflow: "hidden",
+            overflowWrap: "anywhere",
           }}
         >
           {card.name}
@@ -87,6 +95,7 @@ function Slot({ card, width }: { card: SharePackCard; width: number }) {
             textTransform: "uppercase",
             letterSpacing: "0.2em",
             color: card.rarityColor,
+            lineHeight: 1,
             marginTop: 4,
           }}
         >
@@ -209,7 +218,7 @@ export const SharePack = forwardRef<HTMLDivElement, { data: SharePackData }>(fun
         >
           Collected
         </div>
-        <div style={{ fontSize: 44, fontWeight: 900, color: "#67e8f9" }}>
+        <div style={{ fontSize: 44, fontWeight: 900, color: "#67e8f9", lineHeight: 1 }}>
           {data.collected} / {data.total}
         </div>
       </div>

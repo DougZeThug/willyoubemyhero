@@ -4,7 +4,14 @@
 // it is a shared image with the collection counter cut off the bottom, on
 // exactly the packs somebody wanted to show off.
 import { describe, expect, it } from "vitest";
-import { sharePackLayout, SHARE_H, SHARE_W } from "./share-pack-layout";
+import {
+  FOOTER,
+  ROSTER_CAPTION,
+  SECRET_CAPTION,
+  sharePackLayout,
+  SHARE_H,
+  SHARE_W,
+} from "./share-pack-layout";
 
 // Every way a three-card pack can split: [roster cards, secrets].
 const PACKS: [number, number][] = [
@@ -45,22 +52,31 @@ describe("sharePackLayout", () => {
   });
 
   it("keeps every pack shape inside the canvas vertically", () => {
-    // The same budget the layout solves, spelled out so a constant changed over
-    // there cannot quietly overspend it here.
+    // The same budget the layout solves. The caption and footer heights are the
+    // layout's own exports, so the figures measured from the graphic's styles
+    // (roster 91.8, secret 107.4 for two-line names; footer 68) live in one place.
     const HEADER = 94;
-    const FOOTER = 66;
     for (const [rosterCount, secretCount] of PACKS) {
       const { roster, secret } = sharePackLayout(rosterCount, secretCount);
       const rows: number[] = [];
-      if (rosterCount > 0) rows.push(roster * 1.4 + 63);
-      if (secretCount > 0) rows.push(50 + secret * 1.4 + 72);
+      if (rosterCount > 0) rows.push(roster * 1.4 + ROSTER_CAPTION);
+      if (secretCount > 0) rows.push(50 + secret * 1.4 + SECRET_CAPTION);
       const used = 64 * 2 + HEADER + FOOTER + 28 * (rows.length + 1) + rows.reduce((a, b) => a + b);
       expect(used).toBeLessThanOrEqual(SHARE_H);
     }
   });
 
-  it("leaves the one-secret layout as it was", () => {
-    expect(sharePackLayout(2, 1)).toEqual({ roster: 242, secret: 324 });
+  it("pins the one-secret layout", () => {
+    // Re-derived when the caption budget grew to fit a two-line name (was 242/324).
+    expect(sharePackLayout(2, 1)).toEqual({ roster: 221, secret: 296 });
+  });
+
+  it("budgets the captions for the two-line names the graphic allows", () => {
+    // 12 gap + 2 lines at 1.05 + 4 margin + the label at line-height 1.
+    expect(ROSTER_CAPTION).toBeGreaterThanOrEqual(12 + 2 * 28 * 1.05 + 4 + 17);
+    expect(SECRET_CAPTION).toBeGreaterThanOrEqual(12 + 2 * 34 * 1.05 + 4 + 20);
+    // 22 padding + 2 rule + the 44px counter at line-height 1.
+    expect(FOOTER).toBeGreaterThanOrEqual(22 + 2 + 44);
   });
 
   it("does not shrink the cards to nothing", () => {

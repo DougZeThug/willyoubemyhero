@@ -247,7 +247,14 @@ around them.
   draw, not for its picture to arrive.
 - **Splits on the exported card** are listed in whatever order the database
   returned them, which is not guaranteed to be course order. Two stations with
-  the same name collide and one of the two is dropped.
+  the same name both appear: each split row is keyed by its own id, not by its
+  station's name.
+- **A long course on the exported card.** The card is a fixed 1080 × 1350 image,
+  so the splits are fitted to the room under the athlete and the time. A short
+  course draws two columns of full-size rows; a longer one moves to three columns
+  of shorter rows, which holds all thirteen stations of the real course. Only a
+  course too long even for that (roughly sixteen stations or more) closes its grid
+  with an "…and N more" cell. The footer credit is never what gives way.
 - **A run edited while its card is being exported** ships the numbers it was
   given at the tap.
 - **The share sheet dismissed** is indistinguishable from a successful share as

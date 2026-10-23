@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import ClaimPage from "./claim";
 
 const useQuery = vi.fn();
@@ -71,6 +72,7 @@ vi.mock("@/lib/card-collection", async (importOriginal) => ({
   carryPackToIdentity: (...args: unknown[]) => carryPackToIdentity(...args),
 }));
 
+const snapshotLocalCollection = vi.hoisted(() => vi.fn());
 const adoptLocalCollection = vi.hoisted(() => vi.fn());
 const holdForAdoption = vi.hoisted(() => vi.fn());
 const releaseAdoptionHold = vi.hoisted(() => vi.fn());
@@ -79,7 +81,7 @@ vi.mock("@/lib/adopt-collection", async (importOriginal) => ({
   adoptLocalCollection: (...args: unknown[]) => adoptLocalCollection(...args),
   holdForAdoption: (...args: unknown[]) => holdForAdoption(...args),
   releaseAdoptionHold: (...args: unknown[]) => releaseAdoptionHold(...args),
-  snapshotLocalCollection: () => Promise.resolve({}),
+  snapshotLocalCollection: (...args: unknown[]) => snapshotLocalCollection(...args),
 }));
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
@@ -115,6 +117,7 @@ beforeEach(() => {
   useMemberSession.mockReturnValue(null);
   useQuery.mockReturnValue(rosterState({ data: [ATHLETE] }));
   claimPlayer.mockResolvedValue({ ok: true, token: "m.tok", name: "Doug" });
+  snapshotLocalCollection.mockResolvedValue({});
   adoptLocalCollection.mockResolvedValue(1);
   holdForAdoption.mockImplementation(() => Promise.resolve());
   releaseAdoptionHold.mockImplementation(() => Promise.resolve());
@@ -254,6 +257,20 @@ describe("claiming a player", () => {
 
     expect(releaseAdoptionHold).toHaveBeenCalledTimes(1);
     expect(releaseAdoptionHold).toHaveBeenCalledWith("p-doug", {});
+  });
+
+  it("claims nothing when this handset's cards could not be read", async () => {
+    // A failed read used to look like "no cards", and the claim went on to swap
+    // the guest for a member with the collection unfiled. Now it stops first: no
+    // claim call, no token, and the code still works on the next try.
+    snapshotLocalCollection.mockRejectedValue(new Error("Could not read your cards"));
+    await claim();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Could not read your cards"));
+    expect(claimPlayer).not.toHaveBeenCalled();
+    expect(setMemberToken).not.toHaveBeenCalled();
+    expect(holdForAdoption).not.toHaveBeenCalled();
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
   });
 
   it("never publishes the token when the hold could not be written", async () => {

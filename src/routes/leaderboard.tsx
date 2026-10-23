@@ -15,7 +15,8 @@ import {
   FeedPartialBanner,
 } from "@/components/feed-state";
 import { Button } from "@/components/ui/button";
-import { ResultCard } from "@/components/result-card";
+import { ResultCard, type ResultCardData } from "@/components/result-card";
+import { toResultCardData } from "@/lib/result-card-data";
 import { exportCardPng, waitForPaint } from "@/lib/share-card";
 import { toast } from "sonner";
 import { standings } from "@/lib/standings";
@@ -52,6 +53,11 @@ function LeaderboardPage() {
   const photos = useEventPhotoUrls(event?.id ?? null);
   const cards = useEventCardUrls(event?.id ?? null);
   const [sharingRunId, setSharingRunId] = useState<string | null>(null);
+  // A snapshot taken at tap time, not derived from `rows` on each render. A
+  // realtime bundle update that dropped the row mid-export (a re-time, a
+  // scratch) would otherwise unmount the offscreen card between the frame wait
+  // and the rasterise, and the PNG came out blank or of a card that changed.
+  const [shareData, setShareData] = useState<ResultCardData | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   // The same standings the tier rules use, not a second looser set. Ranking
   // official *runs* put a re-timed athlete on the board twice, kept a scratched
@@ -78,31 +84,10 @@ function LeaderboardPage() {
    */
   const rosterFailed = failedTables.includes("event_participants");
 
-  const shareRow = rows.find((r) => r.run.id === sharingRunId);
-  const shareData = shareRow
-    ? {
-        eventName: event?.name ?? "Draft Combine",
-        eventYear: event?.year ?? null,
-        participantName: shareRow.ep?.participant?.name ?? "Athlete",
-        fantasyTeam: shareRow.ep?.participant?.fantasy_team_name ?? null,
-        photoUrl:
-          photos.data?.[shareRow.ep?.id ?? ""] ??
-          shareRow.ep?.participant?.profile_image_url ??
-          null,
-        totalMs: shareRow.run.official_time_ms ?? 0,
-        penaltyMs: shareRow.run.penalty_ms ?? 0,
-        rank: shareRow.place,
-        splits: (bundle?.splits ?? [])
-          .filter((s) => s.run_id === shareRow.run.id)
-          .map((s) => ({
-            id: s.id,
-            label: bundle?.stations.find((st) => st.id === s.station_id)?.name ?? "Split",
-            ms: s.segment_time_ms ?? 0,
-          })),
-      }
-    : null;
-
   async function handleShare(runId: string) {
+    const row = rows.find((r) => r.run.id === runId);
+    if (!row) return;
+    setShareData(toResultCardData({ row, event, bundle, photos: photos.data }));
     setSharingRunId(runId);
     try {
       // The offscreen card mounts on the render this state change causes, so
@@ -120,6 +105,7 @@ function LeaderboardPage() {
       toast.error(e instanceof Error ? e.message : "Could not export that card");
     } finally {
       setSharingRunId(null);
+      setShareData(null);
     }
   }
 

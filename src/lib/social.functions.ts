@@ -53,20 +53,21 @@ const guestSchema = z
   .optional();
 type GuestInput = z.infer<typeof guestSchema>;
 
-function actor(input: GuestInput): {
-  member: string | null;
-  guest: { key: string; name: string } | null;
-} {
+// Discriminated on `kind` so each branch narrows to the identity it actually has.
+type Who =
+  { kind: "member"; member: string } | { kind: "guest"; guest: { key: string; name: string } };
+
+function actor(input: GuestInput): Who {
   const member = optionalMember();
-  if (member) return { member, guest: null };
+  if (member) return { kind: "member", member };
   const guestId = optionalGuest();
   if (!guestId) throw new Error("Claim your player or add a name to join in");
-  return { member: null, guest: { key: guestId, name: input?.name?.trim() || "Guest" } };
+  return { kind: "guest", guest: { key: guestId, name: input?.name?.trim() || "Guest" } };
 }
 
 /** Every reaction and comment for one event, in a single round trip. */
 export const getEventSocial = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: eps } = await sb
@@ -97,7 +98,7 @@ export const getEventSocial = createServerFn({ method: "GET" })
     const meMember = optionalMember();
     const meGuest = meMember ? null : optionalGuest();
     const isMine = (row: { participant_id: string | null; guest_key: string | null }) =>
-      meMember ? row.participant_id === meMember : !!meGuest && row.guest_key === meGuest;
+      meMember ? row.participant_id === meMember : Boolean(meGuest) && row.guest_key === meGuest;
 
     return {
       reactions: (reactions ?? []).map(({ guest_key, ...r }) => ({
@@ -113,7 +114,7 @@ export const getEventSocial = createServerFn({ method: "GET" })
 
 /** Add or remove one of your reactions on a card. Returns the new state. */
 export const toggleReaction = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventParticipantId: zuuid(),
@@ -125,21 +126,22 @@ export const toggleReaction = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const who = actor(data.guest);
     const sb = await admin();
-    const q = sb
+    const reactionQuery = sb
       .from("card_reactions")
       .select("id")
       .eq("event_participant_id", data.eventParticipantId)
       .eq("emoji", data.emoji);
-    const { data: existing } = who.member
-      ? await q.eq("participant_id", who.member).maybeSingle()
-      : await q.eq("guest_key", who.guest!.key).maybeSingle();
+    const { data: existing } =
+      who.kind === "member"
+        ? await reactionQuery.eq("participant_id", who.member).maybeSingle()
+        : await reactionQuery.eq("guest_key", who.guest.key).maybeSingle();
 
     if (existing) {
       await sb.from("card_reactions").delete().eq("id", existing.id);
       return { ok: true as const, reacted: false as const };
     }
     const { error } = await sb.from("card_reactions").insert(
-      who.member
+      who.kind === "member"
         ? {
             event_participant_id: data.eventParticipantId,
             participant_id: who.member,
@@ -148,8 +150,8 @@ export const toggleReaction = createServerFn({ method: "POST" })
         : {
             event_participant_id: data.eventParticipantId,
             participant_id: null,
-            guest_key: who.guest!.key,
-            guest_name: who.guest!.name,
+            guest_key: who.guest.key,
+            guest_name: who.guest.name,
             emoji: data.emoji,
           },
     );
@@ -158,7 +160,7 @@ export const toggleReaction = createServerFn({ method: "POST" })
   });
 
 export const postComment = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventParticipantId: zuuid(),
@@ -173,7 +175,7 @@ export const postComment = createServerFn({ method: "POST" })
     const { data: row, error } = await sb
       .from("card_comments")
       .insert(
-        who.member
+        who.kind === "member"
           ? {
               event_participant_id: data.eventParticipantId,
               participant_id: who.member,
@@ -182,8 +184,8 @@ export const postComment = createServerFn({ method: "POST" })
           : {
               event_participant_id: data.eventParticipantId,
               participant_id: null,
-              guest_key: who.guest!.key,
-              guest_name: who.guest!.name,
+              guest_key: who.guest.key,
+              guest_name: who.guest.name,
               body: data.body,
             },
       )
@@ -195,7 +197,7 @@ export const postComment = createServerFn({ method: "POST" })
 
 /** You can delete your own trash talk; the commissioner can delete anyone's. */
 export const deleteComment = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ commentId: zuuid(), guest: guestSchema }).parse(d))
+  .validator((d: unknown) => z.object({ commentId: zuuid(), guest: guestSchema }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: row } = await sb
@@ -213,13 +215,13 @@ export const deleteComment = createServerFn({ method: "POST" })
     // Authorize against the comment's actual event, not a caller-supplied one —
     // otherwise an admin for event A could delete comments belonging to event B.
     const eventId = row.event_participant?.event_id ?? null;
-    if (!eventId || !isAdminFor(eventId)) {
+    if (!eventId || !(await isAdminFor(eventId))) {
       const me = optionalMember();
-      const isOwnMember = !!me && row.participant_id === me;
+      const isOwnMember = Boolean(me) && row.participant_id === me;
       // Guest ownership is decided by the signed token, never by a key in the
       // request body — that key is copyable and used to be readable publicly.
       const guestId = me ? null : optionalGuest();
-      const isOwnGuest = !!guestId && !!row.guest_key && row.guest_key === guestId;
+      const isOwnGuest = Boolean(guestId) && Boolean(row.guest_key) && row.guest_key === guestId;
       if (!isOwnMember && !isOwnGuest) throw new Error("Not your comment");
     }
     await sb.from("card_comments").delete().eq("id", data.commentId);
@@ -230,7 +232,7 @@ export const deleteComment = createServerFn({ method: "POST" })
 
 /** Your own ballot. Only ever returns the requesting member's votes. */
 export const getMyAwardVotes = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await admin();
@@ -248,7 +250,7 @@ export const getMyAwardVotes = createServerFn({ method: "GET" })
  * per member per category — the upsert just makes changing your mind work.
  */
 export const castAwardVote = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -294,7 +296,7 @@ export const castAwardVote = createServerFn({ method: "POST" })
  * reveal announcing that nobody voted over a vote that had winners.
  */
 export const getAwards = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: ev } = await sb
@@ -311,7 +313,7 @@ export const getAwards = createServerFn({ method: "GET" })
 
 /** Live tally. Commissioner only, so the room can't see it before the reveal. */
 export const getAwardTally = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();
@@ -335,7 +337,7 @@ export const getAwardTally = createServerFn({ method: "GET" })
  * voters a tie is common and picking a winner by row order would be a lie.
  */
 export const closeAwardVoting = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();
@@ -353,7 +355,7 @@ export const closeAwardVoting = createServerFn({ method: "POST" })
 
 /** Reopen voting and unpublish, for when someone was left out. */
 export const reopenAwardVoting = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();

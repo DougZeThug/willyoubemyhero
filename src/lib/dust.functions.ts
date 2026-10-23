@@ -64,7 +64,7 @@ export const getDustBalance = createServerFn({ method: "GET" }).handler(async ()
  * asking.
  */
 export const millCardCopy = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ cardCopyId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ cardCopyId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
@@ -100,7 +100,7 @@ export const millCardCopy = createServerFn({ method: "POST" })
  * participant row lock, and this handler's whole job is to prove who is asking.
  */
 export const sellSecretCard = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ secretPullId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ secretPullId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
@@ -136,7 +136,7 @@ export const sellSecretCard = createServerFn({ method: "POST" })
  * recordCardPulls stopped passing one.
  */
 export const buyBonusSecretPull = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ requestId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ requestId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
@@ -171,7 +171,7 @@ export const buyBonusSecretPull = createServerFn({ method: "POST" })
  * platinum. Same `requestId` rule as the purchase above.
  */
 export const rerollCopyEdition = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ cardCopyId: zuuid(), requestId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ cardCopyId: zuuid(), requestId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
@@ -218,7 +218,7 @@ export const rerollCopyEdition = createServerFn({ method: "POST" })
  * still refused. This only decides what the switch says.
  */
 export const setDustEnabled = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), enabled: z.boolean() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid(), enabled: z.boolean() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     noStore();

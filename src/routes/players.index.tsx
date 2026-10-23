@@ -47,6 +47,7 @@ import {
   TROPHIES_SECTION,
   useVaultLayout,
   useVaultPrefs,
+  type VaultFilter,
   type VaultSort,
 } from "@/lib/vault-layout";
 import { useCollectionTrophies } from "@/hooks/use-collection-trophies";
@@ -68,7 +69,7 @@ import { useAccountSyncState } from "@/lib/account-sync-state";
 import { usePackProgress } from "@/hooks/use-pack-progress";
 import { useMilestoneClaim } from "@/hooks/use-milestone-claim";
 import { useIsOnline } from "@/hooks/use-online";
-import { nextLocalMidnight, packWaiting as packStillSealed } from "@/lib/pack";
+import { packResetAt, packWaiting as packStillSealed } from "@/lib/pack";
 import { summaryReady, vaultSummaryLine } from "@/lib/vault-summary";
 import {
   acquisitionWindow,
@@ -78,7 +79,7 @@ import {
 } from "@/lib/vault-last-seen";
 import { useRecentAcquisitions } from "@/hooks/use-recent-acquisitions";
 import { useSecretCollections } from "@/hooks/use-secret-collections";
-import { urlFromSet } from "@/lib/media";
+import { urlFromSet, type ImageUrlSet } from "@/lib/media";
 
 export const Route = createFileRoute("/players/")({
   head: () => ({
@@ -119,6 +120,93 @@ const LOCKED_RARITY_RANK = 99;
  */
 const SKELETON_TILES = 6;
 
+/**
+ * The streak header and the milestone claim, which only ever make sense together.
+ * Called at the position the two hooks used to occupy, so hook order is unchanged.
+ */
+function useVaultStreak(actor: string | null) {
+  // Off the actor rather than the member, same as the secrets above: a guest
+  // builds a real streak too, and claim_guest_packs carries it over when they
+  // finally put a name to the phone. StreakStatus is a Streak with the milestone
+  // ladder bolted on, which is more than the header needs and costs nothing.
+  const streakQuery = useStreakStatus(actor);
+  const streak = streakQuery.data ?? null;
+  // Whether an answer is still coming, which is what decides if the Today card
+  // reserves the strip's slot. `isPending` alone would be true forever for a
+  // device with no actor, where the query never runs at all — and that person
+  // has no streak to wait for, so the slot should collapse rather than sit
+  // empty above the shelves.
+  const streakPending = Boolean(actor) && streakQuery.isPending;
+  // Claiming a rung from home. The same hook the pack summary's button uses, so
+  // a milestone cannot pay twice or show its reveal on two screens at once.
+  const milestone = useMilestoneClaim(actor, streak);
+  return { streak, streakPending, milestone };
+}
+
+function canClaim(streak: { canClaim?: boolean } | null) {
+  return streak?.canClaim ?? false;
+}
+
+function showFeedBanner(presenting: boolean, realtimeDegraded: boolean, error: unknown) {
+  return !presenting && (realtimeDegraded || Boolean(error));
+}
+
+/** The vault's one-line summary, or null until the roster has answered. */
+function summaryLine(
+  ready: boolean,
+  roster: Parameters<typeof summaryReady>[1],
+  counts: Parameters<typeof vaultSummaryLine>[0],
+) {
+  return summaryReady(ready, roster) ? vaultSummaryLine(counts) : null;
+}
+
+function idOf(event: { id?: string | null } | null | undefined) {
+  return event?.id ?? null;
+}
+
+/** Members only: a guest has no dust balance, so the hook is handed nothing to ask about. */
+function dustHolder(dustOn: boolean, member: { participantId: string } | null | undefined) {
+  return dustOn ? member?.participantId : null;
+}
+
+/** The collection's own flag, held back while an account is still being linked. */
+function collectionSettled(mineReady: boolean, sync: ReturnType<typeof useAccountSyncState>) {
+  return mineReady && sync.status !== "syncing";
+}
+
+function syncErrorOf(sync: ReturnType<typeof useAccountSyncState>) {
+  return sync.status === "error" ? sync.message : null;
+}
+
+/** The deck back to show on a secret, or null when the event has none. */
+function universalBack(urls: ImageUrlSet | null | undefined) {
+  return urlFromSet(urls) ? (urls ?? null) : null;
+}
+
+/**
+ * Why the roster shelf is empty, when it is.
+ *
+ * A filter that matched nothing is not the same as a shelf whose cards are all
+ * pinned upstairs, and neither is "you have not packed anything" — each has a
+ * different next move, so each gets its own sentence.
+ */
+function emptyRosterMessage(
+  unpinnedCount: number,
+  // A thunk so the filter only runs once the first question has been answered.
+  matchesIncludingPinned: () => boolean,
+  filter: VaultFilter,
+): string {
+  if (unpinnedCount === 0) return "Every card is pinned to Favourites.";
+  // Matches upstairs but not down here: the cards this filter is asking
+  // for exist, they are just all on the Favourites shelf. "No spares yet"
+  // would be a flat lie to somebody who has just pinned their only spare.
+  if (matchesIncludingPinned()) return "Every matching card is pinned to Favourites.";
+  if (filter === "spares") return "No spares yet. A second copy of a card turns up here.";
+  if (filter === "missing") return "Nothing missing — you have packed every card.";
+  if (filter === "owned") return "Nothing packed yet. Open today's pack.";
+  return "Every card is pinned to Favourites.";
+}
+
 function PlayersPage() {
   const {
     event,
@@ -128,11 +216,12 @@ function PlayersPage() {
     failedTables,
     realtimeDegraded,
   } = useEventBundle();
-  const cards = useEventCardUrls(event?.id ?? null);
+  const eventId = idOf(event);
+  const cards = useEventCardUrls(eventId);
   // Hoisted once for the whole grid, and the *event's* back rather than each
   // player's — see the note on useEventCardBack. A player's own back on their
   // locked slot would be half the reveal, printed on the thing hiding it.
-  const cardBack = useEventCardBack(event?.id ?? null);
+  const cardBack = useEventCardBack(eventId);
   const navigate = useNavigate();
   /**
    * The SEED is ephemeral on purpose while the sort itself is stored: a frozen
@@ -162,7 +251,7 @@ function PlayersPage() {
   // asking for a balance nobody can spend is a round trip for a chip that is
   // not going to render.
   const dustOn = dustLive(event);
-  const dust = useDustBalance(dustOn ? member?.participantId : null);
+  const dust = useDustBalance(dustHolder(dustOn, member));
   // A guest holds secrets too, so the shelf follows whoever this device is
   // pulling as. No session is minted here — that happens on the pack screen,
   // where a card is actually at stake; the vault only ever reads.
@@ -189,23 +278,9 @@ function PlayersPage() {
     [allTrophies.data, member?.participantId],
   );
   const packStatus = usePackStatus(actor);
-  // Off the actor rather than the member, same as the secrets above: a guest
-  // builds a real streak too, and claim_guest_packs carries it over when they
-  // finally put a name to the phone. StreakStatus is a Streak with the milestone
-  // ladder bolted on, which is more than the header needs and costs nothing.
-  const streakQuery = useStreakStatus(actor);
-  const streak = streakQuery.data ?? null;
-  // Whether an answer is still coming, which is what decides if the Today card
-  // reserves the strip's slot. `isPending` alone would be true forever for a
-  // device with no actor, where the query never runs at all — and that person
-  // has no streak to wait for, so the slot should collapse rather than sit
-  // empty above the shelves.
-  const streakPending = !!actor && streakQuery.isPending;
-  // Claiming a rung from home. The same hook the pack summary's button uses, so
-  // a milestone cannot pay twice or show its reveal on two screens at once.
-  const milestone = useMilestoneClaim(actor, streak);
+  const { streak, streakPending, milestone } = useVaultStreak(actor);
   const offline = !useIsOnline();
-  const pullCounts = useCardPullCounts(event?.id ?? null);
+  const pullCounts = useCardPullCounts(eventId);
   // An index rather than the card itself: the sheet swipes between secrets, so it
   // needs to know where in the shelf the open one sits.
   //
@@ -252,7 +327,7 @@ function PlayersPage() {
   // — because the difference does not matter to a collection that is never going
   // to be reconciled against a server. `eventLoading` is the only part that
   // does: while it is true the answer is still coming.
-  const mine = useMyCollection(event?.id ?? null, rosterIds, !event && !eventLoading);
+  const mine = useMyCollection(eventId, rosterIds, !event && !eventLoading);
   const collected = mine.collection;
   // A phone that has just signed in has no member token yet, so the collection
   // settles off the local store alone and the counter would state "0 collected"
@@ -260,7 +335,7 @@ function PlayersPage() {
   // `ready` flag rather than a second one, so the counters and the grid can
   // never disagree about whether the answer is known.
   const sync = useAccountSyncState();
-  const ready = mine.ready && sync.status !== "syncing";
+  const ready = collectionSettled(mine.ready, sync);
   /**
    * Whether the shelf below knows what it is drawing.
    *
@@ -297,7 +372,7 @@ function PlayersPage() {
       case "shuffle":
         // Seeded, so a realtime bundle update during the combine doesn't silently
         // reorder the grid under the user's thumb.
-        return shuffle(list, seededRng(`${event?.id ?? ""}:${shuffleSeed}`));
+        return shuffle(list, seededRng(`${eventId ?? ""}:${shuffleSeed}`));
       case "newest": {
         // The date you FIRST pulled each card, newest first. There is no
         // per-copy timestamp anywhere — the schema records when a card was first
@@ -350,7 +425,7 @@ function PlayersPage() {
       default:
         return list.sort((a, b) => byName(a).localeCompare(byName(b)));
     }
-  }, [bundle, event?.id, sort, shuffleSeed, rarities, isLocked, collected]);
+  }, [bundle, eventId, sort, shuffleSeed, rarities, isLocked, collected]);
 
   /**
    * The roster the shelf actually draws.
@@ -387,7 +462,7 @@ function PlayersPage() {
   // The server's reset is the league's midnight, which is the clock the pack
   // rolls over on; the device's own midnight is only the fallback for a phone
   // the server has not answered yet.
-  const nextPackAt = packStatus.data?.resetsAt ?? nextLocalMidnight(packProgress.now);
+  const nextPackAt = packResetAt(packStatus.data?.resetsAt, packProgress.now);
 
   /**
    * What arrived since this device last looked (§12).
@@ -407,7 +482,7 @@ function PlayersPage() {
    */
   const lastSeen = useVaultLastSeen();
   const [since] = useState(() => acquisitionWindow(Date.now()));
-  const acquisitions = useRecentAcquisitions(event?.id ?? null, since);
+  const acquisitions = useRecentAcquisitions(eventId, since);
 
   const ownedSecrets = useMemo(() => secrets.data?.cards ?? [], [secrets.data]);
   const { ids: favouriteIds, isFavourite, toggle: toggleFavourite } = useVaultFavourites();
@@ -622,7 +697,7 @@ function PlayersPage() {
   const openSecretCards: ViewerCard[] = useMemo(() => {
     if (!openSecret) return [];
     const list = openSecret.cards ?? visibleSecrets;
-    const back = urlFromSet(cardBack.data?.urls) ? (cardBack.data?.urls ?? null) : null;
+    const back = universalBack(cardBack.data?.urls);
     return list.map((c) => {
       const rarity = secretFoil(c.foil, c.borderFx, c.tier);
       return {
@@ -654,13 +729,20 @@ function PlayersPage() {
   /**
    * The open secret, once it is known to still be there.
    *
-   * The shelves' list is live, so a card can leave it — traded away, or its shelf
-   * rolled up — while the viewer is holding an index into it. Null then, and both
-   * the viewer and the chrome below read this rather than `openSecret`: a viewer
-   * that renders nothing while presentation mode still holds the nav inert is a
-   * screen with no way off it.
+   * Follows the card by id, not by the index it was opened at. The shelves' list
+   * is live and reorders under the viewer: pinning from its own menu lifts the
+   * card out of its shelf, and an index kept across that points at a neighbour,
+   * so the sheet swapped to a different card the moment you pinned this one. Null
+   * only when the card is truly gone from the list — traded away, or its shelf
+   * rolled up — and both the viewer and the chrome below read this rather than
+   * `openSecret`: a viewer that renders nothing while presentation mode still
+   * holds the nav inert is a screen with no way off it.
    */
-  const openSecretIndex = openSecret && openSecretCards[openSecret.index] ? openSecret.index : null;
+  const openSecretIndex = (() => {
+    if (!openSecret) return null;
+    const at = openSecretCards.findIndex((c) => c.id === openSecret.id);
+    return at >= 0 ? at : null;
+  })();
 
   /**
    * The secrets the "new since" strip is showing, in the order it shows them.
@@ -1063,30 +1145,13 @@ function PlayersPage() {
     </div>
   );
 
-  /**
-   * Why the roster shelf is empty, when it is.
-   *
-   * A filter that matched nothing is not the same as a shelf whose cards are all
-   * pinned upstairs, and neither is "you have not packed anything" — each has a
-   * different next move, so each gets its own sentence.
-   */
-  const emptyRosterLine =
-    unpinnedRows.length === 0
-      ? "Every card is pinned to Favourites."
-      : // Matches upstairs but not down here: the cards this filter is asking
-        // for exist, they are just all on the Favourites shelf. "No spares yet"
-        // would be a flat lie to somebody who has just pinned their only spare.
-        filterRoster(rows).length > 0
-        ? "Every matching card is pinned to Favourites."
-        : filter === "spares"
-          ? "No spares yet. A second copy of a card turns up here."
-          : filter === "missing"
-            ? "Nothing missing — you have packed every card."
-            : filter === "owned"
-              ? "Nothing packed yet. Open today's pack."
-              : "Every card is pinned to Favourites.";
+  const emptyRosterLine = emptyRosterMessage(
+    unpinnedRows.length,
+    () => filterRoster(rows).length > 0,
+    filter,
+  );
 
-  const rosterBody = (
+  const renderRosterBody = () => (
     <>
       {/* Four states, in the order they can be true. Placeholders come first and
           cover the wait `shelfWaiting` describes above — every slot face-down
@@ -1127,20 +1192,17 @@ function PlayersPage() {
   //
   // Blank, not zero, until the roster has answered: `ready` is the collection's
   // flag, and a bundle still in the air reads as "Roster 0 / 0".
-  const summary = summaryReady(ready, {
-    loading: eventLoading,
-    error,
-    hasBundle: Boolean(bundle),
-    failedTables,
-  })
-    ? vaultSummaryLine({
-        rosterHeld: mine.collectedCount,
-        rosterSize: rows.length,
-        secrets: secrets.data?.pulled ?? 0,
-        sets: secretSetCount,
-        complete: myTrophies.length,
-      })
-    : null;
+  const summary = summaryLine(
+    ready,
+    { loading: eventLoading, error, hasBundle: Boolean(bundle), failedTables },
+    {
+      rosterHeld: mine.collectedCount,
+      rosterSize: rows.length,
+      secrets: secrets.data?.pulled ?? 0,
+      sets: secretSetCount,
+      complete: myTrophies.length,
+    },
+  );
 
   // A claim's reveal takes the whole screen the way the pack's ceremony does, so
   // it claims the chrome the same way. The card viewer is the same kind of
@@ -1192,7 +1254,9 @@ function PlayersPage() {
           channel too and said nothing at all when it went down — a frozen
           screen with no signal is the exact failure the health states exist
           for. Silent while a reveal has the screen, as on the pack. */}
-        {!presenting && (realtimeDegraded || !!error) && <FeedDegradedBanner className="mb-4" />}
+        {showFeedBanner(presenting, realtimeDegraded, error) && (
+          <FeedDegradedBanner className="mb-4" />
+        )}
         <PresentationMode active={presenting} />
         <PresentationStage active={presenting} />
         {/* A sibling of the stage, never inside it: `backdrop-filter` is a
@@ -1205,7 +1269,7 @@ function PlayersPage() {
             card={milestone.milestoneReveal.card}
             tierFloor={milestone.milestoneReveal.tierFloor}
             duplicate={milestone.milestoneReveal.duplicate}
-            universalBack={urlFromSet(cardBack.data?.urls) ? (cardBack.data?.urls ?? null) : null}
+            universalBack={universalBack(cardBack.data?.urls)}
             onDone={milestone.dismiss}
           />
         )}
@@ -1219,7 +1283,7 @@ function PlayersPage() {
           dustBalance={dust.data?.balance}
           isMember={!!member}
           wasMember={wasMember}
-          syncError={sync.status === "error" ? sync.message : null}
+          syncError={syncErrorOf(sync)}
         />
 
         <TodayCard
@@ -1230,7 +1294,7 @@ function PlayersPage() {
           streak={streak}
           streakPending={streakPending}
           claimable={milestone.claimable}
-          canClaim={streak?.canClaim ?? false}
+          canClaim={canClaim(streak)}
           claiming={milestone.claiming}
           claimError={milestone.claimError}
           offline={offline}
@@ -1310,7 +1374,7 @@ function PlayersPage() {
                 }
               >
                 {section.kind === "roster"
-                  ? rosterBody
+                  ? renderRosterBody()
                   : section.kind === "trophies"
                     ? cardGrid(section.trophies.map(trophyTile))
                     : section.kind === "favourites"

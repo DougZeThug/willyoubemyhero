@@ -222,30 +222,49 @@ function getDb() {
         if (!db.objectStoreNames.contains(PACK_STATE)) db.createObjectStore(PACK_STATE);
       },
     });
+    // A rejected open is cached forever otherwise: one transient failure (a
+    // blocked upgrade, a private-mode hiccup) would fail every later read until
+    // the tab is reloaded, so a retry could never succeed.
+    dbPromise.catch(() => {
+      dbPromise = null;
+    });
   }
   return dbPromise;
 }
 
-export async function loadCollection(): Promise<Record<string, CollectedCard>> {
+/**
+ * The same read as `loadCollection`, but a failed read throws.
+ *
+ * For a caller that acts on the answer irreversibly (the claim snapshots the
+ * collection and then drops the guest token): "the read failed" must never look
+ * like "this device holds no cards". A server render has nothing to lose, so
+ * that case still gives `{}`.
+ */
+export async function loadCollectionOrThrow(): Promise<Record<string, CollectedCard>> {
   if (!isBrowser()) return {};
+  const db = await getDb();
+  // One transaction, so the keys and the values are one snapshot. They are
+  // zipped by index, and each idb shorthand call opens a transaction of its
+  // own -- so a collectCard from another tab landing between the two reads
+  // inserted a key the value list did not have, shifting every entry from
+  // there on onto its neighbour's card and dropping the last one entirely.
+  // Wrong `count`, `tier` and `edition` on somebody else's slab in the vault,
+  // and in adoptableIds -- which reads ids back out of the VALUES -- a card
+  // that never got filed to the server, or an undefined that threw.
+  const tx = db.transaction(COLLECTED, "readonly");
+  const [keys, values] = await Promise.all([tx.store.getAllKeys(), tx.store.getAll()]);
+  await tx.done;
+  const out: Record<string, CollectedCard> = {};
+  keys.forEach((k, i) => {
+    out[String(k)] = values[i] as CollectedCard;
+  });
+  return out;
+}
+
+/** The vault's soft read: a device that cannot read its cards shows an empty vault. */
+export async function loadCollection(): Promise<Record<string, CollectedCard>> {
   try {
-    const db = await getDb();
-    // One transaction, so the keys and the values are one snapshot. They are
-    // zipped by index, and each idb shorthand call opens a transaction of its
-    // own -- so a collectCard from another tab landing between the two reads
-    // inserted a key the value list did not have, shifting every entry from
-    // there on onto its neighbour's card and dropping the last one entirely.
-    // Wrong `count`, `tier` and `edition` on somebody else's slab in the vault,
-    // and in adoptableIds -- which reads ids back out of the VALUES -- a card
-    // that never got filed to the server, or an undefined that threw.
-    const tx = db.transaction(COLLECTED, "readonly");
-    const [keys, values] = await Promise.all([tx.store.getAllKeys(), tx.store.getAll()]);
-    await tx.done;
-    const out: Record<string, CollectedCard> = {};
-    keys.forEach((k, i) => {
-      out[String(k)] = values[i] as CollectedCard;
-    });
-    return out;
+    return await loadCollectionOrThrow();
   } catch {
     return {};
   }

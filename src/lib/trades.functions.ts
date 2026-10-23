@@ -253,7 +253,7 @@ type SpareCopyRow = Pick<
  * touches, so a card is a spare the moment it lands (20260930120000).
  */
 export const getTradeSpares = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ participantId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ participantId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeSpares> => {
     const asker = await requireMember();
     noStore();
@@ -701,7 +701,7 @@ export const getMyTradeOffers = createServerFn({ method: "GET" }).handler(
  * span two tables and supabase-js has no transactions.
  */
 export const createTradeOffer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         recipientId: zuuid(),
@@ -740,7 +740,7 @@ export const createTradeOffer = createServerFn({ method: "POST" })
  * both are toasts rather than errors.
  */
 export const acceptTradeOffer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await db();
@@ -784,7 +784,7 @@ export const acceptTradeOffer = createServerFn({ method: "POST" })
  * an UPDATE that matches nothing is not an error.
  */
 export const declineTradeOffer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await db();
@@ -808,7 +808,7 @@ export const declineTradeOffer = createServerFn({ method: "POST" })
 
 /** Take your own offer back. Same shape as decline, from the other side. */
 export const cancelTradeOffer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await db();
@@ -840,7 +840,7 @@ export const cancelTradeOffer = createServerFn({ method: "POST" })
  * entitled to undo it.
  */
 export const reopenTradeOffer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ offerId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await untypedDb();
@@ -872,7 +872,7 @@ const FEED_LIMIT = 25;
  * no way for a future edit to this handler to forget to.
  */
 export const getTradeFeed = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<TradeFeedEntry[]> => {
     const sb = await db();
     const { data: rows, error } = await sb

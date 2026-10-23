@@ -22,8 +22,13 @@ vi.mock("./card-collection", async (importOriginal) => ({
   loadUnrecorded: () => loadUnrecorded(),
 }));
 
-const { adoptLocalCollection, adoptableIds, holdForAdoption, releaseAdoptionHold } =
-  await import("./adopt-collection");
+const {
+  adoptLocalCollection,
+  adoptableIds,
+  holdForAdoption,
+  releaseAdoptionHold,
+  snapshotLocalCollection,
+} = await import("./adopt-collection");
 
 function snapshotOf(n: number): Record<string, CollectedCard> {
   const out: Record<string, CollectedCard> = {};
@@ -78,6 +83,23 @@ describe("adoptLocalCollection", () => {
   it("says nothing to the server when the handset holds nothing", async () => {
     expect(await adoptLocalCollection({})).toBe(0);
     expect(adoptCollection).not.toHaveBeenCalled();
+  });
+});
+
+describe("snapshotLocalCollection", () => {
+  it("throws when the store cannot be read, rather than answering 'no cards'", async () => {
+    // The claim drops the guest token on this answer; an empty one from a broken
+    // read would cost the guest their collection.
+    vi.stubGlobal("indexedDB", {
+      open: () => {
+        throw new Error("IndexedDB is disabled");
+      },
+    });
+    try {
+      await expect(snapshotLocalCollection()).rejects.toThrow("IndexedDB is disabled");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

@@ -54,6 +54,22 @@ export function useAdminAutoUnlock(isAdmin: boolean, user: User | null, authLoad
     currentUserId.current = userId;
   }, [userId]);
 
+  // Leaving the page voids the request in the air: the answer can take seconds,
+  // and one that lands after navigation would otherwise plant a token for an
+  // account that may have signed out since, with nothing left to notice. Its own
+  // effect with empty deps rather than a cleanup on the one below, which re-runs
+  // on every token refresh (see above). The latches go too, so a remount (React
+  // StrictMode's dev-only fake unmount does this) asks again instead of waiting
+  // on an answer that was just voided.
+  useEffect(
+    () => () => {
+      latestRequest.current++;
+      triedFor.current = null;
+      settledFor.current = null;
+    },
+    [],
+  );
+
   useEffect(() => {
     if (authLoading) return;
     if (isAdmin) {

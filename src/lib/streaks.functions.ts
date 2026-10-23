@@ -191,7 +191,7 @@ export const getStreakStatus = createServerFn({ method: "GET" }).handler(
  * against comes off the verified token, never the payload.
  */
 export const claimStreakMilestone = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         milestone: z.number().int().refine(isStreakMilestone, { message: "Unknown milestone" }),

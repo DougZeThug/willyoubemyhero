@@ -45,7 +45,7 @@ export const listCardPromptTemplates = createServerFn({ method: "GET" }).handler
 });
 
 export const updateCardPromptTemplate = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) =>
+  .validator((data: unknown) =>
     z.object({ slug, masterPrompt: z.string().trim().min(20).max(12000) }).parse(data),
   )
   .handler(async ({ data }) => {
@@ -86,7 +86,7 @@ const saveSchema = z
   });
 
 export const saveCardPromptRun = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => saveSchema.parse(data))
+  .validator((data: unknown) => saveSchema.parse(data))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const client = await db();
@@ -140,7 +140,7 @@ export const saveCardPromptRun = createServerFn({ method: "POST" })
   });
 
 export const listCardPromptRuns = createServerFn({ method: "GET" })
-  .inputValidator((data: unknown) =>
+  .validator((data: unknown) =>
     z.object({ eventId: zuuid(), limit: z.number().int().min(1).max(50).default(30) }).parse(data),
   )
   .handler(async ({ data }) => {

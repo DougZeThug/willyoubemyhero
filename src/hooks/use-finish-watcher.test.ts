@@ -152,4 +152,45 @@ describe("useFinishWatcher", () => {
     });
     expect(onFinish).toHaveBeenCalledTimes(2);
   });
+
+  describe("when the runs read has failed", () => {
+    // A failed read is an empty list in the bundle, with the table named in
+    // `failed`. Seeded from, it would leave "seen" empty and the next good bundle
+    // would celebrate every old finish at once.
+    const alice = makeParticipant({ participant: { id: "p1", name: "Alice", nickname: null } });
+    const bob = makeParticipant({ participant: { id: "p2", name: "Bob", nickname: null } });
+    const aliceRun = makeRun({ participant_id: alice.participant_id, official_time_ms: 50_000 });
+    const good = (runs: ReturnType<typeof makeRun>[]) => bundleWith(runs, [alice, bob]);
+    const degraded = () => makeBundle({ participants: [alice, bob], runs: [], failed: ["runs"] });
+
+    function watch(first: ReturnType<typeof makeBundle>) {
+      const onFinish = vi.fn();
+      const hook = renderHook(({ bundle }) => useFinishWatcher(bundle, onFinish), {
+        initialProps: { bundle: first },
+      });
+      return { onFinish, ...hook };
+    }
+
+    it("does not replay old finishes when the first bundle was degraded", () => {
+      const { onFinish, rerender } = watch(degraded());
+      rerender({ bundle: good([aliceRun]) });
+      expect(onFinish).not.toHaveBeenCalled();
+    });
+
+    it("does not refire a known finish after a degraded refetch in between", () => {
+      const { onFinish, rerender } = watch(good([aliceRun]));
+      rerender({ bundle: degraded() });
+      rerender({ bundle: good([aliceRun]) });
+      expect(onFinish).not.toHaveBeenCalled();
+    });
+
+    it("still fires once for a genuinely new run after a degraded start", () => {
+      const { onFinish, rerender } = watch(degraded());
+      rerender({ bundle: good([aliceRun]) });
+      const bobRun = makeRun({ participant_id: bob.participant_id, official_time_ms: 62_500 });
+      rerender({ bundle: good([aliceRun, bobRun]) });
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ runId: bobRun.id }));
+    });
+  });
 });

@@ -459,7 +459,7 @@ export const getCollectionTrophies = createServerFn({ method: "GET" }).handler(a
 
 /** Create a set. The id is derived from the name once, then never changes. */
 export const createSecretCollection = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ label: collectionLabel }).parse(d))
+  .validator((d: unknown) => z.object({ label: collectionLabel }).parse(d))
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
     const { toSecretCollectionId } = await import("./secret-cards");
@@ -492,7 +492,7 @@ export const createSecretCollection = createServerFn({ method: "POST" })
 
 /** Rename, recolour, reorder or hide a set. The id is never touched — rows point at it. */
 export const updateSecretCollection = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         id: cardCollection,
@@ -540,7 +540,7 @@ export const updateSecretCollection = createServerFn({ method: "POST" })
  * answer for a set that has served its purpose.
  */
 export const deleteSecretCollection = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ id: cardCollection }).parse(d))
+  .validator((d: unknown) => z.object({ id: cardCollection }).parse(d))
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
     const db = await secrets();
@@ -576,7 +576,7 @@ export const deleteSecretCollection = createServerFn({ method: "POST" })
  * be pullable or it burns somebody's once-a-day pull on a blank.
  */
 export const createSecretCards = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         cards: z
@@ -668,7 +668,7 @@ async function storeArt(cardId: string, dataUrl: string) {
 }
 
 export const uploadSecretCardArt = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ id: zuuid(), dataUrl: cardArt }).parse(d))
+  .validator((d: unknown) => z.object({ id: zuuid(), dataUrl: cardArt }).parse(d))
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
     const path = await storeArt(data.id, data.dataUrl);
@@ -676,7 +676,7 @@ export const uploadSecretCardArt = createServerFn({ method: "POST" })
   });
 
 export const updateSecretCard = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         id: zuuid(),
@@ -737,7 +737,7 @@ export const updateSecretCard = createServerFn({ method: "POST" })
  * matches NULL with `=`.
  */
 export const updateSecretCollectionLook = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         collection: cardCollection.nullable(),
@@ -773,7 +773,7 @@ export const updateSecretCollectionLook = createServerFn({ method: "POST" })
  * branch exists to turn a foreign-key error into an answer the panel can explain.
  */
 export const deleteSecretCard = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ id: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ id: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireLeagueAdmin();
     const db = await secrets();
@@ -816,7 +816,7 @@ export const deleteSecretCard = createServerFn({ method: "POST" })
  * the insert.
  */
 export const grantSecretCard = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         participantId: zuuid(),

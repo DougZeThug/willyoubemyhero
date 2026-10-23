@@ -2,6 +2,7 @@
 // the wrong account. The token names no user and the server checks the event
 // alone, so these two hooks and the owner stored beside the token are the whole
 // of the account binding.
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { User } from "@supabase/supabase-js";
@@ -297,6 +298,32 @@ describe("useAdminAutoUnlock", () => {
       const { result } = mount(props(null, true));
       expect(result.current).toBe(true);
       expect(startAdminSessionFromAccount).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("a request that outlived the page", () => {
+    it("does not plant a token once the hook has unmounted", async () => {
+      const late = deferred<{ ok: true; token: string }>();
+      startAdminSessionFromAccount.mockReturnValueOnce(late.promise);
+      const { unmount } = mount(props(userOf("a")));
+      await vi.waitFor(() => expect(startAdminSessionFromAccount).toHaveBeenCalledOnce());
+      unmount();
+
+      await act(async () => {
+        late.resolve({ ok: true, token: "late-token" });
+        await late.promise;
+      });
+
+      expect(setAdminToken).not.toHaveBeenCalled();
+    });
+
+    it("still unlocks under StrictMode's fake unmount and remount", async () => {
+      startAdminSessionFromAccount.mockResolvedValue({ ok: true, token: "tok" });
+      renderHook((p) => useAdminAutoUnlock(p.isAdmin, p.user, p.loading), {
+        initialProps: props(userOf("a")),
+        wrapper: StrictMode,
+      });
+      await vi.waitFor(() => expect(setAdminToken).toHaveBeenCalledWith("tok", "a"));
     });
   });
 

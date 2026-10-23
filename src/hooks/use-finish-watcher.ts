@@ -12,6 +12,8 @@ type Bundle = {
     is_official: boolean;
     official_time_ms: number | null;
   }>;
+  /** Tables whose read failed; the real bundle carries it, and a failed read comes back empty. */
+  failed?: string[];
 };
 
 export type FinishPayload = {
@@ -30,6 +32,10 @@ export function useFinishWatcher(
   const initialized = useRef(false);
   useEffect(() => {
     if (!bundle) return;
+    // A failed runs read comes back as an empty list, not as missing. Taken as
+    // the first bundle it would seed "seen" with nothing, and the next good one
+    // would celebrate every old finish at once. Skipped, it changes nothing.
+    if (bundle.failed?.includes("runs")) return;
     const official = bundle.runs.filter((r) => r.is_official);
     if (!initialized.current) {
       official.forEach((r) => seen.current.add(r.id));
