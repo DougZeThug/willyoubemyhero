@@ -633,6 +633,25 @@ describe("useAccountSync", () => {
     expect(adoptLocalCollection).toHaveBeenLastCalledWith(held);
   });
 
+  it("reports an error, not 'no cards', when the store cannot be read, and recovers on retry", async () => {
+    // A failed read must not be adopted as an empty collection: nothing is
+    // remembered as held, the state is an error, and the retry reads afresh.
+    vi.mocked(snapshotLocalCollection).mockRejectedValue(new Error("storage unavailable"));
+    renderHook(() => useAccountSync(user));
+    await settle();
+    expect(lastState).toMatchObject({ status: "error" });
+    expect(adoptLocalCollection).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem("wwbh:member-token")).toBeNull();
+
+    vi.mocked(snapshotLocalCollection).mockResolvedValue(held);
+    vi.mocked(adoptLocalCollection).mockResolvedValue(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(adoptLocalCollection).toHaveBeenLastCalledWith(held);
+    expect(lastState).toMatchObject({ status: "ready" });
+  });
+
   it("backs off between wakes and stops polling after a handful", async () => {
     vi.mocked(adoptLocalCollection).mockRejectedValue(new Error("offline"));
     renderHook(() => useAccountSync(user));

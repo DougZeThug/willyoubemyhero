@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import {
   addUnrecorded,
   loadCollection,
+  loadCollectionOrThrow,
   loadUnrecorded,
   retireUnrecorded,
   todayKey,
@@ -71,8 +72,14 @@ export function adoptableIds(snapshot: Awaited<ReturnType<typeof loadCollection>
   return Object.values(snapshot).map((c) => c.eventParticipantId);
 }
 
-/** Read this device's collection before anything can prune it. */
-export const snapshotLocalCollection = loadCollection;
+/**
+ * Read this device's collection before anything can prune it.
+ *
+ * A failed read must throw, never look like "no cards": the claim drops the
+ * guest token on the strength of this answer, so an empty one from a broken
+ * read would quietly cost the guest their whole collection.
+ */
+export const snapshotLocalCollection = loadCollectionOrThrow;
 
 /**
  * Hold the snapshot's cards out of the prune for the length of the adoption.
