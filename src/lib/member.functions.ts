@@ -67,7 +67,7 @@ const CLAIM_ATTEMPT_MAX = 10;
  * for a 13-person friend group. The commissioner can rotate any code from admin.
  */
 export const claimPlayer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         participantId: zuuid(),
@@ -243,7 +243,7 @@ export const renewMemberSession = createServerFn({ method: "POST" }).handler(asy
  * commissioner must copy or print the list before leaving the page.
  */
 export const generateMemberCodes = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -356,7 +356,7 @@ export const generateMemberCodes = createServerFn({ method: "POST" })
 
 /** Claim status per player, for the admin console. Never returns code material. */
 export const listMemberClaims = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

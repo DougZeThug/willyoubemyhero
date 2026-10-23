@@ -66,7 +66,7 @@ function actor(input: GuestInput): {
 
 /** Every reaction and comment for one event, in a single round trip. */
 export const getEventSocial = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: eps } = await sb
@@ -113,7 +113,7 @@ export const getEventSocial = createServerFn({ method: "GET" })
 
 /** Add or remove one of your reactions on a card. Returns the new state. */
 export const toggleReaction = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventParticipantId: zuuid(),
@@ -158,7 +158,7 @@ export const toggleReaction = createServerFn({ method: "POST" })
   });
 
 export const postComment = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventParticipantId: zuuid(),
@@ -195,7 +195,7 @@ export const postComment = createServerFn({ method: "POST" })
 
 /** You can delete your own trash talk; the commissioner can delete anyone's. */
 export const deleteComment = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ commentId: zuuid(), guest: guestSchema }).parse(d))
+  .validator((d: unknown) => z.object({ commentId: zuuid(), guest: guestSchema }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: row } = await sb
@@ -230,7 +230,7 @@ export const deleteComment = createServerFn({ method: "POST" })
 
 /** Your own ballot. Only ever returns the requesting member's votes. */
 export const getMyAwardVotes = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     const sb = await admin();
@@ -248,7 +248,7 @@ export const getMyAwardVotes = createServerFn({ method: "GET" })
  * per member per category — the upsert just makes changing your mind work.
  */
 export const castAwardVote = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -294,7 +294,7 @@ export const castAwardVote = createServerFn({ method: "POST" })
  * reveal announcing that nobody voted over a vote that had winners.
  */
 export const getAwards = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = await admin();
     const { data: ev } = await sb
@@ -311,7 +311,7 @@ export const getAwards = createServerFn({ method: "GET" })
 
 /** Live tally. Commissioner only, so the room can't see it before the reveal. */
 export const getAwardTally = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();
@@ -335,7 +335,7 @@ export const getAwardTally = createServerFn({ method: "GET" })
  * voters a tie is common and picking a winner by row order would be a lie.
  */
 export const closeAwardVoting = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();
@@ -353,7 +353,7 @@ export const closeAwardVoting = createServerFn({ method: "POST" })
 
 /** Reopen voting and unpublish, for when someone was left out. */
 export const reopenAwardVoting = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const sb = await admin();

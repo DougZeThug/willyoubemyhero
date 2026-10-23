@@ -20,7 +20,7 @@ import { uuid as zuuid } from "./zod-uuid";
  * a repeated id would make the admin panel's count disagree with the bar's.
  */
 export const setNavHidden = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),

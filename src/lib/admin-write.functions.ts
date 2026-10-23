@@ -66,7 +66,7 @@ function assertInEvent(rows: unknown[] | null | undefined, what: string): void {
  * lands on the same person rather than a new one.
  */
 export const addPlayerToRoster = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -151,9 +151,7 @@ export const addPlayerToRoster = createServerFn({ method: "POST" })
   });
 
 export const removeParticipantFromEvent = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d),
-  )
+  .validator((d: unknown) => z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -204,7 +202,7 @@ export const removeParticipantFromEvent = createServerFn({ method: "POST" })
   });
 
 export const setParticipantStatus = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -278,9 +276,7 @@ export const setParticipantStatus = createServerFn({ method: "POST" })
  * error — for every caller, leaving it alone is exactly the outcome they want.
  */
 export const takeOffClock = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d),
-  )
+  .validator((d: unknown) => z.object({ eventId: zuuid(), eventParticipantId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -313,7 +309,7 @@ export const takeOffClock = createServerFn({ method: "POST" })
  * scratched — being out of the field is a roster decision, not a result.
  */
 export const resetCombine = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -347,7 +343,7 @@ export const resetCombine = createServerFn({ method: "POST" })
  * commissioner can re-time them without wiping everybody else's day.
  */
 export const resetParticipantRuns = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), participantId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid(), participantId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -377,7 +373,7 @@ export const resetParticipantRuns = createServerFn({ method: "POST" })
 
 // ---------- Running order ----------
 export const setRunningOrder = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -424,7 +420,7 @@ export const setRunningOrder = createServerFn({ method: "POST" })
   });
 
 export const recordRandomization = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -451,7 +447,7 @@ export const recordRandomization = createServerFn({ method: "POST" })
 
 // ---------- Stations ----------
 export const upsertStation = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -491,9 +487,7 @@ export const upsertStation = createServerFn({ method: "POST" })
 // updates could half-apply and leave duplicate orders, so the swap happens
 // inside one transaction in the database.
 export const swapStationOrder = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: zuuid(), aId: zuuid(), bId: zuuid() }).parse(d),
-  )
+  .validator((d: unknown) => z.object({ eventId: zuuid(), aId: zuuid(), bId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -507,7 +501,7 @@ export const swapStationOrder = createServerFn({ method: "POST" })
   });
 
 export const deleteStation = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), id: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid(), id: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -572,7 +566,7 @@ async function assertOnRoster(
 }
 
 export const saveCompletedRun = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -710,7 +704,7 @@ export const saveCompletedRun = createServerFn({ method: "POST" })
   });
 
 export const deleteRun = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -735,7 +729,7 @@ export const deleteRun = createServerFn({ method: "POST" })
  * timed again.
  */
 export const deleteRunResult = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid(), runId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -808,7 +802,7 @@ export const deleteRunResult = createServerFn({ method: "POST" })
  * the timed ones without pretending to know when it actually happened.
  */
 export const createManualRun = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -939,7 +933,7 @@ export const createManualRun = createServerFn({ method: "POST" })
  * The arithmetic below stays here; only the writing moved.
  */
 export const updateRunResult = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -1021,7 +1015,7 @@ export const updateRunResult = createServerFn({ method: "POST" })
 // ---------- Draft selections ----------
 
 export const recordDraftSelection = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -1048,7 +1042,7 @@ export const recordDraftSelection = createServerFn({ method: "POST" })
   });
 
 export const undoLastDraftSelection = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { draftDb } = await import("./draft-db.server");
@@ -1064,7 +1058,7 @@ export const undoLastDraftSelection = createServerFn({ method: "POST" })
 
 // ---------- Event ----------
 export const updateEvent = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),

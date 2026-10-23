@@ -105,7 +105,7 @@ async function signSet(paths: {
 
 // Return signed URLs for all event participants that have a photo_path.
 export const getEventPhotoUrls = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = publicClient();
     const { data: eps } = await sb
@@ -278,7 +278,7 @@ async function storeCard(
 }
 
 export const getEventCardUrls = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = publicClient();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -335,7 +335,7 @@ export const getEventCardUrls = createServerFn({ method: "GET" })
   });
 
 export const getEventCardBack = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: event } = await supabaseAdmin
@@ -355,7 +355,7 @@ export const getEventCardBack = createServerFn({ method: "GET" })
   });
 
 export const uploadEventCardBack = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -399,7 +399,7 @@ export const uploadEventCardBack = createServerFn({ method: "POST" })
   });
 
 export const deleteEventCardBack = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -430,7 +430,7 @@ export const deleteEventCardBack = createServerFn({ method: "POST" })
   });
 
 export const uploadParticipantCard = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -451,7 +451,7 @@ export const uploadParticipantCard = createServerFn({ method: "POST" })
   });
 
 export const uploadParticipantCardsBulk = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -507,7 +507,7 @@ async function removePaths(
 }
 
 export const deleteParticipantCard = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -555,7 +555,7 @@ export const deleteParticipantCard = createServerFn({ method: "POST" })
   });
 
 export const uploadParticipantPhoto = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -625,7 +625,7 @@ export const uploadParticipantPhoto = createServerFn({ method: "POST" })
 // ------- Backfill existing images -------
 
 export const getImagePathsNeedingVariants = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -674,7 +674,7 @@ const ART_COLUMNS = {
 } as const satisfies Record<string, readonly [CardPathColumn, CardPathColumn, CardPathColumn]>;
 
 export const writeImageVariants = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -821,7 +821,7 @@ function slugify(s: string) {
 }
 
 export const archiveEvent = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     await requireAdmin(data.eventId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -907,7 +907,7 @@ export const listArchives = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const getArchivedRecap = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ slug: z.string().min(1).max(80) }).parse(d))
+  .validator((d: unknown) => z.object({ slug: z.string().min(1).max(80) }).parse(d))
   .handler(async ({ data }) => {
     const sb = publicClient();
     const { data: row, error } = await sb

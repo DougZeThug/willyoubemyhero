@@ -44,7 +44,7 @@ async function db() {
  * Unguarded, like getEventSocial: this is a public aggregate about public cards.
  */
 export const getCardPullCounts = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<CardPullCounts> => {
     const sb = await admin();
     // Resolve the event's own cards first and constrain to them, the way
@@ -98,7 +98,7 @@ export const getCardPullCounts = createServerFn({ method: "GET" })
  * are distinguishable from pulls forever and never touch the once-a-day index.
  */
 export const adoptCollection = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         // A whole roster's worth, since this is a collection rather than a pack.
@@ -139,7 +139,7 @@ export const adoptCollection = createServerFn({ method: "POST" })
  * grants, with two keys.
  */
 export const grantCard = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .object({
         eventId: zuuid(),
@@ -187,7 +187,7 @@ export const grantCard = createServerFn({ method: "POST" })
  * rows `getCardPullCounts` is careful never to expose.
  */
 export const getMyCardStats = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<MyCardStats> => {
     const me = await requireMember();
     const sb = await admin();

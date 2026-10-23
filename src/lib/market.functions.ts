@@ -442,7 +442,7 @@ async function withListedSecrets(
  * is already up, rather than shelving it twice. The target id IS the key.
  */
 export const listCardForDust = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z
       .discriminatedUnion("kind", [
         z.object({ kind: z.literal("roster"), copyId: zuuid() }),
@@ -482,7 +482,7 @@ export const listCardForDust = createServerFn({ method: "POST" })
 
 /** Take one of your own listings back down. */
 export const cancelMarketListing = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ listingId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ listingId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();
@@ -512,7 +512,7 @@ export const cancelMarketListing = createServerFn({ method: "POST" })
  * rather than off a payload — the `acceptTradeOffer` rule.
  */
 export const buyMarketListing = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ listingId: zuuid(), requestId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ listingId: zuuid(), requestId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const me = await requireMember();
     noStore();

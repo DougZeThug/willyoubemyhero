@@ -54,7 +54,7 @@ export async function withRequestHeaders<T>(
 }
 
 export type CallOptions = {
-  /** Payload for the function's inputValidator. */
+  /** Payload for the function's validator. */
   data?: unknown;
   /** Request headers — `x-admin-token` / `x-member-token` drive the auth guards. */
   headers?: Record<string, string>;
@@ -63,7 +63,7 @@ export type CallOptions = {
 };
 
 /**
- * Loose on purpose. A server function with no inputValidator is typed to accept
+ * Loose on purpose. A server function with no validator is typed to accept
  * `data: undefined`, so a shared `{ data?: unknown }` parameter is not
  * assignable to it. `never[]` is contravariantly compatible with every server
  * function shape, and the cast inside is where the looseness is paid for.

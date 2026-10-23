@@ -60,7 +60,7 @@ export type OwnershipAudit = {
 
 /** Per-player ownership plus every device holding cards nobody can trade. */
 export const getOwnershipAudit = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
+  .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }): Promise<OwnershipAudit> => {
     await requireAdmin(data.eventId);
     const sb = await admin();
@@ -229,7 +229,7 @@ export const getOwnershipAudit = createServerFn({ method: "GET" })
  * as a trade partner.
  */
 export const attachDeviceToPlayer = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
+  .validator((d: unknown) =>
     z.object({ eventId: zuuid(), guestId: zuuid(), participantId: zuuid() }).parse(d),
   )
   .handler(async ({ data }) => {

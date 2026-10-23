@@ -151,9 +151,7 @@ export type RecentAcquisitions = {
  * what this needs, and a trigger restarts it on every change of owner.
  */
 export const getRecentAcquisitions = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) =>
-    z.object({ eventId: zuuid(), since: z.string().datetime() }).parse(d),
-  )
+  .validator((d: unknown) => z.object({ eventId: zuuid(), since: z.string().datetime() }).parse(d))
   .handler(async ({ data }): Promise<RecentAcquisitions> => {
     const participantId = await requireMember();
     noStore();
