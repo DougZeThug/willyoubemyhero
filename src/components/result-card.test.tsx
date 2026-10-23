@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ResultCard, type ResultCardData } from "./result-card";
+import { shareResultLayout } from "@/lib/share-result-layout";
 
 function data(over: Partial<ResultCardData> = {}): ResultCardData {
   return {
@@ -97,5 +98,44 @@ describe("ResultCard", () => {
       />,
     );
     expect(node).toBeInstanceOf(HTMLDivElement);
+  });
+
+  describe("on a long course", () => {
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `split-${i}`,
+        label: `STATION ${i + 1}`,
+        ms: 10_000 + i,
+      }));
+
+    it("draws all thirteen splits and still ends on the footer", () => {
+      // The grid used to run past the canvas and clip the last rows and then the
+      // footer credit. The height itself is pinned in share-result-layout.test.ts.
+      const { container } = render(<ResultCard data={data({ splits: many(13) })} />);
+      for (let i = 1; i <= 13; i++) expect(screen.getByText(`STATION ${i}`)).toBeInTheDocument();
+      expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
+      const root = container.firstElementChild!;
+      expect(root.lastElementChild).toHaveTextContent("willyoubemyhero.com · Draft Combine");
+    });
+
+    it("says how many it left off when even the tightest grid cannot hold them", () => {
+      render(<ResultCard data={data({ splits: many(18), penaltyMs: 5_000 })} />);
+      const left = shareResultLayout(18, true);
+      expect(left.hidden).toBeGreaterThan(0);
+      expect(screen.getAllByText(/^STATION /)).toHaveLength(left.shown);
+      expect(screen.getByText(`…and ${left.hidden} more`)).toBeInTheDocument();
+      expect(screen.getByText(/willyoubemyhero\.com/)).toBeInTheDocument();
+    });
+
+    it("sets the grid from the layout, so the budget is what is drawn", () => {
+      const { container } = render(<ResultCard data={data({ splits: many(13) })} />);
+      const layout = shareResultLayout(13, false);
+      const grid = screen.getByText("STATION 1").parentElement!.parentElement!;
+      expect(grid).toHaveStyle({
+        gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
+        gridAutoRows: `${layout.rowH}px`,
+      });
+      expect(container.firstElementChild).toHaveStyle({ height: "1350px" });
+    });
   });
 });

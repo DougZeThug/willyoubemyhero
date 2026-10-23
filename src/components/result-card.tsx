@@ -1,6 +1,17 @@
-import { forwardRef } from "react";
+import { forwardRef, type CSSProperties } from "react";
 import { formatTime } from "@/lib/format";
 import { urlFromSet } from "@/lib/media";
+import {
+  FOOTER_H,
+  GRID_GAP,
+  HEADER_H,
+  HERO_H,
+  RESULT_GAP,
+  RESULT_H,
+  RESULT_PAD,
+  RESULT_W,
+  shareResultLayout,
+} from "@/lib/share-result-layout";
 import type { ImageUrlSet } from "@/lib/media";
 
 export type ResultCardData = {
@@ -21,29 +32,54 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
   ref,
 ) {
   const photoUrl = urlFromSet(data.photoUrl);
+  const hasPenalty = !!data.penaltyMs && data.penaltyMs > 0;
+  // The canvas is fixed and clips, so how the splits sit is a height budget, not
+  // a style choice. Every text block below carries an explicit lineHeight because
+  // that budget is exact only if "normal" is not what sets a height.
+  const layout = shareResultLayout(data.splits.length, hasPenalty);
+  const cell: CSSProperties = {
+    boxSizing: "border-box",
+    height: layout.rowH,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "0 20px",
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.08)",
+  };
   return (
     <div
       ref={ref}
       style={{
-        width: 1080,
-        height: 1350,
+        width: RESULT_W,
+        height: RESULT_H,
         background:
           "radial-gradient(circle at 50% 20%, oklch(0.28 0.06 220) 0%, oklch(0.12 0.02 240) 55%, oklch(0.08 0.015 240) 100%)",
         color: "white",
         fontFamily: "'Barlow Condensed', system-ui, sans-serif",
-        padding: 72,
+        padding: RESULT_PAD,
         display: "flex",
         flexDirection: "column",
-        gap: 40,
+        gap: RESULT_GAP,
         position: "relative",
         overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          height: HEADER_H,
+        }}
+      >
         <div>
           <div
             style={{
               fontSize: 22,
+              lineHeight: 1.2,
               letterSpacing: "0.4em",
               color: "#67e8f9",
               fontWeight: 800,
@@ -59,8 +95,10 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
         {data.rank != null && (
           <div
             style={{
-              width: 130,
-              height: 130,
+              boxSizing: "border-box",
+              width: HEADER_H,
+              height: HEADER_H,
+              flexShrink: 0,
               borderRadius: 999,
               border: "3px solid #38bdf8",
               boxShadow: "0 0 40px #38bdf8",
@@ -76,11 +114,13 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
         )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 32, height: HERO_H }}>
         <div
           style={{
-            width: 220,
-            height: 220,
+            boxSizing: "border-box",
+            flexShrink: 0,
+            width: HERO_H,
+            height: HERO_H,
             borderRadius: 24,
             overflow: "hidden",
             background: "linear-gradient(135deg,#0e7490,#155e75)",
@@ -107,12 +147,33 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
           )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 84, fontWeight: 900, textTransform: "uppercase", lineHeight: 1 }}>
+          <div
+            style={{
+              fontSize: 84,
+              fontWeight: 900,
+              textTransform: "uppercase",
+              lineHeight: 1,
+              // Two lines and no more, so a long name cannot outgrow the 220px hero.
+              // maxHeight rather than line-clamp, which the image exporter does not
+              // reliably rasterise.
+              maxHeight: 2 * 84,
+              overflow: "hidden",
+            }}
+          >
             {data.participantName}
           </div>
           {data.fantasyTeam && (
             <div
-              style={{ fontSize: 32, color: "#94a3b8", textTransform: "uppercase", marginTop: 8 }}
+              style={{
+                fontSize: 32,
+                lineHeight: 1.2,
+                color: "#94a3b8",
+                textTransform: "uppercase",
+                marginTop: 8,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
             >
               {data.fantasyTeam}
             </div>
@@ -132,6 +193,7 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
         <div
           style={{
             fontSize: 22,
+            lineHeight: 1.2,
             letterSpacing: "0.4em",
             color: "#67e8f9",
             textTransform: "uppercase",
@@ -153,8 +215,8 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
         >
           {formatTime(data.totalMs)}
         </div>
-        {data.penaltyMs && data.penaltyMs > 0 ? (
-          <div style={{ fontSize: 24, color: "#fbbf24", marginTop: 8 }}>
+        {hasPenalty ? (
+          <div style={{ fontSize: 24, lineHeight: 1.2, color: "#fbbf24", marginTop: 8 }}>
             + {formatTime(data.penaltyMs)} penalty
           </div>
         ) : null}
@@ -165,6 +227,7 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
           <div
             style={{
               fontSize: 22,
+              lineHeight: 1.2,
               letterSpacing: "0.4em",
               color: "#67e8f9",
               textTransform: "uppercase",
@@ -174,27 +237,59 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
           >
             Station Splits
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {data.splits.map((s) => (
-              <div
-                key={s.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "16px 20px",
-                  borderRadius: 12,
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <span style={{ fontSize: 28, textTransform: "uppercase", fontWeight: 700 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
+              gridAutoRows: layout.rowH,
+              gap: GRID_GAP,
+            }}
+          >
+            {data.splits.slice(0, layout.shown).map((s) => (
+              <div key={s.id} style={cell}>
+                <span
+                  style={{
+                    fontSize: layout.labelPx,
+                    lineHeight: 1.2,
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                    // Long station names give way to an ellipsis rather than
+                    // pushing the time out of its cell.
+                    minWidth: 0,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
                   {s.label}
                 </span>
-                <span style={{ fontSize: 32, color: "#38bdf8", fontWeight: 800 }}>
+                <span
+                  style={{
+                    fontSize: layout.timePx,
+                    lineHeight: 1.2,
+                    color: "#38bdf8",
+                    fontWeight: 800,
+                    flexShrink: 0,
+                  }}
+                >
                   {formatTime(s.ms)}
                 </span>
               </div>
             ))}
+            {layout.hidden > 0 && (
+              <div style={{ ...cell, justifyContent: "center", color: "#94a3b8" }}>
+                <span
+                  style={{
+                    fontSize: layout.labelPx,
+                    lineHeight: 1.2,
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                  }}
+                >
+                  …and {layout.hidden} more
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -202,7 +297,12 @@ export const ResultCard = forwardRef<HTMLDivElement, { data: ResultCardData }>(f
       <div
         style={{
           marginTop: "auto",
+          height: FOOTER_H,
           fontSize: 20,
+          lineHeight: 1.2,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
           letterSpacing: "0.3em",
           color: "#64748b",
           textTransform: "uppercase",
