@@ -73,6 +73,9 @@ export function useCollectionTrophyWatcher() {
   // than state: flipping it must not itself cause a render, and it must survive
   // the one the seed write fans out.
   const primedRef = useRef(false);
+  const previous = useRef<
+    { participantId: string | null; rows: CollectionTrophy[] | undefined } | undefined
+  >(undefined);
 
   useEffect(() => {
     const supabase = browserSupabase();
@@ -117,7 +120,25 @@ export function useCollectionTrophyWatcher() {
     // primed at all, and the claim that banks their finished set through
     // claim_guest_secrets WAS the priming pass that swallowed it: the set was
     // complete and nothing marked it, on the one path where it is most earned.
-    if (!identity || !rows) return;
+    if (
+      !identity ||
+      (participantId ? identity !== `m:${participantId}` : !identity.startsWith("d:"))
+    )
+      return;
+
+    // Capture the last list seen under the previous identity. Rows that arrive
+    // with or after a claim may include a newly banked trophy and must still fire.
+    const prior = previous.current;
+    const identityChanged = prior !== undefined && prior.participantId !== participantId;
+    const historicalKeys = new Set(
+      identityChanged && participantId
+        ? (prior.rows ?? [])
+            .filter((t) => t.participantId === participantId)
+            .map((t) => trophyKey(participantId, t.collection))
+        : [],
+    );
+    previous.current = { participantId, rows: rows ?? prior?.rows };
+    if (!rows) return;
 
     if (!seen.primed && !primedRef.current) {
       // First run on this device: absorb what is already there and say nothing.
@@ -133,12 +154,22 @@ export function useCollectionTrophyWatcher() {
       return;
     }
 
-    if (!participantId || fresh.length === 0) return;
+    if (!participantId) return;
+    const historical = fresh.filter((t) =>
+      historicalKeys.has(trophyKey(participantId, t.collection)),
+    );
+    const arriving = fresh.filter(
+      (t) => !historicalKeys.has(trophyKey(participantId, t.collection)),
+    );
+    if (historical.length) {
+      markTrophiesCelebrated(historical.map((t) => trophyKey(participantId, t.collection)));
+    }
+    if (arriving.length === 0) return;
     // Marked before it is shown, not after. The host can be unmounted by a
     // navigation mid-ceremony, and a trophy that fires forever because nobody
     // dismissed it is worse than one somebody scrolled past.
-    markTrophiesCelebrated(fresh.map((t) => trophyKey(participantId, t.collection)));
-    setQueue((q) => [...q, ...fresh]);
+    markTrophiesCelebrated(arriving.map((t) => trophyKey(participantId, t.collection)));
+    setQueue((q) => [...q, ...arriving]);
   }, [identity, participantId, rows, fresh, seen]);
 
   return {
