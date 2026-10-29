@@ -1176,7 +1176,7 @@ function PlayersPage() {
           different things, so they stay separate states rather than one shrug. */}
       {rosterFailed ? (
         <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
-          <p>Couldn't read the roster just now.</p>
+          <p>Couldn&apos;t read the roster just now.</p>
           <button
             type="button"
             className="neon-btn-sm"

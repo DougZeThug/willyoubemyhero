@@ -196,7 +196,7 @@ describe("the vault's summary line", () => {
   });
 
   it("reports a failed roster read without a zero count and allows a retry", async () => {
-    const refetch = vi.fn().mockResolvedValue(undefined);
+    const refetch = vi.fn().mockResolvedValue(null);
     useEventBundle.mockReturnValue(
       settledBundle({
         bundle: makeBundle({ participants: [], failed: ["event_participants"] }),
