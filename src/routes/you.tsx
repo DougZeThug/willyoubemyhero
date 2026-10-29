@@ -281,7 +281,9 @@ function YouPage() {
                 <button
                   type="button"
                   className="neon-btn-sm mt-2"
-                  onClick={() => void streakQuery.refetch()}
+                  onClick={() => {
+                    streakQuery.refetch();
+                  }}
                 >
                   Try again
                 </button>

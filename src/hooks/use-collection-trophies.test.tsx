@@ -172,7 +172,9 @@ describe("useCollectionTrophyWatcher", () => {
       rerender();
     });
     await waitFor(() => expect(result.current.queue.map((t) => t.collection)).toEqual(["wags"]));
-    expect(JSON.parse(window.localStorage.getItem("wwbh:trophy-seen")!).ids).toEqual(
+    const saved = window.localStorage.getItem("wwbh:trophy-seen");
+    expect(saved).not.toBeNull();
+    expect(JSON.parse(saved ?? "{}").ids).toEqual(
       expect.arrayContaining([trophyKey(ME, "pets"), trophyKey(ME, "wags")]),
     );
   });

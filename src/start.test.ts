@@ -10,7 +10,8 @@ describe("global Supabase auth middleware", () => {
   async function invokeMiddleware() {
     const { startInstance } = await import("./start");
     const { functionMiddleware } = await startInstance.getOptions();
-    const client = functionMiddleware![0].options.client!;
+    const client = functionMiddleware?.[0]?.options.client;
+    if (!client) throw new Error("Global auth middleware is missing its client handler");
     const next = vi.fn().mockResolvedValue({});
     await client({ next } as unknown as Parameters<typeof client>[0]);
     return next;
@@ -27,7 +28,7 @@ describe("global Supabase auth middleware", () => {
         },
       ),
     }));
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     const next = await invokeMiddleware();
     expect(next).toHaveBeenCalledOnce();

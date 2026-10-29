@@ -1177,7 +1177,13 @@ function PlayersPage() {
       {rosterFailed ? (
         <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
           <p>Couldn't read the roster just now.</p>
-          <button type="button" className="neon-btn-sm" onClick={() => void refetch()}>
+          <button
+            type="button"
+            className="neon-btn-sm"
+            onClick={() => {
+              refetch();
+            }}
+          >
             Try again
           </button>
         </div>

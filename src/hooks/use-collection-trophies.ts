@@ -73,9 +73,10 @@ export function useCollectionTrophyWatcher() {
   // than state: flipping it must not itself cause a render, and it must survive
   // the one the seed write fans out.
   const primedRef = useRef(false);
-  const previous = useRef<
-    { participantId: string | null; rows: CollectionTrophy[] | undefined } | undefined
-  >(undefined);
+  const previous = useRef<{
+    participantId: string | null;
+    rows: CollectionTrophy[] | undefined;
+  } | null>(null);
 
   useEffect(() => {
     const supabase = browserSupabase();
@@ -129,7 +130,7 @@ export function useCollectionTrophyWatcher() {
     // Capture the last list seen under the previous identity. Rows that arrive
     // with or after a claim may include a newly banked trophy and must still fire.
     const prior = previous.current;
-    const identityChanged = prior !== undefined && prior.participantId !== participantId;
+    const identityChanged = prior !== null && prior.participantId !== participantId;
     const historicalKeys = new Set(
       identityChanged && participantId
         ? (prior.rows ?? [])
