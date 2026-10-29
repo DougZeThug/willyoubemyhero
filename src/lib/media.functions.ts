@@ -108,10 +108,11 @@ export const getEventPhotoUrls = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const sb = publicClient();
-    const { data: eps } = await sb
+    const { data: eps, error } = await sb
       .from("event_participants")
       .select("id, photo_path, photo_path_thumb, photo_path_medium")
       .eq("event_id", data.eventId);
+    if (error) throw error;
     const rows = (eps ?? []).filter((r) => !!r.photo_path);
     if (rows.length === 0) return {} as SizedPhotoUrls;
     const out: SizedPhotoUrls = {};
@@ -282,7 +283,7 @@ export const getEventCardUrls = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const sb = publicClient();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ data: eps }, { data: event }] = await Promise.all([
+    const [{ data: eps, error: epsError }, { data: event, error: eventError }] = await Promise.all([
       sb
         .from("event_participants")
         .select(
@@ -295,6 +296,8 @@ export const getEventCardUrls = createServerFn({ method: "GET" })
         .eq("id", data.eventId)
         .maybeSingle(),
     ]);
+    if (epsError) throw epsError;
+    if (eventError) throw eventError;
 
     const universalPaths = {
       thumb: event?.card_back_path_thumb ?? null,
@@ -338,11 +341,12 @@ export const getEventCardBack = createServerFn({ method: "GET" })
   .validator((d: unknown) => z.object({ eventId: zuuid() }).parse(d))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: event } = await supabaseAdmin
+    const { data: event, error } = await supabaseAdmin
       .from("events")
       .select("card_back_path, card_back_path_thumb, card_back_path_medium")
       .eq("id", data.eventId)
       .maybeSingle();
+    if (error) throw error;
     if (!event?.card_back_path)
       return { urls: { thumb: null, medium: null, large: null } as ImageUrlSet };
     return {

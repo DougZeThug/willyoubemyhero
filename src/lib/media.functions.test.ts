@@ -70,6 +70,13 @@ beforeEach(() => {
 });
 
 describe("signed url cache", () => {
+  it("rejects a failed photo lookup instead of returning an empty roster", async () => {
+    withDb({ "event_participants.select": { error: { message: "photo read failed" } } });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.getEventPhotoUrls, { data: { eventId: EVENT_ID } }),
+    ).rejects.toMatchObject({ message: "photo read failed" });
+  });
   it("hands back the same url set for the same object", async () => {
     // A fresh token per call is what made 30 full-size images re-download on
     // every refetch: the browser had never seen the URL before.
@@ -206,6 +213,20 @@ describe("signed url cache", () => {
 });
 
 describe("getEventCardUrls", () => {
+  it.each(["event_participants.select", "events.select"])(
+    "rejects a failed %s read instead of returning partial artwork",
+    async (failedRead) => {
+      withDb({
+        "event_participants.select": { data: [] },
+        "events.select": { data: null },
+        [failedRead]: { error: { message: "card read failed" } },
+      });
+      const mod = await freshModule();
+      await expect(
+        callServerFn(mod.getEventCardUrls, { data: { eventId: EVENT_ID } }),
+      ).rejects.toMatchObject({ message: "card read failed" });
+    },
+  );
   it("prefers a player's own back over the event's universal one", async () => {
     const signer = signingCounter();
     withDb({
@@ -571,6 +592,13 @@ describe("uploadParticipantCardsBulk", () => {
 });
 
 describe("getEventCardBack", () => {
+  it("rejects a failed event lookup instead of reporting no back", async () => {
+    withDb({ "events.select": { error: { message: "back read failed" } } });
+    const mod = await freshModule();
+    await expect(
+      callServerFn(mod.getEventCardBack, { data: { eventId: EVENT_ID } }),
+    ).rejects.toMatchObject({ message: "back read failed" });
+  });
   it("returns null urls when the event has no universal back", async () => {
     withDb({ "events.select": { data: { card_back_path: null } } });
     const mod = await freshModule();
