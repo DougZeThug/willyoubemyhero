@@ -18,6 +18,7 @@ import { WAS_MEMBER_KEY } from "@/lib/member-token";
 const useMemberSession = vi.fn();
 const useActiveEvent = vi.fn();
 const useStreakStatus = vi.fn();
+const useSecretActor = vi.fn();
 const useQuery = vi.fn();
 const requestGyroAccess = vi.fn();
 const useMyCollection = vi.fn();
@@ -60,7 +61,7 @@ const settledBundle = (over: Record<string, unknown> = {}) => ({
 
 vi.mock("@/hooks/use-active-event", () => ({ useActiveEvent: () => useActiveEvent() }));
 vi.mock("@/hooks/use-daily-secret", () => ({
-  useSecretActor: () => "m:me",
+  useSecretActor: () => useSecretActor(),
   useMySecrets: () => ({ data: { cards: [], pulled: 2 } }),
 }));
 vi.mock("@/hooks/use-secret-collections", () => ({ useSecretCollections: () => undefined }));
@@ -147,6 +148,7 @@ beforeEach(() => {
   useMemberSession.mockReturnValue({ participantId: "p-me", name: "Bob Blitz", expiresAt: 0, token: "t" }); // prettier-ignore
   useActiveEvent.mockReturnValue({ data: { id: EVENT_ID, dust_enabled: false } });
   useStreakStatus.mockReturnValue({ data: streak, isPending: false });
+  useSecretActor.mockReturnValue("m:me");
   useQuery.mockReturnValue({ data: [], isPending: false });
   requestGyroAccess.mockResolvedValue("granted");
   setCardSfxMuted(false);
@@ -297,6 +299,34 @@ describe("/you", () => {
     for (const m of STREAK_MILESTONES) {
       expect(screen.getByText(m.label)).toBeInTheDocument();
     }
+  });
+
+  it("waits for the streak status instead of reporting an empty streak", () => {
+    useStreakStatus.mockReturnValue({ data: undefined, isPending: true, isError: false });
+    render(<YouPage />);
+    expect(screen.getByText("Reading your streak…")).toBeInTheDocument();
+    expect(screen.queryByText(/open a pack to start a streak/i)).not.toBeInTheDocument();
+  });
+
+  it("reports a failed streak read and lets the player retry", async () => {
+    const refetch = vi.fn();
+    useStreakStatus.mockReturnValue({ data: undefined, isPending: false, isError: true, refetch });
+    render(<YouPage />);
+    expect(screen.getByText("Could not read your streak.")).toBeInTheDocument();
+    expect(screen.queryByText(/open a pack to start a streak/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("shows the empty state for a settled zero or when there is no actor", () => {
+    useStreakStatus.mockReturnValue({ data: { ...streak, current: 0 }, isPending: false });
+    const { rerender } = render(<YouPage />);
+    expect(screen.getByText(/open a pack to start a streak/i)).toBeInTheDocument();
+    useSecretActor.mockReturnValue(null);
+    useStreakStatus.mockReturnValue({ data: undefined, isPending: true });
+    rerender(<YouPage />);
+    expect(screen.getByText(/open a pack to start a streak/i)).toBeInTheDocument();
+    expect(screen.queryByText("Reading your streak…")).not.toBeInTheDocument();
   });
 
   it("mutes the sound from here", async () => {
