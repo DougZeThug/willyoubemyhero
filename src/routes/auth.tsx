@@ -63,6 +63,20 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const googleRedirected = useRef(false);
+
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      setBusy(false);
+      if (googleRedirected.current) {
+        googleRedirected.current = false;
+        stashAuthNext(null);
+      }
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   /**
    * Whether this visit is a sign-in round trip rather than somebody opening
@@ -121,34 +135,38 @@ function AuthPage() {
 
   async function signInWithGoogle() {
     setBusy(true);
-    preserveAccountHandoff();
-    // The return URL is bare `/auth` and has to stay that way — it is matched
-    // against a redirect allow-list, not composed per destination — so where
-    // this person was headed waits on the device instead.
-    //
-    // Written BEFORE the call, because the browser may leave during it and
-    // there is no "after" on that path. Which makes the rule for the ones that
-    // come back: the stash is earned by actually leaving, and every path that
-    // returns to this still-mounted page has to put it down again. `goTo` is
-    // already in state, so clearing costs this page nothing — and a stash that
-    // outlived its trip is one that fires on the next bare /auth and bounces
-    // somebody straight off their own account screen.
-    stashAuthNext(goTo);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/auth`,
-    });
-    if (result.error) {
+    let redirected = false;
+    try {
+      preserveAccountHandoff();
+      // The return URL is bare `/auth` and has to stay that way — it is matched
+      // against a redirect allow-list, not composed per destination — so where
+      // this person was headed waits on the device instead.
+      //
+      // Written BEFORE the call, because the browser may leave during it and
+      // there is no "after" on that path. Which makes the rule for the ones that
+      // come back: the stash is earned by actually leaving, and every path that
+      // returns to this still-mounted page has to put it down again. `goTo` is
+      // already in state, so clearing costs this page nothing — and a stash that
+      // outlived its trip is one that fires on the next bare /auth and bounces
+      // somebody straight off their own account screen.
+      stashAuthNext(goTo);
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: `${window.location.origin}/auth`,
+      });
+      if (result.error) throw result.error;
+      // Keep the stash and busy state until the browser leaves. A bfcache
+      // restore clears both because that round trip was cancelled.
+      redirected = Boolean(result.redirected);
+      googleRedirected.current = redirected;
+      if (!redirected) stashAuthNext(null);
+    } catch (err) {
       stashAuthNext(null);
-      setBusy(false);
-      toast.error("Google sign-in didn't work", { description: result.error.message });
-      return;
+      toast.error("Google sign-in didn't work", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      if (!redirected) setBusy(false);
     }
-    // Gone. The stash is the only thing that carries the destination back.
-    if (result.redirected) return;
-    // Signed in without leaving — the provider handed back tokens and they were
-    // set here. Nothing will ever come back to consume this.
-    stashAuthNext(null);
-    setBusy(false);
   }
 
   async function submit(e: React.FormEvent) {

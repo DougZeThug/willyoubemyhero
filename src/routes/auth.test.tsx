@@ -7,12 +7,13 @@
 // held on the device across the round trip. "Sign in to claim" spent its whole
 // life landing people on the vault instead of on the rung it named.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import AuthPage from "./auth";
 import { setAccountSyncState } from "@/lib/account-sync-state";
 import { stashAuthNext, takeAuthNext } from "@/lib/auth-next";
+import { toast } from "sonner";
 
 const search = vi.fn();
 const navigate = vi.fn();
@@ -116,6 +117,37 @@ describe("leaving for an auth round trip", () => {
     await userEvent.click(screen.getByRole("button", { name: /continue with google/i }));
 
     await waitFor(() => expect(signInWithOAuth).toHaveBeenCalled());
+    expect(takeAuthNext()).toBeUndefined();
+  });
+
+  it("restores the controls and clears the abandoned destination after Back", async () => {
+    search.mockReturnValue({ next: "/players/pack" });
+    render(<AuthPage />);
+    const google = screen.getByRole("button", { name: /continue with google/i });
+    const submit = screen.getByRole("button", { name: /^sign in$/i });
+    await userEvent.click(google);
+    await waitFor(() => expect(google).toBeDisabled());
+    expect(submit).toBeDisabled();
+
+    act(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: false })));
+    expect(google).toBeDisabled();
+    act(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+    expect(google).toBeEnabled();
+    expect(submit).toBeEnabled();
+    expect(takeAuthNext()).toBeUndefined();
+  });
+
+  it("recovers and reports an unexpected OAuth rejection", async () => {
+    search.mockReturnValue({ next: "/players/pack" });
+    signInWithOAuth.mockRejectedValue(new Error("connection failed"));
+    render(<AuthPage />);
+    const google = screen.getByRole("button", { name: /continue with google/i });
+    await userEvent.click(google);
+    await waitFor(() => expect(google).toBeEnabled());
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeEnabled();
+    expect(toast.error).toHaveBeenCalledWith("Google sign-in didn't work", {
+      description: "connection failed",
+    });
     expect(takeAuthNext()).toBeUndefined();
   });
 

@@ -7,7 +7,7 @@
 // neither may fire for a set the pack or trade screen has already celebrated
 // with its own, better-timed reveal.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createQueryWrapper } from "@/test/query";
 import type { CollectionTrophy } from "@/lib/collection-trophies";
 
@@ -151,6 +151,48 @@ describe("useCollectionTrophyWatcher", () => {
     const member = watch([trophy(ME, "pets")]);
     await waitFor(() => expect(member.result.current.queue).toHaveLength(1));
     expect(member.result.current.queue[0]).toMatchObject({ collection: "pets" });
+  });
+
+  it("absorbs the existing shelf on a mid-session claim but celebrates newly banked trophies", async () => {
+    memberSession.mockReturnValue(null);
+    packIdentity.mockReturnValue("d:device-1");
+    serverFnMock.mockResolvedValue({ trophies: [trophy(ME, "pets")] });
+    const { wrapper, client } = createQueryWrapper();
+    const { result, rerender } = renderHook(() => useCollectionTrophyWatcher(), { wrapper });
+    await waitFor(() =>
+      expect(window.localStorage.getItem("wwbh:trophy-seen")).toContain('"primed":true'),
+    );
+
+    act(() => {
+      memberSession.mockReturnValue({ participantId: ME });
+      packIdentity.mockReturnValue(`m:${ME}`);
+      client.setQueryData(["collection-trophies"], {
+        trophies: [trophy(ME, "pets"), trophy(ME, "wags")],
+      });
+      rerender();
+    });
+    await waitFor(() => expect(result.current.queue.map((t) => t.collection)).toEqual(["wags"]));
+    const saved = window.localStorage.getItem("wwbh:trophy-seen");
+    expect(saved).not.toBeNull();
+    expect(JSON.parse(saved ?? "{}").ids).toEqual(
+      expect.arrayContaining([trophyKey(ME, "pets"), trophyKey(ME, "wags")]),
+    );
+  });
+
+  it("absorbs another member's existing shelf when the participant changes", async () => {
+    setTrophySeen({ primed: true, ids: [trophyKey(ME, "pets")] });
+    const { result, rerender } = watch([trophy(ME, "pets"), trophy(THEM, "wags")]);
+    await waitFor(() => expect(serverFnMock).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.queue).toEqual([]));
+    act(() => {
+      memberSession.mockReturnValue({ participantId: THEM });
+      packIdentity.mockReturnValue(`m:${THEM}`);
+      rerender();
+    });
+    await waitFor(() =>
+      expect(window.localStorage.getItem("wwbh:trophy-seen")).toContain(trophyKey(THEM, "wags")),
+    );
+    expect(result.current.queue).toEqual([]);
   });
 
   it("does not replay a set the guest already celebrated before claiming", async () => {

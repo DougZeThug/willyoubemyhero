@@ -195,16 +195,42 @@ describe("the vault's summary line", () => {
     expect(screen.queryByText(/Roster \d+ \/ \d+/)).toBeNull();
   });
 
-  it("stays blank when the roster table failed to read", () => {
+  it("reports a failed roster read without a zero count and allows a retry", async () => {
+    const refetch = vi.fn().mockResolvedValue(null);
     useEventBundle.mockReturnValue(
       settledBundle({
         bundle: makeBundle({ participants: [], failed: ["event_participants"] }),
         failedTables: ["event_participants"],
+        refetch,
       }),
     );
     render(<PlayersPage />);
     expect(screen.queryByText(/Roster \d+ \/ \d+/)).toBeNull();
+    const shelf = screen.getByRole("heading", { name: "Roster" }).closest("section");
+    if (!shelf) throw new Error("Roster shelf has no section");
+    expect(within(shelf).getByText("Couldn't read the roster just now.")).toBeInTheDocument();
+    expect(within(shelf).queryByText("No participants yet.")).not.toBeInTheDocument();
+    expect(within(shelf).queryByText("0")).not.toBeInTheDocument();
+    await userEvent.click(within(shelf).getByRole("button", { name: "Try again" }));
+    expect(refetch).toHaveBeenCalledOnce();
   });
+
+  it.each([[[]], [["runs"]]])(
+    "shows a genuinely empty roster when failed tables are %s",
+    (failedTables) => {
+      useEventBundle.mockReturnValue(
+        settledBundle({
+          bundle: makeBundle({ participants: [], failed: failedTables }),
+          failedTables,
+        }),
+      );
+      render(<PlayersPage />);
+      const shelf = screen.getByRole("heading", { name: "Roster" }).closest("section");
+      if (!shelf) throw new Error("Roster shelf has no section");
+      expect(within(shelf).getByText("No participants yet.")).toBeInTheDocument();
+      expect(within(shelf).getByText("0")).toBeInTheDocument();
+    },
+  );
 
   it("stays blank when the whole bundle failed", () => {
     useEventBundle.mockReturnValue(

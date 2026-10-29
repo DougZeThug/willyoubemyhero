@@ -29,6 +29,25 @@ beforeEach(() => {
   getEventPhotoUrls.mockReset().mockResolvedValue({});
 });
 
+it.each(["card", "photo"] as const)(
+  "keeps the last %s snapshot and its timestamp after a failed refresh",
+  async (kind) => {
+    const key = `wwbh:v2:${kind}-urls:${EVENT_ID}`;
+    const snapshot = JSON.stringify({ at: Date.now() - 60_000, data: { "ep-1": "cached" } });
+    window.localStorage.setItem(key, snapshot);
+    (kind === "card" ? getEventCardUrls : getEventPhotoUrls).mockRejectedValue(
+      new Error("offline"),
+    );
+    const hooks = await import("./use-photo-urls");
+    const useUrls = kind === "card" ? hooks.useEventCardUrls : hooks.useEventPhotoUrls;
+    const { wrapper } = createQueryWrapper();
+    const { result } = renderHook(() => useUrls(EVENT_ID), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toEqual({ "ep-1": "cached" });
+    expect(window.localStorage.getItem(key)).toBe(snapshot);
+  },
+);
+
 describe("useEventCardUrls", () => {
   it("does not fetch without an event id", async () => {
     const { useEventCardUrls } = await import("./use-photo-urls");

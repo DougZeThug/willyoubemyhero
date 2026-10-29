@@ -215,6 +215,7 @@ function PlayersPage() {
     loading: eventLoading,
     failedTables,
     realtimeDegraded,
+    refetch,
   } = useEventBundle();
   const eventId = idOf(event);
   const cards = useEventCardUrls(eventId);
@@ -353,6 +354,7 @@ function PlayersPage() {
    * moment both queries have settled, however they settled.
    */
   const shelfWaiting = !ready || eventLoading;
+  const rosterFailed = failedTables.includes("event_participants");
 
   /**
    * Whether a slot renders face-down — and the only thing the rarity sort is
@@ -611,11 +613,22 @@ function PlayersPage() {
         // Off the FILTER and not off the two lengths. "Owned" while you own
         // everything matches every card, and a bare count there would read as
         // the whole shelf while a filter was quietly on.
-        meta:
-          filter === "all" ? rosterRows.length : `${rosterRows.length} of ${unpinnedRows.length}`,
+        meta: rosterFailed
+          ? undefined
+          : filter === "all"
+            ? rosterRows.length
+            : `${rosterRows.length} of ${unpinnedRows.length}`,
       },
     ],
-    [favourites, myTrophies, rosterRows.length, unpinnedRows.length, filter, secretGroups],
+    [
+      favourites,
+      myTrophies,
+      rosterRows.length,
+      unpinnedRows.length,
+      filter,
+      secretGroups,
+      rosterFailed,
+    ],
   );
 
   const presentIds = useMemo(() => sections.map((x) => x.id), [sections]);
@@ -1153,7 +1166,7 @@ function PlayersPage() {
 
   const renderRosterBody = () => (
     <>
-      {/* Four states, in the order they can be true. Placeholders come first and
+      {/* A failed roster read is not an empty roster. Placeholders otherwise
           cover the wait `shelfWaiting` describes above — every slot face-down
           because the answer is not in yet rather than because the card is
           unpulled; drawing the backs through it and popping the owned ones open
@@ -1161,7 +1174,20 @@ function PlayersPage() {
           empty roster, a roster whose every card is pinned upstairs and a filter
           that matched nothing look identical in the markup and mean three
           different things, so they stay separate states rather than one shrug. */}
-      {shelfWaiting ? (
+      {rosterFailed ? (
+        <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
+          <p>Couldn&apos;t read the roster just now.</p>
+          <button
+            type="button"
+            className="neon-btn-sm"
+            onClick={() => {
+              refetch();
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      ) : shelfWaiting ? (
         <>
           <p role="status" className="sr-only">
             Counting your collection…

@@ -164,6 +164,8 @@ function YouPage() {
   const dust = useDustBalance(dustHolder(dustOn, member));
 
   const streakQuery = useStreakStatus(actor);
+  const streakPending = Boolean(actor) && streakQuery.isPending && !streakQuery.data;
+  const streakFailed = Boolean(actor) && streakQuery.isError && !streakQuery.data;
   const history = useStreakHistory(actor);
 
   const secrets = useMySecrets(actor);
@@ -271,11 +273,28 @@ function YouPage() {
 
           <section>
             <SectionTitle label="Streak" />
-            <StreakLadder
-              streak={streakQuery.data}
-              history={history.data ?? []}
-              historyLoading={historyLoading(history.isPending, actor)}
-            />
+            {streakPending ? (
+              <p className="text-sm text-muted-foreground">Reading your streak…</p>
+            ) : streakFailed ? (
+              <div>
+                <p className="text-sm text-muted-foreground">Could not read your streak.</p>
+                <button
+                  type="button"
+                  className="neon-btn-sm mt-2"
+                  onClick={() => {
+                    streakQuery.refetch();
+                  }}
+                >
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <StreakLadder
+                streak={actor ? streakQuery.data : undefined}
+                history={history.data ?? []}
+                historyLoading={historyLoading(history.isPending, actor)}
+              />
+            )}
           </section>
 
           <section>
