@@ -1,7 +1,7 @@
 // The spectator screen behind the QR code, where the Top 5 and the done counter
 // sit one above the other and must agree.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import LivePage from "./live";
 import { ACTIVE_RUN_VERSION } from "@/lib/active-run";
@@ -27,13 +27,20 @@ vi.mock("@/hooks/use-run-console", () => ({ useRunConsole: () => useRunConsole()
 vi.mock("@/lib/admin-token", () => ({ useAdminSession: () => useAdminSession() }));
 vi.mock("@/hooks/use-account", () => ({ useAuthUser: () => ({ user: null, loading: false }) }));
 vi.mock("@/components/hud-timer", () => ({
-  HudTimer: (props: { paused: boolean; status: string; runningSinceMs: number }) => (
+  HudTimer: (props: {
+    paused: boolean;
+    status: string;
+    runningSinceMs: number;
+    children: ReactNode;
+  }) => (
     <div
       data-stub="hud-timer"
       data-paused={String(props.paused)}
       data-status={props.status}
       data-base={String(props.runningSinceMs)}
-    />
+    >
+      {props.children}
+    </div>
   ),
 }));
 vi.mock("@/components/finish-celebration", () => ({
@@ -202,6 +209,48 @@ describe("LivePage when the runs read fails", () => {
 
 describe("LivePage crowd clock", () => {
   const ring = () => document.querySelector('[data-stub="hud-timer"]') as HTMLElement;
+
+  it("keeps the official clock without showing the crowd athlete when the timed row disappears", () => {
+    const timed = makeParticipant({
+      participation_status: "queued",
+      participant: { id: "p-timed", name: "Timed Taylor", nickname: null },
+    });
+    const crowd = makeParticipant({
+      participation_status: "running",
+      on_clock_since: new Date(Date.now() - 5_000).toISOString(),
+      participant: { id: "p-crowd", name: "Crowd Casey", nickname: null },
+    });
+    showBundle({ participants: [timed, crowd], runs: [] });
+    useAdminSession.mockReturnValue({ eventId: EVENT_ID });
+    const adminRun = {
+      v: ACTIVE_RUN_VERSION,
+      clientKey: "ck-deleted",
+      eventId: EVENT_ID,
+      participantId: timed.participant_id,
+      startedAtIso: new Date().toISOString(),
+      startedAt: Date.now() - 10_000,
+      status: "running",
+      pauses: [],
+      splits: [],
+      penalties: [],
+    };
+    useRunConsole.mockReturnValue({ run: adminRun, currentEp: timed });
+    const { rerender } = render(<LivePage />);
+    const hero = ring().parentElement as HTMLElement;
+    expect(within(hero).getByRole("link", { name: "Timed Taylor" })).toBeInTheDocument();
+
+    showBundle({ participants: [crowd], runs: [] });
+    useRunConsole.mockReturnValue({ run: adminRun, currentEp: null });
+    rerender(<LivePage />);
+    expect(ring().dataset.paused).toBe("false");
+    expect(ring().dataset.status).toBe("Running");
+    expect(within(hero).getByText("Timed athlete unavailable.")).toBeInTheDocument();
+    expect(within(hero).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(hero).queryByText("Crowd Casey")).not.toBeInTheDocument();
+    expect(within(ring()).queryByText("CC")).not.toBeInTheDocument();
+    expect(ring().querySelector("img")).toBeNull();
+    expect(within(hero).queryByText("Unofficial")).not.toBeInTheDocument();
+  });
 
   it("holds the ring still when the athlete on the clock has no stamp to count from", () => {
     // participation_status says running but on_clock_since is null — a row put

@@ -264,7 +264,9 @@ function LiveHero({
   // is not.
   const onClockUnanchored = onClock && onClockElapsed === null;
 
-  const shown = timedEp ?? current;
+  // An active run owns the clock even if its roster row has disappeared.
+  // Never put the queue's athlete under someone else's official timer.
+  const shown = adminRun ? timedEp : current;
   const art = avatarFor(shown, cards, photos);
 
   return (
@@ -319,7 +321,9 @@ function LiveHero({
           )}
         </div>
       ) : (
-        <div className="mt-4 text-center text-xs text-muted-foreground">{emptyReason}</div>
+        <div className="mt-4 text-center text-xs text-muted-foreground">
+          {adminRun ? "Timed athlete unavailable." : emptyReason}
+        </div>
       )}
     </div>
   );
