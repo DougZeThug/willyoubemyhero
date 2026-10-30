@@ -95,6 +95,16 @@ test("stale gates (HEAD moved) block ready", () => {
   assert.match(run("set", id, "--status", "ready").stderr, /HEAD moved/);
 });
 
+test("committing only .factory/ files does not make gates stale", () => {
+  const { run, d, g } = repo();
+  const id = run("new", "t").stdout.trim();
+  run("gates", id);
+  run("set", id, "--review", "approve", "--reviewer", "r");
+  g("add", ".");
+  g("commit", "-qm", "record");
+  assert.equal(run("set", id, "--status", "ready").status, 0);
+});
+
 test("repair budget blocks the task after 3 failed attempts", () => {
   const { run } = repo();
   const id = run("new", "t").stdout.trim();

@@ -94,6 +94,13 @@ export function changedFiles(base) {
   ].filter(Boolean);
 }
 
+// Task records and evidence live under .factory/ and cannot change behaviour,
+// so committing them must not invalidate a passing gate run.
+export function codeChangedSince(gateHead, ref) {
+  const out = sh(`git diff --name-only ${gateHead} ${ref} -- . ':(exclude).factory'`);
+  return out === null ? true : out !== "";
+}
+
 const commands = {
   new(o) {
     const title = o._.join(" ").trim();
@@ -135,7 +142,7 @@ const commands = {
           die(
             `cannot mark ${s}: latest gate run ${last ? "failed" : "missing"}. Run: factory gates ${t.id}`,
           );
-        if (last.head !== sh("git rev-parse HEAD") && !o.force)
+        if (codeChangedSince(last.head, "HEAD") && !o.force)
           die("cannot mark ready: HEAD moved since the last passing gate run. Re-run gates.");
         if (t.kind !== "maintain" && !t.review)
           die(
@@ -275,7 +282,7 @@ const commands = {
       if (
         last &&
         bref &&
-        last.head !== sh(`git rev-parse ${bref}`) &&
+        codeChangedSince(last.head, bref) &&
         ["ready", "reviewing"].includes(t.status)
       )
         warn.push("gates are stale (branch moved since)");
