@@ -1,7 +1,7 @@
 // Run: node --test .claude/factory/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,6 +33,7 @@ function repo(extra = {}) {
   g("add", ".");
   g("commit", "-qm", "init");
   const run = (...a) => spawnSync("node", [CLI, ...a], { cwd: d, encoding: "utf8" });
+  run.d = d;
   return { d, g, run };
 }
 
@@ -103,6 +104,25 @@ test("committing only .factory/ files does not make gates stale", () => {
   g("add", ".");
   g("commit", "-qm", "record");
   assert.equal(run("set", id, "--status", "ready").status, 0);
+});
+
+test("gates do not clobber a record written while they ran", () => {
+  const { run } = repo({ gates: [{ name: "slow", cmd: "sleep 1" }] });
+  const id = run("new", "t").stdout.trim();
+  const p = spawn("node", [CLI, "gates", id], { cwd: run.d, stdio: "ignore" });
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      run("set", id, "--review", "approve", "--reviewer", "r");
+      p.on("exit", () => {
+        const rec = JSON.parse(
+          fs.readFileSync(path.join(run.d, ".factory/tasks", `${id}.json`), "utf8"),
+        );
+        assert.equal(rec.review?.verdict, "approve");
+        assert.equal(rec.gateRuns.length, 1);
+        resolve();
+      });
+    }, 300);
+  });
 });
 
 test("repair budget blocks the task after 3 failed attempts", () => {

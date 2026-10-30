@@ -233,14 +233,17 @@ const commands = {
       JSON.stringify(run, null, 2),
     );
     if (t) {
-      t.gateRuns.push({
+      // Re-read: gates run for minutes, and a review or note recorded meanwhile
+      // would be overwritten by the copy loaded at the start.
+      const fresh = load(t.id);
+      fresh.gateRuns.push({
         at: run.at,
         head: run.head,
         passed: run.passed,
         gates: run.results.map((x) => `${x.gate}:${x.ok ? "pass" : "FAIL"}`),
         skipped: run.skipped,
       });
-      save(t);
+      save(fresh);
     }
     console.log(run.passed ? "GATES PASS" : "GATES FAIL");
     if (run.skipped.length) console.log(`skipped (not relevant to diff): ${run.skipped}`);
