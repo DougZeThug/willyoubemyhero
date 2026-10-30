@@ -1,0 +1,39 @@
+name: Factory — maintenance audit
+
+# OPT-IN and MANUAL by default (workflow_dispatch). To make it recurring, uncomment
+# the schedule AFTER you have reviewed a manual run — it is a paid workload.
+on:
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: "Optional focus, e.g. dependencies"
+        required: false
+  # schedule:
+  #   - cron: "17 9 * * 1"   # Mondays 09:17 UTC
+
+concurrency:
+  group: factory
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    if: vars.FACTORY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: "1.3.11" }
+      - run: bun install --frozen-lockfile
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "/factory-maintain ${{ inputs.focus }}"
+          claude_args: --max-turns 80

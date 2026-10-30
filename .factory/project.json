@@ -1,0 +1,43 @@
+{
+  "name": "willyoubemyhero",
+  "baseBranch": "main",
+  "maxActiveTasks": 1,
+  "maxRepairAttempts": 3,
+  "gates": [
+    { "name": "lint", "cmd": "bun run lint" },
+    { "name": "typecheck", "cmd": "bun run typecheck" },
+    { "name": "unit", "cmd": "bun run test" },
+    { "name": "db", "cmd": "bun run test:db", "paths": ["^supabase/", "^tests/db/"] },
+    {
+      "name": "build",
+      "cmd": "bun run build",
+      "paths": ["^src/", "^vite\\.config", "^package\\.json"]
+    }
+  ],
+  "deferredToCI": ["bun run test:e2e (CLAUDE.md: CI only, never locally)"],
+  "protectedPaths": [
+    "^AGENTS\\.md$",
+    "^\\.lovable/",
+    "^src/routeTree\\.gen\\.ts$",
+    "^src/integrations/supabase/",
+    "^src/components/ui/",
+    "^public/",
+    "^\\.env"
+  ],
+  "protectedNote": "Generated or Lovable-managed (see CLAUDE.md). Artwork in public/ is never deleted.",
+  "blockedBashPatterns": [
+    "git\\s+push\\b.*(--force|-f\\b|--force-with-lease)",
+    "git\\s+push\\b[^;&|]*[\\s:](main|master)(\\s|$)",
+    "git\\s+(reset\\s+--hard\\s+origin|rebase|commit\\s+--amend)",
+    "supabase\\s+(db\\s+push|migration\\s+up|db\\s+reset)",
+    "\\b(wrangler|vercel)\\s+(deploy|publish|--prod)",
+    "rm\\s+-rf?\\s+(/|~|\\.\\s*$)"
+  ],
+  "domainAgents": {
+    "economy/rarity/packs/trading/schema": "game-economy, collection-trading, backend-data, card-content-systems, skeptic (see hero-lead skill)",
+    "screens (Vault/Pack/Trade/League/You)": "product-mobile-ux"
+  },
+  "visual": {
+    "note": "e2e is CI-only here. Screenshots come from CI artifacts or a phone; factory-qa reports visual checks as PARTIAL unless it has real evidence."
+  }
+}
