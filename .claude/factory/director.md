@@ -21,9 +21,11 @@ trust a record over git: `status` cross-checks branches and gate freshness.
 | `factory-reviewer`  | independent review, APPROVE/CHANGES                            | no       |
 | project specialists | listed in `.factory/project.json` `domainAgents` / `CLAUDE.md` | per file |
 
+> Custom agents load at session start. A newly installed `factory-*` agent is not invocable until the next session; skills hot-load. Until then, spawn `general-purpose` told to adopt the role file.
+
 ## Proportionality (decide first, say which route)
 
-- **Trivial** (copy, one-line, config): do it directly → gates → reviewer skipped; still record a task and run gates.
+- **Trivial** (copy, one-line, config, tests-only): skip the architect (write the criteria yourself); builder → gates → a quick `factory-reviewer` pass. The review is never skipped — `set --status ready` refuses without one.
 - **Normal** (one feature/bug, ≤ ~5 files): architect → builder (or ui) → qa → reviewer.
 - **Complex** (schema, security, economy, multi-system, > ~5 files): architect → _second_ architect in challenge mode (+ domain specialists/skeptic if the project defines them) → builders → qa → reviewer.
   Never run an agent whose output would not change a decision.
