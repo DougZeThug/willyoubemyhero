@@ -93,6 +93,39 @@ describe("parseTime over a minute", () => {
   });
 });
 
+describe("parseTime documented input forms", () => {
+  it("accepts the colon and plain-seconds forms", () => {
+    expect(parseTime("1:23.45")).toBe(83_450);
+    expect(parseTime("83.45")).toBe(83_450);
+    expect(parseTime("83")).toBe(83_000);
+    expect(parseTime("1:23")).toBe(83_000);
+  });
+
+  it("trims whitespace and treats blank input as unreadable", () => {
+    // Pasted or autofilled values arrive with stray spaces around them.
+    expect(parseTime("  1:23.45  ")).toBe(83_450);
+    expect(parseTime("")).toBeNull();
+    expect(parseTime("   ")).toBeNull();
+  });
+
+  it("returns null for input it cannot read", () => {
+    expect(parseTime("abc")).toBeNull();
+    expect(parseTime("1:2:3")).toBeNull();
+    expect(parseTime("-5")).toBeNull();
+    expect(parseTime(".5")).toBeNull();
+    // An explicit minutes part caps the seconds at 59.
+    expect(parseTime("1:60")).toBeNull();
+  });
+
+  it("returns 0, not null, for zero forms", () => {
+    // A zero penalty is legitimate; null would read as "nothing entered" and
+    // 0 is falsy, so callers must compare against null explicitly.
+    expect(parseTime("0")).toBe(0);
+    expect(parseTime("0:00")).toBe(0);
+    expect(parseTime("0.00")).toBe(0);
+  });
+});
+
 describe("initialsOf", () => {
   it("takes the first letter of the first two words", () => {
     expect(initialsOf("Doug Weidensaul")).toBe("DW");
