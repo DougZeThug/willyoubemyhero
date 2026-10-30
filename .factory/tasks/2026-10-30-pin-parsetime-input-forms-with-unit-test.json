@@ -2,7 +2,7 @@
   "id": "2026-10-30-pin-parsetime-input-forms-with-unit-test",
   "title": "Pin parseTime input forms with unit tests",
   "kind": "build",
-  "status": "verifying",
+  "status": "ready",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-10-30T19:37:33.152Z",
   "acceptance": [
@@ -13,20 +13,63 @@
     "src/lib/format.ts is unchanged (git diff)"
   ],
   "repairs": [],
-  "gateRuns": [],
-  "interventions": 0,
-  "nextAction": "qa + reviewer",
-  "notes": [
+  "gateRuns": [
     {
-      "at": "2026-10-30T19:39:32.535Z",
-      "text": "Reviewer traced all 4 criteria against format.ts; no findings"
+      "at": "2026-10-30T19:39:09.579Z",
+      "head": "840cdb27cf08761dffd4d78edb4fcc60c9e4a8c0",
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-10-30T19:42:50.338Z",
+      "head": "94873fa9c0491ba99ae9a1eccce73dc546023b76",
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-10-30T19:46:28.153Z",
+      "head": "95648053cc163b6d4c638d349d106fff4d0eebce",
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
     }
   ],
-  "updatedAt": "2026-10-30T19:39:32.542Z",
+  "interventions": 0,
+  "nextAction": "your review: branch claude/tender-galileo-2sm0z9 (CI e2e pending on GitHub)",
+  "notes": [
+    {
+      "at": "2026-10-30T19:49:13.557Z",
+      "text": "Review covered the parseTime test diff (840cdb2); two later factory-tooling fixes (stale-gate rule, lost-update) are covered by new node tests, not by the independent reviewer"
+    }
+  ],
+  "updatedAt": "2026-10-30T19:49:13.629Z",
   "review": {
     "verdict": "approve",
     "reviewer": "factory-reviewer",
-    "head": "840cdb27cf08761dffd4d78edb4fcc60c9e4a8c0",
-    "at": "2026-10-30T19:39:32.542Z"
+    "head": "95648053cc163b6d4c638d349d106fff4d0eebce",
+    "at": "2026-10-30T19:49:13.565Z"
   }
 }
