@@ -1,0 +1,32 @@
+{
+  "id": "2026-10-30-pin-parsetime-input-forms-with-unit-test",
+  "title": "Pin parseTime input forms with unit tests",
+  "kind": "build",
+  "status": "verifying",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-10-30T19:37:33.152Z",
+  "acceptance": [
+    "parseTime accepts 1:23.45, 83.45, 83, 1:23 with exact ms (test in format.test.ts)",
+    "whitespace is trimmed; empty/blank returns null",
+    "unreadable input returns null (abc, 1:2:3, -5)",
+    "zero forms return 0, not null",
+    "src/lib/format.ts is unchanged (git diff)"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "qa + reviewer",
+  "notes": [
+    {
+      "at": "2026-10-30T19:39:32.535Z",
+      "text": "Reviewer traced all 4 criteria against format.ts; no findings"
+    }
+  ],
+  "updatedAt": "2026-10-30T19:39:32.542Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "840cdb27cf08761dffd4d78edb4fcc60c9e4a8c0",
+    "at": "2026-10-30T19:39:32.542Z"
+  }
+}
