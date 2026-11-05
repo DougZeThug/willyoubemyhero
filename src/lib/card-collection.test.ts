@@ -1,8 +1,8 @@
 // Per-device card collection and daily pack state.
 //
-// The module caches its database handle and its card-meta map at module scope,
-// so every test takes a fresh module against a fresh fake-indexeddb rather than
-// leaking state into the next one.
+// The module caches its database handle at module scope, so every test takes
+// a fresh module against a fresh fake-indexeddb rather than leaking state
+// into the next one.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 
@@ -763,47 +763,6 @@ describe("the pack-dealt mirror", () => {
   });
 });
 
-describe("card meta", () => {
-  it("returns null before priming", async () => {
-    const mod = await freshModule();
-    expect(mod.cachedCardMeta(CARD_A)).toBeNull();
-  });
-
-  it("returns null for an undefined id", async () => {
-    const mod = await freshModule();
-    expect(mod.cachedCardMeta(undefined)).toBeNull();
-  });
-
-  it("caches a saved aspect ratio synchronously", async () => {
-    // A vault grid reads 30+ of these during a single render pass; the whole
-    // point is that a revisit sizes its cards on the first frame.
-    const mod = await freshModule();
-    await mod.saveCardMeta(CARD_A, { aspect: 0.72 });
-    expect(mod.cachedCardMeta(CARD_A)).toEqual({ aspect: 0.72 });
-  });
-
-  it("restores saved ratios into memory on prime", async () => {
-    const mod = await freshModule();
-    await mod.saveCardMeta(CARD_A, { aspect: 0.72 });
-    await mod.saveCardMeta(CARD_B, { aspect: 1.4 });
-
-    // Same database, fresh module: nothing in the in-memory cache yet.
-    vi.resetModules();
-    const reloaded = await import("./card-collection");
-    expect(reloaded.cachedCardMeta(CARD_A)).toBeNull();
-    await reloaded.primeCardMeta();
-    expect(reloaded.cachedCardMeta(CARD_A)).toEqual({ aspect: 0.72 });
-    expect(reloaded.cachedCardMeta(CARD_B)).toEqual({ aspect: 1.4 });
-  });
-
-  it("primes only once, however many callers ask", async () => {
-    const mod = await freshModule();
-    const [a, b] = await Promise.all([mod.primeCardMeta(), mod.primeCardMeta()]);
-    expect(a).toBeUndefined();
-    expect(b).toBeUndefined();
-  });
-});
-
 describe("when IndexedDB is unavailable", () => {
   async function blockedModule() {
     vi.resetModules();
@@ -867,12 +826,6 @@ describe("when IndexedDB is unavailable", () => {
     ).resolves.toBeUndefined();
     await expect(mod.retireUnrecorded([CARD_A])).resolves.toBeUndefined();
   });
-
-  it("still caches card meta in memory", async () => {
-    const mod = await blockedModule();
-    await mod.saveCardMeta(CARD_A, { aspect: 0.72 });
-    expect(mod.cachedCardMeta(CARD_A)).toEqual({ aspect: 0.72 });
-  });
 });
 
 describe("on the server", () => {
@@ -883,6 +836,5 @@ describe("on the server", () => {
     expect(await mod.loadPackState()).toBeNull();
     expect(await mod.loadUnrecorded()).toBeNull();
     await expect(mod.collectCard(CARD_A, "base")).resolves.toBeUndefined();
-    await expect(mod.primeCardMeta()).resolves.toBeUndefined();
   });
 });

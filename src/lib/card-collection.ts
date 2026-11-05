@@ -15,7 +15,6 @@ import { leagueDay } from "./trades";
 // into a confusing null.
 const DB_NAME = "wwbh-cards";
 const COLLECTED = "collected";
-const CARD_META = "card-meta";
 const PACK_STATE = "pack-state";
 
 /** A second row in the same store, so the pack and its unsent ids expire apart. */
@@ -40,9 +39,6 @@ const UNRECORDED_KEY = "unrecorded";
 export function todayKey(): string {
   return leagueDay();
 }
-
-/** Aspect ratio of a player's card art, cached so revisits never re-measure or jump. */
-export type CardMeta = { aspect: number };
 
 /**
  * One slot of today's pack, as this device remembers it.
@@ -215,10 +211,9 @@ function getDb() {
     dbPromise = openDB(DB_NAME, 2, {
       // Guarded rather than switched on `oldVersion`: a device upgrading from v1
       // and a device creating the database fresh both land here, and the only
-      // thing that matters is that all three stores exist afterwards.
+      // thing that matters is that both stores exist afterwards.
       upgrade(db) {
         if (!db.objectStoreNames.contains(COLLECTED)) db.createObjectStore(COLLECTED);
-        if (!db.objectStoreNames.contains(CARD_META)) db.createObjectStore(CARD_META);
         if (!db.objectStoreNames.contains(PACK_STATE)) db.createObjectStore(PACK_STATE);
       },
     });
@@ -676,52 +671,5 @@ export async function carryPackToIdentity(
     // A device that cannot write cannot carry. It gets the second pack, which is
     // the behaviour it had before this existed.
     return false;
-  }
-}
-
-// Aspect ratios are read by every card on screen at once — a vault grid is 30+.
-// One `getAll` on first use beats 30 separate IndexedDB round trips, and the
-// synchronous cache lets a revisit size its cards on the very first render
-// instead of laying out at the default ratio and reflowing a frame later.
-const metaCache = new Map<string, CardMeta>();
-let primePromise: Promise<void> | null = null;
-
-/** Pull the whole card-meta store into memory once per page load. */
-export function primeCardMeta(): Promise<void> {
-  if (!primePromise) {
-    primePromise = (async () => {
-      if (!isBrowser()) return;
-      try {
-        const db = await getDb();
-        // One transaction, like loadCollection and for the same reason. The
-        // Promise.all is not what makes this safe: each idb shorthand call opens
-        // its own transaction, so it only removed the await between two
-        // snapshots rather than making them one.
-        const tx = db.transaction(CARD_META, "readonly");
-        const [keys, values] = await Promise.all([tx.store.getAllKeys(), tx.store.getAll()]);
-        await tx.done;
-        keys.forEach((k, i) => metaCache.set(String(k), values[i] as CardMeta));
-      } catch {
-        /* a device with IndexedDB blocked just measures from the image */
-      }
-    })();
-  }
-  return primePromise;
-}
-
-/** Whatever is already in memory. Null until `primeCardMeta` has resolved. */
-export function cachedCardMeta(eventParticipantId: string | undefined): CardMeta | null {
-  if (!eventParticipantId) return null;
-  return metaCache.get(eventParticipantId) ?? null;
-}
-
-export async function saveCardMeta(eventParticipantId: string, meta: CardMeta): Promise<void> {
-  metaCache.set(eventParticipantId, meta);
-  if (!isBrowser()) return;
-  try {
-    const db = await getDb();
-    await db.put(CARD_META, meta, eventParticipantId);
-  } catch {
-    /* ignore */
   }
 }
