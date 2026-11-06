@@ -48,10 +48,26 @@
       "skipped": [
         "db"
       ]
+    },
+    {
+      "at": "2026-11-06T20:43:35.826Z",
+      "head": "3a66a1733f63e06efddd50e35c0b5ffa9ceec010",
+      "fp": "d8ec17cf9e21bee2d78918ed51e99e53edd07176",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
     }
   ],
   "interventions": 0,
-  "nextAction": "your review: phone check at 320/390/430, then PR/merge",
+  "nextAction": "your review: view shots/review/compare.md, then PR/merge",
   "notes": [
     {
       "at": "2026-11-06T19:43:23.234Z",
@@ -60,14 +76,18 @@
     {
       "at": "2026-11-06T19:49:31.923Z",
       "text": "Final review of 8000bc1..HEAD (incl. refetch-banner fix): APPROVE. Visual checks NOT VERIFIED (code + jsdom only)."
+    },
+    {
+      "at": "2026-11-06T20:46:10.512Z",
+      "text": "src byte-identical to the approved state (git diff ff11562..HEAD -- src empty). Before/after review set committed under shots/review."
     }
   ],
-  "updatedAt": "2026-11-06T19:49:32.071Z",
+  "updatedAt": "2026-11-06T20:46:10.669Z",
   "review": {
     "verdict": "approve",
     "reviewer": "factory-reviewer",
-    "head": "ff11562a1ef9d5fac19dcee2cbc20e2f0c6f2ea7",
-    "fp": "ca4191d7d653ee1843f7352d79610f0ca5df3995",
-    "at": "2026-11-06T19:49:31.981Z"
+    "head": "3a66a1733f63e06efddd50e35c0b5ffa9ceec010",
+    "fp": "d8ec17cf9e21bee2d78918ed51e99e53edd07176",
+    "at": "2026-11-06T20:46:10.577Z"
   }
 }

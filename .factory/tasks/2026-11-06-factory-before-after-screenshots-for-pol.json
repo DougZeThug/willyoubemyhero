@@ -2,7 +2,7 @@
   "id": "2026-11-06-factory-before-after-screenshots-for-pol",
   "title": "Factory before/after screenshots for polish runs",
   "kind": "build",
-  "status": "verifying",
+  "status": "ready",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T20:36:27.292Z",
   "acceptance": [
@@ -29,10 +29,38 @@
       "skipped": [
         "db"
       ]
+    },
+    {
+      "at": "2026-11-06T20:41:19.485Z",
+      "head": "3a66a1733f63e06efddd50e35c0b5ffa9ceec010",
+      "fp": "d8ec17cf9e21bee2d78918ed51e99e53edd07176",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
     }
   ],
   "interventions": 0,
-  "nextAction": "gates + independent review",
-  "notes": [],
-  "updatedAt": "2026-11-06T20:39:02.693Z"
+  "nextAction": "your review & merge",
+  "notes": [
+    {
+      "at": "2026-11-06T20:46:10.323Z",
+      "text": "Reviews of fdb44e7 and the follow-up: APPROVE. Known minors: concurrent shots runs in one checkout are unsafe (the start-up sweep deletes a live run's worktree); --no-capture without prior captures throws a raw ENOENT; verdict()/compareMarkdown not unit-tested; a polish touching the Live-feed banner cannot be evidenced."
+    }
+  ],
+  "updatedAt": "2026-11-06T20:46:10.473Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "3a66a1733f63e06efddd50e35c0b5ffa9ceec010",
+    "fp": "d8ec17cf9e21bee2d78918ed51e99e53edd07176",
+    "at": "2026-11-06T20:46:10.386Z"
+  }
 }
