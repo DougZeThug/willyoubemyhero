@@ -115,6 +115,8 @@ const COMPLETION_BEAT_MS = 900;
  * back on the retry rather than dealing a second one.
  */
 const OPEN_TIMEOUT_MS = 8_000;
+/** How long the dealing slot stays wordless before it says the signal is slow. */
+const SLOW_SIGNAL_MS = 3_000;
 /** Full ceremony for the first few duplicate secrets; after that it is a tax. */
 const DUPE_CEREMONY_LIMIT = 3;
 /** How often to notice the date changed under a tab nobody closed. */
@@ -150,6 +152,28 @@ type OpenRequest = {
 };
 
 /** The one slot ref the row stores per card, from a dealt slot. */
+/**
+ * Words for the dealing slot once it has been bare too long.
+ *
+ * Mounted only while the slot is, so its clock starts with the wait and a retry
+ * (which swaps the slot out for the retry card and back) starts it over. It
+ * never touches the request or its timeout: it only says the wait is not a
+ * lost pack.
+ */
+function SlowSignal() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_SIGNAL_MS);
+    return () => clearTimeout(t);
+  }, []);
+  if (!slow) return null;
+  return (
+    <p role="status" className="px-4 text-center text-meta font-semibold text-muted-foreground">
+      Slow signal — it&apos;s yours either way
+    </p>
+  );
+}
+
 function slotRef(slot: PackSlot, local: LocalBefore | undefined): PackSlotRef {
   const ref: PackSlotRef = { kind: slot.kind, id: slot.id };
   if (local) {
@@ -1469,7 +1493,9 @@ function PackPage() {
               <div
                 data-testid="pack-dealing"
                 className="wax-foil pack-seal-wait relative flex aspect-[5/7] w-full items-center justify-center overflow-hidden rounded-xl border border-white/15"
-              />
+              >
+                <SlowSignal />
+              </div>
             )}
           </div>
         ) : stage === "revealing" ? (
@@ -1529,6 +1555,7 @@ function PackPage() {
             total={total}
             eventYear={event?.year ?? null}
             streak={streak}
+            resetsAt={status.data?.resetsAt}
             claimable={claimable}
             canClaim={streak?.canClaim ?? false}
             claiming={claiming}

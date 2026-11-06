@@ -10,7 +10,7 @@
 // Its own file because it needs an actor that can change mid-test, and
 // players.pack.test.tsx pins `useSecretActor` to one member for good.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { useSyncExternalStore, type ReactNode } from "react";
 import PackPage from "./players.pack";
 import { EVENT_ID, makeBundle } from "@/test/fixtures";
@@ -200,5 +200,65 @@ describe("the pack screen's recovery and hint chrome", () => {
     const hint = await screen.findByText("· or press Enter", { exact: false });
     expect(hint.className).toContain("pointer-coarse:hidden");
     expect(hint.parentElement!.textContent).toBe("Drag across the tear · or press Enter");
+  });
+});
+
+describe("the dealing slot while the signal is slow", () => {
+  const SLOW = /slow signal — it's yours either way/i;
+
+  it("stays wordless until 3s, then says so politely, and drops it once the deal lands", async () => {
+    vi.useFakeTimers();
+    try {
+      let land!: (v: { ok: false }) => void;
+      openPack.mockReset().mockReturnValue(new Promise((r) => (land = r)));
+      render(<PackPage />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(screen.getByTestId("pack-dealing")).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_800);
+      });
+      expect(screen.queryByText(SLOW)).toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      const line = screen.getByText(SLOW);
+      expect(line).toHaveAttribute("role", "status");
+      expect(screen.getByTestId("pack-dealing")).toContainElement(line);
+
+      await act(async () => {
+        land({ ok: false });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.queryByText(SLOW)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("hands over to the retry card at the 8s timeout without keeping the line", async () => {
+    vi.useFakeTimers();
+    try {
+      openPack.mockReset().mockReturnValue(new Promise(() => {}));
+      render(<PackPage />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(screen.getByTestId("pack-dealing")).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_400);
+      });
+      expect(screen.getByText(SLOW)).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(screen.getByTestId("pack-retry")).toBeInTheDocument();
+      expect(screen.queryByText(SLOW)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

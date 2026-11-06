@@ -224,7 +224,62 @@ describe("a secret in its slot", () => {
 
   it("keeps the subtitle quiet while it is still face-down", () => {
     renderSummary({ slots: [secret(), roster(1), roster(2)], revealed: [1, 2] });
-    expect(screen.getByText(/come back tomorrow/i)).toBeInTheDocument();
+    expect(screen.getByText(/today's pack\. next pack/i)).toBeInTheDocument();
+  });
+});
+
+describe("the subtitle's next-pack time", () => {
+  const NOW = Date.parse("2026-09-04T18:00:00Z");
+
+  it("says when the next pack lands, from resetsAt, and drops 'come back tomorrow'", () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      renderSummary({ resetsAt: "2026-09-04T23:50:00Z" });
+      expect(screen.getByText("That's today's pack. Next pack in 6h")).toBeInTheDocument();
+      expect(screen.queryByText(/come back tomorrow/i)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts in minutes inside the hour", () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      renderSummary({ resetsAt: "2026-09-04T18:12:00Z" });
+      expect(screen.getByText("That's today's pack. Next pack in 12m")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to this device's midnight when the server has said nothing", () => {
+    renderSummary();
+    expect(
+      screen.getByText(/^That's today's pack\. Next pack (in \d+[hm]|tomorrow)$/),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves the secret subtitle alone", () => {
+    renderSummary({ slots: [secret(), roster(1), roster(2)], resetsAt: "2026-09-04T23:50:00Z" });
+    expect(screen.getByText("That's today's pack, secret and all")).toBeInTheDocument();
+  });
+});
+
+describe("the busy labels", () => {
+  // One 0.55 step, as 'Reveal all': under it the label is 'nothing at all in a garden'.
+  it("dims 'Opening…' and 'Rendering…' at 0.55, not 0.4", async () => {
+    const claimable = { days: 3, label: "Day 3", blurb: "", tierFloor: null, earned: true, claimed: false }; // prettier-ignore
+    const streak = { current: 3, startedOn: "2026-09-02", lastOpenedOn: "2026-09-04", openedToday: true }; // prettier-ignore
+    renderSummary({ streak, claimable, canClaim: true, claiming: true });
+    const claim = screen.getByTestId("streak-claim");
+    expect(claim).toHaveTextContent("Opening…");
+    expect(claim).toBeDisabled();
+    expect(claim.className).toContain("disabled:opacity-55");
+    expect(claim.className).not.toContain("opacity-40");
+
+    const share = screen.getByRole("button", { name: /share pack/i });
+    expect(share.className).toContain("disabled:opacity-55");
+    expect(share.className).not.toContain("opacity-40");
   });
 });
 

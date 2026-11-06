@@ -232,6 +232,52 @@ const SCENES: Scene[] = [
       await expect(page.getByTestId("pack-retry")).toBeVisible({ timeout: 20_000 });
     },
   },
+  {
+    ...PACK,
+    name: "pack-dealing-slow",
+    arrange: (server: ServerFnMock) => {
+      server.set("openPack", packResponse());
+      // Lands after the 3s line shows and before the 8s timeout hands over to retry.
+      server.delay("openPack", 7_000);
+    },
+    act: async (page) => {
+      await tearPack(page);
+      await expect(page.getByTestId("pack-dealing")).toBeVisible({ timeout: 20_000 });
+      // An explicit exception to the no-fixed-waits rule: the "Slow signal" line
+      // exists only in the after tree, so there is nothing common to wait on. 4s
+      // lands the shot after the 3s mark and before the 8s timeout.
+      await page.waitForTimeout(4_000);
+    },
+  },
+  {
+    ...PACK,
+    name: "pack-summary-claiming",
+    arrange: (server: ServerFnMock) => {
+      server.set("openPack", packResponse());
+      server.set("getStreakStatus", {
+        kind: "member",
+        current: 3,
+        startedOn: "2026-07-26",
+        lastOpenedOn: "2026-07-28",
+        openedToday: true,
+        today: "2026-07-28",
+        canClaim: true,
+        milestones: [
+          { days: 3, label: "Three Days", blurb: "A bonus secret, on the house.", tierFloor: null, earned: true, claimed: false }, // prettier-ignore
+        ],
+      });
+      server.set("claimStreakMilestone", { ok: false });
+      server.delay("claimStreakMilestone", 20_000);
+    },
+    act: async (page) => {
+      await toSummary(page);
+      const claim = page.getByTestId("streak-claim");
+      await claim.click();
+      await expect(claim).toBeDisabled();
+      await expect(claim).toHaveText("Opening…");
+      await claim.scrollIntoViewIfNeeded();
+    },
+  },
 ];
 
 test.describe("factory screenshots", () => {
