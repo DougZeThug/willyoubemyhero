@@ -2,7 +2,7 @@
   "id": "2026-11-06-pack-page-next-pack-time-waiting-line-st",
   "title": "Pack page: next-pack time, waiting line, steadier busy labels",
   "kind": "polish",
-  "status": "building",
+  "status": "ready",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T21:38:16.510Z",
   "acceptance": [
@@ -14,9 +14,54 @@
     "Before/after screenshots committed and described from the images"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-06T21:44:22.593Z",
+      "head": "a589c51638a3138158fa706302d2fada64ce281c",
+      "fp": "36abd13f84b008f14dcef05f9a47ad92dfd8165d",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-06T21:53:15.662Z",
+      "head": "aae6e7d0546ed56a6e68bcb72815cf52af8d8c23",
+      "fp": "aee16d7dd3a9081acef875b4d7b3f92e62bc21fd",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
-  "nextAction": "factory-ui implements",
-  "notes": [],
-  "updatedAt": "2026-11-06T21:38:16.552Z"
+  "nextAction": "your review of shots/review; guest signup card still open for a separate look",
+  "notes": [
+    {
+      "at": "2026-11-06T21:55:47.092Z",
+      "text": "Reviews of a589c51 and the comment-only follow-up aae6e7d: APPROVE. Screenshots viewed at 390 (dealing-slow, summary-claiming before/after). Capture fixture's resetsAt is in the past, so the frame shows 'any moment now'; 6h/12m are unit-tested only. Share 'Rendering...' not photographed. Guest signup card untouched by decision."
+    }
+  ],
+  "updatedAt": "2026-11-06T21:55:47.263Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "aae6e7d0546ed56a6e68bcb72815cf52af8d8c23",
+    "fp": "aee16d7dd3a9081acef875b4d7b3f92e62bc21fd",
+    "at": "2026-11-06T21:55:47.172Z"
+  }
 }
