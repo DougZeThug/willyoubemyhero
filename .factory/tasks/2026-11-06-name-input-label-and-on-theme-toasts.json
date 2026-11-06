@@ -1,0 +1,21 @@
+{
+  "id": "2026-11-06-name-input-label-and-on-theme-toasts",
+  "title": "Name input label and on-theme toasts",
+  "kind": "polish",
+  "status": "building",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-06T22:53:12.993Z",
+  "acceptance": [
+    "The collector name input has an accessible name 'Your name' (aria-label) with no layout change; placeholder kept; unit test by label",
+    "Normal toasts use the app's tokens (popover surface, foreground text, border, primary Undo button, matching close button) instead of sonner's built-in black/white dark palette; contrast meets AA for text and the Undo button; done via sonner's supported CSS variables/classNames, not !important",
+    "Toast position, duration, copy, closeButton, richColors semantics (success/error variants) and e2e-visible roles/text unchanged",
+    "Before/after screenshots of the pin toast (vault-pinned scene) at 390 and 320x568, described from the images",
+    "No other component restyled"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "factory-ui implements",
+  "notes": [],
+  "updatedAt": "2026-11-06T22:53:13.029Z"
+}
