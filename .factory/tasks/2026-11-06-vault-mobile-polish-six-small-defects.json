@@ -2,7 +2,7 @@
   "id": "2026-11-06-vault-mobile-polish-six-small-defects",
   "title": "Vault mobile polish: six small defects",
   "kind": "polish",
-  "status": "verifying",
+  "status": "ready",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T19:39:34.087Z",
   "acceptance": [
@@ -16,14 +16,58 @@
     "REVISED #3: in rearrange mode the Sort & filter chip collapses to icon-only (aria-label and button role kept) instead of being hidden, because the chip is the only way to reach 'Done rearranging' (tests in players.index.test.tsx and vault-sort-sheet.test.tsx)"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-06T19:43:30.417Z",
+      "head": "37b17295e11ecc62ae458366c944e355052d98b2",
+      "fp": "cd8e9559e120c0f249484c651e103b84794c0df7",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    },
+    {
+      "at": "2026-11-06T19:46:59.986Z",
+      "head": "ff11562a1ef9d5fac19dcee2cbc20e2f0c6f2ea7",
+      "fp": "ca4191d7d653ee1843f7352d79610f0ca5df3995",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
-  "nextAction": "qa gates + independent review",
+  "nextAction": "your review: phone check at 320/390/430, then PR/merge",
   "notes": [
     {
       "at": "2026-11-06T19:43:23.234Z",
       "text": "Builder deviated from criterion 3 as first written (hide chip) because hiding it would trap the user in rearrange mode; Director verified and accepted the compact-icon alternative."
+    },
+    {
+      "at": "2026-11-06T19:49:31.923Z",
+      "text": "Final review of 8000bc1..HEAD (incl. refetch-banner fix): APPROVE. Visual checks NOT VERIFIED (code + jsdom only)."
     }
   ],
-  "updatedAt": "2026-11-06T19:43:23.234Z"
+  "updatedAt": "2026-11-06T19:49:32.071Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "ff11562a1ef9d5fac19dcee2cbc20e2f0c6f2ea7",
+    "fp": "ca4191d7d653ee1843f7352d79610f0ca5df3995",
+    "at": "2026-11-06T19:49:31.981Z"
+  }
 }
