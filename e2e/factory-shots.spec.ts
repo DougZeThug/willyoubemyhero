@@ -214,6 +214,23 @@ const SCENES: Scene[] = [
   },
   {
     ...PACK,
+    name: "pack-sealed-guest-open",
+    member: false,
+    signedIn: true,
+    ready: async (page) => {
+      await packReady(page);
+      await expect(page.getByRole("heading", { name: "Pick a trading name" })).toBeVisible();
+    },
+    // The before tree has no such button (its card is always open), so this is
+    // tolerant: click it only where it exists, then wait for the name input.
+    act: async (page) => {
+      const add = page.getByRole("button", { name: "Add name" });
+      if (await add.count()) await add.click();
+      await expect(page.getByPlaceholder("Your name")).toBeVisible();
+    },
+  },
+  {
+    ...PACK,
     name: "pack-stand",
     // Turned, because Next only offers itself once the card is face-up.
     act: async (page) => {
@@ -316,7 +333,12 @@ test.describe("factory screenshots", () => {
         });
         const server = await stubServerFns(page);
         if (scene.member !== false) await asMember(page);
-        if (scene.signedIn) await asSignedInGuest(page);
+        if (scene.signedIn) {
+          await asSignedInGuest(page);
+          // A signed-in session fires syncAccountSession, which has no stub; left
+          // unmatched, the fixture's teardown aborts the run.
+          server.allowUnmatched();
+        }
         server.set("getMyCardStats", OWNS);
         scene.arrange?.(server);
         await page.goto(scene.path ?? "/players");

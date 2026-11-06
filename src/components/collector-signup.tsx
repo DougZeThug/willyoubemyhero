@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -24,7 +24,23 @@ import { cn } from "@/lib/utils";
  * trading post, which is the one screen a new collector has no reason to open;
  * it now sits on the vault and the pack screen too, where they actually land.
  */
-export function CollectorSignup({ className }: { className?: string }) {
+export function CollectorSignup({
+  className,
+  compact = false,
+}: {
+  className?: string;
+  /** Collapsed to one row until tapped; the pack screen's short viewport needs it. */
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(!compact);
+  const formId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Only the tap that expands it moves focus. A form that is open from the first
+  // render (the vault) must not steal it on mount.
+  const expandedByTap = useRef(false);
+  useEffect(() => {
+    if (open && expandedByTap.current) inputRef.current?.focus();
+  }, [open]);
   const qc = useQueryClient();
   const createFn = useServerFn(createCollectorIdentity);
   const { user } = useAuthUser();
@@ -87,8 +103,38 @@ export function CollectorSignup({ className }: { className?: string }) {
     }
   }
 
+  if (!open) {
+    return (
+      <div
+        className={cn(
+          "surface-panel flex items-center justify-between gap-2 rounded-xl border border-primary/30 py-1 pl-3 pr-1.5",
+          className,
+        )}
+      >
+        {/* One line at 320: the label step and tight tracking keep the title
+            beside a 44px button; the full form below keeps its own larger title. */}
+        <h2 className="min-w-0 text-label font-bold uppercase tracking-wide text-primary">
+          Pick a trading name
+        </h2>
+        <button
+          type="button"
+          aria-expanded={false}
+          aria-controls={formId}
+          onClick={() => {
+            expandedByTap.current = true;
+            setOpen(true);
+          }}
+          className="neon-btn-sm min-h-11 shrink-0 px-4"
+        >
+          Add name
+        </button>
+      </div>
+    );
+  }
+
   return (
     <form
+      id={formId}
       onSubmit={submit}
       className={cn("surface-panel rounded-xl border border-primary/30 p-4", className)}
     >
@@ -100,6 +146,7 @@ export function CollectorSignup({ className }: { className?: string }) {
         league sees on your offers.
       </p>
       <input
+        ref={inputRef}
         value={name}
         onChange={(e) => setName(e.target.value)}
         maxLength={32}
@@ -123,11 +170,17 @@ export function CollectorSignup({ className }: { className?: string }) {
  * A member token means they are already reachable, and a signed-out guest gets
  * the ordinary claim flow — neither should see a name box.
  */
-export function CollectorSignupGate({ className }: { className?: string }) {
+export function CollectorSignupGate({
+  className,
+  compact,
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
   const { user, loading } = useAuthUser();
   const me = useMemberSession();
   if (loading || !user || me?.participantId) return null;
-  return <CollectorSignup className={className} />;
+  return <CollectorSignup className={className} compact={compact} />;
 }
 
 /** "jane.doe@x.com" → "Jane Doe". A starting point they can overwrite. */

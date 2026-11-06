@@ -1350,7 +1350,7 @@ function PackPage() {
         {/* Same gate as the vault, and here for the same reason: a pack opened
             before they pick a name lands on the device, not on them. Kept out of
             the ceremony itself — only while the pack is still sealed. */}
-        {stage === "sealed" && <CollectorSignupGate className="mb-3" />}
+        {stage === "sealed" && <CollectorSignupGate className="mb-3" compact />}
         {/* Only while the pack is still sealed. A phone screen is short, and this
             row is 90px of running total above a card whose whole job is to be the
             biggest thing on it. The summary owns the counter once the pack is
