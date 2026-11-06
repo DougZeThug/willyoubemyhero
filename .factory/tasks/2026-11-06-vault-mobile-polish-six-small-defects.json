@@ -1,0 +1,23 @@
+{
+  "id": "2026-11-06-vault-mobile-polish-six-small-defects",
+  "title": "Vault mobile polish: six small defects",
+  "kind": "polish",
+  "status": "building",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-06T19:39:34.087Z",
+  "acceptance": [
+    "Roster tile Link no longer suppresses the keyboard focus ring (players.index.tsx; test in players.index.test.tsx)",
+    "Shelf wrapper scroll offset clears the sticky site header incl. safe-area inset so View set lands with the title visible (class assertion test)",
+    "Rearrange mode hides the Sort & filter chip on the Roster header and it returns afterwards (test)",
+    "Sort sheet description reads 'How your binder reads. Kept on this phone.' (vault-sort-sheet.test.tsx)",
+    "A failed secrets read shows a one-line 'Couldn't read…' panel with a Try again button wired to secrets.refetch(); nothing shown on success; no set counts revealed (test)",
+    "Vault hero sync 'Try again' link has a 44px tap target (min-h-11 inline-flex) (vault-hero.test.tsx)",
+    "No change to rarity vocab, storage keys, aria roles/labels used by e2e, text sizes, or any src/components/ui file"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "factory-ui implements the six fixes",
+  "notes": [],
+  "updatedAt": "2026-11-06T19:39:34.126Z"
+}
