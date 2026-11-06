@@ -18,6 +18,7 @@ import path from "node:path";
 import { devices, type Page } from "@playwright/test";
 import {
   expect,
+  PLAYERS,
   packResponse,
   sealedPack,
   stubServerFns,
@@ -170,6 +171,42 @@ const SCENES: Scene[] = [
     act: async (page) => {
       await page.getByRole("button", { name: "Pin Alice Ace to the top" }).click();
       await page.getByRole("heading", { name: "Favourites" }).waitFor();
+    },
+  },
+  {
+    // The only toast with an Undo action on a richColors (success) surface; the
+    // pin toast above is the plain one.
+    name: "trade-declined-toast",
+    path: "/players/trade",
+    ready: async (page) => {
+      await expect(page.getByRole("button", { name: "Decline" })).toBeVisible({ timeout: 40_000 });
+    },
+    arrange: (server) => {
+      server.set("getMyTradeOffers", {
+        inbox: [
+          {
+            id: "00000000-0000-4000-8000-000000000021",
+            status: "pending",
+            proposerId: PLAYERS[1].pid,
+            recipientId: PLAYERS[0].pid,
+            createdAt: "2026-08-17T10:00:00Z",
+            resolvedAt: null,
+            proposerGives: [
+              { kind: "roster", copyId: "00000000-0000-4000-8000-000000000052", eventParticipantId: PLAYERS[1].ep, edition: "gold" }, // prettier-ignore
+            ],
+            recipientGives: [
+              { kind: "roster", copyId: "00000000-0000-4000-8000-000000000051", eventParticipantId: PLAYERS[0].ep, edition: "standard" }, // prettier-ignore
+            ],
+          },
+        ],
+        outbox: [],
+        recent: [],
+      });
+      server.set("declineTradeOffer", { ok: true });
+    },
+    act: async (page) => {
+      await page.getByRole("button", { name: "Decline" }).click();
+      await expect(page.getByText("Declined", { exact: true })).toBeVisible();
     },
   },
   {
