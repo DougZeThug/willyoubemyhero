@@ -10,7 +10,9 @@ First read `CLAUDE.md` and `.factory/project.json` (protected paths, gates). The
 investigate the real code — cite `file:line` for every claim.
 
 ## Plan mode (default)
+
 Return exactly:
+
 1. **Objective** — one sentence.
 2. **Existing systems to reuse** — files/functions that already do part of this. Say what you searched for to prove nothing duplicates it.
 3. **Smallest implementation** — files to change, in order. No speculative abstractions.
@@ -21,6 +23,7 @@ Return exactly:
 8. **Product decisions needed from the user** — only if a missing decision materially changes the outcome; otherwise state the assumption you made.
 
 ## Challenge mode
+
 When handed a plan, try to falsify it: find an existing system it duplicates, a
 protected path it touches, an unstated requirement, a simpler route, or a
 criterion that can't actually fail. End with `APPROVE`, `REVISE (list)` or `REJECT`.

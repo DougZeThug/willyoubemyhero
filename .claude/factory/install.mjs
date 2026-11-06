@@ -15,12 +15,12 @@ if (!process.argv[2] || !fs.existsSync(path.join(target, ".git"))) {
   console.error("usage: install.mjs <path-to-git-repo> [--dry-run]");
   process.exit(1);
 }
-const log = (m) => console.log(`${dry ? "[dry] " : ""}${m}`);
-const write = (p, c) => {
-  log(`write ${path.relative(target, p)}`);
+const log = (message) => console.log(`${dry ? "[dry] " : ""}${message}`);
+const write = (file, contents) => {
+  log(`write ${path.relative(target, file)}`);
   if (!dry) {
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, c);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, contents);
   }
 };
 
@@ -52,7 +52,9 @@ else {
   let pkg = {};
   try {
     pkg = JSON.parse(fs.readFileSync(path.join(target, "package.json"), "utf8"));
-  } catch {}
+  } catch {
+    pkg = {}; // no readable package.json: gates stay empty
+  }
   const pm = fs.existsSync(path.join(target, "bun.lock"))
     ? "bun run"
     : fs.existsSync(path.join(target, "pnpm-lock.yaml"))
@@ -61,8 +63,8 @@ else {
         ? "yarn"
         : "npm run";
   const gates = ["lint", "typecheck", "test", "build"]
-    .filter((s) => pkg.scripts?.[s])
-    .map((s) => ({ name: s, cmd: `${pm} ${s}` }));
+    .filter((script) => pkg.scripts?.[script])
+    .map((script) => ({ name: script, cmd: `${pm} ${script}` }));
   const base =
     fs.existsSync(path.join(target, ".git/refs/heads/master")) &&
     !fs.existsSync(path.join(target, ".git/refs/heads/main"))
@@ -70,7 +72,7 @@ else {
       : "main";
   write(
     projFile,
-    JSON.stringify(
+    `${JSON.stringify(
       {
         name: path.basename(target),
         baseBranch: base,
@@ -89,7 +91,7 @@ else {
       },
       null,
       2,
-    ) + "\n",
+    )}\n`,
   );
 }
 
@@ -112,10 +114,12 @@ for (const [ev, entries] of Object.entries(mine.hooks)) {
   const have = JSON.stringify(merged.hooks[ev] ?? []);
   merged.hooks[ev] = [
     ...(merged.hooks[ev] ?? []),
-    ...entries.filter((e) => !have.includes(JSON.stringify(e.hooks[0].command).slice(1, -1))),
+    ...entries.filter(
+      (entry) => !have.includes(JSON.stringify(entry.hooks[0].command).slice(1, -1)),
+    ),
   ];
 }
-write(setFile, JSON.stringify(merged, null, 2) + "\n");
+write(setFile, `${JSON.stringify(merged, null, 2)}\n`);
 
 // CLAUDE.md pointer (append once).
 const cm = path.join(target, "CLAUDE.md");
