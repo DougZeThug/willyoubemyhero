@@ -1,0 +1,22 @@
+{
+  "id": "2026-11-06-pack-collapsed-name-prompt-for-signed-in",
+  "title": "Pack: collapsed name prompt for signed-in non-roster people",
+  "kind": "polish",
+  "status": "building",
+  "branch": "claude/tender-galileo-2sm0z9",
+  "createdAt": "2026-11-06T22:41:43.455Z",
+  "acceptance": [
+    "On the Pack screen the CollectorSignupGate renders as one row ('Pick a trading name' heading + Add name button, 44px target, aria-expanded) and expands in place to the existing full form, unchanged; the Vault keeps the full card (compact is opt-in, used only by the pack route)",
+    "At 320x568 the sealed pack's RIP strip is fully above the bottom nav, and the collapsed row's heading does not wrap onto two lines (verified in a render)",
+    "No change to createCollectorIdentity, adoptLocalCollection, token handling, the pack deal or identity keying; the card is still BEFORE the pack (B-07 untouched)",
+    "Tapping Add name moves focus to the name input; unit tests cover collapsed, expanded, non-compact (Vault) and unchanged submit behaviour",
+    "The signedIn capture scenes call server.allowUnmatched() so the unchanged base tree no longer aborts the runner; pack-sealed-guest-open scene exists",
+    "Before/after screenshots committed and described from the images"
+  ],
+  "repairs": [],
+  "gateRuns": [],
+  "interventions": 0,
+  "nextAction": "factory-ui implements option A from patch",
+  "notes": [],
+  "updatedAt": "2026-11-06T22:41:43.499Z"
+}
