@@ -83,7 +83,7 @@ test("an unstaged edit to the first changed file still selects its gates", () =>
   fs.writeFileSync(path.join(fixture.dir, "supabase/m.sql"), "-- v1");
   commitAll(fixture, "add migration");
   fs.writeFileSync(path.join(fixture.dir, "supabase/m.sql"), "-- v2");
-  assert.match(fixture.run("gates").stdout, /▶ db/);
+  assert.match(fixture.run("gates").stdout, /▶ db/u);
 });
 
 test("concurrency ceiling refuses a second active task", () => {
@@ -91,17 +91,17 @@ test("concurrency ceiling refuses a second active task", () => {
   assert.equal(run("new", "first").status, 0);
   const second = run("new", "second");
   assert.notEqual(second.status, 0);
-  assert.match(second.stderr, /concurrency ceiling/);
+  assert.match(second.stderr, /concurrency ceiling/u);
 });
 
 test("cannot mark ready without passing gates and a review", () => {
   const { run } = repo();
   const id = run("new", "t").stdout.trim();
-  assert.match(run("set", id, "--status", "ready").stderr, /gate run missing/);
+  assert.match(run("set", id, "--status", "ready").stderr, /gate run missing/u);
   assert.equal(run("gates", id).status, 0);
-  assert.match(run("set", id, "--status", "ready").stderr, /no recorded independent review/);
+  assert.match(run("set", id, "--status", "ready").stderr, /no recorded independent review/u);
   run("set", id, "--review", "changes", "--reviewer", "reviewer");
-  assert.match(run("set", id, "--status", "ready").stderr, /not approve/);
+  assert.match(run("set", id, "--status", "ready").stderr, /not approve/u);
   run("set", id, "--review", "approve", "--reviewer", "reviewer");
   assert.equal(run("set", id, "--status", "ready").status, 0);
 });
@@ -111,8 +111,8 @@ test("a failing gate fails the run and blocks ready", () => {
   const id = run("new", "t").stdout.trim();
   const result = run("gates", id);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /boom/);
-  assert.match(run("set", id, "--status", "ready").stderr, /failed/);
+  assert.match(result.stdout, /boom/u);
+  assert.match(run("set", id, "--status", "ready").stderr, /failed/u);
 });
 
 test("a passing partial rerun cannot unlock ready after a failed full run", () => {
@@ -126,7 +126,7 @@ test("a passing partial rerun cannot unlock ready after a failed full run", () =
   assert.equal(fixture.run("gates", id).status, 1);
   assert.equal(fixture.run("gates", id, "--only", "fine").status, 0);
   fixture.run("set", id, "--review", "approve", "--reviewer", "reviewer");
-  assert.match(fixture.run("set", id, "--status", "ready").stderr, /partial/);
+  assert.match(fixture.run("set", id, "--status", "ready").stderr, /partial/u);
 });
 
 test("stale gates (code committed after the run) block ready", () => {
@@ -135,7 +135,7 @@ test("stale gates (code committed after the run) block ready", () => {
   commitAll(fixture, "more");
   assert.match(
     fixture.run("set", fixture.id, "--status", "ready").stderr,
-    /code changed since the last passing gate run/,
+    /code changed since the last passing gate run/u,
   );
 });
 
@@ -144,8 +144,28 @@ test("an uncommitted edit after the gates ran blocks ready", () => {
   fs.writeFileSync(path.join(fixture.dir, "a.txt"), "edited after gates");
   assert.match(
     fixture.run("set", fixture.id, "--status", "ready").stderr,
-    /code changed since the last passing gate run/,
+    /code changed since the last passing gate run/u,
   );
+});
+
+test("a gate-policy change in project.json after the run blocks ready", () => {
+  const fixture = approvedTask();
+  fs.writeFileSync(
+    path.join(fixture.dir, ".factory/project.json"),
+    JSON.stringify({ baseBranch: "main", maxActiveTasks: 1, maxRepairAttempts: 3, gates: [] }),
+  );
+  assert.match(
+    fixture.run("set", fixture.id, "--status", "ready").stderr,
+    /code changed since the last passing gate run/u,
+  );
+});
+
+test("an empty gate selection does not count as a pass", () => {
+  const { run } = repo({ gates: [] });
+  const id = run("new", "t").stdout.trim();
+  const result = run("gates", id);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /no gates were selected/u);
 });
 
 test("committing only .factory/ files does not make gates stale", () => {
@@ -161,7 +181,7 @@ test("approval does not survive a code change even after the gates are re-run", 
   assert.equal(fixture.run("gates", fixture.id).status, 0);
   assert.match(
     fixture.run("set", fixture.id, "--status", "ready").stderr,
-    /code changed since the review/,
+    /code changed since the review/u,
   );
 });
 
@@ -194,8 +214,8 @@ test("repair budget blocks the task after 3 failed attempts", () => {
     );
   const fourth = run("repair", id, "--issue", "x", "--result", "failed", "--note", "try 4");
   assert.notEqual(fourth.status, 0);
-  assert.match(fourth.stderr, /budget spent/);
-  assert.match(run("status").stdout, /\[blocked\]/);
+  assert.match(fourth.stderr, /budget spent/u);
+  assert.match(run("status").stdout, /\[blocked\]/u);
 });
 
 test("identical repeated failure blocks early", () => {
@@ -204,7 +224,7 @@ test("identical repeated failure blocks early", () => {
   run("repair", id, "--issue", "x", "--result", "failed", "--note", "same");
   assert.match(
     run("repair", id, "--issue", "x", "--result", "failed", "--note", "same").stderr,
-    /recurred identically/,
+    /recurred identically/u,
   );
 });
 
@@ -212,7 +232,7 @@ test("status flags a task whose branch does not exist", () => {
   const { run } = repo();
   const id = run("new", "t").stdout.trim();
   run("set", id, "--branch", "factory/ghost", "--status", "building");
-  assert.match(run("status").stdout, /branch factory\/ghost not found/);
+  assert.match(run("status").stdout, /branch factory\/ghost not found/u);
 });
 
 test("guard blocks protected paths and dangerous commands only", () => {

@@ -107,15 +107,19 @@ export function changedFiles(base) {
   return [...new Set(lists.flatMap((list) => (list ?? "").split("\n")))].filter(Boolean);
 }
 
-// Content hash of the working tree outside .factory/, independent of commits.
-// Task records and evidence cannot change behaviour, so committing them must not
-// invalidate a passing gate run or review; but an uncommitted edit after the
-// gates ran must. Built in a throwaway index so the real one is never touched.
+// Content hash of the working tree, independent of commits. Task records and
+// evidence cannot change behaviour, so committing them must not invalidate a
+// passing gate run or review; but an uncommitted edit after the gates ran must,
+// and so must a change to .factory/project.json, which decides which gates run. Built in a throwaway index so the real one is never touched.
 export function contentFingerprint() {
   const index = path.join(os.tmpdir(), `factory-idx-${process.pid}-${Date.now()}`);
   const env = { ...process.env, GIT_INDEX_FILE: index };
   try {
-    execSync("git add -A -- . ':(exclude).factory'", { cwd: root, env, stdio: "ignore" });
+    execSync("git add -A -- . ':(exclude).factory/tasks' ':(exclude).factory/evidence'", {
+      cwd: root,
+      env,
+      stdio: "ignore",
+    });
     return execSync("git write-tree", { cwd: root, env, encoding: "utf8" }).trim();
   } catch {
     return null;
@@ -318,6 +322,10 @@ const commands = {
         `${ok ? "✔" : "✘"} ${gate.name} (${((Date.now() - started) / 1000).toFixed(1)}s)`,
       );
       if (!ok) console.log(tail);
+    }
+    if (!selected.length) {
+      run.passed = false;
+      console.log("✘ no gates were selected; refusing to report a pass with nothing run");
     }
     // Edits landing while the gates ran mean the result describes no single state.
     if (contentFingerprint() !== run.fp) {
