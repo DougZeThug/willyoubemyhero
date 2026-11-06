@@ -2,7 +2,7 @@
   "id": "2026-11-06-pack-collapsed-name-prompt-for-signed-in",
   "title": "Pack: collapsed name prompt for signed-in non-roster people",
   "kind": "polish",
-  "status": "building",
+  "status": "ready",
   "branch": "claude/tender-galileo-2sm0z9",
   "createdAt": "2026-11-06T22:41:43.455Z",
   "acceptance": [
@@ -14,9 +14,38 @@
     "Before/after screenshots committed and described from the images"
   ],
   "repairs": [],
-  "gateRuns": [],
+  "gateRuns": [
+    {
+      "at": "2026-11-06T22:45:30.341Z",
+      "head": "f41d416fd5440086509c397b02f69a22a2b4934d",
+      "fp": "521a9f9a159c24f5317763d8742527695f353b41",
+      "partial": false,
+      "passed": true,
+      "gates": [
+        "lint:pass",
+        "typecheck:pass",
+        "unit:pass",
+        "build:pass"
+      ],
+      "skipped": [
+        "db"
+      ]
+    }
+  ],
   "interventions": 0,
-  "nextAction": "factory-ui implements option A from patch",
-  "notes": [],
-  "updatedAt": "2026-11-06T22:41:43.499Z"
+  "nextAction": "your review of shots/review",
+  "notes": [
+    {
+      "at": "2026-11-06T22:51:02.542Z",
+      "text": "Review of f41d416: APPROVE. Screenshots viewed: after 320x568, open after/before 320x568. Minors left: aria-controls points at an absent id while collapsed (allowed); name input has only a placeholder (pre-existing, separate change); no untouched control frame (all 20 captures differ by design). B-07 untouched."
+    }
+  ],
+  "updatedAt": "2026-11-06T22:51:02.681Z",
+  "review": {
+    "verdict": "approve",
+    "reviewer": "factory-reviewer",
+    "head": "f41d416fd5440086509c397b02f69a22a2b4934d",
+    "fp": "521a9f9a159c24f5317763d8742527695f353b41",
+    "at": "2026-11-06T22:51:02.594Z"
+  }
 }
