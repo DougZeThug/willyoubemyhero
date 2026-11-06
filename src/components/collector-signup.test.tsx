@@ -151,6 +151,15 @@ describe("compact", () => {
     expect(screen.getAllByRole("heading", { name: "Pick a trading name" })).toHaveLength(1);
   });
 
+  it("names the box for assistive tech in both forms, not just by its placeholder", async () => {
+    const { unmount } = await renderSignup();
+    expect(screen.getByLabelText("Your name")).toBeInstanceOf(HTMLInputElement);
+    unmount();
+    await renderSignup({ compact: true });
+    await userEvent.click(screen.getByRole("button", { name: "Add name" }));
+    expect(screen.getByLabelText("Your name")).toHaveFocus();
+  });
+
   it("submits from the expanded form exactly as the open one does", async () => {
     await renderSignup({ compact: true });
     await userEvent.click(screen.getByRole("button", { name: "Add name" }));
