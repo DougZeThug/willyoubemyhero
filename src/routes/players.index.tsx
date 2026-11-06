@@ -1352,8 +1352,11 @@ function PlayersPage() {
 
         {/* A failed secrets read renders no shelves, which reads as "my secrets
             are gone". Say it failed instead. Deliberately silent on how many
-            cards or sets exist: that count is withheld. */}
-        {secrets.isError && (
+            cards or sets exist: that count is withheld. Only when there is
+            nothing to show: a background refetch that fails keeps the last good
+            data on screen, and a "couldn't read" banner over visible shelves
+            would contradict them. */}
+        {secrets.isError && !secrets.data && (
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <p>Couldn&apos;t read your secrets just now.</p>
             <button

@@ -516,6 +516,16 @@ describe("vault mobile polish", () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 
+  it("stays quiet when a refetch fails but the last good secrets are still on screen", () => {
+    useMySecrets.mockReturnValue({
+      data: { cards: PETS, pulled: PETS.length },
+      isError: true,
+      refetch: vi.fn(),
+    });
+    render(<PlayersPage />);
+    expect(screen.queryByText(/couldn.t read your secrets/i)).toBeNull();
+  });
+
   it("collapses the sort chip to an icon while shelves are rearranged, keeping its way back", async () => {
     // vaul claims the pointer on press and jsdom has no pointer capture.
     HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
